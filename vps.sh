@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # =========================================================
-#  Project:  VPS 终极深度优化脚本 (2026 工业整合版)
+#  Project:  VPS 深度优化脚本
 #  Logic:    BBR + 深度TCP调优 + 兼容性sysctl写入 + 安全加固
 # =========================================================
 
@@ -18,7 +18,7 @@ PLAIN='\033[0m'
 # 兼容性获取总内存 (MB)
 mem_total=$(free -m | awk '/^Mem:/{print $2}') [cite: 30]
 
-echo -e "${BLUE}=== VPS 深度优化脚本 (工业整合版) ===${PLAIN}"
+echo -e "${BLUE}=== VPS 深度优化脚本 ===${PLAIN}"
 
 # 2. 核心函数：逐行应用 sysctl (解决容器报错) [cite: 43]
 apply_sysctl_settings() {
@@ -45,7 +45,7 @@ fi
 timedatectl set-timezone Asia/Shanghai > /dev/null 2>&1
 
 # 4. 深度 TCP + BBR 调优整合 [cite: 48, 54]
-echo -e "${YELLOW}[2/4] 正在应用深度网络加速 (工业级参数)...${PLAIN}"
+echo -e "${YELLOW}[2/4] 正在应用深度网络加速...${PLAIN}"
 
 cat > /etc/sysctl.d/99-vps-advanced-tune.conf <<EOF
 # --- BBR 拥塞控制 ---
@@ -145,8 +145,8 @@ systemctl restart fail2ban > /dev/null 2>&1
 
 # 结束提示
 echo -e "${GREEN}======================================${PLAIN}"
-echo -e "${BOLD}所有工业级优化已完成！${PLAIN}"
-echo -e "🚀 BBR+高级TCP调优：${GREEN}已生效${PLAIN}"
+echo -e "${BOLD}所有优化已完成！${PLAIN}"
+echo -e "🚀 BBR+TCP调优：${GREEN}已生效${PLAIN}"
 echo -e "📂 文件描述符上限：${GREEN}1,000,000${PLAIN}"
 echo -e "🔒 SSH 端口状态：${GREEN}${final_port}${PLAIN}"
 echo -e "${GREEN}======================================${PLAIN}"
