@@ -590,7 +590,7 @@ main_menu() {
         echo -e " ${GREEN}12.${PLAIN} 综合测试合集     ${YELLOW}(融合怪/流媒体/IP质量/路由等)${PLAIN}"
         echo -e " ${GREEN}13.${PLAIN} 端口流量监控     ${YELLOW}(拉取运行 Port Traffic Dog)${PLAIN}"
         echo -e " ${GREEN}14.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板官方一键脚本)${PLAIN}"
-        echo -e " ${GREEN}15.${PLAIN} 安装 Sing-box    ${YELLOW}(勇哥四合一官方一键脚本)${PLAIN}"
+        echo -e " ${GREEN}15.${PLAIN} 安装 Sing-box    ${YELLOW}(甬哥四合一官方一键脚本)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         echo -e " ${YELLOW}17.${PLAIN} ${BOLD}一键更新脚本${PLAIN}     ${CYAN}(拉取 GitHub 最新版并重启)${PLAIN}"
