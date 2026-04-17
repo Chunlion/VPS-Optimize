@@ -35,7 +35,10 @@
 ## 🚀 一键执行命令
 
 在你的 VPS 终端（Root 用户）复制并粘贴以下命令：
-
+```
+bash <(curl -sL https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh)
+```
+或
 ```bash
 wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
