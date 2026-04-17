@@ -26,10 +26,9 @@ else
     OS="unknown"
 fi
 
-# ================= 重要配置 =================
-# 大佬，请务必在此处填入你 GitHub 仓库中 cy.sh 的原始链接
-UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/cy.sh"
-# ============================================
+
+UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh"
+
 
 # 快捷指令注册
 create_shortcut() {
