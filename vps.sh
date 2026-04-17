@@ -355,7 +355,7 @@ EOF
 func_bbr_manage() {
     clear
     echo -e "${CYAN}👉 正在拉取执行全能 BBR 管理脚本...${PLAIN}"
-    wget -N --no-check-certificate "https://gist.github.com/zeruns/a0ec603f20d1b86de6a774a8ba27588f/raw/4f9957ae23f5efb2bb7c57a198ae2cffebfb1c56/tcp.sh" && chmod +x tcp.sh && ./tcp.sh
+    wget -O tcpx.sh "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh" && chmod +x tcpx.sh && ./tcpx.sh
     echo ""
     read -n 1 -s -r -p "按任意键返回主菜单..."
 }
