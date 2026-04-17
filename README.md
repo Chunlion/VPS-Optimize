@@ -70,7 +70,7 @@ wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps
 
 ## 🤝 贡献与感谢
 
-  * **项目参考**：TCP 调优参数参考了工业级深度调优实践。
+  * **项目参考**：TCP 调优参数参考了[VPS值得买](vpszdm.com)使用的脚本。
   * **作者**：[Chunlion](https://github.com/Chunlion)
   * **反馈**：如有 Bug 或优化建议，欢迎提交 **Issues** 或 **Pull Request**。
 
