@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # =========================================================
-#  Project:  VPS 终极全能控制面板
+#  Project:  VPS 聚合优化面板
 #  Features: 极致排版/智能防火墙/全能工具/BBR/测试合集/热更新
 #  Shortcut: cy
 # =========================================================
@@ -308,7 +308,7 @@ func_security() {
     current_p=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
     current_p=${current_p:-22}
     
-    read -p "当前端口 $current_p, 请输入新端口 (回车保持): " final_p
+    read -p "当前端口 $current_p, 请输入新端口 (回车保持默认): " final_p
     final_p=${final_p:-$current_p}
     
     if [[ "$final_p" != "$current_p" ]]; then
