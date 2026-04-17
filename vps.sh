@@ -333,18 +333,34 @@ func_security() {
 }
 
 # ---------------------------------------------------------
-# 5. Docker 深度管理
+# 5. Docker 深度管理 (增加安装状态判断)
 # ---------------------------------------------------------
 func_docker_manage() {
+    # 【新增】前置检查逻辑
+    if ! command -v docker >/dev/null 2>&1; then
+        clear
+        echo -e "${RED}❌ 错误：检测到系统尚未安装 Docker！${PLAIN}"
+        echo -e "${YELLOW}请先返回主菜单选择 [3] 进入常用环境安装 Docker 引擎。${PLAIN}"
+        echo "------------------------------------------------"
+        read -n 1 -s -r -p "按任意键返回主菜单..."
+        return
+    fi
+
     while true; do
         clear
-        echo -e "${CYAN}🐳 Docker 深度管理${PLAIN}"
-        echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 开启本地防穿透${PLAIN} (限制面板仅 127.0.0.1 访问)"
-        echo -e "${GREEN}  2. 解除防穿透限制${PLAIN} (允许 0.0.0.0 全网访问)"
+        # 【优化】显示当前 Docker 版本
+        local docker_ver
+        docker_ver=$(docker -v | awk '{print $3}' | tr -d ',')
+        
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🐳 Docker 深度管理面板 (版本: ${GREEN}${docker_ver}${PLAIN}${BOLD})${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${GREEN}  1. 开启本地防穿透保护${PLAIN} (限制面板仅 127.0.0.1 访问)"
+        echo -e "${GREEN}  2. 解除本地防穿透保护${PLAIN} (恢复 0.0.0.0 全网访问)"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
-        read -p "👉 请选择: " c
+        read -p "👉 请选择操作: " c
+        
         case $c in
             1) 
                 mkdir -p /etc/docker
@@ -356,17 +372,18 @@ func_docker_manage() {
 }
 EOF
                 systemctl restart docker >/dev/null 2>&1
-                echo -e "${GREEN}✅ 已开启安全保护${PLAIN}" 
+                echo -e "${GREEN}✅ 安全加固已生效！映射端口现在默认仅本地可访。${PLAIN}" 
+                sleep 2
                 ;;
             2) 
                 rm -f /etc/docker/daemon.json
                 systemctl restart docker >/dev/null 2>&1
-                echo -e "${GREEN}✅ 已解除限制${PLAIN}" 
+                echo -e "${GREEN}✅ 已解除防穿透限制！映射端口现在可以全网访问。${PLAIN}" 
+                sleep 2
                 ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
-        sleep 1
     done
 }
 
