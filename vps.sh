@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # =========================================================
-#  Project:  VPS 终极全能控制面板 (热更新满血版)
-#  Features: y/n强交互/智能防火墙/全能工具/BBR/测试合集/热更新
+#  Project:  VPS 终极全能控制面板 (完美排版修复版)
+#  Features: 极致排版/智能防火墙/全能工具/BBR/测试合集/热更新
 #  Shortcut: cy
 # =========================================================
 
@@ -111,42 +111,12 @@ func_system_tweaks() {
         read -p "👉 请选择操作: " tweak_choice
 
         case $tweak_choice in
-            1)
-                read -p "❓ 是否开启 IPv6？(y/n): " yn
-                if [[ "$yn" =~ ^[Yy]$ ]]; then rm -f /etc/sysctl.d/99-disable-ipv6.conf; sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null; echo -e "${GREEN}✅ IPv6 已开启${PLAIN}"
-                elif [[ "$yn" =~ ^[Nn]$ ]]; then echo "net.ipv6.conf.all.disable_ipv6 = 1" > /etc/sysctl.d/99-disable-ipv6.conf; sysctl -p /etc/sysctl.d/99-disable-ipv6.conf >/dev/null; echo -e "${RED}✅ IPv6 已禁用${PLAIN}"; fi; sleep 1 ;;
-            2)
-                read -p "❓ 是否允许被 Ping？(y/n): " yn
-                if [[ "$yn" =~ ^[Yy]$ ]]; then rm -f /etc/sysctl.d/99-disable-ping.conf; sysctl -w net.ipv4.icmp_echo_ignore_all=0 >/dev/null; echo -e "${GREEN}✅ 已允许被Ping${PLAIN}"
-                elif [[ "$yn" =~ ^[Nn]$ ]]; then echo "net.ipv4.icmp_echo_ignore_all = 1" > /etc/sysctl.d/99-disable-ping.conf; sysctl -p /etc/sysctl.d/99-disable-ping.conf >/dev/null; echo -e "${RED}✅ 已禁止被Ping${PLAIN}"; fi; sleep 1 ;;
-            3)
-                read -p "❓ 是否开启自动更新？(y/n): " yn
-                if [[ "$yn" =~ ^[Yy]$ ]]; then
-                    if [[ "$OS" =~ debian|ubuntu ]]; then apt install -y unattended-upgrades -qq >/dev/null; systemctl enable --now unattended-upgrades >/dev/null;
-                    else yum install -y dnf-automatic -q >/dev/null; systemctl enable --now dnf-automatic.timer >/dev/null; fi; echo -e "${GREEN}✅ 自动更新已开启${PLAIN}"
-                elif [[ "$yn" =~ ^[Nn]$ ]]; then
-                    if [[ "$OS" =~ debian|ubuntu ]]; then systemctl disable --now unattended-upgrades >/dev/null;
-                    else systemctl disable --now dnf-automatic.timer >/dev/null; fi; echo -e "${RED}✅ 自动更新已禁用${PLAIN}"; fi; sleep 1 ;;
-            4)
-                read -p "❓ 是否开启防火墙并自动放行活动端口？(y/n): " yn
-                if [[ "$yn" =~ ^[Yy]$ ]]; then
-                    active_ports=$(ss -tuln | grep -E 'LISTEN|UNCONN' | grep -v '127.0.0.1' | awk '{print $5}' | rev | cut -d: -f1 | rev | sort -nu | grep -E '^[0-9]+$')
-                    if [[ "$OS" =~ debian|ubuntu ]]; then
-                        apt install ufw -y >/dev/null; ufw default deny incoming >/dev/null; ufw default allow outgoing >/dev/null;
-                        for p in $active_ports; do ufw allow $p >/dev/null; done; ufw --force enable >/dev/null;
-                    else
-                        yum install firewalld -y >/dev/null; systemctl enable --now firewalld >/dev/null;
-                        for p in $active_ports; do firewall-cmd --permanent --add-port=${p}/tcp >/dev/null; firewall-cmd --permanent --add-port=${p}/udp >/dev/null; done; firewall-cmd --reload >/dev/null;
-                    fi
-                    echo -e "${GREEN}✅ 防火墙已开启并放行端口: $active_ports${PLAIN}"
-                else
-                    if [[ "$OS" =~ debian|ubuntu ]]; then ufw disable >/dev/null; else systemctl disable --now firewalld >/dev/null; fi; echo -e "${RED}✅ 防火墙已关闭${PLAIN}"; fi; read -n 1 -s -r -p "按任意键继续..." ;;
-            6)
-                if [[ "$OS" =~ debian|ubuntu ]]; then ufw status verbose; else firewall-cmd --list-all; fi; read -n 1 -s -r -p "按任意键继续..." ;;
-            5)
-                echo -e "${CYAN}👉 正在清理系统垃圾...${PLAIN}"
-                if [[ "$OS" =~ debian|ubuntu ]]; then apt autoremove --purge -y; apt clean; else yum autoremove -y; yum clean all; fi
-                journalctl --vacuum-time=1d > /dev/null 2>&1; echo -e "${GREEN}✅ 清理完成！${PLAIN}"; sleep 1 ;;
+            1) read -p "❓ 是否开启 IPv6？(y/n): " yn; if [[ "$yn" =~ ^[Yy]$ ]]; then rm -f /etc/sysctl.d/99-disable-ipv6.conf; sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null; echo -e "${GREEN}✅ 已开启${PLAIN}"; else echo "net.ipv6.conf.all.disable_ipv6 = 1" > /etc/sysctl.d/99-disable-ipv6.conf; sysctl -p /etc/sysctl.d/99-disable-ipv6.conf >/dev/null; echo -e "${RED}✅ 已禁用${PLAIN}"; fi; sleep 1 ;;
+            2) read -p "❓ 是否允许被 Ping？(y/n): " yn; if [[ "$yn" =~ ^[Yy]$ ]]; then rm -f /etc/sysctl.d/99-disable-ping.conf; sysctl -w net.ipv4.icmp_echo_ignore_all=0 >/dev/null; echo -e "${GREEN}✅ 已允许${PLAIN}"; else echo "net.ipv4.icmp_echo_ignore_all = 1" > /etc/sysctl.d/99-disable-ping.conf; sysctl -p /etc/sysctl.d/99-disable-ping.conf >/dev/null; echo -e "${RED}✅ 已禁Ping${PLAIN}"; fi; sleep 1 ;;
+            3) read -p "❓ 是否开启自动更新？(y/n): " yn; if [[ "$yn" =~ ^[Yy]$ ]]; then if [[ "$OS" =~ debian|ubuntu ]]; then apt install -y unattended-upgrades -qq >/dev/null; systemctl enable --now unattended-upgrades >/dev/null; else yum install -y dnf-automatic -q >/dev/null; systemctl enable --now dnf-automatic.timer >/dev/null; fi; echo -e "${GREEN}✅ 已开启${PLAIN}"; else if [[ "$OS" =~ debian|ubuntu ]]; then systemctl disable --now unattended-upgrades >/dev/null; else systemctl disable --now dnf-automatic.timer >/dev/null; fi; echo -e "${RED}✅ 已禁用${PLAIN}"; fi; sleep 1 ;;
+            4) read -p "❓ 是否开启防火墙并自动放行活动端口？(y/n): " yn; if [[ "$yn" =~ ^[Yy]$ ]]; then active_ports=$(ss -tuln | grep -E 'LISTEN|UNCONN' | grep -v '127.0.0.1' | awk '{print $5}' | rev | cut -d: -f1 | rev | sort -nu | grep -E '^[0-9]+$'); if [[ "$OS" =~ debian|ubuntu ]]; then apt install ufw -y >/dev/null; ufw default deny incoming >/dev/null; ufw default allow outgoing >/dev/null; for p in $active_ports; do ufw allow $p >/dev/null; done; ufw --force enable >/dev/null; else yum install firewalld -y >/dev/null; systemctl enable --now firewalld >/dev/null; for p in $active_ports; do firewall-cmd --permanent --add-port=${p}/tcp >/dev/null; firewall-cmd --permanent --add-port=${p}/udp >/dev/null; done; firewall-cmd --reload >/dev/null; fi; echo -e "${GREEN}✅ 防火墙已开启并放行端口: $active_ports${PLAIN}"; else if [[ "$OS" =~ debian|ubuntu ]]; then ufw disable >/dev/null; else systemctl disable --now firewalld >/dev/null; fi; echo -e "${RED}✅ 防火墙已关闭${PLAIN}"; fi; read -n 1 -s -r -p "按任意键继续..." ;;
+            6) if [[ "$OS" =~ debian|ubuntu ]]; then ufw status verbose; else firewall-cmd --list-all; fi; read -n 1 -s -r -p "按任意键继续..." ;;
+            5) echo -e "${CYAN}👉 正在清理系统垃圾...${PLAIN}"; if [[ "$OS" =~ debian|ubuntu ]]; then apt autoremove --purge -y; apt clean; else yum autoremove -y; yum clean all; fi; journalctl --vacuum-time=1d > /dev/null 2>&1; echo -e "${GREEN}✅ 清理完成！${PLAIN}"; sleep 1 ;;
             0) break ;;
         esac
     done
@@ -166,165 +136,4 @@ func_env_install() {
         echo -e "${GREEN}  7. 哪吒监控      ${YELLOW}  8. WARP (CF)     ${GREEN}  9. Aria2 下载${PLAIN}"
         echo -e "${GREEN} 10. 宝塔面板      ${YELLOW} 11. PVE 虚拟化    ${GREEN} 12. Argox 节点${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${CYAN} 13. 一键配置 Caddy 反向代理 ${YELLOW}(域名+自动HTTPS)${PLAIN}"
-        echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-        read -p "👉 请选择操作: " env_choice
-        case $env_choice in
-            1) bash <(curl -sL 'https://get.docker.com') ;;
-            2) curl -O https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh && chmod +x pyinstall.sh && ./pyinstall.sh ;;
-            3) apt install iperf3 -y || yum install iperf3 -y ;;
-            4) bash <(curl -L https://raw.githubusercontent.com/zhouh047/realm-oneclick-install/main/realm.sh) -i ;;
-            5) wget --no-check-certificate -O gost.sh https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh && chmod +x gost.sh && ./gost.sh ;;
-            6) bash <(curl -fsSL https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh) ;;
-            7) curl -L https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh -o nezha.sh && chmod +x nezha.sh && ./nezha.sh ;;
-            8) wget -N https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh && bash menu.sh ;;
-            9) wget -N git.io/aria2.sh && chmod +x aria2.sh && ./aria2.sh ;;
-            10) wget -O install.sh http://v7.hostcli.com/install/install-ubuntu_6.0.sh && sudo bash install.sh ;;
-            11) bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh) ;;
-            12) bash <(wget -qO- https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh) ;;
-            13)
-                if [[ "$OS" =~ debian|ubuntu ]]; then apt install -y debian-keyring debian-archive-keyring apt-transport-https -qq && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list && apt update && apt install caddy -y; else yum install -y yum-utils && yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo && yum install caddy -y; fi
-                read -p "请输入解析后的域名: " domain; read -p "请输入本地端口 (如 2053): " port
-                echo -e "$domain {\n    reverse_proxy localhost:$port\n}" > /etc/caddy/Caddyfile
-                systemctl restart caddy && echo -e "${GREEN}✅ 反代成功！访问 https://$domain${PLAIN}" ;;
-            0) break ;;
-        esac
-        echo ""; read -n 1 -s -r -p "按任意键继续..."
-    done
-}
-
-# ---------------------------------------------------------
-# 4. SSH 安全 / 5. Docker 深度 / 6. BBR 管理 (tcpx.sh)
-# ---------------------------------------------------------
-func_security() {
-    clear
-    current_p=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
-    current_p=${current_p:-22}
-    read -p "当前端口 $current_p, 请输入新端口 (回车保持): " final_p; final_p=${final_p:-$current_p}
-    if [[ "$final_p" != "$current_p" ]]; then
-        sed -i "s/^Port .*/Port $final_p/" /etc/ssh/sshd_config; grep -q "^Port $final_p" /etc/ssh/sshd_config || echo "Port $final_p" >> /etc/ssh/sshd_config
-        ufw allow "$final_p"/tcp >/dev/null 2>&1; firewall-cmd --permanent --add-port="$final_p"/tcp >/dev/null 2>&1; firewall-cmd --reload >/dev/null 2>&1
-        iptables -I INPUT -p tcp --dport "$final_p" -j ACCEPT 2>/dev/null
-        systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
-        echo -e "${GREEN}✅ SSH 端口已改为 $final_p 并放行防火墙！${PLAIN}"
-    fi; read -n 1 -s -r -p "按任意键继续..."
-}
-
-func_docker_manage() {
-    while true; do
-        clear
-        echo -e "${CYAN}🐳 Docker 深度管理${PLAIN}"
-        echo -e "1. 开启本地防穿透 (127.0.0.1)\n2. 解除防穿透限制 (0.0.0.0)\n0. 返回"
-        read -p "👉 请选择: " c
-        case $c in
-            1) mkdir -p /etc/docker; echo -e '{\n  "ip": "127.0.0.1",\n  "log-driver": "json-file",\n  "log-opts": {"max-size": "50m", "max-file": "3"}\n}' > /etc/docker/daemon.json; systemctl restart docker; echo -e "${GREEN}✅ 已开启安全保护${PLAIN}" ;;
-            2) rm -f /etc/docker/daemon.json; systemctl restart docker; echo -e "${GREEN}✅ 已解除限制${PLAIN}" ;;
-            0) break ;;
-        esac; sleep 1
-    done
-}
-
-func_bbr_manage() {
-    clear; wget -O tcpx.sh "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh" && chmod +x tcpx.sh && ./tcpx.sh
-}
-
-# ---------------------------------------------------------
-# 7. TCP (Omnitt) / 8. 内存 / 9. 内核 / 10. 清理旧内核
-# ---------------------------------------------------------
-func_tcp_tune() {
-    clear; echo -e "请浏览器打开: ${BLUE}https://omnitt.com/${PLAIN} 生成参数"
-    read -p "👉 准备好粘贴了吗？(y/n): " yn
-    if [[ ! "$yn" =~ ^[Yy]$ ]]; then return; fi
-    temp_f="/etc/sysctl.d/99-omnitt-tune.conf"; > "$temp_f"
-    echo -e "请右键粘贴，输入 EOF 并回车："
-    while IFS= read -r line; do line=$(echo "$line" | tr -d '\r'); [[ "$line" == "EOF" ]] && break; echo "$line" >> "$temp_f"; done
-    if [ -s "$temp_f" ]; then sysctl -p "$temp_f" >/dev/null; echo -e "${GREEN}✅ 应用成功！${PLAIN}"; fi; read -n 1 -s -r -p "按任意键继续..."
-}
-
-func_zram_swap() {
-    clear; mem=$(free -m | awk '/^Mem:/{print $2}')
-    echo -e "${CYAN}💡 推荐策略: 1GB以下选[1], 2-4G选[2], 8G以上选[3]${PLAIN}"
-    read -p "👉 请选择 [1/2/3]: " choice; echo -e "${GREEN}✅ 调优已完成！${PLAIN}"; read -n 1 -s -r -p "按任意键继续..."
-}
-
-# ---------------------------------------------------------
-# 11. 探针 / 12. 测试合集 / 13. 流量狗 / 14-15 面板
-# ---------------------------------------------------------
-func_test_scripts() {
-    while true; do
-        clear
-        echo -e "${GREEN}1. YABS  2. 融合怪  3. SuperBench  4. bench.sh  5. 解锁  6. 路由  7. IP质量  0. 返回${PLAIN}"
-        read -p "👉 请选择: " t
-        case $t in 1) wget -qO- yabs.sh | bash ;; 2) curl -L https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh -o ecs.sh && bash ecs.sh ;; 3) wget -qO- about.superbench.pro | bash ;; 4) wget -qO- bench.sh | bash ;; 5) bash <(curl -L -s check.unlock.media) ;; 6) curl https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh -sSf | sh ;; 7) bash <(curl -Ls IP.Check.Place) ;; 0) break ;; esac
-        read -n 1 -s -r -p "按任意键继续..."
-    done
-}
-
-# ---------------------------------------------------------
-# 17. 更新脚本功能 (热更新逻辑)
-# ---------------------------------------------------------
-func_update_script() {
-    clear
-    echo -e "${CYAN}👉 正在从 GitHub 获取最新版本...${PLAIN}"
-    if curl -sL "$UPDATE_URL" -o /tmp/cy_new.sh; then
-        # 覆盖当前运行的文件
-        mv /tmp/cy_new.sh "$0"
-        chmod +x "$0"
-        # 更新快捷键
-        cp "$0" /usr/local/bin/cy
-        echo -e "${GREEN}✅ 脚本更新成功！${PLAIN}"
-        echo -e "${YELLOW}🚀 正在重新启动脚本...${PLAIN}"
-        sleep 2
-        exec bash "$0"
-    else
-        echo -e "${RED}❌ 更新失败，请检查网络连接或 URL 填写是否正确！${PLAIN}"
-        read -n 1 -s -r -p "按任意键返回..."
-    fi
-}
-
-# ---------------------------------------------------------
-# 主菜单
-# ---------------------------------------------------------
-main_menu() {
-    create_shortcut
-    while true; do
-        clear
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🚀 VPS 终极全能控制面板 (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}${BLUE} 【基础与环境】${PLAIN}"
-        echo -e "  1. 环境初始化  |  2. 系统高级开关  |  3. 全能环境软件"
-        echo -e "------------------------------------------------"
-        echo -e "${BOLD}${BLUE} 【安全与网络】${PLAIN}"
-        echo -e "  4. SSH安全加固 |  5. Docker深度管理 |  6. BBR全能管理"
-        echo -e "  7. 动态TCP调优"
-        echo -e "------------------------------------------------"
-        echo -e "${BOLD}${BLUE} 【内核与内存】${PLAIN}"
-        echo -e "  8. 智能内存调优 |  9. 换装Cloud内核 | 10. 卸载旧内核"
-        echo -e "------------------------------------------------"
-        echo -e "${BOLD}${BLUE} 【探针与节点】${PLAIN}"
-        echo -e " 11. 硬件探针查询 | 12. 综合测试合集  | 13. 流量监控狗"
-        echo -e " 14. 安装 x-panel | 15. 安装甬哥Sing-box"
-        echo -e "------------------------------------------------"
-        echo -e "${BOLD}${BLUE} 【脚本维护】${PLAIN}"
-        echo -e " 17. ${YELLOW}${BOLD}更新脚本${PLAIN} (拉取 GitHub 最新版)"
-        echo -e "------------------------------------------------"
-        echo -e "${RED} 16. 重启服务器   ${RED} 0. 退出面板${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-        read -p "👉 请选择功能: " choice
-        case $choice in
-            1) func_base_init ;; 2) func_system_tweaks ;; 3) func_env_install ;;
-            4) func_security ;; 5) func_docker_manage ;; 6) func_bbr_manage ;;
-            7) func_tcp_tune ;; 8) func_zram_swap ;; 9) func_install_kernel ;;
-            10) func_clean_kernel ;; 11) echo -e "IP: $(curl -s4 icanhazip.com)"; read -n 1 ;;
-            12) func_test_scripts ;; 13) wget -qO t.sh https://raw.githubusercontent.com/zywe03/realm-xwPF/main/port-traffic-dog.sh && bash t.sh ;;
-            14) bash <(curl -Ls https://raw.githubusercontent.com/xeefei/x-panel/master/install.sh) ;; 15) bash <(curl -fsSL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh) ;;
-            17) func_update_script ;;
-            16) reboot ;; 0) exit 0 ;;
-        esac
-    done
-}
-
-main_menu
+        echo -e "${CYAN}
