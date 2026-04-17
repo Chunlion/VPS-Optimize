@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # =========================================================
-#  Project:  VPS 终极全能面板 (Omnitt 联动版)
-#  Features: Omnitt动态调参/换内核/ZRAM/Docker/流量监控/加固
+#  Project:  VPS 终极全能面板 (Omnitt 智能防呆版)
+#  Features: 动态参数防呆录入/换内核/ZRAM/Docker/流量监控
 #  Shortcut: cy
 # =========================================================
 
@@ -39,6 +39,23 @@ create_shortcut() {
 }
 
 # ---------------------------------------------------------
+# 核心函数：逐行安全应用 sysctl (防报错神器)
+# ---------------------------------------------------------
+apply_sysctl_settings() {
+    local conf_file="$1"
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        local key value
+        key=$(echo "$line" | cut -d= -f1 | tr -d ' ')
+        value=$(echo "$line" | cut -d= -f2- | tr -d ' ')
+        if [[ -n "$key" && -n "$value" ]]; then
+            sysctl -w "${key}=${value}" > /dev/null 2>&1
+        fi
+    done < "$conf_file"
+}
+
+# ---------------------------------------------------------
 # 1. 基础环境与系统优化
 # ---------------------------------------------------------
 func_base_init() {
@@ -53,7 +70,6 @@ func_base_init() {
         systemctl enable --now dnf-automatic.timer > /dev/null 2>&1
     fi
 
-    # 日志限制 100M
     mkdir -p /etc/systemd/journald.conf.d/
     cat > /etc/systemd/journald.conf.d/99-limit.conf <<EOF
 [Journal]
@@ -68,45 +84,65 @@ EOF
 }
 
 # ---------------------------------------------------------
-# 2. 动态 TCP 网络调优 (Omnitt 联动)
+# 2. 动态 TCP 网络调优 (防呆多行录入版)
 # ---------------------------------------------------------
 func_tcp_tune() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}🌐 动态 TCP 网络调优 (由 Omnitt 强力驱动)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${GREEN}💡 提示：不同服务器的内存和网络环境差异巨大，盲目套用网上的参数极易导致机器宕机。${PLAIN}"
-    echo -e "${YELLOW}我们为您准备了智能参数生成器，请在浏览器中打开以下网站：${PLAIN}"
-    echo -e ""
-    echo -e "${BOLD}${BLUE}👉 https://omnitt.com/ ${PLAIN}"
-    echo -e ""
+    echo -e "${GREEN}💡 提示：盲目套用参数极易导致机器宕机。${PLAIN}"
+    echo -e "${YELLOW}请在浏览器中打开以下网站，生成您的专属配置：${PLAIN}\n"
+    echo -e "${BOLD}${BLUE}👉 https://omnitt.com/ ${PLAIN}\n"
     echo -e "${GREEN}操作步骤：${PLAIN}"
-    echo -e " 1. 访问上方网站，输入您的机器真实配置和网络环境。"
-    echo -e " 2. 点击生成，并【复制】网站给出的执行命令或多行代码。"
-    echo -e " 3. 按下回车键，我们将打开一个临时编辑器，请【右键粘贴】代码后保存。"
-    echo -e "   ${YELLOW}(保存方法: 键盘按 Ctrl+O，回车确认，按 Ctrl+X 退出)${PLAIN}"
+    echo -e " 1. 访问网站，输入机器真实配置和网络环境。"
+    echo -e " 2. 点击生成，并【复制】网站给出的 ${YELLOW}参数文本${PLAIN} (如 net.core.rmem_max=...)"
+    echo -e " 3. 按回车键继续，然后在终端直接【右键粘贴】所有代码。"
+    echo -e " 4. 粘贴完成后，在新的一行输入 ${RED}EOF${PLAIN} 并按回车确认！"
     echo -e "------------------------------------------------"
-    read -p "👉 复制好代码后，按【回车键】打开编辑器 (输入 n 取消): " open_editor
-
-    if [[ -z "$open_editor" ]] || [[ "$open_editor" =~ ^[Yy]$ ]]; then
-        temp_file="/tmp/omnitt_tune_$(date +%s).sh"
-        echo -e "#!/bin/bash\n# 在此下方粘贴来自 https://omnitt.com/ 的代码:\n" > "$temp_file"
-        
-        # 打开 Nano 让用户粘贴
-        nano "$temp_file"
-        
-        # 校验文件是否被修改（如果大于初始字节说明粘贴了代码）
-        if [ $(wc -c < "$temp_file") -gt 60 ]; then
-            echo -e "\n${CYAN}👉 正在执行您粘贴的优化代码...${PLAIN}"
-            bash "$temp_file"
-            echo -e "${GREEN}✅ 定制 TCP 网络调优已成功应用！${PLAIN}"
-        else
-            echo -e "\n${YELLOW}⚠️ 未检测到有效代码，已取消执行。${PLAIN}"
-        fi
-        rm -f "$temp_file"
-    else
+    read -p "👉 准备好粘贴了吗？(回车继续，输入 n 取消): " start_paste
+    
+    if [[ -n "$start_paste" ]] && [[ ! "$start_paste" =~ ^[Yy]$ ]]; then
         echo -e "\n${YELLOW}已取消 TCP 调优。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回主菜单..."
+        return
     fi
+
+    echo -e "\n${CYAN}👇 请在此处右键粘贴代码，完成后在新行输入 EOF 并按回车：${PLAIN}"
+    
+    temp_file="/etc/sysctl.d/99-omnitt-tune.conf"
+    > "$temp_file" # 清空历史配置文件
+    
+    # 静默吸收所有用户输入，直到识别到 EOF
+    while IFS= read -r line; do
+        line=$(echo "$line" | tr -d '\r') # 清理 Windows 换行符
+        if [[ "$line" == "EOF" || "$line" == "eof" ]]; then
+            break
+        fi
+        echo "$line" >> "$temp_file"
+    done
+    
+    # 校验是否真的有参数写入
+    if [ -s "$temp_file" ]; then
+        echo -e "\n${CYAN}👉 正在为您应用定制的网络参数...${PLAIN}"
+        # 调用核心函数逐行安全写入
+        apply_sysctl_settings "$temp_file"
+        
+        # 顺手提升文件句柄数以配合 TCP 参数
+        if ! grep -q "1000000" /etc/security/limits.conf; then
+            cat >> /etc/security/limits.conf <<EOF
+* soft nofile 1000000
+* hard nofile 1000000
+root soft nofile 1000000
+root hard nofile 1000000
+EOF
+        fi
+        echo -e "${GREEN}✅ 定制 TCP 网络调优已成功应用！${PLAIN}"
+    else
+        echo -e "\n${YELLOW}⚠️ 未检测到有效参数，已取消操作。${PLAIN}"
+        rm -f "$temp_file"
+    fi
+    
     read -n 1 -s -r -p "按任意键返回主菜单..."
 }
 
@@ -237,7 +273,7 @@ func_zram_swap() {
     [[ "$rec_vfs" == "50" ]] && echo -e "   - 额外释放 VFS 文件缓存: ${GREEN}已开启${PLAIN}"
     echo "------------------------------------------------"
 
-    read -p "是否应用系统推荐的优化方案？(回车默认应用推荐, 输入 n 手动选择): " use_rec
+    read -p "是否应用推荐方案？(回车默认应用, 输入 n 手动选择): " use_rec
 
     if [[ -z "$use_rec" || "$use_rec" =~ ^[Yy]$ ]]; then
         final_zram=$rec_zram; final_swap=$rec_swap; final_vfs=$rec_vfs
@@ -253,7 +289,7 @@ func_zram_swap() {
             1) final_zram=100; final_swap=100; final_vfs=50 ;;
             2) final_zram=70; final_swap=60; final_vfs=50 ;;
             3) final_zram=25; final_swap=10; final_vfs=100 ;;
-            *) final_zram=70; final_swap=60; final_vfs=50; echo -e "${YELLOW}未知输入，已默认使用积极档位${PLAIN}" ;;
+            *) final_zram=70; final_swap=60; final_vfs=50; echo -e "${YELLOW}未知输入，已默认积极档位${PLAIN}" ;;
         esac
     fi
 
@@ -314,7 +350,7 @@ main_menu() {
         echo -e "${BOLD}🚀 VPS 终极全能面板 (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${GREEN}  1. 基础环境初始化 ${YELLOW}(安装工具/自动更新/日志瘦身)${PLAIN}"
-        echo -e "${GREEN}  2. 动态TCP网络调优${YELLOW}(🔗 跳转 Omnitt 智能生成配置)${PLAIN}"
+        echo -e "${GREEN}  2. 动态TCP网络调优${YELLOW}(🔗 联动 Omnitt 专属配置录入)${PLAIN}"
         echo -e "${GREEN}  3. SSH 安全加固   ${YELLOW}(修改端口 / Fail2ban 防爆破)${PLAIN}"
         echo -e "${GREEN}  4. 安装 Docker    ${YELLOW}(一键调用官方脚本部署环境)${PLAIN}"
         echo -e "${CYAN}------------------------------------------------${PLAIN}"
