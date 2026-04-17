@@ -184,18 +184,49 @@ EOF
 }
 
 # ---------------------------------------------------------
-# 4. 安装 Docker 环境
+# 4. 安装 Docker 环境 与 安全加固
 # ---------------------------------------------------------
 func_docker() {
     clear
-    if command -v docker >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ 检测到 Docker 已安装，无需重复操作。${PLAIN}"
-    else
+    echo -e "${CYAN}👉 正在检查 Docker 环境...${PLAIN}"
+    
+    if ! command -v docker >/dev/null 2>&1; then
         echo -e "${CYAN}👉 正在调用官方脚本安装 Docker...${PLAIN}"
         curl -fsSL https://get.docker.com | bash
         systemctl enable --now docker > /dev/null 2>&1
         echo -e "${GREEN}✅ Docker 安装完成！${PLAIN}"
+    else
+        echo -e "${GREEN}✅ 检测到 Docker 已安装。${PLAIN}"
     fi
+
+    # Docker 安全与日志防爆盘加固
+    echo -e "\n${YELLOW}💡 Docker 默认会绕过防火墙暴露端口，且日志无上限极易撑爆硬盘。${PLAIN}"
+    read -p "是否应用 Docker 安全配置？(绑定本地IP防穿透 + 日志限制) [Y/n]: " secure_docker
+    
+    if [[ -z "$secure_docker" ]] || [[ "$secure_docker" =~ ^[Yy]$ ]]; then
+        mkdir -p /etc/docker
+        # 写入安全的 daemon.json，不开启可能会引发兼容性问题的 IPv6，只保留核心安全配置
+        cat <<EOF > /etc/docker/daemon.json
+{
+    "ip": "127.0.0.1",
+    "log-driver": "json-file",
+    "log-opts": {
+        "max-size": "50m",
+        "max-file": "3"
+    }
+}
+EOF
+        echo -e "${CYAN}👉 正在重启 Docker 服务应用安全策略...${PLAIN}"
+        systemctl daemon-reload
+        systemctl restart docker
+        echo -e "${GREEN}✅ Docker 安全配置已生效！${PLAIN}"
+        echo -e "${YELLOW}⚠️ 注意：此后使用 -p 映射的端口默认仅本地 (127.0.0.1) 可访。${PLAIN}"
+        echo -e "${YELLOW}如需向公网直接暴露端口，请明确指定，如：-p 0.0.0.0:8080:80${PLAIN}"
+    else
+        echo -e "${BLUE}已跳过 Docker 安全配置。${PLAIN}"
+    fi
+    
+    echo ""
     read -n 1 -s -r -p "按任意键返回主菜单..."
 }
 
