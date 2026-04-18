@@ -350,6 +350,8 @@ func_env_install() {
         echo -e "------------------------------------------------"
         echo -e "${CYAN} 13. 配置 Caddy 反代   ${YELLOW} 14. 查看 Caddy 证书路径${PLAIN}"
         echo -e "${CYAN} 15. Caddy独立跳过验证 ${YELLOW} 16. 清空 Caddy 配置文件${PLAIN}"
+        echo -e "${RED} 17. 删除底层 ACME证书${PLAIN}"
+        echo -e "------------------------------------------------"
         echo -e "------------------------------------------------"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
@@ -427,6 +429,7 @@ EOF
             14) func_view_caddy_cert ;;
             15) func_caddy_add_insecure ;;
             16) func_caddy_clear_config ;;
+            17) func_caddy_delete_cert ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
         esac
@@ -556,7 +559,56 @@ func_caddy_clear_config() {
     fi
     read -n 1 -s -r -p "按任意键继续..."
 }
+# ---------------------------------------------------------
+# 新增功能：删除 Caddy 申请的特定域名证书
+# ---------------------------------------------------------
+func_caddy_delete_cert() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🗑️ 删除 Caddy 域名的 ACME 证书${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
 
+    # 确定 Caddy 证书的底层存储根路径
+    local cert_root="/var/lib/caddy/.local/share/caddy/certificates"
+    [[ ! -d "$cert_root" ]] && cert_root="/root/.local/share/caddy/certificates"
+
+    if [[ ! -d "$cert_root" ]]; then
+        echo -e "${RED}❌ 未检测到 Caddy 证书存储目录！您可能尚未申请过任何证书。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    read -p "👉 请输入要删除证书的准确域名 (如 panel.site.com): " domain
+    if [[ -z "$domain" ]]; then
+        echo -e "${RED}❌ 域名不能为空！操作已取消。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    # 递归查找该域名对应的专属文件夹
+    local target_dir
+    target_dir=$(find "$cert_root" -type d -name "$domain" -print -quit 2>/dev/null)
+
+    if [[ -n "$target_dir" ]]; then
+        echo -e "${YELLOW}⚠️ 警告：即将永久删除以下目录及其包含的所有公钥、私钥和元数据文件：${PLAIN}"
+        echo -e "   ${BLUE}$target_dir${PLAIN}"
+        read -p "❓ 确认要彻底删除吗？(y/n): " yn
+        if [[ "$yn" =~ ^[Yy]$ ]]; then
+            rm -rf "$target_dir"
+            echo -e "${GREEN}✅ 域名 $domain 的底层证书数据已彻底销毁！${PLAIN}"
+            
+            # 重启 Caddy，强制丢弃内存中缓存的旧证书
+            systemctl restart caddy >/dev/null 2>&1
+            echo -e "${BLUE}ℹ️ Caddy 服务已重启，内存证书缓存已清空。${PLAIN}"
+        else
+            echo -e "${BLUE}已安全取消删除操作。${PLAIN}"
+        fi
+    else
+        echo -e "${RED}❌ 未找到域名 $domain 对应的底层证书文件夹！请检查拼写，或先使用 [14] 选项查询确认。${PLAIN}"
+    fi
+
+    read -n 1 -s -r -p "按任意键继续..."
+}
 # ---------------------------------------------------------
 # 4. SSH 安全加固 (终极防失联保命版)
 # ---------------------------------------------------------
