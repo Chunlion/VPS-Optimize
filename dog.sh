@@ -381,26 +381,21 @@ save_traffic_data_on_exit() { save_traffic_data >/dev/null 2>&1; }
 restore_monitoring_if_needed() {
     local active_ports=($(get_active_ports 2>/dev/null || true))
     if [ ${#active_ports[@]} -eq 0 ]; then return 0; fi
-    local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
-    local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
-    local need_restore=false
-
+    
     for port in "${active_ports[@]}"; do
-        if is_port_range "$port"; then
-            local port_safe=$(echo "$port" | tr '-' '_')
-            if ! nft list counter $family $table_name "port_${port_safe}_out" >/dev/null 2>&1; then
-                need_restore=true; break
-            fi
-        else
-            if ! nft list counter $family $table_name "port_${port}_out" >/dev/null 2>&1; then
-                need_restore=true; break
+        local p_safe=$(echo "$port" | tr '-' '_')
+        # 如果内核里找不到这个端口的计数器，说明规则丢了，自动重新下发
+        if ! nft list counter inet port_traffic_monitor "port_${p_safe}_out" >/dev/null 2>&1; then
+            echo -e "${YELLOW}检测到规则丢失，正在为端口 $port 重新下发监控规则...${NC}"
+            add_nftables_rules "$port"
+            
+            # 如果有流量限制，也一并恢复
+            local monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE")
+            if [ "$monthly_limit" != "unlimited" ]; then
+                apply_nftables_quota "$port" "$monthly_limit"
             fi
         fi
     done
-    if [ "$need_restore" = "true" ]; then
-        restore_traffic_data_from_backup
-        restore_all_monitoring_rules >/dev/null 2>&1 || true
-    fi
 }
 
 restore_traffic_data_from_backup() {
@@ -1778,24 +1773,27 @@ EOF
 }
 
 main() {
+    # 1. 基础环境校验
+    check_root
+    
+    # 2. 👉 【核心大招】：把配置初始化和恢复规则提到了最前面！
+    # 这样无论是开机自启还是手动运行，它都会先默默检查并补齐丢失的监控规则
+    init_config  
+
+    # 3. 拦截后台机器人的启动参数
     if [ "${1:-}" == "--run-listener" ]; then
         run_tg_listener
         exit 0
     fi
-
-    if [ $# -gt 0 ]; then
-        case $1 in
-            --reset-port)
-                if [ $# -lt 2 ]; then exit 1; fi
-                auto_reset_port "$2"
-                exit 0
-                ;;
-        esac
+    
+    # 4. 拦截自动重置的参数
+    if [ "${1:-}" == "--reset-port" ]; then
+        auto_reset_port "$2"
+        exit 0
     fi
-
-    check_root
+    
+    # 5. 常规的前台菜单逻辑
     check_dependencies
-    init_config
     create_shortcut_command
     show_main_menu
 }
