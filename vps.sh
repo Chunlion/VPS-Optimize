@@ -88,16 +88,142 @@ EOF
 }
 
 # ---------------------------------------------------------
-# 2. 系统高级开关 (含 IPv4 优先)
+# ★ 防火墙专属管理面板 (新增功能)
+# ---------------------------------------------------------
+func_firewall_manage() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🛡️  系统安全防火墙深度管理${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        
+        local fw_status
+        local str_fw
+        if [[ "$OS" =~ debian|ubuntu ]]; then
+            fw_status=$(ufw status 2>/dev/null | grep -wi active)
+        else
+            fw_status=$(systemctl is-active firewalld 2>/dev/null)
+        fi
+        
+        if [[ "$fw_status" == "active" || -n "$fw_status" ]]; then 
+            str_fw="${GREEN}运行中${PLAIN}"
+        else 
+            str_fw="${RED}已关闭 / 未配置${PLAIN}"
+        fi
+
+        echo -e "当前防火墙状态: [ $str_fw ]"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 开启防火墙并智能放行当前活动端口${PLAIN}"
+        echo -e "${GREEN}  2. 手动添加允许列表 (放行新端口)${PLAIN}"
+        echo -e "${GREEN}  3. 从列表中删除端口 (取消放行)${PLAIN}"
+        echo -e "${GREEN}  4. 查看当前已放行端口列表${PLAIN}"
+        echo -e "${RED}  5. 禁用并彻底关闭防火墙${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${BLUE}  0. 返回上一级菜单${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        
+        local fw_choice
+        read -p "👉 请选择操作: " fw_choice
+        
+        case $fw_choice in
+            1)
+                echo -e "${CYAN}👉 正在嗅探活动端口并配置防火墙...${PLAIN}"
+                local active_ports
+                active_ports=$(ss -tuln | grep -E 'LISTEN|UNCONN' | grep -v '127.0.0.1' | awk '{print $5}' | rev | cut -d: -f1 | rev | sort -nu | grep -E '^[0-9]+$')
+                if [[ "$OS" =~ debian|ubuntu ]]; then
+                    apt install ufw -y >/dev/null 2>&1
+                    ufw --force reset >/dev/null 2>&1
+                    ufw default deny incoming >/dev/null 2>&1
+                    ufw default allow outgoing >/dev/null 2>&1
+                    for p in $active_ports; do ufw allow "$p" >/dev/null 2>&1; done
+                    ufw --force enable >/dev/null 2>&1
+                else
+                    yum install firewalld -y >/dev/null 2>&1
+                    systemctl enable --now firewalld >/dev/null 2>&1
+                    for p in $active_ports; do
+                        firewall-cmd --permanent --add-port="${p}/tcp" >/dev/null 2>&1
+                        firewall-cmd --permanent --add-port="${p}/udp" >/dev/null 2>&1
+                    done
+                    firewall-cmd --reload >/dev/null 2>&1
+                fi
+                echo -e "${GREEN}✅ 防火墙已成功开启！自动放行了以下端口: $(echo $active_ports | tr '\n' ' ')${PLAIN}"
+                sleep 2
+                ;;
+            2)
+                local add_p
+                read -p "👉 请输入要放行的端口号 (如 443): " add_p
+                if [[ -n "$add_p" && "$add_p" =~ ^[0-9]+$ ]]; then
+                    if [[ "$OS" =~ debian|ubuntu ]]; then
+                        ufw allow "$add_p" >/dev/null 2>&1
+                    else
+                        firewall-cmd --permanent --add-port="${add_p}/tcp" >/dev/null 2>&1
+                        firewall-cmd --permanent --add-port="${add_p}/udp" >/dev/null 2>&1
+                        firewall-cmd --reload >/dev/null 2>&1
+                    fi
+                    echo -e "${GREEN}✅ 端口 $add_p 已成功添加至允许列表！${PLAIN}"
+                else
+                    echo -e "${RED}❌ 无效的端口号！${PLAIN}"
+                fi
+                sleep 2
+                ;;
+            3)
+                local del_p
+                read -p "👉 请输入要删除放行的端口号 (如 8080): " del_p
+                if [[ -n "$del_p" && "$del_p" =~ ^[0-9]+$ ]]; then
+                    if [[ "$OS" =~ debian|ubuntu ]]; then
+                        ufw delete allow "$del_p" >/dev/null 2>&1
+                    else
+                        firewall-cmd --permanent --remove-port="${del_p}/tcp" >/dev/null 2>&1
+                        firewall-cmd --permanent --remove-port="${del_p}/udp" >/dev/null 2>&1
+                        firewall-cmd --reload >/dev/null 2>&1
+                    fi
+                    echo -e "${GREEN}✅ 端口 $del_p 已从允许列表中移除！${PLAIN}"
+                else
+                    echo -e "${RED}❌ 无效的端口号！${PLAIN}"
+                fi
+                sleep 2
+                ;;
+            4)
+                echo -e "${CYAN}👇 当前防火墙规则列表：${PLAIN}"
+                if [[ "$OS" =~ debian|ubuntu ]]; then
+                    ufw status numbered
+                else
+                    firewall-cmd --list-ports
+                fi
+                read -n 1 -s -r -p "按任意键继续..."
+                ;;
+            5)
+                echo -e "${RED}⚠️ 正在关闭防火墙...${PLAIN}"
+                if [[ "$OS" =~ debian|ubuntu ]]; then
+                    ufw disable >/dev/null 2>&1
+                else
+                    systemctl disable --now firewalld >/dev/null 2>&1
+                fi
+                echo -e "${GREEN}✅ 防火墙已彻底禁用！${PLAIN}"
+                sleep 2
+                ;;
+            0) 
+                break 
+                ;;
+            *)
+                echo -e "${RED}❌ 无效的选择！${PLAIN}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------
+# 2. 系统高级开关 (已修复显示丢失问题)
 # ---------------------------------------------------------
 func_system_tweaks() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}⚙️  系统高级开关 ( y 开启, n 关闭)${PLAIN}"
+        echo -e "${BOLD}⚙️  系统高级开关与设置${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
-        # 获取各项状态
+        # 状态获取
         local ipv6_status
         local str_ipv6
         ipv6_status=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
@@ -115,10 +241,22 @@ func_system_tweaks() {
         ping_status=$(cat /proc/sys/net/ipv4/icmp_echo_ignore_all 2>/dev/null)
         if [[ "$ping_status" == "0" ]]; then str_ping="${GREEN}允许被Ping${PLAIN}"; else str_ping="${RED}禁Ping中${PLAIN}"; fi
         
+        local update_status
+        local str_update
+        if [[ "$OS" =~ debian|ubuntu ]]; then
+            update_status=$(systemctl is-active unattended-upgrades 2>/dev/null)
+        else
+            update_status=$(systemctl is-active dnf-automatic.timer 2>/dev/null)
+        fi
+        if [[ "$update_status" == "active" ]]; then str_update="${GREEN}开启中${PLAIN}"; else str_update="${RED}已关闭${PLAIN}"; fi
+
+        # 完美修复：一字不落的菜单显示
         echo -e "${GREEN}  1. 管理 IPv6 网络状态${PLAIN}    当前: [ $str_ipv6 ]"
         echo -e "${GREEN}  2. IPv4 出站优先级增强${PLAIN}   当前: [ $str_ipv4_first ]"
         echo -e "${GREEN}  3. 管理 被人Ping状态${PLAIN}     当前: [ $str_ping ]"
-        echo -e "${GREEN}  4. 彻底清理系统垃圾${PLAIN}      (日志/缓存/无用包)"
+        echo -e "${GREEN}  4. 管理 自动安全更新${PLAIN}     当前: [ $str_update ]"
+        echo -e "${GREEN}  5. 防火墙深度管理面板${PLAIN}  (放行/端口控制/开关)"
+        echo -e "${GREEN}  6. 彻底清理系统垃圾${PLAIN}      (日志/缓存/无用包)"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -137,9 +275,7 @@ func_system_tweaks() {
                     echo "net.ipv6.conf.all.disable_ipv6 = 1" > /etc/sysctl.d/99-disable-ipv6.conf
                     sysctl -p /etc/sysctl.d/99-disable-ipv6.conf >/dev/null 2>&1
                     echo -e "${RED}✅ IPv6 已禁用${PLAIN}"
-                fi
-                sleep 1 
-                ;;
+                fi; sleep 1 ;;
             2) 
                 read -p "❓ 设置 IPv4 为最高出站优先级？(y 开启 / n 恢复默认): " yn
                 if [[ "$yn" =~ ^[Yy]$ ]]; then 
@@ -148,9 +284,7 @@ func_system_tweaks() {
                 elif [[ "$yn" =~ ^[Nn]$ ]]; then 
                     sed -i '/precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
                     echo -e "${BLUE}已恢复系统默认${PLAIN}"
-                fi
-                sleep 1 
-                ;;
+                fi; sleep 1 ;;
             3) 
                 read -p "❓ 允许被 Ping？(y 允许 / n 禁止): " yn
                 if [[ "$yn" =~ ^[Yy]$ ]]; then 
@@ -161,24 +295,41 @@ func_system_tweaks() {
                     echo "net.ipv4.icmp_echo_ignore_all = 1" > /etc/sysctl.d/99-disable-ping.conf
                     sysctl -p /etc/sysctl.d/99-disable-ping.conf >/dev/null 2>&1
                     echo -e "${RED}✅ 已开启禁 Ping 保护${PLAIN}"
-                fi
-                sleep 1 
-                ;;
+                fi; sleep 1 ;;
             4) 
+                read -p "❓ 开启系统自动更新？(y 开启 / n 关闭): " yn
+                if [[ "$yn" =~ ^[Yy]$ ]]; then 
+                    if [[ "$OS" =~ debian|ubuntu ]]; then
+                        apt install -y unattended-upgrades -qq >/dev/null 2>&1
+                        systemctl enable --now unattended-upgrades >/dev/null 2>&1
+                    else
+                        yum install -y dnf-automatic -q >/dev/null 2>&1
+                        systemctl enable --now dnf-automatic.timer >/dev/null 2>&1
+                    fi
+                    echo -e "${GREEN}✅ 自动更新已开启${PLAIN}"
+                elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                    if [[ "$OS" =~ debian|ubuntu ]]; then systemctl disable --now unattended-upgrades >/dev/null 2>&1
+                    else systemctl disable --now dnf-automatic.timer >/dev/null 2>&1; fi
+                    echo -e "${GREEN}✅ 自动更新已关闭${PLAIN}"
+                fi; sleep 1 ;;
+            5)
+                # 调用独立的防火墙面板
+                func_firewall_manage
+                ;;
+            6) 
                 echo -e "${CYAN}👉 正在深度清理系统垃圾...${PLAIN}"
-                if is_debian; then 
+                if [[ "$OS" =~ debian|ubuntu ]]; then 
                     apt autoremove --purge -y >/dev/null 2>&1
                     apt clean >/dev/null 2>&1
-                elif is_redhat; then 
+                else 
                     yum autoremove -y >/dev/null 2>&1
                     yum clean all >/dev/null 2>&1
                 fi
                 journalctl --vacuum-time=1d > /dev/null 2>&1
                 echo -e "${GREEN}✅ 清理完成！${PLAIN}"
-                sleep 1 
-                ;;
+                sleep 1 ;;
             0) break ;;
-            *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done
 }
@@ -198,6 +349,8 @@ func_env_install() {
         echo -e "${GREEN} 10. 宝塔面板      ${YELLOW} 11. PVE 虚拟化    ${GREEN} 12. Argox 节点${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${CYAN} 13. 配置 Caddy 反代   ${YELLOW} 14. 查看 Caddy 证书路径${PLAIN}"
+        echo -e "${CYAN} 15. Caddy独立跳过验证 ${YELLOW} 16. 清空 Caddy 配置文件${PLAIN}"
+        echo -e "------------------------------------------------"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -272,6 +425,8 @@ EOF
                 fi
                 ;;
             14) func_view_caddy_cert ;;
+            15) func_caddy_add_insecure ;;
+            16) func_caddy_clear_config ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
         esac
@@ -331,6 +486,73 @@ func_view_caddy_cert() {
             fi
             echo -e "------------------------------------------------"
         done
+    fi
+    read -n 1 -s -r -p "按任意键继续..."
+}
+# ---------------------------------------------------------
+# 新增功能：独立追加 Caddy 跳过不安全证书反代块
+# ---------------------------------------------------------
+func_caddy_add_insecure() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🛡️ 独立配置：追加 Caddy 跳过证书验证反代${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    if [[ ! -f /etc/caddy/Caddyfile ]]; then
+        echo -e "${RED}❌ 未检测到 Caddy 配置文件，请先运行 [13] 安装 Caddy！${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+    
+    local domain
+    local port
+    read -p "👉 请输入解析后的域名 (如 panel.site.com): " domain
+    read -p "👉 请输入面板 HTTPS 本地映射端口 (如 40000): " port
+    
+    if [[ -z "$domain" || -z "$port" ]]; then
+        echo -e "${RED}❌ 域名或端口不能为空！已取消操作。${PLAIN}"
+    else
+        # 备份配置
+        cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak_$(date +%s)"
+        
+        # 直接追加跳过验证的逻辑块
+        cat <<EOF >> /etc/caddy/Caddyfile
+
+$domain {
+    reverse_proxy https://127.0.0.1:$port {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+}
+EOF
+        systemctl restart caddy
+        echo -e "${GREEN}✅ 独立跳过验证配置已成功追加到 Caddyfile！${PLAIN}"
+    fi
+    read -n 1 -s -r -p "按任意键继续..."
+}
+
+# ---------------------------------------------------------
+# 新增功能：清空 Caddy 配置文件
+# ---------------------------------------------------------
+func_caddy_clear_config() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧹 清空 Caddy 配置文件${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    if [[ -f /etc/caddy/Caddyfile ]]; then
+        echo -e "${YELLOW}⚠️ 警告：此操作将删除您所有的 Caddy 反代配置（原文件会自动备份）。${PLAIN}"
+        read -p "❓ 确定要清空 Caddyfile 吗？(y/n): " yn
+        if [[ "$yn" =~ ^[Yy]$ ]]; then
+            cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak_$(date +%s)"
+            # 写入一行注释，防止 Caddy 因为文件完全空而报警告
+            echo "# Caddyfile Cleared" > /etc/caddy/Caddyfile
+            systemctl restart caddy
+            echo -e "${GREEN}✅ 配置文件已清空并重启服务。现在您可以重新添加纯净的配置了！${PLAIN}"
+        else
+            echo -e "${BLUE}已取消清空操作。${PLAIN}"
+        fi
+    else
+        echo -e "${RED}❌ 未检测到 Caddy 配置文件！${PLAIN}"
     fi
     read -n 1 -s -r -p "按任意键继续..."
 }
@@ -482,7 +704,7 @@ func_tcp_tune() {
 }
 
 # ---------------------------------------------------------
-# 8. 智能内存调优 (完整逻辑落地版)
+# 8. 智能内存调优 (修复版：全自动匹配 + 强制挂载保障)
 # ---------------------------------------------------------
 func_zram_swap() {
     clear
@@ -497,12 +719,30 @@ func_zram_swap() {
     echo -e " ${GREEN}3. 保守档 (适合 8G 以上性能怪兽)${PLAIN}"
     echo -e "    - ZRAM 25% 压缩, Swappiness=10。追求极致响应速度。"
     echo -e "------------------------------------------------"
-    read -p "👉 请选择您的调优挡位 [1/2/3]: " choice
+    
+    local choice
+    read -p "👉 请选择您的调优挡位 [1/2/3] (直接回车按内存自动匹配): " choice
+    
+    # 【修复 1】：自动根据内存分配挡位
+    if [[ -z "$choice" ]]; then
+        if [[ "$mem" -lt 1024 ]]; then
+            choice=1
+        elif [[ "$mem" -le 4096 ]]; then
+            choice=2
+        else
+            choice=3
+        fi
+        echo -e "${YELLOW}💡 您按下了回车，系统已根据本机内存 (${mem}MB) 自动选择：[ 挡位 $choice ]${PLAIN}"
+        sleep 1.5
+    fi
     
     if is_debian; then
-        echo -e "${CYAN}正在安装 zram-tools 并下发配置...${PLAIN}"
+        echo -e "${CYAN}正在配置 ZRAM 内存压缩引擎...${PLAIN}"
         apt update -qq >/dev/null 2>&1
         apt install zram-tools -y -qq >/dev/null 2>&1
+        
+        # 【修复 2】：强制加载内核模块，防止精简系统缺失
+        modprobe zram >/dev/null 2>&1
         
         local zram_conf="/etc/default/zramswap"
         local percent=70
@@ -512,65 +752,106 @@ func_zram_swap() {
             1) percent=100; swap_val=100 ;;
             2) percent=70; swap_val=60 ;;
             3) percent=25; swap_val=10 ;;
-            *) percent=70; swap_val=60 ;; # 默认匹配主流
+            *) percent=70; swap_val=60 ;;
         esac
         
-        # 写入 ZRAM 配置文件
-        echo "ALGO=zstd" > "$zram_conf"
-        echo "PERCENT=$percent" >> "$zram_conf"
-        echo "PRIORITY=100" >> "$zram_conf"
+        # 写入配置文件
+        cat <<EOF > "$zram_conf"
+ALGO=zstd
+PERCENT=$percent
+PRIORITY=100
+EOF
         
-        # 重启服务应用
-        systemctl restart zramsetup >/dev/null 2>&1 || systemctl restart zramswap >/dev/null 2>&1
+        # 重载并强制重启服务
+        systemctl daemon-reload >/dev/null 2>&1
+        systemctl enable zramswap >/dev/null 2>&1
+        systemctl restart zramswap >/dev/null 2>&1
+        
+        # 【修复 3】：双重检查机制。如果重启服务后仍未生成 swap，强制调用底层脚本挂载
+        if ! grep -q zram /proc/swaps; then
+            if command -v zramswap >/dev/null 2>&1; then
+                zramswap start >/dev/null 2>&1
+            elif [[ -x /usr/sbin/zramswap ]]; then
+                /usr/sbin/zramswap start >/dev/null 2>&1
+            fi
+        fi
         
         # 修改内核 Swappiness 倾向
         echo "vm.swappiness = $swap_val" > /etc/sysctl.d/99-zram-swappiness.conf
         sysctl -p /etc/sysctl.d/99-zram-swappiness.conf >/dev/null 2>&1
         
-        echo -e "${GREEN}✅ 内存调优落地完成！(已设置: ${percent}% 压缩比, ${swap_val} 交换倾向)${PLAIN}"
+        # 最终验证结果
+        if grep -q zram /proc/swaps; then
+            echo -e "${GREEN}✅ ZRAM 调优落地完成！(已设置: ${percent}% 压缩比, ${swap_val} 交换倾向)${PLAIN}"
+        else
+            echo -e "${RED}❌ 警告：配置已下发，但系统内核似乎拒绝挂载 ZRAM。这通常是因为 VPS 商家阉割了内核功能（例如廉价的 LXC 容器）。${PLAIN}"
+        fi
     else
         echo -e "${RED}❌ 抱歉，当前系统并非 Debian/Ubuntu 衍生系，暂不支持自动化 ZRAM 调优。${PLAIN}"
     fi
     
     read -n 1 -s -r -p "按任意键继续..."
 }
-
 # ---------------------------------------------------------
-# 9. Cloud 内核安装
+# 9. 换装 Cloud/KVM 优化内核 (精确区分 Debian/Ubuntu 并带报错捕获)
 # ---------------------------------------------------------
 func_install_kernel() {
     clear
-    if ! is_debian; then
-        echo -e "${RED}❌ 此功能目前仅支持 Debian/Ubuntu 衍生系统！${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}☁️  换装 Cloud/KVM 优化内核${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    
+    if [[ "$OS" == "debian" ]]; then
+        echo -e "${CYAN}👉 检测到 Debian 系统，准备安装 linux-image-cloud-amd64...${PLAIN}"
+        if apt update -y && apt install -y linux-image-cloud-amd64; then
+            echo -e "${GREEN}✅ Debian Cloud 内核安装完成！请重启服务器以生效。${PLAIN}"
+        else
+            echo -e "${RED}❌ 安装失败！请检查源配置或网络连接。${PLAIN}"
+        fi
+        
+    elif [[ "$OS" == "ubuntu" ]]; then
+        echo -e "${CYAN}👉 检测到 Ubuntu 系统，准备安装 linux-image-kvm...${PLAIN}"
+        echo -e "${YELLOW}💡 提示：Ubuntu 专属的轻量化云/KVM内核名为 linux-image-kvm。${PLAIN}"
+        if apt update -y && apt install -y linux-image-kvm; then
+            echo -e "${GREEN}✅ Ubuntu KVM 优化内核安装完成！请重启服务器以生效。${PLAIN}"
+        else
+            echo -e "${RED}❌ 安装失败！请检查源配置或网络连接。${PLAIN}"
+        fi
+        
     else
-        echo -e "${CYAN}👉 正在更新仓库并安装 linux-image-cloud-amd64...${PLAIN}"
-        apt update -y && apt install -y linux-image-cloud-amd64
-        echo -e "${GREEN}✅ Cloud 内核安装完成！请重启服务器以生效。${PLAIN}"
+        echo -e "${RED}❌ 抱歉，换装优化内核功能目前仅支持 Debian 和 Ubuntu 系统！${PLAIN}"
     fi
+    
+    echo -e "------------------------------------------------"
     read -n 1 -s -r -p "按任意键返回..."
 }
 
 # ---------------------------------------------------------
-# 10. 清理旧内核
+# 10. 清理冗余旧内核 (带 Ubuntu/Debian 提示适配)
 # ---------------------------------------------------------
 func_clean_kernel() {
     clear
-    if ! is_debian; then
+    if [[ ! "$OS" =~ debian|ubuntu ]]; then
         echo -e "${RED}❌ 此功能目前仅支持 Debian/Ubuntu 衍生系统！${PLAIN}"
     else
         echo -e "当前正在运行的内核为: ${GREEN}$(uname -r)${PLAIN}"
-        echo -e "${RED}警告：绝对不要卸载当前正在运行的内核以及带有 cloud 字样的内核！${PLAIN}"
+        echo -e "${RED}⚠️  高危警告：绝对不要卸载当前正在运行的内核！${PLAIN}"
+        echo -e "${RED}⚠️  也不要卸载带有 cloud (Debian) 或 kvm (Ubuntu) 字样的内核！${PLAIN}"
         echo -e "------------------------------------------------"
         dpkg --list | grep linux-image
         echo -e "------------------------------------------------"
         
         local old_k
-        read -p "👉 请输入要卸载的旧内核包全名 (直接回车取消): " old_k
+        read -p "👉 请复制上方要卸载的旧内核包全名并粘贴 (直接回车取消): " old_k
         if [[ -n "$old_k" ]]; then
-            apt purge -y "$old_k" && update-grub && apt autoremove --purge -y
-            echo -e "${GREEN}✅ 清理完成！空间已释放。${PLAIN}"
+            # 同样加入错误捕获
+            if apt purge -y "$old_k" && update-grub && apt autoremove --purge -y; then
+                echo -e "${GREEN}✅ 旧内核 [$old_k] 清理完成！磁盘空间已释放。${PLAIN}"
+            else
+                echo -e "${RED}❌ 清理失败！找不到该内核包或存在依赖问题。${PLAIN}"
+            fi
         else
-            echo -e "${BLUE}已取消操作。${PLAIN}"
+            echo -e "${BLUE}已取消卸载操作。${PLAIN}"
         fi
     fi
     read -n 1 -s -r -p "按任意键返回..."
