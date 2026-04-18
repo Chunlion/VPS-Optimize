@@ -88,7 +88,7 @@ EOF
 }
 
 # ---------------------------------------------------------
-# 2. 系统高级开关 (y/n 模式 + 智能防火墙)
+# 2. 系统高级开关
 # ---------------------------------------------------------
 func_system_tweaks() {
     while true; do
@@ -97,12 +97,22 @@ func_system_tweaks() {
         echo -e "${BOLD}⚙️  系统高级开关 (输入 y 开启, n 关闭)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
+        # IPv6 状态
         ipv6_status=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
         [[ "$ipv6_status" == "0" ]] && str_ipv6="${GREEN}开启中${PLAIN}" || str_ipv6="${RED}已禁用${PLAIN}"
         
+        # IPv4 优先状态
+        if grep -q "^precedence ::ffff:0:0/96  100" /etc/gai.conf 2>/dev/null; then
+            str_ipv4_first="${GREEN}已优先${PLAIN}"
+        else
+            str_ipv4_first="${RED}默认(IPv6优先)${PLAIN}"
+        fi
+        
+        # Ping 状态
         ping_status=$(cat /proc/sys/net/ipv4/icmp_echo_ignore_all 2>/dev/null)
         [[ "$ping_status" == "0" ]] && str_ping="${GREEN}允许被Ping${PLAIN}" || str_ping="${RED}禁Ping中${PLAIN}"
         
+        # 自动更新与防火墙状态
         if [[ "$OS" =~ debian|ubuntu ]]; then
             update_status=$(systemctl is-active unattended-upgrades 2>/dev/null)
             fw_status=$(ufw status 2>/dev/null | grep -wi active)
@@ -113,12 +123,13 @@ func_system_tweaks() {
         [[ "$update_status" == "active" ]] && str_update="${GREEN}开启中${PLAIN}" || str_update="${RED}已禁用${PLAIN}"
         [[ "$fw_status" == "active" || -n "$fw_status" ]] && str_fw="${GREEN}开启中${PLAIN}" || str_fw="${RED}已禁用${PLAIN}"
 
-        echo -e "${GREEN}  1. IPv6 网络${PLAIN}      当前状态: [ $str_ipv6 ]"
-        echo -e "${GREEN}  2. 被人Ping状态${PLAIN}   当前状态: [ $str_ping ]"
-        echo -e "${GREEN}  3. 自动更新服务${PLAIN}   当前状态: [ $str_update ]"
-        echo -e "${GREEN}  4. 系统安全防火墙${PLAIN} 当前状态: [ $str_fw ]"
-        echo -e "${GREEN}  5. 彻底清理系统垃圾${PLAIN} (日志/缓存/无用包)"
-        echo -e "${GREEN}  6. 查看防火墙规则${PLAIN}   (放行规则列表)"
+        echo -e "${GREEN}  1. 管理 IPv6 网络状态${PLAIN}    当前: [ $str_ipv6 ]"
+        echo -e "${GREEN}  2. IPv4 出站优先级增强${PLAIN}   当前: [ $str_ipv4_first ]"
+        echo -e "${GREEN}  3. 管理 被人Ping状态${PLAIN}     当前: [ $str_ping ]"
+        echo -e "${GREEN}  4. 管理 自动安全更新${PLAIN}     当前: [ $str_update ]"
+        echo -e "${GREEN}  5. 管理 系统安全防火墙${PLAIN}   当前: [ $str_fw ]"
+        echo -e "${GREEN}  6. 彻底清理系统垃圾${PLAIN}      (日志/缓存/无用包)"
+        echo -e "${GREEN}  7. 查看防火墙规则列表${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -126,7 +137,7 @@ func_system_tweaks() {
 
         case $tweak_choice in
             1)
-                read -p "❓ 是否开启 IPv6？(y 开启 / n 关闭): " yn
+                read -p "❓ 是否开启 IPv6 网络？(y 开启 / n 关闭): " yn
                 if [[ "$yn" =~ ^[Yy]$ ]]; then
                     rm -f /etc/sysctl.d/99-disable-ipv6.conf
                     sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null 2>&1
@@ -135,10 +146,17 @@ func_system_tweaks() {
                     echo "net.ipv6.conf.all.disable_ipv6 = 1" > /etc/sysctl.d/99-disable-ipv6.conf
                     sysctl -p /etc/sysctl.d/99-disable-ipv6.conf >/dev/null 2>&1
                     echo -e "${RED}✅ IPv6 已禁用${PLAIN}"
-                fi
-                sleep 1
-                ;;
+                fi; sleep 1 ;;
             2)
+                read -p "❓ 是否设置 IPv4 为最高优先级？(y 开启 / n 恢复默认): " yn
+                if [[ "$yn" =~ ^[Yy]$ ]]; then
+                    sed -Ei '/^[[:space:]]*#?[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+100\b.*?$/ {s/.+100\b([[:space:]]*#.*)?$/precedence ::ffff:0:0\/96  100\1/; :a;n;b a}; /^[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+[0-9]+.*$/ {s/^.*precedence.+::ffff:0:0\/96[^0-9]+([0-9]+).*$/precedence ::ffff:0:0\/96  100\t#原值为 \1/; :a;n;ba;}; $aprecedence ::ffff:0:0\/96  100' /etc/gai.conf
+                    echo -e "${GREEN}✅ 已将 IPv4 设置为最高优先级！${PLAIN}"
+                elif [[ "$yn" =~ ^[Nn]$ ]]; then
+                    sed -i '/precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
+                    echo -e "${BLUE}已恢复默认设置。${PLAIN}"
+                fi; sleep 1 ;;
+            3)
                 read -p "❓ 是否允许被 Ping？(y 允许 / n 禁止): " yn
                 if [[ "$yn" =~ ^[Yy]$ ]]; then
                     rm -f /etc/sysctl.d/99-disable-ping.conf
@@ -147,15 +165,15 @@ func_system_tweaks() {
                 elif [[ "$yn" =~ ^[Nn]$ ]]; then
                     echo "net.ipv4.icmp_echo_ignore_all = 1" > /etc/sysctl.d/99-disable-ping.conf
                     sysctl -p /etc/sysctl.d/99-disable-ping.conf >/dev/null 2>&1
-                    echo -e "${RED}✅ 已禁止被 Ping${PLAIN}"
-                fi
-                sleep 1
-                ;;
-            3)
-                read -p "❓ 是否开启自动更新？(y 开启 / n 关闭): " yn
+                    echo -e "${RED}✅ 已开启禁 Ping 保护${PLAIN}"
+                fi; sleep 1 ;;
+            4)
+                read -p "❓ 是否开启系统自动更新？(y 开启 / n 关闭): " yn
                 if [[ "$yn" =~ ^[Yy]$ ]]; then
                     if [[ "$OS" =~ debian|ubuntu ]]; then
                         apt install -y unattended-upgrades -qq >/dev/null 2>&1
+                        echo "unattended-upgrades unattended-upgrades/enable_auto_updates boolean true" | debconf-set-selections
+                        dpkg-reconfigure -f noninteractive unattended-upgrades >/dev/null 2>&1
                         systemctl enable --now unattended-upgrades >/dev/null 2>&1
                     else
                         yum install -y dnf-automatic -q >/dev/null 2>&1
@@ -163,16 +181,11 @@ func_system_tweaks() {
                     fi
                     echo -e "${GREEN}✅ 自动更新已开启${PLAIN}"
                 elif [[ "$yn" =~ ^[Nn]$ ]]; then
-                    if [[ "$OS" =~ debian|ubuntu ]]; then
-                        systemctl disable --now unattended-upgrades >/dev/null 2>&1
-                    else
-                        systemctl disable --now dnf-automatic.timer >/dev/null 2>&1
-                    fi
-                    echo -e "${RED}✅ 自动更新已禁用${PLAIN}"
-                fi
-                sleep 1
-                ;;
-            4)
+                    if [[ "$OS" =~ debian|ubuntu ]]; then systemctl disable --now unattended-upgrades >/dev/null 2>&1
+                    else systemctl disable --now dnf-automatic.timer >/dev/null 2>&1; fi
+                    echo -e "${GREEN}✅ 自动更新已关闭${PLAIN}"
+                fi; sleep 1 ;;
+            5)
                 read -p "❓ 是否开启防火墙并自动放行活动端口？(y/n): " yn
                 if [[ "$yn" =~ ^[Yy]$ ]]; then
                     echo -e "${CYAN}👉 正在嗅探活动端口...${PLAIN}"
@@ -181,9 +194,7 @@ func_system_tweaks() {
                         apt install ufw -y >/dev/null 2>&1
                         ufw default deny incoming >/dev/null 2>&1
                         ufw default allow outgoing >/dev/null 2>&1
-                        for p in $active_ports; do
-                            ufw allow "$p" >/dev/null 2>&1
-                        done
+                        for p in $active_ports; do ufw allow "$p" >/dev/null 2>&1; done
                         ufw --force enable >/dev/null 2>&1
                     else
                         yum install firewalld -y >/dev/null 2>&1
@@ -194,44 +205,24 @@ func_system_tweaks() {
                         done
                         firewall-cmd --reload >/dev/null 2>&1
                     fi
-                    echo -e "${GREEN}✅ 防火墙已开启！自动放行了端口: $(echo $active_ports)${PLAIN}"
+                    echo -e "${GREEN}✅ 防火墙已开启并放行端口: $active_ports${PLAIN}"
                 elif [[ "$yn" =~ ^[Nn]$ ]]; then
-                    if [[ "$OS" =~ debian|ubuntu ]]; then
-                        ufw disable >/dev/null 2>&1
-                    else
-                        systemctl disable --now firewalld >/dev/null 2>&1
-                    fi
+                    if [[ "$OS" =~ debian|ubuntu ]]; then ufw disable >/dev/null 2>&1
+                    else systemctl disable --now firewalld >/dev/null 2>&1; fi
                     echo -e "${RED}✅ 防火墙已关闭${PLAIN}"
-                fi
-                read -n 1 -s -r -p "按任意键继续..."
-                ;;
+                fi; read -n 1 -s -r -p "按任意键继续..." ;;
             6)
-                if [[ "$OS" =~ debian|ubuntu ]]; then
-                    ufw status verbose
-                else
-                    firewall-cmd --list-all
-                fi
-                read -n 1 -s -r -p "按任意键继续..."
-                ;;
-            5)
-                echo -e "${CYAN}👉 正在清理系统垃圾...${PLAIN}"
-                if [[ "$OS" =~ debian|ubuntu ]]; then
-                    apt autoremove --purge -y >/dev/null 2>&1
-                    apt clean >/dev/null 2>&1
-                else
-                    yum autoremove -y >/dev/null 2>&1
-                    yum clean all >/dev/null 2>&1
-                fi
+                echo -e "${CYAN}👉 正在清理垃圾...${PLAIN}"
+                if [[ "$OS" =~ debian|ubuntu ]]; then apt autoremove --purge -y; apt clean; else yum autoremove -y; yum clean all; fi
                 journalctl --vacuum-time=1d > /dev/null 2>&1
-                echo -e "${GREEN}✅ 清理完成！${PLAIN}"
-                sleep 1
-                ;;
+                echo -e "${GREEN}✅ 清理完成！${PLAIN}"; sleep 1 ;;
+            7)
+                if [[ "$OS" =~ debian|ubuntu ]]; then ufw status verbose; else firewall-cmd --list-all; fi
+                read -n 1 -s -r -p "按任意键继续..." ;;
             0) break ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done
 }
-
 # ---------------------------------------------------------
 # 3. 常用环境及软件合集
 # ---------------------------------------------------------
