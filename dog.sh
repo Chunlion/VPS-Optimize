@@ -19,7 +19,7 @@ readonly NC='\033[0m'
 # 网络超时设置
 readonly SHORT_CONNECT_TIMEOUT=5
 readonly SHORT_MAX_TIMEOUT=7
-readonly SCRIPT_URL="https://raw.githubusercontent.com/zywe03/realm-xwPF/main/port-traffic-dog.sh"
+readonly SCRIPT_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/refs/heads/main/dog.sh"
 readonly SHORTCUT_COMMAND="dog"
 
 detect_system() {
