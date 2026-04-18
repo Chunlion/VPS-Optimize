@@ -274,7 +274,7 @@ main_menu() {
             4) func_security ;; 5) func_docker_manage ;; 6) func_bbr_manage ;;
             7) func_tcp_tune ;; 8) func_zram_swap ;; 9) func_install_kernel ;;
             10) func_clean_kernel ;; 11) func_system_info ;; 12) func_test_scripts ;;
-            13) wget -qO t.sh https://raw.githubusercontent.com/zywe03/realm-xwPF/main/port-traffic-dog.sh && bash t.sh ;;
+            13) wget -qO dog.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh && chmod +x dog.sh && ./dog.sh ;;
             14) bash <(curl -Ls https://raw.githubusercontent.com/xeefei/x-panel/master/install.sh) ;;
             15) bash <(curl -fsSL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh) ;;
             19) func_dns_unlock ;; 18) func_rescue_panel ;; 17) func_update_script ;;
