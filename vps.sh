@@ -197,7 +197,7 @@ func_env_install() {
         echo -e "${GREEN}  7. 哪吒监控      ${YELLOW}  8. WARP (CF)     ${GREEN}  9. Aria2 下载${PLAIN}"
         echo -e "${GREEN} 10. 宝塔面板      ${YELLOW} 11. PVE 虚拟化    ${GREEN} 12. Argox 节点${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${CYAN} 13. 追加 Caddy 反代配置 ${YELLOW}(域名+全自动HTTPS)${PLAIN}"
+        echo -e "${CYAN} 13. 配置 Caddy 反代   ${YELLOW} 14. 查看 Caddy 证书路径${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -271,12 +271,68 @@ EOF
                     echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
                 fi
                 ;;
+            14) func_view_caddy_cert ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
         esac
         echo ""
         read -n 1 -s -r -p "按任意键继续..."
     done
+}
+# ---------------------------------------------------------
+# 新增功能：查看 Caddy 已申请证书路径
+# ---------------------------------------------------------
+func_view_caddy_cert() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🔑 Caddy 已申请证书路径查询${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    
+    if [[ ! -f "/etc/caddy/Caddyfile" ]]; then
+        echo -e "${RED}❌ 未检测到 /etc/caddy/Caddyfile，请先配置反代！${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+    
+    # 提取 Caddyfile 中的域名 (排除注释，简单匹配)
+    local domains
+    domains=$(grep -vE '^[[:space:]]*#' /etc/caddy/Caddyfile | grep '{' | awk '{print $1}' | tr -d '{')
+    
+    if [[ -z "$domains" ]]; then
+        echo -e "${YELLOW}⚠️ Caddyfile 中没有配置明确的域名。${PLAIN}"
+    else
+        # Caddy 默认的证书存储根路径
+        local cert_root="/var/lib/caddy/.local/share/caddy/certificates"
+        [[ ! -d "$cert_root" ]] && cert_root="/root/.local/share/caddy/certificates"
+        
+        for domain in $domains; do
+            # 过滤掉本地回环等无意义的块
+            if [[ "$domain" == ":80" || "$domain" == "localhost" ]]; then continue; fi
+            
+            echo -e "${BLUE}🌐 域名: ${BOLD}${domain}${PLAIN}"
+            
+            local found=false
+            if [[ -d "$cert_root" ]]; then
+                # 递归查找对应的 .crt 和 .key 文件
+                local cert_file
+                local key_file
+                cert_file=$(find "$cert_root" -name "${domain}.crt" -print -quit 2>/dev/null)
+                key_file=$(find "$cert_root" -name "${domain}.key" -print -quit 2>/dev/null)
+                
+                if [[ -n "$cert_file" && -n "$key_file" ]]; then
+                    echo -e "   ${GREEN}📄 公钥 (CRT):${PLAIN} ${cert_file}"
+                    echo -e "   ${YELLOW}🔑 密钥 (KEY):${PLAIN} ${key_file}"
+                    found=true
+                fi
+            fi
+            
+            if ! $found; then
+                echo -e "   ${RED}❌ 未找到证书，可能尚未签发成功或路径异常。${PLAIN}"
+            fi
+            echo -e "------------------------------------------------"
+        done
+    fi
+    read -n 1 -s -r -p "按任意键继续..."
 }
 
 # ---------------------------------------------------------
