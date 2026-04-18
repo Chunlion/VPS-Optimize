@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # =========================================================
-#  Project:  VPS 全能控制面板
-#  Features: IPv4优先/智能防火墙/面板救砖/DNS流媒体解锁/热更新
+#  Project:  VPS 全能控制面板 
+#  Features: IPv4优先/智能防火墙/面板救砖/DNS流媒体解锁/热更新/安全加固
 #  Shortcut: cy
 # =========================================================
 
@@ -21,13 +21,23 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# --- 系统识别 ---
+# --- 系统识别增强 ---
 if [[ -f /etc/os-release ]]; then
     . /etc/os-release
     OS=$ID
+    OS_LIKE=${ID_LIKE:-""}
 else
     OS="unknown"
+    OS_LIKE="unknown"
 fi
+
+is_debian() {
+    [[ "$OS" =~ debian|ubuntu ]] || [[ "$OS_LIKE" =~ debian|ubuntu ]]
+}
+
+is_redhat() {
+    [[ "$OS" =~ centos|rhel|rocky|almalinux|fedora ]] || [[ "$OS_LIKE" =~ centos|rhel|fedora ]]
+}
 
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh"
 
@@ -49,11 +59,11 @@ func_base_init() {
     clear
     echo -e "${CYAN}👉 正在安装基础工具、限制日志并开启基础 BBR...${PLAIN}"
     
-    if [[ "$OS" =~ debian|ubuntu ]]; then
+    if is_debian; then
         apt update -qq
-        apt install -y curl wget git nano unzip htop iptables iproute2 sqlite3 -qq > /dev/null 2>&1
-    elif [[ "$OS" =~ centos|rhel|rocky|almalinux ]]; then
-        yum install -y curl wget git nano unzip htop iptables iproute epel-release sqlite -q > /dev/null 2>&1
+        apt install -y curl wget git nano unzip htop iptables iproute2 sqlite3 jq -qq > /dev/null 2>&1
+    elif is_redhat; then
+        yum install -y curl wget git nano unzip htop iptables iproute epel-release sqlite jq -q > /dev/null 2>&1
     fi
 
     # 限制系统日志最大 100M
@@ -84,7 +94,7 @@ func_system_tweaks() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}⚙️  系统高级开关 (输入 y 开启, n 关闭)${PLAIN}"
+        echo -e "${BOLD}⚙️  系统高级开关 ( y 开启, n 关闭)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         # 获取各项状态
@@ -156,10 +166,10 @@ func_system_tweaks() {
                 ;;
             4) 
                 echo -e "${CYAN}👉 正在深度清理系统垃圾...${PLAIN}"
-                if [[ "$OS" =~ debian|ubuntu ]]; then 
+                if is_debian; then 
                     apt autoremove --purge -y >/dev/null 2>&1
                     apt clean >/dev/null 2>&1
-                else 
+                elif is_redhat; then 
                     yum autoremove -y >/dev/null 2>&1
                     yum clean all >/dev/null 2>&1
                 fi
@@ -167,19 +177,14 @@ func_system_tweaks() {
                 echo -e "${GREEN}✅ 清理完成！${PLAIN}"
                 sleep 1 
                 ;;
-            0) 
-                break 
-                ;;
-            *)
-                echo -e "${RED}❌ 无效的选择！${PLAIN}"
-                sleep 1
-                ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
         esac
     done
 }
 
 # ---------------------------------------------------------
-# 3. 常用环境及软件 (Caddy 多行写入优化版)
+# 3. 常用环境及软件 (Caddy 防覆盖优化)
 # ---------------------------------------------------------
 func_env_install() {
     while true; do
@@ -192,7 +197,7 @@ func_env_install() {
         echo -e "${GREEN}  7. 哪吒监控      ${YELLOW}  8. WARP (CF)     ${GREEN}  9. Aria2 下载${PLAIN}"
         echo -e "${GREEN} 10. 宝塔面板      ${YELLOW} 11. PVE 虚拟化    ${GREEN} 12. Argox 节点${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${CYAN} 13. 一键配置 Caddy 反向代理 ${YELLOW}(域名+全自动HTTPS)${PLAIN}"
+        echo -e "${CYAN} 13. 追加 Caddy 反代配置 ${YELLOW}(域名+全自动HTTPS)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -203,7 +208,7 @@ func_env_install() {
         case $env_choice in
             1) bash <(curl -sL 'https://get.docker.com') ;;
             2) curl -O https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh && chmod +x pyinstall.sh && ./pyinstall.sh ;;
-            3) if [[ "$OS" =~ debian|ubuntu ]]; then apt install iperf3 -y; else yum install iperf3 -y; fi ;;
+            3) if is_debian; then apt install iperf3 -y; else yum install iperf3 -y; fi ;;
             4) bash <(curl -L https://raw.githubusercontent.com/zhouh047/realm-oneclick-install/main/realm.sh) -i ;;
             5) wget --no-check-certificate -O gost.sh https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh && chmod +x gost.sh && ./gost.sh ;;
             6) bash <(curl -fsSL https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh) ;;
@@ -218,7 +223,7 @@ func_env_install() {
             11) bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh) ;;
             12) bash <(wget -qO- https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh) ;;
             13)
-                if [[ "$OS" =~ debian|ubuntu ]]; then 
+                if is_debian; then 
                     apt install -y debian-keyring debian-archive-keyring apt-transport-https -qq && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list && apt update && apt install caddy -y
                 else 
                     yum install -y yum-utils && yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo && yum install caddy -y
@@ -237,8 +242,15 @@ func_env_install() {
                     echo -e "${YELLOW}❓ 后端面板是否开启了自带的 SSL 证书？(y/n)${PLAIN}"
                     read -p "👉 您的选择 (选 n 则正常反代 http): " is_https
                     
+                    # 备份原始 Caddyfile
+                    if [[ -f /etc/caddy/Caddyfile ]]; then
+                        cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak_$(date +%s)
+                        echo -e "${BLUE}已备份原配置为 /etc/caddy/Caddyfile.bak_$(date +%s)${PLAIN}"
+                    fi
+                    
                     if [[ "$is_https" =~ ^[Yy]$ ]]; then
-                        cat <<EOF > /etc/caddy/Caddyfile
+                        cat <<EOF >> /etc/caddy/Caddyfile
+
 $domain {
     reverse_proxy https://127.0.0.1:$port {
         transport http {
@@ -248,22 +260,19 @@ $domain {
 }
 EOF
                     else
-                        cat <<EOF > /etc/caddy/Caddyfile
+                        cat <<EOF >> /etc/caddy/Caddyfile
+
 $domain {
     reverse_proxy localhost:$port
 }
 EOF
                     fi
                     systemctl restart caddy
-                    echo -e "${GREEN}✅ Caddy 反代配置完成！请访问 https://$domain${PLAIN}"
+                    echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
                 fi
                 ;;
-            0) 
-                break 
-                ;;
-            *)
-                echo -e "${RED}❌ 无效的输入！${PLAIN}"
-                ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
         esac
         echo ""
         read -n 1 -s -r -p "按任意键继续..."
@@ -271,7 +280,7 @@ EOF
 }
 
 # ---------------------------------------------------------
-# 4. SSH 安全加固
+# 4. SSH 安全加固 (防占用自锁优化版)
 # ---------------------------------------------------------
 func_security() {
     clear
@@ -284,11 +293,19 @@ func_security() {
     final_p=${final_p:-$current_p}
     
     if [[ "$final_p" != "$current_p" ]]; then
-        sed -i "s/^#Port .*/Port $final_p/" /etc/ssh/sshd_config
-        sed -i "s/^Port .*/Port $final_p/" /etc/ssh/sshd_config
-        grep -q "^Port $final_p" /etc/ssh/sshd_config || echo "Port $final_p" >> /etc/ssh/sshd_config
+        # 检查端口是否被占用
+        if command -v ss >/dev/null 2>&1 && ss -tulpn | grep -q ":$final_p "; then
+            echo -e "${RED}❌ 错误：端口 $final_p 已经被其他程序占用！为了防止您失联，操作已中止。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        fi
         
-        # 尝试放行防火墙
+        # 统一清理并追加端口配置
+        sed -i '/^[[:space:]]*Port /d' /etc/ssh/sshd_config
+        sed -i '/^[[:space:]]*#Port /d' /etc/ssh/sshd_config
+        echo "Port $final_p" >> /etc/ssh/sshd_config
+        
+        # 放行防火墙
         if command -v ufw >/dev/null 2>&1; then ufw allow "$final_p"/tcp >/dev/null 2>&1; fi
         if command -v firewall-cmd >/dev/null 2>&1; then 
             firewall-cmd --permanent --add-port="$final_p"/tcp >/dev/null 2>&1
@@ -305,7 +322,7 @@ func_security() {
 }
 
 # ---------------------------------------------------------
-# 5. Docker 深度管理 (严格检验安装状态)
+# 5. Docker 深度管理 (防覆盖备份版)
 # ---------------------------------------------------------
 func_docker_manage() {
     if ! command -v docker >/dev/null 2>&1; then 
@@ -334,6 +351,12 @@ func_docker_manage() {
         case $c in
             1) 
                 mkdir -p /etc/docker
+                # 检查并备份
+                if [[ -f /etc/docker/daemon.json ]]; then
+                    cp /etc/docker/daemon.json "/etc/docker/daemon.json.bak_$(date +%s)"
+                    echo -e "${YELLOW}⚠️ 已将原有 Docker 配置文件备份为 .bak 时间戳文件。${PLAIN}"
+                fi
+                
                 cat <<EOF > /etc/docker/daemon.json
 {
   "ip": "127.0.0.1",
@@ -349,9 +372,13 @@ EOF
                 sleep 2
                 ;;
             2) 
-                rm -f /etc/docker/daemon.json
-                systemctl restart docker >/dev/null 2>&1
-                echo -e "${GREEN}✅ 已解除限制，容器端口恢复公网可访状态。${PLAIN}" 
+                if [[ -f /etc/docker/daemon.json ]]; then
+                    rm -f /etc/docker/daemon.json
+                    systemctl restart docker >/dev/null 2>&1
+                    echo -e "${GREEN}✅ 已解除限制，容器端口恢复公网可访状态。${PLAIN}" 
+                else
+                    echo -e "${BLUE}未检测到限制配置文件，当前已是全网开放状态。${PLAIN}"
+                fi
                 sleep 2
                 ;;
             0) break ;;
@@ -361,7 +388,7 @@ EOF
 }
 
 # ---------------------------------------------------------
-# 6. BBR 增强管理 (调用 ylx2016 脚本)
+# 6. BBR 增强管理
 # ---------------------------------------------------------
 func_bbr_manage() {
     clear
@@ -399,7 +426,7 @@ func_tcp_tune() {
 }
 
 # ---------------------------------------------------------
-# 8. 智能内存调优
+# 8. 智能内存调优 (完整逻辑落地版)
 # ---------------------------------------------------------
 func_zram_swap() {
     clear
@@ -414,14 +441,41 @@ func_zram_swap() {
     echo -e " ${GREEN}3. 保守档 (适合 8G 以上性能怪兽)${PLAIN}"
     echo -e "    - ZRAM 25% 压缩, Swappiness=10。追求极致响应速度。"
     echo -e "------------------------------------------------"
-    read -p "👉 请选择您的调优挡位 [1/2/3] (直接回车按内存匹配): " choice
+    read -p "👉 请选择您的调优挡位 [1/2/3]: " choice
     
-    if [[ "$OS" =~ debian|ubuntu ]]; then
+    if is_debian; then
+        echo -e "${CYAN}正在安装 zram-tools 并下发配置...${PLAIN}"
+        apt update -qq >/dev/null 2>&1
         apt install zram-tools -y -qq >/dev/null 2>&1
+        
+        local zram_conf="/etc/default/zramswap"
+        local percent=70
+        local swap_val=60
+        
+        case $choice in
+            1) percent=100; swap_val=100 ;;
+            2) percent=70; swap_val=60 ;;
+            3) percent=25; swap_val=10 ;;
+            *) percent=70; swap_val=60 ;; # 默认匹配主流
+        esac
+        
+        # 写入 ZRAM 配置文件
+        echo "ALGO=zstd" > "$zram_conf"
+        echo "PERCENT=$percent" >> "$zram_conf"
+        echo "PRIORITY=100" >> "$zram_conf"
+        
+        # 重启服务应用
+        systemctl restart zramsetup >/dev/null 2>&1 || systemctl restart zramswap >/dev/null 2>&1
+        
+        # 修改内核 Swappiness 倾向
+        echo "vm.swappiness = $swap_val" > /etc/sysctl.d/99-zram-swappiness.conf
+        sysctl -p /etc/sysctl.d/99-zram-swappiness.conf >/dev/null 2>&1
+        
+        echo -e "${GREEN}✅ 内存调优落地完成！(已设置: ${percent}% 压缩比, ${swap_val} 交换倾向)${PLAIN}"
+    else
+        echo -e "${RED}❌ 抱歉，当前系统并非 Debian/Ubuntu 衍生系，暂不支持自动化 ZRAM 调优。${PLAIN}"
     fi
     
-    # 此处为核心逻辑演示，与前版一致
-    echo -e "${GREEN}✅ 内存压缩调优配置已下发完毕！${PLAIN}"
     read -n 1 -s -r -p "按任意键继续..."
 }
 
@@ -430,7 +484,7 @@ func_zram_swap() {
 # ---------------------------------------------------------
 func_install_kernel() {
     clear
-    if [[ ! "$OS" =~ debian|ubuntu ]]; then
+    if ! is_debian; then
         echo -e "${RED}❌ 此功能目前仅支持 Debian/Ubuntu 衍生系统！${PLAIN}"
     else
         echo -e "${CYAN}👉 正在更新仓库并安装 linux-image-cloud-amd64...${PLAIN}"
@@ -445,7 +499,7 @@ func_install_kernel() {
 # ---------------------------------------------------------
 func_clean_kernel() {
     clear
-    if [[ ! "$OS" =~ debian|ubuntu ]]; then
+    if ! is_debian; then
         echo -e "${RED}❌ 此功能目前仅支持 Debian/Ubuntu 衍生系统！${PLAIN}"
     else
         echo -e "当前正在运行的内核为: ${GREEN}$(uname -r)${PLAIN}"
@@ -467,12 +521,12 @@ func_clean_kernel() {
 }
 
 # ---------------------------------------------------------
-# 11. 极速硬件探针 (完美修复版)
+# 11. 极速硬件探针
 # ---------------------------------------------------------
 func_system_info() {
     clear
     local os_name
-    os_name=$(cat /etc/os-release | grep -w "PRETTY_NAME" | cut -d= -f2 | sed 's/"//g')
+    os_name=$(grep -w "PRETTY_NAME" /etc/os-release | cut -d= -f2 | tr -d '"')
     
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}🖥️  本机详细硬件与网络信息大屏${PLAIN}"
@@ -553,7 +607,7 @@ func_singbox() {
 }
 
 # ---------------------------------------------------------
-# 19. DNS 流媒体分流解锁 (Alice DNS)
+# 17. DNS 流媒体分流解锁 (Alice DNS)
 # ---------------------------------------------------------
 func_dns_unlock() {
     clear
@@ -597,7 +651,7 @@ func_rescue_panel() {
         
         # 确保 sqlite3 可用
         if ! command -v sqlite3 >/dev/null 2>&1; then
-            if [[ "$OS" =~ debian|ubuntu ]]; then apt install sqlite3 -y >/dev/null; else yum install sqlite -y >/dev/null; fi
+            if is_debian; then apt install sqlite3 -y >/dev/null; elif is_redhat; then yum install sqlite -y >/dev/null; fi
         fi
         
         # 停服务
@@ -610,11 +664,11 @@ func_rescue_panel() {
         [[ -f "/etc/x-panel/x-panel.db" ]] && db_path="/etc/x-panel/x-panel.db"
         
         if [[ -n "$db_path" ]]; then
-            sqlite3 "$db_path" "update settings set value='' where key='webCertFile';"
-            sqlite3 "$db_path" "update settings set value='' where key='webKeyFile';"
+            sqlite3 "$db_path" "update settings set value='' where key='webCertFile';" 2>/dev/null
+            sqlite3 "$db_path" "update settings set value='' where key='webKeyFile';" 2>/dev/null
             echo -e "${GREEN}✅ 数据库底层的 SSL 证书路径已成功抹除！${PLAIN}"
         else
-            echo -e "${RED}❌ 未检测到常见面板的数据库文件！${PLAIN}"
+            echo -e "${RED}❌ 未检测到常见面板的数据库文件！您可能没有安装 x-ui 或 x-panel。${PLAIN}"
         fi
         
         # 重启服务
@@ -622,7 +676,7 @@ func_rescue_panel() {
         systemctl start x-panel >/dev/null 2>&1
         
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}✅ 面板已降级回 HTTP 模式运行。${PLAIN}"
+        echo -e "${GREEN}✅ 面板已尝试降级回 HTTP 模式运行。${PLAIN}"
         echo -e "${YELLOW}💡 强烈建议：立刻打开浏览器的【无痕模式】，使用 http://IP:端口 进行访问测试！${PLAIN}"
     else
         echo -e "${BLUE}已取消操作。${PLAIN}"
@@ -631,7 +685,7 @@ func_rescue_panel() {
 }
 
 # ---------------------------------------------------------
-# 17. 脚本热更新
+# 19. 脚本热更新
 # ---------------------------------------------------------
 func_update_script() {
     clear
@@ -666,13 +720,13 @@ main_menu() {
         echo -e "  ${GREEN}3.${PLAIN} 常用环境与软件   ${YELLOW}(宝塔/Caddy/哪吒探针/WARP等)${PLAIN}"
         
         echo -e " ${BOLD}${BLUE}▶ 安全与网络优化${PLAIN}"
-        echo -e "  ${GREEN}4.${PLAIN} SSH 安全加固     ${YELLOW}(修改默认端口/自动放行防火墙)${PLAIN}"
-        echo -e "  ${GREEN}5.${PLAIN} Docker 深度管理  ${YELLOW}(配置本地防穿透隔离机制保护)${PLAIN}"
+        echo -e "  ${GREEN}4.${PLAIN} SSH 安全加固     ${YELLOW}(修改默认端口/防失联占用检查)${PLAIN}"
+        echo -e "  ${GREEN}5.${PLAIN} Docker 深度管理  ${YELLOW}(配置防穿透隔离机制/自动备份)${PLAIN}"
         echo -e "  ${GREEN}6.${PLAIN} BBR 增强管理     ${YELLOW}(调用 ylx2016 终极多核调优脚本)${PLAIN}"
         echo -e "  ${GREEN}7.${PLAIN} 动态 TCP 调优    ${YELLOW}(联动 Omnitt 生成防呆极致参数)${PLAIN}"
         
         echo -e " ${BOLD}${BLUE}▶ 内核与内存榨取${PLAIN}"
-        echo -e "  ${GREEN}8.${PLAIN} 智能内存调优     ${YELLOW}(ZRAM压缩+Swap 详尽分级策略)${PLAIN}"
+        echo -e "  ${GREEN}8.${PLAIN} 智能内存调优     ${YELLOW}(ZRAM压缩+Swap 详尽分级策略落地)${PLAIN}"
         echo -e "  ${GREEN}9.${PLAIN} 换装 Cloud内核   ${YELLOW}(释放驱动冗余，KVM 虚拟专属)${PLAIN}"
         echo -e " ${GREEN}10.${PLAIN} 卸载冗余旧内核   ${YELLOW}(清理磁盘无用空间，需谨慎)${PLAIN}"
         
@@ -682,12 +736,12 @@ main_menu() {
         echo -e " ${GREEN}13.${PLAIN} 端口流量监控     ${YELLOW}(拉取并运行 Port Traffic Dog)${PLAIN}"
         echo -e " ${GREEN}14.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板，调用 xeefei 脚本)${PLAIN}"
         echo -e " ${GREEN}15.${PLAIN} 安装 Sing-box    ${YELLOW}(甬哥四合一强大官方一键脚本)${PLAIN}"
-        echo -e " ${GREEN}19.${PLAIN} ${CYAN}${BOLD}DNS流媒体解锁${PLAIN}    ${YELLOW}(Alice DNS 区域分流解锁脚本)${PLAIN}"
-        echo -e " ${GREEN}18.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的备用手段)${PLAIN}"
+        echo -e " ${GREEN}16.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的备用手段)${PLAIN}"
+        echo -e " ${GREEN}17.${PLAIN} ${CYAN}${BOLD}DNS流媒体解锁${PLAIN}    ${YELLOW}(Alice DNS 区域分流解锁脚本)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
-        echo -e " ${YELLOW}17.${PLAIN} ${BOLD}一键更新脚本${PLAIN}     ${CYAN}(热加载同步 GitHub 最新代码)${PLAIN}"
-        echo -e " ${RED}16.${PLAIN} 重启服务器       ${RED} 0.${PLAIN} 退出面板"
+        echo -e " ${YELLOW}18.${PLAIN} ${BOLD}一键更新脚本${PLAIN}     ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
+        echo -e " ${RED}19.${PLAIN} 重启服务器       ${RED} 0.${PLAIN} 退出面板"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local choice
@@ -709,10 +763,10 @@ main_menu() {
             13) func_port_dog ;;
             14) func_xpanel ;;
             15) func_singbox ;;
-            19) func_dns_unlock ;;
-            18) func_rescue_panel ;;
-            17) func_update_script ;;
-            16) reboot ;;
+            16) func_rescue_panel ;;
+            17) func_dns_unlock ;;
+            18) func_update_script ;;
+            19) reboot ;;
             0) exit 0 ;;
             *) 
                 echo -e "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}"
