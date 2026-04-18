@@ -1394,33 +1394,71 @@ manage_traffic_reset() {
 }
 
 set_reset_day() {
+    echo -e "${BLUE}=== 设置端口每月重置日 ===${NC}"
     local active_ports=($(get_active_ports))
     if ! show_port_list; then sleep 2; manage_traffic_reset; return; fi
-    read -p "请选择要设置重置日期的端口（输入序号）: " choice_input
-    # (省略校验，保留原逻辑)
+    
+    read -p "请选择要设置重置日期的端口序号（多端口逗号分隔）: " choice_input
+    local valid_choices=()
+    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices
+    
+    if [ ${#valid_choices[@]} -eq 0 ]; then
+        echo -e "${RED}❌ 未选择有效端口，操作取消。${NC}"
+        sleep 2
+        manage_traffic_reset
+        return
+    fi
+    
+    read -p "请输入每月的重置日期 (输入1-31，输入0代表取消自动重置): " reset_day
+    
+    if ! [[ "$reset_day" =~ ^[0-9]+$ ]] || [ "$reset_day" -lt 0 ] || [ "$reset_day" -gt 31 ]; then
+        echo -e "${RED}❌ 输入无效，请输入 0-31 之间的数字！${NC}"
+        sleep 2
+        manage_traffic_reset
+        return
+    fi
+    
+    for choice in "${valid_choices[@]}"; do
+        local port=${active_ports[$((choice-1))]}
+        
+        if [ "$reset_day" = "0" ]; then
+            update_config "del(.ports.\"$port\".quota.reset_day)"
+            remove_port_auto_reset_cron "$port"
+        else
+            update_config ".ports.\"$port\".quota.reset_day = $reset_day"
+            setup_port_auto_reset_cron "$port"
+        fi
+    done
+    
+    echo -e "${GREEN}✅ 重置日期设置成功！${NC}"
+    sleep 2
     manage_traffic_reset
 }
 
 immediate_reset() {
+    echo -e "${BLUE}=== 立即重置端口流量 ===${NC}"
     local active_ports=($(get_active_ports))
     if ! show_port_list; then sleep 2; manage_traffic_reset; return; fi
-    read -p "请选择要立即重置的端口: " choice_input
+    
+    read -p "请选择要立即重置的端口序号（多端口逗号分隔）: " choice_input
     local valid_choices=()
-    local ports_to_reset=()
     parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices
-    for choice in "${valid_choices[@]}"; do
-        ports_to_reset+=("${active_ports[$((choice-1))]}")
-    done
-    if [ ${#ports_to_reset[@]} -eq 0 ]; then sleep 2; immediate_reset; return; fi
+    
+    if [ ${#valid_choices[@]} -eq 0 ]; then
+        echo -e "${RED}❌ 未选择有效端口！${NC}"
+        sleep 2; manage_traffic_reset; return
+    fi
 
-    read -p "确认重置选定端口的流量统计? [y/N]: " confirm
+    read -p "确认立即清零选定端口的流量吗? [y/N]: " confirm
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        for port in "${ports_to_reset[@]}"; do
-            reset_port_nftables_counters "$port"
-            echo -e "${GREEN}端口 $port 流量统计重置成功${NC}"
+        for choice in "${valid_choices[@]}"; do
+            local port=${active_ports[$((choice-1))]}
+            auto_reset_port "$port"
+            echo -e "${GREEN}✅ 端口 $port 已清零！${NC}"
         done
     fi
-    sleep 3; manage_traffic_reset
+    sleep 2
+    manage_traffic_reset
 }
 
 auto_reset_port() {
