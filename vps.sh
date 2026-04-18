@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # =========================================================
-#  Project:  VPS 终极全能控制面板 (满血全展开典藏版)
+#  Project:  VPS 全能控制面板
 #  Features: IPv4优先/智能防火墙/面板救砖/DNS流媒体解锁/热更新
 #  Shortcut: cy
 # =========================================================
@@ -29,10 +29,7 @@ else
     OS="unknown"
 fi
 
-# ================= 重要配置 =================
-# 请在此处填入你 GitHub 仓库中 cy.sh 的原始链接
-UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/cy.sh"
-# ============================================
+UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh"
 
 # --- 全局快捷键注册 ---
 create_shortcut() {
@@ -660,7 +657,7 @@ main_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e " ${BOLD}🚀 VPS 终极全能控制面板 (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
+        echo -e " ${BOLD}🚀 VPS 全能控制面板 (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         echo -e " ${BOLD}${BLUE}▶ 基础与系统环境${PLAIN}"
@@ -684,9 +681,9 @@ main_menu() {
         echo -e " ${GREEN}12.${PLAIN} 综合测试合集     ${YELLOW}(融合怪/流媒体/IP欺诈质量/路由)${PLAIN}"
         echo -e " ${GREEN}13.${PLAIN} 端口流量监控     ${YELLOW}(拉取并运行 Port Traffic Dog)${PLAIN}"
         echo -e " ${GREEN}14.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板，调用 xeefei 脚本)${PLAIN}"
-        echo -e " ${GREEN}15.${PLAIN} 安装 Sing-box    ${YELLOW}(勇哥四合一强大官方一键脚本)${PLAIN}"
+        echo -e " ${GREEN}15.${PLAIN} 安装 Sing-box    ${YELLOW}(甬哥四合一强大官方一键脚本)${PLAIN}"
         echo -e " ${GREEN}19.${PLAIN} ${CYAN}${BOLD}DNS流媒体解锁${PLAIN}    ${YELLOW}(Alice DNS 区域分流解锁脚本)${PLAIN}"
-        echo -e " ${GREEN}18.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的终极手段)${PLAIN}"
+        echo -e " ${GREEN}18.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的备用手段)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         echo -e " ${YELLOW}17.${PLAIN} ${BOLD}一键更新脚本${PLAIN}     ${CYAN}(热加载同步 GitHub 最新代码)${PLAIN}"
