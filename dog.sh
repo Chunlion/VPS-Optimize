@@ -1588,14 +1588,18 @@ run_tg_listener() {
                         local total=$((out_b))
                         [[ "$billing_mode" == "double" ]] && total=$((in_b + out_b))
                         
-                        # 拼接要回复给用户的内容
-                        local reply="📊 <b>端口 ${port} 实时流量查询</b>\n"
+                        # 拼接要回复给用户的内容 (硬核仪表盘风)
+                        local reply="🛰️ <b>端口流量实时报告</b>\n"
                         reply+="────────────────\n"
-                        reply+="↑ 上行(入站): <b>$(format_bytes $in_b)</b>\n"
-                        reply+="↓ 下行(出站): <b>$(format_bytes $out_b)</b>\n"
-                        reply+="💰 累计总计: <b>$(format_bytes $total)</b>\n"
-                        reply+="📌 计费模式: $([[ "$billing_mode" == "double" ]] && echo "双向计费" || echo "单向计费(仅出站)")"
+                        reply+="🔌 <b>监听端口</b>：<code>${port}</code>\n"
+                        reply+="📈 <b>上行流量</b>：<code>$(format_bytes $in_b)</code> (入口)\n"
+                        reply+="📉 <b>下行流量</b>：<code>$(format_bytes $out_b)</code> (出口)\n"
+                        reply+="────────────────\n"
+                        reply+="💰 <b>合计使用</b>：<b>$(format_bytes $total)</b>\n"
+                        reply+="⚙️ <b>计费逻辑</b>：<code>$([[ "$billing_mode" == "double" ]] && echo "双向计费" || echo "单向计费")</code>\n"
+                        reply+="⏰ <b>查询时间</b>：$(get_beijing_time '+%Y-%m-%d %H:%M:%S')"
 
+                        # 发送消息 [cite: 384]
                         curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" \
                             -d "chat_id=${chat_id}" -d "text=${reply}" -d "parse_mode=HTML" > /dev/null
                     else
