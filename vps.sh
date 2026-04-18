@@ -647,13 +647,13 @@ func_test_scripts() {
 func_port_dog() {
     clear
     echo -e "${CYAN}👉 正在拉取并执行 Port Traffic Dog 监控狗...${PLAIN}"
-    wget -qO t.sh https://raw.githubusercontent.com/zywe03/realm-xwPF/main/port-traffic-dog.sh && bash t.sh
+    wget -qO dog.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh && chmod +x dog.sh && ./dog.sh
 }
 
 func_xpanel() {
     clear
     echo -e "${CYAN}👉 正在拉取 xeefei 的官方 x-panel 一键脚本...${PLAIN}"
-    wget -qO dog.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh && chmod +x dog.sh && ./dog.sh
+    bash <(curl -Ls https://raw.githubusercontent.com/xeefei/x-panel/master/install.sh)
 }
 
 func_singbox() {
