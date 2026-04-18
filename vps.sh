@@ -598,7 +598,86 @@ func_security() {
     fi
     read -n 1 -s -r -p "按任意键继续..."
 }
+# ---------------------------------------------------------
+# 新增：Fail2ban 防爆破系统管理 (动态端口检测)
+# ---------------------------------------------------------
+func_fail2ban() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🛡️ Fail2ban 防爆破系统管理${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    
+    # 核心逻辑：实时提取当前系统生效的 SSH 端口
+    local current_p
+    current_p=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
+    current_p=${current_p:-22}
+    
+    echo -e "${YELLOW}👉 当前系统检测到的 SSH 端口为: ${GREEN}$current_p${PLAIN}"
+    echo -e "------------------------------------------------"
+    
+    # 检查安装状态
+    local f2b_status="${RED}未安装${PLAIN}"
+    if command -v fail2ban-server >/dev/null 2>&1; then
+        f2b_status="${GREEN}已运行${PLAIN}"
+    fi
+    
+    echo -e "当前 Fail2ban 状态: [ $f2b_status ]"
+    echo -e "  ${GREEN}1.${PLAIN} 一键安装并配置 Fail2ban ${YELLOW}(自动绑定当前 SSH 端口)${PLAIN}"
+    echo -e "  ${BLUE}2.${PLAIN} 更新防护端口 ${YELLOW}(如果您刚改了 SSH 端口，选此项重载)${PLAIN}"
+    echo -e "  ${RED}3.${PLAIN} 彻底卸载 Fail2ban"
+    echo -e "  ${RED}0.${PLAIN} 返回主菜单"
+    echo -e "------------------------------------------------"
+    
+    local f_choice
+    read -p "👉 请选择操作: " f_choice
+    
+    case $f_choice in
+        1|2)
+            if [[ "$f_choice" == "1" ]]; then
+                echo -e "${CYAN}正在安装 Fail2ban...${PLAIN}"
+                if is_debian; then
+                    apt update -qq >/dev/null 2>&1
+                    apt install fail2ban -y -qq >/dev/null 2>&1
+                elif is_redhat; then
+                    yum install fail2ban -y -q >/dev/null 2>&1
+                fi
+            fi
+            
+            if command -v fail2ban-server >/dev/null 2>&1; then
+                echo -e "${CYAN}正在写入配置并绑定端口 $current_p ...${PLAIN}"
+                cat <<EOF > /etc/fail2ban/jail.local
+[DEFAULT]
+bantime = 86400
+findtime = 600
+maxretry = 5
 
+[sshd]
+enabled = true
+port = $current_p
+EOF
+                systemctl enable fail2ban >/dev/null 2>&1
+                systemctl restart fail2ban >/dev/null 2>&1
+                echo -e "${GREEN}✅ Fail2ban 配置完成并已启动！(保护端口: $current_p)${PLAIN}"
+                echo -e "${YELLOW}💡 规则：10分钟内密码错误5次，自动封禁该IP 24小时。${PLAIN}"
+            else
+                echo -e "${RED}❌ Fail2ban 安装或检测失败，请检查网络源。${PLAIN}"
+            fi
+            ;;
+        3)
+            echo -e "${CYAN}正在卸载 Fail2ban...${PLAIN}"
+            if is_debian; then
+                apt purge fail2ban -y -qq >/dev/null 2>&1
+            elif is_redhat; then
+                yum remove fail2ban -y -q >/dev/null 2>&1
+            fi
+            rm -rf /etc/fail2ban
+            echo -e "${GREEN}✅ Fail2ban 已彻底卸载！${PLAIN}"
+            ;;
+        0) return ;;
+        *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
+    esac
+    read -n 1 -s -r -p "按任意键继续..."
+}
 # ---------------------------------------------------------
 # 5. Docker 深度管理 (防覆盖备份版)
 # ---------------------------------------------------------
@@ -1058,27 +1137,28 @@ main_menu() {
         
         echo -e " ${BOLD}${BLUE}▶ 安全与网络优化${PLAIN}"
         echo -e "  ${GREEN}4.${PLAIN} SSH 安全加固     ${YELLOW}(修改默认端口/防失联占用检查)${PLAIN}"
-        echo -e "  ${GREEN}5.${PLAIN} Docker 深度管理  ${YELLOW}(配置防穿透隔离机制/自动备份)${PLAIN}"
-        echo -e "  ${GREEN}6.${PLAIN} BBR 增强管理     ${YELLOW}(调用 ylx2016 终极多核调优脚本)${PLAIN}"
-        echo -e "  ${GREEN}7.${PLAIN} 动态 TCP 调优    ${YELLOW}(联动 Omnitt 生成防呆极致参数)${PLAIN}"
+        echo -e "  ${GREEN}5.${PLAIN} Fail2ban 防护    ${YELLOW}(自动检测SSH新端口防爆破封禁)${PLAIN}"
+        echo -e "  ${GREEN}6.${PLAIN} Docker 深度管理  ${YELLOW}(配置防穿透隔离机制/自动备份)${PLAIN}"
+        echo -e "  ${GREEN}7.${PLAIN} BBR 增强管理     ${YELLOW}(调用 ylx2016 终极多核调优脚本)${PLAIN}"
+        echo -e "  ${GREEN}8.${PLAIN} 动态 TCP 调优    ${YELLOW}(联动 Omnitt 生成防呆极致参数)${PLAIN}"
         
         echo -e " ${BOLD}${BLUE}▶ 内核与内存榨取${PLAIN}"
-        echo -e "  ${GREEN}8.${PLAIN} 智能内存调优     ${YELLOW}(ZRAM压缩+Swap 详尽分级策略落地)${PLAIN}"
-        echo -e "  ${GREEN}9.${PLAIN} 换装 Cloud内核   ${YELLOW}(释放驱动冗余，KVM 虚拟专属)${PLAIN}"
-        echo -e " ${GREEN}10.${PLAIN} 卸载冗余旧内核   ${YELLOW}(清理磁盘无用空间，需谨慎)${PLAIN}"
+        echo -e "  ${GREEN}9.${PLAIN} 智能内存调优     ${YELLOW}(ZRAM压缩+Swap 详尽分级策略落地)${PLAIN}"
+        echo -e " ${GREEN}10.${PLAIN} 换装 Cloud内核   ${YELLOW}(释放驱动冗余，KVM 虚拟专属)${PLAIN}"
+        echo -e " ${GREEN}11.${PLAIN} 卸载冗余旧内核   ${YELLOW}(清理磁盘无用空间，需谨慎)${PLAIN}"
         
         echo -e " ${BOLD}${BLUE}▶ 探针与节点建站${PLAIN}"
-        echo -e " ${GREEN}11.${PLAIN} 极速硬件探针     ${YELLOW}(全屏显示本机配置与实时负载)${PLAIN}"
-        echo -e " ${GREEN}12.${PLAIN} 综合测试合集     ${YELLOW}(融合怪/流媒体/IP欺诈质量/路由)${PLAIN}"
-        echo -e " ${GREEN}13.${PLAIN} 端口流量监控     ${YELLOW}(拉取并运行 Port Traffic Dog)${PLAIN}"
-        echo -e " ${GREEN}14.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板，调用 xeefei 脚本)${PLAIN}"
-        echo -e " ${GREEN}15.${PLAIN} 安装 Sing-box    ${YELLOW}(甬哥四合一强大官方一键脚本)${PLAIN}"
-        echo -e " ${GREEN}16.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的备用手段)${PLAIN}"
-        echo -e " ${GREEN}17.${PLAIN} ${CYAN}${BOLD}DNS流媒体解锁${PLAIN}    ${YELLOW}(Alice DNS 区域分流解锁脚本)${PLAIN}"
+        echo -e " ${GREEN}12.${PLAIN} 极速硬件探针     ${YELLOW}(全屏显示本机配置与实时负载)${PLAIN}"
+        echo -e " ${GREEN}13.${PLAIN} 综合测试合集     ${YELLOW}(融合怪/流媒体/IP欺诈质量/路由)${PLAIN}"
+        echo -e " ${GREEN}14.${PLAIN} 端口流量监控     ${YELLOW}(拉取并运行 Port Traffic Dog)${PLAIN}"
+        echo -e " ${GREEN}15.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板，调用 xeefei 脚本)${PLAIN}"
+        echo -e " ${GREEN}16.${PLAIN} 安装 Sing-box    ${YELLOW}(甬哥四合一强大官方一键脚本)${PLAIN}"
+        echo -e " ${GREEN}17.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的备用手段)${PLAIN}"
+        echo -e " ${GREEN}18.${PLAIN} ${CYAN}${BOLD}DNS流媒体解锁${PLAIN}    ${YELLOW}(Alice DNS 区域分流解锁脚本)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
-        echo -e " ${YELLOW}18.${PLAIN} ${BOLD}一键更新脚本${PLAIN}     ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
-        echo -e " ${RED}19.${PLAIN} 重启服务器       ${RED} 0.${PLAIN} 退出面板"
+        echo -e " ${YELLOW}19.${PLAIN} ${BOLD}一键更新脚本${PLAIN}     ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
+        echo -e " ${RED}20.${PLAIN} 重启服务器       ${RED} 0.${PLAIN} 退出面板"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local choice
@@ -1089,21 +1169,22 @@ main_menu() {
             2) func_system_tweaks ;;
             3) func_env_install ;;
             4) func_security ;;
-            5) func_docker_manage ;;
-            6) func_bbr_manage ;;
-            7) func_tcp_tune ;;
-            8) func_zram_swap ;;
-            9) func_install_kernel ;;
-            10) func_clean_kernel ;;
-            11) func_system_info ;;
-            12) func_test_scripts ;;
-            13) func_port_dog ;;
-            14) func_xpanel ;;
-            15) func_singbox ;;
-            16) func_rescue_panel ;;
-            17) func_dns_unlock ;;
-            18) func_update_script ;;
-            19) reboot ;;
+            5) func_fail2ban ;;
+            6) func_docker_manage ;;
+            7) func_bbr_manage ;;
+            8) func_tcp_tune ;;
+            9) func_zram_swap ;;
+            10) func_install_kernel ;;
+            11) func_clean_kernel ;;
+            12) func_system_info ;;
+            13) func_test_scripts ;;
+            14) func_port_dog ;;
+            15) func_xpanel ;;
+            16) func_singbox ;;
+            17) func_rescue_panel ;;
+            18) func_dns_unlock ;;
+            19) func_update_script ;;
+            20) reboot ;;
             0) exit 0 ;;
             *) 
                 echo -e "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}"
