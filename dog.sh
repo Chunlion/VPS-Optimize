@@ -679,7 +679,7 @@ show_main_menu() {
     echo "────────────────────────────────────────────────────────"
     echo -e "${BLUE}1.${NC} 添加/删除端口监控     ${BLUE}2.${NC} 端口限制设置管理"
     echo -e "${BLUE}3.${NC} 流量重置管理          ${BLUE}4.${NC} 一键导出/导入配置"
-    echo -e "${BLUE}5.${NC} 安装依赖(更新)脚本    ${BLUE}6.${NC} 卸载脚本"
+    echo -e "${BLUE}5.${NC} 检查并自动热更新脚本    ${BLUE}6.${NC} 卸载脚本"
     echo -e "${BLUE}7.${NC} 通知管理 (含交互式TG机器人)"
     echo -e "${BLUE}0.${NC} 退出"
     echo
@@ -1479,13 +1479,102 @@ import_config() {
 }
 
 install_update_script() {
-    echo -e "${YELLOW}使用在线一键安装覆盖更新即可...${NC}"
-    sleep 2; show_main_menu
+    echo -e "${BLUE}=== 正在启动脚本热更新 ===${NC}"
+    echo "────────────────────────────────────────────────────────"
+    echo -e "${YELLOW}正在从远程仓库获取最新版本...${NC}"
+
+    # 1. 创建临时文件下载新脚本 
+    local temp_file=$(mktemp)
+    
+    # 使用脚本内置的下载函数 [cite: 384]
+    if download_with_sources "$SCRIPT_URL" "$temp_file"; then
+        # 2. 验证下载的文件是否合法（防止下到网页或空文件） 
+        if [ -s "$temp_file" ] && grep -q "端口流量狗" "$temp_file" 2>/dev/null; then
+            echo -e "${GREEN}下载成功，正在进行热替换...${NC}"
+            
+            # 3. 覆盖旧脚本并赋予执行权限 
+            mv "$temp_file" "$SCRIPT_PATH"
+            chmod +x "$SCRIPT_PATH"
+            
+            # 4. 更新相关的快捷命令和通知模块 [cite: 390, 392]
+            create_shortcut_command
+            download_notification_modules >/dev/null 2>&1 || true
+
+            echo -e "${GREEN}脚本更新完成！正在原地热重启...${NC}"
+            echo "────────────────────────────────────────────────────────"
+            sleep 1
+            
+            # 5. 【核心逻辑】使用新脚本进程替换当前进程，实现热重启
+            exec bash "$SCRIPT_PATH"
+        else
+            echo -e "${RED}错误：下载的文件验证失败，请检查网络或 URL。${NC}"
+            rm -f "$temp_file"
+        fi
+    else
+        echo -e "${RED}错误：下载失败，请检查服务器连接。${NC}"
+        rm -f "$temp_file"
+    fi
+
+    read -p "按回车键返回菜单..."
+    show_main_menu
 }
 
 uninstall_script() {
-    echo -e "${RED}卸载功能暂省略，手动清除配置和规则即可${NC}"
-    sleep 2; show_main_menu
+    echo -e "${BLUE}=== 卸载端口流量狗 ===${NC}"
+    echo "────────────────────────────────────────────────────────"
+    echo -e "${YELLOW}将要执行以下操作:${NC}"
+    echo "  1. 清除所有端口的流量监控规则 (nftables)" 
+    echo "  2. 清除所有端口的带宽限制规则 (TC)" [cite: 398]
+    echo "  3. 删除 Telegram/企业微信/自动重置等定时任务" [cite: 400, 401]
+    echo "  4. 停止并删除 TG 交互机器人后台服务 (Systemd)"
+    echo "  5. 删除快捷命令 dog" [cite: 403]
+    echo "  6. 删除所有配置文件及日志 (/etc/port-traffic-dog)" 
+    echo "  7. 删除脚本本身" 
+    echo
+    echo -e "${RED}🔴 警告：此操作不可逆，所有历史流量数据将永久丢失！${NC}" [cite: 394]
+    read -p "确认卸载? [y/N]: " confirm [cite: 394]
+
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then [cite: 395]
+        echo -e "${YELLOW}正在全力卸载中...${NC}" [cite: 395]
+
+        # 1. 清理端口规则 [cite: 396]
+        local active_ports=($(get_active_ports 2>/dev/null || true)) [cite: 396]
+        for port in "${active_ports[@]}"; do [cite: 396]
+            remove_nftables_rules "$port" 2>/dev/null || true [cite: 397]
+            remove_tc_limit "$port" 2>/dev/null || true [cite: 398]
+            remove_port_auto_reset_cron "$port" 2>/dev/null || true [cite: 439]
+        done
+
+        # 2. 删除整个 nftables 表 [cite: 399]
+        local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE" 2>/dev/null || echo "port_traffic_monitor") [cite: 399]
+        local family=$(jq -r '.nftables.family' "$CONFIG_FILE" 2>/dev/null || echo "inet") [cite: 399]
+        nft delete table $family $table_name >/dev/null 2>&1 || true [cite: 399]
+
+        # 3. 停止并清理 Systemd 服务 (新增加的功能)
+        systemctl stop port-tg-bot 2>/dev/null || true
+        systemctl disable port-tg-bot 2>/dev/null || true
+        rm -f /etc/systemd/system/port-tg-bot.service 2>/dev/null
+        systemctl daemon-reload
+
+        # 4. 清理定时任务 [cite: 400, 401]
+        remove_telegram_notification_cron 2>/dev/null || true [cite: 400]
+        remove_wecom_notification_cron 2>/dev/null || true [cite: 401]
+
+        # 5. 删除文件与目录 [cite: 402, 403, 404]
+        rm -rf "$CONFIG_DIR" 2>/dev/null || true 
+        rm -f "/usr/local/bin/$SHORTCUT_COMMAND" 2>/dev/null || true [cite: 403]
+        
+        echo -e "${GREEN}✅ 卸载完成！${NC}" 
+        echo -e "${YELLOW}感谢使用，江湖路远，有缘再见！👋${NC}" 
+        
+        # 6. 最后删除脚本自身 
+        rm -f "$SCRIPT_PATH" 2>/dev/null || true 
+        exit 0 
+    else
+        echo "取消卸载，返回主菜单。"
+        sleep 1
+        show_main_menu
+    fi
 }
 
 # ==========================================
