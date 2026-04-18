@@ -1381,7 +1381,7 @@ remove_tc_limit() {
 
 manage_traffic_reset() {
     echo -e "${BLUE}流量重置管理${NC}"
-    echo "1. 重置流量月重置日设置"
+    echo "1. 每月流量重置日设置"
     echo "2. 立即重置"
     echo "0. 返回主菜单"
     read -p "请选择操作 [0-2]: " choice
@@ -1396,7 +1396,7 @@ manage_traffic_reset() {
 set_reset_day() {
     local active_ports=($(get_active_ports))
     if ! show_port_list; then sleep 2; manage_traffic_reset; return; fi
-    read -p "请选择要设置重置日期的端口: " choice_input
+    read -p "请选择要设置重置日期的端口（输入序号）: " choice_input
     # (省略校验，保留原逻辑)
     manage_traffic_reset
 }
