@@ -26,8 +26,7 @@
 
 **步骤 1：运行脚本**
 ```bash
-chmod +x dog.sh
-./dog.sh
+wget -qO dog.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh && chmod +x dog.sh && ./dog.sh
 ```
 > 💡 *提示：安装完成后，以后随时在终端输入 `dog` 即可唤出主菜单。*
 
