@@ -1702,18 +1702,17 @@ run_tg_listener() {
                         local total=$((out_b))
                         [[ "$billing_mode" == "double" ]] && total=$((in_b + out_b))
                       
-                        local reply="🛰️ <b>端口流量实时报告</b>\n"
-                        reply+="────────────────\n"
-                        reply+="🔌 <b>监听端口</b>：<code>${port}</code>\n"
-                        reply+="📈 <b>上行流量</b>：<code>$(format_bytes $in_b)</code> (入口)\n"
-                        reply+="📉 <b>下行流量</b>：<code>$(format_bytes $out_b)</code> (出口)\n"
-                        reply+="────────────────\n"
-                        reply+="💰 <b>合计使用</b>：<b>$(format_bytes $total)</b>\n"
-                        reply+="⚙️ <b>计费逻辑</b>：<code>$([[ "$billing_mode" == "double" ]] && echo "双向计费" || echo "单向计费")</code>\n"
+                        local reply="🛰️ <b>端口流量实时报告</b>%0A"
+                        reply+="────────────────%0A"
+                        reply+="🔌 <b>监听端口</b>：<code>${port}</code>%0A"
+                        reply+="📈 <b>上行流量</b>：<code>$(format_bytes $in_b)</code> (入口)%0A"
+                        reply+="📉 <b>下行流量</b>：<code>$(format_bytes $out_b)</code> (出口)%0A"
+                        reply+="────────────────%0A"
+                        reply+="💰 <b>合计使用</b>：<b>$(format_bytes $total)</b>%0A"
+                        reply+="⚙️ <b>计费逻辑</b>：<code>$([[ "$billing_mode" == "double" ]] && echo "双向计费" || echo "单向计费")</code>%0A"
                         reply+="⏰ <b>查询时间</b>：$(get_beijing_time '+%Y-%m-%d %H:%M:%S')"
 
-                        curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" \
-                            -d "chat_id=${chat_id}" -d "text=${reply}" -d "parse_mode=HTML" > /dev/null
+                        curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" -d "chat_id=${chat_id}" -d "text=${reply}" -d "parse_mode=HTML" > /dev/null
                     else
                         curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" \
                             -d "chat_id=${chat_id}" -d "text=❌ 未找到端口 ${port} 的监控数据" > /dev/null
