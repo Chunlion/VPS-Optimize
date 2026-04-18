@@ -546,7 +546,7 @@ func_port_dog() {
 func_xpanel() {
     clear
     echo -e "${CYAN}👉 正在拉取 xeefei 的官方 x-panel 一键脚本...${PLAIN}"
-    bash <(curl -Ls https://raw.githubusercontent.com/xeefei/x-panel/master/install.sh)
+    wget -qO dog.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh && chmod +x dog.sh && ./dog.sh
 }
 
 func_singbox() {
