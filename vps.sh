@@ -730,6 +730,49 @@ EOF
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
+# 新增功能：添加 SSH 公钥登录
+# ---------------------------------------------------------
+func_add_ssh_key() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🔑 添加 SSH 公钥登录 (免密安全认证)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}使用 SSH 密钥登录不仅免去输密码的烦恼，更能彻底免疫密码爆破！${PLAIN}"
+    echo -e "请准备好您的公钥 (通常以 ssh-rsa, ssh-ed25519 或 ecdsa 开头)。"
+    echo -e "------------------------------------------------"
+    
+    # 确保根目录的 .ssh 文件夹和权限正确 (极为重要，权限错了一律无法登录)
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+    touch ~/.ssh/authorized_keys
+    chmod 600 ~/.ssh/authorized_keys
+    
+    echo -e "👇 ${CYAN}请在下方右键粘贴您的 SSH 公钥内容，粘贴后按回车键：${PLAIN}"
+    read -r ssh_key
+    
+    if [[ -z "$ssh_key" ]]; then
+        echo -e "${RED}❌ 输入为空，已取消操作。${PLAIN}"
+    elif [[ "$ssh_key" == ssh-* || "$ssh_key" == ecdsa-* ]]; then
+        # 检查是否已经存在相同公钥
+        if grep -q "$ssh_key" ~/.ssh/authorized_keys; then
+            echo -e "${YELLOW}⚠️ 该公钥已存在于 ~/.ssh/authorized_keys 中，无需重复添加。${PLAIN}"
+        else
+            echo "$ssh_key" >> ~/.ssh/authorized_keys
+            
+            # 自动修改 sshd_config 确保开启了公钥登录选项
+            sed -i 's/^#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+            sed -i 's/^PubkeyAuthentication no/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+            systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
+            
+            echo -e "${GREEN}✅ 公钥添加成功！现在您可以尝试使用对应的私钥免密登录本服务器了。${PLAIN}"
+            echo -e "${YELLOW}💡 进阶建议：当您确认公钥登录 100% 成功后，可以手动编辑 /etc/ssh/sshd_config 将 PasswordAuthentication 改为 no，彻底关闭密码登录。${PLAIN}"
+        fi
+    else
+        echo -e "${RED}❌ 格式错误：看起来不像有效的 SSH 公钥。操作已取消。${PLAIN}"
+    fi
+    read -n 1 -s -r -p "按任意键继续..."
+}
+# ---------------------------------------------------------
 # 5. Docker 深度管理 (防覆盖备份版)
 # ---------------------------------------------------------
 func_docker_manage() {
