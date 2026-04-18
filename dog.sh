@@ -1478,6 +1478,19 @@ import_config() {
     sleep 2; manage_configuration
 }
 
+download_with_sources() {
+    local url=$1
+    local output_file=$2
+
+    # 使用 curl 进行下载，设置了超时保护 
+    if curl -sL --connect-timeout 5 --max-time 7 "$url" -o "$output_file" 2>/dev/null; then
+        if [ -s "$output_file" ]; then
+            return 0  # 下载成功且文件不为空 [cite: 385]
+        fi
+    fi
+    return 1  # 下载失败 
+}
+
 install_update_script() {
     echo -e "${BLUE}=== 正在启动脚本热更新 ===${NC}"
     echo "────────────────────────────────────────────────────────"
