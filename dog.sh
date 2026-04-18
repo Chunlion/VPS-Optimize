@@ -2,7 +2,7 @@
 #原项目https://github.com/zywe03/realm-xwPF/blob/main/port-traffic-dog.sh
 set -euo pipefail
 
-readonly SCRIPT_VERSION="1.2.6-TG增强版"
+readonly SCRIPT_VERSION="1.2.6-TG增强版(优化版)"
 readonly SCRIPT_NAME="端口流量狗"
 readonly SCRIPT_PATH="$(realpath "$0")"
 readonly CONFIG_DIR="/etc/port-traffic-dog"
@@ -71,7 +71,6 @@ install_missing_tools() {
 check_dependencies() {
     local silent_mode=${1:-false}
     local missing_tools=()
-    # 增加 curl 依赖，保证 TG 机器人能正常发请求
     local required_tools=("nft" "tc" "ss" "jq" "awk" "bc" "unzip" "cron" "curl")
 
     for tool in "${required_tools[@]}"; do
@@ -114,7 +113,7 @@ setup_script_permissions() {
 setup_cron_environment() {
     local current_cron=$(crontab -l 2>/dev/null || true)
     if ! echo "$current_cron" | grep -q "^PATH=.*sbin"; then
-        local temp_cron=$(mktemp)
+        local temp_cron=$(mktemp /tmp/port-traffic-dog-cron.XXXXXX)
         echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" > "$temp_cron"
         echo "$current_cron" | grep -v "^PATH=" >> "$temp_cron" || true
         crontab "$temp_cron" 2>/dev/null || true
@@ -222,10 +221,14 @@ format_bytes() {
 
 get_beijing_time() { TZ='Asia/Shanghai' date "$@"; }
 
+# 优化1：增加文件锁，防止高并发导致配置脏读/损坏
 update_config() {
     local jq_expression="$1"
-    jq "$jq_expression" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
-    mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+    (
+        flock -w 5 9 || { echo -e "${RED}配置文件正忙，稍后重试${NC}"; return 1; }
+        jq "$jq_expression" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
+        mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+    ) 9> "${CONFIG_DIR}/.config.lock"
 }
 
 show_port_list() {
@@ -347,7 +350,7 @@ get_nftables_counter_data() {
 }
 
 save_traffic_data() {
-    local temp_file=$(mktemp)
+    local temp_file=$(mktemp /tmp/port-traffic-dog-data.XXXXXX)
     local active_ports=($(get_active_ports 2>/dev/null || true))
     if [ ${#active_ports[@]} -eq 0 ]; then return 0; fi
     echo '{}' > "$temp_file"
@@ -367,9 +370,10 @@ save_traffic_data() {
     fi
 }
 
+# 优化2：兜底清理临时文件，防止产生大量 /tmp 垃圾文件
 setup_exit_hooks() {
-    trap 'save_traffic_data_on_exit' EXIT
-    trap 'save_traffic_data_on_exit; exit 1' INT TERM
+    trap 'save_traffic_data_on_exit; rm -f /tmp/port-traffic-dog-*' EXIT
+    trap 'save_traffic_data_on_exit; rm -f /tmp/port-traffic-dog-*; exit 1' INT TERM
 }
 
 save_traffic_data_on_exit() { save_traffic_data >/dev/null 2>&1; }
@@ -842,17 +846,25 @@ add_port_monitoring() {
             quota_config="{\"enabled\": $quota_enabled, \"monthly_limit\": \"$monthly_limit\"}"
         fi
 
-        local port_config="{
-            \"name\": \"端口$port\",
-            \"enabled\": true,
-            \"billing_mode\": \"$billing_mode\",
-            \"bandwidth_limit\": {\"enabled\": false, \"rate\": \"unlimited\"},
-            \"quota\": $quota_config,
-            \"remark\": \"$remark\",
-            \"created_at\": \"$(get_beijing_time -Iseconds)\"
-        }"
+        # 优化3：修复 JSON 注入问题，采用 jq 参数安全传递数据
+        (
+            flock -w 5 9 || { echo -e "${RED}配置文件正忙，跳过 $port${NC}"; continue; }
+            jq --arg port "$port" \
+               --arg billing "$billing_mode" \
+               --arg remark "$remark" \
+               --arg created "$(get_beijing_time -Iseconds)" \
+               --argjson quota_conf "$quota_config" \
+               '.ports[$port] = {
+                   name: ("端口" + $port),
+                   enabled: true,
+                   billing_mode: $billing,
+                   bandwidth_limit: {enabled: false, rate: "unlimited"},
+                   quota: $quota_conf,
+                   remark: $remark,
+                   created_at: $created
+               }' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+        ) 9> "${CONFIG_DIR}/.config.lock"
 
-        update_config ".ports.\"$port\" = $port_config"
         add_nftables_rules "$port"
         if [ "$monthly_limit" != "unlimited" ]; then apply_nftables_quota "$port" "$quota"; fi
         setup_port_auto_reset_cron "$port"
@@ -922,72 +934,62 @@ remove_port_monitoring() {
     manage_port_monitoring
 }
 
+# 优化4：批量应用 nftables 规则，提升并发性能
 add_nftables_rules() {
     local port=$1
     local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
     local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
+    local batch_cmds=""
 
     if is_port_range "$port"; then
         local port_safe=$(echo "$port" | tr '-' '_')
         local mark_id=$(generate_port_range_mark "$port")
         if [ "$billing_mode" = "double" ]; then
-            nft list counter $family $table_name "port_${port_safe}_in" >/dev/null 2>&1 || nft add counter $family $table_name "port_${port_safe}_in" 2>/dev/null || true
-            nft list counter $family $table_name "port_${port_safe}_out" >/dev/null 2>&1 || nft add counter $family $table_name "port_${port_safe}_out" 2>/dev/null || true
+            nft list counter $family $table_name "port_${port_safe}_in" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_in\n"
+            nft list counter $family $table_name "port_${port_safe}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_out\n"
             
-            nft add rule $family $table_name input tcp dport $port meta mark set $mark_id counter name "port_${port_safe}_in"
-            nft add rule $family $table_name input udp dport $port meta mark set $mark_id counter name "port_${port_safe}_in"
-            nft add rule $family $table_name forward tcp dport $port meta mark set $mark_id counter name "port_${port_safe}_in"
-            nft add rule $family $table_name forward udp dport $port meta mark set $mark_id counter name "port_${port_safe}_in"
-            nft add rule $family $table_name input tcp dport $port meta mark set $mark_id counter name "port_${port_safe}_in"
-            nft add rule $family $table_name input udp dport $port meta mark set $mark_id counter name "port_${port_safe}_in"
-            nft add rule $family $table_name forward tcp dport $port meta mark set $mark_id counter name "port_${port_safe}_in"
-            nft add rule $family $table_name forward udp dport $port meta mark set $mark_id counter name "port_${port_safe}_in"
+            batch_cmds+="add rule $family $table_name input tcp dport $port meta mark set $mark_id counter name \"port_${port_safe}_in\"\n"
+            batch_cmds+="add rule $family $table_name input udp dport $port meta mark set $mark_id counter name \"port_${port_safe}_in\"\n"
+            batch_cmds+="add rule $family $table_name forward tcp dport $port meta mark set $mark_id counter name \"port_${port_safe}_in\"\n"
+            batch_cmds+="add rule $family $table_name forward udp dport $port meta mark set $mark_id counter name \"port_${port_safe}_in\"\n"
             
-            nft add rule $family $table_name output tcp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
-            nft add rule $family $table_name output udp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
-            nft add rule $family $table_name forward tcp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
-            nft add rule $family $table_name forward udp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
-            nft add rule $family $table_name output tcp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
-            nft add rule $family $table_name output udp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
-            nft add rule $family $table_name forward tcp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
-            nft add rule $family $table_name forward udp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
+            batch_cmds+="add rule $family $table_name output tcp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
+            batch_cmds+="add rule $family $table_name output udp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
+            batch_cmds+="add rule $family $table_name forward tcp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
+            batch_cmds+="add rule $family $table_name forward udp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
         else
-            nft list counter $family $table_name "port_${port_safe}_out" >/dev/null 2>&1 || nft add counter $family $table_name "port_${port_safe}_out" 2>/dev/null || true
-            nft add rule $family $table_name output tcp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
-            nft add rule $family $table_name output udp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
-            nft add rule $family $table_name forward tcp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
-            nft add rule $family $table_name forward udp sport $port meta mark set $mark_id counter name "port_${port_safe}_out"
+            nft list counter $family $table_name "port_${port_safe}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_out\n"
+            batch_cmds+="add rule $family $table_name output tcp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
+            batch_cmds+="add rule $family $table_name output udp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
+            batch_cmds+="add rule $family $table_name forward tcp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
+            batch_cmds+="add rule $family $table_name forward udp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
         fi
     else
         if [ "$billing_mode" = "double" ]; then
-            nft list counter $family $table_name "port_${port}_in" >/dev/null 2>&1 || nft add counter $family $table_name "port_${port}_in" 2>/dev/null || true
-            nft list counter $family $table_name "port_${port}_out" >/dev/null 2>&1 || nft add counter $family $table_name "port_${port}_out" 2>/dev/null || true
+            nft list counter $family $table_name "port_${port}_in" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port}_in\n"
+            nft list counter $family $table_name "port_${port}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port}_out\n"
             
-            nft add rule $family $table_name input tcp dport $port counter name "port_${port}_in"
-            nft add rule $family $table_name input udp dport $port counter name "port_${port}_in"
-            nft add rule $family $table_name forward tcp dport $port counter name "port_${port}_in"
-            nft add rule $family $table_name forward udp dport $port counter name "port_${port}_in"
-            nft add rule $family $table_name input tcp dport $port counter name "port_${port}_in"
-            nft add rule $family $table_name input udp dport $port counter name "port_${port}_in"
-            nft add rule $family $table_name forward tcp dport $port counter name "port_${port}_in"
-            nft add rule $family $table_name forward udp dport $port counter name "port_${port}_in"
+            batch_cmds+="add rule $family $table_name input tcp dport $port counter name \"port_${port}_in\"\n"
+            batch_cmds+="add rule $family $table_name input udp dport $port counter name \"port_${port}_in\"\n"
+            batch_cmds+="add rule $family $table_name forward tcp dport $port counter name \"port_${port}_in\"\n"
+            batch_cmds+="add rule $family $table_name forward udp dport $port counter name \"port_${port}_in\"\n"
             
-            nft add rule $family $table_name output tcp sport $port counter name "port_${port}_out"
-            nft add rule $family $table_name output udp sport $port counter name "port_${port}_out"
-            nft add rule $family $table_name forward tcp sport $port counter name "port_${port}_out"
-            nft add rule $family $table_name forward udp sport $port counter name "port_${port}_out"
-            nft add rule $family $table_name output tcp sport $port counter name "port_${port}_out"
-            nft add rule $family $table_name output udp sport $port counter name "port_${port}_out"
-            nft add rule $family $table_name forward tcp sport $port counter name "port_${port}_out"
-            nft add rule $family $table_name forward udp sport $port counter name "port_${port}_out"
+            batch_cmds+="add rule $family $table_name output tcp sport $port counter name \"port_${port}_out\"\n"
+            batch_cmds+="add rule $family $table_name output udp sport $port counter name \"port_${port}_out\"\n"
+            batch_cmds+="add rule $family $table_name forward tcp sport $port counter name \"port_${port}_out\"\n"
+            batch_cmds+="add rule $family $table_name forward udp sport $port counter name \"port_${port}_out\"\n"
         else
-            nft list counter $family $table_name "port_${port}_out" >/dev/null 2>&1 || nft add counter $family $table_name "port_${port}_out" 2>/dev/null || true
-            nft add rule $family $table_name output tcp sport $port counter name "port_${port}_out"
-            nft add rule $family $table_name output udp sport $port counter name "port_${port}_out"
-            nft add rule $family $table_name forward tcp sport $port counter name "port_${port}_out"
-            nft add rule $family $table_name forward udp sport $port counter name "port_${port}_out"
+            nft list counter $family $table_name "port_${port}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port}_out\n"
+            batch_cmds+="add rule $family $table_name output tcp sport $port counter name \"port_${port}_out\"\n"
+            batch_cmds+="add rule $family $table_name output udp sport $port counter name \"port_${port}_out\"\n"
+            batch_cmds+="add rule $family $table_name forward tcp sport $port counter name \"port_${port}_out\"\n"
+            batch_cmds+="add rule $family $table_name forward udp sport $port counter name \"port_${port}_out\"\n"
         fi
+    fi
+
+    if [ -n "$batch_cmds" ]; then
+        echo -e "$batch_cmds" | nft -f - 2>/dev/null || true
     fi
 }
 
@@ -1071,6 +1073,7 @@ set_port_bandwidth_limit() {
         fi
 
         remove_tc_limit "$port"
+     
         if ! validate_bandwidth "$limit"; then
             echo -e "${RED}端口 $port 格式错误${NC}"
             continue
@@ -1135,7 +1138,7 @@ set_port_quota_limit() {
 
         if [ "$quota" = "0" ] || [ -z "$quota" ]; then
             remove_nftables_quota "$port"
-            jq ".ports.\"$port\".quota.enabled = true | .ports.\"$port\".quota.monthly_limit = \"unlimited\" | del(.ports.\"$port\".quota.reset_day)" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+            update_config ".ports.\"$port\".quota.enabled = true | .ports.\"$port\".quota.monthly_limit = \"unlimited\" | del(.ports.\"$port\".quota.reset_day)"
             remove_port_auto_reset_cron "$port"
             success_count=$((success_count + 1))
             continue
@@ -1214,9 +1217,7 @@ change_port_billing_mode() {
     local saved_output=${traffic_data[1]:-0}
     
     remove_nftables_rules "$target_port"
-    local tmp_file=$(mktemp)
-    jq ".ports.\"$target_port\".billing_mode = \"$new_mode\"" "$CONFIG_FILE" > "$tmp_file"
-    mv "$tmp_file" "$CONFIG_FILE"
+    update_config ".ports.\"$target_port\".billing_mode = \"$new_mode\""
     
     restore_counter_value "$target_port" "$saved_input" "$saved_output"
     add_nftables_rules "$target_port"
@@ -1230,6 +1231,7 @@ change_port_billing_mode() {
     sleep 2; change_port_billing_mode
 }
 
+# 优化5：批量应用 nftables 配额限制规则
 apply_nftables_quota() {
     local port=$1
     local quota_limit=$2
@@ -1241,6 +1243,7 @@ apply_nftables_quota() {
     local current_input=${current_traffic[0]}
     local current_output=${current_traffic[1]}
     local current_total=$(calculate_total_traffic "$current_input" "$current_output" "$billing_mode")
+    local batch_cmds=""
 
     if is_port_range "$port"; then
         local port_safe=$(echo "$port" | tr '-' '_')
@@ -1249,28 +1252,20 @@ apply_nftables_quota() {
         nft add quota $family $table_name $quota_name { over $quota_bytes bytes used $current_total bytes } 2>/dev/null || true
 
         if [ "$billing_mode" = "double" ]; then
-            nft insert rule $family $table_name input tcp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name input udp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward tcp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward udp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name input tcp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name input udp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward tcp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward udp dport $port quota name "$quota_name" drop 2>/dev/null || true
+            batch_cmds+="insert rule $family $table_name input tcp dport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name input udp dport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward tcp dport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward udp dport $port quota name \"$quota_name\" drop\n"
             
-            nft insert rule $family $table_name output tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name output udp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward udp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name output tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name output udp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward udp sport $port quota name "$quota_name" drop 2>/dev/null || true
+            batch_cmds+="insert rule $family $table_name output tcp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name output udp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward tcp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward udp sport $port quota name \"$quota_name\" drop\n"
         else
-            nft insert rule $family $table_name output tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name output udp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward udp sport $port quota name "$quota_name" drop 2>/dev/null || true
+            batch_cmds+="insert rule $family $table_name output tcp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name output udp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward tcp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward udp sport $port quota name \"$quota_name\" drop\n"
         fi
     else
         local quota_name="port_${port}_quota"
@@ -1278,29 +1273,25 @@ apply_nftables_quota() {
         nft add quota $family $table_name $quota_name { over $quota_bytes bytes used $current_total bytes } 2>/dev/null || true
 
         if [ "$billing_mode" = "double" ]; then
-            nft insert rule $family $table_name input tcp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name input udp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward tcp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward udp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name input tcp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name input udp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward tcp dport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward udp dport $port quota name "$quota_name" drop 2>/dev/null || true
+            batch_cmds+="insert rule $family $table_name input tcp dport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name input udp dport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward tcp dport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward udp dport $port quota name \"$quota_name\" drop\n"
             
-            nft insert rule $family $table_name output tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name output udp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward udp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name output tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name output udp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward udp sport $port quota name "$quota_name" drop 2>/dev/null || true
+            batch_cmds+="insert rule $family $table_name output tcp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name output udp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward tcp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward udp sport $port quota name \"$quota_name\" drop\n"
         else
-            nft insert rule $family $table_name output tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name output udp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward tcp sport $port quota name "$quota_name" drop 2>/dev/null || true
-            nft insert rule $family $table_name forward udp sport $port quota name "$quota_name" drop 2>/dev/null || true
+            batch_cmds+="insert rule $family $table_name output tcp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name output udp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward tcp sport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward udp sport $port quota name \"$quota_name\" drop\n"
         fi
+    fi
+
+    if [ -n "$batch_cmds" ]; then
+        echo -e "$batch_cmds" | nft -f - 2>/dev/null || true
     fi
 }
 
@@ -1498,7 +1489,6 @@ manage_configuration() {
 }
 
 export_config() {
-    # 简化的导出逻辑
     local timestamp=$(get_beijing_time +%Y%m%d-%H%M%S)
     local backup_name="port-traffic-dog-config-${timestamp}.tar.gz"
     local backup_path="/root/${backup_name}"
@@ -1520,13 +1510,12 @@ download_with_sources() {
     local url=$1
     local output_file=$2
 
-    # 使用 curl 进行下载，设置了超时保护 
     if curl -sL --connect-timeout 5 --max-time 7 "$url" -o "$output_file" 2>/dev/null; then
         if [ -s "$output_file" ]; then
-            return 0  # 下载成功且文件不为空 [cite: 385]
+            return 0
         fi
     fi
-    return 1  # 下载失败 
+    return 1 
 }
 
 install_update_script() {
@@ -1534,20 +1523,15 @@ install_update_script() {
     echo "────────────────────────────────────────────────────────"
     echo -e "${YELLOW}正在从远程仓库获取最新版本...${NC}"
 
-    # 1. 创建临时文件下载新脚本 
-    local temp_file=$(mktemp)
+    local temp_file=$(mktemp /tmp/port-traffic-dog-update.XXXXXX)
     
-    # 使用脚本内置的下载函数 [cite: 384]
     if download_with_sources "$SCRIPT_URL" "$temp_file"; then
-        # 2. 验证下载的文件是否合法（防止下到网页或空文件） 
         if [ -s "$temp_file" ] && grep -q "端口流量狗" "$temp_file" 2>/dev/null; then
             echo -e "${GREEN}下载成功，正在进行热替换...${NC}"
             
-            # 3. 覆盖旧脚本并赋予执行权限 
             mv "$temp_file" "$SCRIPT_PATH"
             chmod +x "$SCRIPT_PATH"
             
-            # 4. 更新相关的快捷命令和通知模块 [cite: 390, 392]
             create_shortcut_command
             download_notification_modules >/dev/null 2>&1 || true
 
@@ -1555,7 +1539,6 @@ install_update_script() {
             echo "────────────────────────────────────────────────────────"
             sleep 1
             
-            # 5. 【核心逻辑】使用新脚本进程替换当前进程，实现热重启
             exec bash "$SCRIPT_PATH"
         else
             echo -e "${RED}错误：下载的文件验证失败，请检查网络或 URL。${NC}"
@@ -1575,50 +1558,44 @@ uninstall_script() {
     echo "────────────────────────────────────────────────────────"
     echo -e "${YELLOW}将要执行以下操作:${NC}"
     echo "  1. 清除所有端口的流量监控规则 (nftables)" 
-    echo "  2. 清除所有端口的带宽限制规则 (TC)" [cite: 398]
-    echo "  3. 删除 Telegram/企业微信/自动重置等定时任务" [cite: 400, 401]
+    echo "  2. 清除所有端口的带宽限制规则 (TC)"
+    echo "  3. 删除 Telegram/企业微信/自动重置等定时任务"
     echo "  4. 停止并删除 TG 交互机器人后台服务 (Systemd)"
-    echo "  5. 删除快捷命令 dog" [cite: 403]
+    echo "  5. 删除快捷命令 dog"
     echo "  6. 删除所有配置文件及日志 (/etc/port-traffic-dog)" 
     echo "  7. 删除脚本本身" 
     echo
-    echo -e "${RED}🔴 警告：此操作不可逆，所有历史流量数据将永久丢失！${NC}" [cite: 394]
-    read -p "确认卸载? [y/N]: " confirm [cite: 394]
+    echo -e "${RED}🔴 警告：此操作不可逆，所有历史流量数据将永久丢失！${NC}" 
+    read -p "确认卸载? [y/N]: " confirm
 
-    if [[ "$confirm" =~ ^[Yy]$ ]]; then [cite: 395]
-        echo -e "${YELLOW}正在全力卸载中...${NC}" [cite: 395]
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}正在全力卸载中...${NC}"
 
-        # 1. 清理端口规则 [cite: 396]
-        local active_ports=($(get_active_ports 2>/dev/null || true)) [cite: 396]
-        for port in "${active_ports[@]}"; do [cite: 396]
-            remove_nftables_rules "$port" 2>/dev/null || true [cite: 397]
-            remove_tc_limit "$port" 2>/dev/null || true [cite: 398]
-            remove_port_auto_reset_cron "$port" 2>/dev/null || true [cite: 439]
+        local active_ports=($(get_active_ports 2>/dev/null || true))
+        for port in "${active_ports[@]}"; do
+            remove_nftables_rules "$port" 2>/dev/null || true
+            remove_tc_limit "$port" 2>/dev/null || true
+            remove_port_auto_reset_cron "$port" 2>/dev/null || true
         done
 
-        # 2. 删除整个 nftables 表 [cite: 399]
-        local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE" 2>/dev/null || echo "port_traffic_monitor") [cite: 399]
-        local family=$(jq -r '.nftables.family' "$CONFIG_FILE" 2>/dev/null || echo "inet") [cite: 399]
-        nft delete table $family $table_name >/dev/null 2>&1 || true [cite: 399]
+        local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE" 2>/dev/null || echo "port_traffic_monitor")
+        local family=$(jq -r '.nftables.family' "$CONFIG_FILE" 2>/dev/null || echo "inet")
+        nft delete table $family $table_name >/dev/null 2>&1 || true
 
-        # 3. 停止并清理 Systemd 服务 (新增加的功能)
         systemctl stop port-tg-bot 2>/dev/null || true
         systemctl disable port-tg-bot 2>/dev/null || true
         rm -f /etc/systemd/system/port-tg-bot.service 2>/dev/null
         systemctl daemon-reload
 
-        # 4. 清理定时任务 [cite: 400, 401]
-        remove_telegram_notification_cron 2>/dev/null || true [cite: 400]
-        remove_wecom_notification_cron 2>/dev/null || true [cite: 401]
+        remove_telegram_notification_cron 2>/dev/null || true
+        remove_wecom_notification_cron 2>/dev/null || true
 
-        # 5. 删除文件与目录 [cite: 402, 403, 404]
         rm -rf "$CONFIG_DIR" 2>/dev/null || true 
-        rm -f "/usr/local/bin/$SHORTCUT_COMMAND" 2>/dev/null || true [cite: 403]
+        rm -f "/usr/local/bin/$SHORTCUT_COMMAND" 2>/dev/null || true
         
         echo -e "${GREEN}✅ 卸载完成！${NC}" 
         echo -e "${YELLOW}感谢使用，江湖路远，有缘再见！👋${NC}" 
         
-        # 6. 最后删除脚本自身 
         rm -f "$SCRIPT_PATH" 2>/dev/null || true 
         exit 0 
     else
@@ -1644,12 +1621,10 @@ setup_interactive_tg() {
         return
     fi
 
-    # 写入配置到 config.json
-    jq ".notifications.telegram.bot_token = \"$bot_token\" | .notifications.telegram.chat_id = \"$chat_id\" | .notifications.telegram.enabled = true" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+    update_config ".notifications.telegram.bot_token = \"$bot_token\" | .notifications.telegram.chat_id = \"$chat_id\" | .notifications.telegram.enabled = true"
 
     echo -e "${YELLOW}正在部署 Systemd 守护进程...${NC}"
     
-    # 建立守护进程服务文件
     cat > /etc/systemd/system/port-tg-bot.service << EOF
 [Unit]
 Description=Port Traffic Dog Interactive TG Bot
@@ -1689,6 +1664,7 @@ stop_interactive_tg() {
     manage_notifications
 }
 
+# 优化6：TG后台守护进程数据容错，防止因为 API 返回错误而崩溃退出
 run_tg_listener() {
     local token=$(jq -r '.notifications.telegram.bot_token' "$CONFIG_FILE")
     local allowed_chat=$(jq -r '.notifications.telegram.chat_id' "$CONFIG_FILE")
@@ -1703,17 +1679,16 @@ run_tg_listener() {
 
     while true; do
         local updates=$(curl -s --max-time 60 "https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=50")
-        local latest_id=$(echo "$updates" | jq -r '.result[-1].update_id // empty')
+        local latest_id=$(echo "$updates" | jq -r '.result[-1].update_id // empty' 2>/dev/null || true)
         
-        if [[ -n "$latest_id" ]]; then
+        # 增加纯数字判断容错，防止非预期响应导致 bash 算数报错
+        if [[ -n "$latest_id" && "$latest_id" =~ ^[0-9]+$ ]]; then
             offset=$((latest_id + 1))
             
-            # 解析消息
             echo "$updates" | jq -c '.result[]' | while read -r update; do
                 local msg_text=$(echo "$update" | jq -r '.message.text // empty')
                 local chat_id=$(echo "$update" | jq -r '.message.chat.id // empty')
                 
-                # 正则匹配命令： /t 12345 或者 /traffic 100-200
                 if [[ "$msg_text" =~ ^/(traffic|t)[[:space:]]+([0-9]+(-[0-9]+)?)$ ]]; then
                     local port="${BASH_REMATCH[2]}"
                     
@@ -1721,14 +1696,12 @@ run_tg_listener() {
                         local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
                         local port_safe=$(echo "$port" | tr '-' '_')
                         
-                        # 从 nftables 直接拿实时数据
                         local in_b=$(nft list counter inet port_traffic_monitor "port_${port_safe}_in" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || echo 0)
                         local out_b=$(nft list counter inet port_traffic_monitor "port_${port_safe}_out" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || echo 0)
-                        
+   
                         local total=$((out_b))
                         [[ "$billing_mode" == "double" ]] && total=$((in_b + out_b))
-                        
-                        # 拼接要回复给用户的内容 (硬核仪表盘风)
+                      
                         local reply="🛰️ <b>端口流量实时报告</b>\n"
                         reply+="────────────────\n"
                         reply+="🔌 <b>监听端口</b>：<code>${port}</code>\n"
@@ -1739,7 +1712,6 @@ run_tg_listener() {
                         reply+="⚙️ <b>计费逻辑</b>：<code>$([[ "$billing_mode" == "double" ]] && echo "双向计费" || echo "单向计费")</code>\n"
                         reply+="⏰ <b>查询时间</b>：$(get_beijing_time '+%Y-%m-%d %H:%M:%S')"
 
-                        # 发送消息 [cite: 384]
                         curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" \
                             -d "chat_id=${chat_id}" -d "text=${reply}" -d "parse_mode=HTML" > /dev/null
                     else
@@ -1774,7 +1746,7 @@ manage_notifications() {
 setup_port_auto_reset_cron() {
     local port="$1"
     local script_path="$SCRIPT_PATH"
-    local temp_cron=$(mktemp)
+    local temp_cron=$(mktemp /tmp/port-traffic-dog-cron.XXXXXX)
     crontab -l 2>/dev/null | grep -v "端口流量狗自动重置端口$port" | grep -v "port-traffic-dog.*--reset-port $port" > "$temp_cron" || true
     local quota_enabled=$(jq -r ".ports.\"$port\".quota.enabled // true" "$CONFIG_FILE")
     local monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE")
@@ -1790,7 +1762,7 @@ setup_port_auto_reset_cron() {
 
 remove_port_auto_reset_cron() {
     local port="$1"
-    local temp_cron=$(mktemp)
+    local temp_cron=$(mktemp /tmp/port-traffic-dog-cron.XXXXXX)
     crontab -l 2>/dev/null | grep -v "端口流量狗自动重置端口$port" | grep -v "port-traffic-dog.*--reset-port $port" > "$temp_cron" || true
     crontab "$temp_cron"
     rm -f "$temp_cron"
@@ -1807,7 +1779,6 @@ EOF
 }
 
 main() {
-    # 隐藏入口：当传递了 --run-listener 时，直接启动 TG 后台监听进程
     if [ "${1:-}" == "--run-listener" ]; then
         run_tg_listener
         exit 0
