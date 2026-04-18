@@ -1232,27 +1232,28 @@ main_menu() {
         echo -e " ${BOLD}${BLUE}▶ 安全与网络优化${PLAIN}"
         echo -e "  ${GREEN}4.${PLAIN} SSH 安全加固     ${YELLOW}(修改默认端口/防失联占用检查)${PLAIN}"
         echo -e "  ${GREEN}5.${PLAIN} Fail2ban 防护    ${YELLOW}(自动检测SSH新端口防爆破封禁)${PLAIN}"
-        echo -e "  ${GREEN}6.${PLAIN} Docker 深度管理  ${YELLOW}(配置防穿透隔离机制/自动备份)${PLAIN}"
-        echo -e "  ${GREEN}7.${PLAIN} BBR 增强管理     ${YELLOW}(调用 ylx2016 终极多核调优脚本)${PLAIN}"
-        echo -e "  ${GREEN}8.${PLAIN} 动态 TCP 调优    ${YELLOW}(联动 Omnitt 生成防呆极致参数)${PLAIN}"
+        echo -e "  ${GREEN}6.${PLAIN} 添加 SSH 公钥    ${YELLOW}(配置密钥免密登录，提升安全性)${PLAIN}"
+        echo -e "  ${GREEN}7.${PLAIN} Docker 深度管理  ${YELLOW}(配置防穿透隔离机制/自动备份)${PLAIN}"
+        echo -e "  ${GREEN}8.${PLAIN} BBR 增强管理     ${YELLOW}(调用 ylx2016 终极多核调优脚本)${PLAIN}"
+        echo -e "  ${GREEN}9.${PLAIN} 动态 TCP 调优    ${YELLOW}(联动 Omnitt 生成防呆极致参数)${PLAIN}"
         
         echo -e " ${BOLD}${BLUE}▶ 内核与内存榨取${PLAIN}"
-        echo -e "  ${GREEN}9.${PLAIN} 智能内存调优     ${YELLOW}(ZRAM压缩+Swap 详尽分级策略落地)${PLAIN}"
-        echo -e " ${GREEN}10.${PLAIN} 换装 Cloud内核   ${YELLOW}(释放驱动冗余，KVM 虚拟专属)${PLAIN}"
-        echo -e " ${GREEN}11.${PLAIN} 卸载冗余旧内核   ${YELLOW}(清理磁盘无用空间，需谨慎)${PLAIN}"
+        echo -e " ${GREEN}10.${PLAIN} 智能内存调优     ${YELLOW}(ZRAM压缩+Swap 详尽分级策略落地)${PLAIN}"
+        echo -e " ${GREEN}11.${PLAIN} 换装 Cloud内核   ${YELLOW}(释放驱动冗余，KVM 虚拟专属)${PLAIN}"
+        echo -e " ${GREEN}12.${PLAIN} 卸载冗余旧内核   ${YELLOW}(清理磁盘无用空间，需谨慎)${PLAIN}"
         
         echo -e " ${BOLD}${BLUE}▶ 探针与节点建站${PLAIN}"
-        echo -e " ${GREEN}12.${PLAIN} 极速硬件探针     ${YELLOW}(全屏显示本机配置与实时负载)${PLAIN}"
-        echo -e " ${GREEN}13.${PLAIN} 综合测试合集     ${YELLOW}(融合怪/流媒体/IP欺诈质量/路由)${PLAIN}"
-        echo -e " ${GREEN}14.${PLAIN} 端口流量监控     ${YELLOW}(拉取并运行 Port Traffic Dog)${PLAIN}"
-        echo -e " ${GREEN}15.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板，调用 xeefei 脚本)${PLAIN}"
-        echo -e " ${GREEN}16.${PLAIN} 安装 Sing-box    ${YELLOW}(甬哥四合一强大官方一键脚本)${PLAIN}"
-        echo -e " ${GREEN}17.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的备用手段)${PLAIN}"
-        echo -e " ${GREEN}18.${PLAIN} ${CYAN}${BOLD}DNS流媒体解锁${PLAIN}    ${YELLOW}(Alice DNS 区域分流解锁脚本)${PLAIN}"
+        echo -e " ${GREEN}13.${PLAIN} 极速硬件探针     ${YELLOW}(全屏显示本机配置与实时负载)${PLAIN}"
+        echo -e " ${GREEN}14.${PLAIN} 综合测试合集     ${YELLOW}(融合怪/流媒体/IP欺诈质量/路由)${PLAIN}"
+        echo -e " ${GREEN}15.${PLAIN} 端口流量监控     ${YELLOW}(拉取并运行 Port Traffic Dog)${PLAIN}"
+        echo -e " ${GREEN}16.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板，调用 xeefei 脚本)${PLAIN}"
+        echo -e " ${GREEN}17.${PLAIN} 安装 Sing-box    ${YELLOW}(甬哥四合一强大官方一键脚本)${PLAIN}"
+        echo -e " ${GREEN}18.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的备用手段)${PLAIN}"
+        echo -e " ${GREEN}19.${PLAIN} ${CYAN}${BOLD}DNS流媒体解锁${PLAIN}    ${YELLOW}(Alice DNS 区域分流解锁脚本)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
-        echo -e " ${YELLOW}19.${PLAIN} ${BOLD}一键更新脚本${PLAIN}     ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
-        echo -e " ${RED}20.${PLAIN} 重启服务器       ${RED} 0.${PLAIN} 退出面板"
+        echo -e " ${YELLOW}20.${PLAIN} ${BOLD}一键更新脚本${PLAIN}     ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
+        echo -e " ${RED}21.${PLAIN} 重启服务器       ${RED} 0.${PLAIN} 退出面板"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local choice
@@ -1264,21 +1265,22 @@ main_menu() {
             3) func_env_install ;;
             4) func_security ;;
             5) func_fail2ban ;;
-            6) func_docker_manage ;;
-            7) func_bbr_manage ;;
-            8) func_tcp_tune ;;
-            9) func_zram_swap ;;
-            10) func_install_kernel ;;
-            11) func_clean_kernel ;;
-            12) func_system_info ;;
-            13) func_test_scripts ;;
-            14) func_port_dog ;;
-            15) func_xpanel ;;
-            16) func_singbox ;;
-            17) func_rescue_panel ;;
-            18) func_dns_unlock ;;
-            19) func_update_script ;;
-            20) reboot ;;
+            6) func_add_ssh_key ;;
+            7) func_docker_manage ;;
+            8) func_bbr_manage ;;
+            9) func_tcp_tune ;;
+            10) func_zram_swap ;;
+            11) func_install_kernel ;;
+            12) func_clean_kernel ;;
+            13) func_system_info ;;
+            14) func_test_scripts ;;
+            15) func_port_dog ;;
+            16) func_xpanel ;;
+            17) func_singbox ;;
+            18) func_rescue_panel ;;
+            19) func_dns_unlock ;;
+            20) func_update_script ;;
+            21) reboot ;;
             0) exit 0 ;;
             *) 
                 echo -e "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}"
