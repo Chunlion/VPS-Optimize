@@ -22,6 +22,9 @@ readonly SHORT_MAX_TIMEOUT=7
 readonly SCRIPT_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/refs/heads/main/dog.sh"
 readonly SHORTCUT_COMMAND="dog"
 
+download_notification_modules() {
+    return 0
+}
 detect_system() {
     if [ -f /etc/lsb-release ] && grep -q "Ubuntu" /etc/lsb-release 2>/dev/null; then
         echo "ubuntu"
@@ -71,7 +74,7 @@ install_missing_tools() {
 check_dependencies() {
     local silent_mode=${1:-false}
     local missing_tools=()
-    local required_tools=("nft" "tc" "ss" "jq" "awk" "bc" "unzip" "cron" "curl")
+    local required_tools=("nft" "tc" "ss" "jq" "awk" "bc" "unzip" "cron" "curl" "conntrack")
 
     for tool in "${required_tools[@]}"; do
         if ! command -v "$tool" >/dev/null 2>&1; then
@@ -118,6 +121,24 @@ setup_cron_environment() {
         echo "$current_cron" | grep -v "^PATH=" >> "$temp_cron" || true
         crontab "$temp_cron" 2>/dev/null || true
         rm -f "$temp_cron"
+    fi
+    
+    # 修复：强行注册开机自启任务，确保重启后恢复逻辑被执行
+    if ! crontab -l 2>/dev/null | grep -q "@reboot.*port-traffic-dog"; then
+        local temp_cron2=$(mktemp)
+        crontab -l 2>/dev/null > "$temp_cron2" || true
+        echo "@reboot /bin/bash $SCRIPT_PATH >/dev/null 2>&1" >> "$temp_cron2"
+        crontab "$temp_cron2" 2>/dev/null || true
+        rm -f "$temp_cron2"
+    fi
+    # 修复：注入高频持久化任务，防止意外死机导致的流量数据蒸发
+    if ! crontab -l 2>/dev/null | grep -q "port-traffic-dog.*--save-data"; then
+        local temp_cron3=$(mktemp)
+        crontab -l 2>/dev/null > "$temp_cron3" || true
+        # 每小时第 15 分钟触发一次后台数据存档
+        echo "15 * * * * /bin/bash \"$SCRIPT_PATH\" --save-data >/dev/null 2>&1" >> "$temp_cron3"
+        crontab "$temp_cron3" 2>/dev/null || true
+        rm -f "$temp_cron3"
     fi
 }
 
@@ -173,7 +194,14 @@ EOF
     fi
     init_nftables
     setup_exit_hooks
-    restore_monitoring_if_needed
+    # 修复：移除残缺的 restore_monitoring_if_needed，改为调用全量恢复函数
+    local active_ports=($(get_active_ports 2>/dev/null || true))
+    if [ ${#active_ports[@]} -gt 0 ]; then
+        # 1. 注入关机前保存的流量数据，防止进度丢失
+        restore_traffic_data_from_backup
+        # 2. 恢复所有的 nftables、TC限速 以及 cron 重置任务
+        restore_all_monitoring_rules
+    fi
 }
 
 init_nftables() {
@@ -562,9 +590,7 @@ is_port_range() { local port=$1; [[ "$port" =~ ^[0-9]+-[0-9]+$ ]]; }
 
 generate_port_range_mark() {
     local port_range=$1
-    local start_port=$(echo "$port_range" | cut -d'-' -f1)
-    local end_port=$(echo "$port_range" | cut -d'-' -f2)
-    echo $(( (start_port * 1000 + end_port) % 65536 ))
+    echo "$port_range" | cksum | awk '{print ($1 % 65535) + 1}'
 }
 
 calculate_tc_burst() {
@@ -719,13 +745,14 @@ add_port_monitoring() {
     echo "────────────────────────────────────────────────────────"
 
     declare -A program_ports
-    while read line; do
+    while read -r line; do # 修复: 加入 -r 防止反斜杠丢失
         if [[ "$line" =~ LISTEN|UNCONN ]]; then
-            local_addr=$(echo "$line" | awk '{print $5}')
-            port=$(echo "$local_addr" | grep -o ':[0-9]*$' | cut -d':' -f2)
-            program=$(echo "$line" | awk '{print $7}' | cut -d'"' -f2 2>/dev/null || echo "")
+            # 修复: 加入 local 限定作用域，防止全局污染
+            local local_addr=$(echo "$line" | awk '{print $5}')
+            local port=$(echo "$local_addr" | grep -o ':[0-9]*$' | cut -d':' -f2)
+            local program=$(echo "$line" | awk '{print $7}' | cut -d'"' -f2 2>/dev/null || echo "")
             if [ -n "$port" ] && [ -n "$program" ] && [ "$program" != "-" ]; then
-                if [ -z "${program_ports[$program]:-}" ]; then
+               if [ -z "${program_ports[$program]:-}" ]; then
                     program_ports[$program]="$port"
                 else
                     if [[ ! "${program_ports[$program]}" =~ (^|.*\|)$port(\||$) ]]; then
@@ -738,7 +765,7 @@ add_port_monitoring() {
 
     if [ ${#program_ports[@]} -gt 0 ]; then
         for program in $(printf '%s\n' "${!program_ports[@]}" | sort); do
-            ports="${program_ports[$program]}"
+            local ports="${program_ports[$program]}" # 修复: 声明为 local
             printf "%-10s | %-9s\n" "$program" "$ports"
         done
     else
@@ -843,7 +870,7 @@ add_port_monitoring() {
 
         # 优化3：修复 JSON 注入问题，采用 jq 参数安全传递数据
         (
-            flock -w 5 9 || { echo -e "${RED}配置文件正忙，跳过 $port${NC}"; continue; }
+            flock -w 5 9 || exit 1
             jq --arg port "$port" \
                --arg billing "$billing_mode" \
                --arg remark "$remark" \
@@ -857,8 +884,8 @@ add_port_monitoring() {
                    quota: $quota_conf,
                    remark: $remark,
                    created_at: $created
-               }' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
-        ) 9> "${CONFIG_DIR}/.config.lock"
+                }' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+        ) 9> "${CONFIG_DIR}/.config.lock" || { echo -e "${RED}配置文件正忙，跳过 $port${NC}"; continue; }
 
         add_nftables_rules "$port"
         if [ "$monthly_limit" != "unlimited" ]; then apply_nftables_quota "$port" "$quota"; fi
@@ -1452,6 +1479,36 @@ auto_reset_port() {
     reset_port_nftables_counters "$port"
     echo "端口 $port 自动重置完成"
 }
+check_and_run_daily_resets() {
+    # 获取今天日期，去掉前导 0 防止 Bash 当成八进制报错 (比如 08, 09)
+    local today=$(TZ='Asia/Shanghai' date +%d | sed 's/^0//')
+    local current_ym=$(TZ='Asia/Shanghai' date +%Y-%m)
+    # 利用 GNU date 推算下个月第一天的前一天，完美获取当月最后一天
+    local last_day=$(TZ='Asia/Shanghai' date -d "$current_ym-01 +1 month -1 day" +%d | sed 's/^0//')
+    
+    local active_ports=($(get_active_ports 2>/dev/null || true))
+    for port in "${active_ports[@]}"; do
+        local quota_enabled=$(jq -r ".ports.\"$port\".quota.enabled // false" "$CONFIG_FILE")
+        local monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE")
+        local reset_day=$(jq -r ".ports.\"$port\".quota.reset_day // null" "$CONFIG_FILE")
+        
+        if [ "$quota_enabled" = "true" ] && [ "$monthly_limit" != "unlimited" ] && [ "$reset_day" != "null" ]; then
+            local should_reset=false
+            
+            # 规则 1：今天刚好等于用户设定的重置日
+            if [ "$today" -eq "$reset_day" ]; then
+                should_reset=true
+            # 规则 2：今天是本月最后一天，且用户设定的日期比今天大（完美补偿 31号 陷阱）
+            elif [ "$today" -eq "$last_day" ] && [ "$reset_day" -gt "$last_day" ]; then
+                should_reset=true
+            fi
+            
+            if [ "$should_reset" = true ]; then
+                auto_reset_port "$port"
+            fi
+        fi
+    done
+}
 
 reset_port_nftables_counters() {
     local port=$1
@@ -1738,30 +1795,21 @@ manage_notifications() {
 }
 
 setup_port_auto_reset_cron() {
-    local port="$1"
-    local script_path="$SCRIPT_PATH"
     local temp_cron=$(mktemp /tmp/port-traffic-dog-cron.XXXXXX)
-    crontab -l 2>/dev/null | grep -v "端口流量狗自动重置端口$port" | grep -v "port-traffic-dog.*--reset-port $port" > "$temp_cron" || true
-    local quota_enabled=$(jq -r ".ports.\"$port\".quota.enabled // true" "$CONFIG_FILE")
-    local monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE")
-    local reset_day_raw=$(jq -r ".ports.\"$port\".quota.reset_day" "$CONFIG_FILE")
+    # 顺手把之前可能生成的冗余独立端口规则清理掉
+    crontab -l 2>/dev/null | grep -v "端口流量狗自动重置端口" | grep -v "port-traffic-dog.*--reset-port" | grep -v "--daily-reset-check" > "$temp_cron" || true
     
-    if [ "$quota_enabled" = "true" ] && [ "$monthly_limit" != "unlimited" ] && [ "$reset_day_raw" != "null" ]; then
-        local reset_day="${reset_day_raw:-1}"
-        echo "5 0 $reset_day * * $script_path --reset-port $port >/dev/null 2>&1  # 端口流量狗自动重置端口$port" >> "$temp_cron"
-    fi
+    # 注入唯一的“全局每日智能心跳检测”
+    echo "5 0 * * * /bin/bash \"$SCRIPT_PATH\" --daily-reset-check >/dev/null 2>&1  # 端口流量狗全局智能流量重置" >> "$temp_cron"
+    
     crontab "$temp_cron"
     rm -f "$temp_cron"
 }
 
 remove_port_auto_reset_cron() {
-    local port="$1"
-    local temp_cron=$(mktemp /tmp/port-traffic-dog-cron.XXXXXX)
-    crontab -l 2>/dev/null | grep -v "端口流量狗自动重置端口$port" | grep -v "port-traffic-dog.*--reset-port $port" > "$temp_cron" || true
-    crontab "$temp_cron"
-    rm -f "$temp_cron"
+    # 既然改为了全局每日心跳，这里不需要再单独删配置了，留空即可
+    : 
 }
-
 create_shortcut_command() {
     if [ ! -f "/usr/local/bin/$SHORTCUT_COMMAND" ]; then
         cat > "/usr/local/bin/$SHORTCUT_COMMAND" << EOF
@@ -1791,7 +1839,16 @@ main() {
         auto_reset_port "$2"
         exit 0
     fi
-    
+    # 拦截智能每日检测参数
+    if [ "${1:-}" == "--daily-reset-check" ]; then
+        check_and_run_daily_resets
+        exit 0
+    fi
+    # 拦截后台自动保存数据
+    if [ "${1:-}" == "--save-data" ]; then
+        save_traffic_data
+        exit 0
+    fi
     # 5. 常规的前台菜单逻辑
     check_dependencies
     create_shortcut_command
