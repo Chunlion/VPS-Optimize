@@ -433,7 +433,7 @@ EOF
                     else
                         echo -e "${RED}❌ 致命错误：生成的 Caddyfile 存在语法错误！${PLAIN}"
                         echo -e "${YELLOW}正在回滚配置以防止网站整体宕机...${PLAIN}"
-                        mv "/etc/caddy/Caddyfile.bak_$(date +%s)" /etc/caddy/Caddyfile
+                        mv "$backup_file" /etc/caddy/Caddyfile
                     fi
                 fi
                 ;;
@@ -526,7 +526,8 @@ func_caddy_add_insecure() {
         echo -e "${RED}❌ 域名或端口不能为空！已取消操作。${PLAIN}"
     else
         # 备份配置
-        cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak_$(date +%s)"
+        local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
+        cp /etc/caddy/Caddyfile "$backup_file"
         
         # 直接追加跳过验证的逻辑块
         cat <<EOF >> /etc/caddy/Caddyfile
@@ -546,7 +547,7 @@ EOF
         else
             echo -e "${RED}❌ 致命错误：追加的配置导致语法错误！${PLAIN}"
             echo -e "${YELLOW}正在回滚配置以防止网站整体宕机...${PLAIN}"
-            mv "/etc/caddy/Caddyfile.bak_$(date +%s)" /etc/caddy/Caddyfile
+            mv "$backup_file" /etc/caddy/Caddyfile
         fi
     fi
     read -n 1 -s -r -p "按任意键继续..."
@@ -915,7 +916,13 @@ func_docker_manage() {
                     cp /etc/docker/daemon.json "/etc/docker/daemon.json.bak_$(date +%s)"
                     echo -e "${YELLOW}⚠️ 已将原有 Docker 配置文件备份为 .bak 时间戳文件。${PLAIN}"
                     # 使用 jq 进行非破坏性合并，保留用户原有配置
-                    jq '. + {"ip": "127.0.0.1", "log-driver": "json-file", "log-opts": {"max-size": "50m", "max-file": "3"}}' /etc/docker/daemon.json > /tmp/daemon_tmp.json && mv /tmp/daemon_tmp.json /etc/docker/daemon.json
+                    if jq '. + {"ip": "127.0.0.1", "log-driver": "json-file", "log-opts": {"max-size": "50m", "max-file": "3"}}' /etc/docker/daemon.json > /tmp/daemon_tmp.json 2>/dev/null; then
+                        mv /tmp/daemon_tmp.json /etc/docker/daemon.json
+                    else
+                        echo -e "${RED}❌ 原 daemon.json JSON 格式已损坏，防穿透配置合并失败！${PLAIN}"
+                        # 恢复刚备份的文件
+                        mv "/etc/docker/daemon.json.bak_$(date +%s -d 'now')" /etc/docker/daemon.json 2>/dev/null
+                    fi
                 else
                     # 文件不存在时初始生成
                     cat <<EOF > /etc/docker/daemon.json
@@ -1311,7 +1318,7 @@ func_rescue_panel() {
 func_update_script() {
     clear
     echo -e "${CYAN}👉 正在从 GitHub 源地址拉取最新版本...${PLAIN}"
-    if curl -sL "$UPDATE_URL" -o /tmp/cy_new.sh; then
+    if curl -sL "$UPDATE_URL" -o /tmp/cy_new.sh && bash -n /tmp/cy_new.sh; then
         mv /tmp/cy_new.sh "$0"
         chmod +x "$0"
         cp "$0" /usr/local/bin/cy
