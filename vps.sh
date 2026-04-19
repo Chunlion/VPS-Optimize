@@ -44,8 +44,9 @@ UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh"
 # --- 全局快捷键注册 ---
 create_shortcut() {
     local script_path="/usr/local/bin/cy"
-    if [[ ! -f "$script_path" ]] && [[ -f "$0" ]]; then
-        cp "$(readlink -f "$0")" "$script_path"
+    if [[ ! -f "$script_path" ]]; then
+        # 优先尝试从远端直接拉取最新版本作为快捷方式 (完美兼容 curl 管道运行)
+        curl -sL "$UPDATE_URL" -o "$script_path" 2>/dev/null || cp "$(readlink -f "$0")" "$script_path" 2>/dev/null
         chmod +x "$script_path"
         echo -e "${GREEN}✅ 快捷指令 'cy' 已全局注册！下次可直接输入 cy 唤出面板。${PLAIN}"
         sleep 1
@@ -398,9 +399,12 @@ func_env_install() {
                     read -p "👉 您的选择 (选 n 则正常反代 http): " is_https
                     
                     # 备份原始 Caddyfile
+                    # 1. 备份时锁定时间戳变量，防止秒级误差导致回滚失败
+                    local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
+                    
                     if [[ -f /etc/caddy/Caddyfile ]]; then
-                        cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak_$(date +%s)
-                        echo -e "${BLUE}已备份原配置为 /etc/caddy/Caddyfile.bak_$(date +%s)${PLAIN}"
+                        cp /etc/caddy/Caddyfile "$backup_file"
+                        echo -e "${BLUE}已备份原配置为 $backup_file${PLAIN}"
                     fi
                     
                     if [[ "$is_https" =~ ^[Yy]$ ]]; then
@@ -535,8 +539,15 @@ $domain {
     }
 }
 EOF
-        systemctl restart caddy
-        echo -e "${GREEN}✅ 独立跳过验证配置已成功追加到 Caddyfile！${PLAIN}"
+        # 引入 caddy validate 语法检查机制
+        if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+            systemctl reload caddy >/dev/null 2>&1
+            echo -e "${GREEN}✅ 独立跳过验证配置已成功追加到 Caddyfile 并生效！${PLAIN}"
+        else
+            echo -e "${RED}❌ 致命错误：追加的配置导致语法错误！${PLAIN}"
+            echo -e "${YELLOW}正在回滚配置以防止网站整体宕机...${PLAIN}"
+            mv "/etc/caddy/Caddyfile.bak_$(date +%s)" /etc/caddy/Caddyfile
+        fi
     fi
     read -n 1 -s -r -p "按任意键继续..."
 }
