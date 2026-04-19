@@ -422,7 +422,7 @@ $domain {
 }
 EOF
                     fi
-                    # 增加：安全校验逻辑
+                    # 引入 caddy validate 语法检查机制
                     if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
                         systemctl reload caddy >/dev/null 2>&1
                         echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
@@ -431,6 +431,7 @@ EOF
                         echo -e "${YELLOW}正在回滚配置以防止网站整体宕机...${PLAIN}"
                         mv "/etc/caddy/Caddyfile.bak_$(date +%s)" /etc/caddy/Caddyfile
                     fi
+                fi
                 ;;
             14) func_view_caddy_cert ;;
             15) func_caddy_add_insecure ;;
