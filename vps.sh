@@ -422,9 +422,15 @@ $domain {
 }
 EOF
                     fi
-                    systemctl restart caddy
-                    echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
-                fi
+                    # 增加：安全校验逻辑
+                    if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+                        systemctl reload caddy >/dev/null 2>&1
+                        echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
+                    else
+                        echo -e "${RED}❌ 致命错误：生成的 Caddyfile 存在语法错误！${PLAIN}"
+                        echo -e "${YELLOW}正在回滚配置以防止网站整体宕机...${PLAIN}"
+                        mv "/etc/caddy/Caddyfile.bak_$(date +%s)" /etc/caddy/Caddyfile
+                    fi
                 ;;
             14) func_view_caddy_cert ;;
             15) func_caddy_add_insecure ;;
@@ -560,53 +566,75 @@ func_caddy_clear_config() {
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 新增功能：删除 Caddy 申请的特定域名证书
+# 优化重构：核弹级域名证书清理与解除端口占用
 # ---------------------------------------------------------
 func_caddy_delete_cert() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🗑️ 删除 Caddy 域名的 ACME 证书${PLAIN}"
+    echo -e "${BOLD}☢️ 核弹级：彻底清理域名证书与解除占用${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}💡 场景：当 Caddy 与面板 (如 x-ui) 申请证书起冲突，或需要彻底释放域名时使用。${PLAIN}"
 
-    # 确定 Caddy 证书的底层存储根路径
-    local cert_root="/var/lib/caddy/.local/share/caddy/certificates"
-    [[ ! -d "$cert_root" ]] && cert_root="/root/.local/share/caddy/certificates"
-
-    if [[ ! -d "$cert_root" ]]; then
-        echo -e "${RED}❌ 未检测到 Caddy 证书存储目录！您可能尚未申请过任何证书。${PLAIN}"
-        read -n 1 -s -r -p "按任意键返回..."
-        return
-    fi
-
-    read -p "👉 请输入要删除证书的准确域名 (如 panel.site.com): " domain
+    read -p "👉 请输入要强杀清理的精准域名 (如 panel.site.com): " domain
     if [[ -z "$domain" ]]; then
-        echo -e "${RED}❌ 域名不能为空！操作已取消。${PLAIN}"
+        echo -e "${RED}❌ 域名不能为空！${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
 
-    # 递归查找该域名对应的专属文件夹
-    local target_dir
-    target_dir=$(find "$cert_root" -type d -name "$domain" -print -quit 2>/dev/null)
+    echo -e "\n${CYAN}▶ 正在执行核弹级清理流程...${PLAIN}"
 
-    if [[ -n "$target_dir" ]]; then
-        echo -e "${YELLOW}⚠️ 警告：即将永久删除以下目录及其包含的所有公钥、私钥和元数据文件：${PLAIN}"
-        echo -e "   ${BLUE}$target_dir${PLAIN}"
-        read -p "❓ 确认要彻底删除吗？(y/n): " yn
-        if [[ "$yn" =~ ^[Yy]$ ]]; then
-            rm -rf "$target_dir"
-            echo -e "${GREEN}✅ 域名 $domain 的底层证书数据已彻底销毁！${PLAIN}"
-            
-            # 重启 Caddy，强制丢弃内存中缓存的旧证书
-            systemctl restart caddy >/dev/null 2>&1
-            echo -e "${BLUE}ℹ️ Caddy 服务已重启，内存证书缓存已清空。${PLAIN}"
+    # 1. 停止 Caddy，强制释放 80/443 端口
+    systemctl stop caddy >/dev/null 2>&1
+    echo -e "${GREEN}✅ [1/4] 已强制停止 Caddy 服务，释放 80/443 端口。${PLAIN}"
+
+    # 2. 深度清理 Caddy 底层证书缓存
+    local caddy_paths=("/var/lib/caddy/.local/share/caddy/certificates" "/root/.local/share/caddy/certificates")
+    local caddy_found=false
+    for cp in "${caddy_paths[@]}"; do
+        if [[ -d "$cp" ]]; then
+            # 查找并删除对应域名的目录
+            local target=$(find "$cp" -type d -name "*${domain}*" -print -quit 2>/dev/null)
+            if [[ -n "$target" ]]; then
+                rm -rf "$target"
+                caddy_found=true
+            fi
+        fi
+    done
+    if $caddy_found; then
+        echo -e "${GREEN}✅ [2/4] Caddy 引擎中关于 ${domain} 的密钥与证书已抹除。${PLAIN}"
+    else
+        echo -e "${BLUE}ℹ️ [2/4] 未在 Caddy 引擎中发现该域名的证书。${PLAIN}"
+    fi
+
+    # 3. 清理 acme.sh 残留 (x-ui/宝塔常用的底层工具)
+    if [[ -d "/root/.acme.sh" ]]; then
+        local acme_target=$(find "/root/.acme.sh" -type d -name "*${domain}*" -print -quit 2>/dev/null)
+        if [[ -n "$acme_target" ]]; then
+            rm -rf "$acme_target"
+            echo -e "${GREEN}✅ [3/4] 面板底层 (~/.acme.sh) 关于 ${domain} 的残留已抹除。${PLAIN}"
         else
-            echo -e "${BLUE}已安全取消删除操作。${PLAIN}"
+            echo -e "${BLUE}ℹ️ [3/4] 未在 acme.sh 引擎中发现残留。${PLAIN}"
         fi
     else
-        echo -e "${RED}❌ 未找到域名 $domain 对应的底层证书文件夹！请检查拼写，或先使用 [14] 选项查询确认。${PLAIN}"
+        echo -e "${BLUE}ℹ️ [3/4] 系统未安装独立 acme.sh 环境，已跳过。${PLAIN}"
     fi
 
+    # 4. 检查 Caddyfile 死灰复燃风险
+    if grep -q "$domain" /etc/caddy/Caddyfile 2>/dev/null; then
+        echo -e "${YELLOW}⚠️ [4/4] 警告: /etc/caddy/Caddyfile 中仍然包含该域名的配置块！${PLAIN}"
+        echo -e "   如果此时执行 systemctl start caddy，它会立刻再次抢占端口去申请证书。"
+        echo -e "   ${RED}👉 请使用主菜单的 [16] 清空配置，或手动编辑文件删掉该域名。${PLAIN}"
+    else
+        echo -e "${GREEN}✅ [4/4] Caddyfile 中未发现该域名绑定。${PLAIN}"
+    fi
+
+    echo -e "------------------------------------------------"
+    echo -e "${GREEN}🎉 清理彻底完成！当前系统 80/443 端口已处于完全解绑的真空状态。${PLAIN}"
+    echo -e "${CYAN}下一步建议：${PLAIN}"
+    echo -e "A. 如果你想让 x-ui 自己去申请证书，现在就可以去了。"
+    echo -e "B. 如果你想遵循最佳实践，请在 x-ui 关闭 TLS，然后使用主菜单的 [13] 让 Caddy 反代 HTTP。"
+    
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
@@ -619,7 +647,15 @@ func_security() {
     echo -e "${CYAN}================================================${PLAIN}"
     
     local current_p
-    current_p=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
+    # 尝试从系统底层网络状态中提取 (支持 Systemd Socket 激活机制)
+    current_p=$(ss -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | head -n1)
+    
+    # 如果 ss 命令失败或被精简，回退到文件正则解析
+    if [[ -z "$current_p" ]]; then
+        current_p=$(grep -i "^Port" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
+    fi
+    
+    # 最终默认值兜底
     current_p=${current_p:-22}
     
     echo -e "${YELLOW}⚠️ 警告：修改 SSH 端口前，请务必确认您的云服务商 (如阿里云/腾讯云/AWS) 网页端的【安全组】或【防火墙】已经放行了新端口！否则修改后将彻底失联！${PLAIN}"
@@ -712,7 +748,15 @@ func_fail2ban() {
     
     # 核心逻辑：实时提取当前系统生效的 SSH 端口
     local current_p
-    current_p=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
+    # 尝试从系统底层网络状态中提取 (支持 Systemd Socket 激活机制)
+    current_p=$(ss -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | head -n1)
+    
+    # 如果 ss 命令失败或被精简，回退到文件正则解析
+    if [[ -z "$current_p" ]]; then
+        current_p=$(grep -i "^Port" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
+    fi
+    
+    # 最终默认值兜底
     current_p=${current_p:-22}
     
     echo -e "${YELLOW}👉 当前系统检测到的 SSH 端口为: ${GREEN}$current_p${PLAIN}"
@@ -858,9 +902,11 @@ func_docker_manage() {
                 if [[ -f /etc/docker/daemon.json ]]; then
                     cp /etc/docker/daemon.json "/etc/docker/daemon.json.bak_$(date +%s)"
                     echo -e "${YELLOW}⚠️ 已将原有 Docker 配置文件备份为 .bak 时间戳文件。${PLAIN}"
-                fi
-                
-                cat <<EOF > /etc/docker/daemon.json
+                    # 使用 jq 进行非破坏性合并，保留用户原有配置
+                    jq '. + {"ip": "127.0.0.1", "log-driver": "json-file", "log-opts": {"max-size": "50m", "max-file": "3"}}' /etc/docker/daemon.json > /tmp/daemon_tmp.json && mv /tmp/daemon_tmp.json /etc/docker/daemon.json
+                else
+                    # 文件不存在时初始生成
+                    cat <<EOF > /etc/docker/daemon.json
 {
   "ip": "127.0.0.1",
   "log-driver": "json-file",
@@ -870,6 +916,7 @@ func_docker_manage() {
   }
 }
 EOF
+                fi
                 systemctl restart docker >/dev/null 2>&1
                 echo -e "${GREEN}✅ 已开启安全保护，Docker 容器端口仅限本地反代访问！${PLAIN}" 
                 sleep 2
