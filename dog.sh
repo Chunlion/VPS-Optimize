@@ -663,25 +663,18 @@ format_port_list() {
         local input_bytes=${traffic_data[0]}
         local output_bytes=${traffic_data[1]}
         local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
-        
-        # 获取底层真实流量
         local total_bytes=$(calculate_total_traffic "$input_bytes" "$output_bytes" "$billing_mode")
-        # 换算服务商双倍计费流量
-        local billed_bytes=$((total_bytes * 2))
-        
         local total_formatted=$(format_bytes $total_bytes)
-        local billed_formatted=$(format_bytes $billed_bytes)
         local output_formatted=$(format_bytes $output_bytes)
-        local input_formatted=$(format_bytes $input_bytes)
         local status_label=$(get_port_status_label "$port")
+        local input_formatted=$(format_bytes $input_bytes)
 
         if [ "$format_type" = "display" ]; then
-            # 终端 UI：增加预估扣费展示，并用红色高亮警示
-            echo -e "端口:${GREEN}$port${NC} | 实际使用:${GREEN}$total_formatted${NC} | 预估扣费:${RED}$billed_formatted${NC} | 上行:${GREEN}$input_formatted${NC} | 下行:${GREEN}$output_formatted${NC} | ${YELLOW}$status_label${NC}"
+            echo -e "端口:${GREEN}$port${NC} | 总流量:${GREEN}$total_formatted${NC} | 上行(入站): ${GREEN}$input_formatted${NC} | 下行(出站):${GREEN}$output_formatted${NC} | ${YELLOW}$status_label${NC}"
         elif [ "$format_type" = "markdown" ]; then
-            result+="> 端口:**${port}** | 实际使用:**${total_formatted}** | 预估扣费:**${billed_formatted}** | 上行:**${input_formatted}** | 下行:**${output_formatted}** | ${status_label}\n"
+            result+="> 端口:**${port}** | 总流量:**${total_formatted}** | 上行:**${input_formatted}** | 下行:**${output_formatted}** | ${status_label}\n"
         else
-            result+="\n端口:${port} | 实际使用:${total_formatted} | 预估扣费:${billed_formatted} | 上行:${input_formatted} | 下行:${output_formatted} | ${status_label}"
+            result+="\n端口:${port} | 总流量:${total_formatted} | 上行(入站): ${input_formatted} | 下行(出站):${output_formatted} | ${status_label}"
         fi
     done
     if [ "$format_type" = "message" ] || [ "$format_type" = "markdown" ]; then
@@ -1746,6 +1739,7 @@ run_tg_listener() {
         local updates=$(curl -s --max-time 60 "https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=50")
         local latest_id=$(echo "$updates" | jq -r '.result[-1].update_id // empty' 2>/dev/null || true)
         
+        # 增加纯数字判断容错，防止非预期响应导致 bash 算数报错
         if [[ -n "$latest_id" && "$latest_id" =~ ^[0-9]+$ ]]; then
             offset=$((latest_id + 1))
             
@@ -1765,9 +1759,6 @@ run_tg_listener() {
    
                         local total=$((out_b))
                         [[ "$billing_mode" == "double" ]] && total=$((in_b + out_b))
-                        
-                        # 换算双倍计费
-                        local billed_total=$((total * 2))
                       
                         local reply="🛰️ <b>端口流量实时报告</b>%0A"
                         reply+="────────────────%0A"
@@ -1775,8 +1766,7 @@ run_tg_listener() {
                         reply+="📈 <b>上行流量</b>：<code>$(format_bytes $in_b)</code> (入口)%0A"
                         reply+="📉 <b>下行流量</b>：<code>$(format_bytes $out_b)</code> (出口)%0A"
                         reply+="────────────────%0A"
-                        reply+="✅ <b>实际端口吞吐</b>：<b>$(format_bytes $total)</b>%0A"
-                        reply+="💸 <b>服务商预估扣费</b>：<b>$(format_bytes $billed_total)</b> (实际x2)%0A"
+                        reply+="💰 <b>合计使用</b>：<b>$(format_bytes $total)</b>%0A"
                         reply+="⚙️ <b>计费逻辑</b>：<code>$([[ "$billing_mode" == "double" ]] && echo "双向计费" || echo "单向计费")</code>%0A"
                         reply+="⏰ <b>查询时间</b>：$(get_beijing_time '+%Y-%m-%d %H:%M:%S')"
 
@@ -1787,7 +1777,7 @@ run_tg_listener() {
                     fi
                 fi
             done
-         fi
+        fi
         sleep 1
     done
 }
