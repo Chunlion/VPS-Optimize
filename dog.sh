@@ -1355,7 +1355,8 @@ apply_tc_limit() {
     local interface=$(get_default_interface)
 
     tc qdisc add dev $interface root handle 1: htb default 30 2>/dev/null || true
-    tc class add dev $interface parent 1: classid 1:1 htb rate 1000mbit 2>/dev/null || true
+    # [修复]: 将写死的 1Gbps 根节点上限提升为 100Gbps，防止误伤万兆网卡
+    tc class add dev $interface parent 1: classid 1:1 htb rate 100000mbit 2>/dev/null || true
 
     local class_id=$(generate_tc_class_id "$port")
     tc class del dev $interface classid $class_id 2>/dev/null || true
