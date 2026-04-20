@@ -1073,7 +1073,7 @@ EOF
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 9. 换装 Cloud/KVM 优化内核 (精确区分 Debian/Ubuntu 并带报错捕获)
+# 9. 换装 Cloud/KVM 优化内核 (防卡死与架构硬拦截版)
 # ---------------------------------------------------------
 func_install_kernel() {
     clear
@@ -1081,31 +1081,59 @@ func_install_kernel() {
     echo -e "${BOLD}☁️  换装 Cloud/KVM 优化内核${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     
+    # [拦截机制 1]：虚拟化环境判断 (核心防呆)
+    local virt
+    virt=$(systemd-detect-virt 2>/dev/null || echo "unknown")
+    if [[ "$virt" =~ lxc|openvz ]]; then
+        echo -e "${RED}❌ 致命错误：检测到当前 VPS 为 $virt 容器架构！${PLAIN}"
+        echo -e "${YELLOW}💡 容器与母机共享内核，绝对无法更改内核。操作已安全中止。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    # [拦截机制 2]：CPU 架构判断
+    if [[ "$(uname -m)" != "x86_64" ]]; then
+        echo -e "${RED}❌ 致命错误：当前脚本的优化包仅支持 x86_64 (amd64) 架构！${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    # 设置非交互环境变量，防止 apt 安装内核时弹出 GRUB 紫色界面导致脚本假死
+    export DEBIAN_FRONTEND=noninteractive
+
     if [[ "$OS" == "debian" ]]; then
-        echo -e "${CYAN}👉 检测到 Debian 系统，准备安装 linux-image-cloud-amd64...${PLAIN}"
-        if apt update -y && apt install -y linux-image-cloud-amd64; then
-            echo -e "${GREEN}✅ Debian Cloud 内核安装完成！请重启服务器以生效。${PLAIN}"
+        echo -e "${CYAN}👉 检测到 Debian，正在静默安装 linux-image-cloud-amd64...${PLAIN}"
+        if apt-get update -qq && apt-get install -yq linux-image-cloud-amd64; then
+            update-grub >/dev/null 2>&1
+            echo -e "${GREEN}✅ Debian Cloud 内核安装并已刷新引导！${PLAIN}"
         else
-            echo -e "${RED}❌ 安装失败！请检查源配置或网络连接。${PLAIN}"
+            echo -e "${RED}❌ 安装失败！请检查系统源。${PLAIN}"
         fi
         
     elif [[ "$OS" == "ubuntu" ]]; then
-        echo -e "${CYAN}👉 检测到 Ubuntu 系统，准备安装 linux-image-kvm...${PLAIN}"
-        echo -e "${YELLOW}💡 提示：Ubuntu 专属的轻量化云/KVM内核名为 linux-image-kvm。${PLAIN}"
-        if apt update -y && apt install -y linux-image-kvm; then
-            echo -e "${GREEN}✅ Ubuntu KVM 优化内核安装完成！请重启服务器以生效。${PLAIN}"
+        echo -e "${CYAN}👉 检测到 Ubuntu，正在静默安装 linux-image-kvm...${PLAIN}"
+        if apt-get update -qq && apt-get install -yq linux-image-kvm; then
+            update-grub >/dev/null 2>&1
+            echo -e "${GREEN}✅ Ubuntu KVM 内核安装并已刷新引导！${PLAIN}"
         else
-            echo -e "${RED}❌ 安装失败！请检查源配置或网络连接。${PLAIN}"
+            echo -e "${RED}❌ 安装失败！请检查系统源。${PLAIN}"
         fi
         
     else
         echo -e "${RED}❌ 抱歉，换装优化内核功能目前仅支持 Debian 和 Ubuntu 系统！${PLAIN}"
     fi
     
+    # 清理环境变量，防止影响后续面板操作
+    unset DEBIAN_FRONTEND
+
     echo -e "------------------------------------------------"
+    echo -e "${YELLOW}⚠️ 核心生效指引 (请务必阅读)：${PLAIN}"
+    echo -e "1. 新内核已经躺在您的硬盘里了。请先选择菜单的 ${RED}[21] 重启服务器${PLAIN}。"
+    echo -e "2. Linux 默认优先启动版本号最高的内核。如果重启后执行 ${GREEN}uname -r${PLAIN} 发现依然是旧版 (未带 kvm/cloud 字样)；"
+    echo -e "3. 请进入面板 ${GREEN}[12] 卸载冗余旧内核${PLAIN}，把带有 generic 字样的旧内核全删掉，再次重启即可强制生效！"
+    
     read -n 1 -s -r -p "按任意键返回..."
 }
-
 # ---------------------------------------------------------
 # 10. 清理冗余旧内核 (带 Ubuntu/Debian 提示适配)
 # ---------------------------------------------------------
