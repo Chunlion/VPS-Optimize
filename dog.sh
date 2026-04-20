@@ -54,7 +54,7 @@ install_missing_tools() {
     $pkg_cmd update -qq
     for tool in "${missing_tools[@]}"; do
         case $tool in
-            "nft") $pkg_cmd install -y nftables ;;
+            "nft") $pkg_cmd install -y  ;;
             "tc"|"ss") $pkg_cmd install -y iproute2 ;;
             "jq") $pkg_cmd install -y jq ;;
             "awk") $pkg_cmd install -y gawk ;;
@@ -160,7 +160,7 @@ init_config() {
     "billing_mode": "double"
   },
   "ports": {},
-  "nftables": {
+  "": {
     "table_name": "port_traffic_monitor",
     "family": "inet"
   },
@@ -192,21 +192,21 @@ init_config() {
 }
 EOF
     fi
-    init_nftables
+    init_
     setup_exit_hooks
     # 修复：移除残缺的 restore_monitoring_if_needed，改为调用全量恢复函数
     local active_ports=($(get_active_ports 2>/dev/null || true))
     if [ ${#active_ports[@]} -gt 0 ]; then
         # 1. 注入关机前保存的流量数据，防止进度丢失
         restore_traffic_data_from_backup
-        # 2. 恢复所有的 nftables、TC限速 以及 cron 重置任务
+        # 2. 恢复所有的 、TC限速 以及 cron 重置任务
         restore_all_monitoring_rules
     fi
 }
 
-init_nftables() {
-    local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
-    local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
+init_() {
+    local table_name=$(jq -r '..table_name' "$CONFIG_FILE")
+    local family=$(jq -r '..family' "$CONFIG_FILE")
     nft add table $family $table_name 2>/dev/null || true
     nft add chain $family $table_name input { type filter hook input priority 0\; } 2>/dev/null || true
     nft add chain $family $table_name output { type filter hook output priority 0\; } 2>/dev/null || true
@@ -352,10 +352,10 @@ get_beijing_month_year() {
     echo "$current_day $current_month $current_year"
 }
 
-get_nftables_counter_data() {
+get__counter_data() {
     local port=$1
-    local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
-    local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
+    local table_name=$(jq -r '..table_name' "$CONFIG_FILE")
+    local family=$(jq -r '..family' "$CONFIG_FILE")
     local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
     local input_bytes=0
     local output_bytes=0
@@ -384,7 +384,7 @@ save_traffic_data() {
     echo '{}' > "$temp_file"
 
     for port in "${active_ports[@]}"; do
-        local traffic_data=($(get_nftables_counter_data "$port"))
+        local traffic_data=($(get__counter_data "$port"))
         local current_input=${traffic_data[0]}
         local current_output=${traffic_data[1]}
         if [ $current_input -gt 0 ] || [ $current_output -gt 0 ]; then
@@ -415,12 +415,12 @@ restore_monitoring_if_needed() {
         # 如果内核里找不到这个端口的计数器，说明规则丢了，自动重新下发
         if ! nft list counter inet port_traffic_monitor "port_${p_safe}_out" >/dev/null 2>&1; then
             echo -e "${YELLOW}检测到规则丢失，正在为端口 $port 重新下发监控规则...${NC}"
-            add_nftables_rules "$port"
+            add__rules "$port"
             
             # 如果有流量限制，也一并恢复
             local monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE")
             if [ "$monthly_limit" != "unlimited" ]; then
-                apply_nftables_quota "$port" "$monthly_limit"
+                apply__quota "$port" "$monthly_limit"
             fi
         fi
     done
@@ -443,8 +443,8 @@ restore_counter_value() {
     local port=$1
     local target_input=$2
     local target_output=$3
-    local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
-    local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
+    local table_name=$(jq -r '..table_name' "$CONFIG_FILE")
+    local family=$(jq -r '..family' "$CONFIG_FILE")
     local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
 
     if is_port_range "$port"; then
@@ -464,11 +464,11 @@ restore_counter_value() {
 restore_all_monitoring_rules() {
     local active_ports=($(get_active_ports))
     for port in "${active_ports[@]}"; do
-        add_nftables_rules "$port"
+        add__rules "$port"
         local quota_enabled=$(jq -r ".ports.\"$port\".quota.enabled // false" "$CONFIG_FILE")
         local monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE")
         if [ "$quota_enabled" = "true" ] && [ "$monthly_limit" != "unlimited" ]; then
-            apply_nftables_quota "$port" "$monthly_limit"
+            apply__quota "$port" "$monthly_limit"
         fi
         local limit_enabled=$(jq -r ".ports.\"$port\".bandwidth_limit.enabled // false" "$CONFIG_FILE")
         local rate_limit=$(jq -r ".ports.\"$port\".bandwidth_limit.rate // \"unlimited\"" "$CONFIG_FILE")
@@ -548,7 +548,7 @@ get_port_status_label() {
 
 get_port_monthly_usage() {
     local port=$1
-    local traffic_data=($(get_nftables_counter_data "$port"))
+    local traffic_data=($(get__counter_data "$port"))
     local input_bytes=${traffic_data[0]}
     local output_bytes=${traffic_data[1]}
     local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
@@ -644,7 +644,7 @@ get_daily_total_traffic() {
     local total_bytes=0
     local ports=($(get_active_ports))
     for port in "${ports[@]}"; do
-        local traffic_data=($(get_nftables_counter_data "$port"))
+        local traffic_data=($(get__counter_data "$port"))
         local input_bytes=${traffic_data[0]}
         local output_bytes=${traffic_data[1]}
         local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
@@ -659,7 +659,7 @@ format_port_list() {
     local active_ports=($(get_active_ports))
     local result=""
     for port in "${active_ports[@]}"; do
-        local traffic_data=($(get_nftables_counter_data "$port"))
+        local traffic_data=($(get__counter_data "$port"))
         local input_bytes=${traffic_data[0]}
         local output_bytes=${traffic_data[1]}
         local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
@@ -963,7 +963,10 @@ add_nftables_rules() {
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
     local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
     local batch_cmds=""
-
+    local port_safe=$(echo "$port" | tr '-' '_')
+    if nft list chain $family $table_name output 2>/dev/null | grep -q "port_${port_safe}_out"; then
+        return 0
+    fi
     if is_port_range "$port"; then
         local port_safe=$(echo "$port" | tr '-' '_')
         local mark_id=$(generate_port_range_mark "$port")
