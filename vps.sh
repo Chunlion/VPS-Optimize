@@ -1239,7 +1239,7 @@ EOF
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 9. 换装 Cloud/KVM 优化内核 (重构版：架构强拦截与 DRY 化)
+# 9. 换装 Cloud/KVM 优化内核 (终极版：架构强拦截 + GRUB 强接管)
 # ---------------------------------------------------------
 func_install_kernel() {
     clear
@@ -1273,38 +1273,60 @@ func_install_kernel() {
 
     echo -e "${CYAN}▶ 正在为您静默安装专属优化内核...${PLAIN}"
 
+    local kernel_keyword=""
     if [[ "$OS" == "debian" ]]; then
         install_pkg linux-image-cloud-amd64
-        # 结果校验
-        if dpkg -l | grep -q "linux-image-cloud-amd64"; then
-            update-grub >/dev/null 2>&1
-            echo -e "${GREEN}✅ Debian Cloud 内核安装并已刷新引导！${PLAIN}"
-        else
-            echo -e "${RED}❌ 安装失败！请检查系统源或网络。${PLAIN}"
-        fi
-        
+        kernel_keyword="cloud"
     elif [[ "$OS" == "ubuntu" ]]; then
         install_pkg linux-image-kvm
-        # 结果校验
-        if dpkg -l | grep -q "linux-image-kvm"; then
-            update-grub >/dev/null 2>&1
-            echo -e "${GREEN}✅ Ubuntu KVM 内核安装并已刷新引导！${PLAIN}"
-        else
-            echo -e "${RED}❌ 安装失败！请检查系统源或网络。${PLAIN}"
-        fi
-        
+        kernel_keyword="kvm"
     else
         echo -e "${RED}❌ 抱歉，换装优化内核功能目前仅支持 Debian 和 Ubuntu 系统！${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    # ==========================================
+    # 核心黑科技：GRUB 引导层强制接管
+    # ==========================================
+    # 1. 动态提取刚刚装好的目标内核完整版本号
+    local target_v
+    target_v=$(dpkg -l | awk '/^ii[[:space:]]+linux-image-[0-9]/ && /'"$kernel_keyword"'/ {print $2}' | sed 's/linux-image-//' | sort -V | tail -n 1)
+
+    if [[ -n "$target_v" ]]; then
+        echo -e "${CYAN}▶ 正在接管 GRUB 底层引导，锁定启动内核为: $target_v ...${PLAIN}"
+        
+        # 修改 GRUB 默认行为，允许保存上一次的启动项
+        sed -i 's/^GRUB_DEFAULT=.*/GRUB_DEFAULT=saved/' /etc/default/grub
+        grep -q "^GRUB_SAVEDEFAULT=true" /etc/default/grub || echo "GRUB_SAVEDEFAULT=true" >> /etc/default/grub
+        update-grub >/dev/null 2>&1
+
+        # 精确寻址 GRUB 菜单 ID
+        local menu_1
+        local menu_2
+        menu_1=$(grep -i "submenu 'Advanced options for" /boot/grub/grub.cfg | cut -d"'" -f2 | head -n 1)
+        menu_2=$(grep -i "menuentry '.*$target_v.*'" /boot/grub/grub.cfg | grep -iv "recovery" | cut -d"'" -f2 | head -n 1)
+
+        if [[ -n "$menu_1" && -n "$menu_2" ]]; then
+            # 强制设定默认启动项为新内核
+            grub-set-default "$menu_1>$menu_2"
+            echo -e "${GREEN}✅ GRUB 引导接管成功！已为您消除重启死循环的风险。${PLAIN}"
+        else
+            echo -e "${YELLOW}⚠️ 警告：GRUB 菜单寻址失败。系统可能仍以最高版本号的旧内核启动。${PLAIN}"
+        fi
+    else
+        echo -e "${RED}❌ 错误：内核包似乎未成功安装，请检查系统源或网络状况！${PLAIN}"
     fi
 
     echo -e "------------------------------------------------"
     echo -e "${YELLOW}⚠️ 核心生效指引：${PLAIN}"
-    echo -e "1. 新内核已就绪，请先选择菜单的 ${RED}[24] 重启服务器${PLAIN}。"
-    echo -e "2. 若重启后执行 ${GREEN}uname -r${PLAIN} 发现依然是旧版；"
-    echo -e "3. 请进入面板 ${GREEN}[12] 卸载冗余旧内核${PLAIN} 删掉旧版再次重启！"
+    echo -e "1. 新内核引导已配置完毕，请先选择主菜单的 ${RED}[24] 重启服务器${PLAIN}。"
+    echo -e "2. 重启后系统将自动切入极简 $kernel_keyword 内核。"
+    echo -e "3. 届时您可安心进入面板选择 ${GREEN}[12] 卸载冗余旧内核${PLAIN}，清理残余垃圾包。"
     
     read -n 1 -s -r -p "按任意键返回..."
 }
+
 # ---------------------------------------------------------
 # 10. 清理冗余旧内核 (数组菜单驱动 + 核心防砖拦截版)
 # ---------------------------------------------------------
