@@ -38,7 +38,29 @@ is_debian() {
 is_redhat() {
     [[ "$OS" =~ centos|rhel|rocky|almalinux|fedora ]] || [[ "$OS_LIKE" =~ centos|rhel|fedora ]]
 }
+# --- 全局包管理抽象 (DRY 优化) ---
+install_pkg() {
+    local pkgs="$*"
+    if is_debian; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt update -qq >/dev/null 2>&1
+        apt install -y -qq $pkgs >/dev/null 2>&1
+        unset DEBIAN_FRONTEND
+    elif is_redhat; then
+        yum install -y -q $pkgs >/dev/null 2>&1
+    fi
+}
 
+remove_pkg() {
+    local pkgs="$*"
+    if is_debian; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt purge -y -qq $pkgs >/dev/null 2>&1
+        unset DEBIAN_FRONTEND
+    elif is_redhat; then
+        yum remove -y -q $pkgs >/dev/null 2>&1
+    fi
+}
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh"
 
 # --- 全局快捷键注册 ---
@@ -54,17 +76,17 @@ create_shortcut() {
 }
 
 # ---------------------------------------------------------
-# 1. 基础环境初始化
+# 1. 基础环境初始化 (抽象精简版)
 # ---------------------------------------------------------
 func_base_init() {
     clear
     echo -e "${CYAN}👉 正在安装基础工具、限制日志并开启基础 BBR...${PLAIN}"
     
+    # 优雅调用全局安装函数
     if is_debian; then
-        apt update -qq
-        apt install -y curl wget git nano unzip htop iptables iproute2 sqlite3 jq -qq > /dev/null 2>&1
+        install_pkg curl wget git nano unzip htop iptables iproute2 sqlite3 jq
     elif is_redhat; then
-        yum install -y curl wget git nano unzip htop iptables iproute epel-release sqlite jq -q > /dev/null 2>&1
+        install_pkg curl wget git nano unzip htop iptables iproute epel-release sqlite jq
     fi
 
     # 限制系统日志最大 100M
@@ -87,7 +109,6 @@ EOF
     echo -e "${GREEN}✅ 基础初始化完成，原生 BBR 已激活！${PLAIN}"
     read -n 1 -s -r -p "按任意键返回主菜单..."
 }
-
 # ---------------------------------------------------------
 # ★ 防火墙专属管理面板 (新增功能)
 # ---------------------------------------------------------
@@ -336,7 +357,23 @@ func_system_tweaks() {
 }
 
 # ---------------------------------------------------------
-# 3. 常用环境及软件 (Caddy 防覆盖优化)
+# 统一包管理与执行守卫 (新增：请放在 func_env_install 函数上方)
+# ---------------------------------------------------------
+run_safe() {
+    local desc="$1"
+    shift
+    echo -e "${CYAN}▶ 正在执行: ${desc}...${PLAIN}"
+    # 丢弃正常输出保留错误输出，若执行失败则阻断并告警
+    if "$@" >/dev/null; then
+        echo -e "${GREEN}✅ ${desc} - 成功！${PLAIN}"
+    else
+        echo -e "${RED}❌ ${desc} - 失败！请检查系统网络或依赖源。${PLAIN}"
+        return 1
+    fi
+}
+
+# ---------------------------------------------------------
+# 3. 常用环境及软件 (重构版：防覆盖、严格容错、剔除静默失败)
 # ---------------------------------------------------------
 func_env_install() {
     while true; do
@@ -353,8 +390,6 @@ func_env_install() {
         echo -e "${CYAN} 15. Caddy独立跳过验证 ${YELLOW} 16. 清空 Caddy 配置文件${PLAIN}"
         echo -e "${RED} 17. 删除底层 ACME证书${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "------------------------------------------------"
-        echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
@@ -362,11 +397,16 @@ func_env_install() {
         read -p "👉 选择: " env_choice
         
         case $env_choice in
-            1) bash <(curl -sL 'https://get.docker.com') ;;
-            2) curl -O https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh && chmod +x pyinstall.sh && ./pyinstall.sh ;;
-            3) if is_debian; then apt install iperf3 -y; else yum install iperf3 -y; fi ;;
+            1) 
+                echo -e "${CYAN}▶ 正在拉取 Docker 引擎...${PLAIN}"
+                bash <(curl -sL 'https://get.docker.com') || echo -e "${RED}❌ Docker 安装失败，请检查网络！${PLAIN}" 
+                ;;
+            2) run_safe "安装 Python 环境" bash -c "curl -O https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh && chmod +x pyinstall.sh && ./pyinstall.sh" ;;
+            3) 
+                if is_debian; then run_safe "安装 iperf3" apt install iperf3 -y; else run_safe "安装 iperf3" yum install iperf3 -y; fi 
+                ;;
             4) bash <(curl -L https://raw.githubusercontent.com/zhouh047/realm-oneclick-install/main/realm.sh) -i ;;
-            5) wget --no-check-certificate -O gost.sh https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh && chmod +x gost.sh && ./gost.sh ;;
+            5) run_safe "下载 Gost" bash -c "wget --no-check-certificate -O gost.sh https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh && chmod +x gost.sh && ./gost.sh" ;;
             6) bash <(curl -fsSL https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh) ;;
             7) 
                 curl -L https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh -o nezha.sh && chmod +x nezha.sh && ./nezha.sh 
@@ -379,37 +419,42 @@ func_env_install() {
             11) bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh) ;;
             12) bash <(wget -qO- https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh) ;;
             13)
-                if is_debian; then 
-                    apt install -y debian-keyring debian-archive-keyring apt-transport-https -qq && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list && apt update && apt install caddy -y
-                else 
-                    yum install -y yum-utils && yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo && yum install caddy -y
+                echo -e "${CYAN}▶ 正在检查并安装 Caddy...${PLAIN}"
+                if ! command -v caddy >/dev/null 2>&1; then
+                    if is_debian; then 
+                        apt install -y debian-keyring debian-archive-keyring apt-transport-https -qq >/dev/null 2>&1
+                        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+                        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
+                        apt update -qq && apt install caddy -y >/dev/null 2>&1
+                    else 
+                        yum install -y yum-utils >/dev/null 2>&1 && yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo >/dev/null 2>&1 && yum install caddy -y >/dev/null 2>&1
+                    fi
                 fi
                 
-                local domain
-                local port
-                local is_https
+                mkdir -p /etc/caddy/conf.d
+                if [[ -f /etc/caddy/Caddyfile ]] && ! grep -q "import conf.d/\*" /etc/caddy/Caddyfile; then
+                    echo -e "\nimport conf.d/*" >> /etc/caddy/Caddyfile
+                fi
                 
+                local domain port is_https
                 read -p "请输入解析后的域名 (如 panel.site.com): " domain
                 read -p "请输入面板本地映射端口 (如 40000): " port
                 
-                if [[ -z "$domain" || -z "$port" ]]; then
-                    echo -e "${RED}❌ 域名或端口不能为空！已取消配置。${PLAIN}"
+                # 增加了端口只能是纯数字的防呆校验
+                if [[ -z "$domain" || -z "$port" || ! "$port" =~ ^[0-9]+$ ]]; then
+                    echo -e "${RED}❌ 域名为空或端口格式错误！已取消配置。${PLAIN}"
                 else
-                    echo -e "${YELLOW}❓ 后端面板是否开启了自带的 SSL 证书？(y/n)${PLAIN}"
-                    read -p "👉 您的选择 (选 n 则正常反代 http): " is_https
-                    
-                    # 备份原始 Caddyfile
-                    # 1. 备份时锁定时间戳变量，防止秒级误差导致回滚失败
-                    local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
-                    
-                    if [[ -f /etc/caddy/Caddyfile ]]; then
-                        cp /etc/caddy/Caddyfile "$backup_file"
-                        echo -e "${BLUE}已备份原配置为 $backup_file${PLAIN}"
-                    fi
-                    
-                    if [[ "$is_https" =~ ^[Yy]$ ]]; then
-                        cat <<EOF >> /etc/caddy/Caddyfile
-
+                    # 严谨的冲突判定，同时检查 Caddyfile 和 conf.d 目录
+                    if grep -q "^[[:space:]]*$domain" /etc/caddy/Caddyfile 2>/dev/null || ls /etc/caddy/conf.d/${domain}.caddy >/dev/null 2>&1; then
+                        echo -e "${RED}❌ 错误：已存在该域名的配置块！请先使用功能 [17] 彻底清理，然后再添加。${PLAIN}"
+                    else
+                        read -p "❓ 后端面板是否开启了自带的 SSL 证书？(y/n): " is_https
+                        
+                        local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
+                        [[ -f /etc/caddy/Caddyfile ]] && cp /etc/caddy/Caddyfile "$backup_file"
+                        
+                        if [[ "$is_https" =~ ^[Yy]$ ]]; then
+                            cat <<EOF > "/etc/caddy/conf.d/${domain}.caddy"
 $domain {
     reverse_proxy https://127.0.0.1:$port {
         transport http {
@@ -418,22 +463,24 @@ $domain {
     }
 }
 EOF
-                    else
-                        cat <<EOF >> /etc/caddy/Caddyfile
+                        else
+                            cat <<EOF >> /etc/caddy/Caddyfile
 
 $domain {
     reverse_proxy localhost:$port
 }
 EOF
-                    fi
-                    # 引入 caddy validate 语法检查机制
-                    if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
-                        systemctl reload caddy >/dev/null 2>&1
-                        echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
-                    else
-                        echo -e "${RED}❌ 致命错误：生成的 Caddyfile 存在语法错误！${PLAIN}"
-                        echo -e "${YELLOW}正在回滚配置以防止网站整体宕机...${PLAIN}"
-                        mv "$backup_file" /etc/caddy/Caddyfile
+                        fi
+                        
+                        echo -e "${CYAN}▶ 正在校验 Caddy 配置文件...${PLAIN}"
+                        if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+                            systemctl reload caddy >/dev/null 2>&1
+                            echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
+                        else
+                            echo -e "${RED}❌ 致命错误：生成的配置存在语法异常！正在自动回滚...${PLAIN}"
+                            [[ -f "$backup_file" ]] && mv "$backup_file" /etc/caddy/Caddyfile
+                            rm -f "/etc/caddy/conf.d/${domain}.caddy" # 核心修复：清理掉错误的模块化文件
+                        fi
                     fi
                 fi
                 ;;
@@ -554,39 +601,54 @@ EOF
 }
 
 # ---------------------------------------------------------
-# 新增功能：清空 Caddy 配置文件
+# 新增功能：清空 Caddy 配置文件 (适配模块化安全架构)
 # ---------------------------------------------------------
 func_caddy_clear_config() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧹 清空 Caddy 配置文件${PLAIN}"
+    echo -e "${BOLD}🧹 清空 Caddy 配置文件 (模块化版本)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    if [[ -f /etc/caddy/Caddyfile ]]; then
-        echo -e "${YELLOW}⚠️ 警告：此操作将删除您所有的 Caddy 反代配置（原文件会自动备份）。${PLAIN}"
-        read -p "❓ 确定要清空 Caddyfile 吗？(y/n): " yn
+    
+    # 检查主文件与模块化目录是否存在
+    if [[ -f /etc/caddy/Caddyfile ]] || [[ -d /etc/caddy/conf.d ]]; then
+        echo -e "${YELLOW}⚠️ 警告：此操作将删除您所有的 Caddy 独立反代配置（原文件会自动备份）。${PLAIN}"
+        read -p "❓ 确定要清空 Caddy 配置吗？(y/n): " yn
         if [[ "$yn" =~ ^[Yy]$ ]]; then
-            cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak_$(date +%s)"
-            # 写入一行注释，防止 Caddy 因为文件完全空而报警告
-            echo "# Caddyfile Cleared" > /etc/caddy/Caddyfile
-            systemctl restart caddy
-            echo -e "${GREEN}✅ 配置文件已清空并重启服务。现在您可以重新添加纯净的配置了！${PLAIN}"
+            
+            # 1. 备份现有的模块化配置目录
+            if [[ -d /etc/caddy/conf.d ]]; then
+                local backup_dir="/etc/caddy/conf.d_bak_$(date +%s)"
+                cp -r /etc/caddy/conf.d "$backup_dir" 2>/dev/null
+                echo -e "${BLUE}已备份原配置目录为 $backup_dir${PLAIN}"
+                
+                # 精准清空所有 .caddy 配置文件
+                rm -f /etc/caddy/conf.d/*.caddy 2>/dev/null
+            fi
+            
+            # 2. 守护主文件架构，重置为极简模式并注入模块化指令
+            cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak_$(date +%s)" 2>/dev/null
+            echo "# Caddyfile Cleared and Reset to Modular Architecture" > /etc/caddy/Caddyfile
+            echo "import conf.d/*" >> /etc/caddy/Caddyfile
+            
+            # 3. 重启生效
+            systemctl restart caddy >/dev/null 2>&1
+            echo -e "${GREEN}✅ 所有反代配置已清空并成功重载！系统已恢复纯净的模块化初始状态。${PLAIN}"
         else
             echo -e "${BLUE}已取消清空操作。${PLAIN}"
         fi
     else
-        echo -e "${RED}❌ 未检测到 Caddy 配置文件！${PLAIN}"
+        echo -e "${RED}❌ 未检测到 Caddy 配置文件或模块化目录！${PLAIN}"
     fi
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 优化重构：核弹级域名证书清理与解除端口占用
+# 优化重构：核弹级域名证书清理与解除端口占用 (模块化安全版)
 # ---------------------------------------------------------
 func_caddy_delete_cert() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}☢️ 核弹级：彻底清理域名证书与解除占用${PLAIN}"
+    echo -e "${BOLD}☢️ 核弹级：彻底清理域名证书与配置${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}💡 场景：当 Caddy 与面板 (如 x-ui) 申请证书起冲突，或需要彻底释放域名时使用。${PLAIN}"
 
     read -p "👉 请输入要强杀清理的精准域名 (如 panel.site.com): " domain
     if [[ -z "$domain" ]]; then
@@ -599,14 +661,13 @@ func_caddy_delete_cert() {
 
     # 1. 停止 Caddy，强制释放 80/443 端口
     systemctl stop caddy >/dev/null 2>&1
-    echo -e "${GREEN}✅ [1/4] 已强制停止 Caddy 服务，释放 80/443 端口。${PLAIN}"
+    echo -e "${GREEN}✅ [1/4] 已强制停止 Caddy 服务，释放网络端口。${PLAIN}"
 
     # 2. 深度清理 Caddy 底层证书缓存
     local caddy_paths=("/var/lib/caddy/.local/share/caddy/certificates" "/root/.local/share/caddy/certificates")
     local caddy_found=false
     for cp in "${caddy_paths[@]}"; do
         if [[ -d "$cp" ]]; then
-            # 查找并删除对应域名的目录
             local target=$(find "$cp" -type d -name "*${domain}*" -print -quit 2>/dev/null)
             if [[ -n "$target" ]]; then
                 rm -rf "$target"
@@ -620,7 +681,7 @@ func_caddy_delete_cert() {
         echo -e "${BLUE}ℹ️ [2/4] 未在 Caddy 引擎中发现该域名的证书。${PLAIN}"
     fi
 
-    # 3. 清理 acme.sh 残留 (x-ui/宝塔常用的底层工具)
+    # 3. 清理 acme.sh 残留
     if [[ -d "/root/.acme.sh" ]]; then
         local acme_target=$(find "/root/.acme.sh" -type d -name "*${domain}*" -print -quit 2>/dev/null)
         if [[ -n "$acme_target" ]]; then
@@ -633,25 +694,71 @@ func_caddy_delete_cert() {
         echo -e "${BLUE}ℹ️ [3/4] 系统未安装独立 acme.sh 环境，已跳过。${PLAIN}"
     fi
 
-    # 4. 检查 Caddyfile 死灰复燃风险
-    if grep -q "$domain" /etc/caddy/Caddyfile 2>/dev/null; then
-        echo -e "${YELLOW}⚠️ [4/4] 警告: /etc/caddy/Caddyfile 中仍然包含该域名的配置块！${PLAIN}"
-        echo -e "   如果此时执行 systemctl start caddy，它会立刻再次抢占端口去申请证书。"
-        echo -e "   ${RED}👉 请使用主菜单的 [16] 清空配置，或手动编辑文件删掉该域名。${PLAIN}"
+    # 4. 外科手术：模块化安全删除
+    local domain_conf="/etc/caddy/conf.d/${domain}.caddy"
+    if [[ -f "$domain_conf" ]]; then
+        echo -e "${YELLOW}⏳ [4/4] 检测到专属配置文件，正在销毁...${PLAIN}"
+        rm -f "$domain_conf"
+        echo -e "${GREEN}✅ [4/4] 专属配置文件 ($domain_conf) 已安全移除！${PLAIN}"
     else
-        echo -e "${GREEN}✅ [4/4] Caddyfile 中未发现该域名绑定。${PLAIN}"
+        echo -e "${GREEN}✅ [4/4] 未发现该域名的专属配置文件。${PLAIN}"
     fi
 
+    # 重启 Caddy 以加载干净的配置
+    systemctl start caddy >/dev/null 2>&1
+
     echo -e "------------------------------------------------"
-    echo -e "${GREEN}🎉 清理彻底完成！当前系统 80/443 端口已处于完全解绑的真空状态。${PLAIN}"
-    echo -e "${CYAN}下一步建议：${PLAIN}"
-    echo -e "A. 如果你想让 x-ui 自己去申请证书，现在就可以去了。"
-    echo -e "B. 如果你想遵循最佳实践，请在 x-ui 关闭 TLS，然后使用主菜单的 [13] 让 Caddy 反代 HTTP。"
+    echo -e "${GREEN}🎉 清理彻底完成！当前域名环境已处于出厂真空状态。${PLAIN}"
     
     read -n 1 -s -r -p "按任意键继续..."
 }
+
 # ---------------------------------------------------------
-# 4. SSH 安全加固 (完美兼容 Ubuntu Socket 与 CentOS SELinux)
+# 新增功能：独立追加 Caddy 跳过不安全证书反代块 (模块化版)
+# ---------------------------------------------------------
+func_caddy_add_insecure() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🛡️ 独立配置：追加 Caddy 跳过证书验证反代${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    if [[ ! -f /etc/caddy/Caddyfile ]]; then
+        echo -e "${RED}❌ 未检测到 Caddy 配置文件，请先运行 [13] 安装 Caddy！${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+    
+    local domain
+    local port
+    read -p "👉 请输入解析后的域名 (如 panel.site.com): " domain
+    read -p "👉 请输入面板 HTTPS 本地映射端口 (如 40000): " port
+    
+    if [[ -z "$domain" || -z "$port" ]]; then
+        echo -e "${RED}❌ 域名或端口不能为空！已取消操作。${PLAIN}"
+    else
+        mkdir -p /etc/caddy/conf.d
+        local conf_file="/etc/caddy/conf.d/${domain}.caddy"
+        
+        cat <<EOF > "$conf_file"
+$domain {
+    reverse_proxy https://127.0.0.1:$port {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+}
+EOF
+        if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+            systemctl reload caddy >/dev/null 2>&1
+            echo -e "${GREEN}✅ 独立跳过验证配置已成功建立并生效！${PLAIN}"
+        else
+            echo -e "${RED}❌ 致命错误：追加的配置导致语法错误！正在回滚...${PLAIN}"
+            rm -f "$conf_file"
+        fi
+    fi
+    read -n 1 -s -r -p "按任意键继续..."
+}
+# ---------------------------------------------------------
+# 4. SSH 安全加固 (重构版：原子级备份与绝对防失联机制)
 # ---------------------------------------------------------
 func_security() {
     clear
@@ -665,45 +772,49 @@ func_security() {
     
     if [[ "$final_p" != "$current_p" ]]; then
         
-        # [检查项 1]: 严格的端口合法性校验
+        # [严格检验] 端口合法性
         if ! [[ "$final_p" =~ ^[0-9]+$ ]] || [ "$final_p" -lt 1 ] || [ "$final_p" -gt 65535 ]; then
             echo -e "${RED}❌ 错误：无效的端口号！必须是 1-65535 之间的纯数字。${PLAIN}"
             read -n 1 -s -r -p "按任意键返回..."
             return
         fi
 
-        # 1. 修改传统配置文件
+        echo -e "${CYAN}▶ 正在备份原生 SSH 配置文件...${PLAIN}"
+        local backup_file="/etc/ssh/sshd_config.bak_$(date +%s)"
+        cp /etc/ssh/sshd_config "$backup_file"
+
+        # 1. 修改配置文件
         sed -i '/^[[:space:]]*#\?Port /d' /etc/ssh/sshd_config
         echo "Port $final_p" >> /etc/ssh/sshd_config
         
-        # 2. [CentOS 专属修复]: SELinux 底层策略放行
+        # 2. [CentOS 专属] SELinux 放行
         if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce)" == "Enforcing" ]]; then
-            echo -e "${YELLOW}检测到 SELinux 处于开启状态，正在配置底层端口安全策略...${PLAIN}"
+            echo -e "${YELLOW}检测到 SELinux 开启，正在配置底层端口安全策略...${PLAIN}"
             if command -v semanage >/dev/null 2>&1; then
-                # -a 是添加，-m 是修改（如果端口已被其他规则占用但允许复用）
                 semanage port -a -t ssh_port_t -p tcp "$final_p" 2>/dev/null || semanage port -m -t ssh_port_t -p tcp "$final_p" 2>/dev/null
             else
-                echo -e "${RED}❌ 致命错误：SELinux 已开启但缺少 semanage 工具，强行重启将导致 SSH 彻底瘫痪失联！${PLAIN}"
-                echo -e "${YELLOW}已自动为您回滚配置。请先运行命令安装工具：${PLAIN}"
-                echo -e "CentOS 7: ${GREEN}yum install policycoreutils-python${PLAIN}"
-                echo -e "CentOS 8/9+: ${GREEN}yum install policycoreutils-python-utils${PLAIN}"
-                
-                # 触发防砖回滚机制
-                sed -i '/^[[:space:]]*Port /d' /etc/ssh/sshd_config
-                echo "Port $current_p" >> /etc/ssh/sshd_config
+                echo -e "${RED}❌ 致命错误：缺少 semanage 工具！${PLAIN}"
+                echo -e "${YELLOW}已触发防砖机制，正在全盘恢复原配置文件...${PLAIN}"
+                # 核心安全机制：直接恢复备份文件
+                mv "$backup_file" /etc/ssh/sshd_config
+                echo -e "请先安装: CentOS 7: ${GREEN}yum install policycoreutils-python${PLAIN} 或 8+: ${GREEN}yum install policycoreutils-python-utils${PLAIN}"
                 read -n 1 -s -r -p "按任意键返回..."
                 return
             fi
         fi
 
-        # [检查项 2]: 重启前配置语法核验 (防失联核心机制)
+        # 3. 防失联核心：验证语法
+        echo -e "${CYAN}▶ 正在核验新配置语法...${PLAIN}"
         if ! sshd -t; then
-            echo -e "${RED}❌ 致命错误：SSH 配置存在语法异常，已终止重启以防止失联！${PLAIN}"
+            echo -e "${RED}❌ 致命错误：SSH 配置存在语法异常！已终止重启。${PLAIN}"
+            echo -e "${YELLOW}已触发防砖机制，正在全盘恢复原配置文件...${PLAIN}"
+            # 核心安全机制：直接恢复备份文件
+            mv "$backup_file" /etc/ssh/sshd_config
             read -n 1 -s -r -p "按任意键返回..."
             return
         fi
         
-        # 3. 尝试放行防火墙 (UFW / Firewalld / iptables)
+        # 4. 放行防火墙
         if command -v ufw >/dev/null 2>&1; then ufw allow "$final_p"/tcp >/dev/null 2>&1; fi
         if command -v firewall-cmd >/dev/null 2>&1; then 
             firewall-cmd --permanent --add-port="$final_p"/tcp >/dev/null 2>&1
@@ -711,9 +822,9 @@ func_security() {
         fi
         iptables -I INPUT -p tcp --dport "$final_p" -j ACCEPT 2>/dev/null
         
-        # 4. 核心修复：兼容新版 Ubuntu 的 ssh.socket 机制
+        # 5. 兼容新版 Ubuntu 的 ssh.socket 机制
         if systemctl list-unit-files | grep -q "^ssh.socket"; then
-            echo -e "${YELLOW}检测到 Ubuntu 新版 ssh.socket 机制，正在进行底层端口覆写...${PLAIN}"
+            echo -e "${YELLOW}检测到 Ubuntu ssh.socket，正在覆写...${PLAIN}"
             mkdir -p /etc/systemd/system/ssh.socket.d
             cat <<EOF > /etc/systemd/system/ssh.socket.d/port.conf
 [Socket]
@@ -724,15 +835,16 @@ EOF
             systemctl restart ssh.socket >/dev/null 2>&1
         fi
         
-        # 5. 重启传统服务
+        # 6. 重启服务并清理备份
         systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
+        rm -f "$backup_file" # 成功后清理备份文件
         
-        echo -e "${GREEN}✅ SSH 端口已成功更改为 $final_p 并自动放行系统防火墙/SELinux！${PLAIN}"
+        echo -e "${GREEN}✅ SSH 端口已成功更改为 $final_p 并自动放行！${PLAIN}"
         echo -e "${RED}${BOLD}======================================================${PLAIN}"
         echo -e "${YELLOW}⚠️ 终极保命提示：${PLAIN}"
         echo -e "现在的这扇 SSH 窗口【千万不要关闭】！"
-        echo -e "请立刻打开您的 SSH 客户端使用新端口 $final_p 新建一个连接进行测试。"
-        echo -e "如果云服务商（如阿里云/腾讯云）网页端有【安全组】，请确保也已放行 $final_p 端口！"
+        echo -e "请立刻使用新端口 $final_p 新建一个连接进行测试。"
+        echo -e "如果云平台有【安全组】，请确保也已放行 $final_p 端口！"
         echo -e "${RED}${BOLD}======================================================${PLAIN}"
     else
         echo -e "${BLUE}端口未做更改。${PLAIN}"
@@ -740,7 +852,7 @@ EOF
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 新增：Fail2ban 防爆破系统管理 (动态端口检测)
+# 新增：Fail2ban 防爆破系统管理 (抽象精简版)
 # ---------------------------------------------------------
 func_fail2ban() {
     clear
@@ -748,23 +860,16 @@ func_fail2ban() {
     echo -e "${BOLD}Fail2ban 防爆破系统管理${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     
-    # 核心逻辑：实时提取当前系统生效的 SSH 端口
     local current_p
-    # 尝试从系统底层网络状态中提取 (支持 Systemd Socket 激活机制)
     current_p=$(ss -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | head -n1)
-    
-    # 如果 ss 命令失败或被精简，回退到文件正则解析
     if [[ -z "$current_p" ]]; then
         current_p=$(grep -i "^Port" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
     fi
-    
-    # 最终默认值兜底
     current_p=${current_p:-22}
     
     echo -e "${YELLOW}👉 当前系统检测到的 SSH 端口为: ${GREEN}$current_p${PLAIN}"
     echo -e "------------------------------------------------"
     
-    # 检查安装状态
     local f2b_status="${RED}未安装${PLAIN}"
     if command -v fail2ban-server >/dev/null 2>&1; then
         f2b_status="${GREEN}已运行${PLAIN}"
@@ -784,12 +889,7 @@ func_fail2ban() {
         1|2)
             if [[ "$f_choice" == "1" ]]; then
                 echo -e "${CYAN}正在安装 Fail2ban...${PLAIN}"
-                if is_debian; then
-                    apt update -qq >/dev/null 2>&1
-                    apt install fail2ban -y -qq >/dev/null 2>&1
-                elif is_redhat; then
-                    yum install fail2ban -y -q >/dev/null 2>&1
-                fi
+                install_pkg fail2ban # <--- 核心修改：一句话代替之前的多行系统判定
             fi
             
             if command -v fail2ban-server >/dev/null 2>&1; then
@@ -814,11 +914,7 @@ EOF
             ;;
         3)
             echo -e "${CYAN}正在卸载 Fail2ban...${PLAIN}"
-            if is_debian; then
-                apt purge fail2ban -y -qq >/dev/null 2>&1
-            elif is_redhat; then
-                yum remove fail2ban -y -q >/dev/null 2>&1
-            fi
+            remove_pkg fail2ban # <--- 核心修改：一句话极简卸载
             rm -rf /etc/fail2ban
             echo -e "${GREEN}✅ Fail2ban 已彻底卸载！${PLAIN}"
             ;;
@@ -871,7 +967,7 @@ func_add_ssh_key() {
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 5. Docker 深度管理 (防覆盖备份版)
+# 5. Docker 深度管理 (重构版：非破坏性修改与防宕机回滚)
 # ---------------------------------------------------------
 func_docker_manage() {
     if ! command -v docker >/dev/null 2>&1; then 
@@ -882,6 +978,9 @@ func_docker_manage() {
         return
     fi
     
+    # 确保依赖工具存在 (使用我们抽象的 install_pkg)
+    if ! command -v jq >/dev/null 2>&1; then install_pkg jq; fi
+
     while true; do
         clear
         local docker_ver
@@ -891,7 +990,7 @@ func_docker_manage() {
         echo -e "${BOLD}🐳 Docker 深度管理面板 (版本: ${GREEN}${docker_ver}${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${GREEN}  1. 开启本地防穿透保护${PLAIN} (限制映射端口仅 127.0.0.1 访问)"
-        echo -e "${GREEN}  2. 解除本地防穿透保护${PLAIN} (允许 0.0.0.0 全网直接通过IP访问)"
+        echo -e "${GREEN}  2. 解除本地防穿透保护${PLAIN} (恢复全网可访，${YELLOW}且不破坏您的原有配置${PLAIN})"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         
@@ -899,22 +998,27 @@ func_docker_manage() {
         read -p "👉 请选择操作: " c
         case $c in
             1) 
+                echo -e "${CYAN}▶ 正在配置 Docker 安全策略...${PLAIN}"
                 mkdir -p /etc/docker
+                local conf_file="/etc/docker/daemon.json"
+                local backup_file="${conf_file}.bak_$(date +%s)"
+                
                 # 检查并备份
-                if [[ -f /etc/docker/daemon.json ]]; then
-                    cp /etc/docker/daemon.json "/etc/docker/daemon.json.bak_$(date +%s)"
-                    echo -e "${YELLOW}⚠️ 已将原有 Docker 配置文件备份为 .bak 时间戳文件。${PLAIN}"
+                if [[ -f "$conf_file" ]]; then
+                    cp "$conf_file" "$backup_file"
+                    echo -e "${YELLOW}⚠️ 已备份原有配置至 $backup_file${PLAIN}"
+                    
                     # 使用 jq 进行非破坏性合并，保留用户原有配置
-                    if jq '. + {"ip": "127.0.0.1", "log-driver": "json-file", "log-opts": {"max-size": "50m", "max-file": "3"}}' /etc/docker/daemon.json > /tmp/daemon_tmp.json 2>/dev/null; then
-                        mv /tmp/daemon_tmp.json /etc/docker/daemon.json
-                    else
-                        echo -e "${RED}❌ 原 daemon.json JSON 格式已损坏，防穿透配置合并失败！${PLAIN}"
-                        # 恢复刚备份的文件
-                        mv "/etc/docker/daemon.json.bak_$(date +%s -d 'now')" /etc/docker/daemon.json 2>/dev/null
+                    if ! jq '. + {"ip": "127.0.0.1", "log-driver": "json-file", "log-opts": {"max-size": "50m", "max-file": "3"}}' "$conf_file" > /tmp/daemon_tmp.json 2>/dev/null; then
+                        echo -e "${RED}❌ 原 daemon.json 格式损坏，合并失败！操作中止。${PLAIN}"
+                        rm -f "$backup_file"
+                        read -n 1 -s -r -p "按任意键继续..."
+                        continue
                     fi
+                    mv /tmp/daemon_tmp.json "$conf_file"
                 else
                     # 文件不存在时初始生成
-                    cat <<EOF > /etc/docker/daemon.json
+                    cat <<EOF > "$conf_file"
 {
   "ip": "127.0.0.1",
   "log-driver": "json-file",
@@ -925,15 +1029,46 @@ func_docker_manage() {
 }
 EOF
                 fi
-                systemctl restart docker >/dev/null 2>&1
-                echo -e "${GREEN}✅ 已开启安全保护，Docker 容器端口仅限本地反代访问！${PLAIN}" 
+                
+                # 防宕机重启机制：如果新配置导致引擎崩溃，立刻回滚！
+                if systemctl restart docker >/dev/null 2>&1; then
+                    echo -e "${GREEN}✅ 已开启安全保护，Docker 容器端口仅限本地反代访问！${PLAIN}" 
+                    [[ -f "$backup_file" ]] && rm -f "$backup_file" # 成功则清理备份
+                else
+                    echo -e "${RED}❌ 致命错误：新配置导致 Docker 引擎无法启动！正在自动回滚...${PLAIN}"
+                    if [[ -f "$backup_file" ]]; then
+                        mv "$backup_file" "$conf_file"
+                    else
+                        rm -f "$conf_file"
+                    fi
+                    systemctl restart docker >/dev/null 2>&1
+                fi
                 sleep 2
                 ;;
             2) 
-                if [[ -f /etc/docker/daemon.json ]]; then
-                    rm -f /etc/docker/daemon.json
-                    systemctl restart docker >/dev/null 2>&1
-                    echo -e "${GREEN}✅ 已解除限制，容器端口恢复公网可访状态。${PLAIN}" 
+                local conf_file="/etc/docker/daemon.json"
+                if [[ -f "$conf_file" ]]; then
+                    echo -e "${CYAN}▶ 正在安全移除 Docker 端口限制...${PLAIN}"
+                    local backup_file="${conf_file}.bak_$(date +%s)"
+                    cp "$conf_file" "$backup_file"
+
+                    # 核心修复：只精准删除 ip 限制，绝不误删国内镜像源等其他配置！
+                    if ! jq 'del(.ip)' "$conf_file" > /tmp/daemon_tmp.json 2>/dev/null; then
+                        echo -e "${RED}❌ JSON 解析失败，操作中止。${PLAIN}"
+                        rm -f "$backup_file"
+                        read -n 1 -s -r -p "按任意键继续..."
+                        continue
+                    fi
+                    mv /tmp/daemon_tmp.json "$conf_file"
+
+                    if systemctl restart docker >/dev/null 2>&1; then
+                        echo -e "${GREEN}✅ 已解除限制，容器端口恢复公网可访状态！${PLAIN}"
+                        rm -f "$backup_file"
+                    else
+                        echo -e "${RED}❌ 卸载异常：导致引擎无法启动！正在回滚...${PLAIN}"
+                        mv "$backup_file" "$conf_file"
+                        systemctl restart docker >/dev/null 2>&1
+                    fi
                 else
                     echo -e "${BLUE}未检测到限制配置文件，当前已是全网开放状态。${PLAIN}"
                 fi
@@ -944,7 +1079,6 @@ EOF
         esac
     done
 }
-
 # ---------------------------------------------------------
 # 6. BBR 增强管理
 # ---------------------------------------------------------
@@ -954,37 +1088,80 @@ func_bbr_manage() {
     wget -O tcpx.sh "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh" && chmod +x tcpx.sh && ./tcpx.sh
 }
 
+
 # ---------------------------------------------------------
-# 7. 动态 TCP 调优 (Omnitt)
+# 7. 动态 TCP 调优 (带正则净化与事务回滚机制)
 # ---------------------------------------------------------
 func_tcp_tune() {
     clear
-    echo -e "请浏览器打开: ${BLUE}https://omnitt.com/${PLAIN} 生成针对您网络环境的 TCP 参数"
-    read -p "👉 您准备好粘贴代码了吗？(y 继续 / n 取消): " yn
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🚀 动态 TCP 极致调优 (Omnitt)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "👉 推荐浏览器访问: ${BLUE}https://omnitt.com/${PLAIN} 获取针对您网络的定制参数"
+    echo -e "------------------------------------------------"
+    
+    read -p "❓ 准备好粘贴参数了吗？(y 继续 / n 取消): " yn
     if [[ ! "$yn" =~ ^[Yy]$ ]]; then return; fi
     
     local temp_f="/etc/sysctl.d/99-omnitt-tune.conf"
-    > "$temp_f"
-    echo -e "\n${CYAN}👇 请在此右键粘贴代码，完成后在新的一行输入 EOF 并回车：${PLAIN}"
+    local backup_f="${temp_f}.bak_$(date +%s)"
     
+    # 事务起点：备份原配置
+    if [[ -f "$temp_f" ]]; then
+        cp "$temp_f" "$backup_f"
+    fi
+    
+    > "$temp_f"
+    echo -e "\n${YELLOW}👇 请在下方直接【右键粘贴】代码。${PLAIN}"
+    echo -e "${YELLOW}💡 粘贴完成后，请按下【回车键】，然后输入 ${RED}EOF${YELLOW} 并再次回车保存：${PLAIN}"
+    
+    local has_content=false
     while IFS= read -r line; do
-        line=$(echo "$line" | tr -d '\r')
-        [[ "$line" == "EOF" || "$line" == "eof" ]] && break
-        echo "$line" >> "$temp_f"
+        # 极简清洗：去除回车符和前后多余空格
+        line=$(echo "$line" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+        
+        # 结束符匹配（忽略大小写）
+        if [[ "${line,,}" == "eof" ]]; then
+            break
+        fi
+        
+        # 【防砖机制】：严格正则过滤。只允许空行、#注释、或 a.b.c = 1 格式的键值对
+        if [[ -z "$line" || "$line" =~ ^# || "$line" =~ ^[a-zA-Z0-9_.-]+[[:space:]]*=[[:space:]]*[a-zA-Z0-9_.-]+$ ]]; then
+            echo "$line" >> "$temp_f"
+            # 标记确实写入了有效参数，而不是只敲了几个回车
+            [[ -n "$line" && ! "$line" =~ ^# ]] && has_content=true
+        else
+            echo -e "${RED}⚠️ 已自动过滤非法参数行: $line${PLAIN}"
+        fi
     done
     
-    if [[ -s "$temp_f" ]]; then
-        sysctl -p "$temp_f" >/dev/null 2>&1
-        echo -e "${GREEN}✅ 调优参数应用成功！${PLAIN}"
+    if $has_content; then
+        echo -e "${CYAN}▶ 正在校验并应用新 TCP 参数...${PLAIN}"
+        # 验证新配置是否被内核完全接受
+        if sysctl -p "$temp_f" >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ 动态 TCP 调优参数应用成功！网络吞吐量已提升。${PLAIN}"
+            rm -f "$backup_f" # 成功则删除备份
+        else
+            echo -e "${RED}❌ 致命错误：您粘贴的部分参数当前内核不支持或语法错误！${PLAIN}"
+            echo -e "${YELLOW}正在触发安全回滚...${PLAIN}"
+            if [[ -f "$backup_f" ]]; then
+                mv "$backup_f" "$temp_f"
+                sysctl -p "$temp_f" >/dev/null 2>&1
+            else
+                rm -f "$temp_f"
+            fi
+            echo -e "${BLUE}✅ 已恢复系统原 TCP 状态，未造成任何破坏。${PLAIN}"
+        fi
     else
-        echo -e "${YELLOW}⚠️ 未检测到有效输入，已取消。${PLAIN}"
-        rm -f "$temp_f"
+        echo -e "${YELLOW}⚠️ 未检测到有效的 TCP 调优参数，操作已取消。${PLAIN}"
+        if [[ -f "$backup_f" ]]; then mv "$backup_f" "$temp_f"; else rm -f "$temp_f"; fi
     fi
+    
     read -n 1 -s -r -p "按任意键继续..."
 }
 
 # ---------------------------------------------------------
-# 8. 智能内存调优 (修复版：全自动匹配 + 强制挂载保障)
+# 8. 智能内存调优 (全自动匹配 + 保底 Swap 防假死版)
 # ---------------------------------------------------------
 func_zram_swap() {
     clear
@@ -1003,25 +1180,35 @@ func_zram_swap() {
     local choice
     read -p "👉 请选择您的调优挡位 [1/2/3] (直接回车按内存自动匹配): " choice
     
-    # 【修复 1】：自动根据内存分配挡位
     if [[ -z "$choice" ]]; then
-        if [[ "$mem" -lt 1024 ]]; then
-            choice=1
-        elif [[ "$mem" -le 4096 ]]; then
-            choice=2
-        else
-            choice=3
+        if [[ "$mem" -lt 1024 ]]; then choice=1
+        elif [[ "$mem" -le 4096 ]]; then choice=2
+        else choice=3
         fi
         echo -e "${YELLOW}💡 您按下了回车，系统已根据本机内存 (${mem}MB) 自动选择：[ 挡位 $choice ]${PLAIN}"
         sleep 1.5
     fi
     
     if is_debian; then
-        echo -e "${CYAN}正在配置 ZRAM 内存压缩引擎...${PLAIN}"
+        echo -e "${CYAN}▶ 正在进行第一阶段：整理底层磁盘 Swap (保留 512M 保底防假死)...${PLAIN}"
+        
+        swapoff -a >/dev/null 2>&1
+        rm -f /swapfile /swap.img /var/swap /var/swapfile >/dev/null 2>&1
+        
+        # [核心修复]: 创建一个 512M 的保底 Swap 阻止 OOM
+        dd if=/dev/zero of=/swapfile bs=1M count=512 status=none
+        chmod 600 /swapfile
+        mkswap /swapfile >/dev/null 2>&1
+        swapon /swapfile >/dev/null 2>&1
+        
+        # 确保 fstab 中挂载保底 Swap
+        sed -i -E 's/^([^#].*[[:space:]]swap[[:space:]].*)/#\1/' /etc/fstab
+        echo "/swapfile none swap sw 0 0" >> /etc/fstab
+        echo -e "${GREEN}✅ 已建立 512M 极小磁盘 Swap 作为系统崩溃的最后防线！${PLAIN}"
+        
+        echo -e "${CYAN}▶ 正在进行第二阶段：配置 ZRAM 内存压缩引擎...${PLAIN}"
         apt update -qq >/dev/null 2>&1
         apt install zram-tools -y -qq >/dev/null 2>&1
-        
-        # 【修复 2】：强制加载内核模块，防止精简系统缺失
         modprobe zram >/dev/null 2>&1
         
         local zram_conf="/etc/default/zramswap"
@@ -1035,19 +1222,16 @@ func_zram_swap() {
             *) percent=70; swap_val=60 ;;
         esac
         
-        # 写入配置文件
         cat <<EOF > "$zram_conf"
 ALGO=zstd
 PERCENT=$percent
 PRIORITY=100
 EOF
         
-        # 重载并强制重启服务
         systemctl daemon-reload >/dev/null 2>&1
         systemctl enable zramswap >/dev/null 2>&1
         systemctl restart zramswap >/dev/null 2>&1
         
-        # 【修复 3】：双重检查机制。如果重启服务后仍未生成 swap，强制调用底层脚本挂载
         if ! grep -q zram /proc/swaps; then
             if command -v zramswap >/dev/null 2>&1; then
                 zramswap start >/dev/null 2>&1
@@ -1056,15 +1240,13 @@ EOF
             fi
         fi
         
-        # 修改内核 Swappiness 倾向
         echo "vm.swappiness = $swap_val" > /etc/sysctl.d/99-zram-swappiness.conf
         sysctl -p /etc/sysctl.d/99-zram-swappiness.conf >/dev/null 2>&1
         
-        # 最终验证结果
         if grep -q zram /proc/swaps; then
             echo -e "${GREEN}✅ ZRAM 调优落地完成！(已设置: ${percent}% 压缩比, ${swap_val} 交换倾向)${PLAIN}"
         else
-            echo -e "${RED}❌ 警告：配置已下发，但系统内核似乎拒绝挂载 ZRAM。这通常是因为 VPS 商家阉割了内核功能（例如廉价的 LXC 容器）。${PLAIN}"
+            echo -e "${RED}❌ 警告：配置已下发，但系统内核似乎拒绝挂载 ZRAM。${PLAIN}"
         fi
     else
         echo -e "${RED}❌ 抱歉，当前系统并非 Debian/Ubuntu 衍生系，暂不支持自动化 ZRAM 调优。${PLAIN}"
@@ -1135,33 +1317,60 @@ func_install_kernel() {
     read -n 1 -s -r -p "按任意键返回..."
 }
 # ---------------------------------------------------------
-# 10. 清理冗余旧内核 (带 Ubuntu/Debian 提示适配)
+# 10. 清理冗余旧内核 (数组菜单驱动 + 核心防砖拦截版)
 # ---------------------------------------------------------
 func_clean_kernel() {
     clear
     if [[ ! "$OS" =~ debian|ubuntu ]]; then
         echo -e "${RED}❌ 此功能目前仅支持 Debian/Ubuntu 衍生系统！${PLAIN}"
-    else
-        echo -e "当前正在运行的内核为: ${GREEN}$(uname -r)${PLAIN}"
-        echo -e "${RED}⚠️  高危警告：绝对不要卸载当前正在运行的内核！${PLAIN}"
-        echo -e "${RED}⚠️  也不要卸载带有 cloud (Debian) 或 kvm (Ubuntu) 字样的内核！${PLAIN}"
-        echo -e "------------------------------------------------"
-        dpkg --list | grep linux-image
-        echo -e "------------------------------------------------"
-        
-        local old_k
-        read -p "👉 请复制上方要卸载的旧内核包全名并粘贴 (直接回车取消): " old_k
-        if [[ -n "$old_k" ]]; then
-            # 同样加入错误捕获
-            if apt purge -y "$old_k" && update-grub && apt autoremove --purge -y; then
-                echo -e "${GREEN}✅ 旧内核 [$old_k] 清理完成！磁盘空间已释放。${PLAIN}"
-            else
-                echo -e "${RED}❌ 清理失败！找不到该内核包或存在依赖问题。${PLAIN}"
-            fi
-        else
-            echo -e "${BLUE}已取消卸载操作。${PLAIN}"
-        fi
+        read -n 1 -s -r -p "按任意键返回..."
+        return
     fi
+
+    local current_k
+    current_k=$(uname -r)
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧹 清理冗余旧内核${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "当前正在运行的内核为: ${GREEN}${current_k}${PLAIN}"
+    echo -e "${RED}⚠️ 系统已自动为您屏蔽正在运行的内核以及基础元包。${PLAIN}"
+    echo -e "------------------------------------------------"
+    
+    # 自动提取所有非当前的内核包存入数组 (排除元包)
+    mapfile -t old_kernels < <(dpkg -l | awk '/^ii  linux-image-[0-9]/ {print $2}' | grep -v "$current_k" | grep -v "linux-image-generic" | grep -v "linux-image-virtual" | grep -v "linux-image-kvm" | grep -v "linux-image-cloud-amd64")
+
+    if [[ ${#old_kernels[@]} -eq 0 ]]; then
+        echo -e "${GREEN}✅ 系统非常干净，没有发现需要清理的冗余旧内核。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    echo -e "${YELLOW}扫描到以下冗余内核可供清理：${PLAIN}"
+    for i in "${!old_kernels[@]}"; do
+        echo -e " [${CYAN}$((i+1))${PLAIN}] ${old_kernels[$i]}"
+    done
+    echo -e " [${RED}0${PLAIN}] 取消并返回"
+    echo -e "------------------------------------------------"
+
+    local k_choice
+    read -p "👉 请输入要卸载的序号: " k_choice
+
+    if [[ "$k_choice" == "0" ]]; then
+        echo -e "${BLUE}已取消卸载操作。${PLAIN}"
+    elif [[ "$k_choice" =~ ^[1-9][0-9]*$ ]] && [[ "$k_choice" -le "${#old_kernels[@]}" ]]; then
+        local target_k="${old_kernels[$((k_choice-1))]}"
+        echo -e "${CYAN}正在静默卸载 $target_k 并刷新引导...${PLAIN}"
+        export DEBIAN_FRONTEND=noninteractive
+        if apt-get purge -yq "$target_k" && update-grub >/dev/null 2>&1 && apt-get autoremove --purge -yq >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ 旧内核 [$target_k] 清理完成！磁盘空间已释放。${PLAIN}"
+        else
+            echo -e "${RED}❌ 清理失败！存在依赖问题或执行被中断。${PLAIN}"
+        fi
+        unset DEBIAN_FRONTEND
+    else
+        echo -e "${RED}❌ 无效的选择！${PLAIN}"
+    fi
+
     read -n 1 -s -r -p "按任意键返回..."
 }
 
@@ -1277,7 +1486,104 @@ func_dns_unlock() {
     fi
     read -n 1 -s -r -p "按任意键返回..."
 }
+# ---------------------------------------------------------
+# 新增功能：安装 IP Sentinel (防止 IP 送中)
+# ---------------------------------------------------------
+func_ip_sentinel() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🛡️ 安装 IP Sentinel (防止 IP 送中)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}该脚本将持续监控并修正路由，防止服务器 IP 被错误定位至中国大陆。${PLAIN}"
+    echo -e "------------------------------------------------"
+    
+    read -p "❓ 确定要安装并配置 IP Sentinel 吗？(y/n): " yn
+    if [[ "$yn" =~ ^[Yy]$ ]]; then
+        echo -e "${CYAN}▶ 正在拉取并执行 hotyue 的 IP-Sentinel 主脚本...${PLAIN}"
+        bash <(curl -sL https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/master/install_master.sh)
+    else
+        echo -e "${BLUE}已取消操作。${PLAIN}"
+    fi
+    read -n 1 -s -r -p "按任意键返回..."
+}
 
+# ---------------------------------------------------------
+# 新增功能：安装 SublinkPro (强大的订阅转换与管理面板)
+# ---------------------------------------------------------
+func_sublinkpro() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🔗 安装 SublinkPro (节点订阅转换与管理面板)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    
+    # 1. 检查 Docker 引擎
+    if ! command -v docker >/dev/null 2>&1; then
+        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 常用环境] 中安装 Docker。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    # 2. 检查并兼容 Docker Compose
+    local compose_cmd=""
+    if docker compose version >/dev/null 2>&1; then
+        compose_cmd="docker compose"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        compose_cmd="docker-compose"
+    else
+        echo -e "${YELLOW}⚠️ 未检测到 Docker Compose 插件，正在为您静默安装...${PLAIN}"
+        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose 2>/dev/null
+        chmod +x /usr/local/bin/docker-compose
+        compose_cmd="docker-compose"
+        echo -e "${GREEN}✅ Docker Compose 安装完成。${PLAIN}"
+    fi
+
+    # 3. 部署目录初始化
+    local install_dir="/opt/sublinkpro"
+    echo -e "${YELLOW}💡 SublinkPro 将被安全部署在: ${CYAN}$install_dir${PLAIN}"
+    echo -e "------------------------------------------------"
+    
+    read -p "❓ 确认现在开始一键安装吗？(y/n): " yn
+    if [[ "$yn" =~ ^[Yy]$ ]]; then
+        mkdir -p "$install_dir"
+        cd "$install_dir" || return
+
+        # 生成 docker-compose.yml 文件
+        cat <<EOF > docker-compose.yml
+services:
+  sublinkpro:
+    image: zerodeng/sublink-pro
+    container_name: sublinkpro
+    ports:
+      - "8000:8000"
+    volumes:
+      - "./db:/app/db"
+      - "./template:/app/template"
+      - "./logs:/app/logs"
+    restart: unless-stopped
+EOF
+        
+        echo -e "${CYAN}▶ 正在拉取镜像并启动 SublinkPro 容器...${PLAIN}"
+        $compose_cmd up -d
+        
+        local ip
+        ip=$(curl -s4 icanhazip.com 2>/dev/null || echo "您的服务器IP")
+        
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}🎉 SublinkPro 部署并启动成功！${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "🌐 ${BOLD}面板访问地址:${PLAIN} http://$ip:8000"
+        echo -e "👤 ${BOLD}默认后台账号:${PLAIN} admin"
+        echo -e "🔑 ${BOLD}默认后台密码:${PLAIN} 123456"
+        echo -e "------------------------------------------------"
+        echo -e "${YELLOW}⚠️ 核心防丢提示：${PLAIN}"
+        echo -e "系统产生的数据库、模板和日志都已持久化映射在 ${CYAN}$install_dir${PLAIN} 下。"
+        echo -e "如果您日后需要升级容器或重装 VPS，请务必提前打包备份该目录下的 ${GREEN}./db${PLAIN} 和 ${GREEN}./template${PLAIN} 文件夹！"
+        echo -e "------------------------------------------------"
+    else
+        echo -e "${BLUE}已安全取消部署。${PLAIN}"
+    fi
+    read -n 1 -s -r -p "按任意键返回..."
+}
 # ---------------------------------------------------------
 # 18. 面板救砖/重置 SSL
 # ---------------------------------------------------------
@@ -1328,7 +1634,65 @@ func_rescue_panel() {
     fi
     read -n 1 -s -r -p "按任意键返回..."
 }
-
+# ---------------------------------------------------------
+# 新增功能：网络端口占用可视化排查与进程查杀 (底层调用优化版)
+# ---------------------------------------------------------
+func_port_kill() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🔍 网络端口占用排查与进程释放${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}当前系统中正在监听的活动端口列表：${PLAIN}"
+        echo -e "------------------------------------------------"
+        printf "%-10s %-15s %-20s\n" "协议" "端口" "关联进程 (PID)"
+        
+        ss -tulnp | grep -E 'LISTEN|UNCONN' | while read -r line; do
+            local proto=$(echo "$line" | awk '{print $1}')
+            local port=$(echo "$line" | awk '{print $5}' | awk -F: '{print $NF}')
+            local pid=$(echo "$line" | sed -n 's/.*pid=\([0-9]*\).*/\1/p')
+            local proc=$(echo "$line" | sed -n 's/.*users:(("\([^"]*\)".*/\1/p')
+            
+            local proc_info=""
+            if [[ -z "$proc" || -z "$pid" ]]; then
+                proc_info="系统底层 / 无权限读取"
+            else
+                proc_info="$proc (PID: $pid)"
+            fi
+            printf "%-10s %-15s %-20s\n" "$proto" "$port" "$proc_info"
+        done | sort -n -k2 | uniq
+        
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}👉 指南：找到您想释放的冲突端口，输入它即可强杀对应进程。${PLAIN}"
+        echo -e "${RED}⚠️ 高危：请勿随意终止 sshd (通常为 22) 的端口，否则会断网失联！${PLAIN}"
+        echo -e "------------------------------------------------"
+        
+        local p_choice
+        read -p "❓ 请输入要强杀释放的端口号 (输入 0 返回主菜单): " p_choice
+        
+        if [[ "$p_choice" == "0" ]]; then break; fi
+        
+        if [[ -n "$p_choice" && "$p_choice" =~ ^[0-9]+$ ]]; then
+            echo -e "${CYAN}▶ 正在调用底层系统命令强杀端口 $p_choice ...${PLAIN}"
+            
+            # [依赖前置检查]: 确保存在 fuser 工具
+            if ! command -v fuser >/dev/null 2>&1; then
+                install_pkg psmisc
+            fi
+            
+            # [极简实现]: 一行代码杀掉占用该 TCP/UDP 端口的所有进程
+            if fuser -k -9 -n tcp "$p_choice" >/dev/null 2>&1 || fuser -k -9 -n udp "$p_choice" >/dev/null 2>&1; then
+                echo -e "${GREEN}✅ 目标进程已被系统底层强制回收 (SIGKILL)。端口已释放！${PLAIN}"
+            else
+                echo -e "${BLUE}ℹ️ 未发现任何可被终止的进程占用该端口，或权限不足。${PLAIN}"
+            fi
+            sleep 2
+        else
+            echo -e "${RED}❌ 输入无效！请输入纯数字端口号。${PLAIN}"
+            sleep 1
+        fi
+    done
+}
 # ---------------------------------------------------------
 # 19. 脚本热更新
 # ---------------------------------------------------------
@@ -1349,7 +1713,7 @@ func_update_script() {
 }
 
 # ---------------------------------------------------------
-# 界面主循环 (视觉逻辑重排版)
+# 界面主循环 (新增 IP 防送中 & SublinkPro)
 # ---------------------------------------------------------
 main_menu() {
     create_shortcut
@@ -1374,21 +1738,26 @@ main_menu() {
         
         echo -e " ${BOLD}${BLUE}▶ 内核与内存榨取${PLAIN}"
         echo -e " ${GREEN}10.${PLAIN} 智能内存调优     ${YELLOW}(ZRAM压缩+Swap 详尽分级策略落地)${PLAIN}"
-        echo -e " ${GREEN}11.${PLAIN} 换装 Cloud内核   ${YELLOW}(释放驱动冗余，KVM 虚拟专属)${PLAIN}"
+        echo -e " ${GREEN}11.${PLAIN} 换装轻量内核     ${YELLOW}(释放驱动冗余，KVM 虚拟专属)${PLAIN}"
         echo -e " ${GREEN}12.${PLAIN} 卸载冗余旧内核   ${YELLOW}(清理磁盘无用空间，需谨慎)${PLAIN}"
         
         echo -e " ${BOLD}${BLUE}▶ 探针与节点建站${PLAIN}"
         echo -e " ${GREEN}13.${PLAIN} 极速硬件探针     ${YELLOW}(全屏显示本机配置与实时负载)${PLAIN}"
         echo -e " ${GREEN}14.${PLAIN} 综合测试合集     ${YELLOW}(融合怪/流媒体/IP欺诈质量/路由)${PLAIN}"
         echo -e " ${GREEN}15.${PLAIN} 端口流量监控     ${YELLOW}(拉取并运行 Port Traffic Dog)${PLAIN}"
-        echo -e " ${GREEN}16.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板，调用 mhsanaei 脚本)${PLAIN}"
-        echo -e " ${GREEN}17.${PLAIN} 安装 Sing-box    ${YELLOW}(甬哥四合一强大官方一键脚本)${PLAIN}"
-        echo -e " ${GREEN}18.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的备用手段)${PLAIN}"
-        echo -e " ${GREEN}19.${PLAIN} ${CYAN}${BOLD}DNS流媒体解锁${PLAIN}    ${YELLOW}(Alice DNS 区域分流解锁脚本)${PLAIN}"
+        echo -e " ${GREEN}16.${PLAIN} 端口排查与释放   ${YELLOW}(可视化查看并强杀端口占用进程)${PLAIN}"
+        echo -e " ${GREEN}17.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板，调用 mhsanaei 脚本)${PLAIN}"
+        echo -e " ${GREEN}18.${PLAIN} 安装 Sing-box    ${YELLOW}(甬哥四合一强大官方一键脚本)${PLAIN}"
+        echo -e " ${GREEN}19.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的备用手段)${PLAIN}"
+        echo -e " ${GREEN}20.${PLAIN} ${CYAN}${BOLD}DNS流媒体解锁${PLAIN}    ${YELLOW}(Alice DNS 区域分流解锁脚本)${PLAIN}"
+        
+        echo -e " ${BOLD}${BLUE}▶ 进阶与扩展组件${PLAIN}"
+        echo -e " ${GREEN}21.${PLAIN} 防 IP 送中脚本   ${YELLOW}(部署 IP-Sentinel 修正区域路由)${PLAIN}"
+        echo -e " ${GREEN}22.${PLAIN} 安装 SublinkPro  ${YELLOW}(极速部署节点订阅转换与管理平台)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
-        echo -e " ${YELLOW}20.${PLAIN} ${BOLD}一键更新脚本${PLAIN}     ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
-        echo -e " ${RED}21.${PLAIN} 重启服务器       ${RED} 0.${PLAIN} 退出面板"
+        echo -e " ${YELLOW}23.${PLAIN} ${BOLD}一键更新脚本${PLAIN}     ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
+        echo -e " ${RED}24.${PLAIN} 重启服务器       ${RED} 0.${PLAIN} 退出面板"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local choice
@@ -1410,12 +1779,15 @@ main_menu() {
             13) func_system_info ;;
             14) func_test_scripts ;;
             15) func_port_dog ;;
-            16) func_xpanel ;;
-            17) func_singbox ;;
-            18) func_rescue_panel ;;
-            19) func_dns_unlock ;;
-            20) func_update_script ;;
-            21) reboot ;;
+            16) func_port_kill ;;      
+            17) func_xpanel ;;
+            18) func_singbox ;;
+            19) func_rescue_panel ;;
+            20) func_dns_unlock ;;
+            21) func_ip_sentinel ;;
+            22) func_sublinkpro ;;
+            23) func_update_script ;;
+            24) reboot ;;
             0) exit 0 ;;
             *) 
                 echo -e "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}"
@@ -1427,3 +1799,4 @@ main_menu() {
 
 # --- 启动面板 ---
 main_menu
+
