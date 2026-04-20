@@ -464,7 +464,7 @@ restore_counter_value() {
 restore_all_monitoring_rules() {
     local active_ports=($(get_active_ports))
     for port in "${active_ports[@]}"; do
-        add__rules "$port"
+        add_nftables_rules "$port"
         local quota_enabled=$(jq -r ".ports.\"$port\".quota.enabled // false" "$CONFIG_FILE")
         local monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE")
         if [ "$quota_enabled" = "true" ] && [ "$monthly_limit" != "unlimited" ]; then
