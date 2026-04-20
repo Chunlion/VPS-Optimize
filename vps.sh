@@ -651,28 +651,13 @@ func_caddy_delete_cert() {
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 4. SSH 安全加固 (终极防失联保命版)
+# 4. SSH 安全加固 (完美兼容 Ubuntu Socket 与 CentOS SELinux)
 # ---------------------------------------------------------
 func_security() {
     clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}SSH 端口安全修改 (高危操作防护)${PLAIN}"
-    echo -e "${CYAN}================================================${PLAIN}"
-    
     local current_p
-    # 尝试从系统底层网络状态中提取 (支持 Systemd Socket 激活机制)
-    current_p=$(ss -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | head -n1)
-    
-    # 如果 ss 命令失败或被精简，回退到文件正则解析
-    if [[ -z "$current_p" ]]; then
-        current_p=$(grep -i "^Port" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
-    fi
-    
-    # 最终默认值兜底
+    current_p=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
     current_p=${current_p:-22}
-    
-    echo -e "${YELLOW}⚠️ 警告：修改 SSH 端口前，请务必确认您的云服务商 (如阿里云/腾讯云/AWS) 网页端的【安全组】或【防火墙】已经放行了新端口！否则修改后将彻底失联！${PLAIN}"
-    echo -e "------------------------------------------------"
     
     local final_p
     read -p "当前 SSH 端口为 $current_p, 请输入新端口 [1-65535] (直接回车保持不变): " final_p
@@ -680,43 +665,45 @@ func_security() {
     
     if [[ "$final_p" != "$current_p" ]]; then
         
-        # 【防砖机制 1：严格的端口合法性校验】
+        # [检查项 1]: 严格的端口合法性校验
         if ! [[ "$final_p" =~ ^[0-9]+$ ]] || [ "$final_p" -lt 1 ] || [ "$final_p" -gt 65535 ]; then
-            echo -e "${RED}❌ 致命错误：输入的端口号 ($final_p) 无效！必须是 1 到 65535 之间的纯数字。操作已中止。${PLAIN}"
+            echo -e "${RED}❌ 错误：无效的端口号！必须是 1-65535 之间的纯数字。${PLAIN}"
             read -n 1 -s -r -p "按任意键返回..."
             return
         fi
 
-        # 【防砖机制 2：端口占用冲突检测】
-        if command -v ss >/dev/null 2>&1 && ss -tulpn | grep -q ":$final_p "; then
-            echo -e "${RED}❌ 致命错误：端口 $final_p 已经被系统中的其他程序占用！强行修改会导致 SSH 无法启动。操作已中止。${PLAIN}"
-            read -n 1 -s -r -p "按任意键返回..."
-            return
-        fi
-
-        # 备份原配置，给自己留一条退路
-        cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak_safe
-        
-        # 清理旧端口并写入新端口
-        sed -i '/^[[:space:]]*Port /d' /etc/ssh/sshd_config
-        sed -i '/^[[:space:]]*#Port /d' /etc/ssh/sshd_config
+        # 1. 修改传统配置文件
+        sed -i '/^[[:space:]]*#\?Port /d' /etc/ssh/sshd_config
         echo "Port $final_p" >> /etc/ssh/sshd_config
         
-        # 【防砖机制 3：SELinux 策略放行 (救 RedHat/CentOS 一命)】
+        # 2. [CentOS 专属修复]: SELinux 底层策略放行
         if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce)" == "Enforcing" ]]; then
-            echo -e "${YELLOW}检测到 SELinux 处于开启状态，正在自动添加 SELinux 端口放行规则...${PLAIN}"
+            echo -e "${YELLOW}检测到 SELinux 处于开启状态，正在配置底层端口安全策略...${PLAIN}"
             if command -v semanage >/dev/null 2>&1; then
+                # -a 是添加，-m 是修改（如果端口已被其他规则占用但允许复用）
                 semanage port -a -t ssh_port_t -p tcp "$final_p" 2>/dev/null || semanage port -m -t ssh_port_t -p tcp "$final_p" 2>/dev/null
             else
-                echo -e "${RED}❌ 致命错误：SELinux 开启但缺少 semanage 工具，无法修改底层策略。强行重启将断网失联！${PLAIN}"
-                mv /etc/ssh/sshd_config.bak_safe /etc/ssh/sshd_config # 恢复配置
-                echo -e "${BLUE}已自动恢复原配置，操作中止。${PLAIN}"
+                echo -e "${RED}❌ 致命错误：SELinux 已开启但缺少 semanage 工具，强行重启将导致 SSH 彻底瘫痪失联！${PLAIN}"
+                echo -e "${YELLOW}已自动为您回滚配置。请先运行命令安装工具：${PLAIN}"
+                echo -e "CentOS 7: ${GREEN}yum install policycoreutils-python${PLAIN}"
+                echo -e "CentOS 8/9+: ${GREEN}yum install policycoreutils-python-utils${PLAIN}"
+                
+                # 触发防砖回滚机制
+                sed -i '/^[[:space:]]*Port /d' /etc/ssh/sshd_config
+                echo "Port $current_p" >> /etc/ssh/sshd_config
                 read -n 1 -s -r -p "按任意键返回..."
                 return
             fi
         fi
 
-        # 系统内部防火墙放行
+        # [检查项 2]: 重启前配置语法核验 (防失联核心机制)
+        if ! sshd -t; then
+            echo -e "${RED}❌ 致命错误：SSH 配置存在语法异常，已终止重启以防止失联！${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        fi
+        
+        # 3. 尝试放行防火墙 (UFW / Firewalld / iptables)
         if command -v ufw >/dev/null 2>&1; then ufw allow "$final_p"/tcp >/dev/null 2>&1; fi
         if command -v firewall-cmd >/dev/null 2>&1; then 
             firewall-cmd --permanent --add-port="$final_p"/tcp >/dev/null 2>&1
@@ -724,26 +711,28 @@ func_security() {
         fi
         iptables -I INPUT -p tcp --dport "$final_p" -j ACCEPT 2>/dev/null
         
-        # 【防砖机制 4：重启前配置语法核验】
-        if ! sshd -t; then
-            echo -e "${RED}❌ 致命错误：SSH 配置文件语法检测失败！强行重启将导致服务崩溃！${PLAIN}"
-            mv /etc/ssh/sshd_config.bak_safe /etc/ssh/sshd_config # 恢复配置
-            echo -e "${BLUE}已自动恢复原配置，操作中止。请手动检查 /etc/ssh/sshd_config${PLAIN}"
-            read -n 1 -s -r -p "按任意键返回..."
-            return
+        # 4. 核心修复：兼容新版 Ubuntu 的 ssh.socket 机制
+        if systemctl list-unit-files | grep -q "^ssh.socket"; then
+            echo -e "${YELLOW}检测到 Ubuntu 新版 ssh.socket 机制，正在进行底层端口覆写...${PLAIN}"
+            mkdir -p /etc/systemd/system/ssh.socket.d
+            cat <<EOF > /etc/systemd/system/ssh.socket.d/port.conf
+[Socket]
+ListenStream=
+ListenStream=$final_p
+EOF
+            systemctl daemon-reload >/dev/null 2>&1
+            systemctl restart ssh.socket >/dev/null 2>&1
         fi
         
-        # 一切安全，执行重启
+        # 5. 重启传统服务
         systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
         
-        # 【防砖机制 5：行为安全指引】
-        echo -e "${GREEN}✅ 恭喜！SSH 端口已成功更改为 $final_p 并已重启服务！${PLAIN}"
+        echo -e "${GREEN}✅ SSH 端口已成功更改为 $final_p 并自动放行系统防火墙/SELinux！${PLAIN}"
         echo -e "${RED}${BOLD}======================================================${PLAIN}"
         echo -e "${YELLOW}⚠️ 终极保命提示：${PLAIN}"
         echo -e "现在的这扇 SSH 窗口【千万不要关闭】！"
-        echo -e "请立刻打开您的 SSH 客户端（如 Xshell/Termius），使用新端口 $final_p 新建一个连接进行测试。"
-        echo -e "如果新连接能成功登录，您再关闭当前窗口。"
-        echo -e "如果死活连不上，说明您的云服务商网页端安全组没放行！只要当前窗口不关，您还可以把端口改回去！"
+        echo -e "请立刻打开您的 SSH 客户端使用新端口 $final_p 新建一个连接进行测试。"
+        echo -e "如果云服务商（如阿里云/腾讯云）网页端有【安全组】，请确保也已放行 $final_p 端口！"
         echo -e "${RED}${BOLD}======================================================${PLAIN}"
     else
         echo -e "${BLUE}端口未做更改。${PLAIN}"
@@ -756,7 +745,7 @@ func_security() {
 func_fail2ban() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🛡️ Fail2ban 防爆破系统管理${PLAIN}"
+    echo -e "${BOLD}Fail2ban 防爆破系统管理${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     
     # 核心逻辑：实时提取当前系统生效的 SSH 端口
