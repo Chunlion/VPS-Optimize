@@ -1497,10 +1497,10 @@ func_ip_sentinel() {
     echo -e "${YELLOW}该脚本将持续监控并修正路由，防止服务器 IP 被错误定位至中国大陆。${PLAIN}"
     echo -e "------------------------------------------------"
     
-    read -p "❓ 确定要安装并配置 IP Sentinel 吗？(y/n): " yn
+    read -p "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(y/n): " yn
     if [[ "$yn" =~ ^[Yy]$ ]]; then
         echo -e "${CYAN}▶ 正在拉取并执行 hotyue 的 IP-Sentinel 主脚本...${PLAIN}"
-        bash <(curl -sL https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/master/install_master.sh)
+        bash <(curl -sL https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh)
     else
         echo -e "${BLUE}已取消操作。${PLAIN}"
     fi
