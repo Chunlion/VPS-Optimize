@@ -68,8 +68,16 @@ UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh"
 create_shortcut() {
     local script_path="/usr/local/bin/cy"
     if [[ ! -f "$script_path" ]]; then
-        # 优先尝试从远端直接拉取最新版本作为快捷方式 (完美兼容 curl 管道运行)
-        curl -sL "$UPDATE_URL" -o "$script_path" 2>/dev/null || cp "$(readlink -f "$0")" "$script_path" 2>/dev/null
+        # 优先尝试从远端直接拉取
+        if ! curl -sL "$UPDATE_URL" -o "$script_path" 2>/dev/null; then
+            # 若远端拉取失败，且检测到 $0 确实是本地存在的物理文件，才允许复制
+            if [[ -f "$0" ]]; then
+                cp "$(readlink -f "$0")" "$script_path" 2>/dev/null
+            else
+                echo -e "${YELLOW}⚠️ 快捷指令本地注册挂起，请稍后在面板中使用 [23] 更新脚本完成注册。${PLAIN}"
+                return
+            fi
+        fi
         chmod +x "$script_path"
         echo -e "${GREEN}✅ 快捷指令 'cy' 已全局注册！下次可直接输入 cy 唤出面板。${PLAIN}"
         sleep 1
@@ -548,55 +556,6 @@ func_view_caddy_cert() {
             fi
             echo -e "------------------------------------------------"
         done
-    fi
-    read -n 1 -s -r -p "按任意键继续..."
-}
-# ---------------------------------------------------------
-# 新增功能：独立追加 Caddy 跳过不安全证书反代块
-# ---------------------------------------------------------
-func_caddy_add_insecure() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🛡️ 独立配置：追加 Caddy 跳过证书验证反代${PLAIN}"
-    echo -e "${CYAN}================================================${PLAIN}"
-    if [[ ! -f /etc/caddy/Caddyfile ]]; then
-        echo -e "${RED}❌ 未检测到 Caddy 配置文件，请先运行 [13] 安装 Caddy！${PLAIN}"
-        read -n 1 -s -r -p "按任意键返回..."
-        return
-    fi
-    
-    local domain
-    local port
-    read -p "👉 请输入解析后的域名 (如 panel.site.com): " domain
-    read -p "👉 请输入面板 HTTPS 本地映射端口 (如 40000): " port
-    
-    if [[ -z "$domain" || -z "$port" ]]; then
-        echo -e "${RED}❌ 域名或端口不能为空！已取消操作。${PLAIN}"
-    else
-        # 备份配置
-        local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
-        cp /etc/caddy/Caddyfile "$backup_file"
-        
-        # 直接追加跳过验证的逻辑块
-        cat <<EOF >> /etc/caddy/Caddyfile
-
-$domain {
-    reverse_proxy https://127.0.0.1:$port {
-        transport http {
-            tls_insecure_skip_verify
-        }
-    }
-}
-EOF
-        # 引入 caddy validate 语法检查机制
-        if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
-            systemctl reload caddy >/dev/null 2>&1
-            echo -e "${GREEN}✅ 独立跳过验证配置已成功追加到 Caddyfile 并生效！${PLAIN}"
-        else
-            echo -e "${RED}❌ 致命错误：追加的配置导致语法错误！${PLAIN}"
-            echo -e "${YELLOW}正在回滚配置以防止网站整体宕机...${PLAIN}"
-            mv "$backup_file" /etc/caddy/Caddyfile
-        fi
     fi
     read -n 1 -s -r -p "按任意键继续..."
 }
