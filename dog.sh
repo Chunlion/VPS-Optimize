@@ -796,7 +796,7 @@ add_port_monitoring() {
 
     echo
     echo "请选择统计模式:"
-    echo "1. 双向流量统计 (总流量 = in*2 + out*2)"
+    echo "1. 双向流量统计 (总流量 = in + out)"
     echo "2. 单向流量统计 (仅统计出站)"
     read -p "请选择(回车默认1) [1-2]: " billing_choice
 
@@ -963,14 +963,15 @@ add_nftables_rules() {
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
     local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
     local batch_cmds=""
-    
+
+    # ====== 最小动刀修复：新增幂等性校验，彻底拦截 Cron 的重复规则注入 ======
     local port_safe=$(echo "$port" | tr '-' '_')
     if nft list chain $family $table_name output 2>/dev/null | grep -q "port_${port_safe}_out"; then
         return 0
     fi
-    
+    # ====================================================================
+
     if is_port_range "$port"; then
-        local port_safe=$(echo "$port" | tr '-' '_')
         local mark_id=$(generate_port_range_mark "$port")
         if [ "$billing_mode" = "double" ]; then
             nft list counter $family $table_name "port_${port_safe}_in" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_in\n"
