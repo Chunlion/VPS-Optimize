@@ -38,13 +38,14 @@ is_debian() {
 is_redhat() {
     [[ "$OS" =~ centos|rhel|rocky|almalinux|fedora ]] || [[ "$OS_LIKE" =~ centos|rhel|fedora ]]
 }
-# --- 全局包管理抽象 (DRY 优化) ---
+# --- 全局包管理抽象  ---
 install_pkg() {
     local pkgs="$*"
     if is_debian; then
+        # 使用 apt-get 代替 apt，消除 "stable CLI interface" 警告 
         export DEBIAN_FRONTEND=noninteractive
-        apt update -qq >/dev/null 2>&1
-        apt install -y -qq $pkgs >/dev/null 2>&1
+        apt-get update -qq >/dev/null 2>&1
+        apt-get install -y -qq $pkgs >/dev/null 2>&1
         unset DEBIAN_FRONTEND
     elif is_redhat; then
         yum install -y -q $pkgs >/dev/null 2>&1
@@ -55,7 +56,7 @@ remove_pkg() {
     local pkgs="$*"
     if is_debian; then
         export DEBIAN_FRONTEND=noninteractive
-        apt purge -y -qq $pkgs >/dev/null 2>&1
+        apt-get purge -y -qq $pkgs >/dev/null 2>&1
         unset DEBIAN_FRONTEND
     elif is_redhat; then
         yum remove -y -q $pkgs >/dev/null 2>&1
