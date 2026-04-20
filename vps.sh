@@ -1161,7 +1161,7 @@ func_tcp_tune() {
 }
 
 # ---------------------------------------------------------
-# 8. 智能内存调优 (全自动匹配 + 保底 Swap 防假死版)
+# 8. 智能内存调优 (重构版：安全接管与 DRY 化)
 # ---------------------------------------------------------
 func_zram_swap() {
     clear
@@ -1185,77 +1185,101 @@ func_zram_swap() {
         elif [[ "$mem" -le 4096 ]]; then choice=2
         else choice=3
         fi
-        echo -e "${YELLOW}💡 您按下了回车，系统已根据本机内存 (${mem}MB) 自动选择：[ 挡位 $choice ]${PLAIN}"
+        echo -e "${YELLOW}💡 系统已根据本机内存 (${mem}MB) 自动选择：[ 挡位 $choice ]${PLAIN}"
         sleep 1.5
     fi
     
-    if is_debian; then
-        echo -e "${CYAN}▶ 正在进行第一阶段：整理底层磁盘 Swap (保留 512M 保底防假死)...${PLAIN}"
-        
-        swapoff -a >/dev/null 2>&1
-        rm -f /swapfile /swap.img /var/swap /var/swapfile >/dev/null 2>&1
-        
-        # [核心修复]: 创建一个 512M 的保底 Swap 阻止 OOM
-        dd if=/dev/zero of=/swapfile bs=1M count=512 status=none
-        chmod 600 /swapfile
-        mkswap /swapfile >/dev/null 2>&1
-        swapon /swapfile >/dev/null 2>&1
-        
-        # 确保 fstab 中挂载保底 Swap
-        sed -i -E 's/^([^#].*[[:space:]]swap[[:space:]].*)/#\1/' /etc/fstab
-        echo "/swapfile none swap sw 0 0" >> /etc/fstab
-        echo -e "${GREEN}✅ 已建立 512M 极小磁盘 Swap 作为系统崩溃的最后防线！${PLAIN}"
-        
-        echo -e "${CYAN}▶ 正在进行第二阶段：配置 ZRAM 内存压缩引擎...${PLAIN}"
-        apt update -qq >/dev/null 2>&1
-        apt install zram-tools -y -qq >/dev/null 2>&1
-        modprobe zram >/dev/null 2>&1
-        
-        local zram_conf="/etc/default/zramswap"
-        local percent=70
-        local swap_val=60
-        
-        case $choice in
-            1) percent=100; swap_val=100 ;;
-            2) percent=70; swap_val=60 ;;
-            3) percent=25; swap_val=10 ;;
-            *) percent=70; swap_val=60 ;;
-        esac
-        
-        cat <<EOF > "$zram_conf"
+    # 提早阻断，避免非 Debian 机器运行破坏性 Swap 卸载指令
+    if ! is_debian; then
+        echo -e "${RED}❌ 抱歉，当前系统并非 Debian/Ubuntu 衍生系，暂不支持自动化 ZRAM 调优。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    echo -e "${CYAN}▶ 正在进行第一阶段：整理底层磁盘 Swap (保留 512M 保底防假死)...${PLAIN}"
+    
+    swapoff -a >/dev/null 2>&1
+    rm -f /swapfile /swap.img /var/swap /var/swapfile >/dev/null 2>&1
+    
+    dd if=/dev/zero of=/swapfile bs=1M count=512 status=none
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null 2>&1
+    swapon /swapfile >/dev/null 2>&1
+    
+    sed -i -E 's/^([^#].*[[:space:]]swap[[:space:]].*)/#\1/' /etc/fstab
+    echo "/swapfile none swap sw 0 0" >> /etc/fstab
+    echo -e "${GREEN}✅ 已建立 512M 极小磁盘 Swap 作为系统崩溃的最后防线！${PLAIN}"
+    
+    echo -e "${CYAN}▶ 正在进行第二阶段：配置 ZRAM 内存压缩引擎...${PLAIN}"
+    
+    # 核心修改：使用全局包安装器
+    install_pkg zram-tools
+    modprobe zram >/dev/null 2>&1
+    
+    local zram_conf="/etc/default/zramswap"
+    local percent=70
+    local swap_val=60
+    
+    case $choice in
+        1) percent=100; swap_val=100 ;;
+        2) percent=70; swap_val=60 ;;
+        3) percent=25; swap_val=10 ;;
+        *) percent=70; swap_val=60 ;;
+    esac
+    
+    cat <<EOF > "$zram_conf"
 ALGO=zstd
 PERCENT=$percent
 PRIORITY=100
 EOF
-        
-        systemctl daemon-reload >/dev/null 2>&1
-        systemctl enable zramswap >/dev/null 2>&1
-        systemctl restart zramswap >/dev/null 2>&1
-        
-        if ! grep -q zram /proc/swaps; then
-            if command -v zramswap >/dev/null 2>&1; then
-                zramswap start >/dev/null 2>&1
-            elif [[ -x /usr/sbin/zramswap ]]; then
-                /usr/sbin/zramswap start >/dev/null 2>&1
-            fi
+    
+    systemctl daemon-reload >/dev/null 2>&1
+    systemctl enable zramswap >/dev/null 2>&1
+    systemctl restart zramswap >/dev/null 2>&1
+    
+    if ! grep -q zram /proc/swaps; then
+        if command -v zramswap >/dev/null 2>&1; then
+            zramswap start >/dev/null 2>&1
+        elif [[ -x /usr/sbin/zramswap ]]; then
+            /usr/sbin/zramswap start >/dev/null 2>&1
         fi
-        
-        echo "vm.swappiness = $swap_val" > /etc/sysctl.d/99-zram-swappiness.conf
-        sysctl -p /etc/sysctl.d/99-zram-swappiness.conf >/dev/null 2>&1
-        
-        if grep -q zram /proc/swaps; then
-            echo -e "${GREEN}✅ ZRAM 调优落地完成！(已设置: ${percent}% 压缩比, ${swap_val} 交换倾向)${PLAIN}"
-        else
-            echo -e "${RED}❌ 警告：配置已下发，但系统内核似乎拒绝挂载 ZRAM。${PLAIN}"
-        fi
+    fi
+    
+    echo "vm.swappiness = $swap_val" > /etc/sysctl.d/99-zram-swappiness.conf
+    sysctl -p /etc/sysctl.d/99-zram-swappiness.conf >/dev/null 2>&1
+    
+if grep -q zram /proc/swaps; then
+        echo -e "${GREEN}✅ ZRAM 调优落地完成！(已设置: ${percent}% 压缩比, ${swap_val} 交换倾向)${PLAIN}"
     else
-        echo -e "${RED}❌ 抱歉，当前系统并非 Debian/Ubuntu 衍生系，暂不支持自动化 ZRAM 调优。${PLAIN}"
+        echo -e "${RED}❌ 警告：内核拒绝挂载 ZRAM (常见于 LXC/OpenVZ 架构)。${PLAIN}"
+        echo -e "${CYAN}▶ 正在启动降级优化方案：传统 Swap 扩容与内核防假死调优...${PLAIN}"
+        
+        # 1. 扩容保底 Swap：从 512M 升级至 1024M (1GB)
+        swapoff /swapfile >/dev/null 2>&1
+        rm -f /swapfile >/dev/null 2>&1
+        dd if=/dev/zero of=/swapfile bs=1M count=1024 status=none
+        chmod 600 /swapfile
+        mkswap /swapfile >/dev/null 2>&1
+        swapon /swapfile >/dev/null 2>&1
+        
+        # 2. 注入降级专属的内核内存管理参数
+        # swappiness=30 : 只有内存比较吃紧时才使用较慢的磁盘 Swap
+        # vfs_cache_pressure=50 : 降低系统回收目录/文件系统缓存的频率，提高小鸡流畅度
+        # overcommit_memory=1 : 允许内核分配超过物理内存的空间，防止 Redis/数据库 等服务在启动时被直接 Kill
+        cat <<EOF > /etc/sysctl.d/99-fallback-mem.conf
+vm.swappiness = 30
+vm.vfs_cache_pressure = 50
+vm.overcommit_memory = 1
+EOF
+        sysctl -p /etc/sysctl.d/99-fallback-mem.conf >/dev/null 2>&1
+        
+        echo -e "${GREEN}✅ 降级优化落地：已动态扩充 1GB 磁盘 Swap，并激活保守内存回收策略！${PLAIN}"
     fi
     
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 9. 换装 Cloud/KVM 优化内核 (防卡死与架构硬拦截版)
+# 9. 换装 Cloud/KVM 优化内核 (重构版：架构强拦截与 DRY 化)
 # ---------------------------------------------------------
 func_install_kernel() {
     clear
@@ -1275,44 +1299,49 @@ func_install_kernel() {
 
     # [拦截机制 2]：CPU 架构判断
     if [[ "$(uname -m)" != "x86_64" ]]; then
-        echo -e "${RED}❌ 致命错误：当前脚本的优化包仅支持 x86_64 (amd64) 架构！${PLAIN}"
+        echo -e "${RED}❌ 致命错误：优化内核仅支持 x86_64 (amd64) 架构，本机为 $(uname -m)！${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
 
-    # 设置非交互环境变量，防止 apt 安装内核时弹出 GRUB 紫色界面导致脚本假死
-    export DEBIAN_FRONTEND=noninteractive
+    # [拦截机制 3]：状态防呆 (判断是否已经是目标内核)
+    if uname -r | grep -qE "kvm|cloud"; then
+        echo -e "${GREEN}✅ 系统当前已运行 KVM/Cloud 优化内核 ($(uname -r))，无需重复安装！${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    echo -e "${CYAN}▶ 正在为您静默安装专属优化内核...${PLAIN}"
 
     if [[ "$OS" == "debian" ]]; then
-        echo -e "${CYAN}👉 检测到 Debian，正在静默安装 linux-image-cloud-amd64...${PLAIN}"
-        if apt-get update -qq && apt-get install -yq linux-image-cloud-amd64; then
+        install_pkg linux-image-cloud-amd64
+        # 结果校验
+        if dpkg -l | grep -q "linux-image-cloud-amd64"; then
             update-grub >/dev/null 2>&1
             echo -e "${GREEN}✅ Debian Cloud 内核安装并已刷新引导！${PLAIN}"
         else
-            echo -e "${RED}❌ 安装失败！请检查系统源。${PLAIN}"
+            echo -e "${RED}❌ 安装失败！请检查系统源或网络。${PLAIN}"
         fi
         
     elif [[ "$OS" == "ubuntu" ]]; then
-        echo -e "${CYAN}👉 检测到 Ubuntu，正在静默安装 linux-image-kvm...${PLAIN}"
-        if apt-get update -qq && apt-get install -yq linux-image-kvm; then
+        install_pkg linux-image-kvm
+        # 结果校验
+        if dpkg -l | grep -q "linux-image-kvm"; then
             update-grub >/dev/null 2>&1
             echo -e "${GREEN}✅ Ubuntu KVM 内核安装并已刷新引导！${PLAIN}"
         else
-            echo -e "${RED}❌ 安装失败！请检查系统源。${PLAIN}"
+            echo -e "${RED}❌ 安装失败！请检查系统源或网络。${PLAIN}"
         fi
         
     else
         echo -e "${RED}❌ 抱歉，换装优化内核功能目前仅支持 Debian 和 Ubuntu 系统！${PLAIN}"
     fi
-    
-    # 清理环境变量，防止影响后续面板操作
-    unset DEBIAN_FRONTEND
 
     echo -e "------------------------------------------------"
-    echo -e "${YELLOW}⚠️ 核心生效指引 (请务必阅读)：${PLAIN}"
-    echo -e "1. 新内核已经躺在您的硬盘里了。请先选择菜单的 ${RED}[21] 重启服务器${PLAIN}。"
-    echo -e "2. Linux 默认优先启动版本号最高的内核。如果重启后执行 ${GREEN}uname -r${PLAIN} 发现依然是旧版 (未带 kvm/cloud 字样)；"
-    echo -e "3. 请进入面板 ${GREEN}[12] 卸载冗余旧内核${PLAIN}，把带有 generic 字样的旧内核全删掉，再次重启即可强制生效！"
+    echo -e "${YELLOW}⚠️ 核心生效指引：${PLAIN}"
+    echo -e "1. 新内核已就绪，请先选择菜单的 ${RED}[24] 重启服务器${PLAIN}。"
+    echo -e "2. 若重启后执行 ${GREEN}uname -r${PLAIN} 发现依然是旧版；"
+    echo -e "3. 请进入面板 ${GREEN}[12] 卸载冗余旧内核${PLAIN} 删掉旧版再次重启！"
     
     read -n 1 -s -r -p "按任意键返回..."
 }
@@ -1585,7 +1614,7 @@ EOF
     read -n 1 -s -r -p "按任意键返回..."
 }
 # ---------------------------------------------------------
-# 18. 面板救砖/重置 SSL
+# 18. 面板救砖/重置 SSL (DRY 优化 + 强健寻径)
 # ---------------------------------------------------------
 func_rescue_panel() {
     clear
@@ -1600,9 +1629,10 @@ func_rescue_panel() {
     read -p "❓ 确定要重置面板为 HTTP 模式吗？(y/n): " yn
     if [[ "$yn" =~ ^[Yy]$ ]]; then
         
-        # 确保 sqlite3 可用
+        # 核心修改：使用我们的全局极简包管理器！兼容了包名差异。
         if ! command -v sqlite3 >/dev/null 2>&1; then
-            if is_debian; then apt install sqlite3 -y >/dev/null; elif is_redhat; then yum install sqlite -y >/dev/null; fi
+            echo -e "${CYAN}▶ 正在安装 sqlite3 数据库工具...${PLAIN}"
+            install_pkg sqlite3 sqlite
         fi
         
         # 停服务
@@ -1617,7 +1647,7 @@ func_rescue_panel() {
         if [[ -n "$db_path" ]]; then
             sqlite3 "$db_path" "update settings set value='' where key='webCertFile';" 2>/dev/null
             sqlite3 "$db_path" "update settings set value='' where key='webKeyFile';" 2>/dev/null
-            echo -e "${GREEN}✅ 数据库底层的 SSL 证书路径已成功抹除！${PLAIN}"
+            echo -e "${GREEN}✅ 数据库底层的 SSL 证书路径已成功抹除！(操作数据库: $db_path)${PLAIN}"
         else
             echo -e "${RED}❌ 未检测到常见面板的数据库文件！您可能没有安装 x-ui 或 x-panel。${PLAIN}"
         fi
