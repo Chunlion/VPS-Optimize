@@ -234,7 +234,7 @@ format_bytes() {
     local bytes=$1
     if ! [[ "$bytes" =~ ^[0-9]+$ ]]; then bytes=0; fi
     if [ $bytes -ge 1073741824 ]; then
-        local gb=$(echo "scale=2; $bytes / 1073741824" | bc)
+        local gb=$(awk "BEGIN {printf \"%.2f\", $bytes / 1073741824}")
         echo "${gb}GB"
     elif [ $bytes -ge 1048576 ]; then
         local mb=$(echo "scale=2; $bytes / 1048576" | bc)
@@ -964,56 +964,34 @@ add_nftables_rules() {
     local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
     local batch_cmds=""
 
-    # ====== 最小动刀修复：新增幂等性校验，彻底拦截 Cron 的重复规则注入 ======
     local port_safe=$(echo "$port" | tr '-' '_')
     if nft list chain $family $table_name output 2>/dev/null | grep -q "port_${port_safe}_out"; then
         return 0
     fi
-    # ====================================================================
 
+    # 智能处理匹配表达式（兼容单端口和端口段）
+    local match_expr="dport $port"
+    local sport_expr="sport $port"
     if is_port_range "$port"; then
         local mark_id=$(generate_port_range_mark "$port")
-        if [ "$billing_mode" = "double" ]; then
-            nft list counter $family $table_name "port_${port_safe}_in" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_in\n"
-            nft list counter $family $table_name "port_${port_safe}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_out\n"
-            
-            batch_cmds+="add rule $family $table_name input tcp dport $port meta mark set $mark_id counter name \"port_${port_safe}_in\"\n"
-            batch_cmds+="add rule $family $table_name input udp dport $port meta mark set $mark_id counter name \"port_${port_safe}_in\"\n"
-            batch_cmds+="add rule $family $table_name forward tcp dport $port meta mark set $mark_id counter name \"port_${port_safe}_in\"\n"
-            batch_cmds+="add rule $family $table_name forward udp dport $port meta mark set $mark_id counter name \"port_${port_safe}_in\"\n"
-            
-            batch_cmds+="add rule $family $table_name output tcp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
-            batch_cmds+="add rule $family $table_name output udp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
-            batch_cmds+="add rule $family $table_name forward tcp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
-            batch_cmds+="add rule $family $table_name forward udp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
-        else
-            nft list counter $family $table_name "port_${port_safe}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_out\n"
-            batch_cmds+="add rule $family $table_name output tcp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
-            batch_cmds+="add rule $family $table_name output udp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
-            batch_cmds+="add rule $family $table_name forward tcp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
-            batch_cmds+="add rule $family $table_name forward udp sport $port meta mark set $mark_id counter name \"port_${port_safe}_out\"\n"
-        fi
-    else
-        if [ "$billing_mode" = "double" ]; then
-            nft list counter $family $table_name "port_${port}_in" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port}_in\n"
-            nft list counter $family $table_name "port_${port}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port}_out\n"
-            
-            batch_cmds+="add rule $family $table_name input tcp dport $port counter name \"port_${port}_in\"\n"
-            batch_cmds+="add rule $family $table_name input udp dport $port counter name \"port_${port}_in\"\n"
-            batch_cmds+="add rule $family $table_name forward tcp dport $port counter name \"port_${port}_in\"\n"
-            batch_cmds+="add rule $family $table_name forward udp dport $port counter name \"port_${port}_in\"\n"
-            
-            batch_cmds+="add rule $family $table_name output tcp sport $port counter name \"port_${port}_out\"\n"
-            batch_cmds+="add rule $family $table_name output udp sport $port counter name \"port_${port}_out\"\n"
-            batch_cmds+="add rule $family $table_name forward tcp sport $port counter name \"port_${port}_out\"\n"
-            batch_cmds+="add rule $family $table_name forward udp sport $port counter name \"port_${port}_out\"\n"
-        else
-            nft list counter $family $table_name "port_${port}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port}_out\n"
-            batch_cmds+="add rule $family $table_name output tcp sport $port counter name \"port_${port}_out\"\n"
-            batch_cmds+="add rule $family $table_name output udp sport $port counter name \"port_${port}_out\"\n"
-            batch_cmds+="add rule $family $table_name forward tcp sport $port counter name \"port_${port}_out\"\n"
-            batch_cmds+="add rule $family $table_name forward udp sport $port counter name \"port_${port}_out\"\n"
-        fi
+        match_expr="dport $port meta mark set $mark_id"
+        sport_expr="sport $port meta mark set $mark_id"
+    fi
+
+    # 1. 注入出站规则 (Out & Forward Out - 单双向共用)
+    nft list counter $family $table_name "port_${port_safe}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_out\n"
+    for proto in tcp udp; do
+        batch_cmds+="add rule $family $table_name output $proto $sport_expr counter name \"port_${port_safe}_out\"\n"
+        batch_cmds+="add rule $family $table_name forward $proto $sport_expr counter name \"port_${port_safe}_out\"\n"
+    done
+
+    # 2. 注入入站规则 (In & Forward In - 仅双向模式)
+    if [ "$billing_mode" = "double" ]; then
+        nft list counter $family $table_name "port_${port_safe}_in" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_in\n"
+        for proto in tcp udp; do
+            batch_cmds+="add rule $family $table_name input $proto $match_expr counter name \"port_${port_safe}_in\"\n"
+            batch_cmds+="add rule $family $table_name forward $proto $match_expr counter name \"port_${port_safe}_in\"\n"
+        done
     fi
 
     if [ -n "$batch_cmds" ]; then
@@ -1267,55 +1245,29 @@ apply_nftables_quota() {
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
     local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
     local quota_bytes=$(parse_size_to_bytes "$quota_limit")
+    
     local current_traffic=($(get_nftables_counter_data "$port"))
-    local current_input=${current_traffic[0]}
-    local current_output=${current_traffic[1]}
-    local current_total=$(calculate_total_traffic "$current_input" "$current_output" "$billing_mode")
+    local current_total=$(calculate_total_traffic "${current_traffic[0]}" "${current_traffic[1]}" "$billing_mode")
     local batch_cmds=""
 
-    if is_port_range "$port"; then
-        local port_safe=$(echo "$port" | tr '-' '_')
-        local quota_name="port_${port_safe}_quota"
-        nft delete quota $family $table_name $quota_name 2>/dev/null || true
-        nft add quota $family $table_name $quota_name { over $quota_bytes bytes used $current_total bytes } 2>/dev/null || true
+    local port_safe=$(echo "$port" | tr '-' '_')
+    local quota_name="port_${port_safe}_quota"
+    
+    nft delete quota $family $table_name $quota_name 2>/dev/null || true
+    nft add quota $family $table_name $quota_name { over $quota_bytes bytes used $current_total bytes } 2>/dev/null || true
 
-        if [ "$billing_mode" = "double" ]; then
-            batch_cmds+="insert rule $family $table_name input tcp dport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name input udp dport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward tcp dport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward udp dport $port quota name \"$quota_name\" drop\n"
-            
-            batch_cmds+="insert rule $family $table_name output tcp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name output udp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward tcp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward udp sport $port quota name \"$quota_name\" drop\n"
-        else
-            batch_cmds+="insert rule $family $table_name output tcp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name output udp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward tcp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward udp sport $port quota name \"$quota_name\" drop\n"
-        fi
-    else
-        local quota_name="port_${port}_quota"
-        nft delete quota $family $table_name $quota_name 2>/dev/null || true
-        nft add quota $family $table_name $quota_name { over $quota_bytes bytes used $current_total bytes } 2>/dev/null || true
+    # 出站与转发过滤规则 (单双向共有)
+    for proto in tcp udp; do
+        batch_cmds+="insert rule $family $table_name output $proto sport $port quota name \"$quota_name\" drop\n"
+        batch_cmds+="insert rule $family $table_name forward $proto sport $port quota name \"$quota_name\" drop\n"
+    done
 
-        if [ "$billing_mode" = "double" ]; then
-            batch_cmds+="insert rule $family $table_name input tcp dport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name input udp dport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward tcp dport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward udp dport $port quota name \"$quota_name\" drop\n"
-            
-            batch_cmds+="insert rule $family $table_name output tcp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name output udp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward tcp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward udp sport $port quota name \"$quota_name\" drop\n"
-        else
-            batch_cmds+="insert rule $family $table_name output tcp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name output udp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward tcp sport $port quota name \"$quota_name\" drop\n"
-            batch_cmds+="insert rule $family $table_name forward udp sport $port quota name \"$quota_name\" drop\n"
-        fi
+    # 入站与转发入过滤规则 (仅双向)
+    if [ "$billing_mode" = "double" ]; then
+        for proto in tcp udp; do
+            batch_cmds+="insert rule $family $table_name input $proto dport $port quota name \"$quota_name\" drop\n"
+            batch_cmds+="insert rule $family $table_name forward $proto dport $port quota name \"$quota_name\" drop\n"
+        done
     fi
 
     if [ -n "$batch_cmds" ]; then
@@ -1493,12 +1445,12 @@ check_and_run_daily_resets() {
     # 利用 GNU date 推算下个月第一天的前一天，完美获取当月最后一天
     local last_day=$(TZ='Asia/Shanghai' date -d "$current_ym-01 +1 month -1 day" +%d | sed 's/^0//')
     
-    local active_ports=($(get_active_ports 2>/dev/null || true))
-    for port in "${active_ports[@]}"; do
-        local quota_enabled=$(jq -r ".ports.\"$port\".quota.enabled // false" "$CONFIG_FILE")
-        local monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE")
-        local reset_day=$(jq -r ".ports.\"$port\".quota.reset_day // null" "$CONFIG_FILE")
-        
+    # 优化点：单次 jq 提取所有端口的核心配置项，极大降低系统开销
+    local all_port_configs=$(jq -r '.ports | to_entries[] | "\(.key) \(.value.quota.enabled // false) \(.value.quota.monthly_limit // "unlimited") \(.value.quota.reset_day // "null")"' "$CONFIG_FILE" 2>/dev/null || true)
+    
+    if [ -z "$all_port_configs" ]; then return 0; fi
+
+    echo "$all_port_configs" | while read -r port quota_enabled monthly_limit reset_day; do
         if [ "$quota_enabled" = "true" ] && [ "$monthly_limit" != "unlimited" ] && [ "$reset_day" != "null" ]; then
             local should_reset=false
             
@@ -1744,7 +1696,8 @@ run_tg_listener() {
         if [[ -n "$latest_id" && "$latest_id" =~ ^[0-9]+$ ]]; then
             offset=$((latest_id + 1))
             
-            echo "$updates" | jq -c '.result[]' | while read -r update; do
+            # 优化点：使用进程替换取代管道符，防止 while 陷在 subshell 内
+            while read -r update; do
                 local msg_text=$(echo "$update" | jq -r '.message.text // empty')
                 local chat_id=$(echo "$update" | jq -r '.message.chat.id // empty')
                 
@@ -1777,7 +1730,7 @@ run_tg_listener() {
                             -d "chat_id=${chat_id}" -d "text=❌ 未找到端口 ${port} 的监控数据" > /dev/null
                     fi
                 fi
-            done
+            done < <(echo "$updates" | jq -c '.result[]' 2>/dev/null || true)
         fi
         sleep 1
     done
