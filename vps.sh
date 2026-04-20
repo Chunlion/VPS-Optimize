@@ -1241,8 +1241,8 @@ func_port_dog() {
 
 func_xpanel() {
     clear
-    echo -e "${CYAN}👉 正在拉取 xeefei 的官方 x-panel 一键脚本...${PLAIN}"
-    bash <(curl -Ls https://raw.githubusercontent.com/xeefei/x-panel/master/install.sh)
+    echo -e "${CYAN}👉 正在拉取 mhsanaei 的官方 x-panel 一键脚本...${PLAIN}"
+    bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
 }
 
 func_singbox() {
@@ -1381,7 +1381,7 @@ main_menu() {
         echo -e " ${GREEN}13.${PLAIN} 极速硬件探针     ${YELLOW}(全屏显示本机配置与实时负载)${PLAIN}"
         echo -e " ${GREEN}14.${PLAIN} 综合测试合集     ${YELLOW}(融合怪/流媒体/IP欺诈质量/路由)${PLAIN}"
         echo -e " ${GREEN}15.${PLAIN} 端口流量监控     ${YELLOW}(拉取并运行 Port Traffic Dog)${PLAIN}"
-        echo -e " ${GREEN}16.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板，调用 xeefei 脚本)${PLAIN}"
+        echo -e " ${GREEN}16.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板，调用 mhsanaei 脚本)${PLAIN}"
         echo -e " ${GREEN}17.${PLAIN} 安装 Sing-box    ${YELLOW}(甬哥四合一强大官方一键脚本)${PLAIN}"
         echo -e " ${GREEN}18.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的备用手段)${PLAIN}"
         echo -e " ${GREEN}19.${PLAIN} ${CYAN}${BOLD}DNS流媒体解锁${PLAIN}    ${YELLOW}(Alice DNS 区域分流解锁脚本)${PLAIN}"
