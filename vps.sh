@@ -454,7 +454,7 @@ func_env_install() {
                 ;;
             8) wget -N https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh && bash menu.sh ;;
             9) wget -N git.io/aria2.sh && chmod +x aria2.sh && ./aria2.sh ;;
-            10) 10) wget -O install.sh http://v7.hostcli.com/install/install-ubuntu_6.0.sh && bash install.sh ;;
+            10) wget -O install.sh http://v7.hostcli.com/install/install-ubuntu_6.0.sh && bash install.sh ;;
             11) bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh) ;;
             12) bash <(wget -qO- https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh) ;;
             13)
@@ -737,7 +737,7 @@ func_caddy_add_insecure() {
     # 确保主文件包含模块化目录
     grep -q "import conf.d/\*" /etc/caddy/Caddyfile || echo -e "\nimport conf.d/*" >> /etc/caddy/Caddyfile
         echo -e "${RED}❌ 域名或端口不能为空！已取消操作。${PLAIN}"
-    else
+    
         mkdir -p /etc/caddy/conf.d
         local conf_file="/etc/caddy/conf.d/${domain}.caddy"
         
