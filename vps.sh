@@ -119,7 +119,7 @@ EOF
     read -n 1 -s -r -p "按任意键返回主菜单..."
 }
 # ---------------------------------------------------------
-# ★ 防火墙专属管理面板 (新增功能)
+# ★ 防火墙专属管理面板 (安全追加模式 + DRY 优化)
 # ---------------------------------------------------------
 func_firewall_manage() {
     while true; do
@@ -144,7 +144,7 @@ func_firewall_manage() {
 
         echo -e "当前防火墙状态: [ $str_fw ]"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 开启防火墙并智能放行当前活动端口${PLAIN}"
+        echo -e "${GREEN}  1. 开启防火墙并智能追加当前活动端口${PLAIN} ${YELLOW}(不覆盖原有规则)${PLAIN}"
         echo -e "${GREEN}  2. 手动添加允许列表 (放行新端口)${PLAIN}"
         echo -e "${GREEN}  3. 从列表中删除端口 (取消放行)${PLAIN}"
         echo -e "${GREEN}  4. 查看当前已放行端口列表${PLAIN}"
@@ -160,24 +160,29 @@ func_firewall_manage() {
             1)
                 echo -e "${CYAN}👉 正在嗅探活动端口并配置防火墙...${PLAIN}"
                 local active_ports
+                # 增加了双引号保护，防止变量展开导致的语法错误
                 active_ports=$(ss -tuln | grep -E 'LISTEN|UNCONN' | grep -v '127.0.0.1' | awk '{print $5}' | rev | cut -d: -f1 | rev | sort -nu | grep -E '^[0-9]+$')
+                
                 if [[ "$OS" =~ debian|ubuntu ]]; then
-                    apt install ufw -y >/dev/null 2>&1
-                    ufw --force reset >/dev/null 2>&1
+                    install_pkg ufw
+                    # 【核心修复】：删除了危险的 ufw --force reset
+                    # 设置默认策略（这不会影响已经存在的 allow 规则）
                     ufw default deny incoming >/dev/null 2>&1
                     ufw default allow outgoing >/dev/null 2>&1
+                    
                     for p in $active_ports; do ufw allow "$p" >/dev/null 2>&1; done
                     ufw --force enable >/dev/null 2>&1
                 else
-                    yum install firewalld -y >/dev/null 2>&1
+                    install_pkg firewalld
                     systemctl enable --now firewalld >/dev/null 2>&1
+                    
                     for p in $active_ports; do
                         firewall-cmd --permanent --add-port="${p}/tcp" >/dev/null 2>&1
                         firewall-cmd --permanent --add-port="${p}/udp" >/dev/null 2>&1
                     done
                     firewall-cmd --reload >/dev/null 2>&1
                 fi
-                echo -e "${GREEN}✅ 防火墙已成功开启！自动放行了以下端口: $(echo $active_ports | tr '\n' ' ')${PLAIN}"
+                echo -e "${GREEN}✅ 防火墙已成功配置！已为您安全追加放行了以下端口: $(echo "$active_ports" | tr '\n' ' ')${PLAIN}"
                 sleep 2
                 ;;
             2)
@@ -233,17 +238,11 @@ func_firewall_manage() {
                 echo -e "${GREEN}✅ 防火墙已彻底禁用！${PLAIN}"
                 sleep 2
                 ;;
-            0) 
-                break 
-                ;;
-            *)
-                echo -e "${RED}❌ 无效的选择！${PLAIN}"
-                sleep 1
-                ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
         esac
     done
 }
-
 # ---------------------------------------------------------
 # 2. 系统高级开关 (已修复显示丢失问题)
 # ---------------------------------------------------------
