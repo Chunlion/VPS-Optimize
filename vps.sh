@@ -89,12 +89,16 @@ create_shortcut() {
 # ---------------------------------------------------------
 func_base_init() {
     clear
-    echo -e "${CYAN}👉 正在安装基础工具、限制日志并开启基础 BBR...${PLAIN}"
+    echo -e "${CYAN}👉 正在更新系统软件包、安装基础工具、限制日志并开启基础 BBR...${PLAIN}"
     
-    # 优雅调用全局安装函数
+    # 更新系统软件包并优雅调用全局安装函数
     if is_debian; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -y && apt-get upgrade -y
+        unset DEBIAN_FRONTEND
         install_pkg curl wget git nano unzip htop iptables iproute2 sqlite3 jq
     elif is_redhat; then
+        yum update -y
         install_pkg curl wget git nano unzip htop iptables iproute epel-release sqlite jq
     fi
 
