@@ -111,6 +111,7 @@ EOF
     timedatectl set-timezone Asia/Shanghai > /dev/null 2>&1
     
     # 强制激活基础 BBR
+    modprobe tcp_bbr >/dev/null 2>&1 # 先主动唤醒/加载 BBR 内核模块
     echo "net.core.default_qdisc = fq" > /etc/sysctl.d/99-bbr-init.conf
     echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.d/99-bbr-init.conf
     sysctl -p /etc/sysctl.d/99-bbr-init.conf > /dev/null 2>&1
@@ -119,7 +120,7 @@ EOF
     read -n 1 -s -r -p "按任意键返回主菜单..."
 }
 # ---------------------------------------------------------
-# ★ 防火墙专属管理面板 (安全追加模式 + DRY 优化)
+# ★ 防火墙专属管理面板 (安全追加模式 + 批量多端口支持)
 # ---------------------------------------------------------
 func_firewall_manage() {
     while true; do
@@ -145,8 +146,8 @@ func_firewall_manage() {
         echo -e "当前防火墙状态: [ $str_fw ]"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 开启防火墙并智能追加当前活动端口${PLAIN} ${YELLOW}(不覆盖原有规则)${PLAIN}"
-        echo -e "${GREEN}  2. 手动添加允许列表 (放行新端口)${PLAIN}"
-        echo -e "${GREEN}  3. 从列表中删除端口 (取消放行)${PLAIN}"
+        echo -e "${GREEN}  2. 手动添加允许列表 (支持批量/范围)${PLAIN}"
+        echo -e "${GREEN}  3. 从列表中删除端口 (支持批量/范围)${PLAIN}"
         echo -e "${GREEN}  4. 查看当前已放行端口列表${PLAIN}"
         echo -e "${RED}  5. 禁用并彻底关闭防火墙${PLAIN}"
         echo -e "------------------------------------------------"
@@ -160,13 +161,10 @@ func_firewall_manage() {
             1)
                 echo -e "${CYAN}👉 正在嗅探活动端口并配置防火墙...${PLAIN}"
                 local active_ports
-                # 增加了双引号保护，防止变量展开导致的语法错误
                 active_ports=$(ss -tuln | grep -E 'LISTEN|UNCONN' | grep -v '127.0.0.1' | awk '{print $5}' | rev | cut -d: -f1 | rev | sort -nu | grep -E '^[0-9]+$')
                 
                 if [[ "$OS" =~ debian|ubuntu ]]; then
                     install_pkg ufw
-                    # 【核心修复】：删除了危险的 ufw --force reset
-                    # 设置默认策略（这不会影响已经存在的 allow 规则）
                     ufw default deny incoming >/dev/null 2>&1
                     ufw default allow outgoing >/dev/null 2>&1
                     
@@ -187,35 +185,73 @@ func_firewall_manage() {
                 ;;
             2)
                 local add_p
-                read -p "👉 请输入要放行的端口号 (如 443): " add_p
-                if [[ -n "$add_p" && "$add_p" =~ ^[0-9]+$ ]]; then
-                    if [[ "$OS" =~ debian|ubuntu ]]; then
-                        ufw allow "$add_p" >/dev/null 2>&1
-                    else
-                        firewall-cmd --permanent --add-port="${add_p}/tcp" >/dev/null 2>&1
-                        firewall-cmd --permanent --add-port="${add_p}/udp" >/dev/null 2>&1
+                echo -e "${YELLOW}💡 支持格式：单端口(80)、多端口(80,443)、端口范围(8000:9000 或 8000-9000)${PLAIN}"
+                read -p "👉 请输入要放行的端口号: " add_p
+                
+                # 放宽正则，允许数字、逗号、冒号和减号
+                if [[ -n "$add_p" && "$add_p" =~ ^[0-9]+([,:-][0-9]+)*$ ]]; then
+                    # 将输入的逗号分隔符转换为数组，按个循环处理
+                    IFS=',' read -ra PORT_ARRAY <<< "$add_p"
+                    for p in "${PORT_ARRAY[@]}"; do
+                        if [[ "$OS" =~ debian|ubuntu ]]; then
+                            # UFW 语法转换：将减号强转为冒号
+                            local p_ufw="${p//-/:}"
+                            if [[ "$p_ufw" == *":"* ]]; then
+                                ufw allow "$p_ufw/tcp" >/dev/null 2>&1
+                                ufw allow "$p_ufw/udp" >/dev/null 2>&1
+                            else
+                                ufw allow "$p_ufw" >/dev/null 2>&1
+                            fi
+                        else
+                            # Firewalld 语法转换：将冒号强转为减号
+                            local p_fwd="${p//:/-}"
+                            firewall-cmd --permanent --add-port="${p_fwd}/tcp" >/dev/null 2>&1
+                            firewall-cmd --permanent --add-port="${p_fwd}/udp" >/dev/null 2>&1
+                        fi
+                    done
+                    
+                    if [[ ! "$OS" =~ debian|ubuntu ]]; then
                         firewall-cmd --reload >/dev/null 2>&1
                     fi
-                    echo -e "${GREEN}✅ 端口 $add_p 已成功添加至允许列表！${PLAIN}"
+                    
+                    echo -e "${GREEN}✅ 端口规则 [$add_p] 已成功添加至允许列表！${PLAIN}"
                 else
-                    echo -e "${RED}❌ 无效的端口号！${PLAIN}"
+                    echo -e "${RED}❌ 无效的输入格式！请确保只包含数字、逗号、减号或冒号。${PLAIN}"
                 fi
                 sleep 2
                 ;;
             3)
                 local del_p
-                read -p "👉 请输入要删除放行的端口号 (如 8080): " del_p
-                if [[ -n "$del_p" && "$del_p" =~ ^[0-9]+$ ]]; then
-                    if [[ "$OS" =~ debian|ubuntu ]]; then
-                        ufw delete allow "$del_p" >/dev/null 2>&1
-                    else
-                        firewall-cmd --permanent --remove-port="${del_p}/tcp" >/dev/null 2>&1
-                        firewall-cmd --permanent --remove-port="${del_p}/udp" >/dev/null 2>&1
+                echo -e "${YELLOW}💡 支持格式：单端口(80)、多端口(80,443)、端口范围(8000:9000 或 8000-9000)${PLAIN}"
+                read -p "👉 请输入要删除放行的端口号: " del_p
+                
+                if [[ -n "$del_p" && "$del_p" =~ ^[0-9]+([,:-][0-9]+)*$ ]]; then
+                    IFS=',' read -ra PORT_ARRAY <<< "$del_p"
+                    for p in "${PORT_ARRAY[@]}"; do
+                        if [[ "$OS" =~ debian|ubuntu ]]; then
+                            # UFW 语法转换：将减号强转为冒号
+                            local p_ufw="${p//-/:}"
+                            if [[ "$p_ufw" == *":"* ]]; then
+                                ufw delete allow "$p_ufw/tcp" >/dev/null 2>&1
+                                ufw delete allow "$p_ufw/udp" >/dev/null 2>&1
+                            else
+                                ufw delete allow "$p_ufw" >/dev/null 2>&1
+                            fi
+                        else
+                            # Firewalld 语法转换：将冒号强转为减号
+                            local p_fwd="${p//:/-}"
+                            firewall-cmd --permanent --remove-port="${p_fwd}/tcp" >/dev/null 2>&1
+                            firewall-cmd --permanent --remove-port="${p_fwd}/udp" >/dev/null 2>&1
+                        fi
+                    done
+                    
+                    if [[ ! "$OS" =~ debian|ubuntu ]]; then
                         firewall-cmd --reload >/dev/null 2>&1
                     fi
-                    echo -e "${GREEN}✅ 端口 $del_p 已从允许列表中移除！${PLAIN}"
+                    
+                    echo -e "${GREEN}✅ 端口规则 [$del_p] 已成功从允许列表中移除！${PLAIN}"
                 else
-                    echo -e "${RED}❌ 无效的端口号！${PLAIN}"
+                    echo -e "${RED}❌ 无效的输入格式！请确保只包含数字、逗号、减号或冒号。${PLAIN}"
                 fi
                 sleep 2
                 ;;
