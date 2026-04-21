@@ -737,7 +737,7 @@ func_caddy_add_insecure() {
     # 确保主文件包含模块化目录
     grep -q "import conf.d/\*" /etc/caddy/Caddyfile || echo -e "\nimport conf.d/*" >> /etc/caddy/Caddyfile
         echo -e "${RED}❌ 域名或端口不能为空！已取消操作。${PLAIN}"
-    else
+    
         mkdir -p /etc/caddy/conf.d
         local conf_file="/etc/caddy/conf.d/${domain}.caddy"
         
