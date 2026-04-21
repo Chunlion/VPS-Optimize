@@ -1440,7 +1440,7 @@ func_test_scripts() {
         echo -e "${GREEN}  1. YABS 硬件性能测试  ${YELLOW}  2. 融合怪终极详细测速${PLAIN}"
         echo -e "${GREEN}  3. SuperBench 综合测速${YELLOW}  4. bench.sh 基础测试${PLAIN}"
         echo -e "${GREEN}  5. 流媒体解锁详细检测 ${YELLOW}  6. 三网回程路由测试${PLAIN}"
-        echo -e "${GREEN}  7. IP 质量与欺诈度检测${PLAIN}"
+        echo -e "${GREEN}  7. IP 质量与欺诈度检测${YELLOW}  8.NodeSeek综合测试{PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -1455,6 +1455,7 @@ func_test_scripts() {
             5) bash <(curl -L -s check.unlock.media) ;;
             6) curl https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh -sSf | sh ;;
             7) bash <(curl -Ls IP.Check.Place) ;;
+            8）bash <(curl -sL https://run.NodeQuality.com) ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
         esac
@@ -1480,7 +1481,7 @@ func_xpanel() {
 
 func_singbox() {
     clear
-    echo -e "${CYAN}👉 正在拉取勇哥的 Sing-box 四合一脚本...${PLAIN}"
+    echo -e "${CYAN}👉 正在拉取甬哥的 Sing-box 四合一脚本...${PLAIN}"
     bash <(curl -fsSL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh)
 }
 
