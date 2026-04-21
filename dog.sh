@@ -1893,7 +1893,7 @@ EOF
 
     echo -e "${GREEN}✅ 部署成功！机器人已在后台常驻运行。${NC}"
     echo -e "💡 提示: 请确保在 @BotFather 关闭了机器人的 Group Privacy (Turn OFF)"
-    echo -e "现在可以在 TG 群聊发送 ${YELLOW}/t 端口号${NC} 试试看！"
+    echo -e "现在可发送 ${YELLOW}/t 端口号${NC}、${YELLOW}/all${NC}、${YELLOW}/yday${NC}、${YELLOW}/trend${NC}、${YELLOW}/day YYYY-MM-DD${NC}"
     echo
     read -p "按回车键返回..."
     manage_notifications
@@ -1947,6 +1947,152 @@ manage_display_mode() {
     show_main_menu
 }
 
+tg_send_message() {
+    local token="$1"
+    local chat_id="$2"
+    local text="$3"
+    local parse_mode="${4:-HTML}"
+
+    if [ -n "$parse_mode" ]; then
+        curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" \
+            --data-urlencode "chat_id=${chat_id}" \
+            --data-urlencode "text=${text}" \
+            --data-urlencode "parse_mode=${parse_mode}" >/dev/null 2>&1 || true
+    else
+        curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" \
+            --data-urlencode "chat_id=${chat_id}" \
+            --data-urlencode "text=${text}" >/dev/null 2>&1 || true
+    fi
+}
+
+build_tg_help_message() {
+    cat <<'EOF'
+<b>端口流量狗 TG 指令</b>
+/t 端口           查询单端口实时流量
+/all              查询全部端口实时汇总
+/yday             查询昨日日报
+/trend            查询近7日趋势
+/day YYYY-MM-DD   查询指定日期日报
+/help             查看帮助
+EOF
+}
+
+build_tg_port_report() {
+    local port="$1"
+
+    if ! jq -e ".ports.\"$port\"" "$CONFIG_FILE" >/dev/null 2>&1; then
+        echo "❌ 未找到端口 ${port} 的监控数据"
+        return 0
+    fi
+
+    local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
+    local traffic_data=($(get_nftables_counter_data "$port"))
+    local in_b=${traffic_data[0]:-0}
+    local out_b=${traffic_data[1]:-0}
+    local raw_total=$((in_b + out_b))
+    local billed_total=$(calculate_total_traffic "$in_b" "$out_b" "$billing_mode")
+    local mode_label="单向计费"
+    [ "$billing_mode" = "double" ] && mode_label="双向计费"
+
+    cat <<EOF
+<b>端口流量实时报告</b>
+监听端口: <code>${port}</code>
+上行流量: <code>$(format_bytes "$in_b")</code>
+下行流量: <code>$(format_bytes "$out_b")</code>
+真实总量: <b>$(format_bytes "$raw_total")</b>
+计费总量: <b>$(format_bytes "$billed_total")</b>
+计费逻辑: <code>${mode_label}</code>
+查询时间: $(get_beijing_time '+%Y-%m-%d %H:%M:%S')
+EOF
+}
+
+build_tg_all_ports_report() {
+    local active_ports=($(get_active_ports 2>/dev/null || true))
+    if [ ${#active_ports[@]} -eq 0 ]; then
+        echo "当前暂无监控端口"
+        return 0
+    fi
+
+    local total_raw=0
+    local total_billed=0
+    local report="<b>全部端口实时流量汇总</b>"
+
+    for port in "${active_ports[@]}"; do
+        local traffic_data=($(get_nftables_counter_data "$port"))
+        local in_b=${traffic_data[0]:-0}
+        local out_b=${traffic_data[1]:-0}
+        local raw_total=$((in_b + out_b))
+        local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
+        local billed_total=$(calculate_total_traffic "$in_b" "$out_b" "$billing_mode")
+
+        total_raw=$((total_raw + raw_total))
+        total_billed=$((total_billed + billed_total))
+        report+=$'\n'
+        report+="端口 <code>${port}</code> | 真实: $(format_bytes "$raw_total") | 计费: $(format_bytes "$billed_total")"
+    done
+
+    report+=$'\n'
+    report+="真实合计: <b>$(format_bytes "$total_raw")</b>"
+    report+=$'\n'
+    report+="计费合计: <b>$(format_bytes "$total_billed")</b>"
+    report+=$'\n'
+    report+="查询时间: $(get_beijing_time '+%Y-%m-%d %H:%M:%S')"
+    echo "$report"
+}
+
+build_tg_day_report() {
+    local day_key="$1"
+    ensure_daily_usage_files
+
+    if ! jq -e --arg day "$day_key" '.days[$day]' "$DAILY_USAGE_FILE" >/dev/null 2>&1; then
+        echo "${day_key} 暂无日报数据"
+        return 0
+    fi
+
+    local total_raw=$(jq -r --arg day "$day_key" '.days[$day].total_raw // 0' "$DAILY_USAGE_FILE")
+    local total_billed=$(jq -r --arg day "$day_key" '.days[$day].total_billed // 0' "$DAILY_USAGE_FILE")
+    local report="<b>${day_key} 日报</b>"
+    report+=$'\n'
+    report+="真实总量: <b>$(format_bytes "$total_raw")</b>"
+    report+=$'\n'
+    report+="计费总量: <b>$(format_bytes "$total_billed")</b>"
+
+    local ports=($(jq -r --arg day "$day_key" '.days[$day].ports | keys[]?' "$DAILY_USAGE_FILE" 2>/dev/null | sort -n))
+    if [ ${#ports[@]} -gt 0 ]; then
+        for port in "${ports[@]}"; do
+            local raw=$(jq -r --arg day "$day_key" --arg port "$port" '.days[$day].ports[$port].raw // 0' "$DAILY_USAGE_FILE")
+            local billed=$(jq -r --arg day "$day_key" --arg port "$port" '.days[$day].ports[$port].billed // 0' "$DAILY_USAGE_FILE")
+            report+=$'\n'
+            report+="端口 <code>${port}</code> | 真实: $(format_bytes "$raw") | 计费: $(format_bytes "$billed")"
+        done
+    fi
+
+    echo "$report"
+}
+
+build_tg_7days_report() {
+    ensure_daily_usage_files
+    local sum_raw=0
+    local sum_billed=0
+    local report="<b>近7日趋势报表</b>"
+
+    for ((i=6; i>=0; i--)); do
+        local day_key=$(get_beijing_time -d "-$i day" +%F)
+        local day_raw=$(jq -r --arg day "$day_key" '.days[$day].total_raw // 0' "$DAILY_USAGE_FILE" 2>/dev/null || echo "0")
+        local day_billed=$(jq -r --arg day "$day_key" '.days[$day].total_billed // 0' "$DAILY_USAGE_FILE" 2>/dev/null || echo "0")
+        sum_raw=$((sum_raw + day_raw))
+        sum_billed=$((sum_billed + day_billed))
+        report+=$'\n'
+        report+="${day_key} | 真实: $(format_bytes "$day_raw") | 计费: $(format_bytes "$day_billed")"
+    done
+
+    report+=$'\n'
+    report+="7日真实合计: <b>$(format_bytes "$sum_raw")</b>"
+    report+=$'\n'
+    report+="7日计费合计: <b>$(format_bytes "$sum_billed")</b>"
+    echo "$report"
+}
+
 # 优化6：TG后台守护进程数据容错，防止因为 API 返回错误而崩溃退出
 run_tg_listener() {
     local token=$(jq -r '.notifications.telegram.bot_token' "$CONFIG_FILE")
@@ -1977,33 +2123,56 @@ run_tg_listener() {
                     continue
                 fi
                 
-                if [[ "$msg_text" =~ ^/(traffic|t)[[:space:]]+([0-9]+(-[0-9]+)?)$ ]]; then
-                    local port="${BASH_REMATCH[2]}"
-                    
-                    if jq -e ".ports.\"$port\"" "$CONFIG_FILE" >/dev/null 2>&1; then
-                        local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
-                        local traffic_data=($(get_nftables_counter_data "$port"))
-                        local in_b=${traffic_data[0]:-0}
-                        local out_b=${traffic_data[1]:-0}
-                        local raw_total=$((in_b + out_b))
-                        local billed_total=$(calculate_total_traffic "$in_b" "$out_b" "$billing_mode")
-                      
-                        local reply="🛰️ <b>端口流量实时报告</b>%0A"
-                        reply+="────────────────%0A"
-                        reply+="🔌 <b>监听端口</b>：<code>${port}</code>%0A"
-                        reply+="📈 <b>上行流量</b>：<code>$(format_bytes $in_b)</code> (入口)%0A"
-                        reply+="📉 <b>下行流量</b>：<code>$(format_bytes $out_b)</code> (出口)%0A"
-                        reply+="────────────────%0A"
-                        reply+="📊 <b>真实总量</b>：<b>$(format_bytes $raw_total)</b>%0A"
-                        reply+="💰 <b>计费总量</b>：<b>$(format_bytes $billed_total)</b>%0A"
-                        reply+="⚙️ <b>计费逻辑</b>：<code>$([[ "$billing_mode" == "double" ]] && echo "双向计费" || echo "单向计费")</code>%0A"
-                        reply+="⏰ <b>查询时间</b>：$(get_beijing_time '+%Y-%m-%d %H:%M:%S')"
+                if [[ "$msg_text" =~ ^/(start|help)(@[A-Za-z0-9_]+)?[[:space:]]*$ ]]; then
+                    tg_send_message "$token" "$chat_id" "$(build_tg_help_message)"
+                    continue
+                fi
 
-                        curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" -d "chat_id=${chat_id}" -d "text=${reply}" -d "parse_mode=HTML" > /dev/null
-                    else
-                        curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" \
-                            -d "chat_id=${chat_id}" -d "text=❌ 未找到端口 ${port} 的监控数据" > /dev/null
+                if [[ "$msg_text" =~ ^/(traffic|t)(@[A-Za-z0-9_]+)?[[:space:]]+([0-9]+(-[0-9]+)?)[[:space:]]*$ ]]; then
+                    local port="${BASH_REMATCH[3]}"
+                    local reply
+                    reply=$(build_tg_port_report "$port")
+                    tg_send_message "$token" "$chat_id" "$reply"
+                    continue
+                fi
+
+                if [[ "$msg_text" =~ ^/(all|ta|total|sum)(@[A-Za-z0-9_]+)?[[:space:]]*$ ]]; then
+                    local reply
+                    reply=$(build_tg_all_ports_report)
+                    tg_send_message "$token" "$chat_id" "$reply"
+                    continue
+                fi
+
+                if [[ "$msg_text" =~ ^/(yday|yesterday)(@[A-Za-z0-9_]+)?[[:space:]]*$ ]]; then
+                    local day_key=$(get_beijing_time -d "yesterday" +%F)
+                    local reply
+                    reply=$(build_tg_day_report "$day_key")
+                    tg_send_message "$token" "$chat_id" "$reply"
+                    continue
+                fi
+
+                if [[ "$msg_text" =~ ^/(trend|seven)(@[A-Za-z0-9_]+)?[[:space:]]*$ ]]; then
+                    local reply
+                    reply=$(build_tg_7days_report)
+                    tg_send_message "$token" "$chat_id" "$reply"
+                    continue
+                fi
+
+                if [[ "$msg_text" =~ ^/day(@[A-Za-z0-9_]+)?[[:space:]]+([0-9]{4}-[0-9]{2}-[0-9]{2})[[:space:]]*$ ]]; then
+                    local day_input="${BASH_REMATCH[2]}"
+                    if ! get_beijing_time -d "$day_input" +%F >/dev/null 2>&1; then
+                        tg_send_message "$token" "$chat_id" "❌ 日期格式无效，请使用 YYYY-MM-DD"
+                        continue
                     fi
+                    local reply
+                    reply=$(build_tg_day_report "$day_input")
+                    tg_send_message "$token" "$chat_id" "$reply"
+                    continue
+                fi
+
+                if [[ "$msg_text" =~ ^/ ]]; then
+                    tg_send_message "$token" "$chat_id" "未识别的命令，发送 /help 查看可用指令。" ""
+                    continue
                 fi
             done < <(echo "$updates" | jq -c '.result[]' 2>/dev/null || true)
         fi
@@ -2013,7 +2182,7 @@ run_tg_listener() {
 
 manage_notifications() {
     echo -e "${BLUE}=== 通知管理 ===${NC}"
-    echo "1. 部署 Telegram 交互式查询机器人 (支持在群里 /t 查流量)"
+    echo "1. 部署 Telegram 交互式查询机器人 (支持 /t /all /yday /trend /day)"
     echo "2. 停止并卸载 Telegram 交互式机器人"
     echo "3. 原版企业 wx 机器人通知配置 (保留接口)"
     echo "0. 返回主菜单"
