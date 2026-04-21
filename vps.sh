@@ -1062,9 +1062,8 @@ func_bbr_manage() {
     wget -O tcpx.sh "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh" && chmod +x tcpx.sh && ./tcpx.sh
 }
 
-
 # ---------------------------------------------------------
-# 7. 动态 TCP 调优 (带正则净化与事务回滚机制)
+# 7. 动态 TCP 调优 (修复版：放宽正则以兼容多值与特殊符号)
 # ---------------------------------------------------------
 func_tcp_tune() {
     clear
@@ -1099,8 +1098,8 @@ func_tcp_tune() {
             break
         fi
         
-        # 【防砖机制】：严格正则过滤。只允许空行、#注释、或 a.b.c = 1 格式的键值对
-        if [[ -z "$line" || "$line" =~ ^# || "$line" =~ ^[a-zA-Z0-9_.-]+[[:space:]]*=[[:space:]]*[a-zA-Z0-9_.-]+$ ]]; then
+        # 【核心修复】：放宽等号右侧的值校验，允许包含空格(如 tcp_rmem) 和特殊符号(如 %)
+        if [[ -z "$line" || "$line" =~ ^# || "$line" =~ ^[a-zA-Z0-9_.-]+[[:space:]]*=[[:space:]]*.+$ ]]; then
             echo "$line" >> "$temp_f"
             # 标记确实写入了有效参数，而不是只敲了几个回车
             [[ -n "$line" && ! "$line" =~ ^# ]] && has_content=true
