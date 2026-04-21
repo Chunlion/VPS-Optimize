@@ -137,7 +137,7 @@ func_firewall_manage() {
             fw_status=$(systemctl is-active firewalld 2>/dev/null)
         fi
         
-        if [[ "$fw_status" == "active" || -n "$fw_status" ]]; then 
+        if [[ "$fw_status" == *"active"* ]]; then 
             str_fw="${GREEN}运行中${PLAIN}"
         else 
             str_fw="${RED}已关闭 / 未配置${PLAIN}"
@@ -321,8 +321,7 @@ func_system_tweaks() {
         echo -e "${GREEN}  2. IPv4 出站优先级增强${PLAIN}   当前: [ $str_ipv4_first ]"
         echo -e "${GREEN}  3. 管理 被人Ping状态${PLAIN}     当前: [ $str_ping ]"
         echo -e "${GREEN}  4. 管理 自动安全更新${PLAIN}     当前: [ $str_update ]"
-        echo -e "${GREEN}  5. 防火墙深度管理面板${PLAIN}  (放行/端口控制/开关)"
-        echo -e "${GREEN}  6. 彻底清理系统垃圾${PLAIN}      (日志/缓存/无用包)"
+        echo -e "${GREEN}  5. 彻底清理系统垃圾${PLAIN}      (日志/缓存/无用包)"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -378,11 +377,7 @@ func_system_tweaks() {
                     else systemctl disable --now dnf-automatic.timer >/dev/null 2>&1; fi
                     echo -e "${GREEN}✅ 自动更新已关闭${PLAIN}"
                 fi; sleep 1 ;;
-            5)
-                # 调用独立的防火墙面板
-                func_firewall_manage
-                ;;
-            6) 
+            5) 
                 echo -e "${CYAN}👉 正在深度清理系统垃圾...${PLAIN}"
                 if [[ "$OS" =~ debian|ubuntu ]]; then 
                     apt autoremove --purge -y >/dev/null 2>&1
@@ -459,7 +454,7 @@ func_env_install() {
                 ;;
             8) wget -N https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh && bash menu.sh ;;
             9) wget -N git.io/aria2.sh && chmod +x aria2.sh && ./aria2.sh ;;
-            10) wget -O install.sh http://v7.hostcli.com/install/install-ubuntu_6.0.sh && sudo bash install.sh ;;
+            10) 10) wget -O install.sh http://v7.hostcli.com/install/install-ubuntu_6.0.sh && bash install.sh ;;
             11) bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh) ;;
             12) bash <(wget -qO- https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh) ;;
             13)
@@ -508,8 +503,7 @@ $domain {
 }
 EOF
                         else
-                            cat <<EOF >> /etc/caddy/Caddyfile
-
+                            cat <<EOF > "/etc/caddy/conf.d/${domain}.caddy"
 $domain {
     reverse_proxy localhost:$port
 }
@@ -554,9 +548,9 @@ func_view_caddy_cert() {
         return
     fi
     
-    # 提取 Caddyfile 中的域名 (排除注释，简单匹配)
+    # 提取 Caddyfile 与 conf.d 中的域名 (排除注释，简单匹配)
     local domains
-    domains=$(grep -vE '^[[:space:]]*#' /etc/caddy/Caddyfile | grep '{' | awk '{print $1}' | tr -d '{')
+    domains=$(cat /etc/caddy/Caddyfile /etc/caddy/conf.d/*.caddy 2>/dev/null | grep -vE '^[[:space:]]*#' | grep '{' | awk '{print $1}' | tr -d '{')
     
     if [[ -z "$domains" ]]; then
         echo -e "${YELLOW}⚠️ Caddyfile 中没有配置明确的域名。${PLAIN}"
@@ -668,7 +662,7 @@ func_caddy_delete_cert() {
         local caddy_found=false
         for cp in "${caddy_paths[@]}"; do
             if [[ -d "$cp" ]]; then
-                local target=$(find "$cp" -type d -name "*${domain}*" -print -quit 2>/dev/null)
+                local target=$(find "$cp" -type d -name "${domain}" -print -quit 2>/dev/null)
                 if [[ -n "$target" ]]; then
                     rm -rf "$target"
                     caddy_found=true
@@ -709,10 +703,8 @@ func_caddy_delete_cert() {
 
         echo -e "------------------------------------------------"
         echo -e "${GREEN}🎉 清理彻底完成！当前域名环境已处于出厂真空状态。${PLAIN}"
-        
-        read -n 1 -s -r -p "按任意键继续..."
     else
-        echo -e "${BLUE}端口未做更改。${PLAIN}"
+        echo -e "${BLUE}操作已取消。${PLAIN}"
     fi
     read -n 1 -s -r -p "按任意键继续..."
 }
@@ -736,7 +728,14 @@ func_caddy_add_insecure() {
     read -p "👉 请输入解析后的域名 (如 panel.site.com): " domain
     read -p "👉 请输入面板 HTTPS 本地映射端口 (如 40000): " port
     
-    if [[ -z "$domain" || -z "$port" ]]; then
+    if [[ -z "$domain" || -z "$port" || ! "$port" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}❌ 域名为空或端口格式错误！已取消操作。${PLAIN}"
+        read -n 1 -s -r -p "按任意键继续..."
+        return
+    fi
+    
+    # 确保主文件包含模块化目录
+    grep -q "import conf.d/\*" /etc/caddy/Caddyfile || echo -e "\nimport conf.d/*" >> /etc/caddy/Caddyfile
         echo -e "${RED}❌ 域名或端口不能为空！已取消操作。${PLAIN}"
     else
         mkdir -p /etc/caddy/conf.d
@@ -788,7 +787,7 @@ func_security() {
     if [[ "$final_p" != "$current_p" ]]; then
         
         # [严格检验] 端口合法性
-        if ! [[ "$final_p" =~ ^[0-9]+$ ]] || [ "$final_p" -lt 1 ] || [ "$final_p" -gt 65535 ]; then
+        if ! [[ "$final_p" =~ ^[0-9]+$ ]] || [ "$final_p" -lt 10000 ] || [ "$final_p" -gt 65535 ]; then
             echo -e "${RED}❌ 错误：无效的端口号！必须是 1-65535 之间的纯数字。${PLAIN}"
             read -n 1 -s -r -p "按任意键返回..."
             return
@@ -849,18 +848,23 @@ EOF
         
         # 7. 严格隔离的服务重启逻辑
         echo -e "${CYAN}▶ 正在重启底层 SSH 引擎...${PLAIN}"
+        local restart_ok=false
         if $use_socket; then
-            # 仅重启 socket，绝对不碰 sshd，防止 Address already in use 宕机
-            systemctl restart ssh.socket >/dev/null 2>&1
+            systemctl restart ssh.socket >/dev/null 2>&1 && restart_ok=true
         else
-            # 传统方式启动
-            systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
+            (systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null) && restart_ok=true
         fi
         
-        # 成功后清理备份
-        rm -f "$backup_file" 
-        
-        echo -e "${GREEN}✅ SSH 端口已成功更改为 $final_p 并自动放行！${PLAIN}"
+        if $restart_ok; then
+            rm -f "$backup_file" 
+            echo -e "${GREEN}✅ SSH 端口已成功更改为 $final_p 并自动放行！${PLAIN}"
+        else
+            echo -e "${RED}❌ 致命错误：重启 SSH 服务失败！正在回滚至原端口...${PLAIN}"
+            mv "$backup_file" /etc/ssh/sshd_config
+            $use_socket && systemctl restart ssh.socket >/dev/null 2>&1 || (systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null)
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        fi
         echo -e "${RED}${BOLD}======================================================${PLAIN}"
         echo -e "${YELLOW}⚠️ 终极保命提示：${PLAIN}"
         echo -e "现在的这扇 SSH 窗口【千万不要关闭】！"
@@ -893,7 +897,11 @@ func_fail2ban() {
     
     local f2b_status="${RED}未安装${PLAIN}"
     if command -v fail2ban-server >/dev/null 2>&1; then
-        f2b_status="${GREEN}已运行${PLAIN}"
+        if systemctl is-active --quiet fail2ban; then
+            f2b_status="${GREEN}已运行${PLAIN}"
+        else
+            f2b_status="${YELLOW}已停止${PLAIN}"
+        fi
     fi
     
     echo -e "当前 Fail2ban 状态: [ $f2b_status ]"
@@ -968,8 +976,8 @@ func_add_ssh_key() {
     if [[ -z "$ssh_key" ]]; then
         echo -e "${RED}❌ 输入为空，已取消操作。${PLAIN}"
     elif [[ "$ssh_key" == ssh-* || "$ssh_key" == ecdsa-* ]]; then
-        # 检查是否已经存在相同公钥
-        if grep -q "$ssh_key" ~/.ssh/authorized_keys; then
+        # 检查是否已经存在相同公钥 (采用绝对精确全行匹配)
+        if grep -q -F -x "$ssh_key" ~/.ssh/authorized_keys; then
             echo -e "${YELLOW}⚠️ 该公钥已存在于 ~/.ssh/authorized_keys 中，无需重复添加。${PLAIN}"
         else
             echo "$ssh_key" >> ~/.ssh/authorized_keys
@@ -1227,6 +1235,7 @@ func_zram_swap() {
     swapon /swapfile >/dev/null 2>&1
     
     sed -i -E 's/^([^#].*[[:space:]]swap[[:space:]].*)/#\1/' /etc/fstab
+    sed -i '\@^/swapfile@d' /etc/fstab
     echo "/swapfile none swap sw 0 0" >> /etc/fstab
     echo -e "${GREEN}✅ 已建立 512M 极小磁盘 Swap 作为系统崩溃的最后防线！${PLAIN}"
     
@@ -1407,8 +1416,8 @@ func_clean_kernel() {
     echo -e "${RED}⚠️ 系统已自动为您屏蔽正在运行的内核以及基础元包。${PLAIN}"
     echo -e "------------------------------------------------"
     
-    # 自动提取所有非当前的内核包存入数组 (排除元包)
-    mapfile -t old_kernels < <(dpkg -l | awk '/^ii  linux-image-[0-9]/ {print $2}' | grep -v "$current_k" | grep -v "linux-image-generic" | grep -v "linux-image-virtual" | grep -v "linux-image-kvm" | grep -v "linux-image-cloud-amd64")
+    # 自动提取所有非当前的内核包存入数组 (排除元包，采用高可用字段匹配)
+    mapfile -t old_kernels < <(dpkg -l | awk '$1 == "ii" && $2 ~ /^linux-image-[0-9]/ {print $2}' | grep -v "$current_k" | grep -vE "linux-image-(generic|virtual|kvm|cloud-amd64)")
 
     if [[ ${#old_kernels[@]} -eq 0 ]]; then
         echo -e "${GREEN}✅ 系统非常干净，没有发现需要清理的冗余旧内核。${PLAIN}"
@@ -1682,15 +1691,17 @@ func_rescue_panel() {
         systemctl stop x-panel >/dev/null 2>&1
         
         # 找数据库并擦除
-        local db_path=""
-        [[ -f "/etc/x-ui/x-ui.db" ]] && db_path="/etc/x-ui/x-ui.db"
-        [[ -f "/etc/x-panel/x-panel.db" ]] && db_path="/etc/x-panel/x-panel.db"
+        local db_found=false
+        for db_path in "/etc/x-ui/x-ui.db" "/etc/x-panel/x-panel.db"; do
+            if [[ -f "$db_path" ]]; then
+                sqlite3 "$db_path" "update settings set value='' where key='webCertFile';" 2>/dev/null
+                sqlite3 "$db_path" "update settings set value='' where key='webKeyFile';" 2>/dev/null
+                echo -e "${GREEN}✅ 数据库底层的 SSL 证书路径已成功抹除！(操作数据库: $db_path)${PLAIN}"
+                db_found=true
+            fi
+        done
         
-        if [[ -n "$db_path" ]]; then
-            sqlite3 "$db_path" "update settings set value='' where key='webCertFile';" 2>/dev/null
-            sqlite3 "$db_path" "update settings set value='' where key='webKeyFile';" 2>/dev/null
-            echo -e "${GREEN}✅ 数据库底层的 SSL 证书路径已成功抹除！(操作数据库: $db_path)${PLAIN}"
-        else
+        if ! $db_found; then
             echo -e "${RED}❌ 未检测到常见面板的数据库文件！您可能没有安装 x-ui 或 x-panel。${PLAIN}"
         fi
         
@@ -1772,16 +1783,482 @@ func_update_script() {
     clear
     echo -e "${CYAN}👉 正在从 GitHub 源地址拉取最新版本...${PLAIN}"
     if curl -sL "$UPDATE_URL" -o /tmp/cy_new.sh && bash -n /tmp/cy_new.sh; then
-        mv /tmp/cy_new.sh "$0"
-        chmod +x "$0"
-        cp "$0" /usr/local/bin/cy
+        mv /tmp/cy_new.sh /usr/local/bin/cy
+        chmod +x /usr/local/bin/cy
         echo -e "${GREEN}✅ 更新下载并覆盖完成！正在重启面板...${PLAIN}"
         sleep 1
-        exec bash "$0"
+        exec bash /usr/local/bin/cy
     else
         echo -e "${RED}❌ 更新失败！请检查您的网络连通性或 GitHub 地址是否正确。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
     fi
+}
+
+# ---------------------------------------------------------
+# 20. 一键运维预检
+# ---------------------------------------------------------
+func_preflight_check() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧪 一键运维预检 (网络/系统/资源/包管理)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    local ok_count=0
+    local warn_count=0
+    local err_count=0
+
+    echo -e "${YELLOW}▶ [1/8] 检查系统运行状态...${PLAIN}"
+    local sys_state
+    sys_state=$(systemctl is-system-running 2>/dev/null || echo "unknown")
+    if [[ "$sys_state" == "running" ]]; then
+        echo -e "${GREEN}✅ systemd 状态正常: $sys_state${PLAIN}"
+        ((ok_count++))
+    elif [[ "$sys_state" == "degraded" ]]; then
+        echo -e "${YELLOW}⚠️ systemd 状态降级: $sys_state${PLAIN}"
+        ((warn_count++))
+    else
+        echo -e "${RED}❌ systemd 状态异常: $sys_state${PLAIN}"
+        ((err_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [2/8] 检查公网连通性...${PLAIN}"
+    local ipv4
+    ipv4=$(curl -s4 --max-time 3 icanhazip.com 2>/dev/null)
+    if [[ -n "$ipv4" ]]; then
+        echo -e "${GREEN}✅ IPv4 连通正常: ${ipv4}${PLAIN}"
+        ((ok_count++))
+    else
+        echo -e "${YELLOW}⚠️ 未检测到公网 IPv4，可能为纯 IPv6 或网络受限${PLAIN}"
+        ((warn_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [3/8] 检查 DNS 解析能力...${PLAIN}"
+    if getent ahosts raw.githubusercontent.com >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ DNS 解析正常 (raw.githubusercontent.com)${PLAIN}"
+        ((ok_count++))
+    else
+        echo -e "${RED}❌ DNS 解析失败，后续远程脚本可能无法下载${PLAIN}"
+        ((err_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [4/8] 检查时间同步状态...${PLAIN}"
+    local ntp_sync
+    ntp_sync=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
+    if [[ "$ntp_sync" == "yes" ]]; then
+        echo -e "${GREEN}✅ NTP 时间同步正常${PLAIN}"
+        ((ok_count++))
+    else
+        echo -e "${YELLOW}⚠️ NTP 未同步，可能影响证书签发与仓库校验${PLAIN}"
+        ((warn_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [5/8] 检查磁盘空间...${PLAIN}"
+    local root_use
+    root_use=$(df -P / | awk 'NR==2 {gsub("%", "", $5); print $5}')
+    if [[ -n "$root_use" && "$root_use" -lt 80 ]]; then
+        echo -e "${GREEN}✅ 根分区使用率健康: ${root_use}%${PLAIN}"
+        ((ok_count++))
+    elif [[ -n "$root_use" && "$root_use" -lt 90 ]]; then
+        echo -e "${YELLOW}⚠️ 根分区使用率偏高: ${root_use}%${PLAIN}"
+        ((warn_count++))
+    else
+        echo -e "${RED}❌ 根分区使用率危险: ${root_use:-未知}%${PLAIN}"
+        ((err_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [6/8] 检查可用内存...${PLAIN}"
+    local mem_avail
+    mem_avail=$(free -m | awk '/^Mem:/ {print $7}')
+    [[ -z "$mem_avail" ]] && mem_avail=$(free -m | awk '/^Mem:/ {print $4}')
+    if [[ -n "$mem_avail" && "$mem_avail" -ge 300 ]]; then
+        echo -e "${GREEN}✅ 可用内存充足: ${mem_avail}MB${PLAIN}"
+        ((ok_count++))
+    elif [[ -n "$mem_avail" && "$mem_avail" -ge 150 ]]; then
+        echo -e "${YELLOW}⚠️ 可用内存偏低: ${mem_avail}MB${PLAIN}"
+        ((warn_count++))
+    else
+        echo -e "${RED}❌ 可用内存过低: ${mem_avail:-未知}MB${PLAIN}"
+        ((err_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [7/8] 检查包管理器占用...${PLAIN}"
+    local pkg_busy=false
+    if is_debian; then
+        pgrep -x apt >/dev/null 2>&1 && pkg_busy=true
+        pgrep -x apt-get >/dev/null 2>&1 && pkg_busy=true
+        pgrep -x dpkg >/dev/null 2>&1 && pkg_busy=true
+    elif is_redhat; then
+        pgrep -x yum >/dev/null 2>&1 && pkg_busy=true
+        pgrep -x dnf >/dev/null 2>&1 && pkg_busy=true
+        pgrep -x rpm >/dev/null 2>&1 && pkg_busy=true
+    fi
+
+    if $pkg_busy; then
+        echo -e "${YELLOW}⚠️ 检测到包管理器正在运行，建议稍后再安装软件${PLAIN}"
+        ((warn_count++))
+    else
+        echo -e "${GREEN}✅ 包管理器空闲，可安全执行安装任务${PLAIN}"
+        ((ok_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [8/8] 检查关键命令可用性...${PLAIN}"
+    local cmd_miss=()
+    command -v curl >/dev/null 2>&1 || cmd_miss+=("curl")
+    command -v wget >/dev/null 2>&1 || cmd_miss+=("wget")
+    command -v ss >/dev/null 2>&1 || cmd_miss+=("ss")
+    if [[ ${#cmd_miss[@]} -eq 0 ]]; then
+        echo -e "${GREEN}✅ 关键命令齐全${PLAIN}"
+        ((ok_count++))
+    else
+        echo -e "${RED}❌ 缺少关键命令: ${cmd_miss[*]}${PLAIN}"
+        ((err_count++))
+    fi
+
+    echo -e "------------------------------------------------"
+    echo -e "${CYAN}📌 预检汇总: ${GREEN}${ok_count} 正常${PLAIN} / ${YELLOW}${warn_count} 警告${PLAIN} / ${RED}${err_count} 异常${PLAIN}"
+    if [[ "$err_count" -gt 0 ]]; then
+        echo -e "${RED}⚠️ 建议先修复异常项，再进行环境部署和系统改造。${PLAIN}"
+    elif [[ "$warn_count" -gt 0 ]]; then
+        echo -e "${YELLOW}💡 当前可继续操作，但建议先处理警告项以提升稳定性。${PLAIN}"
+    else
+        echo -e "${GREEN}🎉 当前环境健康，可直接进行后续部署。${PLAIN}"
+    fi
+
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
+# ---------------------------------------------------------
+# 21. 配置备份与回滚中心
+# ---------------------------------------------------------
+func_backup_center() {
+    local backup_root="/opt/vps-panel-backups"
+    mkdir -p "$backup_root"
+
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🗂️ 配置备份与回滚中心${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "当前备份目录: ${YELLOW}${backup_root}${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 创建全量配置备份${PLAIN}"
+        echo -e "${GREEN}  2. 查看现有备份列表${PLAIN}"
+        echo -e "${GREEN}  3. 从备份一键回滚${PLAIN}"
+        echo -e "${GREEN}  4. 清理旧备份 (仅保留最近 5 份)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local b_choice
+        read -p "👉 请选择操作: " b_choice
+
+        case $b_choice in
+            1)
+                local ts
+                ts=$(date +%Y%m%d_%H%M%S)
+                local work_dir="/tmp/vps_backup_${ts}"
+                local tar_file="${backup_root}/backup_${ts}.tar.gz"
+                local copied=0
+
+                mkdir -p "$work_dir"
+
+                [[ -f /etc/ssh/sshd_config ]] && mkdir -p "$work_dir/etc/ssh" && cp -a /etc/ssh/sshd_config "$work_dir/etc/ssh/" && copied=1
+                [[ -f /etc/caddy/Caddyfile ]] && mkdir -p "$work_dir/etc/caddy" && cp -a /etc/caddy/Caddyfile "$work_dir/etc/caddy/" && copied=1
+                [[ -d /etc/caddy/conf.d ]] && mkdir -p "$work_dir/etc/caddy" && cp -a /etc/caddy/conf.d "$work_dir/etc/caddy/" && copied=1
+                [[ -f /etc/docker/daemon.json ]] && mkdir -p "$work_dir/etc/docker" && cp -a /etc/docker/daemon.json "$work_dir/etc/docker/" && copied=1
+                [[ -f /etc/fail2ban/jail.local ]] && mkdir -p "$work_dir/etc/fail2ban" && cp -a /etc/fail2ban/jail.local "$work_dir/etc/fail2ban/" && copied=1
+
+                if compgen -G "/etc/sysctl.d/*.conf" >/dev/null 2>&1; then
+                    mkdir -p "$work_dir/etc/sysctl.d"
+                    cp -a /etc/sysctl.d/*.conf "$work_dir/etc/sysctl.d/" 2>/dev/null
+                    copied=1
+                fi
+
+                if [[ "$copied" -eq 0 ]]; then
+                    rm -rf "$work_dir"
+                    echo -e "${YELLOW}⚠️ 未检测到可备份配置文件，已取消创建。${PLAIN}"
+                else
+                    if tar -czf "$tar_file" -C "$work_dir" . >/dev/null 2>&1; then
+                        echo -e "${GREEN}✅ 备份创建成功: ${tar_file}${PLAIN}"
+                    else
+                        echo -e "${RED}❌ 备份打包失败，请检查磁盘空间与权限。${PLAIN}"
+                    fi
+                    rm -rf "$work_dir"
+                fi
+                ;;
+
+            2)
+                local backups
+                backups=$(ls -1t "$backup_root"/backup_*.tar.gz 2>/dev/null)
+                if [[ -z "$backups" ]]; then
+                    echo -e "${YELLOW}⚠️ 当前没有任何备份文件。${PLAIN}"
+                else
+                    echo -e "${CYAN}👇 当前备份列表 (新 -> 旧)：${PLAIN}"
+                    local idx=1
+                    while IFS= read -r f; do
+                        echo -e "  ${GREEN}${idx}.${PLAIN} $(basename "$f")"
+                        idx=$((idx+1))
+                    done <<< "$backups"
+                fi
+                ;;
+
+            3)
+                mapfile -t backups < <(ls -1t "$backup_root"/backup_*.tar.gz 2>/dev/null)
+                if [[ ${#backups[@]} -eq 0 ]]; then
+                    echo -e "${YELLOW}⚠️ 没有可用备份，无法回滚。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+
+                echo -e "${CYAN}👇 可回滚备份如下：${PLAIN}"
+                for i in "${!backups[@]}"; do
+                    echo -e "  ${GREEN}$((i+1)).${PLAIN} $(basename "${backups[$i]}")"
+                done
+
+                local r_choice
+                read -p "👉 请输入要回滚的序号: " r_choice
+                if ! [[ "$r_choice" =~ ^[0-9]+$ ]] || [[ "$r_choice" -lt 1 ]] || [[ "$r_choice" -gt ${#backups[@]} ]]; then
+                    echo -e "${RED}❌ 无效序号，已取消回滚。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+
+                local target_file="${backups[$((r_choice-1))]}"
+                read -p "❓ 确认从 [$(basename "$target_file")] 回滚系统配置吗？(y/n): " yn
+                if [[ ! "$yn" =~ ^[Yy]$ ]]; then
+                    echo -e "${BLUE}已取消回滚操作。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+
+                local restore_dir="/tmp/vps_restore_$(date +%s)"
+                mkdir -p "$restore_dir"
+
+                if ! tar -xzf "$target_file" -C "$restore_dir" >/dev/null 2>&1; then
+                    rm -rf "$restore_dir"
+                    echo -e "${RED}❌ 备份解压失败，回滚中止。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+
+                [[ -f "$restore_dir/etc/ssh/sshd_config" ]] && cp -af "$restore_dir/etc/ssh/sshd_config" /etc/ssh/sshd_config
+                [[ -f "$restore_dir/etc/caddy/Caddyfile" ]] && cp -af "$restore_dir/etc/caddy/Caddyfile" /etc/caddy/Caddyfile
+                [[ -d "$restore_dir/etc/caddy/conf.d" ]] && mkdir -p /etc/caddy && cp -af "$restore_dir/etc/caddy/conf.d" /etc/caddy/
+                [[ -f "$restore_dir/etc/docker/daemon.json" ]] && mkdir -p /etc/docker && cp -af "$restore_dir/etc/docker/daemon.json" /etc/docker/daemon.json
+                [[ -f "$restore_dir/etc/fail2ban/jail.local" ]] && mkdir -p /etc/fail2ban && cp -af "$restore_dir/etc/fail2ban/jail.local" /etc/fail2ban/jail.local
+
+                if [[ -d "$restore_dir/etc/sysctl.d" ]]; then
+                    mkdir -p /etc/sysctl.d
+                    cp -af "$restore_dir/etc/sysctl.d/"*.conf /etc/sysctl.d/ 2>/dev/null
+                    sysctl --system >/dev/null 2>&1
+                fi
+
+                systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
+                systemctl restart caddy >/dev/null 2>&1
+                systemctl restart docker >/dev/null 2>&1
+                systemctl restart fail2ban >/dev/null 2>&1
+
+                rm -rf "$restore_dir"
+                echo -e "${GREEN}✅ 回滚完成！建议立即验证 SSH、反代和容器服务状态。${PLAIN}"
+                ;;
+
+            4)
+                mapfile -t backups < <(ls -1t "$backup_root"/backup_*.tar.gz 2>/dev/null)
+                if [[ ${#backups[@]} -le 5 ]]; then
+                    echo -e "${BLUE}当前备份数量不超过 5 份，无需清理。${PLAIN}"
+                else
+                    for i in "${!backups[@]}"; do
+                        if [[ "$i" -ge 5 ]]; then
+                            rm -f "${backups[$i]}"
+                        fi
+                    done
+                    echo -e "${GREEN}✅ 清理完成，仅保留最近 5 份备份。${PLAIN}"
+                fi
+                ;;
+
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
+        esac
+
+        echo ""
+        read -n 1 -s -r -p "按任意键继续..."
+    done
+}
+
+# ---------------------------------------------------------
+# 22. 服务健康总览
+# ---------------------------------------------------------
+func_health_dashboard() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}📈 服务健康总览${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    local ssh_state="${RED}未运行${PLAIN}"
+    if systemctl is-active --quiet sshd || systemctl is-active --quiet ssh; then
+        ssh_state="${GREEN}运行中${PLAIN}"
+    fi
+
+    local caddy_state="${RED}未安装/未运行${PLAIN}"
+    if command -v caddy >/dev/null 2>&1; then
+        if systemctl is-active --quiet caddy; then
+            caddy_state="${GREEN}运行中${PLAIN}"
+        else
+            caddy_state="${YELLOW}已安装但未运行${PLAIN}"
+        fi
+    fi
+
+    local docker_state="${RED}未安装/未运行${PLAIN}"
+    if command -v docker >/dev/null 2>&1; then
+        if systemctl is-active --quiet docker; then
+            docker_state="${GREEN}运行中${PLAIN}"
+        else
+            docker_state="${YELLOW}已安装但未运行${PLAIN}"
+        fi
+    fi
+
+    local f2b_state="${RED}未安装${PLAIN}"
+    if command -v fail2ban-server >/dev/null 2>&1; then
+        if systemctl is-active --quiet fail2ban; then
+            f2b_state="${GREEN}运行中${PLAIN}"
+        else
+            f2b_state="${YELLOW}已安装但未运行${PLAIN}"
+        fi
+    fi
+
+    local fw_state="${RED}未启用${PLAIN}"
+    if is_debian; then
+        if ufw status 2>/dev/null | grep -qwi active; then
+            fw_state="${GREEN}UFW 运行中${PLAIN}"
+        else
+            fw_state="${YELLOW}UFW 未启用${PLAIN}"
+        fi
+    else
+        if systemctl is-active --quiet firewalld; then
+            fw_state="${GREEN}Firewalld 运行中${PLAIN}"
+        else
+            fw_state="${YELLOW}Firewalld 未启用${PLAIN}"
+        fi
+    fi
+
+    local current_p
+    current_p=$(ss -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | head -n1)
+    [[ -z "$current_p" ]] && current_p=$(grep -i '^Port' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
+    current_p=${current_p:-22}
+
+    local failed_units
+    failed_units=$(systemctl --failed --no-legend 2>/dev/null | grep -c .)
+
+    echo -e "SSH 服务状态       : [ $ssh_state ]  监听端口: ${CYAN}${current_p}${PLAIN}"
+    echo -e "Caddy 服务状态     : [ $caddy_state ]"
+    echo -e "Docker 服务状态    : [ $docker_state ]"
+    echo -e "Fail2ban 服务状态  : [ $f2b_state ]"
+    echo -e "防火墙服务状态      : [ $fw_state ]"
+    echo -e "失败 systemd 单元数 : ${YELLOW}${failed_units}${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    echo -e "${CYAN}🔌 当前监听端口 Top 12${PLAIN}"
+    ss -tuln 2>/dev/null | grep -E 'LISTEN|UNCONN' | awk '{print $5}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | sort -nu | head -n 12 | tr '\n' ' '
+    echo ""
+
+    local cert_root="/var/lib/caddy/.local/share/caddy/certificates"
+    [[ ! -d "$cert_root" ]] && cert_root="/root/.local/share/caddy/certificates"
+
+    if [[ -d "$cert_root" ]]; then
+        local cert_total=0
+        local cert_warn=0
+        while IFS= read -r crt; do
+            local end_date ts_left days_left
+            end_date=$(openssl x509 -enddate -noout -in "$crt" 2>/dev/null | cut -d= -f2-)
+            if [[ -n "$end_date" ]]; then
+                ts_left=$(( $(date -d "$end_date" +%s 2>/dev/null) - $(date +%s) ))
+                days_left=$(( ts_left / 86400 ))
+                cert_total=$((cert_total+1))
+                if [[ "$days_left" -le 15 ]]; then
+                    cert_warn=$((cert_warn+1))
+                fi
+            fi
+        done < <(find "$cert_root" -type f -name "*.crt" 2>/dev/null)
+
+        echo -e "${CYAN}🔐 证书健康摘要${PLAIN}"
+        if [[ "$cert_total" -eq 0 ]]; then
+            echo -e "${BLUE}ℹ️ 未检索到可分析证书文件。${PLAIN}"
+        else
+            echo -e "证书总数: ${GREEN}${cert_total}${PLAIN} | 15天内到期: ${YELLOW}${cert_warn}${PLAIN}"
+        fi
+    fi
+
+    echo -e "------------------------------------------------"
+    echo -e "${YELLOW}💡 若失败单元 > 0，可执行: systemctl --failed 查看详情。${PLAIN}"
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
+# ---------------------------------------------------------
+# 23. 网络加速与内核优化菜单 (二级直达)
+# ---------------------------------------------------------
+func_net_kernel_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🚀 网络加速与内核优化${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${GREEN}  1. BBR 增强管理${PLAIN}      ${YELLOW}(调用 ylx2016 多核调优脚本)${PLAIN}"
+        echo -e "${GREEN}  2. 动态 TCP 调优${PLAIN}     ${YELLOW}(粘贴 Omnitt 参数并自动校验)${PLAIN}"
+        echo -e "${GREEN}  3. 智能内存调优${PLAIN}      ${YELLOW}(ZRAM + Swap 分级策略)${PLAIN}"
+        echo -e "${GREEN}  4. 换装轻量内核${PLAIN}      ${YELLOW}(Cloud/KVM 优化内核)${PLAIN}"
+        echo -e "${GREEN}  5. 卸载冗余旧内核${PLAIN}    ${YELLOW}(清理磁盘空间)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local nk_choice
+        read -p "👉 请选择操作: " nk_choice
+        case $nk_choice in
+            1) func_bbr_manage ;;
+            2) func_tcp_tune ;;
+            3) func_zram_swap ;;
+            4) func_install_kernel ;;
+            5) func_clean_kernel ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------
+# 24. 面板与节点部署菜单 (二级直达)
+# ---------------------------------------------------------
+func_panel_deploy_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🛰️ 面板与节点部署${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${GREEN}  1. 安装 x-panel${PLAIN}        ${YELLOW}(mhsanaei 官方脚本)${PLAIN}"
+        echo -e "${GREEN}  2. 安装 Sing-box${PLAIN}      ${YELLOW}(甬哥四合一脚本)${PLAIN}"
+        echo -e "${GREEN}  3. 安装 SublinkPro${PLAIN}    ${YELLOW}(订阅转换与管理面板)${PLAIN}"
+        echo -e "${GREEN}  4. 面板救砖/重置SSL${PLAIN}   ${YELLOW}(回退 HTTP 访问)${PLAIN}"
+        echo -e "${GREEN}  5. DNS 流媒体解锁${PLAIN}     ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
+        echo -e "${GREEN}  6. 防 IP 送中脚本${PLAIN}     ${YELLOW}(IP-Sentinel)${PLAIN}"
+        echo -e "${GREEN}  7. 端口流量监控${PLAIN}       ${YELLOW}(Port Traffic Dog)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local pd_choice
+        read -p "👉 请选择操作: " pd_choice
+        case $pd_choice in
+            1) func_xpanel ;;
+            2) func_singbox ;;
+            3) func_sublinkpro ;;
+            4) func_rescue_panel ;;
+            5) func_dns_unlock ;;
+            6) func_ip_sentinel ;;
+            7) func_port_dog ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
 }
 
 # ---------------------------------------------------------
@@ -1795,71 +2272,55 @@ main_menu() {
         echo -e " ${BOLD}🚀 VPS 全能控制面板 (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
-        echo -e " ${BOLD}${BLUE}▶ 基础与系统环境${PLAIN}"
-        echo -e "  ${GREEN}1.${PLAIN} 基础环境初始化   ${YELLOW}(必备工具/时区校准/激活BBR)${PLAIN}"
-        echo -e "  ${GREEN}2.${PLAIN} 系统高级开关     ${YELLOW}(IPv4优先/防火墙开关/禁Ping)${PLAIN}"
-        echo -e "  ${GREEN}3.${PLAIN} 常用环境与软件   ${YELLOW}(宝塔/Caddy/哪吒探针/WARP等)${PLAIN}"
-        
-        echo -e " ${BOLD}${BLUE}▶ 安全与网络优化${PLAIN}"
-        echo -e "  ${GREEN}4.${PLAIN} SSH 安全加固     ${YELLOW}(修改默认端口/防失联占用检查)${PLAIN}"
-        echo -e "  ${GREEN}5.${PLAIN} Fail2ban 防护    ${YELLOW}(自动检测SSH新端口防爆破封禁)${PLAIN}"
-        echo -e "  ${GREEN}6.${PLAIN} 添加 SSH 公钥    ${YELLOW}(配置密钥免密登录，提升安全性)${PLAIN}"
-        echo -e "  ${GREEN}7.${PLAIN} Docker 深度管理  ${YELLOW}(配置防穿透隔离机制/自动备份)${PLAIN}"
-        echo -e "  ${GREEN}8.${PLAIN} BBR 增强管理     ${YELLOW}(调用 ylx2016 终极多核调优脚本)${PLAIN}"
-        echo -e "  ${GREEN}9.${PLAIN} 动态 TCP 调优    ${YELLOW}(联动 Omnitt 生成防呆极致参数)${PLAIN}"
-        
-        echo -e " ${BOLD}${BLUE}▶ 内核与内存榨取${PLAIN}"
-        echo -e " ${GREEN}10.${PLAIN} 智能内存调优     ${YELLOW}(ZRAM压缩+Swap 详尽分级策略落地)${PLAIN}"
-        echo -e " ${GREEN}11.${PLAIN} 换装轻量内核     ${YELLOW}(释放驱动冗余，KVM 虚拟专属)${PLAIN}"
-        echo -e " ${GREEN}12.${PLAIN} 卸载冗余旧内核   ${YELLOW}(清理磁盘无用空间，需谨慎)${PLAIN}"
-        
-        echo -e " ${BOLD}${BLUE}▶ 探针与节点建站${PLAIN}"
-        echo -e " ${GREEN}13.${PLAIN} 极速硬件探针     ${YELLOW}(全屏显示本机配置与实时负载)${PLAIN}"
-        echo -e " ${GREEN}14.${PLAIN} 综合测试合集     ${YELLOW}(融合怪/流媒体/IP欺诈质量/路由)${PLAIN}"
-        echo -e " ${GREEN}15.${PLAIN} 端口流量监控     ${YELLOW}(拉取并运行 Port Traffic Dog)${PLAIN}"
-        echo -e " ${GREEN}16.${PLAIN} 端口排查与释放   ${YELLOW}(可视化查看并强杀端口占用进程)${PLAIN}"
-        echo -e " ${GREEN}17.${PLAIN} 安装 x-panel     ${YELLOW}(多协议面板，调用 mhsanaei 脚本)${PLAIN}"
-        echo -e " ${GREEN}18.${PLAIN} 安装 Sing-box    ${YELLOW}(甬哥四合一强大官方一键脚本)${PLAIN}"
-        echo -e " ${GREEN}19.${PLAIN} ${RED}${BOLD}面板救砖/重置SSL${PLAIN} ${YELLOW}(无法访问面板时的备用手段)${PLAIN}"
-        echo -e " ${GREEN}20.${PLAIN} ${CYAN}${BOLD}DNS流媒体解锁${PLAIN}    ${YELLOW}(Alice DNS 区域分流解锁脚本)${PLAIN}"
-        
-        echo -e " ${BOLD}${BLUE}▶ 进阶与扩展组件${PLAIN}"
-        echo -e " ${GREEN}21.${PLAIN} 防 IP 送中脚本   ${YELLOW}(部署 IP-Sentinel 修正区域路由)${PLAIN}"
-        echo -e " ${GREEN}22.${PLAIN} 安装 SublinkPro  ${YELLOW}(极速部署节点订阅转换与管理平台)${PLAIN}"
+        echo -e " ${BOLD}${BLUE}▶ 高优先直达${PLAIN}"
+        echo -e "  ${GREEN}1.${PLAIN} 一键运维预检      ${YELLOW}(先检查再部署，避免踩坑)${PLAIN}"
+        echo -e "  ${GREEN}2.${PLAIN} 基础环境初始化    ${YELLOW}(工具/时区/基础 BBR)${PLAIN}"
+        echo -e "  ${GREEN}3.${PLAIN} 常用环境与软件库  ${YELLOW}(Docker/Caddy/WARP/面板等)${PLAIN}"
+        echo -e "  ${GREEN}4.${PLAIN} 系统高级开关      ${YELLOW}(IPv6/IPv4 优先/禁 Ping/自动更新)${PLAIN}"
+        echo -e "  ${GREEN}5.${PLAIN} 防火墙深度管理    ${YELLOW}(放行/删除/开关/查看规则)${PLAIN}"
+
+        echo -e " ${BOLD}${BLUE}▶ 安全与运维${PLAIN}"
+        echo -e "  ${GREEN}6.${PLAIN} SSH 安全加固      ${YELLOW}(端口迁移与防失联)${PLAIN}"
+        echo -e "  ${GREEN}7.${PLAIN} Fail2ban 防护     ${YELLOW}(防爆破封禁)${PLAIN}"
+        echo -e "  ${GREEN}8.${PLAIN} 添加 SSH 公钥     ${YELLOW}(免密登录)${PLAIN}"
+        echo -e "  ${GREEN}9.${PLAIN} Docker 深度管理   ${YELLOW}(防穿透与配置回滚)${PLAIN}"
+        echo -e " ${GREEN}10.${PLAIN} 网络与内核优化菜单 ${YELLOW}(BBR/TCP/ZRAM/内核管理)${PLAIN}"
+        echo -e " ${GREEN}11.${PLAIN} 测速与质量检测合集 ${YELLOW}(YABS/流媒体/回程/IP质量)${PLAIN}"
+
+        echo -e " ${BOLD}${BLUE}▶ 部署与排障${PLAIN}"
+        echo -e " ${GREEN}12.${PLAIN} 面板与节点部署菜单 ${YELLOW}(x-panel/Sing-box/救砖/DNS)${PLAIN}"
+        echo -e " ${GREEN}13.${PLAIN} 端口排查与释放     ${YELLOW}(查看占用并强杀进程)${PLAIN}"
+        echo -e " ${GREEN}14.${PLAIN} 极速硬件探针       ${YELLOW}(系统与资源实时信息)${PLAIN}"
+        echo -e " ${GREEN}15.${PLAIN} 配置备份与回滚中心 ${YELLOW}(备份/列表/恢复/清理)${PLAIN}"
+        echo -e " ${GREEN}16.${PLAIN} 服务健康总览       ${YELLOW}(服务状态/证书摘要/端口概览)${PLAIN}"
+        echo -e " ${YELLOW}17.${PLAIN} 一键更新脚本       ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
+        echo -e " ${RED}18.${PLAIN} 重启服务器"
         echo -e "${CYAN}================================================${PLAIN}"
-        
-        echo -e " ${YELLOW}23.${PLAIN} ${BOLD}一键更新脚本${PLAIN}     ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
-        echo -e " ${RED}24.${PLAIN} 重启服务器       ${RED} 0.${PLAIN} 退出面板"
+        echo -e " ${RED} 0.${PLAIN} 退出面板"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local choice
         read -p "👉 请输入对应数字选择功能: " choice
         
         case $choice in
-            1) func_base_init ;;
-            2) func_system_tweaks ;;
+            1) func_preflight_check ;;
+            2) func_base_init ;;
             3) func_env_install ;;
-            4) func_security ;;
-            5) func_fail2ban ;;
-            6) func_add_ssh_key ;;
-            7) func_docker_manage ;;
-            8) func_bbr_manage ;;
-            9) func_tcp_tune ;;
-            10) func_zram_swap ;;
-            11) func_install_kernel ;;
-            12) func_clean_kernel ;;
-            13) func_system_info ;;
-            14) func_test_scripts ;;
-            15) func_port_dog ;;
-            16) func_port_kill ;;      
-            17) func_xpanel ;;
-            18) func_singbox ;;
-            19) func_rescue_panel ;;
-            20) func_dns_unlock ;;
-            21) func_ip_sentinel ;;
-            22) func_sublinkpro ;;
-            23) func_update_script ;;
-            24) reboot ;;
+            4) func_system_tweaks ;;
+            5) func_firewall_manage ;;
+            6) func_security ;;
+            7) func_fail2ban ;;
+            8) func_add_ssh_key ;;
+            9) func_docker_manage ;;
+            10) func_net_kernel_menu ;;
+            11) func_test_scripts ;;
+            12) func_panel_deploy_menu ;;
+            13) func_port_kill ;;
+            14) func_system_info ;;
+            15) func_backup_center ;;
+            16) func_health_dashboard ;;
+            17) func_update_script ;;
+            18) reboot ;;
             0) exit 0 ;;
             *) 
                 echo -e "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}"
