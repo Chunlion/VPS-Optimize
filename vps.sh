@@ -736,12 +736,11 @@ func_caddy_add_insecure() {
     
     # 确保主文件包含模块化目录
     grep -q "import conf.d/\*" /etc/caddy/Caddyfile || echo -e "\nimport conf.d/*" >> /etc/caddy/Caddyfile
-        echo -e "${RED}❌ 域名或端口不能为空！已取消操作。${PLAIN}"
     
-        mkdir -p /etc/caddy/conf.d
-        local conf_file="/etc/caddy/conf.d/${domain}.caddy"
-        
-        cat <<EOF > "$conf_file"
+    mkdir -p /etc/caddy/conf.d
+    local conf_file="/etc/caddy/conf.d/${domain}.caddy"
+    
+    cat <<EOF > "$conf_file"
 $domain {
     reverse_proxy https://127.0.0.1:$port {
         transport http {
@@ -750,14 +749,14 @@ $domain {
     }
 }
 EOF
-        if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
-            systemctl reload caddy >/dev/null 2>&1
-            echo -e "${GREEN}✅ 独立跳过验证配置已成功建立并生效！${PLAIN}"
-        else
-            echo -e "${RED}❌ 致命错误：追加的配置导致语法错误！正在回滚...${PLAIN}"
-            rm -f "$conf_file"
-        fi
+    if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+        systemctl reload caddy >/dev/null 2>&1
+        echo -e "${GREEN}✅ 独立跳过验证配置已成功建立并生效！${PLAIN}"
+    else
+        echo -e "${RED}❌ 致命错误：追加的配置导致语法错误！正在回滚...${PLAIN}"
+        rm -f "$conf_file"
     fi
+
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
