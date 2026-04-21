@@ -717,18 +717,27 @@ EOF
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 4. SSH 安全加固 (重构版：原子级备份与绝对防失联机制)
+# 4. SSH 安全加固 (终极完美版：防截断、防覆盖、防 Socket 冲突)
 # ---------------------------------------------------------
 func_security() {
     clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🛡️ SSH 安全加固 (端口修改与防失联)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    # 1. 极致精准：读取内存和进程，获取当前真实生效的 SSH 端口
     local current_p
-    current_p=$(grep -i "^Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
+    current_p=$(ss -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | sort -u | head -n1)
+    if [[ -z "$current_p" ]]; then
+        current_p=$(sshd -T 2>/dev/null | grep -i "^port " | awk '{print $2}' | head -n1)
+    fi
     current_p=${current_p:-22}
-    
+
     local final_p
-    read -p "当前 SSH 端口为 $current_p, 请输入新端口 [1-65535] (直接回车保持不变): " final_p
+    # 交互提示优化：引导用户使用高位端口避开特权冲突
+    read -p "👉 当前生效的 SSH 端口为 $current_p, 请输入新端口 [10000-65535] (回车保持不变): " final_p
     final_p=${final_p:-$current_p}
-    
+
     if [[ "$final_p" != "$current_p" ]]; then
         
         # [严格检验] 端口合法性
@@ -742,38 +751,34 @@ func_security() {
         local backup_file="/etc/ssh/sshd_config.bak_$(date +%s)"
         cp /etc/ssh/sshd_config "$backup_file"
 
-        # 1. 修改配置文件
+        # 2. 核心黑科技：安全的置顶替换
+        # - 先安全删除所有带 Port 的行 (忽略注释符和空格)
+        # - 然后在文件绝对第一行 (1i) 插入新端口，秒杀所有 include 配置覆盖！
         sed -i '/^[[:space:]]*#\?Port /d' /etc/ssh/sshd_config
-        echo "Port $final_p" >> /etc/ssh/sshd_config
-        
-        # 2. [CentOS 专属] SELinux 放行
+        sed -i "1i Port $final_p" /etc/ssh/sshd_config
+
+        # 3. [CentOS 专属] SELinux 放行
         if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce)" == "Enforcing" ]]; then
             echo -e "${YELLOW}检测到 SELinux 开启，正在配置底层端口安全策略...${PLAIN}"
             if command -v semanage >/dev/null 2>&1; then
                 semanage port -a -t ssh_port_t -p tcp "$final_p" 2>/dev/null || semanage port -m -t ssh_port_t -p tcp "$final_p" 2>/dev/null
             else
-                echo -e "${RED}❌ 致命错误：缺少 semanage 工具！${PLAIN}"
-                echo -e "${YELLOW}已触发防砖机制，正在全盘恢复原配置文件...${PLAIN}"
-                # 核心安全机制：直接恢复备份文件
+                echo -e "${RED}❌ 致命错误：缺少 semanage 工具！已触发安全回滚。${PLAIN}"
                 mv "$backup_file" /etc/ssh/sshd_config
-                echo -e "请先安装: CentOS 7: ${GREEN}yum install policycoreutils-python${PLAIN} 或 8+: ${GREEN}yum install policycoreutils-python-utils${PLAIN}"
                 read -n 1 -s -r -p "按任意键返回..."
                 return
             fi
         fi
 
-        # 3. 防失联核心：验证语法
-        echo -e "${CYAN}▶ 正在核验新配置语法...${PLAIN}"
+        # 4. 防失联核心：验证新配置语法
         if ! sshd -t; then
-            echo -e "${RED}❌ 致命错误：SSH 配置存在语法异常！已终止重启。${PLAIN}"
-            echo -e "${YELLOW}已触发防砖机制，正在全盘恢复原配置文件...${PLAIN}"
-            # 核心安全机制：直接恢复备份文件
+            echo -e "${RED}❌ 致命错误：SSH 配置存在语法异常！正在全盘恢复...${PLAIN}"
             mv "$backup_file" /etc/ssh/sshd_config
             read -n 1 -s -r -p "按任意键返回..."
             return
         fi
         
-        # 4. 放行防火墙
+        # 5. 放行全栈防火墙
         if command -v ufw >/dev/null 2>&1; then ufw allow "$final_p"/tcp >/dev/null 2>&1; fi
         if command -v firewall-cmd >/dev/null 2>&1; then 
             firewall-cmd --permanent --add-port="$final_p"/tcp >/dev/null 2>&1
@@ -781,9 +786,11 @@ func_security() {
         fi
         iptables -I INPUT -p tcp --dport "$final_p" -j ACCEPT 2>/dev/null
         
-        # 5. 兼容新版 Ubuntu 的 ssh.socket 机制
-        if systemctl list-unit-files | grep -q "^ssh.socket"; then
-            echo -e "${YELLOW}检测到 Ubuntu ssh.socket，正在覆写...${PLAIN}"
+        # 6. Ubuntu 的 Socket 端口接管 (防宕机冲突)
+        local use_socket=false
+        if systemctl is-active --quiet ssh.socket; then
+            use_socket=true
+            echo -e "${YELLOW}检测到 Ubuntu ssh.socket，正在覆写底层监听端口...${PLAIN}"
             mkdir -p /etc/systemd/system/ssh.socket.d
             cat <<EOF > /etc/systemd/system/ssh.socket.d/port.conf
 [Socket]
@@ -791,12 +798,20 @@ ListenStream=
 ListenStream=$final_p
 EOF
             systemctl daemon-reload >/dev/null 2>&1
-            systemctl restart ssh.socket >/dev/null 2>&1
         fi
         
-        # 6. 重启服务并清理备份
-        systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
-        rm -f "$backup_file" # 成功后清理备份文件
+        # 7. 严格隔离的服务重启逻辑
+        echo -e "${CYAN}▶ 正在重启底层 SSH 引擎...${PLAIN}"
+        if $use_socket; then
+            # 仅重启 socket，绝对不碰 sshd，防止 Address already in use 宕机
+            systemctl restart ssh.socket >/dev/null 2>&1
+        else
+            # 传统方式启动
+            systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
+        fi
+        
+        # 成功后清理备份
+        rm -f "$backup_file" 
         
         echo -e "${GREEN}✅ SSH 端口已成功更改为 $final_p 并自动放行！${PLAIN}"
         echo -e "${RED}${BOLD}======================================================${PLAIN}"
