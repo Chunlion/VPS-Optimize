@@ -1455,7 +1455,7 @@ func_test_scripts() {
             5) bash <(curl -L -s check.unlock.media) ;;
             6) curl https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh -sSf | sh ;;
             7) bash <(curl -Ls IP.Check.Place) ;;
-            8）bash <(curl -sL https://run.NodeQuality.com) ;;
+            8) bash <(curl -sL https://run.NodeQuality.com) ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
         esac
