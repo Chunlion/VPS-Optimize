@@ -454,7 +454,7 @@ func_env_install() {
                 ;;
             8) wget -N https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh && bash menu.sh ;;
             9) wget -N git.io/aria2.sh && chmod +x aria2.sh && ./aria2.sh ;;
-            10) 10) wget -O install.sh http://v7.hostcli.com/install/install-ubuntu_6.0.sh && bash install.sh ;;
+            10) wget -O install.sh http://v7.hostcli.com/install/install-ubuntu_6.0.sh && bash install.sh ;;
             11) bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh) ;;
             12) bash <(wget -qO- https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh) ;;
             13)
