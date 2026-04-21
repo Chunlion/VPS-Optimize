@@ -2,7 +2,7 @@
 
 # =========================================================
 #  Project:  VPS 全能控制面板 
-#  Features: IPv4优先/智能防火墙/面板救砖/DNS流媒体解锁/热更新/安全加固
+#  Features: 智能防火墙/DNS流媒体解锁/安全加固/IP工具/环境部署/一键反代
 #  Shortcut: cy
 # =========================================================
 
@@ -69,7 +69,7 @@ create_shortcut() {
     local script_path="/usr/local/bin/cy"
     if [[ ! -f "$script_path" ]]; then
         # 优先尝试从远端直接拉取
-        if ! curl -sL "$UPDATE_URL" -o "$script_path" 2>/dev/null; then
+        if ! curl -fsL "$UPDATE_URL" -o "$script_path" 2>/dev/null; then
             # 若远端拉取失败，且检测到 $0 确实是本地存在的物理文件，才允许复制
             if [[ -f "$0" ]]; then
                 cp "$(readlink -f "$0")" "$script_path" 2>/dev/null
@@ -428,10 +428,10 @@ func_env_install() {
         echo -e "${GREEN}  1. Docker 引擎   ${YELLOW}  2. Python 环境   ${GREEN}  3. iperf3 工具${PLAIN}"
         echo -e "${GREEN}  4. Realm 转发    ${YELLOW}  5. Gost 隧道     ${GREEN}  6. 极光面板${PLAIN}"
         echo -e "${GREEN}  7. 哪吒监控      ${YELLOW}  8. WARP (CF)     ${GREEN}  9. Aria2 下载${PLAIN}"
-        echo -e "${GREEN} 10. 宝塔面板      ${YELLOW} 11. PVE 虚拟化    ${GREEN} 12. Argox 节点${PLAIN}"
+        echo -e "${GREEN} 10. 宝塔面板      ${YELLOW}  11. PVE 虚拟化    ${GREEN}  12. Argox 节点${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${CYAN} 13. 配置 Caddy 反代   ${YELLOW} 14. 查看 Caddy 证书路径${PLAIN}"
-        echo -e "${CYAN} 15. Caddy独立跳过验证 ${YELLOW} 16. 清空 Caddy 配置文件${PLAIN}"
+        echo -e "${CYAN} 13. 配置 Caddy 反代   ${YELLOW}  14. 查看 Caddy 证书路径${PLAIN}"
+        echo -e "${CYAN} 15. Caddy独立跳过验证 ${YELLOW}  16. 清空 Caddy 配置文件${PLAIN}"
         echo -e "${RED} 17. 删除底层 ACME证书${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
@@ -443,7 +443,7 @@ func_env_install() {
         case $env_choice in
             1) 
                 echo -e "${CYAN}▶ 正在拉取 Docker 引擎...${PLAIN}"
-                bash <(curl -sL 'https://get.docker.com') || echo -e "${RED}❌ Docker 安装失败，请检查网络！${PLAIN}" 
+                bash <(curl -sL 'https://get.docker.com') || echo -e "${RED}❌ Docker 安装失败，请检查网络！${PLAIN}"
                 ;;
             2) run_safe "安装 Python 环境" bash -c "curl -O https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh && chmod +x pyinstall.sh && ./pyinstall.sh" ;;
             3) 
@@ -644,7 +644,9 @@ func_caddy_delete_cert() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}☢️ 核弹级：彻底清理域名证书与配置${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-
+    echo -e "${YELLOW}功能介绍：该脚本将彻底清理指定域名的证书与配置，确保服务器环境干净。${PLAIN}"
+    echo -e "------------------------------------------------"
+    
     read -p "👉 请输入要强杀清理的精准域名 (如 panel.site.com): " domain
     if [[ -z "$domain" ]]; then
         echo -e "${RED}❌ 域名不能为空！${PLAIN}"
@@ -653,58 +655,65 @@ func_caddy_delete_cert() {
     fi
 
     echo -e "\n${CYAN}▶ 正在执行核弹级清理流程...${PLAIN}"
-
-    # 1. 停止 Caddy，强制释放 80/443 端口
-    systemctl stop caddy >/dev/null 2>&1
-    echo -e "${GREEN}✅ [1/4] 已强制停止 Caddy 服务，释放网络端口。${PLAIN}"
-
-    # 2. 深度清理 Caddy 底层证书缓存
-    local caddy_paths=("/var/lib/caddy/.local/share/caddy/certificates" "/root/.local/share/caddy/certificates")
-    local caddy_found=false
-    for cp in "${caddy_paths[@]}"; do
-        if [[ -d "$cp" ]]; then
-            local target=$(find "$cp" -type d -name "*${domain}*" -print -quit 2>/dev/null)
-            if [[ -n "$target" ]]; then
-                rm -rf "$target"
-                caddy_found=true
+    echo -e "${YELLOW}此操作将永久删除该域名的证书与配置，无法恢复！${PLAIN}"
+    echo -e "请确认操作...${PLAIN}"
+    read -p "❓ 确定要清理吗？(y/n): " yn
+    if [[ "$yn" =~ ^[Yy]$ ]]; then
+        # 1. 停止 Caddy，强制释放 80/443 端口
+        systemctl stop caddy >/dev/null 2>&1
+        echo -e "${GREEN}✅ [1/4] 已强制停止 Caddy 服务，释放网络端口。${PLAIN}"
+        
+        # 2. 深度清理 Caddy 底层证书缓存
+        local caddy_paths=("/var/lib/caddy/.local/share/caddy/certificates" "/root/.local/share/caddy/certificates")
+        local caddy_found=false
+        for cp in "${caddy_paths[@]}"; do
+            if [[ -d "$cp" ]]; then
+                local target=$(find "$cp" -type d -name "*${domain}*" -print -quit 2>/dev/null)
+                if [[ -n "$target" ]]; then
+                    rm -rf "$target"
+                    caddy_found=true
+                fi
             fi
-        fi
-    done
-    if $caddy_found; then
-        echo -e "${GREEN}✅ [2/4] Caddy 引擎中关于 ${domain} 的密钥与证书已抹除。${PLAIN}"
-    else
-        echo -e "${BLUE}ℹ️ [2/4] 未在 Caddy 引擎中发现该域名的证书。${PLAIN}"
-    fi
-
-    # 3. 清理 acme.sh 残留
-    if [[ -d "/root/.acme.sh" ]]; then
-        local acme_target=$(find "/root/.acme.sh" -type d -name "*${domain}*" -print -quit 2>/dev/null)
-        if [[ -n "$acme_target" ]]; then
-            rm -rf "$acme_target"
-            echo -e "${GREEN}✅ [3/4] 面板底层 (~/.acme.sh) 关于 ${domain} 的残留已抹除。${PLAIN}"
+        done
+        if $caddy_found; then
+            echo -e "${GREEN}✅ [2/4] Caddy 引擎中关于 ${domain} 的密钥与证书已抹除。${PLAIN}"
         else
-            echo -e "${BLUE}ℹ️ [3/4] 未在 acme.sh 引擎中发现残留。${PLAIN}"
+            echo -e "${BLUE}ℹ️ [2/4] 未在 Caddy 引擎中发现该域名的证书。${PLAIN}"
         fi
+        
+        # 3. 清理 acme.sh 残留
+        if [[ -d "/root/.acme.sh" ]]; then
+            local acme_target=$(find "/root/.acme.sh" -type d -name "*${domain}*" -print -quit 2>/dev/null)
+            if [[ -n "$acme_target" ]]; then
+                rm -rf "$acme_target"
+                echo -e "${GREEN}✅ [3/4] 面板底层 (~/.acme.sh) 关于 ${domain} 的残留已抹除。${PLAIN}"
+            else
+                echo -e "${BLUE}ℹ️ [3/4] 未在 acme.sh 引擎中发现残留。${PLAIN}"
+            fi
+        else
+            echo -e "${BLUE}ℹ️ [3/4] 系统未安装独立 acme.sh 环境，已跳过。${PLAIN}"
+        fi
+        
+        # 4. 外科手术：模块化安全删除
+        local domain_conf="/etc/caddy/conf.d/${domain}.caddy"
+        if [[ -f "$domain_conf" ]]; then
+            echo -e "${YELLOW}⏳ [4/4] 检测到专属配置文件，正在销毁...${PLAIN}"
+            rm -f "$domain_conf"
+            echo -e "${GREEN}✅ [4/4] 专属配置文件 ($domain_conf) 已安全移除！${PLAIN}"
+        else
+            echo -e "${GREEN}✅ [4/4] 未发现该域名的专属配置文件。${PLAIN}"
+        fi
+
+        # 重启 Caddy 以加载干净的配置
+        systemctl start caddy >/dev/null 2>&1
+
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}🎉 清理彻底完成！当前域名环境已处于出厂真空状态。${PLAIN}"
+        
+        read -n 1 -s -r -p "按任意键继续..."
     else
-        echo -e "${BLUE}ℹ️ [3/4] 系统未安装独立 acme.sh 环境，已跳过。${PLAIN}"
+        echo -e "${BLUE}端口未做更改。${PLAIN}"
     fi
-
-    # 4. 外科手术：模块化安全删除
-    local domain_conf="/etc/caddy/conf.d/${domain}.caddy"
-    if [[ -f "$domain_conf" ]]; then
-        echo -e "${YELLOW}⏳ [4/4] 检测到专属配置文件，正在销毁...${PLAIN}"
-        rm -f "$domain_conf"
-        echo -e "${GREEN}✅ [4/4] 专属配置文件 ($domain_conf) 已安全移除！${PLAIN}"
-    else
-        echo -e "${GREEN}✅ [4/4] 未发现该域名的专属配置文件。${PLAIN}"
-    fi
-
-    # 重启 Caddy 以加载干净的配置
-    systemctl start caddy >/dev/null 2>&1
-
-    echo -e "------------------------------------------------"
-    echo -e "${GREEN}🎉 清理彻底完成！当前域名环境已处于出厂真空状态。${PLAIN}"
-    
     read -n 1 -s -r -p "按任意键继续..."
 }
 
@@ -760,7 +769,9 @@ func_security() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}🛡️ SSH 安全加固 (端口修改与防失联)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-
+    echo -e "${YELLOW}功能介绍：该脚本将修改 SSH 端口并配置防失联机制，确保服务稳定。${PLAIN}"
+    echo -e "------------------------------------------------"
+    
     # 1. 极致精准：读取内存和进程，获取当前真实生效的 SSH 端口
     local current_p
     current_p=$(ss -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | sort -u | head -n1)
@@ -929,7 +940,7 @@ EOF
             echo -e "${GREEN}✅ Fail2ban 已彻底卸载！${PLAIN}"
             ;;
         0) return ;;
-        *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
+        *) echo -e "${RED}❌ 无效的输入！${PLAIN}"; sleep 1 ;;
     esac
     read -n 1 -s -r -p "按任意键继续..."
 }
@@ -1042,7 +1053,7 @@ EOF
                 
                 # 防宕机重启机制：如果新配置导致引擎崩溃，立刻回滚！
                 if systemctl restart docker >/dev/null 2>&1; then
-                    echo -e "${GREEN}✅ 已开启安全保护，Docker 容器端口仅限本地反代访问！${PLAIN}" 
+                    echo -e "${GREEN}✅ 已开启安全保护，Docker 容器端口仅限本地反代访问！${PLAIN}"
                     [[ -f "$backup_file" ]] && rm -f "$backup_file" # 成功则清理备份
                 else
                     echo -e "${RED}❌ 致命错误：新配置导致 Docker 引擎无法启动！正在自动回滚...${PLAIN}"
