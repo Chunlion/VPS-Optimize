@@ -1440,7 +1440,7 @@ func_test_scripts() {
         echo -e "${GREEN}  1. YABS 硬件性能测试  ${YELLOW}  2. 融合怪终极详细测速${PLAIN}"
         echo -e "${GREEN}  3. SuperBench 综合测速${YELLOW}  4. bench.sh 基础测试${PLAIN}"
         echo -e "${GREEN}  5. 流媒体解锁详细检测 ${YELLOW}  6. 三网回程路由测试${PLAIN}"
-        echo -e "${GREEN}  7. IP 质量与欺诈度检测${YELLOW}  8.NodeSeek综合测试{PLAIN}"
+        echo -e "${GREEN}  7. IP 质量与欺诈度检测${YELLOW}  8. NodeSeek 综合测试${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -1463,7 +1463,6 @@ func_test_scripts() {
         read -n 1 -s -r -p "测试完成，按任意键继续..."
     done
 }
-
 # ---------------------------------------------------------
 # 13, 14, 15 面板与流量狗快速部署
 # ---------------------------------------------------------
