@@ -455,28 +455,67 @@ issue_cf_dns_cert_with_retry() {
     local cf_token_raw="$2"
     local acme_bin="$3"
     local cf_token
+    local acme_log
 
     cf_token=$(echo "$cf_token_raw" | tr -d '\r\n')
     if [[ -z "$cf_token" || ! -x "$acme_bin" || -z "$domain" ]]; then
         return 1
     fi
 
-    if CF_Token="$cf_token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 >/dev/null 2>&1; then
+    acme_log="/tmp/vps_acme_${domain}_$(date +%s).log"
+
+    if CF_Token="$cf_token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 >"$acme_log" 2>&1; then
         return 0
     fi
 
     # 旧残留常导致“删除后重签失败”，先清理历史状态再强制签发。
     "$acme_bin" --remove -d "$domain" --ecc >/dev/null 2>&1 || true
     rm -rf "/root/.acme.sh/${domain}_ecc" >/dev/null 2>&1 || true
+    rm -rf "/root/.acme.sh/${domain}" >/dev/null 2>&1 || true
 
-    if CF_Token="$cf_token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 --force >/dev/null 2>&1; then
+    if CF_Token="$cf_token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 --force >>"$acme_log" 2>&1; then
         return 0
     fi
 
-    if CF_Token="$cf_token" "$acme_bin" --renew -d "$domain" --force --ecc >/dev/null 2>&1; then
+    if CF_Token="$cf_token" "$acme_bin" --renew -d "$domain" --force --ecc >>"$acme_log" 2>&1; then
         return 0
     fi
 
+    mkdir -p /root/cert
+    cp -f "$acme_log" /root/cert/acme_last_error.log >/dev/null 2>&1 || true
+    echo -e "${RED}❌ acme.sh 最终失败：${domain}${PLAIN}"
+    echo -e "${YELLOW}   最近错误日志: /root/cert/acme_last_error.log${PLAIN}"
+
+    local acme_hint
+    acme_hint=$(grep -Ei 'error|invalid|unauthorized|forbidden|failed|timeout|SERVFAIL|NXDOMAIN|permission' "$acme_log" | tail -n 12)
+    if [[ -n "$acme_hint" ]]; then
+        echo -e "${YELLOW}   关键报错如下：${PLAIN}"
+        echo "$acme_hint"
+    else
+        echo -e "${YELLOW}   未提取到关键错误，展示日志尾部：${PLAIN}"
+        tail -n 12 "$acme_log"
+    fi
+
+    return 1
+}
+
+verify_cf_token_online() {
+    local cf_token_raw="$1"
+    local cf_token
+    local verify_resp
+
+    cf_token=$(echo "$cf_token_raw" | tr -d '\r\n')
+    if [[ -z "$cf_token" ]]; then
+        return 1
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        return 2
+    fi
+
+    verify_resp=$(curl -s --max-time 10 -H "Authorization: Bearer ${cf_token}" -H "Content-Type: application/json" "https://api.cloudflare.com/client/v4/user/tokens/verify" 2>/dev/null)
+    if echo "$verify_resp" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+        return 0
+    fi
     return 1
 }
 
@@ -684,6 +723,18 @@ func_caddy_cf_reality_wizard() {
     echo ""
     if [[ -z "$cf_token" || ${#cf_token} -lt 20 ]]; then
         echo -e "${RED}❌ Token 长度异常，已取消。${PLAIN}"
+        return
+    fi
+    echo -e "${CYAN}▶ 正在在线校验 Cloudflare Token...${PLAIN}"
+    verify_cf_token_online "$cf_token"
+    local verify_rc=$?
+    if [[ "$verify_rc" -eq 0 ]]; then
+        echo -e "${GREEN}✅ Token 校验通过。${PLAIN}"
+    elif [[ "$verify_rc" -eq 2 ]]; then
+        echo -e "${YELLOW}⚠️ 未安装 curl，跳过在线校验。${PLAIN}"
+    else
+        echo -e "${RED}❌ Token 在线校验失败：请检查权限或确认 Token 未填错。${PLAIN}"
+        echo -e "${YELLOW}需要权限：Zone.DNS.Edit + Zone.Zone.Read${PLAIN}"
         return
     fi
 
@@ -1211,6 +1262,20 @@ func_caddy_cf_maintenance_menu() {
                 if [[ -z "$new_token" || ${#new_token} -lt 20 ]]; then
                     echo -e "${RED}❌ Token 长度异常，更新取消。${PLAIN}"
                 else
+                    echo -e "${CYAN}▶ 正在在线校验 Cloudflare Token...${PLAIN}"
+                    verify_cf_token_online "$new_token"
+                    local verify_rc=$?
+                    if [[ "$verify_rc" -eq 1 ]]; then
+                        echo -e "${RED}❌ Token 在线校验失败，未写入。${PLAIN}"
+                        echo -e "${YELLOW}需要权限：Zone.DNS.Edit + Zone.Zone.Read${PLAIN}"
+                        read -n 1 -s -r -p "按任意键继续..."
+                        continue
+                    elif [[ "$verify_rc" -eq 2 ]]; then
+                        echo -e "${YELLOW}⚠️ 未安装 curl，跳过在线校验，继续写入。${PLAIN}"
+                    else
+                        echo -e "${GREEN}✅ Token 校验通过。${PLAIN}"
+                    fi
+
                     escaped_token=${new_token//\'/\'"\'"\'}
                     printf "CF_Token='%s'\n" "$escaped_token" > /root/.config/vps-panel/cloudflare.env
                     chmod 600 /root/.config/vps-panel/cloudflare.env
