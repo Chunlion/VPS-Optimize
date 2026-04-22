@@ -420,6 +420,66 @@ is_valid_domain() {
     echo "$domain" | grep -Eq '^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
 }
 
+quarantine_legacy_caddy_443_configs() {
+    local conf_dir="/etc/caddy/conf.d"
+    local quarantine_dir="/etc/caddy/conf.d_quarantine_443_$(date +%s)"
+    local moved_count=0
+
+    if [[ ! -d "$conf_dir" ]]; then
+        return 0
+    fi
+
+    while IFS= read -r conf_file; do
+        local first_site_line
+        first_site_line=$(grep -m1 -E '^[[:space:]]*[^#[:space:]].*\{' "$conf_file" 2>/dev/null | sed 's/^[[:space:]]*//')
+
+        [[ -z "$first_site_line" ]] && continue
+
+        # Reality+CF 向导的新规范：https://domain:port { + bind 127.0.0.1
+        if [[ "$first_site_line" =~ ^https://[^[:space:]]+:[0-9]+[[:space:]]*\{ ]]; then
+            continue
+        fi
+
+        mkdir -p "$quarantine_dir"
+        mv "$conf_file" "$quarantine_dir/" >/dev/null 2>&1
+        ((moved_count++))
+    done < <(find "$conf_dir" -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)
+
+    if [[ "$moved_count" -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️ 已自动隔离 ${moved_count} 个旧站点配置（可能抢占 443）到：${quarantine_dir}${PLAIN}"
+    fi
+}
+
+issue_cf_dns_cert_with_retry() {
+    local domain="$1"
+    local cf_token_raw="$2"
+    local acme_bin="$3"
+    local cf_token
+
+    cf_token=$(echo "$cf_token_raw" | tr -d '\r\n')
+    if [[ -z "$cf_token" || ! -x "$acme_bin" || -z "$domain" ]]; then
+        return 1
+    fi
+
+    if CF_Token="$cf_token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # 旧残留常导致“删除后重签失败”，先清理历史状态再强制签发。
+    "$acme_bin" --remove -d "$domain" --ecc >/dev/null 2>&1 || true
+    rm -rf "/root/.acme.sh/${domain}_ecc" >/dev/null 2>&1 || true
+
+    if CF_Token="$cf_token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 --force >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if CF_Token="$cf_token" "$acme_bin" --renew -d "$domain" --force --ecc >/dev/null 2>&1; then
+        return 0
+    fi
+
+    return 1
+}
+
 generate_caddy_cf_manifest() {
     local summary_file="/root/cert/caddy_cf_manifest.txt"
     mkdir -p /root/cert
@@ -620,7 +680,7 @@ func_caddy_cf_reality_wizard() {
 
     local cf_token
     echo -e "${CYAN}👇 请输入 Cloudflare API Token（需 Zone.DNS 编辑权限）${PLAIN}"
-    read -s -p "CF Token: " cf_token
+    read -p "CF Token: " cf_token
     echo ""
     if [[ -z "$cf_token" || ${#cf_token} -lt 20 ]]; then
         echo -e "${RED}❌ Token 长度异常，已取消。${PLAIN}"
@@ -679,6 +739,9 @@ EOF
         echo -e "\nimport conf.d/*" >> /etc/caddy/Caddyfile
     fi
 
+    echo -e "${CYAN}▶ 正在扫描并隔离旧式 Caddy 配置（防止抢占 443）...${PLAIN}"
+    quarantine_legacy_caddy_443_configs
+
     echo -e "${YELLOW}👇 开始添加域名反代规则（可连续添加多个）${PLAIN}"
     echo -e "${YELLOW}格式：域名 -> 本地端口，例如 panel.example.com -> 8000${PLAIN}"
     echo -e "------------------------------------------------"
@@ -717,12 +780,11 @@ EOF
         # shellcheck disable=SC1090
         source "$cf_env_file"
         echo -e "${CYAN}▶ 正在为 ${domain} 申请 DNS 证书...${PLAIN}"
-        if ! CF_Token="$CF_Token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 >/dev/null 2>&1; then
-            if ! CF_Token="$CF_Token" "$acme_bin" --renew -d "$domain" --force --ecc >/dev/null 2>&1; then
-                echo -e "${RED}❌ 证书申请失败：${domain}${PLAIN}"
-                ((fail_count++))
-                continue
-            fi
+        if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
+            echo -e "${RED}❌ 证书申请失败：${domain}${PLAIN}"
+            echo -e "${YELLOW}   提示：可进入 [19]-[9] 一键自动修复后再重试。${PLAIN}"
+            ((fail_count++))
+            continue
         fi
 
         local cert_file="/etc/caddy/certs/${domain}.crt"
@@ -972,6 +1034,9 @@ EOF
         ((fixed_count++))
     fi
 
+    echo -e "${YELLOW}▶ [1.5/7] 隔离旧式站点配置（避免抢占 443）...${PLAIN}"
+    quarantine_legacy_caddy_443_configs
+
     echo -e "${YELLOW}▶ [2/7] 修复证书权限...${PLAIN}"
     if [[ -d /etc/caddy/certs ]]; then
         if id caddy >/dev/null 2>&1; then
@@ -1121,6 +1186,7 @@ func_caddy_cf_maintenance_menu() {
         echo -e "${GREEN}  7. 重建清单文件${PLAIN}"
         echo -e "${GREEN}  8. 一键体检（Token/证书/监听/后端）${PLAIN}"
         echo -e "${GREEN}  9. 一键自动修复（常见问题）${PLAIN}"
+        echo -e "${GREEN} 10. 隔离旧配置（避免 Caddy 抢占 443）${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -1140,7 +1206,7 @@ func_caddy_cf_maintenance_menu() {
                 mkdir -p /root/.config/vps-panel
                 chmod 700 /root/.config/vps-panel
                 echo -e "${CYAN}👇 请输入新的 Cloudflare API Token${PLAIN}"
-                read -s -p "CF Token: " new_token
+                read -p "CF Token: " new_token
                 echo ""
                 if [[ -z "$new_token" || ${#new_token} -lt 20 ]]; then
                     echo -e "${RED}❌ Token 长度异常，更新取消。${PLAIN}"
@@ -1179,8 +1245,9 @@ func_caddy_cf_maintenance_menu() {
                 source "$cf_env_file"
                 echo -e "${CYAN}▶ 正在重签证书: ${domain}${PLAIN}"
 
-                if ! CF_Token="$CF_Token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 --force >/dev/null 2>&1; then
+                if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
                     echo -e "${RED}❌ 证书签发失败：${domain}${PLAIN}"
+                    echo -e "${YELLOW}   提示：建议先执行本菜单 [9] 自动修复再重试。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -1265,8 +1332,9 @@ func_caddy_cf_maintenance_menu() {
                 rm -f "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"
                 rm -f "/root/cert/${domain}.crt" "/root/cert/${domain}.key"
 
-                read -p "❓ 是否同时删除 acme.sh 历史记录？(y/n): " purge_acme
+                read -p "❓ 是否同时删除 acme.sh 历史记录？(y/n，默认n，建议保留): " purge_acme
                 if [[ "$purge_acme" =~ ^[Yy]$ ]]; then
+                    /root/.acme.sh/acme.sh --remove -d "$domain" --ecc >/dev/null 2>&1 || true
                     rm -rf "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/${domain}"
                 fi
 
@@ -1297,6 +1365,16 @@ func_caddy_cf_maintenance_menu() {
 
             9)
                 func_caddy_cf_auto_fix
+                ;;
+
+            10)
+                quarantine_legacy_caddy_443_configs
+                if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+                    systemctl restart caddy >/dev/null 2>&1
+                    echo -e "${GREEN}✅ 隔离完成，Caddy 已重载。${PLAIN}"
+                else
+                    echo -e "${RED}❌ 当前 Caddy 配置校验失败，请先修复语法错误。${PLAIN}"
+                fi
                 ;;
 
             0) break ;;
