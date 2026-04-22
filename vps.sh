@@ -415,6 +415,53 @@ run_safe() {
     fi
 }
 
+is_valid_domain() {
+    local domain="$1"
+    echo "$domain" | grep -Eq '^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+}
+
+generate_caddy_cf_manifest() {
+    local summary_file="/root/cert/caddy_cf_manifest.txt"
+    mkdir -p /root/cert
+    : > "$summary_file"
+    echo "Caddy CF DNS 自动化清单 - $(date '+%F %T')" >> "$summary_file"
+    echo "------------------------------------------------" >> "$summary_file"
+
+    local found=false
+    if [[ -d /etc/caddy/conf.d ]]; then
+        while IFS= read -r conf_file; do
+            local domain
+            local listen_port
+            local backend
+            domain=$(basename "$conf_file" .caddy)
+
+            if [[ ! -f "/etc/caddy/certs/${domain}.crt" || ! -f "/etc/caddy/certs/${domain}.key" ]]; then
+                continue
+            fi
+
+            listen_port=$(sed -n '1{s@^https://[^:]*:\([0-9]\+\)[[:space:]]*{.*$@\1@p;q}' "$conf_file")
+            backend=$(grep -E '^[[:space:]]*reverse_proxy[[:space:]]+127.0.0.1:[0-9]+' "$conf_file" | awk '{print $2}' | head -n1)
+
+            [[ -z "$listen_port" ]] && listen_port="未知"
+            [[ -z "$backend" ]] && backend="未知"
+
+            echo "域名: ${domain}" >> "$summary_file"
+            echo "  后端: ${backend}" >> "$summary_file"
+            echo "  Caddy监听: 127.0.0.1:${listen_port}" >> "$summary_file"
+            echo "  证书CRT: /root/cert/${domain}.crt" >> "$summary_file"
+            echo "  证书KEY: /root/cert/${domain}.key" >> "$summary_file"
+            echo "  配置文件: ${conf_file}" >> "$summary_file"
+            echo "------------------------------------------------" >> "$summary_file"
+            found=true
+        done < <(find /etc/caddy/conf.d -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)
+    fi
+
+    if ! $found; then
+        echo "当前未检测到可管理的 CF DNS 站点配置。" >> "$summary_file"
+        echo "------------------------------------------------" >> "$summary_file"
+    fi
+}
+
 # ---------------------------------------------------------
 # 3. 常用环境及软件 (重构版：防覆盖、严格容错、剔除静默失败)
 # ---------------------------------------------------------
@@ -432,6 +479,8 @@ func_env_install() {
         echo -e "${CYAN} 13. 配置 Caddy 反代   ${YELLOW}  14. 查看 Caddy 证书路径${PLAIN}"
         echo -e "${CYAN} 15. Caddy独立跳过验证 ${YELLOW}  16. 清空 Caddy 配置文件${PLAIN}"
         echo -e "${RED} 17. 删除底层 ACME证书${PLAIN}"
+        echo -e "${GREEN} 18. Reality+CF DNS 一键反代与证书${PLAIN} ${YELLOW}(不占用443/支持多域名)${PLAIN}"
+        echo -e "${GREEN} 19. CF DNS 二次维护菜单${PLAIN} ${YELLOW}(重签/重建链接/清理/重载)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -530,6 +579,8 @@ EOF
             15) func_caddy_add_insecure ;;
             16) func_caddy_clear_config ;;
             17) func_caddy_delete_cert ;;
+            18) func_caddy_cf_reality_wizard ;;
+            19) func_caddy_cf_maintenance_menu ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
         esac
@@ -537,6 +588,726 @@ EOF
         read -n 1 -s -r -p "按任意键继续..."
     done
 }
+
+# ---------------------------------------------------------
+# 新增功能：Reality 443 复用 + Cloudflare DNS 证书自动化
+# ---------------------------------------------------------
+func_caddy_cf_reality_wizard() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧩 Reality 443 复用 + Cloudflare DNS 自动化向导${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}本向导会让 Caddy 仅监听本地端口，不占用公网 80/443。${PLAIN}"
+    echo -e "${YELLOW}推荐用于：3x-ui Reality 已占用 443，同时 Web 服务需要同域名 HTTPS。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    read -p "❓ 当前 443 端口是否已被 3x-ui VLESS-Reality 占用？(y/n): " reality_occupied
+    if [[ "$reality_occupied" =~ ^[Nn]$ ]]; then
+        echo -e "${BLUE}ℹ️ 您选择了未占用 443，本向导仍将使用本地端口模式，避免与未来业务冲突。${PLAIN}"
+    fi
+
+    local listen_port
+    read -p "👉 请输入 Caddy 本地 TLS 监听端口 (默认 8443): " listen_port
+    listen_port=${listen_port:-8443}
+    if ! [[ "$listen_port" =~ ^[0-9]+$ ]] || [[ "$listen_port" -lt 1 || "$listen_port" -gt 65535 ]]; then
+        echo -e "${RED}❌ 监听端口无效！必须是 1-65535 的纯数字。${PLAIN}"
+        return
+    fi
+    if [[ "$reality_occupied" =~ ^[Yy]$ ]] && [[ "$listen_port" -eq 443 ]]; then
+        echo -e "${RED}❌ 443 已用于 Reality，请改用本地高位端口 (如 8443/9443)。${PLAIN}"
+        return
+    fi
+
+    local cf_token
+    echo -e "${CYAN}👇 请输入 Cloudflare API Token（需 Zone.DNS 编辑权限）${PLAIN}"
+    read -s -p "CF Token: " cf_token
+    echo ""
+    if [[ -z "$cf_token" || ${#cf_token} -lt 20 ]]; then
+        echo -e "${RED}❌ Token 长度异常，已取消。${PLAIN}"
+        return
+    fi
+
+    if ! command -v caddy >/dev/null 2>&1; then
+        echo -e "${CYAN}▶ 未检测到 Caddy，正在安装...${PLAIN}"
+        if is_debian; then
+            apt install -y debian-keyring debian-archive-keyring apt-transport-https -qq >/dev/null 2>&1
+            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
+            apt update -qq >/dev/null 2>&1
+            apt install caddy -y -qq >/dev/null 2>&1
+        elif is_redhat; then
+            yum install -y yum-utils -q >/dev/null 2>&1
+            yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo >/dev/null 2>&1
+            yum install caddy -y -q >/dev/null 2>&1
+        fi
+    fi
+    if ! command -v caddy >/dev/null 2>&1; then
+        echo -e "${RED}❌ Caddy 安装失败，请检查网络后重试。${PLAIN}"
+        return
+    fi
+
+    local acme_bin="/root/.acme.sh/acme.sh"
+    if [[ ! -x "$acme_bin" ]]; then
+        echo -e "${CYAN}▶ 正在安装 acme.sh...${PLAIN}"
+        if ! bash -c "curl -fsSL https://get.acme.sh | sh -s email=admin@localhost" >/dev/null 2>&1; then
+            echo -e "${RED}❌ acme.sh 安装失败，请检查网络后重试。${PLAIN}"
+            return
+        fi
+    fi
+    if [[ ! -x "$acme_bin" ]]; then
+        echo -e "${RED}❌ 未找到 acme.sh，可执行文件异常。${PLAIN}"
+        return
+    fi
+
+    local cf_env_dir="/root/.config/vps-panel"
+    local cf_env_file="${cf_env_dir}/cloudflare.env"
+    mkdir -p "$cf_env_dir"
+    chmod 700 "$cf_env_dir"
+    local escaped_token
+    escaped_token=${cf_token//\'/\'"\'"\'}
+    printf "CF_Token='%s'\n" "$escaped_token" > "$cf_env_file"
+    chmod 600 "$cf_env_file"
+
+    mkdir -p /etc/caddy/conf.d /etc/caddy/certs /root/cert
+
+    if [[ ! -f /etc/caddy/Caddyfile ]]; then
+        cat <<EOF > /etc/caddy/Caddyfile
+# Managed by VPS-Optimize
+import conf.d/*
+EOF
+    elif ! grep -q "import conf.d/\*" /etc/caddy/Caddyfile; then
+        echo -e "\nimport conf.d/*" >> /etc/caddy/Caddyfile
+    fi
+
+    echo -e "${YELLOW}👇 开始添加域名反代规则（可连续添加多个）${PLAIN}"
+    echo -e "${YELLOW}格式：域名 -> 本地端口，例如 panel.example.com -> 8000${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local success_count=0
+    local fail_count=0
+    local summary_file="/root/cert/caddy_cf_manifest.txt"
+
+    while true; do
+        local domain backend_port continue_add
+        read -p "👉 请输入域名 (回车结束添加): " domain
+        if [[ -z "$domain" ]]; then
+            break
+        fi
+
+        if ! is_valid_domain "$domain"; then
+            echo -e "${RED}❌ 域名格式无效：$domain${PLAIN}"
+            ((fail_count++))
+            continue
+        fi
+
+        read -p "👉 请输入该域名反代的本地端口: " backend_port
+        if ! [[ "$backend_port" =~ ^[0-9]+$ ]] || [[ "$backend_port" -lt 1 || "$backend_port" -gt 65535 ]]; then
+            echo -e "${RED}❌ 端口无效：$backend_port${PLAIN}"
+            ((fail_count++))
+            continue
+        fi
+
+        local conf_file="/etc/caddy/conf.d/${domain}.caddy"
+        if [[ -f "$conf_file" ]]; then
+            echo -e "${RED}❌ 已存在域名配置：$conf_file，请先删除后再添加。${PLAIN}"
+            ((fail_count++))
+            continue
+        fi
+
+        # shellcheck disable=SC1090
+        source "$cf_env_file"
+        echo -e "${CYAN}▶ 正在为 ${domain} 申请 DNS 证书...${PLAIN}"
+        if ! CF_Token="$CF_Token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 >/dev/null 2>&1; then
+            if ! CF_Token="$CF_Token" "$acme_bin" --renew -d "$domain" --force --ecc >/dev/null 2>&1; then
+                echo -e "${RED}❌ 证书申请失败：${domain}${PLAIN}"
+                ((fail_count++))
+                continue
+            fi
+        fi
+
+        local cert_file="/etc/caddy/certs/${domain}.crt"
+        local key_file="/etc/caddy/certs/${domain}.key"
+
+        if ! "$acme_bin" --install-cert -d "$domain" --ecc \
+            --fullchain-file "$cert_file" \
+            --key-file "$key_file" \
+            --reloadcmd "systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true" >/dev/null 2>&1; then
+            echo -e "${RED}❌ 证书安装失败：${domain}${PLAIN}"
+            ((fail_count++))
+            continue
+        fi
+
+        if id caddy >/dev/null 2>&1; then
+            chown root:caddy "$cert_file" "$key_file" >/dev/null 2>&1
+            chmod 640 "$cert_file" "$key_file"
+        else
+            chmod 600 "$cert_file" "$key_file"
+        fi
+
+        ln -sfn "$cert_file" "/root/cert/${domain}.crt"
+        ln -sfn "$key_file" "/root/cert/${domain}.key"
+
+        cat <<EOF > "$conf_file"
+https://${domain}:${listen_port} {
+    bind 127.0.0.1
+    tls ${cert_file} ${key_file}
+    reverse_proxy 127.0.0.1:${backend_port}
+}
+EOF
+
+        echo -e "${GREEN}✅ 域名 ${domain} 已完成：证书签发 + 反代配置 + 证书挂载。${PLAIN}"
+        ((success_count++))
+
+        read -p "继续添加下一个域名？(y/n): " continue_add
+        if [[ ! "$continue_add" =~ ^[Yy]$ ]]; then
+            break
+        fi
+    done
+
+    echo -e "${CYAN}▶ 正在校验并加载 Caddy 配置...${PLAIN}"
+    if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+        systemctl enable caddy >/dev/null 2>&1
+        systemctl restart caddy >/dev/null 2>&1
+        echo -e "${GREEN}✅ Caddy 已成功重载，配置生效。${PLAIN}"
+    else
+        echo -e "${RED}❌ Caddy 配置校验失败！请检查 /etc/caddy/conf.d/ 下新增文件语法。${PLAIN}"
+        echo -e "${YELLOW}已保留证书文件，您修正配置后可手动执行: systemctl restart caddy${PLAIN}"
+    fi
+
+    generate_caddy_cf_manifest
+
+    echo -e "------------------------------------------------"
+    echo -e "${GREEN}🎯 向导执行完成：成功 ${success_count} 个，失败 ${fail_count} 个。${PLAIN}"
+    echo -e "${CYAN}证书软链接目录:${PLAIN} /root/cert"
+    echo -e "${CYAN}清单文件路径:${PLAIN} ${summary_file}"
+    echo -e "${YELLOW}💡 3x-ui 手动配置提示：${PLAIN}"
+    echo -e "1) 在 Reality 节点里设置 fallback/dest 指向: 127.0.0.1:${listen_port}"
+    echo -e "2) 每个回落域名需与本向导录入域名一致，SNI 才能命中对应证书和反代规则"
+    echo -e "3) 如业务强依赖真实访客IP，请后续再单独启用 PROXY Protocol 高阶方案"
+}
+
+# ---------------------------------------------------------
+# 新增功能：CF DNS 证书二次维护菜单
+# ---------------------------------------------------------
+func_caddy_cf_health_check() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🩺 CF DNS 一键体检${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    local ok_count=0
+    local warn_count=0
+    local err_count=0
+    local cf_env_file="/root/.config/vps-panel/cloudflare.env"
+
+    echo -e "${YELLOW}▶ [1/5] 检查 Cloudflare Token ...${PLAIN}"
+    if [[ -f "$cf_env_file" ]]; then
+        # shellcheck disable=SC1090
+        source "$cf_env_file"
+        if [[ -n "$CF_Token" ]]; then
+            if command -v curl >/dev/null 2>&1; then
+                local verify_resp
+                verify_resp=$(curl -s --max-time 8 -H "Authorization: Bearer ${CF_Token}" -H "Content-Type: application/json" "https://api.cloudflare.com/client/v4/user/tokens/verify" 2>/dev/null)
+                if echo "$verify_resp" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+                    echo -e "${GREEN}✅ Cloudflare Token 校验通过${PLAIN}"
+                    ((ok_count++))
+                else
+                    echo -e "${YELLOW}⚠️ Token 文件存在，但在线校验失败（可能权限不足/网络异常）${PLAIN}"
+                    ((warn_count++))
+                fi
+            else
+                echo -e "${YELLOW}⚠️ 未安装 curl，跳过在线校验。${PLAIN}"
+                ((warn_count++))
+            fi
+        else
+            echo -e "${RED}❌ Token 文件为空，请在维护菜单 [2] 重新写入。${PLAIN}"
+            ((err_count++))
+        fi
+    else
+        echo -e "${RED}❌ 未找到 Token 文件: ${cf_env_file}${PLAIN}"
+        ((err_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [2/5] 检查 Caddy 服务状态...${PLAIN}"
+    if command -v caddy >/dev/null 2>&1; then
+        if systemctl is-active --quiet caddy; then
+            echo -e "${GREEN}✅ Caddy 服务运行中${PLAIN}"
+            ((ok_count++))
+        else
+            echo -e "${YELLOW}⚠️ Caddy 已安装但未运行${PLAIN}"
+            ((warn_count++))
+        fi
+    else
+        echo -e "${RED}❌ 未安装 Caddy${PLAIN}"
+        ((err_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [3/5] 检查域名配置、证书与软链接...${PLAIN}"
+    local domain_count=0
+    if [[ -d /etc/caddy/conf.d ]]; then
+        while IFS= read -r conf_file; do
+            local domain
+            local listen_port
+            local backend
+            local backend_port
+            local cert_file
+            local key_file
+            local cert_end
+            local cert_ts
+            local now_ts
+            local days_left
+
+            domain=$(basename "$conf_file" .caddy)
+            cert_file="/etc/caddy/certs/${domain}.crt"
+            key_file="/etc/caddy/certs/${domain}.key"
+
+            if ! head -n1 "$conf_file" | grep -q '^https://'; then
+                continue
+            fi
+            ((domain_count++))
+
+            listen_port=$(sed -n '1{s@^https://[^:]*:\([0-9]\+\)[[:space:]]*{.*$@\1@p;q}' "$conf_file")
+            backend=$(grep -E '^[[:space:]]*reverse_proxy[[:space:]]+127.0.0.1:[0-9]+' "$conf_file" | awk '{print $2}' | head -n1)
+            backend_port=$(echo "$backend" | awk -F: '{print $2}')
+
+            echo -e "${CYAN}  - 域名: ${domain}${PLAIN}"
+
+            if [[ -f "$cert_file" && -f "$key_file" ]]; then
+                cert_end=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2-)
+                cert_ts=$(date -d "$cert_end" +%s 2>/dev/null)
+                now_ts=$(date +%s)
+                days_left=$(( (cert_ts - now_ts) / 86400 ))
+
+                if [[ -n "$cert_end" && "$days_left" -gt 15 ]]; then
+                    echo -e "    ${GREEN}证书状态: 正常 (剩余约 ${days_left} 天)${PLAIN}"
+                    ((ok_count++))
+                elif [[ -n "$cert_end" ]]; then
+                    echo -e "    ${YELLOW}证书状态: 即将到期 (剩余约 ${days_left} 天)${PLAIN}"
+                    ((warn_count++))
+                else
+                    echo -e "    ${RED}证书状态: 无法读取有效期${PLAIN}"
+                    ((err_count++))
+                fi
+            else
+                echo -e "    ${RED}证书状态: 缺失 /etc/caddy/certs/${domain}.crt|.key${PLAIN}"
+                ((err_count++))
+            fi
+
+            if [[ -L "/root/cert/${domain}.crt" && -e "/root/cert/${domain}.crt" && -L "/root/cert/${domain}.key" && -e "/root/cert/${domain}.key" ]]; then
+                echo -e "    ${GREEN}软链接状态: /root/cert 已正确挂载${PLAIN}"
+                ((ok_count++))
+            else
+                echo -e "    ${YELLOW}软链接状态: 缺失或失效，建议执行维护菜单 [4]${PLAIN}"
+                ((warn_count++))
+            fi
+
+            if [[ -n "$listen_port" ]] && ss -lnt 2>/dev/null | awk '{print $4}' | grep -q "127.0.0.1:${listen_port}$"; then
+                echo -e "    ${GREEN}监听状态: Caddy 本地端口 127.0.0.1:${listen_port} 可见${PLAIN}"
+                ((ok_count++))
+            else
+                echo -e "    ${YELLOW}监听状态: 未检测到 127.0.0.1:${listen_port} 在监听${PLAIN}"
+                ((warn_count++))
+            fi
+
+            if [[ -n "$backend_port" ]] && ss -lnt 2>/dev/null | awk '{print $4}' | grep -Eq ":${backend_port}$"; then
+                echo -e "    ${GREEN}后端状态: 127.0.0.1:${backend_port} 有服务监听${PLAIN}"
+                ((ok_count++))
+            else
+                echo -e "    ${YELLOW}后端状态: 127.0.0.1:${backend_port} 未检测到监听${PLAIN}"
+                ((warn_count++))
+            fi
+        done < <(find /etc/caddy/conf.d -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)
+    fi
+
+    if [[ "$domain_count" -eq 0 ]]; then
+        echo -e "${YELLOW}⚠️ 未检测到本功能托管的域名配置（https://域名:端口）。${PLAIN}"
+        ((warn_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [4/5] 检查清单文件...${PLAIN}"
+    if [[ -f /root/cert/caddy_cf_manifest.txt ]]; then
+        echo -e "${GREEN}✅ 清单文件存在: /root/cert/caddy_cf_manifest.txt${PLAIN}"
+        ((ok_count++))
+    else
+        echo -e "${YELLOW}⚠️ 清单文件不存在，建议执行维护菜单 [7] 重建。${PLAIN}"
+        ((warn_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [5/5] 总结...${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "${CYAN}体检结果: ${GREEN}${ok_count} 正常${PLAIN} / ${YELLOW}${warn_count} 警告${PLAIN} / ${RED}${err_count} 异常${PLAIN}"
+    if [[ "$err_count" -gt 0 ]]; then
+        echo -e "${RED}建议优先修复异常项，再继续业务切流。${PLAIN}"
+    elif [[ "$warn_count" -gt 0 ]]; then
+        echo -e "${YELLOW}当前可继续运行，但建议处理警告项提高稳定性。${PLAIN}"
+    else
+        echo -e "${GREEN}环境健康，可放心使用 Reality 回落 + Caddy 反代链路。${PLAIN}"
+    fi
+}
+
+func_caddy_cf_auto_fix() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧰 CF DNS 一键自动修复${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    local fixed_count=0
+    local warn_count=0
+    local fail_count=0
+    local cf_env_file="/root/.config/vps-panel/cloudflare.env"
+    local acme_bin="/root/.acme.sh/acme.sh"
+
+    echo -e "${YELLOW}▶ [1/7] 修复基础目录与主配置...${PLAIN}"
+    mkdir -p /root/cert /etc/caddy/certs /etc/caddy/conf.d /root/.config/vps-panel
+    chmod 700 /root/.config/vps-panel >/dev/null 2>&1
+
+    if [[ ! -f /etc/caddy/Caddyfile ]]; then
+        cat <<EOF > /etc/caddy/Caddyfile
+# Managed by VPS-Optimize
+import conf.d/*
+EOF
+        ((fixed_count++))
+    elif ! grep -q "import conf.d/\*" /etc/caddy/Caddyfile; then
+        echo -e "\nimport conf.d/*" >> /etc/caddy/Caddyfile
+        ((fixed_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [2/7] 修复证书权限...${PLAIN}"
+    if [[ -d /etc/caddy/certs ]]; then
+        if id caddy >/dev/null 2>&1; then
+            chown root:caddy /etc/caddy/certs/* 2>/dev/null
+            chmod 640 /etc/caddy/certs/* 2>/dev/null
+        else
+            chmod 600 /etc/caddy/certs/* 2>/dev/null
+        fi
+        ((fixed_count++))
+    else
+        ((warn_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [3/7] 全量重建 /root/cert 软链接...${PLAIN}"
+    local relink_count=0
+    if [[ -d /etc/caddy/certs ]]; then
+        while IFS= read -r cert_path; do
+            local domain
+            domain=$(basename "$cert_path" .crt)
+            if [[ -f "/etc/caddy/certs/${domain}.key" ]]; then
+                ln -sfn "/etc/caddy/certs/${domain}.crt" "/root/cert/${domain}.crt"
+                ln -sfn "/etc/caddy/certs/${domain}.key" "/root/cert/${domain}.key"
+                ((relink_count++))
+            fi
+        done < <(find /etc/caddy/certs -maxdepth 1 -type f -name "*.crt" 2>/dev/null | sort)
+    fi
+    echo -e "${GREEN}✅ 已重建 ${relink_count} 组软链接。${PLAIN}"
+    ((fixed_count++))
+
+    echo -e "${YELLOW}▶ [4/7] 近效期证书自动续签...${PLAIN}"
+    local renew_count=0
+    local renew_fail=0
+    if [[ -x "$acme_bin" && -f "$cf_env_file" ]]; then
+        # shellcheck disable=SC1090
+        source "$cf_env_file"
+        if [[ -n "$CF_Token" ]]; then
+            while IFS= read -r conf_file; do
+                local domain
+                local cert_file
+                local cert_end
+                local cert_ts
+                local now_ts
+                local days_left
+
+                domain=$(basename "$conf_file" .caddy)
+                cert_file="/etc/caddy/certs/${domain}.crt"
+
+                if ! head -n1 "$conf_file" | grep -q '^https://'; then
+                    continue
+                fi
+                if [[ ! -f "$cert_file" ]]; then
+                    continue
+                fi
+
+                cert_end=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2-)
+                cert_ts=$(date -d "$cert_end" +%s 2>/dev/null)
+                now_ts=$(date +%s)
+                days_left=$(( (cert_ts - now_ts) / 86400 ))
+
+                if [[ -z "$cert_end" || "$days_left" -le 15 ]]; then
+                    if CF_Token="$CF_Token" "$acme_bin" --renew -d "$domain" --force --ecc >/dev/null 2>&1; then
+                        "$acme_bin" --install-cert -d "$domain" --ecc \
+                            --fullchain-file "/etc/caddy/certs/${domain}.crt" \
+                            --key-file "/etc/caddy/certs/${domain}.key" \
+                            --reloadcmd "systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true" >/dev/null 2>&1
+                        ((renew_count++))
+                    else
+                        ((renew_fail++))
+                    fi
+                fi
+            done < <(find /etc/caddy/conf.d -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)
+
+            if [[ "$renew_fail" -gt 0 ]]; then
+                ((warn_count+=renew_fail))
+            fi
+            echo -e "${GREEN}✅ 自动续签完成，成功 ${renew_count} 个，失败 ${renew_fail} 个。${PLAIN}"
+            ((fixed_count++))
+        else
+            echo -e "${YELLOW}⚠️ Token 为空，跳过自动续签。${PLAIN}"
+            ((warn_count++))
+        fi
+    else
+        echo -e "${YELLOW}⚠️ 未检测到 acme.sh 或 Token 文件，跳过自动续签。${PLAIN}"
+        ((warn_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [5/7] 校验并重载 Caddy...${PLAIN}"
+    if command -v caddy >/dev/null 2>&1; then
+        if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+            systemctl enable caddy >/dev/null 2>&1
+            if systemctl restart caddy >/dev/null 2>&1; then
+                echo -e "${GREEN}✅ Caddy 配置校验通过并重启成功。${PLAIN}"
+                ((fixed_count++))
+            else
+                echo -e "${RED}❌ Caddy 重启失败，请手动检查日志。${PLAIN}"
+                ((fail_count++))
+            fi
+        else
+            echo -e "${RED}❌ Caddy 配置校验失败，未执行重启。${PLAIN}"
+            ((fail_count++))
+        fi
+    else
+        echo -e "${RED}❌ 未安装 Caddy，无法执行重载。${PLAIN}"
+        ((fail_count++))
+    fi
+
+    echo -e "${YELLOW}▶ [6/7] 重建清单文件...${PLAIN}"
+    generate_caddy_cf_manifest
+    ((fixed_count++))
+    echo -e "${GREEN}✅ 清单已重建: /root/cert/caddy_cf_manifest.txt${PLAIN}"
+
+    echo -e "${YELLOW}▶ [7/7] 补全 acme 自动续签任务...${PLAIN}"
+    if [[ -x "$acme_bin" ]]; then
+        if "$acme_bin" --install-cronjob >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ acme.sh 自动续签任务已确认。${PLAIN}"
+            ((fixed_count++))
+        else
+            echo -e "${YELLOW}⚠️ 无法确认 acme.sh 续签任务，请手动检查 crontab。${PLAIN}"
+            ((warn_count++))
+        fi
+    else
+        echo -e "${YELLOW}⚠️ 未安装 acme.sh，跳过续签任务补全。${PLAIN}"
+        ((warn_count++))
+    fi
+
+    echo -e "------------------------------------------------"
+    echo -e "${CYAN}自动修复结果: ${GREEN}${fixed_count} 已修复${PLAIN} / ${YELLOW}${warn_count} 警告${PLAIN} / ${RED}${fail_count} 失败${PLAIN}"
+    if [[ "$fail_count" -gt 0 ]]; then
+        echo -e "${RED}存在失败项，建议先执行维护菜单 [8] 体检复查并查看 caddy 日志。${PLAIN}"
+    else
+        echo -e "${GREEN}自动修复流程完成，可执行维护菜单 [8] 复检确认。${PLAIN}"
+    fi
+}
+
+func_caddy_cf_maintenance_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🛠️ CF DNS 二次维护菜单${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${GREEN}  1. 查看当前 CF DNS 管理域名与路径${PLAIN}"
+        echo -e "${GREEN}  2. 更新 Cloudflare API Token${PLAIN}"
+        echo -e "${GREEN}  3. 重新签发指定域名证书${PLAIN}"
+        echo -e "${GREEN}  4. 重建 /root/cert 证书软链接${PLAIN}"
+        echo -e "${GREEN}  5. 删除指定域名配置与证书${PLAIN}"
+        echo -e "${GREEN}  6. 校验并重载 Caddy${PLAIN}"
+        echo -e "${GREEN}  7. 重建清单文件${PLAIN}"
+        echo -e "${GREEN}  8. 一键体检（Token/证书/监听/后端）${PLAIN}"
+        echo -e "${GREEN}  9. 一键自动修复（常见问题）${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local m_choice
+        read -p "👉 请选择操作: " m_choice
+
+        case $m_choice in
+            1)
+                generate_caddy_cf_manifest
+                echo -e "${CYAN}👇 当前清单内容：${PLAIN}"
+                cat /root/cert/caddy_cf_manifest.txt 2>/dev/null
+                ;;
+
+            2)
+                local new_token escaped_token
+                mkdir -p /root/.config/vps-panel
+                chmod 700 /root/.config/vps-panel
+                echo -e "${CYAN}👇 请输入新的 Cloudflare API Token${PLAIN}"
+                read -s -p "CF Token: " new_token
+                echo ""
+                if [[ -z "$new_token" || ${#new_token} -lt 20 ]]; then
+                    echo -e "${RED}❌ Token 长度异常，更新取消。${PLAIN}"
+                else
+                    escaped_token=${new_token//\'/\'"\'"\'}
+                    printf "CF_Token='%s'\n" "$escaped_token" > /root/.config/vps-panel/cloudflare.env
+                    chmod 600 /root/.config/vps-panel/cloudflare.env
+                    echo -e "${GREEN}✅ Cloudflare Token 已更新。${PLAIN}"
+                fi
+                ;;
+
+            3)
+                local domain
+                local acme_bin="/root/.acme.sh/acme.sh"
+                local cf_env_file="/root/.config/vps-panel/cloudflare.env"
+
+                read -p "👉 请输入要重签的域名: " domain
+                if ! is_valid_domain "$domain"; then
+                    echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+
+                if [[ ! -x "$acme_bin" ]]; then
+                    echo -e "${RED}❌ 未检测到 acme.sh，请先运行 [18] 初始化。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+                if [[ ! -f "$cf_env_file" ]]; then
+                    echo -e "${RED}❌ 未检测到 Cloudflare Token，请先执行本菜单 [2]。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+
+                # shellcheck disable=SC1090
+                source "$cf_env_file"
+                echo -e "${CYAN}▶ 正在重签证书: ${domain}${PLAIN}"
+
+                if ! CF_Token="$CF_Token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 --force >/dev/null 2>&1; then
+                    echo -e "${RED}❌ 证书签发失败：${domain}${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+
+                mkdir -p /etc/caddy/certs /root/cert
+                if ! "$acme_bin" --install-cert -d "$domain" --ecc \
+                    --fullchain-file "/etc/caddy/certs/${domain}.crt" \
+                    --key-file "/etc/caddy/certs/${domain}.key" \
+                    --reloadcmd "systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true" >/dev/null 2>&1; then
+                    echo -e "${RED}❌ 证书安装失败：${domain}${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+
+                if id caddy >/dev/null 2>&1; then
+                    chown root:caddy "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key" >/dev/null 2>&1
+                    chmod 640 "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"
+                else
+                    chmod 600 "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"
+                fi
+
+                ln -sfn "/etc/caddy/certs/${domain}.crt" "/root/cert/${domain}.crt"
+                ln -sfn "/etc/caddy/certs/${domain}.key" "/root/cert/${domain}.key"
+                generate_caddy_cf_manifest
+                echo -e "${GREEN}✅ 重签完成并已更新 /root/cert 软链接。${PLAIN}"
+                ;;
+
+            4)
+                local link_mode domain
+                mkdir -p /root/cert
+                read -p "❓ 重建全部链接还是单域名？(all/one): " link_mode
+
+                if [[ "$link_mode" == "all" ]]; then
+                    local relink_count=0
+                    if [[ -d /etc/caddy/certs ]]; then
+                        while IFS= read -r cert_path; do
+                            domain=$(basename "$cert_path" .crt)
+                            if [[ -f "/etc/caddy/certs/${domain}.key" ]]; then
+                                ln -sfn "/etc/caddy/certs/${domain}.crt" "/root/cert/${domain}.crt"
+                                ln -sfn "/etc/caddy/certs/${domain}.key" "/root/cert/${domain}.key"
+                                ((relink_count++))
+                            fi
+                        done < <(find /etc/caddy/certs -maxdepth 1 -type f -name "*.crt" 2>/dev/null | sort)
+                    fi
+                    generate_caddy_cf_manifest
+                    echo -e "${GREEN}✅ 已重建 ${relink_count} 个域名的证书软链接。${PLAIN}"
+                else
+                    read -p "👉 请输入域名: " domain
+                    if ! is_valid_domain "$domain"; then
+                        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+                        read -n 1 -s -r -p "按任意键继续..."
+                        continue
+                    fi
+                    if [[ -f "/etc/caddy/certs/${domain}.crt" && -f "/etc/caddy/certs/${domain}.key" ]]; then
+                        ln -sfn "/etc/caddy/certs/${domain}.crt" "/root/cert/${domain}.crt"
+                        ln -sfn "/etc/caddy/certs/${domain}.key" "/root/cert/${domain}.key"
+                        generate_caddy_cf_manifest
+                        echo -e "${GREEN}✅ 软链接已重建：/root/cert/${domain}.crt 与 /root/cert/${domain}.key${PLAIN}"
+                    else
+                        echo -e "${RED}❌ 未找到该域名证书文件。${PLAIN}"
+                    fi
+                fi
+                ;;
+
+            5)
+                local domain purge_acme
+                read -p "👉 请输入要删除的域名: " domain
+                if ! is_valid_domain "$domain"; then
+                    echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+
+                read -p "❓ 确认删除 ${domain} 的配置与证书？(y/n): " yn
+                if [[ ! "$yn" =~ ^[Yy]$ ]]; then
+                    echo -e "${BLUE}已取消删除。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+
+                rm -f "/etc/caddy/conf.d/${domain}.caddy"
+                rm -f "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"
+                rm -f "/root/cert/${domain}.crt" "/root/cert/${domain}.key"
+
+                read -p "❓ 是否同时删除 acme.sh 历史记录？(y/n): " purge_acme
+                if [[ "$purge_acme" =~ ^[Yy]$ ]]; then
+                    rm -rf "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/${domain}"
+                fi
+
+                if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+                    systemctl restart caddy >/dev/null 2>&1
+                fi
+                generate_caddy_cf_manifest
+                echo -e "${GREEN}✅ ${domain} 已清理完成。${PLAIN}"
+                ;;
+
+            6)
+                if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+                    systemctl restart caddy >/dev/null 2>&1
+                    echo -e "${GREEN}✅ Caddy 配置校验通过，已重启生效。${PLAIN}"
+                else
+                    echo -e "${RED}❌ Caddy 配置校验失败，请检查 /etc/caddy/conf.d/*.caddy${PLAIN}"
+                fi
+                ;;
+
+            7)
+                generate_caddy_cf_manifest
+                echo -e "${GREEN}✅ 清单已重建：/root/cert/caddy_cf_manifest.txt${PLAIN}"
+                ;;
+
+            8)
+                func_caddy_cf_health_check
+                ;;
+
+            9)
+                func_caddy_cf_auto_fix
+                ;;
+
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
+        esac
+
+        echo ""
+        read -n 1 -s -r -p "按任意键继续..."
+    done
+}
+
 # ---------------------------------------------------------
 # 新增功能：查看 Caddy 已申请证书路径
 # ---------------------------------------------------------
