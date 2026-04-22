@@ -63,7 +63,7 @@ remove_pkg() {
     fi
 }
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh"
-ACME_ACCOUNT_EMAIL="admin@example.com"
+ACME_ACCOUNT_EMAIL="addid927@gmail.com"
 
 # --- 全局快捷键注册 ---
 create_shortcut() {
