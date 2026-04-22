@@ -464,7 +464,10 @@ issue_cf_dns_cert_with_retry() {
 
     acme_log="/tmp/vps_acme_${domain}_$(date +%s).log"
 
-    if CF_Token="$cf_token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 >"$acme_log" 2>&1; then
+    # 强制使用 Let's Encrypt，避免 ZeroSSL 触发 EAB 依赖导致签发失败。
+    "$acme_bin" --set-default-ca --server letsencrypt >/dev/null 2>&1 || true
+
+    if CF_Token="$cf_token" "$acme_bin" --issue --server letsencrypt --dns dns_cf -d "$domain" --keylength ec-256 >"$acme_log" 2>&1; then
         return 0
     fi
 
@@ -473,11 +476,11 @@ issue_cf_dns_cert_with_retry() {
     rm -rf "/root/.acme.sh/${domain}_ecc" >/dev/null 2>&1 || true
     rm -rf "/root/.acme.sh/${domain}" >/dev/null 2>&1 || true
 
-    if CF_Token="$cf_token" "$acme_bin" --issue --dns dns_cf -d "$domain" --keylength ec-256 --force >>"$acme_log" 2>&1; then
+    if CF_Token="$cf_token" "$acme_bin" --issue --server letsencrypt --dns dns_cf -d "$domain" --keylength ec-256 --force >>"$acme_log" 2>&1; then
         return 0
     fi
 
-    if CF_Token="$cf_token" "$acme_bin" --renew -d "$domain" --force --ecc >>"$acme_log" 2>&1; then
+    if CF_Token="$cf_token" "$acme_bin" --renew --server letsencrypt -d "$domain" --force --ecc >>"$acme_log" 2>&1; then
         return 0
     fi
 
@@ -769,6 +772,7 @@ func_caddy_cf_reality_wizard() {
         echo -e "${RED}❌ 未找到 acme.sh，可执行文件异常。${PLAIN}"
         return
     fi
+    "$acme_bin" --set-default-ca --server letsencrypt >/dev/null 2>&1 || true
 
     local cf_env_dir="/root/.config/vps-panel"
     local cf_env_file="${cf_env_dir}/cloudflare.env"
@@ -1148,7 +1152,7 @@ EOF
                 days_left=$(( (cert_ts - now_ts) / 86400 ))
 
                 if [[ -z "$cert_end" || "$days_left" -le 15 ]]; then
-                    if CF_Token="$CF_Token" "$acme_bin" --renew -d "$domain" --force --ecc >/dev/null 2>&1; then
+                    if issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
                         "$acme_bin" --install-cert -d "$domain" --ecc \
                             --fullchain-file "/etc/caddy/certs/${domain}.crt" \
                             --key-file "/etc/caddy/certs/${domain}.key" \
