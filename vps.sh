@@ -63,7 +63,6 @@ remove_pkg() {
     fi
 }
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh"
-ACME_ACCOUNT_EMAIL="addid927@gmail.com"
 
 # --- 全局快捷键注册 ---
 create_shortcut() {
@@ -421,6 +420,68 @@ is_valid_domain() {
     echo "$domain" | grep -Eq '^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
 }
 
+get_acme_account_email() {
+    local account_conf="/root/.acme.sh/account.conf"
+    if [[ -f "$account_conf" ]]; then
+        local existing_email
+        existing_email=$(grep '^ACCOUNT_EMAIL=' "$account_conf" 2>/dev/null | cut -d"'" -f2 | cut -d'"' -f2)
+        if echo "$existing_email" | grep -Eq '^[a-zA-Z0-9._%+-]+@(gmail\.com|outlook\.com|yahoo\.com|hotmail\.com)$'; then
+            echo "$existing_email"
+            return
+        fi
+    fi
+
+    local prefix
+    prefix=$(tr -dc 'a-z0-9' < /dev/urandom | head -c 12 2>/dev/null || echo "user$RANDOM$RANDOM")
+    local domains=("gmail.com" "outlook.com" "yahoo.com" "hotmail.com")
+    local domain="${domains[$((RANDOM % ${#domains[@]}))]}"
+    echo "${prefix}@${domain}"
+}
+
+prepare_acme_account() {
+    local acme_bin="$1"
+    local acme_email="$2"
+    local account_log="${3:-/tmp/vps_acme_account_$(date +%s).log}"
+    local account_conf="/root/.acme.sh/account.conf"
+    local le_ca_dir="/root/.acme.sh/ca/acme-v02.api.letsencrypt.org"
+
+    if [[ ! -x "$acme_bin" ]]; then
+        return 1
+    fi
+
+    mkdir -p /root/.acme.sh
+    if [[ -f "$account_conf" ]]; then
+        if grep -q '^ACCOUNT_EMAIL=' "$account_conf"; then
+            sed -i "s|^ACCOUNT_EMAIL=.*|ACCOUNT_EMAIL='${acme_email}'|" "$account_conf"
+        else
+            printf "ACCOUNT_EMAIL='%s'\n" "$acme_email" >> "$account_conf"
+        fi
+    else
+        printf "ACCOUNT_EMAIL='%s'\n" "$acme_email" > "$account_conf"
+    fi
+
+    export ACCOUNT_EMAIL="$acme_email"
+    "$acme_bin" --set-default-ca --server letsencrypt >/dev/null 2>&1 || true
+
+    if "$acme_bin" --register-account --server letsencrypt --accountemail "$acme_email" >"$account_log" 2>&1 || \
+       "$acme_bin" --register-account --server letsencrypt -m "$acme_email" >>"$account_log" 2>&1 || \
+       "$acme_bin" --update-account --server letsencrypt --accountemail "$acme_email" >>"$account_log" 2>&1 || \
+       "$acme_bin" --update-account --server letsencrypt -m "$acme_email" >>"$account_log" 2>&1; then
+        return 0
+    fi
+
+    # 若历史账户状态异常（例如旧邮箱残留），清理 LE 账户缓存后重试。
+    rm -rf "$le_ca_dir" "/root/.acme.sh/ca/acme-staging-v02.api.letsencrypt.org" >/dev/null 2>&1 || true
+    if "$acme_bin" --register-account --server letsencrypt --accountemail "$acme_email" >>"$account_log" 2>&1 || \
+       "$acme_bin" --register-account --server letsencrypt -m "$acme_email" >>"$account_log" 2>&1 || \
+       "$acme_bin" --update-account --server letsencrypt --accountemail "$acme_email" >>"$account_log" 2>&1 || \
+       "$acme_bin" --update-account --server letsencrypt -m "$acme_email" >>"$account_log" 2>&1; then
+        return 0
+    fi
+
+    return 1
+}
+
 quarantine_legacy_caddy_443_configs() {
     local conf_dir="/etc/caddy/conf.d"
     local quarantine_dir="/etc/caddy/conf.d_quarantine_443_$(date +%s)"
@@ -457,6 +518,7 @@ issue_cf_dns_cert_with_retry() {
     local acme_bin="$3"
     local cf_token
     local acme_log
+    local acme_email
 
     cf_token=$(echo "$cf_token_raw" | tr -d '\r\n')
     if [[ -z "$cf_token" || ! -x "$acme_bin" || -z "$domain" ]]; then
@@ -464,11 +526,21 @@ issue_cf_dns_cert_with_retry() {
     fi
 
     acme_log="/tmp/vps_acme_${domain}_$(date +%s).log"
+    acme_email=$(get_acme_account_email)
 
     # 强制使用 Let's Encrypt，避免 ZeroSSL 触发 EAB 依赖导致签发失败。
-    "$acme_bin" --set-default-ca --server letsencrypt >/dev/null 2>&1 || true
-    if ! "$acme_bin" --register-account -m "$ACME_ACCOUNT_EMAIL" --server letsencrypt >/dev/null 2>&1; then
-        "$acme_bin" --update-account -m "$ACME_ACCOUNT_EMAIL" --server letsencrypt >/dev/null 2>&1 || true
+    if ! prepare_acme_account "$acme_bin" "$acme_email" "$acme_log"; then
+        mkdir -p /root/cert
+        cp -f "$acme_log" /root/cert/acme_last_error.log >/dev/null 2>&1 || true
+        echo -e "${RED}❌ acme 账户初始化失败：${domain}${PLAIN}"
+        echo -e "${YELLOW}   最近错误日志: /root/cert/acme_last_error.log${PLAIN}"
+        local account_hint
+        account_hint=$(grep -Ei 'error|invalid|unauthorized|forbidden|failed|contact|account' "$acme_log" | tail -n 12)
+        if [[ -n "$account_hint" ]]; then
+            echo -e "${YELLOW}   关键报错如下：${PLAIN}"
+            echo "$account_hint"
+        fi
+        return 1
     fi
 
     if CF_Token="$cf_token" "$acme_bin" --issue --server letsencrypt --dns dns_cf -d "$domain" --keylength ec-256 >"$acme_log" 2>&1; then
@@ -765,9 +837,11 @@ func_caddy_cf_reality_wizard() {
     fi
 
     local acme_bin="/root/.acme.sh/acme.sh"
+    local acme_email
+    acme_email=$(get_acme_account_email)
     if [[ ! -x "$acme_bin" ]]; then
         echo -e "${CYAN}▶ 正在安装 acme.sh...${PLAIN}"
-        if ! bash -c "curl -fsSL https://get.acme.sh | sh -s email=${ACME_ACCOUNT_EMAIL}" >/dev/null 2>&1; then
+        if ! bash -c "curl -fsSL https://get.acme.sh | sh -s email=${acme_email}" >/dev/null 2>&1; then
             echo -e "${RED}❌ acme.sh 安装失败，请检查网络后重试。${PLAIN}"
             return
         fi
@@ -776,9 +850,9 @@ func_caddy_cf_reality_wizard() {
         echo -e "${RED}❌ 未找到 acme.sh，可执行文件异常。${PLAIN}"
         return
     fi
-    "$acme_bin" --set-default-ca --server letsencrypt >/dev/null 2>&1 || true
-    if ! "$acme_bin" --register-account -m "$ACME_ACCOUNT_EMAIL" --server letsencrypt >/dev/null 2>&1; then
-        "$acme_bin" --update-account -m "$ACME_ACCOUNT_EMAIL" --server letsencrypt >/dev/null 2>&1 || true
+    if ! prepare_acme_account "$acme_bin" "$acme_email"; then
+        echo -e "${RED}❌ acme 账户初始化失败，请检查邮箱配置后重试。${PLAIN}"
+        return
     fi
 
     local cf_env_dir="/root/.config/vps-panel"
@@ -3260,4 +3334,3 @@ main_menu() {
 
 # --- 启动面板 ---
 main_menu
-
