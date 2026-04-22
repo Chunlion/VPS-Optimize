@@ -63,6 +63,7 @@ remove_pkg() {
     fi
 }
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh"
+ACME_ACCOUNT_EMAIL="admin@example.com"
 
 # --- 全局快捷键注册 ---
 create_shortcut() {
@@ -466,6 +467,9 @@ issue_cf_dns_cert_with_retry() {
 
     # 强制使用 Let's Encrypt，避免 ZeroSSL 触发 EAB 依赖导致签发失败。
     "$acme_bin" --set-default-ca --server letsencrypt >/dev/null 2>&1 || true
+    if ! "$acme_bin" --register-account -m "$ACME_ACCOUNT_EMAIL" --server letsencrypt >/dev/null 2>&1; then
+        "$acme_bin" --update-account -m "$ACME_ACCOUNT_EMAIL" --server letsencrypt >/dev/null 2>&1 || true
+    fi
 
     if CF_Token="$cf_token" "$acme_bin" --issue --server letsencrypt --dns dns_cf -d "$domain" --keylength ec-256 >"$acme_log" 2>&1; then
         return 0
@@ -763,7 +767,7 @@ func_caddy_cf_reality_wizard() {
     local acme_bin="/root/.acme.sh/acme.sh"
     if [[ ! -x "$acme_bin" ]]; then
         echo -e "${CYAN}▶ 正在安装 acme.sh...${PLAIN}"
-        if ! bash -c "curl -fsSL https://get.acme.sh | sh -s email=admin@localhost" >/dev/null 2>&1; then
+        if ! bash -c "curl -fsSL https://get.acme.sh | sh -s email=${ACME_ACCOUNT_EMAIL}" >/dev/null 2>&1; then
             echo -e "${RED}❌ acme.sh 安装失败，请检查网络后重试。${PLAIN}"
             return
         fi
@@ -773,6 +777,9 @@ func_caddy_cf_reality_wizard() {
         return
     fi
     "$acme_bin" --set-default-ca --server letsencrypt >/dev/null 2>&1 || true
+    if ! "$acme_bin" --register-account -m "$ACME_ACCOUNT_EMAIL" --server letsencrypt >/dev/null 2>&1; then
+        "$acme_bin" --update-account -m "$ACME_ACCOUNT_EMAIL" --server letsencrypt >/dev/null 2>&1 || true
+    fi
 
     local cf_env_dir="/root/.config/vps-panel"
     local cf_env_file="${cf_env_dir}/cloudflare.env"
