@@ -168,8 +168,6 @@ init_config() {
         cat > "$CONFIG_FILE" << 'EOF'
 {
   "global": {
-        "billing_mode": "double",
-        "display_mode": "billing"
   },
   "ports": {},
   "nftables": {
@@ -487,19 +485,13 @@ restore_all_monitoring_rules() {
 calculate_total_traffic() {
     local input_bytes=$1
     local output_bytes=$2
-    local billing_mode=${3:-"double"}
-    local raw_total=$((input_bytes + output_bytes))
-    case $billing_mode in
-        "double") echo $((raw_total * 2)) ;;
-        "single"|*) echo $raw_total ;;
-    esac
+    echo $((input_bytes + output_bytes))
 }
 
 get_port_status_label() {
     local port=$1
     local port_config=$(jq -r ".ports.\"$port\"" "$CONFIG_FILE" 2>/dev/null)
     local remark=$(echo "$port_config" | jq -r '.remark // ""')
-    local billing_mode=$(echo "$port_config" | jq -r '.billing_mode // "double"')
     local limit_enabled=$(echo "$port_config" | jq -r '.bandwidth_limit.enabled // false')
     local rate_limit=$(echo "$port_config" | jq -r '.bandwidth_limit.rate // "unlimited"')
     local quota_enabled=$(echo "$port_config" | jq -r '.quota.enabled // true')
@@ -521,11 +513,7 @@ get_port_status_label() {
             local limit_bytes=$(parse_size_to_bytes "$monthly_limit")
             local usage_percent=$((current_usage * 100 / limit_bytes))
             local quota_display="$monthly_limit"
-            if [ "$billing_mode" = "double" ]; then
-                status_tags+=("[双向${quota_display}]")
-            else
-                status_tags+=("[单向${quota_display}]")
-            fi
+            status_tags+=("[${quota_display}]")
             if [ "$reset_day" != "null" ]; then
                 local time_info=($(get_beijing_month_year))
                 local current_day=${time_info[0]}
@@ -539,7 +527,7 @@ get_port_status_label() {
             fi
             if [ $usage_percent -ge 100 ]; then status_tags+=("[已超限]"); fi
         else
-            if [ "$billing_mode" = "double" ]; then status_tags+=("[双向无限制]"); else status_tags+=("[单向无限制]"); fi
+            status_tags+=("[无限制]")
         fi
     fi
     if [ "$limit_enabled" = "true" ] && [ "$rate_limit" != "unlimited" ]; then
@@ -556,8 +544,7 @@ get_port_monthly_usage() {
     local traffic_data=($(get_nftables_counter_data "$port"))
     local input_bytes=${traffic_data[0]}
     local output_bytes=${traffic_data[1]}
-    local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
-    calculate_total_traffic "$input_bytes" "$output_bytes" "$billing_mode"
+    calculate_total_traffic "$input_bytes" "$output_bytes"
 }
 
 validate_bandwidth() {
@@ -614,17 +601,11 @@ format_tc_burst() {
 }
 
 get_global_display_mode() {
-    local display_mode=$(jq -r '.global.display_mode // "billing"' "$CONFIG_FILE" 2>/dev/null || echo "billing")
-    case "$display_mode" in
-        "billing"|"raw") echo "$display_mode" ;;
-        *) echo "billing" ;;
-    esac
+    echo "raw"
 }
 
 ensure_global_defaults() {
-    if ! jq -e '.global.display_mode' "$CONFIG_FILE" >/dev/null 2>&1; then
-        update_config '.global.display_mode = "billing"' >/dev/null 2>&1 || true
-    fi
+    :
 }
 
 ensure_daily_usage_files() {
@@ -682,19 +663,13 @@ generate_tc_class_id() {
 }
 
 get_daily_total_traffic() {
-    local display_mode=${1:-"billing"}
     local total_bytes=0
     local ports=($(get_active_ports))
     for port in "${ports[@]}"; do
         local traffic_data=($(get_nftables_counter_data "$port"))
         local input_bytes=${traffic_data[0]}
         local output_bytes=${traffic_data[1]}
-        local raw_total=$((input_bytes + output_bytes))
-        local port_total=$raw_total
-        if [ "$display_mode" = "billing" ]; then
-            local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
-            port_total=$(calculate_total_traffic "$input_bytes" "$output_bytes" "$billing_mode")
-        fi
+        local port_total=$((input_bytes + output_bytes))
         total_bytes=$(( total_bytes + port_total ))
     done
     format_bytes $total_bytes
@@ -717,36 +692,49 @@ collect_daily_usage_snapshot() {
         local input_bytes=${traffic_data[0]:-0}
         local output_bytes=${traffic_data[1]:-0}
         local raw_total=$((input_bytes + output_bytes))
-        local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
-        local billed_total=$(calculate_total_traffic "$input_bytes" "$output_bytes" "$billing_mode")
 
-        local prev_raw=$(jq -r --arg port "$port" '.ports[$port].raw // 0' "$state_tmp" 2>/dev/null || echo "0")
-        local prev_billed=$(jq -r --arg port "$port" '.ports[$port].billed // 0' "$state_tmp" 2>/dev/null || echo "0")
+        local prev_raw=0
+        if jq -e --arg port "$port" '.ports[$port]' "$state_tmp" >/dev/null 2>&1; then
+            prev_raw=$(jq -r --arg port "$port" '.ports[$port].raw // 0' "$state_tmp" 2>/dev/null || echo "0")
+        else
+            prev_raw=$raw_total
+        fi
 
         local delta_raw=$((raw_total - prev_raw))
-        local delta_billed=$((billed_total - prev_billed))
-
-        # 计数器被重置时会出现负差值，这里自动兜底为当前值，避免日报断档。
-        if [ "$delta_raw" -lt 0 ]; then delta_raw=$raw_total; fi
-        if [ "$delta_billed" -lt 0 ]; then delta_billed=$billed_total; fi
+        if [ "$delta_raw" -lt 0 ]; then
+            local backup_raw=0
+            if [ -f "$TRAFFIC_DATA_FILE" ]; then
+                local backup_input=$(jq -r ".\"$port\".input // 0" "$TRAFFIC_DATA_FILE" 2>/dev/null || echo "0")
+                local backup_output=$(jq -r ".\"$port\".output // 0" "$TRAFFIC_DATA_FILE" 2>/dev/null || echo "0")
+                backup_raw=$((backup_input + backup_output))
+            fi
+            if [ "$backup_raw" -gt 0 ] && [ "$backup_raw" -gt "$prev_raw" ]; then
+                delta_raw=$((raw_total - backup_raw))
+                if [ "$delta_raw" -lt 0 ]; then
+                    delta_raw=$raw_total
+                    prev_raw=0
+                else
+                    prev_raw=$backup_raw
+                fi
+            else
+                delta_raw=$raw_total
+                prev_raw=0
+            fi
+        fi
 
         jq --arg day "$day_key" \
            --arg port "$port" \
            --arg ts "$snapshot_time" \
            --argjson delta_raw "$delta_raw" \
-           --argjson delta_billed "$delta_billed" \
-           '.days[$day].ports[$port].raw = ((.days[$day].ports[$port].raw // 0) + $delta_raw) |
-            .days[$day].ports[$port].billed = ((.days[$day].ports[$port].billed // 0) + $delta_billed) |
+           '.days[$day].ports[$port] = (.days[$day].ports[$port] // 0) + $delta_raw |
             .days[$day].total_raw = ((.days[$day].total_raw // 0) + $delta_raw) |
-            .days[$day].total_billed = ((.days[$day].total_billed // 0) + $delta_billed) |
             .days[$day].updated_at = $ts |
             .meta.last_snapshot = $ts' "$usage_tmp" > "${usage_tmp}.new" && mv "${usage_tmp}.new" "$usage_tmp"
 
         jq --arg port "$port" \
            --arg ts "$snapshot_time" \
            --argjson raw "$raw_total" \
-           --argjson billed "$billed_total" \
-           '.ports[$port] = {raw: $raw, billed: $billed} |
+           '.ports[$port] = {raw: $raw} |
             .updated_at = $ts' "$state_tmp" > "${state_tmp}.new" && mv "${state_tmp}.new" "$state_tmp"
     done
 
@@ -771,10 +759,9 @@ show_daily_report_for_day() {
     fi
 
     local total_raw=$(jq -r --arg day "$day_key" '.days[$day].total_raw // 0' "$DAILY_USAGE_FILE")
-    local total_billed=$(jq -r --arg day "$day_key" '.days[$day].total_billed // 0' "$DAILY_USAGE_FILE")
 
     echo -e "${BLUE}=== $day_key 日报 ===${NC}"
-    echo -e "真实总量: ${GREEN}$(format_bytes "$total_raw")${NC} | 计费总量: ${GREEN}$(format_bytes "$total_billed")${NC}"
+    echo -e "流量总量: ${GREEN}$(format_bytes "$total_raw")${NC}"
     echo "────────────────────────────────────────────────────────"
 
     local ports=($(jq -r --arg day "$day_key" '.days[$day].ports | keys[]?' "$DAILY_USAGE_FILE" 2>/dev/null | sort -n))
@@ -784,32 +771,28 @@ show_daily_report_for_day() {
     fi
 
     for port in "${ports[@]}"; do
-        local raw=$(jq -r --arg day "$day_key" --arg port "$port" '.days[$day].ports[$port].raw // 0' "$DAILY_USAGE_FILE")
-        local billed=$(jq -r --arg day "$day_key" --arg port "$port" '.days[$day].ports[$port].billed // 0' "$DAILY_USAGE_FILE")
-        echo -e "端口 ${GREEN}$port${NC} | 真实: ${GREEN}$(format_bytes "$raw")${NC} | 计费: ${GREEN}$(format_bytes "$billed")${NC}"
+        local raw=$(jq -r --arg day "$day_key" --arg port "$port" '.days[$day].ports[$port] | if type == "object" then .raw // 0 else . // 0 end' "$DAILY_USAGE_FILE")
+        echo -e "端口 ${GREEN}$port${NC} | 流量: ${GREEN}$(format_bytes "$raw")${NC}"
     done
 }
 
 show_recent_7_days_trend() {
     ensure_daily_usage_files
     local sum_raw=0
-    local sum_billed=0
 
     echo -e "${BLUE}=== 近7日趋势报表 ===${NC}"
-    echo "日期 | 真实总量 | 计费总量"
+    echo "日期 | 流量总量"
     echo "────────────────────────────────────────────────────────"
 
     for ((i=6; i>=0; i--)); do
         local day_key=$(get_beijing_time -d "-$i day" +%F)
         local day_raw=$(jq -r --arg day "$day_key" '.days[$day].total_raw // 0' "$DAILY_USAGE_FILE" 2>/dev/null || echo "0")
-        local day_billed=$(jq -r --arg day "$day_key" '.days[$day].total_billed // 0' "$DAILY_USAGE_FILE" 2>/dev/null || echo "0")
         sum_raw=$((sum_raw + day_raw))
-        sum_billed=$((sum_billed + day_billed))
-        echo "$day_key | $(format_bytes "$day_raw") | $(format_bytes "$day_billed")"
+        echo "$day_key | $(format_bytes "$day_raw")"
     done
 
     echo "────────────────────────────────────────────────────────"
-    echo -e "7日合计 | 真实: ${GREEN}$(format_bytes "$sum_raw")${NC} | 计费: ${GREEN}$(format_bytes "$sum_billed")${NC}"
+    echo -e "7日合计: ${GREEN}$(format_bytes "$sum_raw")${NC}"
 }
 
 manage_daily_usage_reports() {
@@ -873,30 +856,23 @@ manage_daily_usage_reports() {
 format_port_list() {
     local format_type="$1"
     local active_ports=($(get_active_ports))
-    local display_mode=$(get_global_display_mode)
     local result=""
     for port in "${active_ports[@]}"; do
         local traffic_data=($(get_nftables_counter_data "$port"))
         local input_bytes=${traffic_data[0]}
         local output_bytes=${traffic_data[1]}
-        local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
-        local raw_total_bytes=$((input_bytes + output_bytes))
-        local billed_total_bytes=$(calculate_total_traffic "$input_bytes" "$output_bytes" "$billing_mode")
-        local total_bytes=$billed_total_bytes
-        [ "$display_mode" = "raw" ] && total_bytes=$raw_total_bytes
+        local total_bytes=$((input_bytes + output_bytes))
         local total_formatted=$(format_bytes $total_bytes)
-        local raw_total_formatted=$(format_bytes $raw_total_bytes)
-        local billed_total_formatted=$(format_bytes $billed_total_bytes)
         local output_formatted=$(format_bytes $output_bytes)
         local status_label=$(get_port_status_label "$port")
         local input_formatted=$(format_bytes $input_bytes)
 
         if [ "$format_type" = "display" ]; then
-            echo -e "端口:${GREEN}$port${NC} | 当前总量:${GREEN}$total_formatted${NC} | 真实:${GREEN}$raw_total_formatted${NC} | 计费:${GREEN}$billed_total_formatted${NC} | 上行(入站): ${GREEN}$input_formatted${NC} | 下行(出站):${GREEN}$output_formatted${NC} | ${YELLOW}$status_label${NC}"
+            echo -e "端口:${GREEN}$port${NC} | 当前总量:${GREEN}$total_formatted${NC} | 上行(入站): ${GREEN}$input_formatted${NC} | 下行(出站):${GREEN}$output_formatted${NC} | ${YELLOW}$status_label${NC}"
         elif [ "$format_type" = "markdown" ]; then
-            result+="> 端口:**${port}** | 当前总量:**${total_formatted}** | 真实:**${raw_total_formatted}** | 计费:**${billed_total_formatted}** | 上行:**${input_formatted}** | 下行:**${output_formatted}** | ${status_label}\n"
+            result+="> 端口:**${port}** | 当前总量:**${total_formatted}** | 上行:**${input_formatted}** | 下行:**${output_formatted}** | ${status_label}\n"
         else
-            result+="\n端口:${port} | 当前总量:${total_formatted} | 真实:${raw_total_formatted} | 计费:${billed_total_formatted} | 上行(入站): ${input_formatted} | 下行(出站):${output_formatted} | ${status_label}"
+            result+="\n端口:${port} | 当前总量:${total_formatted} | 上行(入站): ${input_formatted} | 下行(出站):${output_formatted} | ${status_label}"
         fi
     done
     if [ "$format_type" = "message" ] || [ "$format_type" = "markdown" ]; then
@@ -908,16 +884,13 @@ show_main_menu() {
     clear
     local active_ports=($(get_active_ports))
     local port_count=${#active_ports[@]}
-    local display_mode=$(get_global_display_mode)
-    local display_mode_label="计费值"
-    [ "$display_mode" = "raw" ] && display_mode_label="真实值"
-    local daily_total=$(get_daily_total_traffic "$display_mode")
+    local daily_total=$(get_daily_total_traffic)
 
     echo -e "${BLUE}=== 端口流量狗 v$SCRIPT_VERSION ===${NC}"
     echo -e "${GREEN}介绍主页:${NC}https://zywe.de | ${GREEN}原项目:${NC}https://github.com/zywe03/realm-xwPF"
     echo -e "${GREEN}项目地址：https://github.com/Chunlion/VPS-Optimize 作者修改了部分代码 | 快捷命令: dog${NC}"
     echo
-    echo -e "${GREEN}状态: 监控中${NC} | ${BLUE}守护端口: ${port_count}个${NC} | ${YELLOW}端口总流量(${display_mode_label}): $daily_total${NC}"
+    echo -e "${GREEN}状态: 监控中${NC} | ${BLUE}守护端口: ${port_count}个${NC} | ${YELLOW}端口总流量: $daily_total${NC}"
     echo "────────────────────────────────────────────────────────"
 
     if [ $port_count -gt 0 ]; then
@@ -931,7 +904,7 @@ show_main_menu() {
     echo -e "${BLUE}3.${NC} 流量重置管理          ${BLUE}4.${NC} 一键导出/导入配置"
     echo -e "${BLUE}5.${NC} 检查并自动热更新脚本    ${BLUE}6.${NC} 卸载脚本"
     echo -e "${BLUE}7.${NC} 通知管理 (含交互式TG机器人)"
-    echo -e "${BLUE}8.${NC} 显示模式切换 (计费值/真实值)"
+    echo -e "${BLUE}8.${NC} 流量显示模式"
     echo -e "${BLUE}9.${NC} 流量日报与趋势报表"
     echo -e "${BLUE}0.${NC} 退出"
     echo
@@ -1024,19 +997,6 @@ add_port_monitoring() {
     fi
 
     echo
-    echo "请选择计费模式:"
-    echo "1. 双向计费 (按端口进出总流量x2计费，近似覆盖上游出口开销)"
-    echo "2. 单项计费 (按端口进出总流量计费，不加倍)"
-    read -p "请选择计费模式(回车默认1) [1-2]: " billing_choice
-
-    local billing_mode="double"
-    case $billing_choice in
-        1|"") billing_mode="double" ;;
-        2) billing_mode="single" ;;
-        *) billing_mode="double" ;;
-    esac
-
-    echo
     local port_list=$(IFS=','; echo "${valid_ports[*]}")
     while true; do
         echo "请输入配额值（0为无限制）（要带单位MB/GB/T）:"
@@ -1101,14 +1061,12 @@ add_port_monitoring() {
         (
             flock -w 5 9 || exit 1
             jq --arg port "$port" \
-               --arg billing "$billing_mode" \
                --arg remark "$remark" \
                --arg created "$(get_beijing_time -Iseconds)" \
                --argjson quota_conf "$quota_config" \
                '.ports[$port] = {
                    name: ("端口" + $port),
                    enabled: true,
-                   billing_mode: $billing,
                    bandwidth_limit: {enabled: false, rate: "unlimited"},
                    quota: $quota_conf,
                    remark: $remark,
@@ -1397,70 +1355,14 @@ manage_traffic_limits() {
     echo -e "${BLUE}=== 端口限制设置管理 ===${NC}"
     echo "1. 设置端口带宽限制（速率控制）"
     echo "2. 设置端口流量配额（总量控制）"
-    echo "3. 修改端口计费方式（双向/单项）"
     echo "0. 返回主菜单"
-    read -p "请选择操作 [0-3]: " choice
+    read -p "请选择操作 [0-2]: " choice
     case $choice in
         1) set_port_bandwidth_limit ;;
         2) set_port_quota_limit ;;
-        3) change_port_billing_mode ;;
         0) show_main_menu ;;
         *) echo -e "${RED}无效选择${NC}"; sleep 1; manage_traffic_limits ;;
     esac
-}
-
-change_port_billing_mode() {
-    local active_ports=$(jq -r '.ports | keys[]' "$CONFIG_FILE" 2>/dev/null | sort -n)
-    if [ -z "$active_ports" ]; then sleep 2; manage_traffic_limits; return; fi
-    
-    local port_list=()
-    local idx=1
-    for port in $active_ports; do
-        local current_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
-        local mode_display=$([ "$current_mode" = "double" ] && echo "双向" || echo "单向")
-        echo -e "  $idx. 端口 $port - 当前模式: ${BLUE}${mode_display}${NC}"
-        port_list+=("$port")
-        ((idx++))
-    done
-    echo "  0. 返回上级菜单"
-    
-    read -p "请选择要修改的端口 [0-$((idx-1))]: " port_choice
-    if [ "$port_choice" = "0" ]; then manage_traffic_limits; return; fi
-    if ! [[ "$port_choice" =~ ^[0-9]+$ ]] || [ "$port_choice" -lt 1 ] || [ "$port_choice" -gt ${#port_list[@]} ]; then
-        change_port_billing_mode; return
-    fi
-    
-    local target_port="${port_list[$((port_choice-1))]}"
-    echo "1. 双向计费 (端口进出总流量x2)"
-    echo "2. 单项计费 (端口进出总流量)"
-    echo "0. 取消"
-    read -p "请选择计费模式 [0-2]: " mode_choice
-    
-    local new_mode=""
-    case $mode_choice in
-        1) new_mode="double" ;;
-        2) new_mode="single" ;;
-        0|"") change_port_billing_mode; return ;;
-        *) change_port_billing_mode; return ;;
-    esac
-    
-    local traffic_data=($(get_nftables_counter_data "$target_port"))
-    local saved_input=${traffic_data[0]:-0}
-    local saved_output=${traffic_data[1]:-0}
-    
-    remove_nftables_rules "$target_port"
-    update_config ".ports.\"$target_port\".billing_mode = \"$new_mode\""
-    
-    restore_counter_value "$target_port" "$saved_input" "$saved_output"
-    add_nftables_rules "$target_port"
-    
-    local quota_enabled=$(jq -r ".ports.\"$target_port\".quota.enabled // false" "$CONFIG_FILE")
-    local quota_limit=$(jq -r ".ports.\"$target_port\".quota.monthly_limit // \"\"" "$CONFIG_FILE")
-    if [ "$quota_enabled" = "true" ] && [ -n "$quota_limit" ] && [ "$quota_limit" != "null" ] && [ "$quota_limit" != "unlimited" ]; then
-        apply_nftables_quota "$target_port" "$quota_limit"
-    fi
-    echo -e "${GREEN}✓ 计费方式已更新${NC}"
-    sleep 2; change_port_billing_mode
 }
 
 # 优化5：批量应用 nftables 配额限制规则
@@ -1469,7 +1371,6 @@ apply_nftables_quota() {
     local quota_limit=$2
     local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
-    local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
     local quota_bytes=$(parse_size_to_bytes "$quota_limit")
     
     local current_traffic=($(get_nftables_counter_data "$port"))
@@ -1477,15 +1378,6 @@ apply_nftables_quota() {
     local effective_quota_bytes=$quota_bytes
     local effective_used_bytes=$current_raw_total
     local batch_cmds=""
-
-    # 单项: 按进出总流量计费; 双向: 按进出总流量x2计费，因此 quota 阈值折算为一半。
-    if [ "$billing_mode" = "double" ]; then
-        effective_quota_bytes=$((quota_bytes / 2))
-        effective_used_bytes=$current_raw_total
-        if [ "$effective_quota_bytes" -lt 1 ]; then
-            effective_quota_bytes=1
-        fi
-    fi
 
     local port_safe=$(echo "$port" | tr '-' '_')
     local quota_name="port_${port_safe}_quota"
@@ -1911,26 +1803,12 @@ stop_interactive_tg() {
 }
 
 manage_display_mode() {
-    local current_mode=$(get_global_display_mode)
-    local current_label="计费值"
-    [ "$current_mode" = "raw" ] && current_label="真实值"
-
     echo -e "${BLUE}=== 流量显示模式设置 ===${NC}"
-    echo -e "当前模式: ${GREEN}${current_label}${NC}"
-    echo "1. 显示计费值（按端口计费策略展示）"
-    echo "2. 显示真实值（端口进出总流量，不做加倍）"
+    echo -e "当前模式: ${GREEN}真实值${NC}（端口进出总流量）"
     echo "0. 返回主菜单"
-    read -p "请选择 [0-2]: " mode_choice
+    read -p "请选择 [0]: " mode_choice
 
     case $mode_choice in
-        1)
-            update_config '.global.display_mode = "billing"'
-            echo -e "${GREEN}✓ 已切换为计费值显示${NC}"
-            ;;
-        2)
-            update_config '.global.display_mode = "raw"'
-            echo -e "${GREEN}✓ 已切换为真实值显示${NC}"
-            ;;
         0)
             show_main_menu
             return
@@ -1985,23 +1863,17 @@ build_tg_port_report() {
         return 0
     fi
 
-    local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
     local traffic_data=($(get_nftables_counter_data "$port"))
     local in_b=${traffic_data[0]:-0}
     local out_b=${traffic_data[1]:-0}
     local raw_total=$((in_b + out_b))
-    local billed_total=$(calculate_total_traffic "$in_b" "$out_b" "$billing_mode")
-    local mode_label="单向计费"
-    [ "$billing_mode" = "double" ] && mode_label="双向计费"
 
     cat <<EOF
 <b>端口流量实时报告</b>
 监听端口: <code>${port}</code>
 上行流量: <code>$(format_bytes "$in_b")</code>
 下行流量: <code>$(format_bytes "$out_b")</code>
-真实总量: <b>$(format_bytes "$raw_total")</b>
-计费总量: <b>$(format_bytes "$billed_total")</b>
-计费逻辑: <code>${mode_label}</code>
+流量总量: <b>$(format_bytes "$raw_total")</b>
 查询时间: $(get_beijing_time '+%Y-%m-%d %H:%M:%S')
 EOF
 }
@@ -2014,7 +1886,6 @@ build_tg_all_ports_report() {
     fi
 
     local total_raw=0
-    local total_billed=0
     local report="<b>全部端口实时流量汇总</b>"
 
     for port in "${active_ports[@]}"; do
@@ -2022,19 +1893,14 @@ build_tg_all_ports_report() {
         local in_b=${traffic_data[0]:-0}
         local out_b=${traffic_data[1]:-0}
         local raw_total=$((in_b + out_b))
-        local billing_mode=$(jq -r ".ports.\"$port\".billing_mode // \"double\"" "$CONFIG_FILE")
-        local billed_total=$(calculate_total_traffic "$in_b" "$out_b" "$billing_mode")
 
         total_raw=$((total_raw + raw_total))
-        total_billed=$((total_billed + billed_total))
         report+=$'\n'
-        report+="端口 <code>${port}</code> | 真实: $(format_bytes "$raw_total") | 计费: $(format_bytes "$billed_total")"
+        report+="端口 <code>${port}</code> | 流量: $(format_bytes "$raw_total")"
     done
 
     report+=$'\n'
-    report+="真实合计: <b>$(format_bytes "$total_raw")</b>"
-    report+=$'\n'
-    report+="计费合计: <b>$(format_bytes "$total_billed")</b>"
+    report+="流量合计: <b>$(format_bytes "$total_raw")</b>"
     report+=$'\n'
     report+="查询时间: $(get_beijing_time '+%Y-%m-%d %H:%M:%S')"
     echo "$report"
@@ -2050,20 +1916,16 @@ build_tg_day_report() {
     fi
 
     local total_raw=$(jq -r --arg day "$day_key" '.days[$day].total_raw // 0' "$DAILY_USAGE_FILE")
-    local total_billed=$(jq -r --arg day "$day_key" '.days[$day].total_billed // 0' "$DAILY_USAGE_FILE")
     local report="<b>${day_key} 日报</b>"
     report+=$'\n'
-    report+="真实总量: <b>$(format_bytes "$total_raw")</b>"
-    report+=$'\n'
-    report+="计费总量: <b>$(format_bytes "$total_billed")</b>"
+    report+="流量总量: <b>$(format_bytes "$total_raw")</b>"
 
     local ports=($(jq -r --arg day "$day_key" '.days[$day].ports | keys[]?' "$DAILY_USAGE_FILE" 2>/dev/null | sort -n))
     if [ ${#ports[@]} -gt 0 ]; then
         for port in "${ports[@]}"; do
-            local raw=$(jq -r --arg day "$day_key" --arg port "$port" '.days[$day].ports[$port].raw // 0' "$DAILY_USAGE_FILE")
-            local billed=$(jq -r --arg day "$day_key" --arg port "$port" '.days[$day].ports[$port].billed // 0' "$DAILY_USAGE_FILE")
+            local raw=$(jq -r --arg day "$day_key" --arg port "$port" '.days[$day].ports[$port] | if type == "object" then .raw // 0 else . // 0 end' "$DAILY_USAGE_FILE")
             report+=$'\n'
-            report+="端口 <code>${port}</code> | 真实: $(format_bytes "$raw") | 计费: $(format_bytes "$billed")"
+            report+="端口 <code>${port}</code> | 流量: $(format_bytes "$raw")"
         done
     fi
 
@@ -2073,23 +1935,18 @@ build_tg_day_report() {
 build_tg_7days_report() {
     ensure_daily_usage_files
     local sum_raw=0
-    local sum_billed=0
     local report="<b>近7日趋势报表</b>"
 
     for ((i=6; i>=0; i--)); do
         local day_key=$(get_beijing_time -d "-$i day" +%F)
         local day_raw=$(jq -r --arg day "$day_key" '.days[$day].total_raw // 0' "$DAILY_USAGE_FILE" 2>/dev/null || echo "0")
-        local day_billed=$(jq -r --arg day "$day_key" '.days[$day].total_billed // 0' "$DAILY_USAGE_FILE" 2>/dev/null || echo "0")
         sum_raw=$((sum_raw + day_raw))
-        sum_billed=$((sum_billed + day_billed))
         report+=$'\n'
-        report+="${day_key} | 真实: $(format_bytes "$day_raw") | 计费: $(format_bytes "$day_billed")"
+        report+="${day_key} | 流量: $(format_bytes "$day_raw")"
     done
 
     report+=$'\n'
-    report+="7日真实合计: <b>$(format_bytes "$sum_raw")</b>"
-    report+=$'\n'
-    report+="7日计费合计: <b>$(format_bytes "$sum_billed")</b>"
+    report+="7日流量合计: <b>$(format_bytes "$sum_raw")</b>"
     echo "$report"
 }
 
