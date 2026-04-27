@@ -3345,7 +3345,17 @@ func_sublinkpro() {
 
     # 3. 部署目录初始化
     local install_dir="/opt/sublinkpro"
+    local sublink_port="8000"
+    while true; do
+        sublink_port=$(ask_with_default "请输入 SublinkPro 对外访问端口" "$sublink_port")
+        if is_valid_port "$sublink_port"; then
+            break
+        fi
+        echo -e "${RED}❌ 端口无效，请输入 1-65535 之间的数字。${PLAIN}"
+    done
+
     echo -e "${YELLOW}💡 SublinkPro 将被安全部署在: ${CYAN}$install_dir${PLAIN}"
+    echo -e "${YELLOW}💡 SublinkPro 对外访问端口将使用: ${CYAN}$sublink_port${PLAIN}"
     echo -e "------------------------------------------------"
     
     read -p "❓ 确认现在开始一键安装吗？(y/n): " yn
@@ -3360,7 +3370,7 @@ services:
     image: zerodeng/sublink-pro
     container_name: sublinkpro
     ports:
-      - "8000:8000"
+      - "${sublink_port}:8000"
     volumes:
       - "./db:/app/db"
       - "./template:/app/template"
@@ -3377,7 +3387,7 @@ EOF
         echo -e "------------------------------------------------"
         echo -e "${GREEN}🎉 SublinkPro 部署并启动成功！${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "🌐 ${BOLD}面板访问地址:${PLAIN} http://$ip:8000"
+        echo -e "🌐 ${BOLD}面板访问地址:${PLAIN} http://$ip:${sublink_port}"
         echo -e "👤 ${BOLD}默认后台账号:${PLAIN} admin"
         echo -e "🔑 ${BOLD}默认后台密码:${PLAIN} 123456"
         echo -e "------------------------------------------------"
