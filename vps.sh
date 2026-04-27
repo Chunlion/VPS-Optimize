@@ -1412,8 +1412,8 @@ server {
 ${second_listen}
     ssl_preread on;
     proxy_pass \$vps_sni_backend;
-    proxy_connect_timeout 5s;
-    proxy_timeout 300s;
+    proxy_connect_timeout 10s;
+    proxy_timeout 24h;
 }
 EOF
     nginx -t
