@@ -32,7 +32,7 @@
 * ✅ **综合测试合集**：内置 YABS 硬件测试、融合怪测速、流媒体解锁检测及回程路由追踪。
 * ✅ **端口实时排查**：可视化查看端口占用情况，并支持**一键强杀**冲突进程。
 
-![简介](https://i.mji.rip/2026/04/20/7444789776a94109fb33d8ed7fac6b04.png)
+![hDs7YeIK27xezmFmDwYK5YYMYx3HkH3U.webp](https://cdn.nodeimage.com/i/hDs7YeIK27xezmFmDwYK5YYMYx3HkH3U.webp)
 
 ---
 
