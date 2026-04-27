@@ -657,7 +657,7 @@ func_env_install() {
         echo -e "${CYAN} 13. 配置 Caddy 反代   ${YELLOW}  14. 查看 Caddy 证书路径${PLAIN}"
         echo -e "${CYAN} 15. Caddy独立跳过验证 ${YELLOW}  16. 清空 Caddy 配置文件${PLAIN}"
         echo -e "${RED} 17. 删除底层 ACME证书${PLAIN}"
-        echo -e "${GREEN} 18. Reality+CF DNS 一键反代与证书${PLAIN} ${YELLOW}(不占用443/支持多域名)${PLAIN}"
+        echo -e "${GREEN} 18. Nginx Stream + Caddy + REALITY 443 单入口分流${PLAIN}"
         echo -e "${GREEN} 19. CF DNS 二次维护菜单${PLAIN} ${YELLOW}(重签/重建链接/清理/重载)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
@@ -768,9 +768,9 @@ EOF
 }
 
 # ---------------------------------------------------------
-# 新增功能：Reality 443 复用 + Cloudflare DNS 证书自动化
+# 旧版 Reality+CF 向导已禁用，菜单 [18] 使用下方新的 SNI stack 向导。
 # ---------------------------------------------------------
-func_caddy_cf_reality_wizard() {
+func_caddy_cf_reality_wizard_legacy_disabled() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}🧩 Reality 443 复用 + Cloudflare DNS 自动化向导${PLAIN}"
@@ -987,6 +987,461 @@ EOF
 # ---------------------------------------------------------
 # 新增功能：CF DNS 证书二次维护菜单
 # ---------------------------------------------------------
+ask_with_default() {
+    local prompt="$1"
+    local default_value="$2"
+    local input
+    read -p "${prompt} (默认: ${default_value}): " input
+    echo "${input:-$default_value}"
+}
+
+is_valid_port() {
+    local port="$1"
+    [[ "$port" =~ ^[0-9]+$ ]] && [[ "$port" -ge 1 && "$port" -le 65535 ]]
+}
+
+is_valid_listen_addr() {
+    local addr="$1"
+    if [[ "$addr" == "127.0.0.1" || "$addr" == "localhost" || "$addr" == "0.0.0.0" || "$addr" == "::1" || "$addr" == "::" ]]; then
+        return 0
+    fi
+    if [[ "$addr" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+        local IFS=.
+        local -a octets=($addr)
+        local octet
+        for octet in "${octets[@]}"; do
+            [[ "$octet" -ge 0 && "$octet" -le 255 ]] || return 1
+        done
+        return 0
+    fi
+    return 1
+}
+
+warn_if_public_bind() {
+    local service_name="$1"
+    local listen_addr="$2"
+    local listen_port="$3"
+    local confirm
+    if [[ "$listen_addr" == "0.0.0.0" || "$listen_addr" == "::" ]]; then
+        echo -e "${RED}⚠️  高风险：${service_name} 将监听公网 ${listen_addr}:${listen_port}${PLAIN}"
+        echo -e "${RED}这会破坏默认的本地监听安全模型，可能导致端口直接暴露。${PLAIN}"
+        read -p "如确认继续，请输入 YES: " confirm
+        [[ "$confirm" == "YES" ]] || return 1
+    fi
+    return 0
+}
+
+format_hostport() {
+    local addr="$1"
+    local port="$2"
+    if [[ "$addr" == "::" || "$addr" == "::1" ]]; then
+        echo "[${addr}]:${port}"
+    else
+        echo "${addr}:${port}"
+    fi
+}
+
+collect_sni_stack_config() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}Nginx Stream + Caddy + REALITY 443 单入口分流${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}公网 443 只允许 Nginx stream 监听；Caddy/Xray/3x-ui 默认全部绑定 127.0.0.1。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    read -p "面板域名（必填，例如 panel.example.com）: " PANEL_DOMAIN
+    SITE_DOMAIN=$(ask_with_default "展示站域名（可选，留空则不配置）" "")
+    REALITY_SNI=$(ask_with_default "REALITY 伪装 SNI" "ftp.tsukuba.wide.ad.jp")
+    NGINX_LISTEN_ADDR=$(ask_with_default "Nginx 公网监听地址" "0.0.0.0")
+    NGINX_LISTEN_PORT=$(ask_with_default "Nginx 公网监听端口" "443")
+
+    local advanced_mode
+    read -p "是否进入高级模式并允许修改本地服务监听地址？(y/n，默认 n): " advanced_mode
+    if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
+        CADDY_LISTEN_ADDR=$(ask_with_default "Caddy 本地监听地址" "127.0.0.1")
+        XRAY_LISTEN_ADDR=$(ask_with_default "Xray REALITY 本地监听地址" "127.0.0.1")
+        PANEL_LISTEN_ADDR=$(ask_with_default "3x-ui 面板监听地址" "127.0.0.1")
+        SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "127.0.0.1")
+        SITE_BACKEND_ADDR=$(ask_with_default "展示站后端监听地址" "127.0.0.1")
+    else
+        CADDY_LISTEN_ADDR="127.0.0.1"
+        XRAY_LISTEN_ADDR="127.0.0.1"
+        PANEL_LISTEN_ADDR="127.0.0.1"
+        SUB_LISTEN_ADDR="127.0.0.1"
+        SITE_BACKEND_ADDR="127.0.0.1"
+        echo -e "${GREEN}普通模式：Caddy/Xray/3x-ui/订阅/展示站后端均使用 127.0.0.1。${PLAIN}"
+    fi
+
+    CADDY_LISTEN_PORT=$(ask_with_default "Caddy 本地监听端口" "8443")
+    XRAY_LISTEN_PORT=$(ask_with_default "Xray REALITY 本地监听端口" "1443")
+    PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "40000")
+    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（若与面板同端口请输入 40000）" "2096")
+    SITE_BACKEND_PORT=$(ask_with_default "展示站后端端口" "3000")
+
+    PANEL_INTERNAL_SSL="off"
+    local panel_ssl_enabled
+    read -p "3x-ui 面板是否已经开启内置 SSL/填写证书路径？(y/n，默认 n): " panel_ssl_enabled
+    if [[ "$panel_ssl_enabled" =~ ^[Yy]$ ]]; then
+        PANEL_INTERNAL_SSL="on"
+        echo -e "${RED}⚠️  当前架构要求 3x-ui 面板关闭内置 SSL，证书只给 Caddy 使用。${PLAIN}"
+        echo -e "${YELLOW}如果 3x-ui 继续启用 SSL，Caddy 默认会用 HTTP 连接 HTTPS 后端，常见结果是 502 或面板打不开。${PLAIN}"
+        read -p "请确认稍后会在 3x-ui 中关闭面板 SSL 并清空证书路径，输入 YES 继续: " panel_ssl_confirm
+        [[ "$panel_ssl_confirm" == "YES" ]] || return 1
+    fi
+
+    echo -e "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}"
+    read -p "CF Token: " CF_TOKEN
+
+    PANEL_DOMAIN=$(echo "$PANEL_DOMAIN" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+    SITE_DOMAIN=$(echo "$SITE_DOMAIN" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+    REALITY_SNI=$(echo "$REALITY_SNI" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+
+    if ! is_valid_domain "$PANEL_DOMAIN"; then echo -e "${RED}❌ 面板域名无效。${PLAIN}"; return 1; fi
+    if [[ -n "$SITE_DOMAIN" ]] && ! is_valid_domain "$SITE_DOMAIN"; then echo -e "${RED}❌ 展示站域名无效。${PLAIN}"; return 1; fi
+    if ! is_valid_domain "$REALITY_SNI"; then echo -e "${RED}❌ REALITY SNI 无效。${PLAIN}"; return 1; fi
+    if [[ "$PANEL_DOMAIN" == "$REALITY_SNI" || "$PANEL_DOMAIN" == "$SITE_DOMAIN" || ( -n "$SITE_DOMAIN" && "$SITE_DOMAIN" == "$REALITY_SNI" ) ]]; then
+        echo -e "${RED}❌ 面板域名、展示站域名、REALITY SNI 不能相同。${PLAIN}"
+        return 1
+    fi
+
+    local p a
+    for p in "$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "$SITE_BACKEND_PORT"; do
+        is_valid_port "$p" || { echo -e "${RED}❌ 端口无效：${p}${PLAIN}"; return 1; }
+    done
+    for a in "$NGINX_LISTEN_ADDR" "$CADDY_LISTEN_ADDR" "$XRAY_LISTEN_ADDR" "$PANEL_LISTEN_ADDR" "$SUB_LISTEN_ADDR" "$SITE_BACKEND_ADDR"; do
+        is_valid_listen_addr "$a" || { echo -e "${RED}❌ 监听地址无效：${a}${PLAIN}"; return 1; }
+    done
+    [[ "$NGINX_LISTEN_PORT" != "443" ]] && echo -e "${YELLOW}⚠️  Nginx 公网端口不是 443，不推荐。${PLAIN}"
+
+    warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
+    warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
+    warn_if_public_bind "3x-ui 面板" "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT" || return 1
+    warn_if_public_bind "3x-ui 订阅服务" "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT" || return 1
+
+    if [[ -z "$CF_TOKEN" || ${#CF_TOKEN} -lt 20 ]]; then echo -e "${RED}❌ Cloudflare Token 长度异常。${PLAIN}"; return 1; fi
+    echo -e "${CYAN}▶ 正在在线校验 Cloudflare Token...${PLAIN}"
+    verify_cf_token_online "$CF_TOKEN"
+    local verify_rc=$?
+    if [[ "$verify_rc" -eq 0 ]]; then
+        echo -e "${GREEN}✅ Cloudflare Token 校验通过。${PLAIN}"
+    elif [[ "$verify_rc" -eq 2 ]]; then
+        echo -e "${YELLOW}⚠️ 未安装 curl，跳过在线校验。${PLAIN}"
+    else
+        echo -e "${RED}❌ Cloudflare Token 校验失败。${PLAIN}"
+        return 1
+    fi
+}
+
+install_caddy_if_needed() {
+    command -v caddy >/dev/null 2>&1 && return 0
+    echo -e "${CYAN}▶ 未检测到 Caddy，正在安装...${PLAIN}"
+    if is_debian; then
+        install_pkg debian-keyring debian-archive-keyring apt-transport-https curl gpg
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
+        install_pkg caddy
+    elif is_redhat; then
+        install_pkg yum-utils
+        yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo >/dev/null 2>&1 || true
+        install_pkg caddy
+    fi
+    command -v caddy >/dev/null 2>&1
+}
+
+install_nginx_stream_stack() {
+    echo -e "${CYAN}▶ 正在安装 Nginx stream 组件...${PLAIN}"
+    if is_debian; then
+        install_pkg nginx libnginx-mod-stream
+    elif is_redhat; then
+        install_pkg nginx
+        yum install -y -q nginx-mod-stream >/dev/null 2>&1 || true
+    fi
+    command -v nginx >/dev/null 2>&1 || { echo -e "${RED}❌ Nginx 安装失败。${PLAIN}"; return 1; }
+    mkdir -p /etc/nginx/stream.d
+    if ! grep -Eq '^[[:space:]]*stream[[:space:]]*\{' /etc/nginx/nginx.conf 2>/dev/null; then
+        cp -f /etc/nginx/nginx.conf "/etc/nginx/nginx.conf.bak_$(date +%s)" 2>/dev/null || true
+        cat <<'EOF' >> /etc/nginx/nginx.conf
+
+stream {
+    include /etc/nginx/stream.d/*.conf;
+}
+EOF
+    elif ! grep -q '/etc/nginx/stream.d/\*.conf' /etc/nginx/nginx.conf 2>/dev/null; then
+        cp -f /etc/nginx/nginx.conf "/etc/nginx/nginx.conf.bak_$(date +%s)" 2>/dev/null || true
+        sed -i '/^[[:space:]]*stream[[:space:]]*{/a\    include /etc/nginx/stream.d/*.conf;' /etc/nginx/nginx.conf
+    fi
+}
+
+write_nginx_sni_stream_config() {
+    local conf_file="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
+    local first_listen="listen ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT};"
+    local second_listen="    listen [::]:${NGINX_LISTEN_PORT};"
+    local caddy_backend
+    local xray_backend
+    [[ "$NGINX_LISTEN_ADDR" == "::" || "$NGINX_LISTEN_ADDR" == "::1" ]] && first_listen="listen [${NGINX_LISTEN_ADDR}]:${NGINX_LISTEN_PORT};"
+    [[ "$NGINX_LISTEN_ADDR" == "::" ]] && second_listen=""
+    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
+    cat <<EOF > "$conf_file"
+map \$ssl_preread_server_name \$vps_sni_backend {
+    ${PANEL_DOMAIN} caddy_backend;
+EOF
+    [[ -n "$SITE_DOMAIN" ]] && echo "    ${SITE_DOMAIN} caddy_backend;" >> "$conf_file"
+    cat <<EOF >> "$conf_file"
+    ${REALITY_SNI} xray_backend;
+    default xray_backend;
+}
+
+upstream caddy_backend {
+    server ${caddy_backend};
+}
+
+upstream xray_backend {
+    server ${xray_backend};
+}
+
+server {
+    ${first_listen}
+${second_listen}
+    ssl_preread on;
+    proxy_pass \$vps_sni_backend;
+    proxy_connect_timeout 5s;
+    proxy_timeout 300s;
+}
+EOF
+    nginx -t
+}
+
+ensure_caddy_local_base_config() {
+    install_caddy_if_needed || return 1
+    mkdir -p /etc/caddy/conf.d /etc/caddy/certs
+    cp -f /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak_$(date +%s)" 2>/dev/null || true
+    cat <<'EOF' > /etc/caddy/Caddyfile
+{
+    auto_https off
+}
+
+import conf.d/*
+EOF
+}
+
+write_caddy_panel_config() {
+    local panel_backend
+    local sub_backend
+    panel_backend=$(format_hostport "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT")
+    sub_backend=$(format_hostport "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT")
+    cat <<EOF > "/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy"
+https://${PANEL_DOMAIN}:${CADDY_LISTEN_PORT} {
+    bind ${CADDY_LISTEN_ADDR}
+    tls /etc/caddy/certs/${PANEL_DOMAIN}.crt /etc/caddy/certs/${PANEL_DOMAIN}.key
+    encode gzip
+
+    @sub path /sub /sub/*
+    handle @sub {
+        reverse_proxy ${sub_backend} {
+            header_up Host {http.request.host}
+            header_up X-Forwarded-Host {http.request.host}
+            header_up X-Forwarded-Proto https
+            header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    handle {
+        reverse_proxy ${panel_backend} {
+            header_up Host {http.request.host}
+            header_up X-Forwarded-Host {http.request.host}
+            header_up X-Forwarded-Proto https
+            header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+}
+EOF
+}
+
+write_caddy_site_config() {
+    [[ -z "$SITE_DOMAIN" ]] && return 0
+    local site_backend
+    site_backend=$(format_hostport "$SITE_BACKEND_ADDR" "$SITE_BACKEND_PORT")
+    cat <<EOF > "/etc/caddy/conf.d/${SITE_DOMAIN}.caddy"
+https://${SITE_DOMAIN}:${CADDY_LISTEN_PORT} {
+    bind ${CADDY_LISTEN_ADDR}
+    tls /etc/caddy/certs/${SITE_DOMAIN}.crt /etc/caddy/certs/${SITE_DOMAIN}.key
+    encode gzip
+
+    reverse_proxy ${site_backend} {
+        header_up Host {http.request.host}
+        header_up X-Forwarded-Host {http.request.host}
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
+        header_up X-Real-IP {remote_host}
+    }
+}
+EOF
+}
+
+issue_and_install_cert_for_domain() {
+    local domain="$1"
+    local cf_token="$2"
+    local acme_bin="/root/.acme.sh/acme.sh"
+    local acme_email
+    acme_email=$(get_acme_account_email)
+    if [[ ! -x "$acme_bin" ]]; then
+        echo -e "${CYAN}▶ 正在安装 acme.sh...${PLAIN}"
+        bash -c "curl -fsSL https://get.acme.sh | sh -s email=${acme_email}" >/dev/null 2>&1 || return 1
+    fi
+    prepare_acme_account "$acme_bin" "$acme_email" || return 1
+    mkdir -p /etc/caddy/certs /root/cert
+    echo -e "${CYAN}▶ 正在为 ${domain} 申请 Cloudflare DNS 证书...${PLAIN}"
+    issue_cf_dns_cert_with_retry "$domain" "$cf_token" "$acme_bin" || return 1
+    "$acme_bin" --install-cert -d "$domain" --ecc \
+        --fullchain-file "/etc/caddy/certs/${domain}.crt" \
+        --key-file "/etc/caddy/certs/${domain}.key" \
+        --reloadcmd "systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true" >/dev/null 2>&1 || return 1
+    if id caddy >/dev/null 2>&1; then
+        chown root:caddy "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key" >/dev/null 2>&1
+        chmod 640 "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"
+    else
+        chmod 600 "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"
+    fi
+    ln -sfn "/etc/caddy/certs/${domain}.crt" "/root/cert/${domain}.crt"
+    ln -sfn "/etc/caddy/certs/${domain}.key" "/root/cert/${domain}.key"
+}
+
+save_sni_stack_env() {
+    mkdir -p /etc/vps-optimize
+    cat <<EOF > /etc/vps-optimize/sni-stack.env
+PANEL_DOMAIN='${PANEL_DOMAIN}'
+SITE_DOMAIN='${SITE_DOMAIN}'
+REALITY_SNI='${REALITY_SNI}'
+NGINX_LISTEN_ADDR='${NGINX_LISTEN_ADDR}'
+NGINX_LISTEN_PORT='${NGINX_LISTEN_PORT}'
+CADDY_LISTEN_ADDR='${CADDY_LISTEN_ADDR}'
+CADDY_LISTEN_PORT='${CADDY_LISTEN_PORT}'
+XRAY_LISTEN_ADDR='${XRAY_LISTEN_ADDR}'
+XRAY_LISTEN_PORT='${XRAY_LISTEN_PORT}'
+PANEL_LISTEN_ADDR='${PANEL_LISTEN_ADDR}'
+PANEL_LISTEN_PORT='${PANEL_LISTEN_PORT}'
+SUB_LISTEN_ADDR='${SUB_LISTEN_ADDR}'
+SUB_LISTEN_PORT='${SUB_LISTEN_PORT}'
+SITE_BACKEND_ADDR='${SITE_BACKEND_ADDR}'
+SITE_BACKEND_PORT='${SITE_BACKEND_PORT}'
+PANEL_INTERNAL_SSL='${PANEL_INTERNAL_SSL}'
+EOF
+    chmod 600 /etc/vps-optimize/sni-stack.env
+}
+
+harden_single_443_firewall() {
+    local yn ssh_port remove_ports port
+    echo -e "${YELLOW}可选：防火墙只保留 SSH 与 Nginx 公网入口端口。${PLAIN}"
+    echo -e "${YELLOW}提醒：若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，脚本的“自动追加当前活动端口”功能可能再次放行它。${PLAIN}"
+    read -p "是否现在收紧防火墙？(y/n，默认 n): " yn
+    [[ "$yn" =~ ^[Yy]$ ]] || return 0
+    ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
+    ssh_port=${ssh_port:-22}
+    remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "$SITE_BACKEND_PORT" "40000" "8443" "1443" "2096" "3000")
+    if command -v ufw >/dev/null 2>&1; then
+        ufw allow "${ssh_port}/tcp" >/dev/null 2>&1 || true
+        ufw allow "${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || true
+        for port in "${remove_ports[@]}"; do
+            [[ "$port" == "$ssh_port" || "$port" == "$NGINX_LISTEN_PORT" ]] && continue
+            ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
+            ufw delete allow "${port}/udp" >/dev/null 2>&1 || true
+        done
+    elif command -v firewall-cmd >/dev/null 2>&1; then
+        systemctl enable --now firewalld >/dev/null 2>&1 || true
+        firewall-cmd --permanent --add-port="${ssh_port}/tcp" >/dev/null 2>&1 || true
+        firewall-cmd --permanent --add-port="${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || true
+        for port in "${remove_ports[@]}"; do
+            [[ "$port" == "$ssh_port" || "$port" == "$NGINX_LISTEN_PORT" ]] && continue
+            firewall-cmd --permanent --remove-port="${port}/tcp" >/dev/null 2>&1 || true
+            firewall-cmd --permanent --remove-port="${port}/udp" >/dev/null 2>&1 || true
+        done
+        firewall-cmd --reload >/dev/null 2>&1 || true
+    else
+        echo -e "${YELLOW}⚠️ 未检测到 ufw/firewalld，跳过防火墙收紧。${PLAIN}"
+    fi
+}
+
+print_sni_stack_result() {
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${GREEN}✅ Nginx Stream + Caddy + REALITY 单入口分流配置完成${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "面板入口：https://${PANEL_DOMAIN}/"
+    echo -e "订阅入口：https://${PANEL_DOMAIN}/sub/"
+    [[ -n "$SITE_DOMAIN" ]] && echo -e "展示站入口：https://${SITE_DOMAIN}/"
+    echo -e "REALITY 客户端外部连接端口：${NGINX_LISTEN_PORT}"
+    echo -e "REALITY serverName / SNI：${REALITY_SNI}"
+    echo -e ""
+    echo -e "Xray REALITY inbound 应设置：listen=${XRAY_LISTEN_ADDR}, port=${XRAY_LISTEN_PORT}, dest=${REALITY_SNI}:443, serverNames=[${REALITY_SNI}]"
+    echo -e "3x-ui 面板应设置：listen=${PANEL_LISTEN_ADDR}, port=${PANEL_LISTEN_PORT}, webBasePath=/"
+    echo -e "3x-ui 面板 SSL / HTTPS / Certificate / Key = 关闭或留空（证书只给 Caddy 使用）"
+    echo -e "Panel URL / Public URL / External URL = https://${PANEL_DOMAIN}/"
+    echo -e "Subscription URI Path = /sub/"
+    echo -e "Subscription External URL = https://${PANEL_DOMAIN}/sub/"
+    echo -e ""
+    if [[ "$PANEL_INTERNAL_SSL" == "on" ]]; then
+        echo -e "${RED}重要：你刚才表示 3x-ui 已启用内置 SSL。请先关闭它，否则 Caddy 反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 可能打不开。${PLAIN}"
+    fi
+    echo -e "${RED}严禁：REALITY dest 写成本机 Caddy；REALITY serverNames 写成面板域名；Caddy 监听公网 443；3x-ui 面板公网暴露 40000；Xray REALITY 直接监听公网 443；把 Caddy 证书路径填进 3x-ui 面板 SSL。${PLAIN}"
+    echo -e ""
+    echo -e "若面板打不开，优先检查："
+    echo -e "  - 3x-ui 是否仍开启了面板 SSL；应关闭，并清空证书/私钥路径"
+    echo -e "  - Caddy 反代默认按 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "  - journalctl -u caddy -n 80 --no-pager"
+    echo -e "  - journalctl -u x-ui -u 3x-ui -n 80 --no-pager"
+    echo -e ""
+    echo -e "监听期望："
+    echo -e "  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> nginx"
+    echo -e "  ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> caddy"
+    echo -e "  ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT} -> xray"
+    echo -e "  ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} -> 3x-ui"
+    echo -e "  ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} -> 3x-ui subscription"
+    [[ -n "$SITE_DOMAIN" ]] && echo -e "  ${SITE_BACKEND_ADDR}:${SITE_BACKEND_PORT} -> site backend"
+    echo -e ""
+    echo -e "检查命令："
+    echo -e "  ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096|:3000'"
+    echo -e "  nginx -t"
+    echo -e "  caddy validate --config /etc/caddy/Caddyfile"
+    echo -e "  systemctl restart nginx"
+    echo -e "  systemctl restart caddy"
+    echo -e "  openssl s_client -connect 服务器IP:${NGINX_LISTEN_PORT} -servername ${PANEL_DOMAIN}"
+    echo -e "  openssl s_client -connect 服务器IP:${NGINX_LISTEN_PORT} -servername ${REALITY_SNI}"
+}
+
+func_caddy_cf_reality_wizard() {
+    collect_sni_stack_config || return 1
+    local cf_env_dir="/root/.config/vps-panel"
+    local cf_env_file="${cf_env_dir}/cloudflare.env"
+    local escaped_token
+    mkdir -p "$cf_env_dir"
+    chmod 700 "$cf_env_dir"
+    escaped_token=${CF_TOKEN//\'/\'"\'"\'}
+    printf "CF_Token='%s'\n" "$escaped_token" > "$cf_env_file"
+    chmod 600 "$cf_env_file"
+
+    install_nginx_stream_stack || return 1
+    ensure_caddy_local_base_config || return 1
+    quarantine_legacy_caddy_443_configs
+    issue_and_install_cert_for_domain "$PANEL_DOMAIN" "$CF_TOKEN" || return 1
+    if [[ -n "$SITE_DOMAIN" ]]; then
+        issue_and_install_cert_for_domain "$SITE_DOMAIN" "$CF_TOKEN" || return 1
+    fi
+    write_caddy_panel_config
+    write_caddy_site_config
+    caddy validate --config /etc/caddy/Caddyfile || return 1
+    write_nginx_sni_stream_config || return 1
+    systemctl enable nginx >/dev/null 2>&1 || true
+    systemctl restart nginx || return 1
+    systemctl enable caddy >/dev/null 2>&1 || true
+    systemctl restart caddy || return 1
+    save_sni_stack_env
+    harden_single_443_firewall
+    generate_caddy_cf_manifest
+    print_sni_stack_result
+}
+
 func_caddy_cf_health_check() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
