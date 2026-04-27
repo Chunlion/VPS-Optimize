@@ -130,7 +130,7 @@ func_firewall_manage() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🛡️  系统安全防火墙深度管理${PLAIN}"
+        echo -e "${BOLD}🛡️ 防火墙规则管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local fw_status
@@ -149,11 +149,11 @@ func_firewall_manage() {
 
         echo -e "当前防火墙状态: [ $str_fw ]"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 开启防火墙并智能追加当前活动端口${PLAIN} ${YELLOW}(不覆盖原有规则)${PLAIN}"
-        echo -e "${GREEN}  2. 手动添加允许列表 (支持批量/范围)${PLAIN}"
-        echo -e "${GREEN}  3. 从列表中删除端口 (支持批量/范围)${PLAIN}"
-        echo -e "${GREEN}  4. 查看当前已放行端口列表${PLAIN}"
-        echo -e "${RED}  5. 禁用并彻底关闭防火墙${PLAIN}"
+        echo -e "${GREEN}  1. 启用防火墙 + 自动放行当前公网端口${PLAIN} ${YELLOW}(不覆盖原有规则)${PLAIN}"
+        echo -e "${GREEN}  2. 手动放行端口${PLAIN} ${YELLOW}(支持 80,443 或 8000-9000)${PLAIN}"
+        echo -e "${GREEN}  3. 删除已放行端口${PLAIN} ${YELLOW}(支持批量/范围)${PLAIN}"
+        echo -e "${GREEN}  4. 查看防火墙放行列表${PLAIN}"
+        echo -e "${RED}  5. 关闭防火墙${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  0. 返回上一级菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -290,7 +290,7 @@ func_system_tweaks() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}⚙️  系统高级开关与设置${PLAIN}"
+        echo -e "${BOLD}⚙️ 系统开关与清理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         # 状态获取
@@ -321,11 +321,11 @@ func_system_tweaks() {
         if [[ "$update_status" == "active" ]]; then str_update="${GREEN}开启中${PLAIN}"; else str_update="${RED}已关闭${PLAIN}"; fi
 
         # 完美修复：一字不落的菜单显示
-        echo -e "${GREEN}  1. 管理 IPv6 网络状态${PLAIN}    当前: [ $str_ipv6 ]"
-        echo -e "${GREEN}  2. IPv4 出站优先级增强${PLAIN}   当前: [ $str_ipv4_first ]"
-        echo -e "${GREEN}  3. 管理 被人Ping状态${PLAIN}     当前: [ $str_ping ]"
-        echo -e "${GREEN}  4. 管理 自动安全更新${PLAIN}     当前: [ $str_update ]"
-        echo -e "${GREEN}  5. 彻底清理系统垃圾${PLAIN}      (日志/缓存/无用包)"
+        echo -e "${GREEN}  1. IPv6 开关${PLAIN}              当前: [ $str_ipv6 ]"
+        echo -e "${GREEN}  2. IPv4 出站优先${PLAIN}          当前: [ $str_ipv4_first ]"
+        echo -e "${GREEN}  3. Ping 响应开关${PLAIN}          当前: [ $str_ping ]"
+        echo -e "${GREEN}  4. 自动安全更新开关${PLAIN}       当前: [ $str_update ]"
+        echo -e "${GREEN}  5. 清理系统垃圾${PLAIN}           (日志/缓存/无用包)"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -647,18 +647,21 @@ func_env_install() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}📦 常用环境及软件一键安装库${PLAIN}"
+        echo -e "${BOLD}📦 软件安装与反代分流中心${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${GREEN}  1. Docker 引擎   ${YELLOW}  2. Python 环境   ${GREEN}  3. iperf3 工具${PLAIN}"
-        echo -e "${GREEN}  4. Realm 转发    ${YELLOW}  5. Gost 隧道     ${GREEN}  6. 极光面板${PLAIN}"
-        echo -e "${GREEN}  7. 哪吒监控      ${YELLOW}  8. WARP (CF)     ${GREEN}  9. Aria2 下载${PLAIN}"
-        echo -e "${GREEN} 10. 宝塔面板      ${YELLOW}  11. PVE 虚拟化    ${GREEN}  12. Argox 节点${PLAIN}"
+        echo -e "${BOLD}${BLUE}▶ 基础运行环境${PLAIN}"
+        echo -e "${GREEN}  1. Docker 引擎        ${YELLOW}  2. Python 环境        ${GREEN}  3. iperf3 测速工具${PLAIN}"
+        echo -e "${BOLD}${BLUE}▶ 转发、隧道与常用服务${PLAIN}"
+        echo -e "${GREEN}  4. Realm 端口转发     ${YELLOW}  5. Gost 隧道          ${GREEN}  6. 极光面板${PLAIN}"
+        echo -e "${GREEN}  7. 哪吒监控           ${YELLOW}  8. WARP 解锁/网络     ${GREEN}  9. Aria2 下载${PLAIN}"
+        echo -e "${GREEN} 10. 宝塔面板           ${YELLOW} 11. PVE 虚拟化工具     ${GREEN} 12. Argox 节点${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${CYAN} 13. 配置 Caddy 反代   ${YELLOW}  14. 查看 Caddy 证书路径${PLAIN}"
-        echo -e "${CYAN} 15. Caddy独立跳过验证 ${YELLOW}  16. 清空 Caddy 配置文件${PLAIN}"
-        echo -e "${RED} 17. 删除底层 ACME证书${PLAIN}"
-        echo -e "${GREEN} 18. Nginx Stream + Caddy + REALITY 443 单入口分流${PLAIN}"
-        echo -e "${GREEN} 19. CF DNS 二次维护菜单${PLAIN} ${YELLOW}(重签/重建链接/清理/重载)${PLAIN}"
+        echo -e "${BOLD}${BLUE}▶ Caddy、证书与 443 单入口分流${PLAIN}"
+        echo -e "${CYAN} 13. 普通 Caddy 反代    ${YELLOW} 14. 查看 Caddy 证书路径${PLAIN}"
+        echo -e "${CYAN} 15. Caddy 跳过后端证书校验 ${YELLOW}16. 清空 Caddy 配置${PLAIN}"
+        echo -e "${RED} 17. 删除底层 ACME 证书${PLAIN}"
+        echo -e "${GREEN} 18. 443 单入口分流向导${PLAIN} ${YELLOW}(Nginx Stream + Caddy + REALITY)${PLAIN}"
+        echo -e "${GREEN} 19. CF DNS / Caddy 维护菜单${PLAIN} ${YELLOW}(重签/软链/清理/体检/修复)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -1366,33 +1369,51 @@ harden_single_443_firewall() {
 
 print_sni_stack_result() {
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${GREEN}✅ Nginx Stream + Caddy + REALITY 单入口分流配置完成${PLAIN}"
+    echo -e "${GREEN}✅ 443 单入口分流配置完成${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "面板入口：https://${PANEL_DOMAIN}/"
-    echo -e "订阅入口：https://${PANEL_DOMAIN}/sub/"
-    [[ -n "$SITE_DOMAIN" ]] && echo -e "展示站入口：https://${SITE_DOMAIN}/"
-    echo -e "REALITY 客户端外部连接端口：${NGINX_LISTEN_PORT}"
-    echo -e "REALITY serverName / SNI：${REALITY_SNI}"
+    echo -e "${BOLD}一、以后从外面只访问这些地址${PLAIN}"
+    echo -e "  面板入口：      https://${PANEL_DOMAIN}/"
+    echo -e "  订阅入口：      https://${PANEL_DOMAIN}/sub/"
+    [[ -n "$SITE_DOMAIN" ]] && echo -e "  展示站入口：    https://${SITE_DOMAIN}/"
+    echo -e "  REALITY 端口：  ${NGINX_LISTEN_PORT}"
     echo -e ""
-    echo -e "Xray REALITY inbound 应设置：listen=${XRAY_LISTEN_ADDR}, port=${XRAY_LISTEN_PORT}, dest=${REALITY_SNI}:443, serverNames=[${REALITY_SNI}]"
-    echo -e "3x-ui 面板应设置：listen=${PANEL_LISTEN_ADDR}, port=${PANEL_LISTEN_PORT}, webBasePath=/"
-    echo -e "3x-ui 面板 SSL / HTTPS / Certificate / Key = 关闭或留空（证书只给 Caddy 使用）"
-    echo -e "Panel URL / Public URL / External URL = https://${PANEL_DOMAIN}/"
-    echo -e "Subscription URI Path = /sub/"
-    echo -e "Subscription External URL = https://${PANEL_DOMAIN}/sub/"
+    echo -e "${YELLOW}不要从公网访问这些内部端口：${CADDY_LISTEN_PORT}/${XRAY_LISTEN_PORT}/${PANEL_LISTEN_PORT}/${SUB_LISTEN_PORT}/${SITE_BACKEND_PORT}${PLAIN}"
+    echo -e "${YELLOW}它们应该只给本机内部服务互相连接，不是浏览器入口。${PLAIN}"
     echo -e ""
+    echo -e "${BOLD}二、3x-ui 面板设置建议${PLAIN}"
+    echo -e "  面板监听地址：${PANEL_LISTEN_ADDR}"
+    echo -e "  面板端口：    ${PANEL_LISTEN_PORT}"
+    echo -e "  webBasePath： /"
+    echo -e "  面板 SSL/HTTPS：关闭"
+    echo -e "  证书路径/私钥路径：留空，不要填写 Caddy 证书"
+    echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}/"
+    echo -e "  Subscription URI Path：/sub/"
+    echo -e "  Subscription External URL：https://${PANEL_DOMAIN}/sub/"
     if [[ "$PANEL_INTERNAL_SSL" == "on" ]]; then
-        echo -e "${RED}重要：你刚才表示 3x-ui 已启用内置 SSL。请先关闭它，否则 Caddy 反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 可能打不开。${PLAIN}"
+        echo -e "${RED}  重要：你刚才表示 3x-ui 已启用内置 SSL，请先关闭它，否则容易 404/502/重定向循环。${PLAIN}"
     fi
-    echo -e "${RED}严禁：REALITY dest 写成本机 Caddy；REALITY serverNames 写成面板域名；Caddy 监听公网 443；3x-ui 面板公网暴露 40000；Xray REALITY 直接监听公网 443；把 Caddy 证书路径填进 3x-ui 面板 SSL。${PLAIN}"
     echo -e ""
-    echo -e "若面板打不开，优先检查："
-    echo -e "  - 3x-ui 是否仍开启了面板 SSL；应关闭，并清空证书/私钥路径"
-    echo -e "  - Caddy 反代默认按 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
-    echo -e "  - journalctl -u caddy -n 80 --no-pager"
-    echo -e "  - journalctl -u x-ui -u 3x-ui -n 80 --no-pager"
+    echo -e "${BOLD}三、Xray / 3x-ui REALITY 入站这样填${PLAIN}"
+    echo -e "  入站监听地址 listen：${XRAY_LISTEN_ADDR}"
+    echo -e "  入站监听端口 port：  ${XRAY_LISTEN_PORT}"
+    echo -e "  协议 protocol：      VLESS"
+    echo -e "  传输 network：       tcp"
+    echo -e "  安全 security：      reality"
+    echo -e "  REALITY dest：       ${REALITY_SNI}:443"
+    echo -e "  serverNames：        ${REALITY_SNI}"
+    echo -e "  SpiderX：            /"
+    echo -e "  客户端连接地址：     你的服务器 IP 或解析到服务器的域名"
+    echo -e "  客户端连接端口：     ${NGINX_LISTEN_PORT}"
+    echo -e "  客户端 SNI/serverName：${REALITY_SNI}"
+    echo -e "${YELLOW}  注意：REALITY 的 dest/serverNames 必须是外部真实站点，不要写面板域名。${PLAIN}"
     echo -e ""
-    echo -e "监听期望："
+    echo -e "${BOLD}四、常见错误怎么判断${PLAIN}"
+    echo -e "  ERR_SSL_PROTOCOL_ERROR：通常是访问了内部端口，外部只访问 https://${PANEL_DOMAIN}/"
+    echo -e "  ERR_TOO_MANY_REDIRECTS：通常是 3x-ui 面板还开着 SSL/强制 HTTPS，请关闭并清空证书路径"
+    echo -e "  HTTP 404：先检查 3x-ui 的 webBasePath 是否为 /，再检查 Caddy 是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "  502 Bad Gateway：通常是 3x-ui 没启动、端口不对，或 3x-ui 开了 HTTPS 但 Caddy 按 HTTP 连接"
+    echo -e ""
+    echo -e "${BOLD}五、监听状态应该长这样${PLAIN}"
     echo -e "  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> nginx"
     echo -e "  ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> caddy"
     echo -e "  ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT} -> xray"
@@ -1400,14 +1421,17 @@ print_sni_stack_result() {
     echo -e "  ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} -> 3x-ui subscription"
     [[ -n "$SITE_DOMAIN" ]] && echo -e "  ${SITE_BACKEND_ADDR}:${SITE_BACKEND_PORT} -> site backend"
     echo -e ""
-    echo -e "检查命令："
+    echo -e "${BOLD}六、检查命令${PLAIN}"
     echo -e "  ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096|:3000'"
     echo -e "  nginx -t"
     echo -e "  caddy validate --config /etc/caddy/Caddyfile"
-    echo -e "  systemctl restart nginx"
-    echo -e "  systemctl restart caddy"
+    echo -e "  curl -I http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}/"
     echo -e "  openssl s_client -connect 服务器IP:${NGINX_LISTEN_PORT} -servername ${PANEL_DOMAIN}"
     echo -e "  openssl s_client -connect 服务器IP:${NGINX_LISTEN_PORT} -servername ${REALITY_SNI}"
+    echo -e "  journalctl -u caddy -n 80 --no-pager"
+    echo -e "  journalctl -u x-ui -u 3x-ui -n 80 --no-pager"
+    echo -e ""
+    echo -e "${RED}绝对不要做：Caddy 监听公网 443；Xray 监听公网 443；3x-ui 面板暴露公网；把 Caddy 证书填进 3x-ui 面板 SSL；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
 }
 
 func_caddy_cf_reality_wizard() {
@@ -1766,18 +1790,18 @@ func_caddy_cf_maintenance_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🛠️ CF DNS 二次维护菜单${PLAIN}"
+        echo -e "${BOLD}🛠️ CF DNS / Caddy 证书维护中心${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${GREEN}  1. 查看当前 CF DNS 管理域名与路径${PLAIN}"
+        echo -e "${GREEN}  1. 查看已管理域名 / 证书路径${PLAIN}"
         echo -e "${GREEN}  2. 更新 Cloudflare API Token${PLAIN}"
-        echo -e "${GREEN}  3. 重新签发指定域名证书${PLAIN}"
+        echo -e "${GREEN}  3. 重新签发某个域名证书${PLAIN}"
         echo -e "${GREEN}  4. 重建 /root/cert 证书软链接${PLAIN}"
-        echo -e "${GREEN}  5. 删除指定域名配置与证书${PLAIN}"
+        echo -e "${GREEN}  5. 删除某个域名的 Caddy 配置与证书${PLAIN}"
         echo -e "${GREEN}  6. 校验并重载 Caddy${PLAIN}"
-        echo -e "${GREEN}  7. 重建清单文件${PLAIN}"
-        echo -e "${GREEN}  8. 一键体检（Token/证书/监听/后端）${PLAIN}"
-        echo -e "${GREEN}  9. 一键自动修复（常见问题）${PLAIN}"
-        echo -e "${GREEN} 10. 隔离旧配置（避免 Caddy 抢占 443）${PLAIN}"
+        echo -e "${GREEN}  7. 重建证书清单文件${PLAIN}"
+        echo -e "${GREEN}  8. 一键体检${PLAIN} ${YELLOW}(Token/证书/监听/后端)${PLAIN}"
+        echo -e "${GREEN}  9. 一键自动修复常见问题${PLAIN}"
+        echo -e "${GREEN} 10. 隔离旧 Caddy 配置${PLAIN} ${YELLOW}(避免抢占 443)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -2473,10 +2497,10 @@ func_docker_manage() {
         docker_ver=$(docker -v | awk '{print $3}' | tr -d ',')
         
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🐳 Docker 深度管理面板 (版本: ${GREEN}${docker_ver}${PLAIN}${BOLD})${PLAIN}"
+        echo -e "${BOLD}🐳 Docker 安全管理 (版本: ${GREEN}${docker_ver}${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${GREEN}  1. 开启本地防穿透保护${PLAIN} (限制映射端口仅 127.0.0.1 访问)"
-        echo -e "${GREEN}  2. 解除本地防穿透保护${PLAIN} (恢复全网可访，${YELLOW}且不破坏您的原有配置${PLAIN})"
+        echo -e "${GREEN}  1. 开启 Docker 本地防穿透${PLAIN} ${YELLOW}(限制映射端口仅 127.0.0.1 访问)${PLAIN}"
+        echo -e "${GREEN}  2. 解除 Docker 本地防穿透${PLAIN} ${YELLOW}(恢复全网可访，不破坏原配置)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         
@@ -2950,10 +2974,10 @@ func_test_scripts() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}📊 VPS 综合测速与质量检验合集库${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${GREEN}  1. YABS 硬件性能测试  ${YELLOW}  2. 融合怪终极详细测速${PLAIN}"
-        echo -e "${GREEN}  3. SuperBench 综合测速${YELLOW}  4. bench.sh 基础测试${PLAIN}"
-        echo -e "${GREEN}  5. 流媒体解锁详细检测 ${YELLOW}  6. 三网回程路由测试${PLAIN}"
-        echo -e "${GREEN}  7. IP 质量与欺诈度检测${YELLOW}  8. NodeSeek 综合测试${PLAIN}"
+        echo -e "${GREEN}  1. YABS 硬件性能测试      ${YELLOW}  2. 融合怪详细测速${PLAIN}"
+        echo -e "${GREEN}  3. SuperBench 综合测速    ${YELLOW}  4. bench.sh 基础测试${PLAIN}"
+        echo -e "${GREEN}  5. 流媒体解锁检测         ${YELLOW}  6. 三网回程路由测试${PLAIN}"
+        echo -e "${GREEN}  7. IP 质量 / 欺诈度检测   ${YELLOW}  8. NodeSeek 综合测试${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -3398,10 +3422,10 @@ func_backup_center() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "当前备份目录: ${YELLOW}${backup_root}${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 创建全量配置备份${PLAIN}"
+        echo -e "${GREEN}  1. 创建全量配置备份${PLAIN}       ${YELLOW}(系统/面板/Caddy/脚本配置)${PLAIN}"
         echo -e "${GREEN}  2. 查看现有备份列表${PLAIN}"
         echo -e "${GREEN}  3. 从备份一键回滚${PLAIN}"
-        echo -e "${GREEN}  4. 清理旧备份 (仅保留最近 5 份)${PLAIN}"
+        echo -e "${GREEN}  4. 清理旧备份${PLAIN}             ${YELLOW}(仅保留最近 5 份)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -3657,13 +3681,13 @@ func_net_kernel_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🚀 网络加速与内核优化${PLAIN}"
+        echo -e "${BOLD}🚀 网络性能与内核管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${GREEN}  1. BBR 增强管理${PLAIN}      ${YELLOW}(调用 ylx2016 多核调优脚本)${PLAIN}"
-        echo -e "${GREEN}  2. 动态 TCP 调优${PLAIN}     ${YELLOW}(粘贴 Omnitt 参数并自动校验)${PLAIN}"
-        echo -e "${GREEN}  3. 智能内存调优${PLAIN}      ${YELLOW}(ZRAM + Swap 分级策略)${PLAIN}"
-        echo -e "${GREEN}  4. 换装轻量内核${PLAIN}      ${YELLOW}(Cloud/KVM 优化内核)${PLAIN}"
-        echo -e "${GREEN}  5. 卸载冗余旧内核${PLAIN}    ${YELLOW}(清理磁盘空间)${PLAIN}"
+        echo -e "${GREEN}  1. BBR / 拥塞控制管理${PLAIN}   ${YELLOW}(调用 ylx2016 多内核调优脚本)${PLAIN}"
+        echo -e "${GREEN}  2. 动态 TCP 参数调优${PLAIN}    ${YELLOW}(粘贴 Omnitt 参数并自动校验)${PLAIN}"
+        echo -e "${GREEN}  3. ZRAM / Swap 内存调优${PLAIN} ${YELLOW}(按内存分档优化小鸡)${PLAIN}"
+        echo -e "${GREEN}  4. 安装轻量优化内核${PLAIN}     ${YELLOW}(Cloud/KVM 内核)${PLAIN}"
+        echo -e "${GREEN}  5. 清理旧内核${PLAIN}           ${YELLOW}(释放磁盘空间，谨慎操作)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -3689,15 +3713,15 @@ func_panel_deploy_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🛰️ 面板与节点部署${PLAIN}"
+        echo -e "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${GREEN}  1. 安装 x-panel${PLAIN}        ${YELLOW}(mhsanaei 官方脚本)${PLAIN}"
-        echo -e "${GREEN}  2. 安装 Sing-box${PLAIN}      ${YELLOW}(甬哥四合一脚本)${PLAIN}"
-        echo -e "${GREEN}  3. 安装 SublinkPro${PLAIN}    ${YELLOW}(订阅转换与管理面板)${PLAIN}"
-        echo -e "${GREEN}  4. 面板救砖/重置SSL${PLAIN}   ${YELLOW}(回退 HTTP 访问)${PLAIN}"
-        echo -e "${GREEN}  5. DNS 流媒体解锁${PLAIN}     ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
-        echo -e "${GREEN}  6. 防 IP 送中脚本${PLAIN}     ${YELLOW}(IP-Sentinel)${PLAIN}"
-        echo -e "${GREEN}  7. 端口流量监控${PLAIN}       ${YELLOW}(Port Traffic Dog)${PLAIN}"
+        echo -e "${GREEN}  1. 安装 3x-ui 面板${PLAIN}       ${YELLOW}(mhsanaei 官方脚本)${PLAIN}"
+        echo -e "${GREEN}  2. 安装 Sing-box${PLAIN}         ${YELLOW}(甬哥四合一脚本)${PLAIN}"
+        echo -e "${GREEN}  3. 安装 SublinkPro${PLAIN}       ${YELLOW}(订阅转换与管理面板)${PLAIN}"
+        echo -e "${GREEN}  4. 面板救砖 / 重置 SSL${PLAIN}   ${YELLOW}(回退 HTTP 访问)${PLAIN}"
+        echo -e "${GREEN}  5. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
+        echo -e "${GREEN}  6. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
+        echo -e "${GREEN}  7. 端口流量监控${PLAIN}          ${YELLOW}(Port Traffic Dog)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -3729,28 +3753,30 @@ main_menu() {
         echo -e " ${BOLD}🚀 VPS 全能控制面板 (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
-        echo -e " ${BOLD}${BLUE}▶ 高优先直达${PLAIN}"
-        echo -e "  ${GREEN}1.${PLAIN} 一键运维预检      ${YELLOW}(先检查再部署，避免踩坑)${PLAIN}"
-        echo -e "  ${GREEN}2.${PLAIN} 基础环境初始化    ${YELLOW}(工具/时区/基础 BBR)${PLAIN}"
-        echo -e "  ${GREEN}3.${PLAIN} 常用环境与软件库  ${YELLOW}(Docker/Caddy/WARP/面板等)${PLAIN}"
-        echo -e "  ${GREEN}4.${PLAIN} 系统高级开关      ${YELLOW}(IPv6/IPv4 优先/禁 Ping/自动更新)${PLAIN}"
-        echo -e "  ${GREEN}5.${PLAIN} 防火墙深度管理    ${YELLOW}(放行/删除/开关/查看规则)${PLAIN}"
+        echo -e " ${BOLD}${BLUE}▶ ① 推荐流程：新机器先跑这里${PLAIN}"
+        echo -e "  ${GREEN}1.${PLAIN} 运维预检与风险扫描    ${YELLOW}(部署前先看端口/系统/服务状态)${PLAIN}"
+        echo -e "  ${GREEN}2.${PLAIN} 基础环境初始化        ${YELLOW}(工具/时区/系统更新/基础 BBR)${PLAIN}"
+        echo -e "  ${GREEN}3.${PLAIN} 软件安装与反代分流    ${YELLOW}(Docker/Caddy/WARP/443单入口)${PLAIN}"
+        echo -e "  ${GREEN}4.${PLAIN} 面板与节点部署        ${YELLOW}(3x-ui/Sing-box/SublinkPro/救砖)${PLAIN}"
 
-        echo -e " ${BOLD}${BLUE}▶ 安全与运维${PLAIN}"
-        echo -e "  ${GREEN}6.${PLAIN} SSH 安全加固      ${YELLOW}(端口迁移与防失联)${PLAIN}"
-        echo -e "  ${GREEN}7.${PLAIN} Fail2ban 防护     ${YELLOW}(防爆破封禁)${PLAIN}"
-        echo -e "  ${GREEN}8.${PLAIN} 添加 SSH 公钥     ${YELLOW}(免密登录)${PLAIN}"
-        echo -e "  ${GREEN}9.${PLAIN} Docker 深度管理   ${YELLOW}(防穿透与配置回滚)${PLAIN}"
-        echo -e " ${GREEN}10.${PLAIN} 网络与内核优化菜单 ${YELLOW}(BBR/TCP/ZRAM/内核管理)${PLAIN}"
-        echo -e " ${GREEN}11.${PLAIN} 测速与质量检测合集 ${YELLOW}(YABS/流媒体/回程/IP质量)${PLAIN}"
+        echo -e " ${BOLD}${BLUE}▶ ② 安全与访问控制${PLAIN}"
+        echo -e "  ${GREEN}5.${PLAIN} SSH 安全加固          ${YELLOW}(改端口/防失联/安全登录)${PLAIN}"
+        echo -e "  ${GREEN}6.${PLAIN} 添加 SSH 公钥         ${YELLOW}(免密登录)${PLAIN}"
+        echo -e "  ${GREEN}7.${PLAIN} Fail2ban 防爆破       ${YELLOW}(自动封禁 SSH 爆破 IP)${PLAIN}"
+        echo -e "  ${GREEN}8.${PLAIN} 防火墙规则管理        ${YELLOW}(放行/删除/查看/关闭)${PLAIN}"
+        echo -e "  ${GREEN}9.${PLAIN} 系统开关与清理        ${YELLOW}(IPv6/IPv4优先/Ping/自动更新/垃圾清理)${PLAIN}"
 
-        echo -e " ${BOLD}${BLUE}▶ 部署与排障${PLAIN}"
-        echo -e " ${GREEN}12.${PLAIN} 面板与节点部署菜单 ${YELLOW}(x-panel/Sing-box/救砖/DNS)${PLAIN}"
-        echo -e " ${GREEN}13.${PLAIN} 端口排查与释放     ${YELLOW}(查看占用并强杀进程)${PLAIN}"
-        echo -e " ${GREEN}14.${PLAIN} 极速硬件探针       ${YELLOW}(系统与资源实时信息)${PLAIN}"
-        echo -e " ${GREEN}15.${PLAIN} 配置备份与回滚中心 ${YELLOW}(备份/列表/恢复/清理)${PLAIN}"
-        echo -e " ${GREEN}16.${PLAIN} 服务健康总览       ${YELLOW}(服务状态/证书摘要/端口概览)${PLAIN}"
-        echo -e " ${YELLOW}17.${PLAIN} 一键更新脚本       ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
+        echo -e " ${BOLD}${BLUE}▶ ③ 网络性能与容器${PLAIN}"
+        echo -e " ${GREEN}10.${PLAIN} 网络与内核优化        ${YELLOW}(BBR/TCP/ZRAM/轻量内核)${PLAIN}"
+        echo -e " ${GREEN}11.${PLAIN} Docker 安全管理       ${YELLOW}(本地防穿透/恢复访问)${PLAIN}"
+
+        echo -e " ${BOLD}${BLUE}▶ ④ 诊断、备份与维护${PLAIN}"
+        echo -e " ${GREEN}12.${PLAIN} 测速与质量检测        ${YELLOW}(YABS/流媒体/回程/IP质量)${PLAIN}"
+        echo -e " ${GREEN}13.${PLAIN} 端口排查与释放        ${YELLOW}(查看占用并强杀进程)${PLAIN}"
+        echo -e " ${GREEN}14.${PLAIN} 系统硬件探针          ${YELLOW}(CPU/内存/磁盘/网络实时信息)${PLAIN}"
+        echo -e " ${GREEN}15.${PLAIN} 服务健康总览          ${YELLOW}(服务状态/证书摘要/端口概览)${PLAIN}"
+        echo -e " ${GREEN}16.${PLAIN} 配置备份与回滚        ${YELLOW}(备份/列表/恢复/清理)${PLAIN}"
+        echo -e " ${YELLOW}17.${PLAIN} 更新脚本              ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
         echo -e " ${RED}18.${PLAIN} 重启服务器"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${RED} 0.${PLAIN} 退出面板"
@@ -3763,19 +3789,19 @@ main_menu() {
             1) func_preflight_check ;;
             2) func_base_init ;;
             3) func_env_install ;;
-            4) func_system_tweaks ;;
-            5) func_firewall_manage ;;
-            6) func_security ;;
+            4) func_panel_deploy_menu ;;
+            5) func_security ;;
+            6) func_add_ssh_key ;;
             7) func_fail2ban ;;
-            8) func_add_ssh_key ;;
-            9) func_docker_manage ;;
+            8) func_firewall_manage ;;
+            9) func_system_tweaks ;;
             10) func_net_kernel_menu ;;
-            11) func_test_scripts ;;
-            12) func_panel_deploy_menu ;;
+            11) func_docker_manage ;;
+            12) func_test_scripts ;;
             13) func_port_kill ;;
             14) func_system_info ;;
-            15) func_backup_center ;;
-            16) func_health_dashboard ;;
+            15) func_health_dashboard ;;
+            16) func_backup_center ;;
             17) func_update_script ;;
             18) reboot ;;
             0) exit 0 ;;
