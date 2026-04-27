@@ -1044,6 +1044,208 @@ format_hostport() {
     fi
 }
 
+sni_stack_backup_dir() {
+    echo "/etc/vps-optimize/backups/sni-stack_$(date +%Y%m%d_%H%M%S)"
+}
+
+create_sni_stack_backup() {
+    local backup_dir
+    backup_dir=$(sni_stack_backup_dir)
+    mkdir -p "$backup_dir/nginx_stream.d" "$backup_dir/caddy_conf.d" "$backup_dir/vps-optimize"
+    [[ -f /etc/nginx/nginx.conf ]] && cp -a /etc/nginx/nginx.conf "$backup_dir/nginx.conf" 2>/dev/null || true
+    [[ -d /etc/nginx/stream.d ]] && cp -a /etc/nginx/stream.d/vps_sni_*.conf "$backup_dir/nginx_stream.d/" 2>/dev/null || true
+    [[ -f /etc/caddy/Caddyfile ]] && cp -a /etc/caddy/Caddyfile "$backup_dir/Caddyfile" 2>/dev/null || true
+    [[ -d /etc/caddy/conf.d ]] && cp -a /etc/caddy/conf.d/*.caddy "$backup_dir/caddy_conf.d/" 2>/dev/null || true
+    [[ -f /etc/vps-optimize/sni-stack.env ]] && cp -a /etc/vps-optimize/sni-stack.env "$backup_dir/vps-optimize/sni-stack.env" 2>/dev/null || true
+    echo "$backup_dir" > /etc/vps-optimize/sni-stack.last-backup 2>/dev/null || true
+    echo -e "${GREEN}✅ 已创建配置备份：${backup_dir}${PLAIN}"
+}
+
+cleanup_old_nginx_sni_stream_configs() {
+    mkdir -p /etc/nginx/stream.d
+    local old_dir="/etc/nginx/stream.d/backup_vps_sni_$(date +%Y%m%d_%H%M%S)"
+    local moved=0
+    while IFS= read -r conf_file; do
+        mkdir -p "$old_dir"
+        mv "$conf_file" "$old_dir/" >/dev/null 2>&1 && ((moved++))
+    done < <(find /etc/nginx/stream.d -maxdepth 1 -type f -name 'vps_sni_*.conf' 2>/dev/null | sort)
+    if [[ "$moved" -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️ 已隔离 ${moved} 个旧 Nginx SNI 配置到：${old_dir}${PLAIN}"
+    fi
+}
+
+probe_reality_sni() {
+    local sni="$1"
+    echo -e "${CYAN}▶ 正在检测 REALITY 伪装 SNI 连通性：${sni}:443${PLAIN}"
+    if ! command -v openssl >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ 未检测到 openssl，跳过 SNI 连通性检测。${PLAIN}"
+        return 0
+    fi
+    if timeout 12 openssl s_client -connect "${sni}:443" -servername "$sni" </dev/null 2>/tmp/vps_reality_sni_probe.log | grep -q "BEGIN CERTIFICATE"; then
+        echo -e "${GREEN}✅ REALITY SNI 可连通并返回证书。${PLAIN}"
+        return 0
+    fi
+    echo -e "${RED}❌ REALITY SNI 检测失败：${sni}:443 未正常返回证书。${PLAIN}"
+    echo -e "${YELLOW}请更换一个外部真实 HTTPS 站点域名，不要使用模板域名或自己的面板域名。${PLAIN}"
+    return 1
+}
+
+print_sni_stack_preview() {
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}即将写入的 443 单入口分流配置预览${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Nginx stream"
+    echo -e "面板域名：${PANEL_DOMAIN} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    [[ -n "$SITE_DOMAIN" ]] && echo -e "展示站域名：${SITE_DOMAIN} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${SITE_BACKEND_ADDR}:${SITE_BACKEND_PORT}"
+    echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
+    echo -e "默认/未知 SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
+    echo -e ""
+    echo -e "${YELLOW}确认后会备份现有配置，并隔离旧的 /etc/nginx/stream.d/vps_sni_*.conf。${PLAIN}"
+    local confirm
+    read -p "确认写入并重启 Nginx/Caddy？输入 YES 继续: " confirm
+    [[ "$confirm" == "YES" ]]
+}
+
+caddy_format_configs() {
+    command -v caddy >/dev/null 2>&1 || return 0
+    caddy fmt --overwrite /etc/caddy/Caddyfile >/dev/null 2>&1 || true
+    if [[ -d /etc/caddy/conf.d ]]; then
+        while IFS= read -r conf_file; do
+            caddy fmt --overwrite "$conf_file" >/dev/null 2>&1 || true
+        done < <(find /etc/caddy/conf.d -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)
+    fi
+}
+
+load_sni_stack_env() {
+    local env_file="/etc/vps-optimize/sni-stack.env"
+    if [[ ! -f "$env_file" ]]; then
+        echo -e "${RED}❌ 未找到 ${env_file}，请先运行 [18] 初始化。${PLAIN}"
+        return 1
+    fi
+    # shellcheck disable=SC1090
+    source "$env_file"
+    PANEL_INTERNAL_SSL=${PANEL_INTERNAL_SSL:-off}
+}
+
+sni_stack_health_check() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧪 443 单入口分流链路体检${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+
+    local ok=0 warn=0 fail=0
+    check_listen() {
+        local name="$1"
+        local port="$2"
+        local expect_addr="$3"
+        if ss -lntp 2>/dev/null | grep -q ":${port}[[:space:]]"; then
+            local line
+            line=$(ss -lntp 2>/dev/null | grep ":${port}[[:space:]]" | head -n1)
+            echo -e "${GREEN}✅ ${name} 端口 ${port} 有监听：${line}${PLAIN}"
+            if [[ -n "$expect_addr" ]] && ! echo "$line" | grep -q "$expect_addr"; then
+                echo -e "${YELLOW}⚠️ ${name} 期望监听 ${expect_addr}:${port}，请确认是否被改成公网监听。${PLAIN}"
+                ((warn++))
+            else
+                ((ok++))
+            fi
+        else
+            echo -e "${RED}❌ ${name} 端口 ${port} 未监听。${PLAIN}"
+            ((fail++))
+        fi
+    }
+
+    check_listen "Nginx 公网入口" "$NGINX_LISTEN_PORT" ""
+    check_listen "Caddy 本地 TLS" "$CADDY_LISTEN_PORT" "$CADDY_LISTEN_ADDR"
+    check_listen "Xray/3x-ui REALITY" "$XRAY_LISTEN_PORT" "$XRAY_LISTEN_ADDR"
+    check_listen "3x-ui 面板" "$PANEL_LISTEN_PORT" "$PANEL_LISTEN_ADDR"
+    check_listen "3x-ui 订阅" "$SUB_LISTEN_PORT" "$SUB_LISTEN_ADDR"
+    [[ -n "$SITE_DOMAIN" ]] && check_listen "展示站后端" "$SITE_BACKEND_PORT" "$SITE_BACKEND_ADDR"
+
+    echo -e "------------------------------------------------"
+    nginx -t >/dev/null 2>&1 && echo -e "${GREEN}✅ nginx -t 通过${PLAIN}" && ((ok++)) || { echo -e "${RED}❌ nginx -t 失败${PLAIN}"; ((fail++)); }
+    caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 && echo -e "${GREEN}✅ Caddy 配置校验通过${PLAIN}" && ((ok++)) || { echo -e "${RED}❌ Caddy 配置校验失败${PLAIN}"; ((fail++)); }
+
+    if command -v openssl >/dev/null 2>&1; then
+        if timeout 10 openssl s_client -connect "127.0.0.1:${NGINX_LISTEN_PORT}" -servername "$PANEL_DOMAIN" </dev/null 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
+            echo -e "${GREEN}✅ 面板 SNI 可从 Nginx 命中 Caddy 证书链${PLAIN}"
+            ((ok++))
+        else
+            echo -e "${YELLOW}⚠️ 面板 SNI 测试未拿到证书，请检查 Nginx stream 与 Caddy。${PLAIN}"
+            ((warn++))
+        fi
+    fi
+
+    echo -e "------------------------------------------------"
+    echo -e "体检结果：${GREEN}通过 ${ok}${PLAIN} / ${YELLOW}警告 ${warn}${PLAIN} / ${RED}失败 ${fail}${PLAIN}"
+}
+
+check_sni_stack_subscription_hint() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🔎 订阅端口与 External Proxy 检查提示${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    echo -e "请在 3x-ui 的 REALITY 入站里开启 External Proxy，并确保："
+    echo -e "  类型：相同"
+    echo -e "  地址：你的节点域名或服务器 IP"
+    echo -e "  端口：${NGINX_LISTEN_PORT}"
+    echo -e ""
+    echo -e "复制节点链接后应该看到："
+    echo -e "  vless://...@节点地址:${NGINX_LISTEN_PORT}?security=reality&sni=${REALITY_SNI}&..."
+    echo -e ""
+    echo -e "${YELLOW}如果链接里还是 :${XRAY_LISTEN_PORT}，说明 3x-ui 订阅仍在输出本地入站端口，请回到入站设置检查 External Proxy。${PLAIN}"
+}
+
+reapply_sni_stack_from_env() {
+    load_sni_stack_env || return 1
+    print_sni_stack_preview || return 1
+    create_sni_stack_backup
+    install_nginx_stream_stack || return 1
+    ensure_caddy_local_base_config || return 1
+    cleanup_old_nginx_sni_stream_configs
+    write_caddy_panel_config
+    write_caddy_site_config
+    caddy_format_configs
+    caddy validate --config /etc/caddy/Caddyfile || return 1
+    write_nginx_sni_stream_config || return 1
+    systemctl restart nginx || return 1
+    systemctl restart caddy || return 1
+    print_sni_stack_result
+}
+
+rollback_sni_stack_config() {
+    local backup_dir
+    backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
+    if [[ -z "$backup_dir" || ! -d "$backup_dir" ]]; then
+        backup_dir=$(find /etc/vps-optimize/backups -maxdepth 1 -type d -name 'sni-stack_*' 2>/dev/null | sort | tail -n1)
+    fi
+    if [[ -z "$backup_dir" || ! -d "$backup_dir" ]]; then
+        echo -e "${RED}❌ 未找到可回滚的 SNI stack 备份。${PLAIN}"
+        return 1
+    fi
+    echo -e "${YELLOW}即将回滚到备份：${backup_dir}${PLAIN}"
+    local confirm
+    read -p "这会覆盖当前 Nginx/Caddy 的相关配置，输入 YES 继续: " confirm
+    [[ "$confirm" == "YES" ]] || return 1
+
+    [[ -f "$backup_dir/nginx.conf" ]] && cp -a "$backup_dir/nginx.conf" /etc/nginx/nginx.conf
+    mkdir -p /etc/nginx/stream.d /etc/caddy/conf.d
+    rm -f /etc/nginx/stream.d/vps_sni_*.conf 2>/dev/null || true
+    cp -a "$backup_dir/nginx_stream.d/"*.conf /etc/nginx/stream.d/ 2>/dev/null || true
+    [[ -f "$backup_dir/Caddyfile" ]] && cp -a "$backup_dir/Caddyfile" /etc/caddy/Caddyfile
+    if [[ -d "$backup_dir/caddy_conf.d" ]]; then
+        cp -a "$backup_dir/caddy_conf.d/"*.caddy /etc/caddy/conf.d/ 2>/dev/null || true
+    fi
+    [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]] && cp -a "$backup_dir/vps-optimize/sni-stack.env" /etc/vps-optimize/sni-stack.env
+
+    nginx -t && caddy validate --config /etc/caddy/Caddyfile && {
+        systemctl restart nginx >/dev/null 2>&1 || true
+        systemctl restart caddy >/dev/null 2>&1 || true
+        echo -e "${GREEN}✅ 回滚完成。${PLAIN}"
+    }
+}
+
 collect_sni_stack_config() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -1054,7 +1256,9 @@ collect_sni_stack_config() {
 
     read -p "面板域名（必填，例如 panel.example.com）: " PANEL_DOMAIN
     SITE_DOMAIN=$(ask_with_default "展示站域名（可选，留空则不配置）" "")
-    REALITY_SNI=$(ask_with_default "REALITY 伪装 SNI" "ftp.tsukuba.wide.ad.jp")
+    echo -e "${YELLOW}REALITY 伪装 SNI 请填写外部真实 HTTPS 站点域名，不要填写面板域名或节点域名。${PLAIN}"
+    echo -e "${YELLOW}模板示例：your-reality-sni.example.com（请替换成你自己选择的真实站点）${PLAIN}"
+    read -p "REALITY 伪装 SNI（必填）: " REALITY_SNI
     NGINX_LISTEN_ADDR=$(ask_with_default "Nginx 公网监听地址" "0.0.0.0")
     NGINX_LISTEN_PORT=$(ask_with_default "Nginx 公网监听端口" "443")
 
@@ -1243,7 +1447,6 @@ https://${PANEL_DOMAIN}:${CADDY_LISTEN_PORT} {
     handle @sub {
         reverse_proxy ${sub_backend} {
             header_up Host {http.request.host}
-            header_up X-Forwarded-Host {http.request.host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
             header_up X-Real-IP {remote_host}
@@ -1253,7 +1456,6 @@ https://${PANEL_DOMAIN}:${CADDY_LISTEN_PORT} {
     handle {
         reverse_proxy ${panel_backend} {
             header_up Host {http.request.host}
-            header_up X-Forwarded-Host {http.request.host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
             header_up X-Real-IP {remote_host}
@@ -1275,7 +1477,6 @@ https://${SITE_DOMAIN}:${CADDY_LISTEN_PORT} {
 
     reverse_proxy ${site_backend} {
         header_up Host {http.request.host}
-        header_up X-Forwarded-Host {http.request.host}
         header_up X-Forwarded-Proto https
         header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
         header_up X-Real-IP {remote_host}
@@ -1436,6 +1637,8 @@ print_sni_stack_result() {
 
 func_caddy_cf_reality_wizard() {
     collect_sni_stack_config || return 1
+    probe_reality_sni "$REALITY_SNI" || return 1
+    print_sni_stack_preview || return 1
     local cf_env_dir="/root/.config/vps-panel"
     local cf_env_file="${cf_env_dir}/cloudflare.env"
     local escaped_token
@@ -1445,8 +1648,10 @@ func_caddy_cf_reality_wizard() {
     printf "CF_Token='%s'\n" "$escaped_token" > "$cf_env_file"
     chmod 600 "$cf_env_file"
 
+    create_sni_stack_backup
     install_nginx_stream_stack || return 1
     ensure_caddy_local_base_config || return 1
+    cleanup_old_nginx_sni_stream_configs
     quarantine_legacy_caddy_443_configs
     issue_and_install_cert_for_domain "$PANEL_DOMAIN" "$CF_TOKEN" || return 1
     if [[ -n "$SITE_DOMAIN" ]]; then
@@ -1454,6 +1659,7 @@ func_caddy_cf_reality_wizard() {
     fi
     write_caddy_panel_config
     write_caddy_site_config
+    caddy_format_configs
     caddy validate --config /etc/caddy/Caddyfile || return 1
     write_nginx_sni_stream_config || return 1
     systemctl enable nginx >/dev/null 2>&1 || true
@@ -1802,6 +2008,10 @@ func_caddy_cf_maintenance_menu() {
         echo -e "${GREEN}  8. 一键体检${PLAIN} ${YELLOW}(Token/证书/监听/后端)${PLAIN}"
         echo -e "${GREEN}  9. 一键自动修复常见问题${PLAIN}"
         echo -e "${GREEN} 10. 隔离旧 Caddy 配置${PLAIN} ${YELLOW}(避免抢占 443)${PLAIN}"
+        echo -e "${GREEN} 11. 443 单入口链路体检${PLAIN} ${YELLOW}(Nginx/Caddy/REALITY/面板)${PLAIN}"
+        echo -e "${GREEN} 12. 重新应用上次 443 分流配置${PLAIN}"
+        echo -e "${GREEN} 13. 订阅端口 / External Proxy 检查提示${PLAIN}"
+        echo -e "${RED} 14. 回滚 443 单入口配置${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -1975,9 +2185,10 @@ func_caddy_cf_maintenance_menu() {
                 ;;
 
             6)
+                caddy_format_configs
                 if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
                     systemctl restart caddy >/dev/null 2>&1
-                    echo -e "${GREEN}✅ Caddy 配置校验通过，已重启生效。${PLAIN}"
+                    echo -e "${GREEN}✅ Caddy 配置已格式化，校验通过并重启生效。${PLAIN}"
                 else
                     echo -e "${RED}❌ Caddy 配置校验失败，请检查 /etc/caddy/conf.d/*.caddy${PLAIN}"
                 fi
@@ -2004,6 +2215,22 @@ func_caddy_cf_maintenance_menu() {
                 else
                     echo -e "${RED}❌ 当前 Caddy 配置校验失败，请先修复语法错误。${PLAIN}"
                 fi
+                ;;
+
+            11)
+                sni_stack_health_check
+                ;;
+
+            12)
+                reapply_sni_stack_from_env
+                ;;
+
+            13)
+                check_sni_stack_subscription_hint
+                ;;
+
+            14)
+                rollback_sni_stack_config
                 ;;
 
             0) break ;;

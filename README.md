@@ -85,7 +85,7 @@ cy
 -> 127.0.0.1:3000
 -> SublinkPro 或其他 HTTP 服务
 
-REALITY 伪装 SNI ftp.tsukuba.wide.ad.jp
+REALITY 伪装 SNI your-reality-sni.example.com
 -> 127.0.0.1:1443
 -> Xray / 3x-ui REALITY 入站
 
@@ -101,7 +101,7 @@ REALITY 伪装 SNI ftp.tsukuba.wide.ad.jp
 ```text
 面板域名：panel.example.com
 展示站域名：可留空
-REALITY 伪装 SNI：ftp.tsukuba.wide.ad.jp
+REALITY 伪装 SNI：your-reality-sni.example.com(请替换成你自己选择的外部真实 HTTPS 站点)
 Nginx 公网监听地址：0.0.0.0
 Nginx 公网监听端口：443
 Caddy 本地监听地址：127.0.0.1
@@ -121,7 +121,7 @@ Cloudflare API Token：用于 DNS 签发证书
 
 ```text
 面板域名、展示站域名、REALITY SNI 不能相同。
-REALITY SNI 要写外部真实站点，例如 ftp.tsukuba.wide.ad.jp。
+REALITY SNI 要写外部真实 HTTPS 站点，不要直接照抄模板域名。
 公网 443 只能由 Nginx stream 监听，Caddy / Xray / 3x-ui 都走本地端口。
 ```
 
@@ -144,7 +144,7 @@ node.example.com
 ```text
 面板入口：panel.example.com
 节点地址：node.example.com
-REALITY SNI：ftp.tsukuba.wide.ad.jp
+REALITY SNI：your-reality-sni.example.com
 ```
 
 Cloudflare API Token 至少需要：
@@ -200,8 +200,8 @@ REALITY 部分：
 ```text
 安全：Reality
 uTLS：chrome
-Target / dest：ftp.tsukuba.wide.ad.jp:443
-SNI / serverNames：ftp.tsukuba.wide.ad.jp
+Target / dest：your-reality-sni.example.com:443
+SNI / serverNames：your-reality-sni.example.com
 Short IDs：生成或填写 1 个或多个 shortId
 SpiderX：/
 公钥 / 私钥：点击生成，服务端保存私钥，客户端使用公钥
@@ -249,7 +249,7 @@ node.example.com:443
 保存后复制节点链接，应该能看到类似：
 
 ```text
-vless://uuid@node.example.com:443?security=reality&sni=ftp.tsukuba.wide.ad.jp&...
+vless://uuid@node.example.com:443?security=reality&sni=your-reality-sni.example.com&...
 ```
 
 如果链接里还是 `:1443`，说明 External Proxy 没有生效，SublinkPro 转换后也可能继续得到错误端口。
@@ -275,7 +275,7 @@ SublinkPro 只负责转换，不建议靠它修复错误端口
 ```text
 server: node.example.com
 port: 443
-sni: ftp.tsukuba.wide.ad.jp
+sni: your-reality-sni.example.com
 ```
 
 流量统计仍然由 3x-ui 按用户/入站统计，不需要手动复制裸 vless 信息。
@@ -343,7 +343,25 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com
 测试 REALITY SNI：
 
 ```bash
-openssl s_client -connect 服务器IP:443 -servername ftp.tsukuba.wide.ad.jp
+openssl s_client -connect 服务器IP:443 -servername your-reality-sni.example.com
+```
+
+### 9. 后续维护菜单
+
+如果已经跑过一次 `443 单入口分流向导`，后续可以进入：
+
+```text
+3. 软件安装与反代分流
+19. CF DNS / Caddy 维护菜单
+```
+
+常用维护项：
+
+```text
+11. 443 单入口链路体检：检查 Nginx、Caddy、REALITY、面板端口和 SNI 分流。
+12. 重新应用上次 443 分流配置：读取 /etc/vps-optimize/sni-stack.env 并重新生成配置。
+13. 订阅端口 / External Proxy 检查提示：确认订阅里节点端口是否应为 443。
+14. 回滚 443 单入口配置：从最近一次备份恢复 Nginx/Caddy 相关配置。
 ```
 
 ---
@@ -362,7 +380,7 @@ openssl s_client -connect 服务器IP:443 -servername ftp.tsukuba.wide.ad.jp
 
 ## 六、 🔄 更新与维护
 
-* **热更新**：面板内置了自更新功能。只需在主菜单选择 `23`，即可同步 GitHub 最新代码并自动重载，无需重新下载脚本。
+* **热更新**：面板内置了自更新功能。只需在主菜单选择 `17`，即可同步 GitHub 最新代码并自动重载，无需重新下载脚本。
 * **反馈建议**：本项目部分逻辑由 AI 整合多位技术大神的开源作品而成，如有 Bug 请前往 GitHub 提交 Issue。
 
 ---
