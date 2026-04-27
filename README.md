@@ -22,7 +22,8 @@
 * ✅ **IPv4/IPv6 优先级管理**：一键切换 IPv4 优先，解决部分环境下 IPv6 导致的连接超时问题。
 
 ### 3. 📦 环境部署与进阶组件
-* ✅ **全能软件库**：一键部署 **Docker**、Python、宝塔面板、哪吒探针、WARP 以及 Caddy 反代。
+* ✅ **全能软件库**：一键部署 **Docker**、Python、宝塔面板、哪吒探针、WARP、Sing-box 以及 Caddy 反代。
+* ✅ **Sing-box / Xray 多脚本入口**：内置甬哥四合一脚本、**233boy Sing-box 一键脚本** 与 **233boy Xray 一键脚本**，按个人习惯选择部署方式。
 * ✅ **Caddy 自动化**：支持模块化管理反代配置，提供**跳过 TLS 验证**及一键清理证书残留功能。
 * ✅ **新增：Nginx Stream + Caddy + REALITY 443 单入口分流**：公网只暴露 `443`，由 Nginx 按 SNI 分流到 Caddy、REALITY 和本地面板，避免 3x-ui 面板与 Xray 入站直接暴露公网。
 * ✅ **新增：SublinkPro**：快速部署节点订阅转换与管理平台，数据持久化存储。
@@ -56,6 +57,31 @@ wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps
 cy
 ```
 即可随时进入控制面板。
+
+### 节点脚本入口
+
+面板与节点相关工具集中在：
+
+```text
+4. 面板与节点部署
+```
+
+其中 Sing-box / Xray 相关入口包括：
+
+```text
+2. 安装 Sing-box（甬哥四合一脚本）
+3. 安装 Sing-box（233boy 一键脚本）
+4. 安装 Xray（233boy 一键脚本）
+```
+
+233boy 文档：
+
+```text
+Sing-box：https://233boy.com/sing-box/sing-box-script/
+Xray：https://233boy.com/xray/xray-script/
+```
+
+安装完成后，233boy Sing-box 通常可以用 `sing-box` 或 `sb` 进入管理面板；233boy Xray 通常可以用 `xray` 进入管理面板。
 
 ---
 

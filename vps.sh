@@ -3248,6 +3248,24 @@ func_singbox() {
     bash <(curl -fsSL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh)
 }
 
+func_singbox_233boy() {
+    clear
+    echo -e "${CYAN}👉 正在拉取 233boy 的 Sing-box 一键脚本...${PLAIN}"
+    echo -e "${YELLOW}脚本来源：https://github.com/233boy/sing-box${PLAIN}"
+    echo -e "${YELLOW}使用文档：https://233boy.com/sing-box/sing-box-script/${PLAIN}"
+    echo -e "${GREEN}安装完成后通常可使用 sing-box 或 sb 命令进入管理面板。${PLAIN}"
+    bash <(wget -qO- -o- https://github.com/233boy/sing-box/raw/main/install.sh)
+}
+
+func_xray_233boy() {
+    clear
+    echo -e "${CYAN}👉 正在拉取 233boy 的 Xray 一键脚本...${PLAIN}"
+    echo -e "${YELLOW}脚本来源：https://github.com/233boy/Xray${PLAIN}"
+    echo -e "${YELLOW}使用文档：https://233boy.com/xray/xray-script/${PLAIN}"
+    echo -e "${GREEN}安装完成后通常可使用 xray 命令进入管理面板。${PLAIN}"
+    bash <(wget -qO- -o- https://github.com/233boy/Xray/raw/main/install.sh)
+}
+
 # ---------------------------------------------------------
 # 17. DNS 流媒体分流解锁 (Alice DNS)
 # ---------------------------------------------------------
@@ -3944,11 +3962,13 @@ func_panel_deploy_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${GREEN}  1. 安装 3x-ui 面板${PLAIN}       ${YELLOW}(mhsanaei 官方脚本)${PLAIN}"
         echo -e "${GREEN}  2. 安装 Sing-box${PLAIN}         ${YELLOW}(甬哥四合一脚本)${PLAIN}"
-        echo -e "${GREEN}  3. 安装 SublinkPro${PLAIN}       ${YELLOW}(订阅转换与管理面板)${PLAIN}"
-        echo -e "${GREEN}  4. 面板救砖 / 重置 SSL${PLAIN}   ${YELLOW}(回退 HTTP 访问)${PLAIN}"
-        echo -e "${GREEN}  5. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
-        echo -e "${GREEN}  6. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
-        echo -e "${GREEN}  7. 端口流量监控${PLAIN}          ${YELLOW}(Port Traffic Dog)${PLAIN}"
+        echo -e "${GREEN}  3. 安装 Sing-box${PLAIN}         ${YELLOW}(233boy 一键脚本 / sb 管理)${PLAIN}"
+        echo -e "${GREEN}  4. 安装 Xray${PLAIN}             ${YELLOW}(233boy 一键脚本)${PLAIN}"
+        echo -e "${GREEN}  5. 安装 SublinkPro${PLAIN}       ${YELLOW}(订阅转换与管理面板)${PLAIN}"
+        echo -e "${GREEN}  6. 面板救砖 / 重置 SSL${PLAIN}   ${YELLOW}(回退 HTTP 访问)${PLAIN}"
+        echo -e "${GREEN}  7. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
+        echo -e "${GREEN}  8. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
+        echo -e "${GREEN}  9. 端口流量监控${PLAIN}          ${YELLOW}(Port Traffic Dog)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -3958,11 +3978,13 @@ func_panel_deploy_menu() {
         case $pd_choice in
             1) func_xpanel ;;
             2) func_singbox ;;
-            3) func_sublinkpro ;;
-            4) func_rescue_panel ;;
-            5) func_dns_unlock ;;
-            6) func_ip_sentinel ;;
-            7) func_port_dog ;;
+            3) func_singbox_233boy ;;
+            4) func_xray_233boy ;;
+            5) func_sublinkpro ;;
+            6) func_rescue_panel ;;
+            7) func_dns_unlock ;;
+            8) func_ip_sentinel ;;
+            9) func_port_dog ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
