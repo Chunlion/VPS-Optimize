@@ -656,13 +656,17 @@ func_env_install() {
         echo -e "${GREEN}  7. 哪吒监控           ${YELLOW}  8. WARP 解锁/网络     ${GREEN}  9. Aria2 下载${PLAIN}"
         echo -e "${GREEN} 10. 宝塔面板           ${YELLOW} 11. PVE 虚拟化工具     ${GREEN} 12. Argox 节点${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${BOLD}${BLUE}▶ Caddy、证书与 443 单入口分流${PLAIN}"
-        echo -e "${CYAN} 13. 普通 Caddy 反代    ${YELLOW} 14. 查看 Caddy 证书路径${PLAIN}"
-        echo -e "${CYAN} 15. Caddy 跳过后端证书校验 ${YELLOW}16. 清空 Caddy 配置${PLAIN}"
-        echo -e "${RED} 17. 删除底层 ACME 证书${PLAIN}"
-        echo -e "${GREEN} 18. 443 单入口分流向导${PLAIN} ${YELLOW}(Nginx Stream + Caddy + REALITY)${PLAIN}"
-        echo -e "${GREEN} 19. CF DNS / Caddy 维护菜单${PLAIN} ${YELLOW}(重签/软链/清理/体检/修复)${PLAIN}"
-        echo -e "${GREEN} 20. 管理 443 网站/反代域名${PLAIN} ${YELLOW}(新增/删除/查看，不重跑完整向导)${PLAIN}"
+        echo -e "${BOLD}${BLUE}▶ Caddy 普通反代${PLAIN}"
+        echo -e "${CYAN} 13. 普通 Caddy 反代${PLAIN}          ${YELLOW}(适合普通网站/面板反代，不是 443 单入口)${PLAIN}"
+        echo -e "${CYAN} 14. 查看 Caddy 证书路径${PLAIN}       ${YELLOW}(查看证书和私钥位置)${PLAIN}"
+        echo -e "${CYAN} 15. Caddy 跳过后端证书校验${PLAIN}   ${YELLOW}(后端自签 HTTPS 时使用)${PLAIN}"
+        echo -e "${CYAN} 16. 清空 Caddy 配置${PLAIN}           ${YELLOW}(危险操作，清理反代配置)${PLAIN}"
+        echo -e "${RED} 17. 删除底层 ACME 证书${PLAIN}        ${YELLOW}(危险操作，清理签发记录)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${BOLD}${BLUE}▶ 443 单入口分流${PLAIN} ${YELLOW}(推荐：Nginx Stream + Caddy + REALITY)${PLAIN}"
+        echo -e "${GREEN} 18. 首次配置 443 单入口${PLAIN}       ${YELLOW}(面板/订阅/REALITY/网站共用公网 443)${PLAIN}"
+        echo -e "${GREEN} 19. 443 单入口维护中心${PLAIN}        ${YELLOW}(体检/重签/修复/回滚/订阅提示)${PLAIN}"
+        echo -e "${GREEN} 20. 管理 443 网站/反代${PLAIN}        ${YELLOW}(后续新增/删除网站，不重跑完整向导)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -2365,23 +2369,28 @@ func_caddy_cf_maintenance_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🛠️ CF DNS / Caddy 证书维护中心${PLAIN}"
+        echo -e "${BOLD}🛠️ 443 / Caddy / Cloudflare 维护中心${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}${BLUE}▶ 443 单入口常用${PLAIN}"
+        echo -e "${GREEN} 11. 443 链路与安全体检${PLAIN}       ${YELLOW}(Nginx/Caddy/REALITY/面板/版本隐藏)${PLAIN}"
+        echo -e "${GREEN} 15. 管理 443 网站/反代域名${PLAIN}    ${YELLOW}(新增/删除/查看，最常用)${PLAIN}"
+        echo -e "${GREEN} 12. 重新应用上次 443 配置${PLAIN}     ${YELLOW}(读取 sni-stack.env 重建配置)${PLAIN}"
+        echo -e "${GREEN} 13. 订阅端口 / External Proxy 提示${PLAIN} ${YELLOW}(节点链接应输出公网 443)${PLAIN}"
+        echo -e "${RED} 14. 回滚 443 单入口配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${BOLD}${BLUE}▶ 证书与 Cloudflare${PLAIN}"
         echo -e "${GREEN}  1. 查看已管理域名 / 证书路径${PLAIN}"
         echo -e "${GREEN}  2. 更新 Cloudflare API Token${PLAIN}"
         echo -e "${GREEN}  3. 重新签发某个域名证书${PLAIN}"
         echo -e "${GREEN}  4. 重建 /root/cert 证书软链接${PLAIN}"
-        echo -e "${GREEN}  5. 删除某个域名的 Caddy 配置与证书${PLAIN}"
-        echo -e "${GREEN}  6. 校验并重载 Caddy${PLAIN}"
         echo -e "${GREEN}  7. 重建证书清单文件${PLAIN}"
-        echo -e "${GREEN}  8. 一键体检${PLAIN} ${YELLOW}(Token/证书/监听/后端)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${BOLD}${BLUE}▶ Caddy 修复与清理${PLAIN}"
+        echo -e "${GREEN}  6. 校验并重载 Caddy${PLAIN}"
+        echo -e "${GREEN}  8. Caddy/证书一键体检${PLAIN}       ${YELLOW}(Token/证书/监听/后端)${PLAIN}"
         echo -e "${GREEN}  9. 一键自动修复常见问题${PLAIN}"
-        echo -e "${GREEN} 10. 隔离旧 Caddy 配置${PLAIN} ${YELLOW}(避免抢占 443)${PLAIN}"
-        echo -e "${GREEN} 11. 443 单入口链路体检${PLAIN} ${YELLOW}(Nginx/Caddy/REALITY/面板)${PLAIN}"
-        echo -e "${GREEN} 12. 重新应用上次 443 分流配置${PLAIN}"
-        echo -e "${GREEN} 13. 订阅端口 / External Proxy 检查提示${PLAIN}"
-        echo -e "${RED} 14. 回滚 443 单入口配置${PLAIN}"
-        echo -e "${GREEN} 15. 管理 443 网站/反代域名${PLAIN} ${YELLOW}(新增/删除/查看)${PLAIN}"
+        echo -e "${GREEN} 10. 隔离旧 Caddy 配置${PLAIN}        ${YELLOW}(避免抢占 443)${PLAIN}"
+        echo -e "${RED}  5. 删除某个域名的 Caddy 配置与证书${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -4702,6 +4711,45 @@ func_panel_deploy_menu() {
     done
 }
 
+func_sni_stack_quick_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🧩 443 单入口管理中心${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}用途：公网只开放 443，由 Nginx 按 SNI 分流到 Caddy、REALITY、3x-ui 和本地网站。${PLAIN}"
+        echo -e "${YELLOW}如果只是后续加网站，直接选 [2]，不用重跑首次配置。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${BOLD}${BLUE}▶ 新手常用${PLAIN}"
+        echo -e "${GREEN}  1. 首次配置 443 单入口${PLAIN}       ${YELLOW}(第一次部署时使用)${PLAIN}"
+        echo -e "${GREEN}  2. 管理网站/反代域名${PLAIN}         ${YELLOW}(新增/删除/查看网站，最常用)${PLAIN}"
+        echo -e "${GREEN}  3. 443 单入口链路体检${PLAIN}        ${YELLOW}(检查 Nginx/Caddy/REALITY/面板/安全项)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${BOLD}${BLUE}▶ 配置维护${PLAIN}"
+        echo -e "${CYAN}  4. 重新应用上次配置${PLAIN}           ${YELLOW}(读取 sni-stack.env 重新生成配置)${PLAIN}"
+        echo -e "${CYAN}  5. 订阅端口 / External Proxy 提示${PLAIN} ${YELLOW}(检查订阅节点是否输出 443)${PLAIN}"
+        echo -e "${CYAN}  6. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local sni_choice
+        read -p "👉 请选择操作: " sni_choice
+        case "$sni_choice" in
+            1) func_caddy_cf_reality_wizard ;;
+            2) manage_sni_stack_sites ;;
+            3) sni_stack_health_check ;;
+            4) reapply_sni_stack_from_env ;;
+            5) check_sni_stack_subscription_hint ;;
+            6) func_caddy_cf_maintenance_menu ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+        echo ""
+        read -n 1 -s -r -p "按任意键继续..."
+    done
+}
+
 # ---------------------------------------------------------
 # 界面主循环 (新增 IP 防送中 & SublinkPro)
 # ---------------------------------------------------------
@@ -4738,6 +4786,9 @@ main_menu() {
         echo -e " ${GREEN}16.${PLAIN} 配置备份与回滚        ${YELLOW}(备份/列表/恢复/清理)${PLAIN}"
         echo -e " ${YELLOW}17.${PLAIN} 更新脚本              ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
         echo -e " ${RED}18.${PLAIN} 重启服务器"
+        echo -e ""
+        echo -e " ${BOLD}${BLUE}▶ ⑤ 高频直达${PLAIN}"
+        echo -e " ${GREEN}19.${PLAIN} 443 单入口管理中心    ${YELLOW}(初始化/加网站/体检/修复都在这里)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${RED} 0.${PLAIN} 退出面板"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -4764,6 +4815,7 @@ main_menu() {
             16) func_backup_center ;;
             17) func_update_script ;;
             18) reboot ;;
+            19) func_sni_stack_quick_menu ;;
             0) exit 0 ;;
             *) 
                 echo -e "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}"
