@@ -249,7 +249,10 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 7. 安装 Sub-Store（HTTP-META / Docker Compose）
 8. 更新订阅管理工具（SublinkPro / 妙妙屋 / Sub-Store）
 9. 安装 Dockge（Docker Compose 管理面板）
+10. 迁移 Compose 到 Dockge（Dockge 后安装时接管旧项目）
 ```
+
+Dockge 如果是后安装的，可以用第 10 项扫描 `/opt` 下已有的 Compose 项目，例如 SublinkPro、妙妙屋、Sub-Store，并移动到 Dockge 的 stacks 目录。迁移时脚本会逐项确认，避免覆盖已有 stack。
 
 233boy 文档：
 
