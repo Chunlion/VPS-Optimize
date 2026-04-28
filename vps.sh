@@ -662,6 +662,7 @@ func_env_install() {
         echo -e "${RED} 17. 删除底层 ACME 证书${PLAIN}"
         echo -e "${GREEN} 18. 443 单入口分流向导${PLAIN} ${YELLOW}(Nginx Stream + Caddy + REALITY)${PLAIN}"
         echo -e "${GREEN} 19. CF DNS / Caddy 维护菜单${PLAIN} ${YELLOW}(重签/软链/清理/体检/修复)${PLAIN}"
+        echo -e "${GREEN} 20. 管理 443 网站/反代域名${PLAIN} ${YELLOW}(新增/删除/查看，不重跑完整向导)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -762,6 +763,7 @@ EOF
             17) func_caddy_delete_cert ;;
             18) func_caddy_cf_reality_wizard ;;
             19) func_caddy_cf_maintenance_menu ;;
+            20) manage_sni_stack_sites ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
         esac
@@ -998,6 +1000,19 @@ ask_with_default() {
     echo "${input:-$default_value}"
 }
 
+split_csv_to_array() {
+    local input="$1"
+    local -n out_array=$2
+    local idx cleaned
+    out_array=()
+    local raw_array=()
+    IFS=',' read -ra raw_array <<< "$input"
+    for idx in "${!raw_array[@]}"; do
+        cleaned=$(echo "${raw_array[$idx]}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+        [[ -n "$cleaned" ]] && out_array+=("$cleaned")
+    done
+}
+
 is_valid_port() {
     local port="$1"
     [[ "$port" =~ ^[0-9]+$ ]] && [[ "$port" -ge 1 && "$port" -le 65535 ]]
@@ -1096,7 +1111,12 @@ print_sni_stack_preview() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Nginx stream"
     echo -e "面板域名：${PANEL_DOMAIN} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
-    [[ -n "$SITE_DOMAIN" ]] && echo -e "展示站域名：${SITE_DOMAIN} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${SITE_BACKEND_ADDR}:${SITE_BACKEND_PORT}"
+    if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
+        local i
+        for i in "${!SITE_DOMAINS[@]}"; do
+            echo -e "网站/反代域名：${SITE_DOMAINS[$i]} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]}"
+        done
+    fi
     echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
     echo -e "默认/未知 SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
     echo -e ""
@@ -1125,6 +1145,35 @@ load_sni_stack_env() {
     # shellcheck disable=SC1090
     source "$env_file"
     PANEL_INTERNAL_SSL=${PANEL_INTERNAL_SSL:-off}
+    normalize_site_stack_arrays
+}
+
+normalize_site_stack_arrays() {
+    SITE_DOMAINS=()
+    SITE_BACKEND_ADDRS=()
+    SITE_BACKEND_PORTS=()
+
+    if [[ -n "${SITE_DOMAINS_CSV:-}" ]]; then
+        split_csv_to_array "$SITE_DOMAINS_CSV" SITE_DOMAINS
+        split_csv_to_array "${SITE_BACKEND_ADDRS_CSV:-}" SITE_BACKEND_ADDRS
+        split_csv_to_array "${SITE_BACKEND_PORTS_CSV:-}" SITE_BACKEND_PORTS
+    elif [[ -n "${SITE_DOMAIN:-}" ]]; then
+        SITE_DOMAINS=("$SITE_DOMAIN")
+        SITE_BACKEND_ADDRS=("${SITE_BACKEND_ADDR:-127.0.0.1}")
+        SITE_BACKEND_PORTS=("${SITE_BACKEND_PORT:-3000}")
+    fi
+
+    local i default_port
+    default_port=3000
+    for i in "${!SITE_DOMAINS[@]}"; do
+        SITE_BACKEND_ADDRS[$i]="${SITE_BACKEND_ADDRS[$i]:-127.0.0.1}"
+        SITE_BACKEND_PORTS[$i]="${SITE_BACKEND_PORTS[$i]:-$default_port}"
+        default_port=$((default_port + 1))
+    done
+
+    SITE_DOMAIN="${SITE_DOMAINS[0]:-}"
+    SITE_BACKEND_ADDR="${SITE_BACKEND_ADDRS[0]:-127.0.0.1}"
+    SITE_BACKEND_PORT="${SITE_BACKEND_PORTS[0]:-3000}"
 }
 
 sni_stack_health_check() {
@@ -1160,7 +1209,12 @@ sni_stack_health_check() {
     check_listen "Xray/3x-ui REALITY" "$XRAY_LISTEN_PORT" "$XRAY_LISTEN_ADDR"
     check_listen "3x-ui 面板" "$PANEL_LISTEN_PORT" "$PANEL_LISTEN_ADDR"
     check_listen "3x-ui 订阅" "$SUB_LISTEN_PORT" "$SUB_LISTEN_ADDR"
-    [[ -n "$SITE_DOMAIN" ]] && check_listen "展示站后端" "$SITE_BACKEND_PORT" "$SITE_BACKEND_ADDR"
+    if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
+        local i
+        for i in "${!SITE_DOMAINS[@]}"; do
+            check_listen "网站后端 ${SITE_DOMAINS[$i]}" "${SITE_BACKEND_PORTS[$i]}" "${SITE_BACKEND_ADDRS[$i]}"
+        done
+    fi
 
     echo -e "------------------------------------------------"
     nginx -t >/dev/null 2>&1 && echo -e "${GREEN}✅ nginx -t 通过${PLAIN}" && ((ok++)) || { echo -e "${RED}❌ nginx -t 失败${PLAIN}"; ((fail++)); }
@@ -1255,7 +1309,12 @@ collect_sni_stack_config() {
     echo -e "------------------------------------------------"
 
     read -p "面板域名（必填，例如 panel.example.com）: " PANEL_DOMAIN
-    SITE_DOMAIN=$(ask_with_default "展示站域名（可选，留空则不配置）" "")
+    SITE_DOMAINS=()
+    SITE_BACKEND_ADDRS=()
+    SITE_BACKEND_PORTS=()
+    local site_domains_input
+    site_domains_input=$(ask_with_default "网站/反代域名（可选，多个用英文逗号分隔，例如 site1.example.com,site2.example.com）" "")
+    split_csv_to_array "$site_domains_input" SITE_DOMAINS
     echo -e "${YELLOW}REALITY 伪装 SNI 请填写外部真实 HTTPS 站点域名，不要填写面板域名或节点域名。${PLAIN}"
     echo -e "${YELLOW}模板示例：your-reality-sni.example.com（请替换成你自己选择的真实站点）${PLAIN}"
     read -p "REALITY 伪装 SNI（必填）: " REALITY_SNI
@@ -1269,21 +1328,34 @@ collect_sni_stack_config() {
         XRAY_LISTEN_ADDR=$(ask_with_default "Xray REALITY 本地监听地址" "127.0.0.1")
         PANEL_LISTEN_ADDR=$(ask_with_default "3x-ui 面板监听地址" "127.0.0.1")
         SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "127.0.0.1")
-        SITE_BACKEND_ADDR=$(ask_with_default "展示站后端监听地址" "127.0.0.1")
     else
         CADDY_LISTEN_ADDR="127.0.0.1"
         XRAY_LISTEN_ADDR="127.0.0.1"
         PANEL_LISTEN_ADDR="127.0.0.1"
         SUB_LISTEN_ADDR="127.0.0.1"
-        SITE_BACKEND_ADDR="127.0.0.1"
-        echo -e "${GREEN}普通模式：Caddy/Xray/3x-ui/订阅/展示站后端均使用 127.0.0.1。${PLAIN}"
+        echo -e "${GREEN}普通模式：Caddy/Xray/3x-ui/订阅/网站后端均使用 127.0.0.1。${PLAIN}"
     fi
 
     CADDY_LISTEN_PORT=$(ask_with_default "Caddy 本地监听端口" "8443")
     XRAY_LISTEN_PORT=$(ask_with_default "Xray REALITY 本地监听端口" "1443")
     PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "40000")
     SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（若与面板同端口请输入 40000）" "2096")
-    SITE_BACKEND_PORT=$(ask_with_default "展示站后端端口" "3000")
+    if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
+        local i default_site_port
+        default_site_port=3000
+        for i in "${!SITE_DOMAINS[@]}"; do
+            if [[ -z "${SITE_DOMAINS[$i]}" ]]; then
+                continue
+            fi
+            if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
+                SITE_BACKEND_ADDRS[$i]=$(ask_with_default "网站 ${SITE_DOMAINS[$i]} 的后端监听地址" "127.0.0.1")
+            else
+                SITE_BACKEND_ADDRS[$i]="127.0.0.1"
+            fi
+            SITE_BACKEND_PORTS[$i]=$(ask_with_default "网站 ${SITE_DOMAINS[$i]} 的后端端口" "$default_site_port")
+            default_site_port=$((default_site_port + 1))
+        done
+    fi
 
     PANEL_INTERNAL_SSL="off"
     local panel_ssl_enabled
@@ -1300,24 +1372,32 @@ collect_sni_stack_config() {
     read -p "CF Token: " CF_TOKEN
 
     PANEL_DOMAIN=$(echo "$PANEL_DOMAIN" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
-    SITE_DOMAIN=$(echo "$SITE_DOMAIN" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
     REALITY_SNI=$(echo "$REALITY_SNI" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
 
     if ! is_valid_domain "$PANEL_DOMAIN"; then echo -e "${RED}❌ 面板域名无效。${PLAIN}"; return 1; fi
-    if [[ -n "$SITE_DOMAIN" ]] && ! is_valid_domain "$SITE_DOMAIN"; then echo -e "${RED}❌ 展示站域名无效。${PLAIN}"; return 1; fi
     if ! is_valid_domain "$REALITY_SNI"; then echo -e "${RED}❌ REALITY SNI 无效。${PLAIN}"; return 1; fi
-    if [[ "$PANEL_DOMAIN" == "$REALITY_SNI" || "$PANEL_DOMAIN" == "$SITE_DOMAIN" || ( -n "$SITE_DOMAIN" && "$SITE_DOMAIN" == "$REALITY_SNI" ) ]]; then
-        echo -e "${RED}❌ 面板域名、展示站域名、REALITY SNI 不能相同。${PLAIN}"
-        return 1
-    fi
+    local site_domain seen_domains
+    seen_domains=" ${PANEL_DOMAIN} ${REALITY_SNI} "
+    for site_domain in "${SITE_DOMAINS[@]}"; do
+        [[ -z "$site_domain" ]] && continue
+        if ! is_valid_domain "$site_domain"; then echo -e "${RED}❌ 网站/反代域名无效：${site_domain}${PLAIN}"; return 1; fi
+        if [[ "$site_domain" == "$PANEL_DOMAIN" || "$site_domain" == "$REALITY_SNI" || "$seen_domains" == *" ${site_domain} "* ]]; then
+            echo -e "${RED}❌ 面板域名、网站/反代域名、REALITY SNI 不能相同：${site_domain}${PLAIN}"
+            return 1
+        fi
+        seen_domains+=" ${site_domain} "
+    done
 
     local p a
-    for p in "$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "$SITE_BACKEND_PORT"; do
+    for p in "$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}"; do
         is_valid_port "$p" || { echo -e "${RED}❌ 端口无效：${p}${PLAIN}"; return 1; }
     done
-    for a in "$NGINX_LISTEN_ADDR" "$CADDY_LISTEN_ADDR" "$XRAY_LISTEN_ADDR" "$PANEL_LISTEN_ADDR" "$SUB_LISTEN_ADDR" "$SITE_BACKEND_ADDR"; do
+    for a in "$NGINX_LISTEN_ADDR" "$CADDY_LISTEN_ADDR" "$XRAY_LISTEN_ADDR" "$PANEL_LISTEN_ADDR" "$SUB_LISTEN_ADDR" "${SITE_BACKEND_ADDRS[@]}"; do
         is_valid_listen_addr "$a" || { echo -e "${RED}❌ 监听地址无效：${a}${PLAIN}"; return 1; }
     done
+    SITE_DOMAIN="${SITE_DOMAINS[0]:-}"
+    SITE_BACKEND_ADDR="${SITE_BACKEND_ADDRS[0]:-127.0.0.1}"
+    SITE_BACKEND_PORT="${SITE_BACKEND_PORTS[0]:-3000}"
     [[ "$NGINX_LISTEN_PORT" != "443" ]] && echo -e "${YELLOW}⚠️  Nginx 公网端口不是 443，不推荐。${PLAIN}"
 
     warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
@@ -1393,7 +1473,12 @@ write_nginx_sni_stream_config() {
 map \$ssl_preread_server_name \$vps_sni_backend {
     ${PANEL_DOMAIN} caddy_backend;
 EOF
-    [[ -n "$SITE_DOMAIN" ]] && echo "    ${SITE_DOMAIN} caddy_backend;" >> "$conf_file"
+    if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
+        local site_domain
+        for site_domain in "${SITE_DOMAINS[@]}"; do
+            [[ -n "$site_domain" ]] && echo "    ${site_domain} caddy_backend;" >> "$conf_file"
+        done
+    fi
     cat <<EOF >> "$conf_file"
     ${REALITY_SNI} xray_backend;
     default xray_backend;
@@ -1466,13 +1551,16 @@ EOF
 }
 
 write_caddy_site_config() {
-    [[ -z "$SITE_DOMAIN" ]] && return 0
-    local site_backend
-    site_backend=$(format_hostport "$SITE_BACKEND_ADDR" "$SITE_BACKEND_PORT")
-    cat <<EOF > "/etc/caddy/conf.d/${SITE_DOMAIN}.caddy"
-https://${SITE_DOMAIN}:${CADDY_LISTEN_PORT} {
+    [[ ${#SITE_DOMAINS[@]} -eq 0 ]] && return 0
+    local i site_domain site_backend
+    for i in "${!SITE_DOMAINS[@]}"; do
+        site_domain="${SITE_DOMAINS[$i]}"
+        [[ -z "$site_domain" ]] && continue
+        site_backend=$(format_hostport "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}")
+        cat <<EOF > "/etc/caddy/conf.d/${site_domain}.caddy"
+https://${site_domain}:${CADDY_LISTEN_PORT} {
     bind ${CADDY_LISTEN_ADDR}
-    tls /etc/caddy/certs/${SITE_DOMAIN}.crt /etc/caddy/certs/${SITE_DOMAIN}.key
+    tls /etc/caddy/certs/${site_domain}.crt /etc/caddy/certs/${site_domain}.key
     encode gzip
 
     reverse_proxy ${site_backend} {
@@ -1483,6 +1571,7 @@ https://${SITE_DOMAIN}:${CADDY_LISTEN_PORT} {
     }
 }
 EOF
+    done
 }
 
 issue_and_install_cert_for_domain() {
@@ -1515,9 +1604,14 @@ issue_and_install_cert_for_domain() {
 
 save_sni_stack_env() {
     mkdir -p /etc/vps-optimize
+    local site_domains_csv site_backend_addrs_csv site_backend_ports_csv
+    site_domains_csv=$(IFS=','; echo "${SITE_DOMAINS[*]}")
+    site_backend_addrs_csv=$(IFS=','; echo "${SITE_BACKEND_ADDRS[*]}")
+    site_backend_ports_csv=$(IFS=','; echo "${SITE_BACKEND_PORTS[*]}")
     cat <<EOF > /etc/vps-optimize/sni-stack.env
 PANEL_DOMAIN='${PANEL_DOMAIN}'
-SITE_DOMAIN='${SITE_DOMAIN}'
+SITE_DOMAIN='${SITE_DOMAINS[0]:-}'
+SITE_DOMAINS_CSV='${site_domains_csv}'
 REALITY_SNI='${REALITY_SNI}'
 NGINX_LISTEN_ADDR='${NGINX_LISTEN_ADDR}'
 NGINX_LISTEN_PORT='${NGINX_LISTEN_PORT}'
@@ -1529,8 +1623,10 @@ PANEL_LISTEN_ADDR='${PANEL_LISTEN_ADDR}'
 PANEL_LISTEN_PORT='${PANEL_LISTEN_PORT}'
 SUB_LISTEN_ADDR='${SUB_LISTEN_ADDR}'
 SUB_LISTEN_PORT='${SUB_LISTEN_PORT}'
-SITE_BACKEND_ADDR='${SITE_BACKEND_ADDR}'
-SITE_BACKEND_PORT='${SITE_BACKEND_PORT}'
+SITE_BACKEND_ADDR='${SITE_BACKEND_ADDRS[0]:-127.0.0.1}'
+SITE_BACKEND_PORT='${SITE_BACKEND_PORTS[0]:-3000}'
+SITE_BACKEND_ADDRS_CSV='${site_backend_addrs_csv}'
+SITE_BACKEND_PORTS_CSV='${site_backend_ports_csv}'
 PANEL_INTERNAL_SSL='${PANEL_INTERNAL_SSL}'
 EOF
     chmod 600 /etc/vps-optimize/sni-stack.env
@@ -1544,7 +1640,7 @@ harden_single_443_firewall() {
     [[ "$yn" =~ ^[Yy]$ ]] || return 0
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}
-    remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "$SITE_BACKEND_PORT" "40000" "8443" "1443" "2096" "3000")
+    remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "40000" "8443" "1443" "2096" "3000")
     if command -v ufw >/dev/null 2>&1; then
         ufw allow "${ssh_port}/tcp" >/dev/null 2>&1 || true
         ufw allow "${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || true
@@ -1575,10 +1671,15 @@ print_sni_stack_result() {
     echo -e "${BOLD}一、以后从外面只访问这些地址${PLAIN}"
     echo -e "  面板入口：      https://${PANEL_DOMAIN}/"
     echo -e "  订阅入口：      https://${PANEL_DOMAIN}/sub/"
-    [[ -n "$SITE_DOMAIN" ]] && echo -e "  展示站入口：    https://${SITE_DOMAIN}/"
+    if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
+        local i
+        for i in "${!SITE_DOMAINS[@]}"; do
+            echo -e "  网站/反代入口： https://${SITE_DOMAINS[$i]}/"
+        done
+    fi
     echo -e "  REALITY 端口：  ${NGINX_LISTEN_PORT}"
     echo -e ""
-    echo -e "${YELLOW}不要从公网访问这些内部端口：${CADDY_LISTEN_PORT}/${XRAY_LISTEN_PORT}/${PANEL_LISTEN_PORT}/${SUB_LISTEN_PORT}/${SITE_BACKEND_PORT}${PLAIN}"
+    echo -e "${YELLOW}不要从公网访问这些内部端口：${CADDY_LISTEN_PORT}/${XRAY_LISTEN_PORT}/${PANEL_LISTEN_PORT}/${SUB_LISTEN_PORT}/${SITE_BACKEND_PORTS[*]}${PLAIN}"
     echo -e "${YELLOW}它们应该只给本机内部服务互相连接，不是浏览器入口。${PLAIN}"
     echo -e ""
     echo -e "${BOLD}二、3x-ui 面板设置建议${PLAIN}"
@@ -1620,7 +1721,12 @@ print_sni_stack_result() {
     echo -e "  ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT} -> xray"
     echo -e "  ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} -> 3x-ui"
     echo -e "  ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} -> 3x-ui subscription"
-    [[ -n "$SITE_DOMAIN" ]] && echo -e "  ${SITE_BACKEND_ADDR}:${SITE_BACKEND_PORT} -> site backend"
+    if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
+        local i
+        for i in "${!SITE_DOMAINS[@]}"; do
+            echo -e "  ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]} -> ${SITE_DOMAINS[$i]} 网站后端"
+        done
+    fi
     echo -e ""
     echo -e "${BOLD}六、检查命令${PLAIN}"
     echo -e "  ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096|:3000'"
@@ -1633,6 +1739,205 @@ print_sni_stack_result() {
     echo -e "  journalctl -u x-ui -u 3x-ui -n 80 --no-pager"
     echo -e ""
     echo -e "${RED}绝对不要做：Caddy 监听公网 443；Xray 监听公网 443；3x-ui 面板暴露公网；把 Caddy 证书填进 3x-ui 面板 SSL；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+}
+
+apply_sni_stack_runtime_config() {
+    create_sni_stack_backup
+    install_nginx_stream_stack || return 1
+    ensure_caddy_local_base_config || return 1
+    cleanup_old_nginx_sni_stream_configs
+    write_caddy_panel_config
+    write_caddy_site_config
+    caddy_format_configs
+    caddy validate --config /etc/caddy/Caddyfile || return 1
+    write_nginx_sni_stream_config || return 1
+    systemctl enable nginx >/dev/null 2>&1 || true
+    systemctl restart nginx || return 1
+    systemctl enable caddy >/dev/null 2>&1 || true
+    systemctl restart caddy || return 1
+    save_sni_stack_env
+    generate_caddy_cf_manifest
+}
+
+list_sni_stack_sites() {
+    load_sni_stack_env || return 1
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}当前 443 单入口网站/反代域名${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "面板域名：${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
+    echo -e "------------------------------------------------"
+    if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}当前没有额外的网站/反代域名。${PLAIN}"
+        return 0
+    fi
+
+    local i num
+    for i in "${!SITE_DOMAINS[@]}"; do
+        num=$((i + 1))
+        echo -e "${GREEN}${num}.${PLAIN} https://${SITE_DOMAINS[$i]}/ -> ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]}"
+    done
+}
+
+add_sni_stack_site() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}添加 443 网站/反代域名${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+
+    local cf_env_file="/root/.config/vps-panel/cloudflare.env"
+    if [[ ! -f "$cf_env_file" ]]; then
+        echo -e "${RED}❌ 未找到 Cloudflare Token，请先进入维护菜单 [2] 写入 Token。${PLAIN}"
+        return 1
+    fi
+    # shellcheck disable=SC1090
+    source "$cf_env_file"
+    if [[ -z "${CF_Token:-}" ]]; then
+        echo -e "${RED}❌ Cloudflare Token 为空，请先进入维护菜单 [2] 更新。${PLAIN}"
+        return 1
+    fi
+
+    echo -e "这个入口适合后续新增网站，例如 SublinkPro、Dockge、博客、订阅管理工具等。"
+    echo -e "${YELLOW}新增域名会走：公网 ${NGINX_LISTEN_PORT} -> Nginx SNI -> Caddy -> 本地后端。${PLAIN}"
+    echo -e ""
+
+    local site_domain site_addr site_port advanced_mode existing idx confirm
+    read -p "请输入新网站/反代域名（例如 sub.example.com）: " site_domain
+    site_domain=$(echo "$site_domain" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+
+    if ! is_valid_domain "$site_domain"; then
+        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+        return 1
+    fi
+    if [[ "$site_domain" == "$PANEL_DOMAIN" || "$site_domain" == "$REALITY_SNI" ]]; then
+        echo -e "${RED}❌ 新域名不能和面板域名或 REALITY SNI 相同。${PLAIN}"
+        return 1
+    fi
+    for existing in "${SITE_DOMAINS[@]}"; do
+        if [[ "$site_domain" == "$existing" ]]; then
+            echo -e "${RED}❌ 该域名已经在 443 分流列表中。${PLAIN}"
+            return 1
+        fi
+    done
+
+    read -p "是否进入高级模式并允许修改后端监听地址？(y/n，默认 n): " advanced_mode
+    if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
+        site_addr=$(ask_with_default "后端监听地址" "127.0.0.1")
+    else
+        site_addr="127.0.0.1"
+        echo -e "${GREEN}普通模式：后端地址使用 127.0.0.1。${PLAIN}"
+    fi
+    site_port=$(ask_with_default "后端端口" "$((3000 + ${#SITE_DOMAINS[@]}))")
+
+    is_valid_listen_addr "$site_addr" || { echo -e "${RED}❌ 后端监听地址无效：${site_addr}${PLAIN}"; return 1; }
+    is_valid_port "$site_port" || { echo -e "${RED}❌ 后端端口无效：${site_port}${PLAIN}"; return 1; }
+    warn_if_public_bind "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
+
+    echo -e ""
+    echo -e "${CYAN}即将添加：${site_domain} -> ${site_addr}:${site_port}${PLAIN}"
+    read -p "确认申请证书并更新 Nginx/Caddy？输入 YES 继续: " confirm
+    [[ "$confirm" == "YES" ]] || return 1
+
+    idx=${#SITE_DOMAINS[@]}
+    SITE_DOMAINS[$idx]="$site_domain"
+    SITE_BACKEND_ADDRS[$idx]="$site_addr"
+    SITE_BACKEND_PORTS[$idx]="$site_port"
+
+    issue_and_install_cert_for_domain "$site_domain" "$CF_Token" || return 1
+    apply_sni_stack_runtime_config || return 1
+    echo -e "${GREEN}✅ 已添加网站入口：https://${site_domain}/${PLAIN}"
+    echo -e "${YELLOW}提醒：后端服务需要监听 ${site_addr}:${site_port}，浏览器只访问 https://${site_domain}/。${PLAIN}"
+}
+
+remove_sni_stack_site() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}删除 443 网站/反代域名${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+
+    if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}当前没有可删除的网站/反代域名。${PLAIN}"
+        return 0
+    fi
+
+    local i num choice idx domain confirm delete_cert new_domains new_addrs new_ports
+    for i in "${!SITE_DOMAINS[@]}"; do
+        num=$((i + 1))
+        echo -e "${GREEN}${num}.${PLAIN} ${SITE_DOMAINS[$i]} -> ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]}"
+    done
+    echo -e "------------------------------------------------"
+    read -p "请输入要删除的序号: " choice
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#SITE_DOMAINS[@]} )); then
+        echo -e "${RED}❌ 序号无效。${PLAIN}"
+        return 1
+    fi
+
+    idx=$((choice - 1))
+    domain="${SITE_DOMAINS[$idx]}"
+    read -p "确认从 443 分流中删除 ${domain}？输入 YES 继续: " confirm
+    [[ "$confirm" == "YES" ]] || return 1
+
+    new_domains=()
+    new_addrs=()
+    new_ports=()
+    for i in "${!SITE_DOMAINS[@]}"; do
+        [[ "$i" -eq "$idx" ]] && continue
+        new_domains+=("${SITE_DOMAINS[$i]}")
+        new_addrs+=("${SITE_BACKEND_ADDRS[$i]}")
+        new_ports+=("${SITE_BACKEND_PORTS[$i]}")
+    done
+    SITE_DOMAINS=("${new_domains[@]}")
+    SITE_BACKEND_ADDRS=("${new_addrs[@]}")
+    SITE_BACKEND_PORTS=("${new_ports[@]}")
+    rm -f "/etc/caddy/conf.d/${domain}.caddy"
+
+    apply_sni_stack_runtime_config || return 1
+
+    read -p "是否同时删除 ${domain} 的 Caddy 证书文件？(y/n，默认 n): " delete_cert
+    if [[ "$delete_cert" =~ ^[Yy]$ ]]; then
+        rm -f "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"
+        rm -f "/root/cert/${domain}.crt" "/root/cert/${domain}.key"
+        generate_caddy_cf_manifest
+        echo -e "${GREEN}✅ 已删除 ${domain} 的配置与本地证书文件。${PLAIN}"
+    else
+        echo -e "${GREEN}✅ 已删除 ${domain} 的分流配置，证书文件已保留。${PLAIN}"
+    fi
+}
+
+manage_sni_stack_sites() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🌐 443 网站/反代域名管理${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "用于已经完成 [18] 443 单入口初始化后的日常维护。"
+        echo -e "新增网站不需要重跑完整向导，只需要把域名指向本机后端端口。"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 查看当前网站/反代域名${PLAIN}"
+        echo -e "${GREEN}  2. 新增网站/反代域名${PLAIN}"
+        echo -e "${GREEN}  3. 删除网站/反代域名${PLAIN}"
+        echo -e "${GREEN}  4. 重新应用并重启 Nginx/Caddy${PLAIN}"
+        echo -e "${GREEN}  5. 443 单入口链路体检${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local choice
+        read -p "👉 请选择操作: " choice
+        case "$choice" in
+            1) list_sni_stack_sites ;;
+            2) add_sni_stack_site ;;
+            3) remove_sni_stack_site ;;
+            4) reapply_sni_stack_from_env ;;
+            5) sni_stack_health_check ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
+        esac
+        echo ""
+        read -n 1 -s -r -p "按任意键继续..."
+    done
 }
 
 func_caddy_cf_reality_wizard() {
@@ -1654,8 +1959,12 @@ func_caddy_cf_reality_wizard() {
     cleanup_old_nginx_sni_stream_configs
     quarantine_legacy_caddy_443_configs
     issue_and_install_cert_for_domain "$PANEL_DOMAIN" "$CF_TOKEN" || return 1
-    if [[ -n "$SITE_DOMAIN" ]]; then
-        issue_and_install_cert_for_domain "$SITE_DOMAIN" "$CF_TOKEN" || return 1
+    if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
+        local site_domain
+        for site_domain in "${SITE_DOMAINS[@]}"; do
+            [[ -z "$site_domain" ]] && continue
+            issue_and_install_cert_for_domain "$site_domain" "$CF_TOKEN" || return 1
+        done
     fi
     write_caddy_panel_config
     write_caddy_site_config
@@ -2012,6 +2321,7 @@ func_caddy_cf_maintenance_menu() {
         echo -e "${GREEN} 12. 重新应用上次 443 分流配置${PLAIN}"
         echo -e "${GREEN} 13. 订阅端口 / External Proxy 检查提示${PLAIN}"
         echo -e "${RED} 14. 回滚 443 单入口配置${PLAIN}"
+        echo -e "${GREEN} 15. 管理 443 网站/反代域名${PLAIN} ${YELLOW}(新增/删除/查看)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -2231,6 +2541,10 @@ func_caddy_cf_maintenance_menu() {
 
             14)
                 rollback_sni_stack_config
+                ;;
+
+            15)
+                manage_sni_stack_sites
                 ;;
 
             0) break ;;
@@ -3316,6 +3630,34 @@ func_ip_sentinel() {
 # ---------------------------------------------------------
 # 新增功能：安装 SublinkPro (强大的订阅转换与管理面板)
 # ---------------------------------------------------------
+ensure_docker_compose_ready() {
+    DOCKER_COMPOSE_CMD=""
+    if ! command -v docker >/dev/null 2>&1; then
+        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 软件安装与反代分流] 中安装 Docker。${PLAIN}"
+        return 1
+    fi
+
+    if docker compose version >/dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="docker compose"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="docker-compose"
+    else
+        echo -e "${YELLOW}⚠️ 未检测到 Docker Compose 插件，正在为您安装...${PLAIN}"
+        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose 2>/dev/null
+        chmod +x /usr/local/bin/docker-compose
+        DOCKER_COMPOSE_CMD="docker-compose"
+        echo -e "${GREEN}✅ Docker Compose 安装完成。${PLAIN}"
+    fi
+}
+
+generate_random_secret() {
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex 32
+    else
+        echo "secret_$(date +%s)_$RANDOM$RANDOM"
+    fi
+}
+
 func_sublinkpro() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -3398,6 +3740,297 @@ EOF
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
     fi
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
+func_miaomiaowu() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}安装 妙妙屋订阅管理 (Docker Compose)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+
+    local install_dir="/opt/miaomiaowu"
+    local mmw_port="8080"
+    local jwt_secret
+
+    while true; do
+        mmw_port=$(ask_with_default "请输入 妙妙屋 对外访问端口" "$mmw_port")
+        if is_valid_port "$mmw_port"; then
+            break
+        fi
+        echo -e "${RED}❌ 端口无效，请输入 1-65535 之间的数字。${PLAIN}"
+    done
+
+    jwt_secret=$(ask_with_default "JWT_SECRET（回车自动生成随机密钥）" "")
+    if [[ -z "$jwt_secret" ]]; then
+        jwt_secret=$(generate_random_secret)
+    fi
+
+    echo -e "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}"
+    echo -e "${YELLOW}访问端口：${CYAN}${mmw_port}${PLAIN}"
+    echo -e "${YELLOW}数据目录：${CYAN}${install_dir}/data、subscribes、rule_templates${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local yn
+    read -p "确认现在部署 妙妙屋订阅管理 吗？(y/n): " yn
+    if [[ "$yn" =~ ^[Yy]$ ]]; then
+        mkdir -p "$install_dir"/{data,subscribes,rule_templates}
+        cd "$install_dir" || return
+
+        cat <<EOF > docker-compose.yml
+version: '3.8'
+
+services:
+  miaomiaowu:
+    image: ghcr.io/iluobei/miaomiaowu:latest
+    container_name: miaomiaowu
+    restart: unless-stopped
+    user: root
+    environment:
+      PORT: "${mmw_port}"
+      DATABASE_PATH: /app/data/traffic.db
+      LOG_LEVEL: info
+      JWT_SECRET: "${jwt_secret}"
+    ports:
+      - "${mmw_port}:${mmw_port}"
+    volumes:
+      - ./data:/app/data
+      - ./subscribes:/app/subscribes
+      - ./rule_templates:/app/rule_templates
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${mmw_port}/"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+EOF
+
+        echo -e "${CYAN}▶ 正在拉取镜像并启动 妙妙屋 容器...${PLAIN}"
+        $DOCKER_COMPOSE_CMD up -d
+
+        local ip
+        ip=$(curl -s4 icanhazip.com 2>/dev/null || echo "您的服务器IP")
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}✅ 妙妙屋订阅管理部署完成！${PLAIN}"
+        echo -e "访问地址：${BOLD}http://${ip}:${mmw_port}${PLAIN}"
+        echo -e "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}"
+        echo -e "${YELLOW}请定期备份 ${install_dir}/data、subscribes、rule_templates。${PLAIN}"
+    else
+        echo -e "${BLUE}已安全取消部署。${PLAIN}"
+    fi
+
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
+func_substore() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}安装 Sub-Store (Docker Compose / HTTP-META)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+
+    local install_dir="/opt/sub-store"
+    local backend_port="3001"
+    local meta_port="9876"
+    local backend_path="/$(generate_random_secret | cut -c1-48)"
+
+    while true; do
+        backend_port=$(ask_with_default "Sub-Store 后端 API 端口" "$backend_port")
+        if is_valid_port "$backend_port"; then break; fi
+        echo -e "${RED}❌ 端口无效，请输入 1-65535 之间的数字。${PLAIN}"
+    done
+
+    while true; do
+        meta_port=$(ask_with_default "HTTP-META 本地端口" "$meta_port")
+        if is_valid_port "$meta_port"; then break; fi
+        echo -e "${RED}❌ 端口无效，请输入 1-65535 之间的数字。${PLAIN}"
+    done
+
+    backend_path=$(ask_with_default "前端访问后端路径（建议保留随机路径）" "$backend_path")
+    if [[ "$backend_path" != /* ]]; then
+        backend_path="/${backend_path}"
+    fi
+
+    echo -e "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}"
+    echo -e "${YELLOW}Sub-Store 后端：${CYAN}127.0.0.1:${backend_port}${PLAIN}"
+    echo -e "${YELLOW}HTTP-META：${CYAN}127.0.0.1:${meta_port}${PLAIN}"
+    echo -e "${YELLOW}前端后端路径：${CYAN}${backend_path}${PLAIN}"
+    echo -e "${YELLOW}默认使用 host 网络并绑定 127.0.0.1，如需公网访问建议再接 Caddy/Nginx 反代。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local yn
+    read -p "确认现在部署 Sub-Store 吗？(y/n): " yn
+    if [[ "$yn" =~ ^[Yy]$ ]]; then
+        mkdir -p "$install_dir/data"
+        cd "$install_dir" || return
+
+        cat <<EOF > docker-compose.yml
+version: '3.8'
+
+services:
+  sub-store:
+    image: xream/sub-store:http-meta
+    container_name: sub-store
+    restart: always
+    network_mode: host
+    environment:
+      SUB_STORE_BACKEND_API_HOST: "127.0.0.1"
+      SUB_STORE_BACKEND_API_PORT: "${backend_port}"
+      SUB_STORE_BACKEND_MERGE: "true"
+      SUB_STORE_FRONTEND_BACKEND_PATH: "${backend_path}"
+      PORT: "${meta_port}"
+      HOST: "127.0.0.1"
+    volumes:
+      - ./data:/opt/app/data
+EOF
+
+        echo -e "${CYAN}▶ 正在拉取镜像并启动 Sub-Store 容器...${PLAIN}"
+        $DOCKER_COMPOSE_CMD up -d
+
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}✅ Sub-Store 部署完成！${PLAIN}"
+        echo -e "本地后端地址：${BOLD}http://127.0.0.1:${backend_port}${backend_path}${PLAIN}"
+        echo -e "HTTP-META 地址：${BOLD}http://127.0.0.1:${meta_port}${PLAIN}"
+        echo -e "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}"
+        echo -e "${YELLOW}请定期备份 ${install_dir}/data。${PLAIN}"
+    else
+        echo -e "${BLUE}已安全取消部署。${PLAIN}"
+    fi
+
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
+update_compose_project() {
+    local name="$1"
+    local dir="$2"
+
+    if [[ ! -d "$dir" || ! -f "$dir/docker-compose.yml" ]]; then
+        echo -e "${YELLOW}⚠️ 未找到 ${name} 的 Compose 配置：${dir}/docker-compose.yml，已跳过。${PLAIN}"
+        return 1
+    fi
+
+    echo -e "${CYAN}▶ 正在更新 ${name}...${PLAIN}"
+    (
+        cd "$dir" || exit 1
+        $DOCKER_COMPOSE_CMD pull
+        $DOCKER_COMPOSE_CMD up -d
+    )
+}
+
+func_update_subscription_tools() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}更新订阅管理工具 (Docker Compose)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${GREEN}  1. 更新 SublinkPro${PLAIN}       ${YELLOW}(/opt/sublinkpro)${PLAIN}"
+    echo -e "${GREEN}  2. 更新 妙妙屋订阅管理${PLAIN}     ${YELLOW}(/opt/miaomiaowu)${PLAIN}"
+    echo -e "${GREEN}  3. 更新 Sub-Store${PLAIN}        ${YELLOW}(/opt/sub-store)${PLAIN}"
+    echo -e "${GREEN}  4. 全部更新${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "${RED}  0. 返回${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    local choice
+    read -p "请选择要更新的项目: " choice
+    [[ "$choice" == "0" ]] && return
+
+    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+
+    case "$choice" in
+        1) update_compose_project "SublinkPro" "/opt/sublinkpro" ;;
+        2) update_compose_project "妙妙屋订阅管理" "/opt/miaomiaowu" ;;
+        3) update_compose_project "Sub-Store" "/opt/sub-store" ;;
+        4)
+            update_compose_project "SublinkPro" "/opt/sublinkpro" || true
+            update_compose_project "妙妙屋订阅管理" "/opt/miaomiaowu" || true
+            update_compose_project "Sub-Store" "/opt/sub-store" || true
+            ;;
+        *)
+            echo -e "${RED}❌ 无效选择！${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+            ;;
+    esac
+
+    echo -e "------------------------------------------------"
+    echo -e "${GREEN}✅ 更新流程已执行完成。${PLAIN}"
+    local prune_confirm
+    read -p "是否清理无标签旧镜像以释放磁盘空间？(y/n，默认 n): " prune_confirm
+    if [[ "$prune_confirm" =~ ^[Yy]$ ]]; then
+        docker image prune -f
+    fi
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
+func_dockge() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}安装 Dockge (Docker Compose 管理面板)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}Dockge 用来管理 compose.yaml stack，可创建、编辑、启动、停止、重启和更新镜像。${PLAIN}"
+    echo -e "${YELLOW}注意：Dockge 会挂载 Docker socket，建议只监听本地地址，再通过 Caddy/Nginx 反代访问。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+
+    local install_dir="/opt/dockge"
+    local stacks_dir="/opt/stacks"
+    local dockge_bind_addr="127.0.0.1"
+    local dockge_port="5001"
+
+    dockge_bind_addr=$(ask_with_default "Dockge 监听地址" "$dockge_bind_addr")
+    is_valid_listen_addr "$dockge_bind_addr" || { echo -e "${RED}❌ 监听地址无效。${PLAIN}"; read -n 1 -s -r -p "按任意键返回..."; return; }
+
+    while true; do
+        dockge_port=$(ask_with_default "Dockge 访问端口" "$dockge_port")
+        if is_valid_port "$dockge_port"; then break; fi
+        echo -e "${RED}❌ 端口无效，请输入 1-65535 之间的数字。${PLAIN}"
+    done
+    warn_if_public_bind "Dockge 管理面板" "$dockge_bind_addr" "$dockge_port" || return 1
+    stacks_dir=$(ask_with_default "Dockge stacks 目录" "$stacks_dir")
+
+    echo -e "${YELLOW}Dockge 目录：${CYAN}${install_dir}${PLAIN}"
+    echo -e "${YELLOW}Stacks 目录：${CYAN}${stacks_dir}${PLAIN}"
+    echo -e "${YELLOW}监听地址：${CYAN}${dockge_bind_addr}:${dockge_port}${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local yn
+    read -p "确认现在部署 Dockge 吗？(y/n): " yn
+    if [[ "$yn" =~ ^[Yy]$ ]]; then
+        mkdir -p "$install_dir" "$stacks_dir"
+        cd "$install_dir" || return
+
+        cat <<EOF > compose.yaml
+services:
+  dockge:
+    image: louislam/dockge:1
+    container_name: dockge
+    restart: unless-stopped
+    ports:
+      - "${dockge_bind_addr}:${dockge_port}:5001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+      - ${stacks_dir}:${stacks_dir}
+    environment:
+      DOCKGE_STACKS_DIR: "${stacks_dir}"
+EOF
+
+        echo -e "${CYAN}▶ 正在拉取镜像并启动 Dockge...${PLAIN}"
+        $DOCKER_COMPOSE_CMD up -d
+
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}✅ Dockge 部署完成！${PLAIN}"
+        echo -e "访问地址：${BOLD}http://${dockge_bind_addr}:${dockge_port}${PLAIN}"
+        echo -e "Stacks 目录：${CYAN}${stacks_dir}${PLAIN}"
+        echo -e "${YELLOW}已有 compose 项目需要移动到 ${stacks_dir}/项目名/compose.yaml 后，在 Dockge 里扫描 stacks 目录。${PLAIN}"
+    else
+        echo -e "${BLUE}已安全取消部署。${PLAIN}"
+    fi
+
     read -n 1 -s -r -p "按任意键返回..."
 }
 # ---------------------------------------------------------
@@ -3975,10 +4608,14 @@ func_panel_deploy_menu() {
         echo -e "${GREEN}  3. 安装 Sing-box${PLAIN}         ${YELLOW}(233boy 一键脚本 / sb 管理)${PLAIN}"
         echo -e "${GREEN}  4. 安装 Xray${PLAIN}             ${YELLOW}(233boy 一键脚本)${PLAIN}"
         echo -e "${GREEN}  5. 安装 SublinkPro${PLAIN}       ${YELLOW}(订阅转换与管理面板)${PLAIN}"
-        echo -e "${GREEN}  6. 面板救砖 / 重置 SSL${PLAIN}   ${YELLOW}(回退 HTTP 访问)${PLAIN}"
-        echo -e "${GREEN}  7. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
-        echo -e "${GREEN}  8. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
-        echo -e "${GREEN}  9. 端口流量监控${PLAIN}          ${YELLOW}(Port Traffic Dog)${PLAIN}"
+        echo -e "${GREEN}  6. 安装 妙妙屋订阅管理${PLAIN}     ${YELLOW}(Docker Compose)${PLAIN}"
+        echo -e "${GREEN}  7. 安装 Sub-Store${PLAIN}        ${YELLOW}(HTTP-META / Docker Compose)${PLAIN}"
+        echo -e "${GREEN}  8. 更新订阅管理工具${PLAIN}       ${YELLOW}(SublinkPro/妙妙屋/Sub-Store)${PLAIN}"
+        echo -e "${GREEN}  9. 安装 Dockge${PLAIN}           ${YELLOW}(Docker Compose 管理面板)${PLAIN}"
+        echo -e "${GREEN} 10. 面板救砖 / 重置 SSL${PLAIN}   ${YELLOW}(回退 HTTP 访问)${PLAIN}"
+        echo -e "${GREEN} 11. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
+        echo -e "${GREEN} 12. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
+        echo -e "${GREEN} 13. 端口流量监控${PLAIN}          ${YELLOW}(Port Traffic Dog)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -3991,10 +4628,14 @@ func_panel_deploy_menu() {
             3) func_singbox_233boy ;;
             4) func_xray_233boy ;;
             5) func_sublinkpro ;;
-            6) func_rescue_panel ;;
-            7) func_dns_unlock ;;
-            8) func_ip_sentinel ;;
-            9) func_port_dog ;;
+            6) func_miaomiaowu ;;
+            7) func_substore ;;
+            8) func_update_subscription_tools ;;
+            9) func_dockge ;;
+            10) func_rescue_panel ;;
+            11) func_dns_unlock ;;
+            12) func_ip_sentinel ;;
+            13) func_port_dog ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
@@ -4016,7 +4657,7 @@ main_menu() {
         echo -e "  ${GREEN}1.${PLAIN} 运维预检与风险扫描    ${YELLOW}(部署前先看端口/系统/服务状态)${PLAIN}"
         echo -e "  ${GREEN}2.${PLAIN} 基础环境初始化        ${YELLOW}(工具/时区/系统更新/基础 BBR)${PLAIN}"
         echo -e "  ${GREEN}3.${PLAIN} 软件安装与反代分流    ${YELLOW}(Docker/Caddy/WARP/443单入口)${PLAIN}"
-        echo -e "  ${GREEN}4.${PLAIN} 面板与节点部署        ${YELLOW}(3x-ui/Sing-box/SublinkPro/救砖)${PLAIN}"
+        echo -e "  ${GREEN}4.${PLAIN} 面板与节点部署        ${YELLOW}(3x-ui/Sing-box/订阅管理/救砖)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ② 安全与访问控制${PLAIN}"
         echo -e "  ${GREEN}5.${PLAIN} SSH 安全加固          ${YELLOW}(改端口/防失联/安全登录)${PLAIN}"

@@ -26,7 +26,7 @@
 * ✅ **Sing-box / Xray 多脚本入口**：内置甬哥四合一脚本、**233boy Sing-box 一键脚本** 与 **233boy Xray 一键脚本**，按个人习惯选择部署方式。
 * ✅ **Caddy 自动化**：支持模块化管理反代配置，提供**跳过 TLS 验证**及一键清理证书残留功能。
 * ✅ **新增：Nginx Stream + Caddy + REALITY 443 单入口分流**：公网只暴露 `443`，由 Nginx 按 SNI 分流到 Caddy、REALITY 和本地面板，避免 3x-ui 面板与 Xray 入站直接暴露公网。
-* ✅ **新增：SublinkPro**：快速部署节点订阅转换与管理平台，数据持久化存储。
+* ✅ **新增：订阅管理与 Compose 工具**：快速部署和更新 SublinkPro、妙妙屋订阅管理、Sub-Store，并可安装 Dockge 管理 compose.yaml stack。
 * ✅ **新增：IP Sentinel**：防止服务器 IP 被错误定位至中国大陆（防送中）。
 
 ### 4. 📊 测速与诊断工具
@@ -66,12 +66,17 @@ cy
 4. 面板与节点部署
 ```
 
-其中 Sing-box / Xray 相关入口包括：
+其中节点与订阅工具入口包括：
 
 ```text
 2. 安装 Sing-box（甬哥四合一脚本）
 3. 安装 Sing-box（233boy 一键脚本）
 4. 安装 Xray（233boy 一键脚本）
+5. 安装 SublinkPro（订阅转换与管理面板）
+6. 安装 妙妙屋订阅管理（Docker Compose）
+7. 安装 Sub-Store（HTTP-META / Docker Compose）
+8. 更新订阅管理工具（SublinkPro / 妙妙屋 / Sub-Store）
+9. 安装 Dockge（Docker Compose 管理面板）
 ```
 
 233boy 文档：
@@ -94,6 +99,8 @@ Xray：https://233boy.com/xray/xray-script/
 18. Nginx Stream + Caddy + REALITY 443 单入口分流
 ```
 
+详细教程、后续新增网站、3x-ui 参数、External Proxy 和排错说明见：[docs/443-single-entry.md](docs/443-single-entry.md)
+
 它的目标很简单：**公网只开放一个 443，所有流量先进入 Nginx stream，再按 SNI 分流**。
 
 ```text
@@ -105,11 +112,11 @@ Xray：https://233boy.com/xray/xray-script/
 -> 127.0.0.1:40000
 -> 3x-ui 面板
 
-展示站域名 site.example.com，可选
+网站/反代域名 site.example.com，可选，可填写多个
 -> 127.0.0.1:8443
 -> Caddy
 -> 127.0.0.1:3000
--> SublinkPro 或其他 HTTP 服务
+-> SublinkPro、Dockge、普通网站或其他 HTTP 服务
 
 REALITY 伪装 SNI your-reality-sni.example.com
 -> 127.0.0.1:1443
@@ -126,7 +133,7 @@ REALITY 伪装 SNI your-reality-sni.example.com
 
 ```text
 面板域名：panel.example.com
-展示站域名：可留空
+网站/反代域名：可留空，多个用英文逗号分隔
 REALITY 伪装 SNI：your-reality-sni.example.com(请替换成你自己选择的外部真实 HTTPS 站点)
 Nginx 公网监听地址：0.0.0.0
 Nginx 公网监听端口：443
@@ -138,18 +145,35 @@ Xray REALITY 本地监听端口：1443
 3x-ui 面板端口：40000
 3x-ui 订阅服务监听地址：127.0.0.1
 3x-ui 订阅服务端口：2096
-展示站后端地址：127.0.0.1
-展示站后端端口：3000
+网站/反代后端地址：127.0.0.1
+网站/反代后端端口：3000
 Cloudflare API Token：用于 DNS 签发证书
 ```
 
 注意三件事：
 
 ```text
-面板域名、展示站域名、REALITY SNI 不能相同。
+面板域名、网站/反代域名、REALITY SNI 不能相同。
 REALITY SNI 要写外部真实 HTTPS 站点，不要直接照抄模板域名。
 公网 443 只能由 Nginx stream 监听，Caddy / Xray / 3x-ui 都走本地端口。
 ```
+
+如果需要反代多个网站，可以在“网站/反代域名”里用英文逗号分隔，例如：
+
+```text
+sub.example.com,dockge.example.com,blog.example.com
+```
+
+脚本会分别询问每个域名对应的本地后端地址和端口。
+
+如果已经完成过一次 443 单入口初始化，后续新增或删除网站不需要重跑完整向导，可以进入：
+
+```text
+3. 软件安装与反代分流
+20. 管理 443 网站/反代域名
+```
+
+这个入口适合后续接入 SublinkPro、Dockge、妙妙屋、Sub-Store、博客、状态页等本地 HTTP 服务。
 
 ### 2. DNS 和证书准备
 
@@ -285,7 +309,7 @@ vless://uuid@node.example.com:443?security=reality&sni=your-reality-sni.example.
 推荐流程：
 
 ```text
-3x-ui 订阅链接 -> SublinkPro -> Clash / Mihomo 客户端
+3x-ui 订阅链接 -> SublinkPro / 妙妙屋 / Sub-Store -> Clash / Mihomo 客户端
 ```
 
 关键点：
@@ -293,7 +317,7 @@ vless://uuid@node.example.com:443?security=reality&sni=your-reality-sni.example.
 ```text
 3x-ui 订阅外部地址应为：https://panel.example.com/sub/
 3x-ui 节点 External Proxy 端口应为：443
-SublinkPro 只负责转换，不建议靠它修复错误端口
+订阅管理工具只负责转换，不建议靠它修复错误端口
 ```
 
 这样 Clash / Mihomo 客户端里看到的节点会使用：
@@ -350,7 +374,7 @@ ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096|:3000'
 127.0.0.1:1443    -> xray / 3x-ui REALITY
 127.0.0.1:40000   -> 3x-ui 面板
 127.0.0.1:2096    -> 3x-ui 订阅，可选
-127.0.0.1:3000    -> 展示站后端，可选
+127.0.0.1:3000    -> 网站/反代后端，可选
 ```
 
 检查配置：
@@ -388,6 +412,7 @@ openssl s_client -connect 服务器IP:443 -servername your-reality-sni.example.c
 12. 重新应用上次 443 分流配置：读取 /etc/vps-optimize/sni-stack.env 并重新生成配置。
 13. 订阅端口 / External Proxy 检查提示：确认订阅里节点端口是否应为 443。
 14. 回滚 443 单入口配置：从最近一次备份恢复 Nginx/Caddy 相关配置。
+15. 管理 443 网站/反代域名：查看、新增、删除额外网站，不用重跑完整向导。
 ```
 
 ---
