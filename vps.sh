@@ -415,6 +415,52 @@ run_safe() {
     fi
 }
 
+download_remote_script() {
+    local url="$1"
+    local output_file="$2"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --connect-timeout 10 --max-time 90 "$url" -o "$output_file"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$output_file" "$url"
+    else
+        echo -e "${RED}❌ 缺少 curl/wget，无法下载远程脚本。${PLAIN}"
+        return 1
+    fi
+    [[ -s "$output_file" ]]
+}
+
+run_remote_script() {
+    local desc="$1"
+    local url="$2"
+    shift 2
+    local yn tmp_file rc
+    echo -e "${CYAN}▶ ${desc}${PLAIN}"
+    echo -e "${YELLOW}脚本来源：${url}${PLAIN}"
+    read -p "确认下载并执行该远程脚本？(y/N): " yn
+    if [[ ! "$yn" =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}已取消执行。${PLAIN}"
+        return 1
+    fi
+
+    tmp_file=$(mktemp /tmp/vps-remote.XXXXXX.sh)
+    if ! download_remote_script "$url" "$tmp_file"; then
+        rm -f "$tmp_file"
+        echo -e "${RED}❌ 下载失败，请检查网络或脚本来源。${PLAIN}"
+        return 1
+    fi
+    if ! bash -n "$tmp_file" >/dev/null 2>&1; then
+        echo -e "${RED}❌ 远程脚本未通过 Bash 语法检查，已中止执行。${PLAIN}"
+        echo -e "${YELLOW}已保留下载文件用于排查：${tmp_file}${PLAIN}"
+        return 1
+    fi
+
+    chmod +x "$tmp_file"
+    bash "$tmp_file" "$@"
+    rc=$?
+    rm -f "$tmp_file"
+    return "$rc"
+}
+
 is_valid_domain() {
     local domain="$1"
     echo "$domain" | grep -Eq '^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
@@ -677,25 +723,25 @@ func_env_install() {
         case $env_choice in
             1) 
                 echo -e "${CYAN}▶ 正在拉取 Docker 引擎...${PLAIN}"
-                bash <(curl -sL 'https://get.docker.com') || echo -e "${RED}❌ Docker 安装失败，请检查网络！${PLAIN}"
+                run_remote_script "安装 Docker 引擎" "https://get.docker.com" || echo -e "${RED}❌ Docker 安装失败，请检查网络！${PLAIN}"
                 ;;
-            2) run_safe "安装 Python 环境" bash -c "curl -O https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh && chmod +x pyinstall.sh && ./pyinstall.sh" ;;
+            2) run_remote_script "安装 Python 环境" "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh" ;;
             3) 
                 if is_debian; then run_safe "安装 iperf3" apt install iperf3 -y; else run_safe "安装 iperf3" yum install iperf3 -y; fi 
                 ;;
-            4) bash <(curl -L https://raw.githubusercontent.com/zhouh047/realm-oneclick-install/main/realm.sh) -i ;;
-            5) run_safe "下载 Gost" bash -c "wget --no-check-certificate -O gost.sh https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh && chmod +x gost.sh && ./gost.sh" ;;
-            6) bash <(curl -fsSL https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh) ;;
+            4) run_remote_script "安装 Realm 端口转发" "https://raw.githubusercontent.com/zhouh047/realm-oneclick-install/main/realm.sh" -i ;;
+            5) run_remote_script "安装 Gost 隧道" "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh" ;;
+            6) run_remote_script "安装极光面板" "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh" ;;
             7) 
-                curl -L https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh -o nezha.sh && chmod +x nezha.sh && ./nezha.sh 
+                run_remote_script "安装哪吒监控" "https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh"
                 echo -e "\n${YELLOW}💡 哪吒自定义代码提示 (去除动效并固定顶部)：${PLAIN}"
                 echo -e "${GREEN}<script>\nwindow.ShowNetTransfer = true;\nwindow.FixedTopServerName = true;\nwindow.DisableAnimatedMan = true;\n</script>${PLAIN}"
                 ;;
-            8) wget -N https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh && bash menu.sh ;;
-            9) wget -N git.io/aria2.sh && chmod +x aria2.sh && ./aria2.sh ;;
-            10) wget -O install.sh http://v7.hostcli.com/install/install-ubuntu_6.0.sh && bash install.sh ;;
-            11) bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh) ;;
-            12) bash <(wget -qO- https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh) ;;
+            8) run_remote_script "安装 WARP 解锁/网络工具" "https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh" ;;
+            9) run_remote_script "安装 Aria2 下载工具" "https://git.io/aria2.sh" ;;
+            10) run_remote_script "安装宝塔面板" "http://v7.hostcli.com/install/install-ubuntu_6.0.sh" ;;
+            11) run_remote_script "安装 PVE 虚拟化工具" "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh" ;;
+            12) run_remote_script "安装 Argox 节点" "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh" ;;
             13)
                 echo -e "${CYAN}▶ 正在检查并安装 Caddy...${PLAIN}"
                 if ! command -v caddy >/dev/null 2>&1; then
@@ -3640,14 +3686,14 @@ func_test_scripts() {
         local t
         read -p "👉 请输入对应序号选择: " t
         case $t in
-            1) wget -qO- yabs.sh | bash ;;
-            2) curl -L https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh -o ecs.sh && bash ecs.sh ;;
-            3) wget -qO- about.superbench.pro | bash ;;
-            4) wget -qO- bench.sh | bash ;;
-            5) bash <(curl -L -s check.unlock.media) ;;
-            6) curl https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh -sSf | sh ;;
-            7) bash <(curl -Ls IP.Check.Place) ;;
-            8) bash <(curl -sL https://run.NodeQuality.com) ;;
+            1) run_remote_script "运行 YABS 硬件性能测试" "https://yabs.sh" ;;
+            2) run_remote_script "运行融合怪详细测速" "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh" ;;
+            3) run_remote_script "运行 SuperBench 综合测速" "https://about.superbench.pro" ;;
+            4) run_remote_script "运行 bench.sh 基础测试" "https://bench.sh" ;;
+            5) run_remote_script "运行流媒体解锁检测" "https://check.unlock.media" ;;
+            6) run_remote_script "运行三网回程路由测试" "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh" ;;
+            7) run_remote_script "运行 IP 质量 / 欺诈度检测" "https://IP.Check.Place" ;;
+            8) run_remote_script "运行 NodeSeek 综合测试" "https://run.NodeQuality.com" ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
         esac
@@ -3661,19 +3707,19 @@ func_test_scripts() {
 func_port_dog() {
     clear
     echo -e "${CYAN}👉 正在拉取并执行 Port Traffic Dog 监控狗...${PLAIN}"
-    wget -qO dog.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh && chmod +x dog.sh && ./dog.sh
+    run_remote_script "安装 Port Traffic Dog 监控狗" "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh"
 }
 
 func_xpanel() {
     clear
     echo -e "${CYAN}👉 正在拉取 mhsanaei 的官方 x-panel 一键脚本...${PLAIN}"
-    bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
+    run_remote_script "安装 3x-ui / x-ui 面板" "https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
 }
 
 func_singbox() {
     clear
     echo -e "${CYAN}👉 正在拉取甬哥的 Sing-box 四合一脚本...${PLAIN}"
-    bash <(curl -fsSL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh)
+    run_remote_script "安装 Sing-box 甬哥四合一脚本" "https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh"
 }
 
 func_singbox_233boy() {
@@ -3682,7 +3728,7 @@ func_singbox_233boy() {
     echo -e "${YELLOW}脚本来源：https://github.com/233boy/sing-box${PLAIN}"
     echo -e "${YELLOW}使用文档：https://233boy.com/sing-box/sing-box-script/${PLAIN}"
     echo -e "${GREEN}安装完成后通常可使用 sing-box 或 sb 命令进入管理面板。${PLAIN}"
-    bash <(wget -qO- -o- https://github.com/233boy/sing-box/raw/main/install.sh)
+    run_remote_script "安装 Sing-box 233boy 一键脚本" "https://github.com/233boy/sing-box/raw/main/install.sh"
 }
 
 func_xray_233boy() {
@@ -3691,7 +3737,7 @@ func_xray_233boy() {
     echo -e "${YELLOW}脚本来源：https://github.com/233boy/Xray${PLAIN}"
     echo -e "${YELLOW}使用文档：https://233boy.com/xray/xray-script/${PLAIN}"
     echo -e "${GREEN}安装完成后通常可使用 xray 命令进入管理面板。${PLAIN}"
-    bash <(wget -qO- -o- https://github.com/233boy/Xray/raw/main/install.sh)
+    run_remote_script "安装 Xray 233boy 一键脚本" "https://github.com/233boy/Xray/raw/main/install.sh"
 }
 
 # ---------------------------------------------------------
@@ -3733,8 +3779,7 @@ func_ip_sentinel() {
     
     read -p "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(y/n): " yn
     if [[ "$yn" =~ ^[Yy]$ ]]; then
-        echo -e "${CYAN}▶ 正在拉取并执行 hotyue 的 IP-Sentinel 主脚本...${PLAIN}"
-        bash <(curl -sL https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh)
+        run_remote_script "安装并配置 IP Sentinel" "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh"
     else
         echo -e "${BLUE}已取消操作。${PLAIN}"
     fi
