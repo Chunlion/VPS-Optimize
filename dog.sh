@@ -115,6 +115,16 @@ setup_script_permissions() {
     if [ -f "/usr/local/bin/port-traffic-dog.sh" ]; then chmod +x "/usr/local/bin/port-traffic-dog.sh" 2>/dev/null || true; fi
 }
 
+confirm_danger() {
+    local title="$1"
+    local impact="$2"
+    local confirm
+    echo -e "${RED}高风险操作: ${title}${NC}"
+    echo -e "${YELLOW}影响: ${impact}${NC}"
+    read -p "确认继续请输入 YES: " confirm
+    [[ "$confirm" == "YES" ]]
+}
+
 setup_cron_environment() {
     local current_cron=$(crontab -l 2>/dev/null || true)
     if ! echo "$current_cron" | grep -q "^PATH=.*sbin"; then
@@ -1701,8 +1711,7 @@ immediate_reset() {
         sleep 2; manage_traffic_reset; return
     fi
 
-    read -p "确认立即清零选定端口的流量吗? [y/N]: " confirm
-    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    if confirm_danger "立即清零端口流量" "选定端口的当前 nftables 计数和配额计数会被重置，历史实时统计不可恢复。"; then
         for choice in "${valid_choices[@]}"; do
             local port=${active_ports[$((choice-1))]}
             auto_reset_port "$port"
@@ -1791,8 +1800,10 @@ export_config() {
 import_config() {
     read -p "配置包路径: " package_path
     if [ -f "$package_path" ]; then
-        tar -xzf "$package_path" -C / 2>/dev/null
-        echo -e "${GREEN}配置包已恢复，重启脚本生效。${NC}"
+        if confirm_danger "导入配置包" "会把配置包内容解压到系统根目录，覆盖现有 Port Traffic Dog 配置。"; then
+            tar -xzf "$package_path" -C / 2>/dev/null
+            echo -e "${GREEN}配置包已恢复，重启脚本生效。${NC}"
+        fi
     fi
     sleep 2; manage_configuration
 }
@@ -1857,9 +1868,7 @@ uninstall_script() {
     echo "  7. 删除脚本本身" 
     echo
     echo -e "${RED}🔴 警告：此操作不可逆，所有历史流量数据将永久丢失！${NC}" 
-    read -p "确认卸载? [y/N]: " confirm
-
-    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    if confirm_danger "卸载端口流量狗" "会删除 nftables/tc 规则、定时任务、机器人服务、快捷命令、配置和历史流量数据。"; then
         echo -e "${YELLOW}正在全力卸载中...${NC}"
 
         local active_ports=($(get_active_ports 2>/dev/null || true))

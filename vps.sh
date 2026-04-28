@@ -461,6 +461,27 @@ run_remote_script() {
     return "$rc"
 }
 
+install_acme_sh() {
+    local acme_email="$1"
+    local tmp_file rc
+    tmp_file=$(mktemp /tmp/vps-acme.XXXXXX.sh)
+    echo -e "${CYAN}▶ 正在安装 acme.sh...${PLAIN}"
+    if ! download_remote_script "https://get.acme.sh" "$tmp_file"; then
+        rm -f "$tmp_file"
+        echo -e "${RED}❌ acme.sh 安装脚本下载失败。${PLAIN}"
+        return 1
+    fi
+    if ! sh -n "$tmp_file" >/dev/null 2>&1; then
+        echo -e "${RED}❌ acme.sh 安装脚本未通过 sh 语法检查，已中止。${PLAIN}"
+        echo -e "${YELLOW}已保留下载文件用于排查：${tmp_file}${PLAIN}"
+        return 1
+    fi
+    sh "$tmp_file" "email=${acme_email}" >/dev/null 2>&1
+    rc=$?
+    rm -f "$tmp_file"
+    return "$rc"
+}
+
 is_valid_domain() {
     local domain="$1"
     echo "$domain" | grep -Eq '^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
@@ -763,10 +784,11 @@ func_env_install() {
                 local domain port is_https
                 read -p "请输入解析后的域名 (如 panel.site.com): " domain
                 read -p "请输入面板本地映射端口 (如 40000): " port
+                domain=$(echo "$domain" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
                 
                 # 增加了端口只能是纯数字的防呆校验
-                if [[ -z "$domain" || -z "$port" || ! "$port" =~ ^[0-9]+$ ]]; then
-                    echo -e "${RED}❌ 域名为空或端口格式错误！已取消配置。${PLAIN}"
+                if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
+                    echo -e "${RED}❌ 域名或端口格式错误！域名不要带 http(s)://、路径或端口，端口必须是 1-65535。${PLAIN}"
                 else
                     # 严谨的冲突判定，同时检查 Caddyfile 和 conf.d 目录
                     if grep -q "^[[:space:]]*$domain" /etc/caddy/Caddyfile 2>/dev/null || ls /etc/caddy/conf.d/${domain}.caddy >/dev/null 2>&1; then
@@ -895,8 +917,7 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
     local acme_email
     acme_email=$(get_acme_account_email)
     if [[ ! -x "$acme_bin" ]]; then
-        echo -e "${CYAN}▶ 正在安装 acme.sh...${PLAIN}"
-        if ! bash -c "curl -fsSL https://get.acme.sh | sh -s email=${acme_email}" >/dev/null 2>&1; then
+        if ! install_acme_sh "$acme_email"; then
             echo -e "${RED}❌ acme.sh 安装失败，请检查网络后重试。${PLAIN}"
             return
         fi
@@ -1701,8 +1722,7 @@ issue_and_install_cert_for_domain() {
     local acme_email
     acme_email=$(get_acme_account_email)
     if [[ ! -x "$acme_bin" ]]; then
-        echo -e "${CYAN}▶ 正在安装 acme.sh...${PLAIN}"
-        bash -c "curl -fsSL https://get.acme.sh | sh -s email=${acme_email}" >/dev/null 2>&1 || return 1
+        install_acme_sh "$acme_email" || return 1
     fi
     prepare_acme_account "$acme_bin" "$acme_email" || return 1
     mkdir -p /etc/caddy/certs /root/cert
@@ -4486,7 +4506,7 @@ func_preflight_check() {
 # 21. 配置备份与回滚中心
 # ---------------------------------------------------------
 func_backup_center() {
-    local backup_root="/opt/vps-panel-backups"
+    local backup_root="/etc/vps-optimize/backups/manual"
     mkdir -p "$backup_root"
 
     while true; do
@@ -4513,19 +4533,27 @@ func_backup_center() {
                 ts=$(date +%Y%m%d_%H%M%S)
                 local work_dir="/tmp/vps_backup_${ts}"
                 local tar_file="${backup_root}/backup_${ts}.tar.gz"
+                local manifest_file="${work_dir}/manifest.txt"
                 local copied=0
 
                 mkdir -p "$work_dir"
+                {
+                    echo "VPS-Optimize backup manifest"
+                    echo "Created: $(date -Is 2>/dev/null || date)"
+                    echo "Backup file: ${tar_file}"
+                    echo "Included paths:"
+                } > "$manifest_file"
 
-                [[ -f /etc/ssh/sshd_config ]] && mkdir -p "$work_dir/etc/ssh" && cp -a /etc/ssh/sshd_config "$work_dir/etc/ssh/" && copied=1
-                [[ -f /etc/caddy/Caddyfile ]] && mkdir -p "$work_dir/etc/caddy" && cp -a /etc/caddy/Caddyfile "$work_dir/etc/caddy/" && copied=1
-                [[ -d /etc/caddy/conf.d ]] && mkdir -p "$work_dir/etc/caddy" && cp -a /etc/caddy/conf.d "$work_dir/etc/caddy/" && copied=1
-                [[ -f /etc/docker/daemon.json ]] && mkdir -p "$work_dir/etc/docker" && cp -a /etc/docker/daemon.json "$work_dir/etc/docker/" && copied=1
-                [[ -f /etc/fail2ban/jail.local ]] && mkdir -p "$work_dir/etc/fail2ban" && cp -a /etc/fail2ban/jail.local "$work_dir/etc/fail2ban/" && copied=1
+                [[ -f /etc/ssh/sshd_config ]] && mkdir -p "$work_dir/etc/ssh" && cp -a /etc/ssh/sshd_config "$work_dir/etc/ssh/" && echo " - /etc/ssh/sshd_config" >> "$manifest_file" && copied=1
+                [[ -f /etc/caddy/Caddyfile ]] && mkdir -p "$work_dir/etc/caddy" && cp -a /etc/caddy/Caddyfile "$work_dir/etc/caddy/" && echo " - /etc/caddy/Caddyfile" >> "$manifest_file" && copied=1
+                [[ -d /etc/caddy/conf.d ]] && mkdir -p "$work_dir/etc/caddy" && cp -a /etc/caddy/conf.d "$work_dir/etc/caddy/" && echo " - /etc/caddy/conf.d" >> "$manifest_file" && copied=1
+                [[ -f /etc/docker/daemon.json ]] && mkdir -p "$work_dir/etc/docker" && cp -a /etc/docker/daemon.json "$work_dir/etc/docker/" && echo " - /etc/docker/daemon.json" >> "$manifest_file" && copied=1
+                [[ -f /etc/fail2ban/jail.local ]] && mkdir -p "$work_dir/etc/fail2ban" && cp -a /etc/fail2ban/jail.local "$work_dir/etc/fail2ban/" && echo " - /etc/fail2ban/jail.local" >> "$manifest_file" && copied=1
 
                 if compgen -G "/etc/sysctl.d/*.conf" >/dev/null 2>&1; then
                     mkdir -p "$work_dir/etc/sysctl.d"
                     cp -a /etc/sysctl.d/*.conf "$work_dir/etc/sysctl.d/" 2>/dev/null
+                    echo " - /etc/sysctl.d/*.conf" >> "$manifest_file"
                     copied=1
                 fi
 
