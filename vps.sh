@@ -74,7 +74,7 @@ create_shortcut() {
             if [[ -f "$0" ]]; then
                 cp "$(readlink -f "$0")" "$script_path" 2>/dev/null
             else
-                echo -e "${YELLOW}⚠️ 快捷指令本地注册挂起，请稍后在面板中使用 [23] 更新脚本完成注册。${PLAIN}"
+                echo -e "${YELLOW}⚠️ 快捷指令本地注册挂起，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
                 return
             fi
         fi
@@ -461,6 +461,18 @@ run_remote_script() {
     return "$rc"
 }
 
+pause_after_external_script() {
+    local prompt="${1:-按回车键继续...}"
+    local junk
+
+    if [[ -r /dev/tty ]]; then
+        while IFS= read -r -s -n 1 -t 0.05 junk < /dev/tty; do :; done
+        read -r -p "$prompt" junk < /dev/tty
+    else
+        read -r -p "$prompt" junk
+    fi
+}
+
 install_acme_sh() {
     local acme_email="$1"
     local tmp_file rc
@@ -754,9 +766,10 @@ func_env_install() {
             5) run_remote_script "安装 Gost 隧道" "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh" ;;
             6) run_remote_script "安装极光面板" "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh" ;;
             7) 
-                run_remote_script "安装哪吒监控" "https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh"
-                echo -e "\n${YELLOW}💡 哪吒自定义代码提示 (去除动效并固定顶部)：${PLAIN}"
-                echo -e "${GREEN}<script>\nwindow.ShowNetTransfer = true;\nwindow.FixedTopServerName = true;\nwindow.DisableAnimatedMan = true;\n</script>${PLAIN}"
+                if run_remote_script "安装哪吒监控" "https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh"; then
+                    echo -e "\n${YELLOW}💡 哪吒自定义代码提示 (去除动效并固定顶部)：${PLAIN}"
+                    echo -e "${GREEN}<script>\nwindow.ShowNetTransfer = true;\nwindow.FixedTopServerName = true;\nwindow.DisableAnimatedMan = true;\n</script>${PLAIN}"
+                fi
                 ;;
             8) run_remote_script "安装 WARP 解锁/网络工具" "https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh" ;;
             9) run_remote_script "安装 Aria2 下载工具" "https://git.io/aria2.sh" ;;
@@ -840,7 +853,7 @@ EOF
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
         esac
         echo ""
-        read -n 1 -s -r -p "按任意键继续..."
+        pause_after_external_script "按回车键继续..."
     done
 }
 
@@ -3199,7 +3212,7 @@ func_docker_manage() {
     if ! command -v docker >/dev/null 2>&1; then 
         clear
         echo -e "${RED}❌ 错误：检测到系统尚未安装 Docker 引擎！${PLAIN}"
-        echo -e "${YELLOW}💡 请先在主菜单进入 [3 常用环境及软件] 安装 Docker。${PLAIN}"
+        echo -e "${YELLOW}💡 请先在主菜单进入 [3 软件安装与反代分流] 安装 Docker。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -3505,91 +3518,157 @@ EOF
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 9. 换装 Cloud/KVM 优化内核 (终极版：架构强拦截 + GRUB 强接管)
+# 9. 安装/切换优化内核 (Cloud/KVM 稳定优先 + XanMod 高级可选)
 # ---------------------------------------------------------
+set_grub_default_kernel_by_keyword() {
+    local kernel_keyword="$1"
+    local target_v menu_1 menu_2
+
+    target_v=$(dpkg -l | awk '/^ii[[:space:]]+linux-image-[0-9]/ && /'"$kernel_keyword"'/ {print $2}' | sed 's/linux-image-//' | sort -V | tail -n 1)
+    if [[ -z "$target_v" ]]; then
+        echo -e "${RED}❌ 错误：未找到已安装的 ${kernel_keyword} 内核包，请检查安装日志。${PLAIN}"
+        return 1
+    fi
+
+    echo -e "${CYAN}▶ 正在接管 GRUB 底层引导，锁定启动内核为: $target_v ...${PLAIN}"
+    sed -i 's/^GRUB_DEFAULT=.*/GRUB_DEFAULT=saved/' /etc/default/grub
+    grep -q "^GRUB_SAVEDEFAULT=true" /etc/default/grub || echo "GRUB_SAVEDEFAULT=true" >> /etc/default/grub
+    update-grub >/dev/null 2>&1
+
+    menu_1=$(grep -i "submenu 'Advanced options for" /boot/grub/grub.cfg | cut -d"'" -f2 | head -n 1)
+    menu_2=$(grep -i "menuentry '.*$target_v.*'" /boot/grub/grub.cfg | grep -iv "recovery" | cut -d"'" -f2 | head -n 1)
+
+    if [[ -n "$menu_1" && -n "$menu_2" ]]; then
+        grub-set-default "$menu_1>$menu_2"
+        echo -e "${GREEN}✅ GRUB 引导接管成功！重启后将优先进入：$target_v${PLAIN}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}⚠️ 警告：GRUB 菜单寻址失败。系统可能仍以最高版本号内核启动。${PLAIN}"
+    return 1
+}
+
+install_cloud_kvm_kernel() {
+    local kernel_keyword=""
+
+    if uname -r | grep -qE "kvm|cloud"; then
+        echo -e "${GREEN}✅ 系统当前已运行 KVM/Cloud 优化内核 ($(uname -r))，无需重复安装！${PLAIN}"
+        return 0
+    fi
+
+    echo -e "${CYAN}▶ 正在安装发行版官方 Cloud/KVM 内核...${PLAIN}"
+    if [[ "$OS" == "debian" ]]; then
+        install_pkg linux-image-cloud-amd64 || return 1
+        kernel_keyword="cloud"
+    elif [[ "$OS" == "ubuntu" ]]; then
+        install_pkg linux-image-kvm || return 1
+        kernel_keyword="kvm"
+    else
+        echo -e "${RED}❌ Cloud/KVM 内核功能目前仅支持 Debian 和 Ubuntu。${PLAIN}"
+        return 1
+    fi
+
+    set_grub_default_kernel_by_keyword "$kernel_keyword"
+}
+
+install_xanmod_kernel() {
+    local codename confirm
+
+    if uname -r | grep -qi "xanmod"; then
+        echo -e "${GREEN}✅ 系统当前已运行 XanMod 内核 ($(uname -r))，无需重复安装！${PLAIN}"
+        return 0
+    fi
+
+    if ! is_debian; then
+        echo -e "${RED}❌ XanMod 自动安装目前仅支持 Debian/Ubuntu 衍生系统。${PLAIN}"
+        return 1
+    fi
+
+    codename="${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}"
+    if [[ -z "$codename" ]] && command -v lsb_release >/dev/null 2>&1; then
+        codename=$(lsb_release -sc 2>/dev/null)
+    fi
+    if [[ -z "$codename" ]]; then
+        echo -e "${RED}❌ 无法识别系统代号，无法安全添加 XanMod 源。${PLAIN}"
+        return 1
+    fi
+
+    echo -e "${RED}⚠️  XanMod 是第三方性能内核，可能影响 DKMS/驱动/部分云厂商兼容性。${PLAIN}"
+    echo -e "${YELLOW}建议先确认有快照、救援控制台，且知道如何从 GRUB 切回旧内核。${PLAIN}"
+    read -p "确认安装 XanMod LTS 兼容版内核请输入 YES: " confirm
+    [[ "$confirm" == "YES" ]] || { echo -e "${BLUE}已取消 XanMod 安装。${PLAIN}"; return 1; }
+
+    echo -e "${CYAN}▶ 正在添加 XanMod 官方 APT 源并安装 LTS 兼容版内核...${PLAIN}"
+    install_pkg ca-certificates curl gpg || return 1
+    mkdir -p /etc/apt/keyrings
+    rm -f /etc/apt/keyrings/xanmod-archive-keyring.gpg
+    if ! curl -fsSL https://dl.xanmod.org/archive.key | gpg --dearmor -o /etc/apt/keyrings/xanmod-archive-keyring.gpg; then
+        echo -e "${RED}❌ XanMod GPG key 下载或写入失败。${PLAIN}"
+        return 1
+    fi
+    echo "deb [signed-by=/etc/apt/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org ${codename} main" > /etc/apt/sources.list.d/xanmod-release.list
+
+    apt-get update -qq || return 1
+    apt-get install -y -qq linux-xanmod-lts-x64v1 || {
+        echo -e "${RED}❌ XanMod 内核安装失败，可能是当前系统代号暂未被 XanMod 源支持。${PLAIN}"
+        return 1
+    }
+
+    set_grub_default_kernel_by_keyword "xanmod"
+}
+
 func_install_kernel() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}☁️  换装 Cloud/KVM 优化内核${PLAIN}"
+    echo -e "${BOLD}☁️  安装/切换优化内核${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    
-    # [拦截机制 1]：虚拟化环境判断 (核心防呆)
-    local virt
+    echo -e "${GREEN}  1. Cloud/KVM 官方云内核${PLAIN} ${YELLOW}(推荐：稳定、轻量、云厂商兼容更好)${PLAIN}"
+    echo -e "     适合：普通 VPS、节点、Caddy、Docker、生产环境、小内存机器。"
+    echo -e "${GREEN}  2. XanMod LTS 性能内核${PLAIN} ${YELLOW}(高级：BBRv3/新调度/第三方性能 patch)${PLAIN}"
+    echo -e "     适合：愿意折腾、追求低延迟/新特性；需要快照或救援控制台兜底。"
+    echo -e "------------------------------------------------"
+    echo -e "${RED}  0. 返回${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    local kernel_choice virt
+    read -p "👉 请选择要安装的内核类型 [推荐 1]: " kernel_choice
+    kernel_choice="${kernel_choice:-1}"
+    [[ "$kernel_choice" == "0" ]] && return
+
     virt=$(systemd-detect-virt 2>/dev/null || echo "unknown")
     if [[ "$virt" =~ lxc|openvz ]]; then
         echo -e "${RED}❌ 致命错误：检测到当前 VPS 为 $virt 容器架构！${PLAIN}"
-        echo -e "${YELLOW}💡 容器与母机共享内核，绝对无法更改内核。操作已安全中止。${PLAIN}"
+        echo -e "${YELLOW}💡 容器与母机共享内核，无法更改内核。操作已安全中止。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
 
-    # [拦截机制 2]：CPU 架构判断
     if [[ "$(uname -m)" != "x86_64" ]]; then
         echo -e "${RED}❌ 致命错误：优化内核仅支持 x86_64 (amd64) 架构，本机为 $(uname -m)！${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
 
-    # [拦截机制 3]：状态防呆 (判断是否已经是目标内核)
-    if uname -r | grep -qE "kvm|cloud"; then
-        echo -e "${GREEN}✅ 系统当前已运行 KVM/Cloud 优化内核 ($(uname -r))，无需重复安装！${PLAIN}"
+    local install_rc=0
+    case "$kernel_choice" in
+        1) install_cloud_kvm_kernel ;;
+        2) install_xanmod_kernel ;;
+        *) echo -e "${RED}❌ 无效选择。${PLAIN}"; read -n 1 -s -r -p "按任意键返回..."; return ;;
+    esac
+    install_rc=$?
+    if [[ "$install_rc" -ne 0 ]]; then
+        echo -e "------------------------------------------------"
+        echo -e "${YELLOW}⚠️ 内核安装/切换未完成，未继续提示重启。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
-    fi
-
-    echo -e "${CYAN}▶ 正在为您静默安装专属优化内核...${PLAIN}"
-
-    local kernel_keyword=""
-    if [[ "$OS" == "debian" ]]; then
-        install_pkg linux-image-cloud-amd64
-        kernel_keyword="cloud"
-    elif [[ "$OS" == "ubuntu" ]]; then
-        install_pkg linux-image-kvm
-        kernel_keyword="kvm"
-    else
-        echo -e "${RED}❌ 抱歉，换装优化内核功能目前仅支持 Debian 和 Ubuntu 系统！${PLAIN}"
-        read -n 1 -s -r -p "按任意键返回..."
-        return
-    fi
-
-    # ==========================================
-    # 核心黑科技：GRUB 引导层强制接管
-    # ==========================================
-    # 1. 动态提取刚刚装好的目标内核完整版本号
-    local target_v
-    target_v=$(dpkg -l | awk '/^ii[[:space:]]+linux-image-[0-9]/ && /'"$kernel_keyword"'/ {print $2}' | sed 's/linux-image-//' | sort -V | tail -n 1)
-
-    if [[ -n "$target_v" ]]; then
-        echo -e "${CYAN}▶ 正在接管 GRUB 底层引导，锁定启动内核为: $target_v ...${PLAIN}"
-        
-        # 修改 GRUB 默认行为，允许保存上一次的启动项
-        sed -i 's/^GRUB_DEFAULT=.*/GRUB_DEFAULT=saved/' /etc/default/grub
-        grep -q "^GRUB_SAVEDEFAULT=true" /etc/default/grub || echo "GRUB_SAVEDEFAULT=true" >> /etc/default/grub
-        update-grub >/dev/null 2>&1
-
-        # 精确寻址 GRUB 菜单 ID
-        local menu_1
-        local menu_2
-        menu_1=$(grep -i "submenu 'Advanced options for" /boot/grub/grub.cfg | cut -d"'" -f2 | head -n 1)
-        menu_2=$(grep -i "menuentry '.*$target_v.*'" /boot/grub/grub.cfg | grep -iv "recovery" | cut -d"'" -f2 | head -n 1)
-
-        if [[ -n "$menu_1" && -n "$menu_2" ]]; then
-            # 强制设定默认启动项为新内核
-            grub-set-default "$menu_1>$menu_2"
-            echo -e "${GREEN}✅ GRUB 引导接管成功！已为您消除重启死循环的风险。${PLAIN}"
-        else
-            echo -e "${YELLOW}⚠️ 警告：GRUB 菜单寻址失败。系统可能仍以最高版本号的旧内核启动。${PLAIN}"
-        fi
-    else
-        echo -e "${RED}❌ 错误：内核包似乎未成功安装，请检查系统源或网络状况！${PLAIN}"
     fi
 
     echo -e "------------------------------------------------"
     echo -e "${YELLOW}⚠️ 核心生效指引：${PLAIN}"
-    echo -e "1. 新内核引导已配置完毕，请先选择主菜单的 ${RED}[24] 重启服务器${PLAIN}。"
-    echo -e "2. 重启后系统将自动切入极简 $kernel_keyword 内核。"
-    echo -e "3. 届时您可安心进入面板选择 ${GREEN}[12] 卸载冗余旧内核${PLAIN}，清理残余垃圾包。"
-    
+    echo -e "1. 新内核引导已配置完毕，请先选择主菜单的 ${RED}[18] 重启服务器${PLAIN}。"
+    echo -e "2. 重启后请运行 ${GREEN}uname -r${PLAIN} 确认实际进入的新内核。"
+    echo -e "3. 确认稳定后，再进入本菜单选择 ${GREEN}[5] 清理旧内核${PLAIN}。"
+
     read -n 1 -s -r -p "按任意键返回..."
 }
 
@@ -3704,21 +3783,24 @@ func_test_scripts() {
         echo -e "${CYAN}================================================${PLAIN}"
         
         local t
+        local ran_test=false
         read -p "👉 请输入对应序号选择: " t
         case $t in
-            1) run_remote_script "运行 YABS 硬件性能测试" "https://yabs.sh" ;;
-            2) run_remote_script "运行融合怪详细测速" "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh" ;;
-            3) run_remote_script "运行 SuperBench 综合测速" "https://about.superbench.pro" ;;
-            4) run_remote_script "运行 bench.sh 基础测试" "https://bench.sh" ;;
-            5) run_remote_script "运行流媒体解锁检测" "https://check.unlock.media" ;;
-            6) run_remote_script "运行三网回程路由测试" "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh" ;;
-            7) run_remote_script "运行 IP 质量 / 欺诈度检测" "https://IP.Check.Place" ;;
-            8) run_remote_script "运行 NodeSeek 综合测试" "https://run.NodeQuality.com" ;;
+            1) ran_test=true; run_remote_script "运行 YABS 硬件性能测试" "https://yabs.sh" ;;
+            2) ran_test=true; run_remote_script "运行融合怪详细测速" "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh" ;;
+            3) ran_test=true; run_remote_script "运行 SuperBench 综合测速" "https://about.superbench.pro" ;;
+            4) ran_test=true; run_remote_script "运行 bench.sh 基础测试" "https://bench.sh" ;;
+            5) ran_test=true; run_remote_script "运行流媒体解锁检测" "https://check.unlock.media" ;;
+            6) ran_test=true; run_remote_script "运行三网回程路由测试" "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh" ;;
+            7) ran_test=true; run_remote_script "运行 IP 质量 / 欺诈度检测" "https://IP.Check.Place" ;;
+            8) ran_test=true; run_remote_script "运行 NodeSeek 综合测试" "https://run.NodeQuality.com" ;;
             0) break ;;
-            *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
+            *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1; continue ;;
         esac
         echo ""
-        read -n 1 -s -r -p "测试完成，按任意键继续..."
+        if [[ "$ran_test" == "true" ]]; then
+            pause_after_external_script "操作结束，按回车键返回测试菜单..."
+        fi
     done
 }
 # ---------------------------------------------------------
@@ -3728,18 +3810,21 @@ func_port_dog() {
     clear
     echo -e "${CYAN}👉 正在拉取并执行 Port Traffic Dog 监控狗...${PLAIN}"
     run_remote_script "安装 Port Traffic Dog 监控狗" "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
 func_xpanel() {
     clear
     echo -e "${CYAN}👉 正在拉取 mhsanaei 的官方 x-panel 一键脚本...${PLAIN}"
     run_remote_script "安装 3x-ui / x-ui 面板" "https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
 func_singbox() {
     clear
     echo -e "${CYAN}👉 正在拉取甬哥的 Sing-box 四合一脚本...${PLAIN}"
     run_remote_script "安装 Sing-box 甬哥四合一脚本" "https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
 func_singbox_233boy() {
@@ -3749,6 +3834,7 @@ func_singbox_233boy() {
     echo -e "${YELLOW}使用文档：https://233boy.com/sing-box/sing-box-script/${PLAIN}"
     echo -e "${GREEN}安装完成后通常可使用 sing-box 或 sb 命令进入管理面板。${PLAIN}"
     run_remote_script "安装 Sing-box 233boy 一键脚本" "https://github.com/233boy/sing-box/raw/main/install.sh"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
 func_xray_233boy() {
@@ -3758,6 +3844,7 @@ func_xray_233boy() {
     echo -e "${YELLOW}使用文档：https://233boy.com/xray/xray-script/${PLAIN}"
     echo -e "${GREEN}安装完成后通常可使用 xray 命令进入管理面板。${PLAIN}"
     run_remote_script "安装 Xray 233boy 一键脚本" "https://github.com/233boy/Xray/raw/main/install.sh"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
 # ---------------------------------------------------------
@@ -3784,7 +3871,7 @@ func_dns_unlock() {
     else
         echo -e "${BLUE}已安全取消操作。${PLAIN}"
     fi
-    read -n 1 -s -r -p "按任意键返回..."
+    pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 # ---------------------------------------------------------
 # 新增功能：安装 IP Sentinel (防止 IP 送中)
@@ -3803,7 +3890,7 @@ func_ip_sentinel() {
     else
         echo -e "${BLUE}已取消操作。${PLAIN}"
     fi
-    read -n 1 -s -r -p "按任意键返回..."
+    pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
 # ---------------------------------------------------------
@@ -3845,7 +3932,7 @@ func_sublinkpro() {
     
     # 1. 检查 Docker 引擎
     if ! command -v docker >/dev/null 2>&1; then
-        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 常用环境] 中安装 Docker。${PLAIN}"
+        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 软件安装与反代分流] 中安装 Docker。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -4979,7 +5066,7 @@ func_net_kernel_menu() {
         echo -e "${GREEN}  1. BBR / 拥塞控制管理${PLAIN}   ${YELLOW}(调用 ylx2016 多内核调优脚本)${PLAIN}"
         echo -e "${GREEN}  2. 动态 TCP 参数调优${PLAIN}    ${YELLOW}(粘贴 Omnitt 参数并自动校验)${PLAIN}"
         echo -e "${GREEN}  3. ZRAM / Swap 内存调优${PLAIN} ${YELLOW}(按内存分档优化小鸡)${PLAIN}"
-        echo -e "${GREEN}  4. 安装轻量优化内核${PLAIN}     ${YELLOW}(Cloud/KVM 内核)${PLAIN}"
+        echo -e "${GREEN}  4. 安装/切换优化内核${PLAIN}   ${YELLOW}(Cloud/KVM 稳定推荐 / XanMod 高级可选)${PLAIN}"
         echo -e "${GREEN}  5. 清理旧内核${PLAIN}           ${YELLOW}(释放磁盘空间，谨慎操作)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
