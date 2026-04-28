@@ -6,7 +6,7 @@
 
 > 项目适合有一定 Linux/VPS 基础的用户。脚本会修改系统服务、防火墙、内核参数、Nginx/Caddy 配置和 Docker 配置，请先看完“使用前必读”和“高风险功能”。
 
-![VPS-Optimize 面板预览](https://i.mji.rip/2026/04/28/551fa3d4709c7e1ee7c9a4827f9eed23.png)
+![VPS-Optimize 面板预览](https://i.mji.rip/2026/04/28/ed5bf23f4ebf88300819ff3520bac2df.png)
 
 ## 📚 目录
 
