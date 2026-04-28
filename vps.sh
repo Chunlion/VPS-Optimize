@@ -2372,31 +2372,49 @@ func_caddy_cf_maintenance_menu() {
         echo -e "${BOLD}🛠️ 443 / Caddy / Cloudflare 维护中心${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}${BLUE}▶ 443 单入口常用${PLAIN}"
-        echo -e "${GREEN} 11. 443 链路与安全体检${PLAIN}       ${YELLOW}(Nginx/Caddy/REALITY/面板/版本隐藏)${PLAIN}"
-        echo -e "${GREEN} 15. 管理 443 网站/反代域名${PLAIN}    ${YELLOW}(新增/删除/查看，最常用)${PLAIN}"
-        echo -e "${GREEN} 12. 重新应用上次 443 配置${PLAIN}     ${YELLOW}(读取 sni-stack.env 重建配置)${PLAIN}"
-        echo -e "${GREEN} 13. 订阅端口 / External Proxy 提示${PLAIN} ${YELLOW}(节点链接应输出公网 443)${PLAIN}"
-        echo -e "${RED} 14. 回滚 443 单入口配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}"
+        echo -e "${GREEN}  1. 443 链路与安全体检${PLAIN}       ${YELLOW}(Nginx/Caddy/REALITY/面板/版本隐藏)${PLAIN}"
+        echo -e "${GREEN}  2. 管理 443 网站/反代域名${PLAIN}    ${YELLOW}(新增/删除/查看，最常用)${PLAIN}"
+        echo -e "${GREEN}  3. 重新应用上次 443 配置${PLAIN}     ${YELLOW}(读取 sni-stack.env 重建配置)${PLAIN}"
+        echo -e "${GREEN}  4. 订阅端口 / External Proxy 提示${PLAIN} ${YELLOW}(节点链接应输出公网 443)${PLAIN}"
+        echo -e "${RED}  5. 回滚 443 单入口配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 证书与 Cloudflare${PLAIN}"
-        echo -e "${GREEN}  1. 查看已管理域名 / 证书路径${PLAIN}"
-        echo -e "${GREEN}  2. 更新 Cloudflare API Token${PLAIN}"
-        echo -e "${GREEN}  3. 重新签发某个域名证书${PLAIN}"
-        echo -e "${GREEN}  4. 重建 /root/cert 证书软链接${PLAIN}"
-        echo -e "${GREEN}  7. 重建证书清单文件${PLAIN}"
+        echo -e "${GREEN}  6. 查看已管理域名 / 证书路径${PLAIN}"
+        echo -e "${GREEN}  7. 更新 Cloudflare API Token${PLAIN}"
+        echo -e "${GREEN}  8. 重新签发某个域名证书${PLAIN}"
+        echo -e "${GREEN}  9. 重建 /root/cert 证书软链接${PLAIN}"
+        echo -e "${GREEN} 10. 重建证书清单文件${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ Caddy 修复与清理${PLAIN}"
-        echo -e "${GREEN}  6. 校验并重载 Caddy${PLAIN}"
-        echo -e "${GREEN}  8. Caddy/证书一键体检${PLAIN}       ${YELLOW}(Token/证书/监听/后端)${PLAIN}"
-        echo -e "${GREEN}  9. 一键自动修复常见问题${PLAIN}"
-        echo -e "${GREEN} 10. 隔离旧 Caddy 配置${PLAIN}        ${YELLOW}(避免抢占 443)${PLAIN}"
-        echo -e "${RED}  5. 删除某个域名的 Caddy 配置与证书${PLAIN}"
+        echo -e "${GREEN} 11. 校验并重载 Caddy${PLAIN}"
+        echo -e "${GREEN} 12. Caddy/证书一键体检${PLAIN}       ${YELLOW}(Token/证书/监听/后端)${PLAIN}"
+        echo -e "${GREEN} 13. 一键自动修复常见问题${PLAIN}"
+        echo -e "${GREEN} 14. 隔离旧 Caddy 配置${PLAIN}        ${YELLOW}(避免抢占 443)${PLAIN}"
+        echo -e "${RED} 15. 删除某个域名的 Caddy 配置与证书${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local m_choice
         read -p "👉 请选择操作: " m_choice
+
+        case "$m_choice" in
+            1) m_choice=11 ;;
+            2) m_choice=15 ;;
+            3) m_choice=12 ;;
+            4) m_choice=13 ;;
+            5) m_choice=14 ;;
+            6) m_choice=1 ;;
+            7) m_choice=2 ;;
+            8) m_choice=3 ;;
+            9) m_choice=4 ;;
+            10) m_choice=7 ;;
+            11) m_choice=6 ;;
+            12) m_choice=8 ;;
+            13) m_choice=9 ;;
+            14) m_choice=10 ;;
+            15) m_choice=5 ;;
+        esac
 
         case $m_choice in
             1)
@@ -3992,12 +4010,14 @@ update_compose_project() {
 func_update_subscription_tools() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}更新订阅管理工具 (Docker Compose)${PLAIN}"
+    echo -e "${BOLD}${YELLOW}UPD 更新订阅管理工具 (Docker Compose)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${GREEN}  1. 更新 SublinkPro${PLAIN}       ${YELLOW}(/opt/sublinkpro)${PLAIN}"
-    echo -e "${GREEN}  2. 更新 妙妙屋订阅管理${PLAIN}     ${YELLOW}(/opt/miaomiaowu)${PLAIN}"
-    echo -e "${GREEN}  3. 更新 Sub-Store${PLAIN}        ${YELLOW}(/opt/sub-store)${PLAIN}"
-    echo -e "${GREEN}  4. 全部更新${PLAIN}"
+    echo -e "${YELLOW}这个菜单只更新订阅管理工具容器，不会更新 3x-ui / Sing-box / Xray。${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}${YELLOW}  1. UPD 更新 SublinkPro${PLAIN}       ${CYAN}(/opt/sublinkpro)${PLAIN}"
+    echo -e "${BOLD}${YELLOW}  2. UPD 更新 妙妙屋订阅管理${PLAIN}     ${CYAN}(/opt/miaomiaowu)${PLAIN}"
+    echo -e "${BOLD}${YELLOW}  3. UPD 更新 Sub-Store${PLAIN}        ${CYAN}(/opt/sub-store)${PLAIN}"
+    echo -e "${BOLD}${YELLOW}  4. UPD 全部更新${PLAIN}"
     echo -e "------------------------------------------------"
     echo -e "${RED}  0. 返回${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
@@ -4679,7 +4699,7 @@ func_panel_deploy_menu() {
         echo -e "${GREEN}  5. 安装 SublinkPro${PLAIN}       ${YELLOW}(订阅转换与管理面板)${PLAIN}"
         echo -e "${GREEN}  6. 安装 妙妙屋订阅管理${PLAIN}     ${YELLOW}(Docker Compose)${PLAIN}"
         echo -e "${GREEN}  7. 安装 Sub-Store${PLAIN}        ${YELLOW}(HTTP-META / Docker Compose)${PLAIN}"
-        echo -e "${GREEN}  8. 更新订阅管理工具${PLAIN}       ${YELLOW}(SublinkPro/妙妙屋/Sub-Store)${PLAIN}"
+        echo -e "${BOLD}${YELLOW}  8. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
         echo -e "${GREEN}  9. 安装 Dockge${PLAIN}           ${YELLOW}(Docker Compose 管理面板)${PLAIN}"
         echo -e "${GREEN} 10. 面板救砖 / 重置 SSL${PLAIN}   ${YELLOW}(回退 HTTP 访问)${PLAIN}"
         echo -e "${GREEN} 11. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
@@ -4784,7 +4804,7 @@ main_menu() {
         echo -e " ${GREEN}14.${PLAIN} 系统硬件探针          ${YELLOW}(CPU/内存/磁盘/网络实时信息)${PLAIN}"
         echo -e " ${GREEN}15.${PLAIN} 服务健康总览          ${YELLOW}(服务状态/证书摘要/端口概览)${PLAIN}"
         echo -e " ${GREEN}16.${PLAIN} 配置备份与回滚        ${YELLOW}(备份/列表/恢复/清理)${PLAIN}"
-        echo -e " ${YELLOW}17.${PLAIN} 更新脚本              ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
+        echo -e " ${BOLD}${YELLOW}17.${PLAIN} UPD 更新脚本          ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
         echo -e " ${RED}18.${PLAIN} 重启服务器"
         echo -e ""
         echo -e " ${BOLD}${BLUE}▶ ⑤ 高频直达${PLAIN}"
