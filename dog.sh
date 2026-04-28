@@ -1071,6 +1071,7 @@ show_main_menu() {
     echo -e "${BLUE}=== 端口流量狗 v$SCRIPT_VERSION ===${NC}"
     echo -e "${GREEN}介绍主页:${NC}https://zywe.de | ${GREEN}原项目:${NC}https://github.com/zywe03/realm-xwPF"
     echo -e "${GREEN}项目地址：https://github.com/Chunlion/VPS-Optimize 作者修改了部分代码 | 快捷命令: dog${NC}"
+    echo -e "${YELLOW}用途：按端口统计流量、设置配额/限速、日报趋势和 Telegram 查询。${NC}"
     echo
     echo -e "${GREEN}状态: 监控中${NC} | ${BLUE}守护端口: ${port_count}个${NC}"
     echo -e "${YELLOW}端口单向(用户实际/出站): $port_single_total${NC} | ${YELLOW}端口双向(入站+出站): $port_dual_total${NC}"
@@ -1085,12 +1086,11 @@ show_main_menu() {
     fi
 
     echo "────────────────────────────────────────────────────────"
-    echo -e "${BLUE}1.${NC} 添加/删除端口监控     ${BLUE}2.${NC} 端口限制设置管理"
-    echo -e "${BLUE}3.${NC} 流量重置管理          ${BLUE}4.${NC} 一键导出/导入配置"
-    echo -e "${BLUE}5.${NC} 检查并自动热更新脚本    ${BLUE}6.${NC} 卸载脚本"
-    echo -e "${BLUE}7.${NC} 通知管理 (含交互式TG机器人)"
-    echo -e "${BLUE}8.${NC} 流量口径说明"
-    echo -e "${BLUE}9.${NC} 流量日报与趋势报表"
+    echo -e "${BLUE}1.${NC} 添加/删除端口监控       ${BLUE}2.${NC} 配额/限速管理"
+    echo -e "${BLUE}3.${NC} 每月/立即重置流量       ${BLUE}4.${NC} 导出/导入配置"
+    echo -e "${BLUE}5.${NC} 检查并热更新脚本        ${BLUE}6.${NC} 卸载脚本"
+    echo -e "${BLUE}7.${NC} 通知管理 (Telegram 查询)"
+    echo -e "${BLUE}8.${NC} 流量口径说明            ${BLUE}9.${NC} 日报与趋势报表"
     echo -e "${BLUE}0.${NC} 退出"
     echo
     read_trimmed choice "请选择操作 [0-9]: "

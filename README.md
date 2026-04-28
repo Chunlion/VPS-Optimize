@@ -2,18 +2,18 @@
 
 一个面向 VPS 日常运维、网络调优、安全加固、面板部署和 443 单入口分流的 Bash 控制面板。
 
-它不是单个功能脚本，而是把常见 VPS 操作整理成一个可反复调用的菜单：新机器初始化、SSH 加固、Docker 管理、Caddy 反代、Nginx Stream + Caddy + REALITY 单入口、订阅管理工具、测速诊断、备份回滚都集中在 `cy` 面板里。
+常见操作都集中在 `cy` 面板里：新机器初始化、SSH 加固、Docker 管理、Caddy 反代、443 单入口、订阅管理工具、测速诊断、备份回滚。适合有一定 Linux/VPS 基础、希望少记命令但保留可控性的用户。
 
-> 项目适合有一定 Linux/VPS 基础的用户。脚本会修改系统服务、防火墙、内核参数、Nginx/Caddy 配置和 Docker 配置，请先看完“使用前必读”和“高风险功能”。
-
-![VPS-Optimize 面板预览](https://i.mji.rip/2026/04/28/ed5bf23f4ebf88300819ff3520bac2df.png)
+> 脚本会修改系统服务、防火墙、内核参数、Nginx/Caddy 配置和 Docker 配置。动 SSH、防火墙、内核、证书、443 单入口前，请先做快照并保留当前 SSH 会话。
 
 ## 📚 目录
 
+- [⚡ 快速开始](#quick-start)
 - [🎯 适用场景](#scenarios)
 - [⚠️ 使用前必读](#before-you-start)
-- [⚡ 快速开始](#quick-start)
 - [🧭 推荐使用流程](#recommended-flow)
+- [🧭 菜单速查](#menu-guide)
+- [🖥️ 面板预览](#preview)
 - [🧰 功能总览](#features)
 - [🧩 443 单入口分流](#single-443-entry)
 - [📡 订阅管理与节点工具](#node-tools)
@@ -22,6 +22,23 @@
 - [❓ 常见问题](#faq)
 - [🔄 更新与卸载](#update-uninstall)
 - [💬 反馈与联系](#feedback)
+
+<a id="quick-start"></a>
+## ⚡ 快速开始
+
+下载并运行主脚本：
+
+```bash
+wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh && chmod +x vps.sh && ./vps.sh
+```
+
+首次运行后会注册全局快捷命令：
+
+```bash
+cy
+```
+
+以后在服务器终端输入 `cy` 即可进入控制面板。
 
 <a id="scenarios"></a>
 ## 🎯 适用场景
@@ -56,23 +73,6 @@
 
 5. 执行内核、网络、Docker、防火墙、证书清理、强杀端口等功能前，建议先做 VPS 快照。
 
-<a id="quick-start"></a>
-## ⚡ 快速开始
-
-下载并运行主脚本：
-
-```bash
-wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh && chmod +x vps.sh && ./vps.sh
-```
-
-首次运行后会注册全局快捷命令：
-
-```bash
-cy
-```
-
-以后在服务器终端输入 `cy` 即可进入控制面板。
-
 <a id="recommended-flow"></a>
 ## 🧭 推荐使用流程
 
@@ -96,8 +96,8 @@ cy
 
 ```text
 1. 运维预检与风险扫描
-3. 软件安装与反代分流
-4. 面板与节点部署
+3. 基础组件与反代分流
+4. 面板、节点与订阅工具
 19. 443 单入口管理中心
 15. 服务健康总览
 16. 配置备份与回滚
@@ -124,60 +124,62 @@ cy
 
 不需要重跑首次配置向导。
 
+<a id="menu-guide"></a>
+## 🧭 菜单速查
+
+| 你想做什么 | 推荐入口 | 说明 |
+| --- | --- | --- |
+| 新机器先体检 | `1` | 部署前看系统、端口、DNS、磁盘、内存和关键命令 |
+| 新机器基础初始化 | `2` | 装常用工具、设置时区、开启基础 BBR |
+| 改 SSH 端口 | `5` | 改前先在云厂商安全组放行新端口 |
+| 管理防火墙端口 | `8` | 放行、删除、查看、关闭系统防火墙规则 |
+| 安装 Docker/Caddy/WARP | `3` | 偏基础组件、普通 Caddy 反代和 443 单入口入口 |
+| 安装 3x-ui/Sing-box/订阅工具 | `4` | 偏面板、节点、订阅管理工具和 Dockge |
+| 部署 3x-ui + REALITY + 443 | `19 -> 1` | 首次配置 443 单入口 |
+| 后续新增网站或反代域名 | `19 -> 2` | 不需要重跑首次配置 |
+| 443/证书/面板打不开 | `19 -> 3` 或 `19 -> 6` | 先体检链路，再进证书维护 |
+| 查看服务是否正常 | `15` | 服务状态、证书摘要、监听端口概览 |
+| 备份或回滚配置 | `16` | 重要操作前建议先备份 |
+| 端口占用排查 | `13` | 查看占用并按需释放端口 |
+| 更新脚本 | `17` | 从 GitHub 拉取最新 `vps.sh` |
+
+<a id="preview"></a>
+## 🖥️ 面板预览
+
+![VPS-Optimize 面板预览](https://i.mji.rip/2026/04/28/ed5bf23f4ebf88300819ff3520bac2df.png)
+
 <a id="features"></a>
 ## 🧰 功能总览
 
 ### 🛡️ 基础环境与安全
 
-- 基础环境初始化：安装 `curl`、`wget`、`git`、`jq`、`sqlite3`、`iproute2` 等常用工具。
-- 时区设置：默认设置为 `Asia/Shanghai`。
-- 基础 BBR：写入 `net.core.default_qdisc=fq` 和 `net.ipv4.tcp_congestion_control=bbr`。
-- SSH 加固：修改 SSH 端口、检查新端口连通、防止直接失联。
-- SSH 公钥：追加公钥到 `authorized_keys`。
-- Fail2ban：按当前 SSH 端口配置 SSH 爆破防护。
-- 防火墙管理：支持查看、放行、删除规则，兼容 `ufw` / `firewalld`。
+- 基础环境初始化：常用工具、时区、基础 BBR。
+- SSH 安全：改端口、防失联检查、公钥登录、Fail2ban。
+- 防火墙管理：查看、放行、删除规则，兼容 `ufw` / `firewalld`。
 
 ### 🚀 网络、内核与系统调优
 
-- BBR 增强：调用 `ylx2016` 网络加速脚本。
-- 动态 TCP 调优：写入更激进或更稳妥的 TCP 参数。
-- ZRAM/SWAP：按内存大小选择压缩策略。
-- IPv4/IPv6 优先级：可切换 IPv4 优先，缓解部分 IPv6 环境下载超时。
-- Ping、自动更新、垃圾清理等系统开关。
-- 内核安装与旧内核清理。
+- BBR 增强、动态 TCP 参数、ZRAM/SWAP。
+- IPv4/IPv6 优先级、Ping、自动更新、垃圾清理。
+- 优化内核安装与旧内核清理。
 
 ### 📦 软件安装与反代
 
-- Docker 引擎。
-- Python 环境。
-- iperf3。
-- Realm、Gost、WARP、Aria2、哪吒、宝塔、PVE 工具、Argox。
-- Caddy 普通反代。
-- Caddy 证书查看、跳过后端证书校验、配置清理、ACME 证书清理。
+- Docker、Python、iperf3、Realm、Gost、WARP、Aria2、哪吒、宝塔、PVE 工具、Argox。
+- 普通 Caddy 反代、证书查看、跳过后端证书校验、配置清理、ACME 证书清理。
 - Nginx Stream + Caddy + REALITY 443 单入口分流。
 
 ### 📡 面板与节点
 
-- 3x-ui / x-ui 面板入口。
-- Sing-box 甬哥四合一脚本。
-- Sing-box 233boy 一键脚本。
-- Xray 233boy 一键脚本。
-- SublinkPro。
-- 妙妙屋订阅管理。
-- Sub-Store。
-- Dockge。
-- DNS 流媒体解锁。
-- IP Sentinel。
-- Port Traffic Dog。
+- 3x-ui / x-ui、Sing-box、Xray。
+- SublinkPro、妙妙屋订阅管理、Sub-Store、Dockge。
+- DNS 流媒体解锁、IP Sentinel、Port Traffic Dog。
 
 ### 🩺 诊断、备份与维护
 
-- YABS、融合怪、流媒体解锁、回程路由、IP 质量等测试入口。
-- 端口占用查看与释放。
-- CPU、内存、磁盘、网络实时信息。
-- 服务健康总览：服务状态、证书摘要、端口概览。
-- 配置备份、列表、恢复与清理。
-- 脚本热更新。
+- YABS、融合怪、流媒体解锁、回程路由、IP 质量测试。
+- 端口占用查看与释放、系统硬件探针、服务健康总览。
+- 配置备份、列表、恢复、清理和脚本热更新。
 
 <a id="single-443-entry"></a>
 ## 🧩 443 单入口分流
@@ -235,7 +237,7 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 节点和订阅相关入口集中在：
 
 ```text
-4. 面板与节点部署
+4. 面板、节点与订阅工具
 ```
 
 常用入口：
@@ -287,7 +289,7 @@ Dockge           -> 127.0.0.1:5001
 如果没有使用 443 单入口，只想做普通 Caddy 反代，可以进入：
 
 ```text
-3. 软件安装与反代分流
+3. 基础组件与反代分流
 13. 普通 Caddy 反代
 ```
 
@@ -346,7 +348,14 @@ dog
 <a id="high-risk"></a>
 ## 🛑 高风险功能
 
-这些功能不是不能用，而是使用前要确认上下文：
+
+操作前先确认：
+
+- VPS 已有快照、备份或救援控制台。
+- 当前 SSH 会话不要断开，尤其是修改 SSH、防火墙、网络和内核时。
+- 云厂商安全组已经放行新 SSH 端口、`80`、`443` 或业务端口。
+- 你知道当前 `80/443` 由谁监听：`ss -lntp | grep -E ':80|:443'`。
+- 重要配置建议先备份：`/etc/ssh`、`/etc/caddy`、`/etc/nginx`、`/etc/vps-optimize`。
 
 | 功能 | 风险 | 建议 |
 | --- | --- | --- |
