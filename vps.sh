@@ -15,6 +15,43 @@ CYAN='\033[1;36m'
 PLAIN='\033[0m'
 BOLD='\033[1m'
 
+trim_input() {
+    local value="$*"
+    value="${value//$'\r'/}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+}
+
+read_trimmed() {
+    local __target="$1"
+    local prompt="${2:-}"
+    local input
+    read -r -p "$prompt" input
+    printf -v "$__target" '%s' "$(trim_input "$input")"
+}
+
+read_secret_trimmed() {
+    local __target="$1"
+    local prompt="${2:-}"
+    local input
+    read -r -s -p "$prompt" input
+    echo ""
+    printf -v "$__target" '%s' "$(trim_input "$input")"
+}
+
+normalize_domain_input() {
+    local domain
+    domain="$(trim_input "$1")"
+    domain=$(echo "$domain" | tr '[:upper:]' '[:lower:]')
+    domain="${domain#http://}"
+    domain="${domain#https://}"
+    domain="${domain%%/*}"
+    domain="${domain%%:*}"
+    domain=$(echo "$domain" | tr -d '[:space:]')
+    printf '%s' "$domain"
+}
+
 # --- 权限检查 ---
 if [[ $EUID -ne 0 ]]; then
     echo -e "${RED}❌ 错误：请以 root 用户身份运行本脚本！${PLAIN}"
@@ -159,13 +196,28 @@ func_firewall_manage() {
         echo -e "${CYAN}================================================${PLAIN}"
         
         local fw_choice
-        read -p "👉 请选择操作: " fw_choice
+        read_trimmed fw_choice "👉 请选择操作: "
         
         case $fw_choice in
             1)
                 echo -e "${CYAN}👉 正在嗅探活动端口并配置防火墙...${PLAIN}"
                 local active_ports
-                active_ports=$(ss -tuln | grep -E 'LISTEN|UNCONN' | grep -v '127.0.0.1' | awk '{print $5}' | rev | cut -d: -f1 | rev | sort -nu | grep -E '^[0-9]+$')
+                active_ports=$(ss -tuln 2>/dev/null | grep -E 'LISTEN|UNCONN' | awk '{print $5}' | grep -Ev '^(127\.0\.0\.1:|\[?::1\]?:)' | rev | cut -d: -f1 | rev | sort -nu | grep -E '^[0-9]+$' || true)
+
+                local ssh_port
+                ssh_port=$(ss -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | head -n1)
+                [[ -z "$ssh_port" ]] && ssh_port=$(grep -i '^Port' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
+                ssh_port=${ssh_port:-22}
+                if is_valid_port "$ssh_port" && ! printf '%s\n' "$active_ports" | grep -qx "$ssh_port"; then
+                    active_ports=$(printf '%s\n%s\n' "$active_ports" "$ssh_port" | grep -E '^[0-9]+$' | sort -nu)
+                fi
+
+                if [[ -z "$active_ports" ]]; then
+                    echo -e "${RED}❌ 未能识别到需要放行的监听端口，已取消启用防火墙，避免误锁 SSH。${PLAIN}"
+                    echo -e "${YELLOW}请先确认 ss/iproute2 可用，或使用 [2] 手动添加 SSH 端口后再启用。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
                 
                 if [[ "$OS" =~ debian|ubuntu ]]; then
                     install_pkg ufw
@@ -190,10 +242,31 @@ func_firewall_manage() {
             2)
                 local add_p
                 echo -e "${YELLOW}💡 支持格式：单端口(80)、多端口(80,443)、端口范围(8000:9000 或 8000-9000)${PLAIN}"
-                read -p "👉 请输入要放行的端口号: " add_p
+                read_trimmed add_p "👉 请输入要放行的端口号: "
+                add_p=$(normalize_port_rule_input "$add_p")
+                if [[ -z "$add_p" || "$add_p" == "0" ]]; then
+                    echo -e "${BLUE}已取消添加端口规则。${PLAIN}"
+                    sleep 1
+                    continue
+                fi
                 
                 # 放宽正则，允许数字、逗号、冒号和减号
-                if [[ -n "$add_p" && "$add_p" =~ ^[0-9]+([,:-][0-9]+)*$ ]]; then
+                if is_valid_port_rule_input "$add_p"; then
+                    if [[ "$OS" =~ debian|ubuntu ]]; then
+                        install_pkg ufw
+                        if ! command -v ufw >/dev/null 2>&1; then
+                            echo -e "${RED}❌ 未检测到 ufw，无法写入规则。${PLAIN}"
+                            sleep 2
+                            continue
+                        fi
+                        if ! ufw status 2>/dev/null | grep -qi active; then
+                            echo -e "${YELLOW}⚠️ UFW 当前未启用，本次只写入规则；需要启用时请回到 [1] 自动放行活动端口。${PLAIN}"
+                        fi
+                    elif ! systemctl is-active --quiet firewalld 2>/dev/null; then
+                        echo -e "${RED}❌ Firewalld 未运行。为避免误关端口，请先使用 [1] 启用并自动放行当前活动端口。${PLAIN}"
+                        sleep 2
+                        continue
+                    fi
                     # 将输入的逗号分隔符转换为数组，按个循环处理
                     IFS=',' read -ra PORT_ARRAY <<< "$add_p"
                     for p in "${PORT_ARRAY[@]}"; do
@@ -220,16 +293,34 @@ func_firewall_manage() {
                     
                     echo -e "${GREEN}✅ 端口规则 [$add_p] 已成功添加至允许列表！${PLAIN}"
                 else
-                    echo -e "${RED}❌ 无效的输入格式！请确保只包含数字、逗号、减号或冒号。${PLAIN}"
+                    echo -e "${RED}❌ 无效的端口格式！端口必须是 1-65535，范围起始值不能大于结束值。${PLAIN}"
                 fi
                 sleep 2
                 ;;
             3)
                 local del_p
                 echo -e "${YELLOW}💡 支持格式：单端口(80)、多端口(80,443)、端口范围(8000:9000 或 8000-9000)${PLAIN}"
-                read -p "👉 请输入要删除放行的端口号: " del_p
+                read_trimmed del_p "👉 请输入要删除放行的端口号: "
+                del_p=$(normalize_port_rule_input "$del_p")
+                if [[ -z "$del_p" || "$del_p" == "0" ]]; then
+                    echo -e "${BLUE}已取消删除端口规则。${PLAIN}"
+                    sleep 1
+                    continue
+                fi
                 
-                if [[ -n "$del_p" && "$del_p" =~ ^[0-9]+([,:-][0-9]+)*$ ]]; then
+                if is_valid_port_rule_input "$del_p"; then
+                    if [[ "$OS" =~ debian|ubuntu ]]; then
+                        install_pkg ufw
+                        if ! command -v ufw >/dev/null 2>&1; then
+                            echo -e "${RED}❌ 未检测到 ufw，无法删除规则。${PLAIN}"
+                            sleep 2
+                            continue
+                        fi
+                    elif ! systemctl is-active --quiet firewalld 2>/dev/null; then
+                        echo -e "${RED}❌ Firewalld 未运行，无法读取/删除运行时规则。${PLAIN}"
+                        sleep 2
+                        continue
+                    fi
                     IFS=',' read -ra PORT_ARRAY <<< "$del_p"
                     for p in "${PORT_ARRAY[@]}"; do
                         if [[ "$OS" =~ debian|ubuntu ]]; then
@@ -255,7 +346,7 @@ func_firewall_manage() {
                     
                     echo -e "${GREEN}✅ 端口规则 [$del_p] 已成功从允许列表中移除！${PLAIN}"
                 else
-                    echo -e "${RED}❌ 无效的输入格式！请确保只包含数字、逗号、减号或冒号。${PLAIN}"
+                    echo -e "${RED}❌ 无效的端口格式！端口必须是 1-65535，范围起始值不能大于结束值。${PLAIN}"
                 fi
                 sleep 2
                 ;;
@@ -331,11 +422,11 @@ func_system_tweaks() {
         echo -e "${CYAN}================================================${PLAIN}"
         
         local tweak_choice
-        read -p "👉 请选择操作: " tweak_choice
+        read_trimmed tweak_choice "👉 请选择操作: "
         
         case $tweak_choice in
-            1) 
-                read -p "❓ 开启 IPv6？(y 开启 / n 关闭): " yn
+            1)
+                read_trimmed yn "❓ 开启 IPv6？(y 开启 / n 关闭): "
                 if [[ "$yn" =~ ^[Yy]$ ]]; then 
                     rm -f /etc/sysctl.d/99-disable-ipv6.conf
                     sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null 2>&1
@@ -345,8 +436,8 @@ func_system_tweaks() {
                     sysctl -p /etc/sysctl.d/99-disable-ipv6.conf >/dev/null 2>&1
                     echo -e "${RED}✅ IPv6 已禁用${PLAIN}"
                 fi; sleep 1 ;;
-            2) 
-                read -p "❓ 设置 IPv4 为最高出站优先级？(y 开启 / n 恢复默认): " yn
+            2)
+                read_trimmed yn "❓ 设置 IPv4 为最高出站优先级？(y 开启 / n 恢复默认): "
                 if [[ "$yn" =~ ^[Yy]$ ]]; then 
                     sed -Ei '/^[[:space:]]*#?[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+100\b.*?$/ {s/.+100\b([[:space:]]*#.*)?$/precedence ::ffff:0:0\/96  100\1/; :a;n;b a}; /^[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+[0-9]+.*$/ {s/^.*precedence.+::ffff:0:0\/96[^0-9]+([0-9]+).*$/precedence ::ffff:0:0\/96  100\t#原值为 \1/; :a;n;ba;}; $aprecedence ::ffff:0:0\/96  100' /etc/gai.conf
                     echo -e "${GREEN}✅ 已设为 IPv4 优先${PLAIN}"
@@ -354,8 +445,8 @@ func_system_tweaks() {
                     sed -i '/precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
                     echo -e "${BLUE}已恢复系统默认${PLAIN}"
                 fi; sleep 1 ;;
-            3) 
-                read -p "❓ 允许被 Ping？(y 允许 / n 禁止): " yn
+            3)
+                read_trimmed yn "❓ 允许被 Ping？(y 允许 / n 禁止): "
                 if [[ "$yn" =~ ^[Yy]$ ]]; then 
                     rm -f /etc/sysctl.d/99-disable-ping.conf
                     sysctl -w net.ipv4.icmp_echo_ignore_all=0 >/dev/null 2>&1
@@ -365,8 +456,8 @@ func_system_tweaks() {
                     sysctl -p /etc/sysctl.d/99-disable-ping.conf >/dev/null 2>&1
                     echo -e "${RED}✅ 已开启禁 Ping 保护${PLAIN}"
                 fi; sleep 1 ;;
-            4) 
-                read -p "❓ 开启系统自动更新？(y 开启 / n 关闭): " yn
+            4)
+                read_trimmed yn "❓ 开启系统自动更新？(y 开启 / n 关闭): "
                 if [[ "$yn" =~ ^[Yy]$ ]]; then 
                     if [[ "$OS" =~ debian|ubuntu ]]; then
                         apt install -y unattended-upgrades -qq >/dev/null 2>&1
@@ -436,7 +527,7 @@ run_remote_script() {
     local yn tmp_file rc
     echo -e "${CYAN}▶ ${desc}${PLAIN}"
     echo -e "${YELLOW}脚本来源：${url}${PLAIN}"
-    read -p "确认下载并执行该远程脚本？(y/N): " yn
+    read_trimmed yn "确认下载并执行该远程脚本？(y/N): "
     if [[ ! "$yn" =~ ^[Yy]$ ]]; then
         echo -e "${BLUE}已取消执行。${PLAIN}"
         return 1
@@ -749,9 +840,9 @@ func_env_install() {
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        
+
         local env_choice
-        read -p "👉 选择: " env_choice
+        read_trimmed env_choice "👉 选择: "
         
         case $env_choice in
             1) 
@@ -795,9 +886,9 @@ func_env_install() {
                 fi
                 
                 local domain port is_https
-                read -p "请输入解析后的域名 (如 panel.site.com): " domain
-                read -p "请输入面板本地映射端口 (如 40000): " port
-                domain=$(echo "$domain" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+                read_trimmed domain "请输入解析后的域名 (如 panel.site.com): "
+                read_trimmed port "请输入面板本地映射端口 (如 40000): "
+                domain=$(normalize_domain_input "$domain")
                 
                 # 增加了端口只能是纯数字的防呆校验
                 if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
@@ -807,7 +898,7 @@ func_env_install() {
                     if grep -q "^[[:space:]]*$domain" /etc/caddy/Caddyfile 2>/dev/null || ls /etc/caddy/conf.d/${domain}.caddy >/dev/null 2>&1; then
                         echo -e "${RED}❌ 错误：已存在该域名的配置块！请先使用功能 [17] 彻底清理，然后再添加。${PLAIN}"
                     else
-                        read -p "❓ 后端面板是否开启了自带的 SSL 证书？(y/n): " is_https
+                        read_trimmed is_https "❓ 后端面板是否开启了自带的 SSL 证书？(y/n): "
                         
                         local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
                         [[ -f /etc/caddy/Caddyfile ]] && cp /etc/caddy/Caddyfile "$backup_file"
@@ -869,13 +960,13 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
     echo -e "${YELLOW}推荐用于：3x-ui Reality 已占用 443，同时 Web 服务需要同域名 HTTPS。${PLAIN}"
     echo -e "------------------------------------------------"
 
-    read -p "❓ 当前 443 端口是否已被 3x-ui VLESS-Reality 占用？(y/n): " reality_occupied
+    read_trimmed reality_occupied "❓ 当前 443 端口是否已被 3x-ui VLESS-Reality 占用？(y/n): "
     if [[ "$reality_occupied" =~ ^[Nn]$ ]]; then
         echo -e "${BLUE}ℹ️ 您选择了未占用 443，本向导仍将使用本地端口模式，避免与未来业务冲突。${PLAIN}"
     fi
 
     local listen_port
-    read -p "👉 请输入 Caddy 本地 TLS 监听端口 (默认 8443): " listen_port
+    read_trimmed listen_port "👉 请输入 Caddy 本地 TLS 监听端口 (默认 8443): "
     listen_port=${listen_port:-8443}
     if ! [[ "$listen_port" =~ ^[0-9]+$ ]] || [[ "$listen_port" -lt 1 || "$listen_port" -gt 65535 ]]; then
         echo -e "${RED}❌ 监听端口无效！必须是 1-65535 的纯数字。${PLAIN}"
@@ -888,8 +979,7 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
 
     local cf_token
     echo -e "${CYAN}👇 请输入 Cloudflare API Token（需 Zone.DNS 编辑权限）${PLAIN}"
-    read -p "CF Token: " cf_token
-    echo ""
+    read_secret_trimmed cf_token "CF Token: "
     if [[ -z "$cf_token" || ${#cf_token} -lt 20 ]]; then
         echo -e "${RED}❌ Token 长度异常，已取消。${PLAIN}"
         return
@@ -977,7 +1067,8 @@ EOF
 
     while true; do
         local domain backend_port continue_add
-        read -p "👉 请输入域名 (回车结束添加): " domain
+        read_trimmed domain "👉 请输入域名 (回车结束添加): "
+        domain=$(normalize_domain_input "$domain")
         if [[ -z "$domain" ]]; then
             break
         fi
@@ -988,8 +1079,8 @@ EOF
             continue
         fi
 
-        read -p "👉 请输入该域名反代的本地端口: " backend_port
-        if ! [[ "$backend_port" =~ ^[0-9]+$ ]] || [[ "$backend_port" -lt 1 || "$backend_port" -gt 65535 ]]; then
+        read_trimmed backend_port "👉 请输入该域名反代的本地端口: "
+        if ! is_valid_port "$backend_port"; then
             echo -e "${RED}❌ 端口无效：$backend_port${PLAIN}"
             ((fail_count++))
             continue
@@ -1007,7 +1098,7 @@ EOF
         echo -e "${CYAN}▶ 正在为 ${domain} 申请 DNS 证书...${PLAIN}"
         if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
             echo -e "${RED}❌ 证书申请失败：${domain}${PLAIN}"
-            echo -e "${YELLOW}   提示：可进入 [19]-[9] 一键自动修复后再重试。${PLAIN}"
+            echo -e "${YELLOW}   提示：可进入主菜单 [19] -> [6] -> [13] 一键自动修复后再重试。${PLAIN}"
             ((fail_count++))
             continue
         fi
@@ -1045,7 +1136,7 @@ EOF
         echo -e "${GREEN}✅ 域名 ${domain} 已完成：证书签发 + 反代配置 + 证书挂载。${PLAIN}"
         ((success_count++))
 
-        read -p "继续添加下一个域名？(y/n): " continue_add
+        read_trimmed continue_add "继续添加下一个域名？(y/n): "
         if [[ ! "$continue_add" =~ ^[Yy]$ ]]; then
             break
         fi
@@ -1080,7 +1171,7 @@ ask_with_default() {
     local prompt="$1"
     local default_value="$2"
     local input
-    read -p "${prompt} (默认: ${default_value}): " input
+    read_trimmed input "${prompt} (默认: ${default_value}): "
     echo "${input:-$default_value}"
 }
 
@@ -1088,6 +1179,7 @@ split_csv_to_array() {
     local input="$1"
     local -n out_array=$2
     local idx cleaned
+    input="${input//，/,}"
     out_array=()
     local raw_array=()
     IFS=',' read -ra raw_array <<< "$input"
@@ -1099,7 +1191,7 @@ split_csv_to_array() {
 
 is_valid_port() {
     local port="$1"
-    [[ "$port" =~ ^[0-9]+$ ]] && [[ "$port" -ge 1 && "$port" -le 65535 ]]
+    [[ "$port" =~ ^[0-9]+$ ]] && (( 10#$port >= 1 && 10#$port <= 65535 ))
 }
 
 is_valid_listen_addr() {
@@ -1112,11 +1204,66 @@ is_valid_listen_addr() {
         local -a octets=($addr)
         local octet
         for octet in "${octets[@]}"; do
-            [[ "$octet" -ge 0 && "$octet" -le 255 ]] || return 1
+            [[ "$octet" =~ ^[0-9]+$ ]] || return 1
+            (( 10#$octet >= 0 && 10#$octet <= 255 )) || return 1
         done
         return 0
     fi
     return 1
+}
+
+normalize_port_rule_input() {
+    local value="$1"
+    value="${value//，/,}"
+    value="${value//：/:}"
+    value="${value//－/-}"
+    value="${value//—/-}"
+    value=$(echo "$value" | tr -d '[:space:]')
+
+    local item start end extra
+    local items=()
+    local normalized=()
+    IFS=',' read -ra items <<< "$value"
+    for item in "${items[@]}"; do
+        item="${item//:/-}"
+        if [[ "$item" == *-* ]]; then
+            IFS='-' read -r start end extra <<< "$item"
+            if [[ -z "$extra" && "$start" =~ ^[0-9]+$ && "$end" =~ ^[0-9]+$ ]]; then
+                normalized+=("$((10#$start))-$((10#$end))")
+            else
+                normalized+=("$item")
+            fi
+        elif [[ "$item" =~ ^[0-9]+$ ]]; then
+            normalized+=("$((10#$item))")
+        else
+            normalized+=("$item")
+        fi
+    done
+
+    (IFS=','; printf '%s' "${normalized[*]}")
+}
+
+is_valid_port_rule_input() {
+    local input
+    input=$(normalize_port_rule_input "$1")
+    [[ -n "$input" ]] || return 1
+
+    local item range_start range_end extra
+    local items=()
+    IFS=',' read -ra items <<< "$input"
+    for item in "${items[@]}"; do
+        [[ -n "$item" ]] || return 1
+        item="${item//:/-}"
+        if [[ "$item" == *-* ]]; then
+            IFS='-' read -r range_start range_end extra <<< "$item"
+            [[ -z "$extra" ]] || return 1
+            is_valid_port "$range_start" && is_valid_port "$range_end" || return 1
+            (( 10#$range_start <= 10#$range_end )) || return 1
+        else
+            is_valid_port "$item" || return 1
+        fi
+    done
+    return 0
 }
 
 warn_if_public_bind() {
@@ -1127,7 +1274,7 @@ warn_if_public_bind() {
     if [[ "$listen_addr" == "0.0.0.0" || "$listen_addr" == "::" ]]; then
         echo -e "${RED}⚠️  高风险：${service_name} 将监听公网 ${listen_addr}:${listen_port}${PLAIN}"
         echo -e "${RED}这会破坏默认的本地监听安全模型，可能导致端口直接暴露。${PLAIN}"
-        read -p "如确认继续，请输入 YES: " confirm
+        read_trimmed confirm "如确认继续，请输入 YES: "
         [[ "$confirm" == "YES" ]] || return 1
     fi
     return 0
@@ -1141,7 +1288,7 @@ confirm_danger() {
     echo -e "${RED}⚠️ 高风险操作：${title}${PLAIN}"
     echo -e "${YELLOW}影响：${impact}${PLAIN}"
     echo -e "${BLUE}回退：${rollback}${PLAIN}"
-    read -p "确认继续请输入 YES: " confirm
+    read_trimmed confirm "确认继续请输入 YES: "
     [[ "$confirm" == "YES" ]]
 }
 
@@ -1218,7 +1365,7 @@ print_sni_stack_preview() {
     echo -e ""
     echo -e "${YELLOW}确认后会备份现有配置，并隔离旧的 /etc/nginx/stream.d/vps_sni_*.conf。${PLAIN}"
     local confirm
-    read -p "确认写入并重启 Nginx/Caddy？输入 YES 继续: " confirm
+    read_trimmed confirm "确认写入并重启 Nginx/Caddy？输入 YES 继续: "
     [[ "$confirm" == "YES" ]]
 }
 
@@ -1235,7 +1382,7 @@ caddy_format_configs() {
 load_sni_stack_env() {
     local env_file="/etc/vps-optimize/sni-stack.env"
     if [[ ! -f "$env_file" ]]; then
-        echo -e "${RED}❌ 未找到 ${env_file}，请先运行 [18] 初始化。${PLAIN}"
+        echo -e "${RED}❌ 未找到 ${env_file}，请先运行主菜单 [19] -> [1] 首次配置 443 单入口。${PLAIN}"
         return 1
     fi
     # shellcheck disable=SC1090
@@ -1391,7 +1538,7 @@ rollback_sni_stack_config() {
     fi
     echo -e "${YELLOW}即将回滚到备份：${backup_dir}${PLAIN}"
     local confirm
-    read -p "这会覆盖当前 Nginx/Caddy 的相关配置，输入 YES 继续: " confirm
+    read_trimmed confirm "这会覆盖当前 Nginx/Caddy 的相关配置，输入 YES 继续: "
     [[ "$confirm" == "YES" ]] || return 1
 
     [[ -f "$backup_dir/nginx.conf" ]] && cp -a "$backup_dir/nginx.conf" /etc/nginx/nginx.conf
@@ -1419,7 +1566,7 @@ collect_sni_stack_config() {
     echo -e "${YELLOW}公网 443 只允许 Nginx stream 监听；Caddy/Xray/3x-ui 默认全部绑定 127.0.0.1。${PLAIN}"
     echo -e "------------------------------------------------"
 
-    read -p "面板域名（必填，例如 panel.example.com）: " PANEL_DOMAIN
+    read_trimmed PANEL_DOMAIN "面板域名（必填，例如 panel.example.com）: "
     SITE_DOMAINS=()
     SITE_BACKEND_ADDRS=()
     SITE_BACKEND_PORTS=()
@@ -1428,12 +1575,12 @@ collect_sni_stack_config() {
     split_csv_to_array "$site_domains_input" SITE_DOMAINS
     echo -e "${YELLOW}REALITY 伪装 SNI 请填写外部真实 HTTPS 站点域名，不要填写面板域名或节点域名。${PLAIN}"
     echo -e "${YELLOW}模板示例：your-reality-sni.example.com（请替换成你自己选择的真实站点）${PLAIN}"
-    read -p "REALITY 伪装 SNI（必填）: " REALITY_SNI
+    read_trimmed REALITY_SNI "REALITY 伪装 SNI（必填）: "
     NGINX_LISTEN_ADDR=$(ask_with_default "Nginx 公网监听地址" "0.0.0.0")
     NGINX_LISTEN_PORT=$(ask_with_default "Nginx 公网监听端口" "443")
 
     local advanced_mode
-    read -p "是否进入高级模式并允许修改本地服务监听地址？(y/n，默认 n): " advanced_mode
+    read_trimmed advanced_mode "是否进入高级模式并允许修改本地服务监听地址？(y/n，默认 n): "
     if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
         CADDY_LISTEN_ADDR=$(ask_with_default "Caddy 本地监听地址" "127.0.0.1")
         XRAY_LISTEN_ADDR=$(ask_with_default "Xray REALITY 本地监听地址" "127.0.0.1")
@@ -1470,20 +1617,24 @@ collect_sni_stack_config() {
 
     PANEL_INTERNAL_SSL="off"
     local panel_ssl_enabled
-    read -p "3x-ui 面板是否已经开启内置 SSL/填写证书路径？(y/n，默认 n): " panel_ssl_enabled
+    read_trimmed panel_ssl_enabled "3x-ui 面板是否已经开启内置 SSL/填写证书路径？(y/n，默认 n): "
     if [[ "$panel_ssl_enabled" =~ ^[Yy]$ ]]; then
         PANEL_INTERNAL_SSL="on"
         echo -e "${RED}⚠️  当前架构要求 3x-ui 面板关闭内置 SSL，证书只给 Caddy 使用。${PLAIN}"
         echo -e "${YELLOW}如果 3x-ui 继续启用 SSL，Caddy 默认会用 HTTP 连接 HTTPS 后端，常见结果是 502 或面板打不开。${PLAIN}"
-        read -p "请确认稍后会在 3x-ui 中关闭面板 SSL 并清空证书路径，输入 YES 继续: " panel_ssl_confirm
+        read_trimmed panel_ssl_confirm "请确认稍后会在 3x-ui 中关闭面板 SSL 并清空证书路径，输入 YES 继续: "
         [[ "$panel_ssl_confirm" == "YES" ]] || return 1
     fi
 
     echo -e "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}"
-    read -p "CF Token: " CF_TOKEN
+    read_secret_trimmed CF_TOKEN "CF Token: "
 
-    PANEL_DOMAIN=$(echo "$PANEL_DOMAIN" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
-    REALITY_SNI=$(echo "$REALITY_SNI" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+    PANEL_DOMAIN=$(normalize_domain_input "$PANEL_DOMAIN")
+    REALITY_SNI=$(normalize_domain_input "$REALITY_SNI")
+    local site_idx
+    for site_idx in "${!SITE_DOMAINS[@]}"; do
+        SITE_DOMAINS[$site_idx]=$(normalize_domain_input "${SITE_DOMAINS[$site_idx]}")
+    done
 
     if ! is_valid_domain "$PANEL_DOMAIN"; then echo -e "${RED}❌ 面板域名无效。${PLAIN}"; return 1; fi
     if ! is_valid_domain "$REALITY_SNI"; then echo -e "${RED}❌ REALITY SNI 无效。${PLAIN}"; return 1; fi
@@ -1789,7 +1940,7 @@ harden_single_443_firewall() {
     local yn ssh_port remove_ports port
     echo -e "${YELLOW}可选：防火墙只保留 SSH 与 Nginx 公网入口端口。${PLAIN}"
     echo -e "${YELLOW}提醒：若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，脚本的“自动追加当前活动端口”功能可能再次放行它。${PLAIN}"
-    read -p "是否现在收紧防火墙？(y/n，默认 n): " yn
+    read_trimmed yn "是否现在收紧防火墙？(y/n，默认 n): "
     [[ "$yn" =~ ^[Yy]$ ]] || return 0
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}
@@ -1957,8 +2108,12 @@ add_sni_stack_site() {
     echo -e ""
 
     local site_domain site_addr site_port advanced_mode existing idx confirm
-    read -p "请输入新网站/反代域名（例如 sub.example.com）: " site_domain
-    site_domain=$(echo "$site_domain" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+    read_trimmed site_domain "请输入新网站/反代域名（例如 sub.example.com）: "
+    site_domain=$(normalize_domain_input "$site_domain")
+    if [[ -z "$site_domain" || "$site_domain" == "0" ]]; then
+        echo -e "${BLUE}已取消新增网站/反代域名。${PLAIN}"
+        return 0
+    fi
 
     if ! is_valid_domain "$site_domain"; then
         echo -e "${RED}❌ 域名格式无效。${PLAIN}"
@@ -1975,7 +2130,7 @@ add_sni_stack_site() {
         fi
     done
 
-    read -p "是否进入高级模式并允许修改后端监听地址？(y/n，默认 n): " advanced_mode
+    read_trimmed advanced_mode "是否进入高级模式并允许修改后端监听地址？(y/n，默认 n): "
     if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
         site_addr=$(ask_with_default "后端监听地址" "127.0.0.1")
     else
@@ -1990,7 +2145,7 @@ add_sni_stack_site() {
 
     echo -e ""
     echo -e "${CYAN}即将添加：${site_domain} -> ${site_addr}:${site_port}${PLAIN}"
-    read -p "确认申请证书并更新 Nginx/Caddy？输入 YES 继续: " confirm
+    read_trimmed confirm "确认申请证书并更新 Nginx/Caddy？输入 YES 继续: "
     [[ "$confirm" == "YES" ]] || return 1
 
     idx=${#SITE_DOMAINS[@]}
@@ -2022,7 +2177,11 @@ remove_sni_stack_site() {
         echo -e "${GREEN}${num}.${PLAIN} ${SITE_DOMAINS[$i]} -> ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]}"
     done
     echo -e "------------------------------------------------"
-    read -p "请输入要删除的序号: " choice
+    read_trimmed choice "请输入要删除的序号: "
+    if [[ -z "$choice" || "$choice" == "0" ]]; then
+        echo -e "${BLUE}已取消删除。${PLAIN}"
+        return 0
+    fi
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#SITE_DOMAINS[@]} )); then
         echo -e "${RED}❌ 序号无效。${PLAIN}"
         return 1
@@ -2030,7 +2189,7 @@ remove_sni_stack_site() {
 
     idx=$((choice - 1))
     domain="${SITE_DOMAINS[$idx]}"
-    read -p "确认从 443 分流中删除 ${domain}？输入 YES 继续: " confirm
+    read_trimmed confirm "确认从 443 分流中删除 ${domain}？输入 YES 继续: "
     [[ "$confirm" == "YES" ]] || return 1
 
     new_domains=()
@@ -2049,7 +2208,7 @@ remove_sni_stack_site() {
 
     apply_sni_stack_runtime_config || return 1
 
-    read -p "是否同时删除 ${domain} 的 Caddy 证书文件？(y/n，默认 n): " delete_cert
+    read_trimmed delete_cert "是否同时删除 ${domain} 的 Caddy 证书文件？(y/n，默认 n): "
     if [[ "$delete_cert" =~ ^[Yy]$ ]]; then
         rm -f "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"
         rm -f "/root/cert/${domain}.crt" "/root/cert/${domain}.key"
@@ -2066,7 +2225,7 @@ manage_sni_stack_sites() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}🌐 443 网站/反代域名管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "用于已经完成 [18] 443 单入口初始化后的日常维护。"
+        echo -e "用于已经完成 443 单入口首次配置后的日常维护。"
         echo -e "新增网站不需要重跑完整向导，只需要把域名指向本机后端端口。"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 查看当前网站/反代域名${PLAIN}"
@@ -2079,7 +2238,7 @@ manage_sni_stack_sites() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read -p "👉 请选择操作: " choice
+        read_trimmed choice "👉 请选择操作: "
         case "$choice" in
             1) list_sni_stack_sites ;;
             2) add_sni_stack_site ;;
@@ -2256,7 +2415,7 @@ func_caddy_cf_health_check() {
                 echo -e "    ${GREEN}软链接状态: /root/cert 已正确挂载${PLAIN}"
                 ((ok_count++))
             else
-                echo -e "    ${YELLOW}软链接状态: 缺失或失效，建议执行维护菜单 [4]${PLAIN}"
+                echo -e "    ${YELLOW}软链接状态: 缺失或失效，建议执行维护菜单 [9] 重建软链接${PLAIN}"
                 ((warn_count++))
             fi
 
@@ -2288,7 +2447,7 @@ func_caddy_cf_health_check() {
         echo -e "${GREEN}✅ 清单文件存在: /root/cert/caddy_cf_manifest.txt${PLAIN}"
         ((ok_count++))
     else
-        echo -e "${YELLOW}⚠️ 清单文件不存在，建议执行维护菜单 [7] 重建。${PLAIN}"
+        echo -e "${YELLOW}⚠️ 清单文件不存在，建议执行维护菜单 [10] 重建。${PLAIN}"
         ((warn_count++))
     fi
 
@@ -2462,9 +2621,9 @@ EOF
     echo -e "------------------------------------------------"
     echo -e "${CYAN}自动修复结果: ${GREEN}${fixed_count} 已修复${PLAIN} / ${YELLOW}${warn_count} 警告${PLAIN} / ${RED}${fail_count} 失败${PLAIN}"
     if [[ "$fail_count" -gt 0 ]]; then
-        echo -e "${RED}存在失败项，建议先执行维护菜单 [8] 体检复查并查看 caddy 日志。${PLAIN}"
+        echo -e "${RED}存在失败项，建议先执行维护菜单 [12] 体检复查并查看 caddy 日志。${PLAIN}"
     else
-        echo -e "${GREEN}自动修复流程完成，可执行维护菜单 [8] 复检确认。${PLAIN}"
+        echo -e "${GREEN}自动修复流程完成，可执行维护菜单 [12] 复检确认。${PLAIN}"
     fi
 }
 
@@ -2499,7 +2658,7 @@ func_caddy_cf_maintenance_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local m_choice
-        read -p "👉 请选择操作: " m_choice
+        read_trimmed m_choice "👉 请选择操作: "
 
         case "$m_choice" in
             1) m_choice=11 ;;
@@ -2531,8 +2690,7 @@ func_caddy_cf_maintenance_menu() {
                 mkdir -p /root/.config/vps-panel
                 chmod 700 /root/.config/vps-panel
                 echo -e "${CYAN}👇 请输入新的 Cloudflare API Token${PLAIN}"
-                read -p "CF Token: " new_token
-                echo ""
+                read_secret_trimmed new_token "CF Token: "
                 if [[ -z "$new_token" || ${#new_token} -lt 20 ]]; then
                     echo -e "${RED}❌ Token 长度异常，更新取消。${PLAIN}"
                 else
@@ -2562,7 +2720,8 @@ func_caddy_cf_maintenance_menu() {
                 local acme_bin="/root/.acme.sh/acme.sh"
                 local cf_env_file="/root/.config/vps-panel/cloudflare.env"
 
-                read -p "👉 请输入要重签的域名: " domain
+                read_trimmed domain "👉 请输入要重签的域名: "
+                domain=$(normalize_domain_input "$domain")
                 if ! is_valid_domain "$domain"; then
                     echo -e "${RED}❌ 域名格式无效。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
@@ -2570,7 +2729,7 @@ func_caddy_cf_maintenance_menu() {
                 fi
 
                 if [[ ! -x "$acme_bin" ]]; then
-                    echo -e "${RED}❌ 未检测到 acme.sh，请先运行 [18] 初始化。${PLAIN}"
+                    echo -e "${RED}❌ 未检测到 acme.sh，请先运行主菜单 [19] -> [1] 首次配置 443 单入口。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -2586,7 +2745,7 @@ func_caddy_cf_maintenance_menu() {
 
                 if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
                     echo -e "${RED}❌ 证书签发失败：${domain}${PLAIN}"
-                    echo -e "${YELLOW}   提示：建议先执行本菜单 [9] 自动修复再重试。${PLAIN}"
+                    echo -e "${YELLOW}   提示：建议先执行本菜单 [13] 自动修复再重试。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -2617,7 +2776,7 @@ func_caddy_cf_maintenance_menu() {
             4)
                 local link_mode domain
                 mkdir -p /root/cert
-                read -p "❓ 重建全部链接还是单域名？(all/one): " link_mode
+                read_trimmed link_mode "❓ 重建全部链接还是单域名？(all/one): "
 
                 if [[ "$link_mode" == "all" ]]; then
                     local relink_count=0
@@ -2634,7 +2793,8 @@ func_caddy_cf_maintenance_menu() {
                     generate_caddy_cf_manifest
                     echo -e "${GREEN}✅ 已重建 ${relink_count} 个域名的证书软链接。${PLAIN}"
                 else
-                    read -p "👉 请输入域名: " domain
+                    read_trimmed domain "👉 请输入域名: "
+                    domain=$(normalize_domain_input "$domain")
                     if ! is_valid_domain "$domain"; then
                         echo -e "${RED}❌ 域名格式无效。${PLAIN}"
                         read -n 1 -s -r -p "按任意键继续..."
@@ -2653,14 +2813,15 @@ func_caddy_cf_maintenance_menu() {
 
             5)
                 local domain purge_acme
-                read -p "👉 请输入要删除的域名: " domain
+                read_trimmed domain "👉 请输入要删除的域名: "
+                domain=$(normalize_domain_input "$domain")
                 if ! is_valid_domain "$domain"; then
                     echo -e "${RED}❌ 域名格式无效。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
 
-                read -p "❓ 确认删除 ${domain} 的配置与证书？(y/n): " yn
+                read_trimmed yn "❓ 确认删除 ${domain} 的配置与证书？(y/n): "
                 if [[ ! "$yn" =~ ^[Yy]$ ]]; then
                     echo -e "${BLUE}已取消删除。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
@@ -2671,7 +2832,7 @@ func_caddy_cf_maintenance_menu() {
                 rm -f "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"
                 rm -f "/root/cert/${domain}.crt" "/root/cert/${domain}.key"
 
-                read -p "❓ 是否同时删除 acme.sh 历史记录？(y/n，默认n，建议保留): " purge_acme
+                read_trimmed purge_acme "❓ 是否同时删除 acme.sh 历史记录？(y/n，默认n，建议保留): "
                 if [[ "$purge_acme" =~ ^[Yy]$ ]]; then
                     /root/.acme.sh/acme.sh --remove -d "$domain" --ecc >/dev/null 2>&1 || true
                     rm -rf "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/${domain}"
@@ -2853,9 +3014,15 @@ func_caddy_delete_cert() {
     echo -e "${YELLOW}功能介绍：该脚本将彻底清理指定域名的证书与配置，确保服务器环境干净。${PLAIN}"
     echo -e "------------------------------------------------"
     
-    read -p "👉 请输入要强杀清理的精准域名 (如 panel.site.com): " domain
+    read_trimmed domain "👉 请输入要强杀清理的精准域名 (如 panel.site.com): "
+    domain=$(normalize_domain_input "$domain")
     if [[ -z "$domain" ]]; then
         echo -e "${RED}❌ 域名不能为空！${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+    if ! is_valid_domain "$domain"; then
+        echo -e "${RED}❌ 域名格式无效，已取消清理。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -2936,10 +3103,11 @@ func_caddy_add_insecure() {
     
     local domain
     local port
-    read -p "👉 请输入解析后的域名 (如 panel.site.com): " domain
-    read -p "👉 请输入面板 HTTPS 本地映射端口 (如 40000): " port
+    read_trimmed domain "👉 请输入解析后的域名 (如 panel.site.com): "
+    read_trimmed port "👉 请输入面板 HTTPS 本地映射端口 (如 40000): "
+    domain=$(normalize_domain_input "$domain")
     
-    if [[ -z "$domain" || -z "$port" || ! "$port" =~ ^[0-9]+$ ]]; then
+    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
         echo -e "${RED}❌ 域名为空或端口格式错误！已取消操作。${PLAIN}"
         read -n 1 -s -r -p "按任意键继续..."
         return
@@ -2991,14 +3159,14 @@ func_security() {
 
     local final_p
     # 交互提示优化：引导用户使用高位端口避开特权冲突
-    read -p "👉 当前生效的 SSH 端口为 $current_p, 请输入新端口 [10000-65535] (回车保持不变): " final_p
+    read_trimmed final_p "👉 当前生效的 SSH 端口为 $current_p, 请输入新端口 [10000-65535] (回车保持不变): "
     final_p=${final_p:-$current_p}
 
     if [[ "$final_p" != "$current_p" ]]; then
         
         # [严格检验] 端口合法性
-        if ! [[ "$final_p" =~ ^[0-9]+$ ]] || [ "$final_p" -lt 10000 ] || [ "$final_p" -gt 65535 ]; then
-            echo -e "${RED}❌ 错误：无效的端口号！必须是 1-65535 之间的纯数字。${PLAIN}"
+        if ! [[ "$final_p" =~ ^[0-9]+$ ]] || (( 10#$final_p < 10000 || 10#$final_p > 65535 )); then
+            echo -e "${RED}❌ 错误：无效的端口号！必须是 10000-65535 之间的纯数字。${PLAIN}"
             read -n 1 -s -r -p "按任意键返回..."
             return
         fi
@@ -3122,7 +3290,7 @@ func_fail2ban() {
     echo -e "------------------------------------------------"
     
     local f_choice
-    read -p "👉 请选择操作: " f_choice
+    read_trimmed f_choice "👉 请选择操作: "
     
     case $f_choice in
         1|2)
@@ -3234,7 +3402,7 @@ func_docker_manage() {
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         
         local c
-        read -p "👉 请选择操作: " c
+        read_trimmed c "👉 请选择操作: "
         case $c in
             1) 
                 echo -e "${CYAN}▶ 正在配置 Docker 安全策略...${PLAIN}"
@@ -3338,7 +3506,7 @@ func_tcp_tune() {
     echo -e "👉 推荐浏览器访问: ${BLUE}https://omnitt.com/${PLAIN} 获取针对您网络的定制参数"
     echo -e "------------------------------------------------"
     
-    read -p "❓ 准备好粘贴参数了吗？(y 继续 / n 取消): " yn
+    read_trimmed yn "❓ 准备好粘贴参数了吗？(y 继续 / n 取消): "
     if [[ ! "$yn" =~ ^[Yy]$ ]]; then return; fi
     
     local temp_f="/etc/sysctl.d/99-omnitt-tune.conf"
@@ -3416,7 +3584,7 @@ func_zram_swap() {
     echo -e "------------------------------------------------"
     
     local choice
-    read -p "👉 请选择您的调优挡位 [1/2/3] (直接回车按内存自动匹配): " choice
+    read_trimmed choice "👉 请选择您的调优挡位 [1/2/3] (直接回车按内存自动匹配): "
     
     if [[ -z "$choice" ]]; then
         if [[ "$mem" -lt 1024 ]]; then choice=1
@@ -3595,7 +3763,7 @@ install_xanmod_kernel() {
 
     echo -e "${RED}⚠️  XanMod 是第三方性能内核，可能影响 DKMS/驱动/部分云厂商兼容性。${PLAIN}"
     echo -e "${YELLOW}建议先确认有快照、救援控制台，且知道如何从 GRUB 切回旧内核。${PLAIN}"
-    read -p "确认安装 XanMod LTS 兼容版内核请输入 YES: " confirm
+    read_trimmed confirm "确认安装 XanMod LTS 兼容版内核请输入 YES: "
     [[ "$confirm" == "YES" ]] || { echo -e "${BLUE}已取消 XanMod 安装。${PLAIN}"; return 1; }
 
     echo -e "${CYAN}▶ 正在添加 XanMod 官方 APT 源并安装 LTS 兼容版内核...${PLAIN}"
@@ -3631,7 +3799,7 @@ func_install_kernel() {
     echo -e "${CYAN}================================================${PLAIN}"
 
     local kernel_choice virt
-    read -p "👉 请选择要安装的内核类型 [推荐 1]: " kernel_choice
+    read_trimmed kernel_choice "👉 请选择要安装的内核类型 [推荐 1]: "
     kernel_choice="${kernel_choice:-1}"
     [[ "$kernel_choice" == "0" ]] && return
 
@@ -3709,7 +3877,7 @@ func_clean_kernel() {
     echo -e "------------------------------------------------"
 
     local k_choice
-    read -p "👉 请输入要卸载的序号: " k_choice
+    read_trimmed k_choice "👉 请输入要卸载的序号: "
 
     if [[ "$k_choice" == "0" ]]; then
         echo -e "${BLUE}已取消卸载操作。${PLAIN}"
@@ -3784,7 +3952,7 @@ func_test_scripts() {
         
         local t
         local ran_test=false
-        read -p "👉 请输入对应序号选择: " t
+        read_trimmed t "👉 请输入对应序号选择: "
         case $t in
             1) ran_test=true; run_remote_script "运行 YABS 硬件性能测试" "https://yabs.sh" ;;
             2) ran_test=true; run_remote_script "运行融合怪详细测速" "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh" ;;
@@ -3865,7 +4033,7 @@ func_dns_unlock() {
     echo -e "------------------------------------------------"
     
     local yn
-    read -p "❓ 确认现在运行 Alice DNS 解锁脚本吗？(y/n): " yn
+    read_trimmed yn "❓ 确认现在运行 Alice DNS 解锁脚本吗？(y/n): "
     if [[ "$yn" =~ ^[Yy]$ ]]; then
         wget https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh && bash dns-unlock.sh
     else
@@ -3884,7 +4052,7 @@ func_ip_sentinel() {
     echo -e "${YELLOW}该脚本将持续监控并修正路由，防止服务器 IP 被错误定位至中国大陆。${PLAIN}"
     echo -e "------------------------------------------------"
     
-    read -p "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(y/n): " yn
+    read_trimmed yn "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(y/n): "
     if [[ "$yn" =~ ^[Yy]$ ]]; then
         run_remote_script "安装并配置 IP Sentinel" "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh"
     else
@@ -3966,7 +4134,7 @@ func_sublinkpro() {
     echo -e "${YELLOW}💡 SublinkPro 对外访问端口将使用: ${CYAN}$sublink_port${PLAIN}"
     echo -e "------------------------------------------------"
     
-    read -p "❓ 确认现在开始一键安装吗？(y/n): " yn
+    read_trimmed yn "❓ 确认现在开始一键安装吗？(y/n): "
     if [[ "$yn" =~ ^[Yy]$ ]]; then
         mkdir -p "$install_dir"
         cd "$install_dir" || return
@@ -4040,7 +4208,7 @@ func_miaomiaowu() {
     echo -e "------------------------------------------------"
 
     local yn
-    read -p "确认现在部署 妙妙屋订阅管理 吗？(y/n): " yn
+    read_trimmed yn "确认现在部署 妙妙屋订阅管理 吗？(y/n): "
     if [[ "$yn" =~ ^[Yy]$ ]]; then
         mkdir -p "$install_dir"/{data,subscribes,rule_templates}
         cd "$install_dir" || return
@@ -4128,7 +4296,7 @@ func_substore() {
     echo -e "------------------------------------------------"
 
     local yn
-    read -p "确认现在部署 Sub-Store 吗？(y/n): " yn
+    read_trimmed yn "确认现在部署 Sub-Store 吗？(y/n): "
     if [[ "$yn" =~ ^[Yy]$ ]]; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
@@ -4202,7 +4370,7 @@ func_update_subscription_tools() {
     echo -e "${CYAN}================================================${PLAIN}"
 
     local choice
-    read -p "请选择要更新的项目: " choice
+    read_trimmed choice "请选择要更新的项目: "
     [[ "$choice" == "0" ]] && return
 
     ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
@@ -4226,7 +4394,7 @@ func_update_subscription_tools() {
     echo -e "------------------------------------------------"
     echo -e "${GREEN}✅ 更新流程已执行完成。${PLAIN}"
     local prune_confirm
-    read -p "是否清理无标签旧镜像以释放磁盘空间？(y/n，默认 n): " prune_confirm
+    read_trimmed prune_confirm "是否清理无标签旧镜像以释放磁盘空间？(y/n，默认 n): "
     if [[ "$prune_confirm" =~ ^[Yy]$ ]]; then
         docker image prune -f
     fi
@@ -4266,7 +4434,7 @@ func_dockge() {
     echo -e "------------------------------------------------"
 
     local yn
-    read -p "确认现在部署 Dockge 吗？(y/n): " yn
+    read_trimmed yn "确认现在部署 Dockge 吗？(y/n): "
     if [[ "$yn" =~ ^[Yy]$ ]]; then
         mkdir -p "$install_dir" "$stacks_dir"
         cd "$install_dir" || return
@@ -4391,10 +4559,10 @@ migrate_compose_project_to_dockge() {
     echo -e "${YELLOW}Compose：${CYAN}${source_compose}${PLAIN}"
     echo -e "${YELLOW}说明：会移动整个项目目录，保留相对挂载的数据目录。${PLAIN}"
     echo -e "${YELLOW}如果项目使用 Docker 命名卷，建议保持 stack 名称与原目录名一致。${PLAIN}"
-    read -p "确认迁移这个项目吗？(y/n): " yn
+    read_trimmed yn "确认迁移这个项目吗？(y/n): "
     [[ "$yn" =~ ^[Yy]$ ]] || { echo -e "${BLUE}已取消迁移 ${source_dir}。${PLAIN}"; return 0; }
 
-    read -p "是否先停止旧容器并在新目录重新启动？(Y/n): " restart_confirm
+    read_trimmed restart_confirm "是否先停止旧容器并在新目录重新启动？(Y/n): "
     if [[ "$restart_confirm" =~ ^[Nn]$ ]]; then
         restart_stack="false"
     fi
@@ -4464,7 +4632,7 @@ func_migrate_compose_to_dockge() {
     echo -e "${RED}  0. 返回${PLAIN}"
     echo -e "------------------------------------------------"
 
-    read -p "请选择要迁移的项目: " choice
+    read_trimmed choice "请选择要迁移的项目: "
     case "$choice" in
         0) return ;;
         a|A)
@@ -4478,7 +4646,7 @@ func_migrate_compose_to_dockge() {
             fi
             ;;
         c|C)
-            read -p "请输入已有 Compose 项目目录: " custom_dir
+            read_trimmed custom_dir "请输入已有 Compose 项目目录: "
             migrate_compose_project_to_dockge "$custom_dir" "$stacks_dir"
             ;;
         *)
@@ -4505,7 +4673,7 @@ func_rescue_panel() {
     echo -e "------------------------------------------------"
     
     local yn
-    read -p "❓ 确定要重置面板为 HTTP 模式吗？(y/n): " yn
+    read_trimmed yn "❓ 确定要重置面板为 HTTP 模式吗？(y/n): "
     if [[ "$yn" =~ ^[Yy]$ ]]; then
         
         # 核心修改：使用我们的全局极简包管理器！兼容了包名差异。
@@ -4579,7 +4747,7 @@ func_port_kill() {
         echo -e "------------------------------------------------"
         
         local p_choice
-        read -p "❓ 请输入要强杀释放的端口号 (输入 0 返回主菜单): " p_choice
+        read_trimmed p_choice "❓ 请输入要强杀释放的端口号 (输入 0 返回主菜单): "
         
         if [[ "$p_choice" == "0" ]]; then break; fi
         
@@ -4803,7 +4971,7 @@ func_backup_center() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local b_choice
-        read -p "👉 请选择操作: " b_choice
+        read_trimmed b_choice "👉 请选择操作: "
 
         case $b_choice in
             1)
@@ -4877,7 +5045,7 @@ func_backup_center() {
                 done
 
                 local r_choice
-                read -p "👉 请输入要回滚的序号: " r_choice
+                read_trimmed r_choice "👉 请输入要回滚的序号: "
                 if ! [[ "$r_choice" =~ ^[0-9]+$ ]] || [[ "$r_choice" -lt 1 ]] || [[ "$r_choice" -gt ${#backups[@]} ]]; then
                     echo -e "${RED}❌ 无效序号，已取消回滚。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
@@ -4885,7 +5053,7 @@ func_backup_center() {
                 fi
 
                 local target_file="${backups[$((r_choice-1))]}"
-                read -p "❓ 确认从 [$(basename "$target_file")] 回滚系统配置吗？(y/n): " yn
+                read_trimmed yn "❓ 确认从 [$(basename "$target_file")] 回滚系统配置吗？(y/n): "
                 if [[ ! "$yn" =~ ^[Yy]$ ]]; then
                     echo -e "${BLUE}已取消回滚操作。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
@@ -5073,7 +5241,7 @@ func_net_kernel_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local nk_choice
-        read -p "👉 请选择操作: " nk_choice
+        read_trimmed nk_choice "👉 请选择操作: "
         case $nk_choice in
             1) func_bbr_manage ;;
             2) func_tcp_tune ;;
@@ -5114,7 +5282,7 @@ func_panel_deploy_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local pd_choice
-        read -p "👉 请选择操作: " pd_choice
+        read_trimmed pd_choice "👉 请选择操作: "
         case $pd_choice in
             1) func_xpanel ;;
             2) func_singbox ;;
@@ -5159,14 +5327,14 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local sni_choice
-        read -p "👉 请选择操作: " sni_choice
+        read_trimmed sni_choice "👉 请选择操作: "
         case "$sni_choice" in
             1) func_caddy_cf_reality_wizard ;;
-            2) manage_sni_stack_sites ;;
+            2) manage_sni_stack_sites; continue ;;
             3) sni_stack_health_check ;;
             4) reapply_sni_stack_from_env ;;
             5) check_sni_stack_subscription_hint ;;
-            6) func_caddy_cf_maintenance_menu ;;
+            6) func_caddy_cf_maintenance_menu; continue ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
@@ -5219,7 +5387,7 @@ main_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         
         local choice
-        read -p "👉 请输入对应数字选择功能: " choice
+        read_trimmed choice "👉 请输入对应数字选择功能: "
         
         case $choice in
             1) func_preflight_check ;;

@@ -18,6 +18,31 @@ readonly BLUE='\033[0;34m'
 readonly GREEN='\033[0;32m'
 readonly NC='\033[0m'
 
+trim_input() {
+    local value="$*"
+    value="${value//$'\r'/}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+}
+
+read_trimmed() {
+    local __target="$1"
+    local prompt="${2:-}"
+    local input
+    read -r -p "$prompt" input
+    printf -v "$__target" '%s' "$(trim_input "$input")"
+}
+
+read_secret_trimmed() {
+    local __target="$1"
+    local prompt="${2:-}"
+    local input
+    read -r -s -p "$prompt" input
+    echo ""
+    printf -v "$__target" '%s' "$(trim_input "$input")"
+}
+
 # 网络超时设置
 readonly SHORT_CONNECT_TIMEOUT=5
 readonly SHORT_MAX_TIMEOUT=7
@@ -121,7 +146,7 @@ confirm_danger() {
     local confirm
     echo -e "${RED}高风险操作: ${title}${NC}"
     echo -e "${YELLOW}影响: ${impact}${NC}"
-    read -p "确认继续请输入 YES: " confirm
+    read_trimmed confirm "确认继续请输入 YES: "
     [[ "$confirm" == "YES" ]]
 }
 
@@ -296,16 +321,22 @@ show_port_list() {
     return 0
 }
 
+is_valid_port_number() {
+    local port="$1"
+    [[ "$port" =~ ^[0-9]+$ ]] && (( 10#$port >= 1 && 10#$port <= 65535 ))
+}
+
 parse_multi_choice_input() {
     local input="$1"
     local max_choice="$2"
     local -n result_array=$3
+    input="${input//，/,}"
     IFS=',' read -ra CHOICES <<< "$input"
     result_array=()
     for choice in "${CHOICES[@]}"; do
-        choice=$(echo "$choice" | tr -d ' ')
-        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "$max_choice" ]; then
-            result_array+=("$choice")
+        choice=$(trim_input "$choice")
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( 10#$choice >= 1 && 10#$choice <= max_choice )); then
+            result_array+=("$((10#$choice))")
         else
             echo -e "${RED}无效选择: $choice${NC}"
         fi
@@ -315,34 +346,40 @@ parse_multi_choice_input() {
 parse_comma_separated_input() {
     local input="$1"
     local -n result_array=$2
+    input="${input//，/,}"
     IFS=',' read -ra result_array <<< "$input"
     for i in "${!result_array[@]}"; do
-        result_array[$i]=$(echo "${result_array[$i]}" | tr -d ' ')
+        result_array[$i]=$(trim_input "${result_array[$i]}")
     done
 }
 
 parse_port_range_input() {
     local input="$1"
     local -n result_array=$2
+    input="${input//，/,}"
+    input="${input//：/:}"
+    input="${input//－/-}"
+    input="${input//—/-}"
     IFS=',' read -ra PARTS <<< "$input"
     result_array=()
     for part in "${PARTS[@]}"; do
-        part=$(echo "$part" | tr -d ' ')
+        part=$(trim_input "$part")
+        part="${part//:/-}"
         if is_port_range "$part"; then
             local start_port=$(echo "$part" | cut -d'-' -f1)
             local end_port=$(echo "$part" | cut -d'-' -f2)
-            if [ "$start_port" -gt "$end_port" ]; then
+            if (( 10#$start_port > 10#$end_port )); then
                 echo -e "${RED}错误：端口段 $part 起始端口大于结束端口${NC}"
                 return 1
             fi
-            if [ "$start_port" -lt 1 ] || [ "$start_port" -gt 65535 ] || [ "$end_port" -lt 1 ] || [ "$end_port" -gt 65535 ]; then
+            if ! is_valid_port_number "$start_port" || ! is_valid_port_number "$end_port"; then
                 echo -e "${RED}错误：端口段 $part 包含无效端口${NC}"
                 return 1
             fi
-            result_array+=("$part")
+            result_array+=("$((10#$start_port))-$((10#$end_port))")
         elif [[ "$part" =~ ^[0-9]+$ ]]; then
-            if [ "$part" -ge 1 ] && [ "$part" -le 65535 ]; then
-                result_array+=("$part")
+            if is_valid_port_number "$part"; then
+                result_array+=("$((10#$part))")
             else
                 echo -e "${RED}错误：端口号 $part 无效${NC}"
                 return 1
@@ -538,7 +575,7 @@ choose_billing_mode() {
     echo -e "${BLUE}请选择流量配额统计口径：${NC}" >&2
     echo "1. 单向计费：只计算 VPS 出站流量，接近用户本地实际使用量" >&2
     echo "2. 双向计费：计算入站 + 出站，接近 VPS 商家后台统计口径" >&2
-    read -p "请选择 [1/2，回车默认${default_choice}]: " billing_choice
+    read_trimmed billing_choice "请选择 [1/2，回车默认${default_choice}]: "
     billing_choice="${billing_choice:-$default_choice}"
 
     case "$billing_choice" in
@@ -941,7 +978,7 @@ manage_daily_usage_reports() {
     echo "3. 查看近7日趋势"
     echo "4. 查看指定日期报表"
     echo "0. 返回主菜单"
-    read -p "请选择 [0-4]: " choice
+    read_trimmed choice "请选择 [0-4]: "
 
     case $choice in
         1)
@@ -953,17 +990,17 @@ manage_daily_usage_reports() {
             local day_key=$(get_beijing_time -d "yesterday" +%F)
             show_daily_report_for_day "$day_key"
             echo
-            read -p "按回车返回..."
+            read -r -p "按回车返回..."
             manage_daily_usage_reports
             ;;
         3)
             show_recent_7_days_trend
             echo
-            read -p "按回车返回..."
+            read -r -p "按回车返回..."
             manage_daily_usage_reports
             ;;
         4)
-            read -p "请输入日期 (YYYY-MM-DD): " day_input
+            read_trimmed day_input "请输入日期 (YYYY-MM-DD): "
             if [[ ! "$day_input" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
                 echo -e "${RED}日期格式错误${NC}"
                 sleep 1
@@ -978,7 +1015,7 @@ manage_daily_usage_reports() {
             fi
             show_daily_report_for_day "$day_input"
             echo
-            read -p "按回车返回..."
+            read -r -p "按回车返回..."
             manage_daily_usage_reports
             ;;
         0)
@@ -1056,7 +1093,7 @@ show_main_menu() {
     echo -e "${BLUE}9.${NC} 流量日报与趋势报表"
     echo -e "${BLUE}0.${NC} 退出"
     echo
-    read -p "请选择操作 [0-9]: " choice
+    read_trimmed choice "请选择操作 [0-9]: "
 
     case $choice in
         1) manage_port_monitoring ;;
@@ -1078,7 +1115,7 @@ manage_port_monitoring() {
     echo "1. 添加端口监控"
     echo "2. 删除端口监控"
     echo "0. 返回主菜单"
-    read -p "请选择操作 [0-2]: " choice
+    read_trimmed choice "请选择操作 [0-2]: "
     case $choice in
         1) add_port_monitoring ;;
         2) remove_port_monitoring ;;
@@ -1123,10 +1160,20 @@ add_port_monitoring() {
     fi
 
     echo "────────────────────────────────────────────────────────"
-    read -p "请输入要监控的端口号（多端口使用逗号,分隔,端口段使用-分隔）: " port_input
+    read_trimmed port_input "请输入要监控的端口号（多端口使用逗号,分隔,端口段使用-分隔）: "
+    if [ -z "$port_input" ] || [ "$port_input" = "0" ]; then
+        echo -e "${YELLOW}已取消添加端口监控${NC}"
+        sleep 1
+        manage_port_monitoring
+        return
+    fi
 
     local PORTS=()
-    parse_port_range_input "$port_input" PORTS
+    if ! parse_port_range_input "$port_input" PORTS; then
+        sleep 2
+        manage_port_monitoring
+        return
+    fi
     local valid_ports=()
 
     for port in "${PORTS[@]}"; do
@@ -1148,7 +1195,7 @@ add_port_monitoring() {
     local port_list=$(IFS=','; echo "${valid_ports[*]}")
     while true; do
         echo "请输入配额值（0为无限制）（要带单位MB/GB/T）:"
-        read -p "流量配额(回车默认0): " quota_input
+        read_trimmed quota_input "流量配额(回车默认0): "
         if [ -z "$quota_input" ]; then quota_input="0"; fi
 
         local QUOTAS=()
@@ -1177,7 +1224,7 @@ add_port_monitoring() {
     billing_mode=$(choose_billing_mode "dual")
 
     echo
-    read -p "请输入当前规则备注(可选，直接回车跳过): " remark_input
+    read_trimmed remark_input "请输入当前规则备注(可选，直接回车跳过): "
     local REMARKS=()
     if [ -n "$remark_input" ]; then
         parse_comma_separated_input "$remark_input" REMARKS
@@ -1242,7 +1289,13 @@ remove_port_monitoring() {
     if ! show_port_list; then sleep 2; manage_port_monitoring; return; fi
     echo
 
-    read -p "请选择要删除的端口（多端口使用逗号,分隔）: " choice_input
+    read_trimmed choice_input "请选择要删除的端口（多端口使用逗号,分隔）: "
+    if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
+        echo -e "${YELLOW}已取消删除端口监控${NC}"
+        sleep 1
+        manage_port_monitoring
+        return
+    fi
     local valid_choices=()
     local ports_to_delete=()
     parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices
@@ -1256,7 +1309,7 @@ remove_port_monitoring() {
         sleep 2; remove_port_monitoring; return
     fi
 
-    read -p "确认删除这些端口的监控? [y/N]: " confirm
+    read_trimmed confirm "确认删除这些端口的监控? [y/N]: "
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
         local deleted_count=0
         for port in "${ports_to_delete[@]}"; do
@@ -1374,7 +1427,13 @@ set_port_bandwidth_limit() {
     local active_ports=($(get_active_ports))
     if ! show_port_list; then sleep 2; manage_traffic_limits; return; fi
 
-    read -p "请选择要限制的端口（多端口使用逗号,分隔） [1-${#active_ports[@]}]: " choice_input
+    read_trimmed choice_input "请选择要限制的端口（多端口使用逗号,分隔） [1-${#active_ports[@]}]: "
+    if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
+        echo -e "${YELLOW}已取消设置带宽限制${NC}"
+        sleep 1
+        manage_traffic_limits
+        return
+    fi
     local valid_choices=()
     local ports_to_limit=()
     parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices
@@ -1390,7 +1449,7 @@ set_port_bandwidth_limit() {
 
     local port_list=$(IFS=','; echo "${ports_to_limit[*]}")
     echo "请输入限制值（0为无限制）（要带单位Kbps/Mbps/Gbps）:"
-    read -p "带宽限制: " limit_input
+    read_trimmed limit_input "带宽限制: "
 
     local LIMITS=()
     parse_comma_separated_input "$limit_input" LIMITS
@@ -1433,7 +1492,13 @@ set_port_quota_limit() {
     echo -e "${BLUE}=== 设置端口流量配额 ===${NC}"
     local active_ports=($(get_active_ports))
     if ! show_port_list; then sleep 2; manage_traffic_limits; return; fi
-    read -p "请选择要设置配额的端口（多端口使用逗号,分隔） [1-${#active_ports[@]}]: " choice_input
+    read_trimmed choice_input "请选择要设置配额的端口（多端口使用逗号,分隔） [1-${#active_ports[@]}]: "
+    if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
+        echo -e "${YELLOW}已取消设置流量配额${NC}"
+        sleep 1
+        manage_traffic_limits
+        return
+    fi
 
     local valid_choices=()
     local ports_to_quota=()
@@ -1450,7 +1515,7 @@ set_port_quota_limit() {
 
     while true; do
         echo "请输入配额值（0为无限制）（要带单位MB/GB/T）:"
-        read -p "流量配额(回车默认0): " quota_input
+        read_trimmed quota_input "流量配额(回车默认0): "
         if [ -z "$quota_input" ]; then quota_input="0"; fi
 
         local QUOTAS=()
@@ -1512,7 +1577,7 @@ manage_traffic_limits() {
     echo "1. 设置端口带宽限制（速率控制）"
     echo "2. 设置端口流量配额（总量控制）"
     echo "0. 返回主菜单"
-    read -p "请选择操作 [0-2]: " choice
+    read_trimmed choice "请选择操作 [0-2]: "
     case $choice in
         1) set_port_bandwidth_limit ;;
         2) set_port_quota_limit ;;
@@ -1646,7 +1711,7 @@ manage_traffic_reset() {
     echo "1. 每月流量重置日设置"
     echo "2. 立即重置"
     echo "0. 返回主菜单"
-    read -p "请选择操作 [0-2]: " choice
+    read_trimmed choice "请选择操作 [0-2]: "
     case $choice in
         1) set_reset_day ;;
         2) immediate_reset ;;
@@ -1660,7 +1725,13 @@ set_reset_day() {
     local active_ports=($(get_active_ports))
     if ! show_port_list; then sleep 2; manage_traffic_reset; return; fi
     
-    read -p "请选择要设置重置日期的端口序号（多端口逗号分隔）: " choice_input
+    read_trimmed choice_input "请选择要设置重置日期的端口序号（多端口逗号分隔）: "
+    if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
+        echo -e "${YELLOW}已取消设置重置日期${NC}"
+        sleep 1
+        manage_traffic_reset
+        return
+    fi
     local valid_choices=()
     parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices
     
@@ -1671,7 +1742,7 @@ set_reset_day() {
         return
     fi
     
-    read -p "请输入每月的重置日期 (输入1-31，输入0代表取消自动重置): " reset_day
+    read_trimmed reset_day "请输入每月的重置日期 (输入1-31，输入0代表取消自动重置): "
     
     if ! [[ "$reset_day" =~ ^[0-9]+$ ]] || [ "$reset_day" -lt 0 ] || [ "$reset_day" -gt 31 ]; then
         echo -e "${RED}❌ 输入无效，请输入 0-31 之间的数字！${NC}"
@@ -1702,7 +1773,13 @@ immediate_reset() {
     local active_ports=($(get_active_ports))
     if ! show_port_list; then sleep 2; manage_traffic_reset; return; fi
     
-    read -p "请选择要立即重置的端口序号（多端口逗号分隔）: " choice_input
+    read_trimmed choice_input "请选择要立即重置的端口序号（多端口逗号分隔）: "
+    if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
+        echo -e "${YELLOW}已取消立即重置${NC}"
+        sleep 1
+        manage_traffic_reset
+        return
+    fi
     local valid_choices=()
     parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices
     
@@ -1779,7 +1856,7 @@ manage_configuration() {
     echo "1. 导出配置包"
     echo "2. 导入配置包"
     echo "0. 返回上级菜单"
-    read -p "请输入选择 [0-2]: " choice
+    read_trimmed choice "请输入选择 [0-2]: "
     case $choice in
         1) export_config ;;
         2) import_config ;;
@@ -1798,7 +1875,7 @@ export_config() {
 }
 
 import_config() {
-    read -p "配置包路径: " package_path
+    read_trimmed package_path "配置包路径: "
     if [ -f "$package_path" ]; then
         if confirm_danger "导入配置包" "会把配置包内容解压到系统根目录，覆盖现有 Port Traffic Dog 配置。"; then
             tar -xzf "$package_path" -C / 2>/dev/null
@@ -1851,7 +1928,7 @@ install_update_script() {
         rm -f "$temp_file"
     fi
 
-    read -p "按回车键返回菜单..."
+    read -r -p "按回车键返回菜单..."
     show_main_menu
 }
 
@@ -1911,8 +1988,8 @@ uninstall_script() {
 
 setup_interactive_tg() {
     echo -e "${BLUE}=== 部署 Telegram 交互式查询机器人 ===${NC}"
-    read -p "请输入 Bot Token (去@BotFather获取): " bot_token
-    read -p "请输入允许查询的 Chat ID (个人的ID或群组ID): " chat_id
+    read_secret_trimmed bot_token "请输入 Bot Token (去@BotFather获取): "
+    read_trimmed chat_id "请输入允许查询的 Chat ID (个人的ID或群组ID): "
 
     if [ -z "$bot_token" ] || [ -z "$chat_id" ]; then
         echo -e "${RED}Token或Chat ID不能为空，操作取消。${NC}"
@@ -1949,7 +2026,7 @@ EOF
     echo -e "💡 提示: 请确保在 @BotFather 关闭了机器人的 Group Privacy (Turn OFF)"
     echo -e "现在可发送 ${YELLOW}/t 端口号${NC}、${YELLOW}/all${NC}、${YELLOW}/yday${NC}、${YELLOW}/trend${NC}、${YELLOW}/day YYYY-MM-DD${NC}"
     echo
-    read -p "按回车键返回..."
+    read -r -p "按回车键返回..."
     manage_notifications
 }
 
@@ -1973,7 +2050,7 @@ manage_display_mode() {
     echo -e "${YELLOW}注意：商家后台包含系统更新、Docker、面板、探针等所有流量，不只包含被 dog 监控的端口。${NC}"
     echo -e "${YELLOW}如果你要给用户看 Clash/订阅里的实际用量，一般看“用户单向(出站)”更直观。${NC}"
     echo "0. 返回主菜单"
-    read -p "请选择 [0]: " mode_choice
+    read_trimmed mode_choice "请选择 [0]: "
 
     case $mode_choice in
         0)
@@ -2232,7 +2309,7 @@ manage_notifications() {
     echo "3. 原版企业 wx 机器人通知配置 (保留接口)"
     echo "0. 返回主菜单"
     echo
-    read -p "请选择操作 [0-3]: " choice
+    read_trimmed choice "请选择操作 [0-3]: "
 
     case $choice in
         1) setup_interactive_tg ;;
