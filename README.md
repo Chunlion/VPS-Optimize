@@ -33,7 +33,7 @@
 * ✅ **综合测试合集**：内置 YABS 硬件测试、融合怪测速、流媒体解锁检测及回程路由追踪。
 * ✅ **端口实时排查**：可视化查看端口占用情况，并支持**一键强杀**冲突进程。
 
-![hDs7YeIK27xezmFmDwYK5YYMYx3HkH3U.webp](https://cdn.nodeimage.com/i/hDs7YeIK27xezmFmDwYK5YYMYx3HkH3U.webp)
+![VPS-Optimize 面板预览](https://i.mji.rip/2026/04/28/551fa3d4709c7e1ee7c9a4827f9eed23.png)
 
 ---
 
@@ -147,7 +147,7 @@ REALITY dest/serverNames 必须写外部真实 HTTPS 站点，不要写面板域
 ## 六、 🔄 更新与维护
 
 * **热更新**：面板内置了自更新功能。只需在主菜单选择 `17`，即可同步 GitHub 最新代码并自动重载，无需重新下载脚本。
-* **反馈建议**：本项目部分逻辑由 AI 整合多位技术大神的开源作品而成，如有 Bug 请前往 GitHub 提交 Issue。
+* **反馈与联系**：如有 Bug 或建议，欢迎前往 GitHub 提交 Issue，也可以通过作者 GitHub 主页展示的邮箱联系。
 
 ---
 
