@@ -1053,6 +1053,18 @@ warn_if_public_bind() {
     return 0
 }
 
+confirm_danger() {
+    local title="$1"
+    local impact="$2"
+    local rollback="$3"
+    local confirm
+    echo -e "${RED}⚠️ 高风险操作：${title}${PLAIN}"
+    echo -e "${YELLOW}影响：${impact}${PLAIN}"
+    echo -e "${BLUE}回退：${rollback}${PLAIN}"
+    read -p "确认继续请输入 YES: " confirm
+    [[ "$confirm" == "YES" ]]
+}
+
 format_hostport() {
     local addr="$1"
     local port="$2"
@@ -2004,6 +2016,18 @@ manage_sni_stack_sites() {
 }
 
 func_caddy_cf_reality_wizard() {
+    if [[ -f /etc/vps-optimize/sni-stack.env ]]; then
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}检测到已有 443 单入口配置${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}如果只是新增网站或反代域名，请返回并选择 [2] 管理网站/反代域名。${PLAIN}"
+        echo -e "${YELLOW}继续首次配置会重写 Nginx/Caddy/REALITY 分流核心配置。${PLAIN}"
+        echo -e "------------------------------------------------"
+        grep -E '^(PANEL_DOMAIN|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT)=' /etc/vps-optimize/sni-stack.env 2>/dev/null || true
+        echo -e "------------------------------------------------"
+        confirm_danger "重新执行 443 首次配置" "将基于新输入重写 443 单入口核心配置，并重启 Nginx/Caddy。" "脚本会先创建备份，可从 443 维护菜单或备份目录回滚。" || return 1
+    fi
     collect_sni_stack_config || return 1
     probe_reality_sni "$REALITY_SNI" || return 1
     print_sni_stack_preview || return 1
@@ -2710,9 +2734,8 @@ func_caddy_clear_config() {
     
     # 检查主文件与模块化目录是否存在
     if [[ -f /etc/caddy/Caddyfile ]] || [[ -d /etc/caddy/conf.d ]]; then
-        echo -e "${YELLOW}⚠️ 警告：此操作将删除您所有的 Caddy 独立反代配置（原文件会自动备份）。${PLAIN}"
-        read -p "❓ 确定要清空 Caddy 配置吗？(y/n): " yn
-        if [[ "$yn" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}将清空 /etc/caddy/conf.d/*.caddy，并重置 /etc/caddy/Caddyfile 为模块化初始状态。${PLAIN}"
+        if confirm_danger "清空 Caddy 反代配置" "所有独立 Caddy 反代配置会失效，相关网站/面板可能暂时打不开。" "脚本会备份 Caddyfile 和 conf.d 目录，可按备份路径手动恢复。"; then
             
             # 1. 备份现有的模块化配置目录
             if [[ -d /etc/caddy/conf.d ]]; then
@@ -2761,8 +2784,7 @@ func_caddy_delete_cert() {
     echo -e "\n${CYAN}▶ 正在执行核弹级清理流程...${PLAIN}"
     echo -e "${YELLOW}此操作将永久删除该域名的证书与配置，无法恢复！${PLAIN}"
     echo -e "请确认操作...${PLAIN}"
-    read -p "❓ 确定要清理吗？(y/n): " yn
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if confirm_danger "彻底清理 ${domain} 的证书与配置" "会停止 Caddy，删除该域名证书、acme.sh 残留和 Caddy 配置，再启动 Caddy。" "请先确认已有系统快照或 Caddy 备份；删除后的证书需要重新签发。"; then
         # 1. 停止 Caddy，强制释放 80/443 端口
         systemctl stop caddy >/dev/null 2>&1
         echo -e "${GREEN}✅ [1/4] 已强制停止 Caddy 服务，释放网络端口。${PLAIN}"
@@ -3548,6 +3570,11 @@ func_clean_kernel() {
         echo -e "${BLUE}已取消卸载操作。${PLAIN}"
     elif [[ "$k_choice" =~ ^[1-9][0-9]*$ ]] && [[ "$k_choice" -le "${#old_kernels[@]}" ]]; then
         local target_k="${old_kernels[$((k_choice-1))]}"
+        confirm_danger "卸载旧内核 ${target_k}" "会删除内核包并刷新 GRUB，引导异常时可能影响下次启动。" "建议先创建 VPS 快照；当前运行内核已自动排除，如失败请从快照或救援模式恢复。" || {
+            echo -e "${BLUE}已取消卸载操作。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        }
         echo -e "${CYAN}正在静默卸载 $target_k 并刷新引导...${PLAIN}"
         export DEBIAN_FRONTEND=noninteractive
         if apt-get purge -yq "$target_k" && update-grub >/dev/null 2>&1 && apt-get autoremove --purge -yq >/dev/null 2>&1; then
@@ -4213,7 +4240,19 @@ func_port_kill() {
         
         if [[ "$p_choice" == "0" ]]; then break; fi
         
-        if [[ -n "$p_choice" && "$p_choice" =~ ^[0-9]+$ ]]; then
+        if is_valid_port "$p_choice"; then
+            local ssh_match
+            ssh_match=$(ss -tulnp 2>/dev/null | awk -v port="$p_choice" '$5 ~ ":" port "$" && $0 ~ /(sshd|ssh)/ {print}')
+            if [[ -n "$ssh_match" || "$p_choice" == "22" ]]; then
+                echo -e "${RED}❌ 检测到你选择的是 SSH 相关端口或默认 SSH 端口，为避免失联，已拒绝强杀。${PLAIN}"
+                sleep 2
+                continue
+            fi
+            confirm_danger "强杀占用端口 ${p_choice} 的进程" "会对 TCP/UDP ${p_choice} 占用进程发送 SIGKILL，相关服务会立即中断。" "如果杀错服务，需要手动重启对应 systemd 服务或容器。" || {
+                echo -e "${BLUE}已取消强杀操作。${PLAIN}"
+                sleep 1
+                continue
+            }
             echo -e "${CYAN}▶ 正在调用底层系统命令强杀端口 $p_choice ...${PLAIN}"
             
             # [依赖前置检查]: 确保存在 fuser 工具
@@ -4233,6 +4272,19 @@ func_port_kill() {
             sleep 1
         fi
     done
+}
+
+func_reboot_server() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🔁 重启服务器${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    confirm_danger "立即重启服务器" "当前 SSH 会话会断开，所有运行中的服务会短暂中断。" "请确认云厂商控制台可用，并确保关键配置已经保存。" || {
+        echo -e "${BLUE}已取消重启操作。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    }
+    reboot
 }
 # ---------------------------------------------------------
 # 19. 脚本热更新
@@ -4834,7 +4886,7 @@ main_menu() {
             15) func_health_dashboard ;;
             16) func_backup_center ;;
             17) func_update_script ;;
-            18) reboot ;;
+            18) func_reboot_server ;;
             19) func_sni_stack_quick_menu ;;
             0) exit 0 ;;
             *) 
