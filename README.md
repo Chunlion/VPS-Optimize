@@ -128,6 +128,7 @@ REALITY SNI       -> Xray / 3x-ui REALITY 入站
 Caddy、Xray REALITY、3x-ui 面板、订阅服务、网站后端默认都只监听 127.0.0.1。
 3x-ui 面板不要填写 Caddy 证书路径，SSL/HTTPS 应关闭。
 REALITY dest/serverNames 必须写外部真实 HTTPS 站点，不要写面板域名。
+脚本会关闭 Nginx 版本号显示，并隔离默认站点，减少错误页面暴露信息。
 ```
 
 ---

@@ -43,6 +43,12 @@ REALITY 伪装 SNI your-reality-sni.example.com
 
 最终公网只需要放行 `443` 和 SSH 端口。`8443`、`1443`、`40000`、`2096`、`3000` 这类端口默认都只监听 `127.0.0.1`。
 
+脚本还会顺手加固 Nginx 默认错误页：
+
+- 自动设置 `server_tokens off`，避免默认错误页显示 Nginx 具体版本号。
+- 隔离 Nginx 自带默认站点，避免错误域名命中欢迎页。
+- 写入 `/etc/nginx/conf.d/00-vps-default-drop.conf`，让公网 `80` 的未知访问直接 `return 444` 丢弃连接。
+
 ## 2. 首次配置怎么进入
 
 脚本菜单路径：
@@ -314,6 +320,8 @@ ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096|:3000|:5001|:8080'
 ```bash
 nginx -t
 caddy validate --config /etc/caddy/Caddyfile
+grep -n "server_tokens off" /etc/nginx/nginx.conf
+cat /etc/nginx/conf.d/00-vps-default-drop.conf
 ```
 
 测试面板证书：
@@ -345,4 +353,3 @@ journalctl -u x-ui -u 3x-ui -n 80 --no-pager
 - 不要把 REALITY 的 `dest/serverNames` 写成面板域名。
 - 不要把网站分流继续交给 Xray fallback。
 - 不要用内部端口当浏览器访问入口。
-

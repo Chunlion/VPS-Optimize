@@ -1219,6 +1219,20 @@ sni_stack_health_check() {
     echo -e "------------------------------------------------"
     nginx -t >/dev/null 2>&1 && echo -e "${GREEN}✅ nginx -t 通过${PLAIN}" && ((ok++)) || { echo -e "${RED}❌ nginx -t 失败${PLAIN}"; ((fail++)); }
     caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 && echo -e "${GREEN}✅ Caddy 配置校验通过${PLAIN}" && ((ok++)) || { echo -e "${RED}❌ Caddy 配置校验失败${PLAIN}"; ((fail++)); }
+    if grep -Eq '^[[:space:]]*server_tokens[[:space:]]+off;' /etc/nginx/nginx.conf 2>/dev/null; then
+        echo -e "${GREEN}✅ Nginx 已关闭版本号显示 server_tokens off${PLAIN}"
+        ((ok++))
+    else
+        echo -e "${YELLOW}⚠️ 未确认 Nginx server_tokens off，错误页可能显示版本号。${PLAIN}"
+        ((warn++))
+    fi
+    if [[ -f /etc/nginx/conf.d/00-vps-default-drop.conf ]]; then
+        echo -e "${GREEN}✅ Nginx 80 默认站点已设置为丢弃连接${PLAIN}"
+        ((ok++))
+    else
+        echo -e "${YELLOW}⚠️ 未找到 80 默认丢弃配置，错误域名可能命中默认页。${PLAIN}"
+        ((warn++))
+    fi
 
     if command -v openssl >/dev/null 2>&1; then
         if timeout 10 openssl s_client -connect "127.0.0.1:${NGINX_LISTEN_PORT}" -servername "$PANEL_DOMAIN" </dev/null 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
@@ -1256,6 +1270,7 @@ reapply_sni_stack_from_env() {
     print_sni_stack_preview || return 1
     create_sni_stack_backup
     install_nginx_stream_stack || return 1
+    harden_nginx_public_errors
     ensure_caddy_local_base_config || return 1
     cleanup_old_nginx_sni_stream_configs
     write_caddy_panel_config
@@ -1263,8 +1278,8 @@ reapply_sni_stack_from_env() {
     caddy_format_configs
     caddy validate --config /etc/caddy/Caddyfile || return 1
     write_nginx_sni_stream_config || return 1
-    systemctl restart nginx || return 1
     systemctl restart caddy || return 1
+    systemctl restart nginx || return 1
     print_sni_stack_result
 }
 
@@ -1457,6 +1472,49 @@ EOF
         cp -f /etc/nginx/nginx.conf "/etc/nginx/nginx.conf.bak_$(date +%s)" 2>/dev/null || true
         sed -i '/^[[:space:]]*stream[[:space:]]*{/a\    include /etc/nginx/stream.d/*.conf;' /etc/nginx/nginx.conf
     fi
+}
+
+harden_nginx_public_errors() {
+    local nginx_conf="/etc/nginx/nginx.conf"
+    local drop_conf="/etc/nginx/conf.d/00-vps-default-drop.conf"
+    local quarantine_dir="/etc/vps-optimize/nginx-default-sites-disabled_$(date +%s)"
+    local moved=0
+    local default_file
+
+    command -v nginx >/dev/null 2>&1 || return 0
+    mkdir -p /etc/nginx/conf.d /etc/vps-optimize
+
+    if [[ -f "$nginx_conf" ]]; then
+        if grep -Eq '^[#[:space:]]*server_tokens[[:space:]]+' "$nginx_conf"; then
+            sed -i 's/^[#[:space:]]*server_tokens[[:space:]].*;/    server_tokens off;/' "$nginx_conf"
+        elif grep -Eq '^[[:space:]]*http[[:space:]]*\{' "$nginx_conf"; then
+            sed -i '/^[[:space:]]*http[[:space:]]*{/a\    server_tokens off;' "$nginx_conf"
+        fi
+    fi
+
+    for default_file in \
+        /etc/nginx/sites-enabled/default \
+        /etc/nginx/sites-available/default \
+        /etc/nginx/conf.d/default.conf; do
+        if [[ -e "$default_file" ]]; then
+            mkdir -p "$quarantine_dir"
+            mv "$default_file" "$quarantine_dir/" >/dev/null 2>&1 && ((moved++))
+        fi
+    done
+
+    cat <<'EOF' > "$drop_conf"
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 444;
+}
+EOF
+
+    if [[ "$moved" -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️ 已隔离 ${moved} 个 Nginx 默认站点配置到：${quarantine_dir}${PLAIN}"
+    fi
+    echo -e "${GREEN}✅ 已关闭 Nginx 版本号显示，并写入 80 端口默认丢弃规则。${PLAIN}"
 }
 
 write_nginx_sni_stream_config() {
@@ -1744,6 +1802,7 @@ print_sni_stack_result() {
 apply_sni_stack_runtime_config() {
     create_sni_stack_backup
     install_nginx_stream_stack || return 1
+    harden_nginx_public_errors
     ensure_caddy_local_base_config || return 1
     cleanup_old_nginx_sni_stream_configs
     write_caddy_panel_config
@@ -1751,10 +1810,10 @@ apply_sni_stack_runtime_config() {
     caddy_format_configs
     caddy validate --config /etc/caddy/Caddyfile || return 1
     write_nginx_sni_stream_config || return 1
-    systemctl enable nginx >/dev/null 2>&1 || true
-    systemctl restart nginx || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
+    systemctl enable nginx >/dev/null 2>&1 || true
+    systemctl restart nginx || return 1
     save_sni_stack_env
     generate_caddy_cf_manifest
 }
@@ -1955,6 +2014,7 @@ func_caddy_cf_reality_wizard() {
 
     create_sni_stack_backup
     install_nginx_stream_stack || return 1
+    harden_nginx_public_errors
     ensure_caddy_local_base_config || return 1
     cleanup_old_nginx_sni_stream_configs
     quarantine_legacy_caddy_443_configs
@@ -1971,10 +2031,10 @@ func_caddy_cf_reality_wizard() {
     caddy_format_configs
     caddy validate --config /etc/caddy/Caddyfile || return 1
     write_nginx_sni_stream_config || return 1
-    systemctl enable nginx >/dev/null 2>&1 || true
-    systemctl restart nginx || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
+    systemctl enable nginx >/dev/null 2>&1 || true
+    systemctl restart nginx || return 1
     save_sni_stack_env
     harden_single_443_firewall
     generate_caddy_cf_manifest
