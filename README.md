@@ -90,329 +90,44 @@ Xray：https://233boy.com/xray/xray-script/
 
 ---
 
-## 四、 🧩 443 单入口分流教程
+## 四、 🧩 443 单入口分流
 
-这个功能位于：
+这个功能用于把 3x-ui 面板、订阅入口、REALITY 入站、SublinkPro、Dockge、妙妙屋、Sub-Store 或普通网站统一收进公网 `443`。
+
+```text
+公网 443 -> Nginx stream 按 SNI 分流
+
+panel.example.com -> Caddy -> 3x-ui 面板
+site.example.com  -> Caddy -> 本地网站/订阅管理工具
+REALITY SNI       -> Xray / 3x-ui REALITY 入站
+未知 SNI          -> Xray / 3x-ui REALITY 入站
+```
+
+首次初始化：
 
 ```text
 3. 软件安装与反代分流
-18. Nginx Stream + Caddy + REALITY 443 单入口分流
+18. 443 单入口分流向导
 ```
 
-详细教程、后续新增网站、3x-ui 参数、External Proxy 和排错说明见：[docs/443-single-entry.md](docs/443-single-entry.md)
-
-它的目标很简单：**公网只开放一个 443，所有流量先进入 Nginx stream，再按 SNI 分流**。
-
-```text
-公网 443 -> Nginx stream
-
-面板域名 panel.example.com
--> 127.0.0.1:8443
--> Caddy
--> 127.0.0.1:40000
--> 3x-ui 面板
-
-网站/反代域名 site.example.com，可选，可填写多个
--> 127.0.0.1:8443
--> Caddy
--> 127.0.0.1:3000
--> SublinkPro、Dockge、普通网站或其他 HTTP 服务
-
-REALITY 伪装 SNI your-reality-sni.example.com
--> 127.0.0.1:1443
--> Xray / 3x-ui REALITY 入站
-
-未知 SNI
--> 127.0.0.1:1443
--> Xray / 3x-ui REALITY 入站
-```
-
-### 1. 脚本里怎么填
-
-普通用户建议一路使用默认本地监听地址：
-
-```text
-面板域名：panel.example.com
-网站/反代域名：可留空，多个用英文逗号分隔
-REALITY 伪装 SNI：your-reality-sni.example.com(请替换成你自己选择的外部真实 HTTPS 站点)
-Nginx 公网监听地址：0.0.0.0
-Nginx 公网监听端口：443
-Caddy 本地监听地址：127.0.0.1
-Caddy 本地监听端口：8443
-Xray REALITY 本地监听地址：127.0.0.1
-Xray REALITY 本地监听端口：1443
-3x-ui 面板监听地址：127.0.0.1
-3x-ui 面板端口：40000
-3x-ui 订阅服务监听地址：127.0.0.1
-3x-ui 订阅服务端口：2096
-网站/反代后端地址：127.0.0.1
-网站/反代后端端口：3000
-Cloudflare API Token：用于 DNS 签发证书
-```
-
-注意三件事：
-
-```text
-面板域名、网站/反代域名、REALITY SNI 不能相同。
-REALITY SNI 要写外部真实 HTTPS 站点，不要直接照抄模板域名。
-公网 443 只能由 Nginx stream 监听，Caddy / Xray / 3x-ui 都走本地端口。
-```
-
-如果需要反代多个网站，可以在“网站/反代域名”里用英文逗号分隔，例如：
-
-```text
-sub.example.com,dockge.example.com,blog.example.com
-```
-
-脚本会分别询问每个域名对应的本地后端地址和端口。
-
-如果已经完成过一次 443 单入口初始化，后续新增或删除网站不需要重跑完整向导，可以进入：
+后续新增或删除网站/反代域名：
 
 ```text
 3. 软件安装与反代分流
 20. 管理 443 网站/反代域名
 ```
 
-这个入口适合后续接入 SublinkPro、Dockge、妙妙屋、Sub-Store、博客、状态页等本地 HTTP 服务。
+详细配置、3x-ui 参数、REALITY 入站、External Proxy、订阅转换和排错说明请看：
 
-### 2. DNS 和证书准备
+👉 [443 单入口分流详细教程](docs/443-single-entry.md)
 
-至少准备一个面板域名：
-
-```text
-panel.example.com
-```
-
-如果你想让节点地址和面板地址分开，可以再准备：
+核心原则：
 
 ```text
-node.example.com
-```
-
-推荐关系：
-
-```text
-面板入口：panel.example.com
-节点地址：node.example.com
-REALITY SNI：your-reality-sni.example.com
-```
-
-Cloudflare API Token 至少需要：
-
-```text
-Zone.Zone.Read
-Zone.DNS.Edit
-```
-
-### 3. 3x-ui 面板设置
-
-脚本配置好 Caddy 后，**不要在 3x-ui 面板里再填写 SSL 证书路径**。
-
-3x-ui 面板应该这样设置：
-
-```text
-面板监听地址：127.0.0.1
-面板端口：40000
-webBasePath：/
-面板 SSL / HTTPS：关闭
-证书路径：留空
-私钥路径：留空
-Panel URL / Public URL / External URL：https://panel.example.com/
-Subscription URI Path：/sub/
-Subscription External URL：https://panel.example.com/sub/
-```
-
-为什么证书不填进 3x-ui？
-
-因为这套架构是：
-
-```text
-浏览器 HTTPS -> Nginx stream -> Caddy 终止 TLS -> HTTP 反代到 3x-ui
-```
-
-证书只给 Caddy 用，3x-ui 只做本地 HTTP 后端。这样更稳，也不容易出现重定向循环。
-
-### 4. 3x-ui 中配置 REALITY 入站
-
-在 3x-ui 里新增或编辑 VLESS 入站：
-
-```text
-协议：vless
-监听：127.0.0.1
-端口：1443
-传输：TCP (RAW)
-decryption：none
-Fallbacks：留空
-```
-
-REALITY 部分：
-
-```text
-安全：Reality
-uTLS：chrome
-Target / dest：your-reality-sni.example.com:443
-SNI / serverNames：your-reality-sni.example.com
-Short IDs：生成或填写 1 个或多个 shortId
-SpiderX：/
-公钥 / 私钥：点击生成，服务端保存私钥，客户端使用公钥
-```
-
-不要把 `Target / dest` 写成：
-
-```text
-127.0.0.1:8443
-panel.example.com:443
-```
-
-也不要使用 Xray fallback 分流网站，因为现在分流已经由 Nginx stream 负责。
-
-### 5. External Proxy 怎么填
-
-服务端 REALITY 入站真实监听：
-
-```text
-127.0.0.1:1443
-```
-
-但客户端应该连接公网：
-
-```text
-node.example.com:443
-```
-
-所以在 3x-ui 入站里打开 `External Proxy`，建议填写：
-
-```text
-类型：相同
-地址：node.example.com
-端口：443
-备注：可留空
-```
-
-如果暂时没有节点域名，也可以填：
-
-```text
-地址：panel.example.com
-端口：443
-```
-
-保存后复制节点链接，应该能看到类似：
-
-```text
-vless://uuid@node.example.com:443?security=reality&sni=your-reality-sni.example.com&...
-```
-
-如果链接里还是 `:1443`，说明 External Proxy 没有生效，SublinkPro 转换后也可能继续得到错误端口。
-
-### 6. SublinkPro 订阅转换建议
-
-推荐流程：
-
-```text
-3x-ui 订阅链接 -> SublinkPro / 妙妙屋 / Sub-Store -> Clash / Mihomo 客户端
-```
-
-关键点：
-
-```text
-3x-ui 订阅外部地址应为：https://panel.example.com/sub/
-3x-ui 节点 External Proxy 端口应为：443
-订阅管理工具只负责转换，不建议靠它修复错误端口
-```
-
-这样 Clash / Mihomo 客户端里看到的节点会使用：
-
-```text
-server: node.example.com
-port: 443
-sni: your-reality-sni.example.com
-```
-
-流量统计仍然由 3x-ui 按用户/入站统计，不需要手动复制裸 vless 信息。
-
-### 7. 常见错误判断
-
-`ERR_SSL_PROTOCOL_ERROR` 通常是访问了内部端口。不要访问：
-
-```text
-https://panel.example.com:8443/
-https://panel.example.com:40000/
-https://panel.example.com:1443/
-```
-
-访问：
-
-```text
-https://panel.example.com/面板url根路径
-```
-
-`ERR_TOO_MANY_REDIRECTS` 通常是 3x-ui 面板还开着 SSL 或强制 HTTPS。关闭面板 SSL，并清空证书/私钥路径。
-
-`HTTP 404` 先检查：
-
-```bash
-curl -I http://127.0.0.1:40000/
-```
-
-如果本地也是 404，检查 `webBasePath` 是否为 `/`。
-
-`502 Bad Gateway` 通常是 3x-ui 没启动、端口不对，或 3x-ui 开了 HTTPS 但 Caddy 按 HTTP 连接。
-
-### 8. 验证命令
-
-检查监听：
-
-```bash
-ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096|:3000'
-```
-
-期望类似：
-
-```text
-0.0.0.0:443       -> nginx
-127.0.0.1:8443    -> caddy
-127.0.0.1:1443    -> xray / 3x-ui REALITY
-127.0.0.1:40000   -> 3x-ui 面板
-127.0.0.1:2096    -> 3x-ui 订阅，可选
-127.0.0.1:3000    -> 网站/反代后端，可选
-```
-
-检查配置：
-
-```bash
-nginx -t
-caddy validate --config /etc/caddy/Caddyfile
-```
-
-测试面板证书：
-
-```bash
-openssl s_client -connect 服务器IP:443 -servername panel.example.com
-```
-
-测试 REALITY SNI：
-
-```bash
-openssl s_client -connect 服务器IP:443 -servername your-reality-sni.example.com
-```
-
-### 9. 后续维护菜单
-
-如果已经跑过一次 `443 单入口分流向导`，后续可以进入：
-
-```text
-3. 软件安装与反代分流
-19. CF DNS / Caddy 维护菜单
-```
-
-常用维护项：
-
-```text
-11. 443 单入口链路体检：检查 Nginx、Caddy、REALITY、面板端口和 SNI 分流。
-12. 重新应用上次 443 分流配置：读取 /etc/vps-optimize/sni-stack.env 并重新生成配置。
-13. 订阅端口 / External Proxy 检查提示：确认订阅里节点端口是否应为 443。
-14. 回滚 443 单入口配置：从最近一次备份恢复 Nginx/Caddy 相关配置。
-15. 管理 443 网站/反代域名：查看、新增、删除额外网站，不用重跑完整向导。
+公网 443 只能由 Nginx stream 监听。
+Caddy、Xray REALITY、3x-ui 面板、订阅服务、网站后端默认都只监听 127.0.0.1。
+3x-ui 面板不要填写 Caddy 证书路径，SSL/HTTPS 应关闭。
+REALITY dest/serverNames 必须写外部真实 HTTPS 站点，不要写面板域名。
 ```
 
 ---
