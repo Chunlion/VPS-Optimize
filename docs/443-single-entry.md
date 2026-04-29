@@ -160,14 +160,16 @@ https://dockge.example.com:8443/
 ```text
 面板监听地址：127.0.0.1
 面板端口：40000
-webBasePath：/
+webBasePath：/panel-a8f3c9/
 面板 SSL / HTTPS：关闭
 证书路径：留空
 私钥路径：留空
-Panel URL / Public URL / External URL：https://panel.example.com/
+Panel URL / Public URL / External URL：https://panel.example.com/panel-a8f3c9/
 Subscription URI Path：/sub/
 Subscription External URL：https://panel.example.com/sub/
 ```
+
+`webBasePath` 不建议使用根路径 `/`。建议设置一个不容易被猜到的随机路径，例如 `/panel-a8f3c9/`、`/my-xui-9d2k/`，并让面板 URL 同步带上这个路径。这样公网访问 `https://panel.example.com/` 时不会直接暴露面板登录页，能降低被批量扫描命中的概率。
 
 原因是证书由 Caddy 负责：
 
@@ -288,7 +290,7 @@ vless://uuid@node.example.com:443?security=reality&sni=your-reality-sni.example.
 curl -I http://127.0.0.1:40000/
 ```
 
-如果本地也是 404，优先检查 3x-ui 的 `webBasePath` 是否为 `/`。
+如果本地也是 404，优先检查你访问的路径是否和 3x-ui 的 `webBasePath` 一致。例如 `webBasePath` 设置为 `/panel-a8f3c9/`，面板入口就应该访问 `https://panel.example.com/panel-a8f3c9/`。
 
 `502 Bad Gateway`：
 

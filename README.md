@@ -418,9 +418,11 @@ systemctl status sshd --no-pager
 单入口模式下，浏览器只访问标准 HTTPS 地址：
 
 ```text
-https://panel.example.com/
+https://panel.example.com/panel-a8f3c9/
 https://sub.example.com/
 ```
+
+其中 `/panel-a8f3c9/` 是示例面板路径。3x-ui 的 `webBasePath` 不建议设置为根路径 `/`，最好换成随机路径，并让 Panel URL / Public URL / External URL 同步带上这个路径，降低被批量扫描命中的概率。
 
 不要访问：
 

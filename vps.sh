@@ -1972,11 +1972,13 @@ harden_single_443_firewall() {
 }
 
 print_sni_stack_result() {
+    local suggested_panel_path
+    suggested_panel_path="/panel-$(tr -dc 'a-z0-9' < /dev/urandom | head -c 8 2>/dev/null || echo "$RANDOM$RANDOM")/"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${GREEN}✅ 443 单入口分流配置完成${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}一、以后从外面只访问这些地址${PLAIN}"
-    echo -e "  面板入口：      https://${PANEL_DOMAIN}/"
+    echo -e "  面板入口：      https://${PANEL_DOMAIN}${suggested_panel_path}"
     echo -e "  订阅入口：      https://${PANEL_DOMAIN}/sub/"
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i
@@ -1992,12 +1994,13 @@ print_sni_stack_result() {
     echo -e "${BOLD}二、3x-ui 面板设置建议${PLAIN}"
     echo -e "  面板监听地址：${PANEL_LISTEN_ADDR}"
     echo -e "  面板端口：    ${PANEL_LISTEN_PORT}"
-    echo -e "  webBasePath： /"
+    echo -e "  webBasePath： ${suggested_panel_path}"
     echo -e "  面板 SSL/HTTPS：关闭"
     echo -e "  证书路径/私钥路径：留空，不要填写 Caddy 证书"
-    echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}/"
+    echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}${suggested_panel_path}"
     echo -e "  Subscription URI Path：/sub/"
     echo -e "  Subscription External URL：https://${PANEL_DOMAIN}/sub/"
+    echo -e "${YELLOW}  不建议使用 webBasePath=/，随机面板路径能降低被批量扫描命中的概率。${PLAIN}"
     if [[ "$PANEL_INTERNAL_SSL" == "on" ]]; then
         echo -e "${RED}  重要：你刚才表示 3x-ui 已启用内置 SSL，请先关闭它，否则容易 404/502/重定向循环。${PLAIN}"
     fi
@@ -2017,9 +2020,9 @@ print_sni_stack_result() {
     echo -e "${YELLOW}  注意：REALITY 的 dest/serverNames 必须是外部真实站点，不要写面板域名。${PLAIN}"
     echo -e ""
     echo -e "${BOLD}四、常见错误怎么判断${PLAIN}"
-    echo -e "  ERR_SSL_PROTOCOL_ERROR：通常是访问了内部端口，外部只访问 https://${PANEL_DOMAIN}/"
+    echo -e "  ERR_SSL_PROTOCOL_ERROR：通常是访问了内部端口，外部只访问 https://${PANEL_DOMAIN}${suggested_panel_path}"
     echo -e "  ERR_TOO_MANY_REDIRECTS：通常是 3x-ui 面板还开着 SSL/强制 HTTPS，请关闭并清空证书路径"
-    echo -e "  HTTP 404：先检查 3x-ui 的 webBasePath 是否为 /，再检查 Caddy 是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "  HTTP 404：先检查访问路径是否等于 3x-ui 的 webBasePath，再检查 Caddy 是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  502 Bad Gateway：通常是 3x-ui 没启动、端口不对，或 3x-ui 开了 HTTPS 但 Caddy 按 HTTP 连接"
     echo -e ""
     echo -e "${BOLD}五、监听状态应该长这样${PLAIN}"
