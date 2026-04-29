@@ -3386,7 +3386,7 @@ func_docker_manage() {
     if ! command -v docker >/dev/null 2>&1; then 
         clear
         echo -e "${RED}❌ 错误：检测到系统尚未安装 Docker 引擎！${PLAIN}"
-        echo -e "${YELLOW}💡 请先在主菜单进入 [3 软件安装与反代分流] 安装 Docker。${PLAIN}"
+        echo -e "${YELLOW}💡 请先在主菜单进入 [3 基础组件与反代分流] 安装 Docker。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -3994,6 +3994,76 @@ func_xpanel() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
+func_xpanel_manage() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧭 3x-ui / x-ui 管理 / 卸载${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}用途：进入官方管理菜单，执行配置查看、账号管理、更新或卸载等操作。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local panel_cmd=""
+    if command -v x-ui >/dev/null 2>&1; then
+        panel_cmd="x-ui"
+    elif command -v 3x-ui >/dev/null 2>&1; then
+        panel_cmd="3x-ui"
+    fi
+
+    if [[ -z "$panel_cmd" ]]; then
+        echo -e "${YELLOW}未检测到 x-ui / 3x-ui 命令，当前机器可能尚未安装 3x-ui 面板。${PLAIN}"
+        local yn
+        read_trimmed yn "是否现在安装 3x-ui 面板？(y/n): "
+        if [[ "$yn" =~ ^[Yy]$ ]]; then
+            func_xpanel
+        else
+            echo -e "${BLUE}已取消操作。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+        fi
+        return
+    fi
+
+    echo -e "${GREEN}即将打开 ${panel_cmd} 官方管理菜单。${PLAIN}"
+    echo -e "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}"
+    echo -e "------------------------------------------------"
+    "$panel_cmd"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
+}
+
+func_sui_panel() {
+    clear
+    echo -e "${CYAN}👉 正在拉取 alireza0 的 S-UI 官方安装脚本...${PLAIN}"
+    run_remote_script "安装 S-UI 面板" "https://raw.githubusercontent.com/alireza0/s-ui/master/install.sh"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
+}
+
+func_sui_manage() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧭 S-UI 管理 / 卸载${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}用途：进入 S-UI 官方管理菜单，执行配置查看、账号管理、更新或卸载等操作。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    if ! command -v s-ui >/dev/null 2>&1; then
+        echo -e "${YELLOW}未检测到 s-ui 命令，当前机器可能尚未安装 S-UI。${PLAIN}"
+        local yn
+        read_trimmed yn "是否现在安装 S-UI？(y/n): "
+        if [[ "$yn" =~ ^[Yy]$ ]]; then
+            func_sui_panel
+        else
+            echo -e "${BLUE}已取消操作。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+        fi
+        return
+    fi
+
+    echo -e "${GREEN}即将打开 S-UI 官方管理菜单。${PLAIN}"
+    echo -e "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}"
+    echo -e "------------------------------------------------"
+    s-ui
+    pause_after_external_script "操作结束，按回车键返回菜单..."
+}
+
 func_singbox() {
     clear
     echo -e "${CYAN}👉 正在拉取甬哥的 Sing-box 四合一脚本...${PLAIN}"
@@ -4011,6 +4081,35 @@ func_singbox_233boy() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
+func_singbox_manage() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧭 Sing-box 管理 / 卸载${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}用途：进入已安装 Sing-box 一键脚本的管理菜单。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local sb_cmd=""
+    if command -v sb >/dev/null 2>&1; then
+        sb_cmd="sb"
+    elif command -v sing-box >/dev/null 2>&1; then
+        sb_cmd="sing-box"
+    fi
+
+    if [[ -z "$sb_cmd" ]]; then
+        echo -e "${YELLOW}未检测到 sb / sing-box 管理命令。${PLAIN}"
+        echo -e "${BLUE}如果是首次部署，请先选择对应的 Sing-box 安装项。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    echo -e "${GREEN}即将打开 ${sb_cmd} 管理菜单。${PLAIN}"
+    echo -e "${YELLOW}如需卸载，请在脚本菜单中选择对应卸载项。${PLAIN}"
+    echo -e "------------------------------------------------"
+    "$sb_cmd"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
+}
+
 func_xray_233boy() {
     clear
     echo -e "${CYAN}👉 正在拉取 233boy 的 Xray 一键脚本...${PLAIN}"
@@ -4018,6 +4117,34 @@ func_xray_233boy() {
     echo -e "${YELLOW}使用文档：https://233boy.com/xray/xray-script/${PLAIN}"
     echo -e "${GREEN}安装完成后通常可使用 xray 命令进入管理面板。${PLAIN}"
     run_remote_script "安装 Xray 233boy 一键脚本" "https://github.com/233boy/Xray/raw/main/install.sh"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
+}
+
+func_xray_manage() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧭 Xray 管理 / 卸载${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}用途：进入 233boy Xray 官方管理菜单。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    if ! command -v xray >/dev/null 2>&1; then
+        echo -e "${YELLOW}未检测到 xray 管理命令，当前机器可能尚未安装 233boy Xray 脚本。${PLAIN}"
+        local yn
+        read_trimmed yn "是否现在安装 Xray？(y/n): "
+        if [[ "$yn" =~ ^[Yy]$ ]]; then
+            func_xray_233boy
+        else
+            echo -e "${BLUE}已取消操作。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+        fi
+        return
+    fi
+
+    echo -e "${GREEN}即将打开 xray 管理菜单。${PLAIN}"
+    echo -e "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}"
+    echo -e "------------------------------------------------"
+    xray
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
@@ -4073,7 +4200,7 @@ func_ip_sentinel() {
 ensure_docker_compose_ready() {
     DOCKER_COMPOSE_CMD=""
     if ! command -v docker >/dev/null 2>&1; then
-        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 软件安装与反代分流] 中安装 Docker。${PLAIN}"
+        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 基础组件与反代分流] 中安装 Docker。${PLAIN}"
         return 1
     fi
 
@@ -4106,7 +4233,7 @@ func_sublinkpro() {
     
     # 1. 检查 Docker 引擎
     if ! command -v docker >/dev/null 2>&1; then
-        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 软件安装与反代分流] 中安装 Docker。${PLAIN}"
+        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 基础组件与反代分流] 中安装 Docker。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -4486,6 +4613,201 @@ find_compose_file() {
         fi
     done
     return 1
+}
+
+is_managed_compose_dir() {
+    local dir="${1%/}"
+    case "$dir" in
+        /opt/sublinkpro|/opt/miaomiaowu|/opt/sub-store|/opt/dockge)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+manage_compose_project() {
+    local project_name="$1"
+    local project_dir="${2%/}"
+    local data_hint="$3"
+    local compose_file choice yn
+
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🧭 ${project_name} 管理 / 卸载${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}部署目录：${CYAN}${project_dir}${PLAIN}"
+        echo -e "${YELLOW}数据提示：${CYAN}${data_hint}${PLAIN}"
+        echo -e "------------------------------------------------"
+
+        if [[ ! -d "$project_dir" ]] || ! compose_file=$(find_compose_file "$project_dir"); then
+            echo -e "${YELLOW}未检测到 ${project_name} 的 Compose 部署。${PLAIN}"
+            echo -e "${BLUE}可以先返回上级菜单选择对应安装项。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        fi
+
+        echo -e "${GREEN}  1. 查看运行状态${PLAIN}"
+        echo -e "${GREEN}  2. 重启服务${PLAIN}"
+        echo -e "${GREEN}  3. 更新镜像并重建${PLAIN}"
+        echo -e "${YELLOW}  4. 停止并移除容器（保留目录数据）${PLAIN}"
+        echo -e "${RED}  5. 删除部署目录（删除配置/数据）${PLAIN}"
+        echo -e "${RED}  0. 返回上级菜单${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        read_trimmed choice "👉 请选择操作: "
+        case "$choice" in
+            1)
+                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" ps)
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            2)
+                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" restart)
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            3)
+                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            4)
+                read_trimmed yn "确认停止并移除 ${project_name} 容器？目录数据会保留。(y/n): "
+                if [[ "$yn" =~ ^[Yy]$ ]]; then
+                    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                    (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down)
+                    echo -e "${GREEN}✅ 已停止并移除容器，部署目录仍保留：${project_dir}${PLAIN}"
+                else
+                    echo -e "${BLUE}已取消操作。${PLAIN}"
+                fi
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            5)
+                echo -e "${RED}⚠️  高风险：这会删除 ${project_dir}，包括配置、数据库或本地数据。${PLAIN}"
+                read_trimmed yn "请输入 DELETE 确认删除部署目录: "
+                if [[ "$yn" == "DELETE" ]]; then
+                    if ! is_managed_compose_dir "$project_dir"; then
+                        echo -e "${RED}❌ 安全检查未通过，拒绝删除非脚本托管目录：${project_dir}${PLAIN}"
+                    else
+                        ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                        (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down -v)
+                        rm -rf -- "$project_dir"
+                        echo -e "${GREEN}✅ 已删除 ${project_name} 部署目录。${PLAIN}"
+                    fi
+                else
+                    echo -e "${BLUE}已取消删除。${PLAIN}"
+                fi
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            0) return ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
+func_manage_sublinkpro() {
+    manage_compose_project "SublinkPro" "/opt/sublinkpro" "db / template / logs 会保存在部署目录中"
+}
+
+func_manage_miaomiaowu() {
+    manage_compose_project "妙妙屋订阅管理" "/opt/miaomiaowu" "data / subscribes / rule_templates 会保存在部署目录中"
+}
+
+func_manage_substore() {
+    manage_compose_project "Sub-Store" "/opt/sub-store" "data 会保存在部署目录中"
+}
+
+func_manage_dockge() {
+    manage_compose_project "Dockge" "/opt/dockge" "Dockge 数据在 /opt/dockge/data；Stacks 默认在 /opt/stacks，不会随 Dockge 目录删除"
+}
+
+func_service_action_menu() {
+    local title="$1"
+    local usage="$2"
+    local install_label="$3"
+    local install_func="$4"
+    local manage_label="$5"
+    local manage_func="$6"
+    local choice
+
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🧭 ${title}${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}${usage}${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. ${install_label}${PLAIN}"
+        echo -e "${GREEN}  2. ${manage_label}${PLAIN}"
+        echo -e "${RED}  0. 返回上级菜单${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        read_trimmed choice "👉 请选择操作: "
+
+        case "$choice" in
+            1) "$install_func" ;;
+            2) "$manage_func" ;;
+            0) return ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
+func_xpanel_menu() {
+    func_service_action_menu "3x-ui / x-ui 面板" "安装或进入官方菜单进行配置、更新、重置、卸载。" "安装 3x-ui 面板" func_xpanel "管理 / 卸载 3x-ui 面板" func_xpanel_manage
+}
+
+func_sui_menu() {
+    func_service_action_menu "S-UI 面板" "安装或进入 S-UI 官方菜单进行配置、更新、卸载。" "安装 S-UI 面板" func_sui_panel "管理 / 卸载 S-UI 面板" func_sui_manage
+}
+
+func_singbox_menu() {
+    local choice
+
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🧭 Sing-box 管理${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}可选择不同一键脚本安装，也可进入已安装脚本的管理菜单。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 安装 Sing-box（甬哥四合一脚本）${PLAIN}"
+        echo -e "${GREEN}  2. 安装 Sing-box（233boy 一键脚本）${PLAIN}"
+        echo -e "${GREEN}  3. 管理 / 卸载 Sing-box${PLAIN}"
+        echo -e "${RED}  0. 返回上级菜单${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        read_trimmed choice "👉 请选择操作: "
+
+        case "$choice" in
+            1) func_singbox ;;
+            2) func_singbox_233boy ;;
+            3) func_singbox_manage ;;
+            0) return ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
+func_xray_menu() {
+    func_service_action_menu "Xray 管理" "安装或进入 233boy Xray 官方菜单进行配置、更新、卸载。" "安装 Xray（233boy 一键脚本）" func_xray_233boy "管理 / 卸载 Xray" func_xray_manage
+}
+
+func_sublinkpro_menu() {
+    func_service_action_menu "SublinkPro 管理" "安装或管理 Docker Compose 部署的 SublinkPro。" "安装 SublinkPro" func_sublinkpro "管理 / 卸载 SublinkPro" func_manage_sublinkpro
+}
+
+func_miaomiaowu_menu() {
+    func_service_action_menu "妙妙屋订阅管理" "安装或管理 Docker Compose 部署的妙妙屋订阅管理。" "安装 妙妙屋订阅管理" func_miaomiaowu "管理 / 卸载 妙妙屋" func_manage_miaomiaowu
+}
+
+func_substore_menu() {
+    func_service_action_menu "Sub-Store 管理" "安装或管理 Docker Compose 部署的 Sub-Store。" "安装 Sub-Store" func_substore "管理 / 卸载 Sub-Store" func_manage_substore
+}
+
+func_dockge_menu() {
+    func_service_action_menu "Dockge 管理" "安装或管理 Docker Compose 部署的 Dockge。" "安装 Dockge" func_dockge "管理 / 卸载 Dockge" func_manage_dockge
 }
 
 is_dockge_migration_seen() {
@@ -5271,18 +5593,18 @@ func_panel_deploy_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：安装 3x-ui、Sing-box、Xray、订阅管理工具、Dockge 和节点辅助工具。${PLAIN}"
+        echo -e "${YELLOW}用途：管理 3x-ui、S-UI、Sing-box、Xray、订阅工具、Dockge 和节点辅助工具。${PLAIN}"
         echo -e "${YELLOW}提示：面板或订阅工具对外访问，推荐后续接入 [19] 443 单入口。${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 安装 3x-ui 面板${PLAIN}       ${YELLOW}(mhsanaei 官方脚本)${PLAIN}"
-        echo -e "${GREEN}  2. 安装 Sing-box${PLAIN}         ${YELLOW}(甬哥四合一脚本)${PLAIN}"
-        echo -e "${GREEN}  3. 安装 Sing-box${PLAIN}         ${YELLOW}(233boy 一键脚本 / sb 管理)${PLAIN}"
-        echo -e "${GREEN}  4. 安装 Xray${PLAIN}             ${YELLOW}(233boy 一键脚本)${PLAIN}"
-        echo -e "${GREEN}  5. 安装 SublinkPro${PLAIN}       ${YELLOW}(订阅转换与管理面板)${PLAIN}"
-        echo -e "${GREEN}  6. 安装 妙妙屋订阅管理${PLAIN}     ${YELLOW}(Docker Compose)${PLAIN}"
-        echo -e "${GREEN}  7. 安装 Sub-Store${PLAIN}        ${YELLOW}(HTTP-META / Docker Compose)${PLAIN}"
-        echo -e "${BOLD}${YELLOW}  8. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
-        echo -e "${GREEN}  9. 安装 Dockge${PLAIN}           ${YELLOW}(Docker Compose 管理面板)${PLAIN}"
+        echo -e "${GREEN}  1. 管理 3x-ui 面板${PLAIN}       ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  2. 管理 S-UI 面板${PLAIN}        ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  3. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  4. 管理 Xray${PLAIN}             ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  5. 管理 SublinkPro${PLAIN}       ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  6. 管理 妙妙屋订阅管理${PLAIN}     ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  7. 管理 Sub-Store${PLAIN}        ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  8. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${BOLD}${YELLOW}  9. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
         echo -e "${GREEN} 10. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
         echo -e "${GREEN} 11. 面板救砖 / 重置 SSL${PLAIN}   ${YELLOW}(回退 HTTP 访问)${PLAIN}"
         echo -e "${GREEN} 12. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
@@ -5295,15 +5617,15 @@ func_panel_deploy_menu() {
         local pd_choice
         read_trimmed pd_choice "👉 请选择操作: "
         case $pd_choice in
-            1) func_xpanel ;;
-            2) func_singbox ;;
-            3) func_singbox_233boy ;;
-            4) func_xray_233boy ;;
-            5) func_sublinkpro ;;
-            6) func_miaomiaowu ;;
-            7) func_substore ;;
-            8) func_update_subscription_tools ;;
-            9) func_dockge ;;
+            1) func_xpanel_menu ;;
+            2) func_sui_menu ;;
+            3) func_singbox_menu ;;
+            4) func_xray_menu ;;
+            5) func_sublinkpro_menu ;;
+            6) func_miaomiaowu_menu ;;
+            7) func_substore_menu ;;
+            8) func_dockge_menu ;;
+            9) func_update_subscription_tools ;;
             10) func_migrate_compose_to_dockge ;;
             11) func_rescue_panel ;;
             12) func_dns_unlock ;;

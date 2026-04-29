@@ -45,7 +45,7 @@ cy
 
 - 新买 VPS 后快速完成基础初始化、时区、基础工具和 BBR。
 - 管理 SSH 端口、防火墙、Fail2ban、SSH 公钥等基础安全项。
-- 部署 Docker、Python、Caddy、WARP、哪吒、宝塔、Sing-box、Xray、3x-ui 等常见组件。
+- 部署 Docker、Python、Caddy、WARP、哪吒、宝塔、Sing-box、Xray、3x-ui、S-UI 等常见组件。
 - 把 3x-ui 面板、订阅入口、REALITY 入站、SublinkPro、Dockge、妙妙屋、Sub-Store 或普通网站统一收进公网 `443`。
 - 排查端口占用、服务状态、证书、系统资源、IP 质量、流媒体解锁和回程线路。
 - 做配置备份、恢复、健康检查和脚本热更新。
@@ -134,7 +134,7 @@ cy
 | 改 SSH 端口 | `5` | 改前先在云厂商安全组放行新端口 |
 | 管理防火墙端口 | `8` | 放行、删除、查看、关闭系统防火墙规则 |
 | 安装 Docker/Caddy/WARP | `3` | 偏基础组件、普通 Caddy 反代和 443 单入口入口 |
-| 安装 3x-ui/Sing-box/订阅工具 | `4` | 偏面板、节点、订阅管理工具和 Dockge |
+| 安装 3x-ui/S-UI/Sing-box/订阅工具 | `4` | 偏面板、节点、订阅管理工具和 Dockge |
 | 部署 3x-ui + REALITY + 443 | `19 -> 1` | 首次配置 443 单入口 |
 | 后续新增网站或反代域名 | `19 -> 2` | 不需要重跑首次配置 |
 | 443/证书/面板打不开 | `19 -> 3` 或 `19 -> 6` | 先体检链路，再进证书维护 |
@@ -171,7 +171,7 @@ cy
 
 ### 📡 面板与节点
 
-- 3x-ui / x-ui、Sing-box、Xray。
+- 3x-ui / x-ui、S-UI、Sing-box、Xray。
 - SublinkPro、妙妙屋订阅管理、Sub-Store、Dockge。
 - DNS 流媒体解锁、IP Sentinel、Port Traffic Dog。
 
@@ -243,18 +243,25 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 常用入口：
 
 ```text
-2. 安装 Sing-box（甬哥四合一脚本）
-3. 安装 Sing-box（233boy 一键脚本）
-4. 安装 Xray（233boy 一键脚本）
-5. 安装 SublinkPro（订阅转换与管理面板）
-6. 安装 妙妙屋订阅管理（Docker Compose）
-7. 安装 Sub-Store（HTTP-META / Docker Compose）
-8. 更新订阅管理工具（SublinkPro / 妙妙屋 / Sub-Store）
-9. 安装 Dockge（Docker Compose 管理面板）
+1. 管理 3x-ui 面板
+2. 管理 S-UI 面板
+3. 管理 Sing-box
+4. 管理 Xray
+5. 管理 SublinkPro
+6. 管理 妙妙屋订阅管理
+7. 管理 Sub-Store
+8. 管理 Dockge
+9. 更新订阅管理工具（SublinkPro / 妙妙屋 / Sub-Store）
 10. 迁移 Compose 到 Dockge（Dockge 后安装时接管旧项目）
+11. 面板救砖 / 重置 SSL
+12. DNS 流媒体解锁
+13. 防 IP 送中脚本
+14. 端口流量监控
 ```
 
-Dockge 如果是后安装的，可以用第 10 项扫描 `/opt` 下已有的 Compose 项目，例如 SublinkPro、妙妙屋、Sub-Store，并移动到 Dockge 的 stacks 目录。迁移时脚本会逐项确认，避免覆盖已有 stack。
+每个“管理”入口点进去后，再选择安装、进入官方菜单、更新、停止或卸载。Dockge 如果是后安装的，可以用第 10 项扫描 `/opt` 下已有的 Compose 项目，例如 SublinkPro、妙妙屋、Sub-Store，并移动到 Dockge 的 stacks 目录。迁移时脚本会逐项确认，避免覆盖已有 stack。
+
+Docker Compose 部署的项目现在都有独立的“管理 / 卸载”入口。普通停止会保留部署目录和数据；删除部署目录需要输入 `DELETE` 二次确认，避免误删配置和数据库。
 
 ### 🌐 部署完节点工具后接入 Caddy 反代
 
