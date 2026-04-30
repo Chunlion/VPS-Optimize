@@ -206,7 +206,7 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 
 Docker Compose 部署项目都有独立的“管理 / 归档”入口。普通停止会保留部署目录和数据；归档部署目录需要输入 `ARCHIVE` 二次确认，目录会移动到隔离区，避免误删配置和数据库。
 
-Komari 默认部署到 `/opt/komari`，数据保存在 `/opt/komari/data`。安装完成后可查看容器日志获取默认管理员账号；如需 HTTPS 访问，建议通过 `19 -> 2` 添加 443 单入口反代域名。
+Komari 默认部署到 `/opt/komari`，数据保存在 `/opt/komari/data`。安装时可选择自定义初始管理员账号和密码；如果不自定义，安装完成后可查看容器日志获取默认管理员账号。如需 HTTPS 访问，建议通过 `19 -> 2` 添加 443 单入口反代域名。
 
 <a id="traffic-dog"></a>
 ## 📊 端口流量狗

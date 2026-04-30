@@ -4663,6 +4663,9 @@ func_komari() {
     local install_dir="/opt/komari"
     local komari_bind_addr="127.0.0.1"
     local komari_port="25774"
+    local custom_admin="n"
+    local admin_username=""
+    local admin_password=""
     local yn
 
     komari_bind_addr=$(ask_with_default "Komari 监听地址" "$komari_bind_addr")
@@ -4675,9 +4678,39 @@ func_komari() {
     done
     warn_if_public_bind "Komari 探针监控面板" "$komari_bind_addr" "$komari_port" || return 1
 
+    read_trimmed custom_admin "是否自定义初始管理员账号和密码？(y/n，默认 n): "
+    if [[ "$custom_admin" =~ ^[Yy]$ ]]; then
+        while true; do
+            read_trimmed admin_username "管理员用户名（默认 admin）: "
+            admin_username="${admin_username:-admin}"
+            if [[ "$admin_username" =~ ^[A-Za-z0-9._-]{3,32}$ ]]; then
+                break
+            fi
+            echo -e "${RED}❌ 用户名只能包含字母、数字、点、下划线和短横线，长度 3-32。${PLAIN}"
+        done
+
+        while true; do
+            read_secret_trimmed admin_password "管理员密码（至少 8 位，留空自动生成）: "
+            if [[ -z "$admin_password" ]]; then
+                admin_password=$(generate_random_secret | cut -c1-24)
+                echo -e "${YELLOW}已自动生成管理员密码，部署完成后会显示一次，请及时保存。${PLAIN}"
+                break
+            fi
+            if [[ ${#admin_password} -ge 8 ]]; then
+                break
+            fi
+            echo -e "${RED}❌ 密码至少需要 8 位。${PLAIN}"
+        done
+    fi
+
     echo -e "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}"
     echo -e "${YELLOW}数据目录：${CYAN}${install_dir}/data${PLAIN}"
     echo -e "${YELLOW}监听地址：${CYAN}${komari_bind_addr}:${komari_port}${PLAIN}"
+    if [[ -n "$admin_username" ]]; then
+        echo -e "${YELLOW}初始管理员：${CYAN}${admin_username}${PLAIN}"
+    else
+        echo -e "${YELLOW}初始管理员：${CYAN}使用 Komari 默认生成账号，请安装后查看容器日志${PLAIN}"
+    fi
     echo -e "------------------------------------------------"
     read_trimmed yn "确认现在部署 Komari 吗？(y/n): "
     if [[ "$yn" =~ ^[Yy]$ ]]; then
@@ -4695,9 +4728,22 @@ services:
     volumes:
       - ./data:/app/data
     environment:
+EOF
+
+        if [[ -n "$admin_username" ]]; then
+            cat <<EOF >> docker-compose.yml
+      ADMIN_USERNAME: "${admin_username}"
+      ADMIN_PASSWORD: "${admin_password}"
+EOF
+        else
+            cat <<'EOF' >> docker-compose.yml
       # 可选：如需自定义初始管理员账号，请停止容器后取消注释并填写。
       # ADMIN_USERNAME: admin
       # ADMIN_PASSWORD: yourpassword
+EOF
+        fi
+
+        cat <<EOF >> docker-compose.yml
     restart: unless-stopped
 EOF
 
@@ -4708,7 +4754,13 @@ EOF
         echo -e "${GREEN}✅ Komari 部署完成！${PLAIN}"
         echo -e "访问地址：${BOLD}http://${komari_bind_addr}:${komari_port}${PLAIN}"
         echo -e "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}"
-        echo -e "${YELLOW}默认管理员账号请查看日志：${CYAN}$DOCKER_COMPOSE_CMD logs komari${PLAIN}"
+        if [[ -n "$admin_username" ]]; then
+            echo -e "管理员账号：${BOLD}${admin_username}${PLAIN}"
+            echo -e "管理员密码：${BOLD}${admin_password}${PLAIN}"
+            echo -e "${YELLOW}请及时保存密码，后续也可在 ${install_dir}/docker-compose.yml 中查看或修改。${PLAIN}"
+        else
+            echo -e "${YELLOW}默认管理员账号请查看日志：${CYAN}$DOCKER_COMPOSE_CMD logs komari${PLAIN}"
+        fi
         echo -e "${YELLOW}如需公网 HTTPS 访问，建议回到主菜单使用 [19] -> [2] 添加反代域名。${PLAIN}"
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
