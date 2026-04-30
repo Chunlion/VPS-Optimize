@@ -173,6 +173,8 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 - 3x-ui 面板 SSL/HTTPS 应关闭，证书路径和私钥路径留空。
 - REALITY 的 `dest` / `Target` 和 `serverNames` / `SNI` 必须写外部真实 HTTPS 站点，不要写面板域名。
 
+如果机器上已经有普通 Caddy 反代，启用 443 单入口前请先备份并记录旧站点的域名、后端地址和端口。脚本会隔离可能抢占公网 `443` 的旧 Caddy 配置，但不会自动把旧反代规则迁移成新的 443 单入口站点；启用后需要通过 `19 -> 2` 手动补录旧网站。
+
 完整教程请看：[443 单入口分流详细教程](docs/443-single-entry.md)。
 
 <a id="node-tools"></a>
