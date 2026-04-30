@@ -40,6 +40,43 @@ read_secret_trimmed() {
     printf -v "$__target" '%s' "$(trim_input "$input")"
 }
 
+pause_return() {
+    local prompt="${1:-按任意键继续...}"
+    read -n 1 -s -r -p "$prompt"
+    echo ""
+}
+
+quarantine_path() {
+    local target="$1"
+    local quarantine_root="${2:-/root/vps-optimize-quarantine}"
+    local resolved base dest
+
+    if [[ -z "$target" || "$target" == *"*"* || "$target" == *"?"* ]]; then
+        echo -e "${RED}❌ 拒绝隔离空路径或通配符路径：${target}${PLAIN}"
+        return 1
+    fi
+
+    [[ -e "$target" || -L "$target" ]] || return 0
+
+    resolved=$(readlink -f -- "$target" 2>/dev/null || realpath -m -- "$target" 2>/dev/null || printf '%s' "$target")
+    case "$resolved" in
+        /|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/opt|/proc|/root|/run|/sbin|/sys|/tmp|/usr|/var)
+            echo -e "${RED}❌ 拒绝隔离系统根级目录：${resolved}${PLAIN}"
+            return 1
+            ;;
+    esac
+
+    mkdir -p "$quarantine_root" || return 1
+    base=$(basename "$resolved")
+    dest="${quarantine_root%/}/$(date +%Y%m%d_%H%M%S)_${base}"
+    while [[ -e "$dest" ]]; do
+        dest="${dest}_$RANDOM"
+    done
+
+    mv -- "$target" "$dest"
+    echo -e "${YELLOW}已隔离：${resolved} -> ${dest}${PLAIN}"
+}
+
 normalize_domain_input() {
     local domain
     domain="$(trim_input "$1")"
@@ -640,8 +677,9 @@ prepare_acme_account() {
         return 0
     fi
 
-    # 若历史账户状态异常（例如旧邮箱残留），清理 LE 账户缓存后重试。
-    rm -rf "$le_ca_dir" "/root/.acme.sh/ca/acme-staging-v02.api.letsencrypt.org" >/dev/null 2>&1 || true
+    # 若历史账户状态异常（例如旧邮箱残留），先隔离 LE 账户缓存后重试。
+    quarantine_path "$le_ca_dir" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
+    quarantine_path "/root/.acme.sh/ca/acme-staging-v02.api.letsencrypt.org" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
     if "$acme_bin" --register-account --server letsencrypt --accountemail "$acme_email" >>"$account_log" 2>&1 || \
        "$acme_bin" --register-account --server letsencrypt -m "$acme_email" >>"$account_log" 2>&1 || \
        "$acme_bin" --update-account --server letsencrypt --accountemail "$acme_email" >>"$account_log" 2>&1 || \
@@ -717,10 +755,10 @@ issue_cf_dns_cert_with_retry() {
         return 0
     fi
 
-    # 旧残留常导致“删除后重签失败”，先清理历史状态再强制签发。
+    # 旧残留常导致“删除后重签失败”，先隔离历史状态再强制签发。
     "$acme_bin" --remove -d "$domain" --ecc >/dev/null 2>&1 || true
-    rm -rf "/root/.acme.sh/${domain}_ecc" >/dev/null 2>&1 || true
-    rm -rf "/root/.acme.sh/${domain}" >/dev/null 2>&1 || true
+    quarantine_path "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
+    quarantine_path "/root/.acme.sh/${domain}" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
 
     if CF_Token="$cf_token" "$acme_bin" --issue --server letsencrypt --dns dns_cf -d "$domain" --keylength ec-256 --force >>"$acme_log" 2>&1; then
         return 0
@@ -1546,7 +1584,9 @@ rollback_sni_stack_config() {
 
     [[ -f "$backup_dir/nginx.conf" ]] && cp -a "$backup_dir/nginx.conf" /etc/nginx/nginx.conf
     mkdir -p /etc/nginx/stream.d /etc/caddy/conf.d
-    rm -f /etc/nginx/stream.d/vps_sni_*.conf 2>/dev/null || true
+    while IFS= read -r stream_conf; do
+        quarantine_path "$stream_conf" "/etc/nginx/stream.d_quarantine" >/dev/null 2>&1 || true
+    done < <(find /etc/nginx/stream.d -maxdepth 1 -type f -name 'vps_sni_*.conf' 2>/dev/null | sort)
     cp -a "$backup_dir/nginx_stream.d/"*.conf /etc/nginx/stream.d/ 2>/dev/null || true
     [[ -f "$backup_dir/Caddyfile" ]] && cp -a "$backup_dir/Caddyfile" /etc/caddy/Caddyfile
     if [[ -d "$backup_dir/caddy_conf.d" ]]; then
@@ -2844,7 +2884,8 @@ func_caddy_cf_maintenance_menu() {
                 read_trimmed purge_acme "❓ 是否同时删除 acme.sh 历史记录？(y/n，默认n，建议保留): "
                 if [[ "$purge_acme" =~ ^[Yy]$ ]]; then
                     /root/.acme.sh/acme.sh --remove -d "$domain" --ecc >/dev/null 2>&1 || true
-                    rm -rf "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/${domain}"
+                    quarantine_path "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
+                    quarantine_path "/root/.acme.sh/${domain}" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
                 fi
 
                 if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
@@ -2992,8 +3033,10 @@ func_caddy_clear_config() {
                 cp -r /etc/caddy/conf.d "$backup_dir" 2>/dev/null
                 echo -e "${BLUE}已备份原配置目录为 $backup_dir${PLAIN}"
                 
-                # 精准清空所有 .caddy 配置文件
-                rm -f /etc/caddy/conf.d/*.caddy 2>/dev/null
+                # 精准隔离所有 .caddy 配置文件，避免不可逆删除。
+                while IFS= read -r caddy_conf; do
+                    mv "$caddy_conf" "$backup_dir/" 2>/dev/null || true
+                done < <(find /etc/caddy/conf.d -maxdepth 1 -type f -name '*.caddy' 2>/dev/null | sort)
             fi
             
             # 2. 守护主文件架构，重置为极简模式并注入模块化指令
@@ -3051,7 +3094,7 @@ func_caddy_delete_cert() {
             if [[ -d "$cp" ]]; then
                 local target=$(find "$cp" -type d -name "${domain}" -print -quit 2>/dev/null)
                 if [[ -n "$target" ]]; then
-                    rm -rf "$target"
+                    quarantine_path "$target" "/root/vps-optimize-quarantine/caddy-certs" >/dev/null 2>&1 || true
                     caddy_found=true
                 fi
             fi
@@ -3066,7 +3109,7 @@ func_caddy_delete_cert() {
         if [[ -d "/root/.acme.sh" ]]; then
             local acme_target=$(find "/root/.acme.sh" -type d -name "*${domain}*" -print -quit 2>/dev/null)
             if [[ -n "$acme_target" ]]; then
-                rm -rf "$acme_target"
+                quarantine_path "$acme_target" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
                 echo -e "${GREEN}✅ [3/4] 面板底层 (~/.acme.sh) 关于 ${domain} 的残留已抹除。${PLAIN}"
             else
                 echo -e "${BLUE}ℹ️ [3/4] 未在 acme.sh 引擎中发现残留。${PLAIN}"
@@ -3331,8 +3374,8 @@ EOF
         3)
             echo -e "${CYAN}正在卸载 Fail2ban...${PLAIN}"
             remove_pkg fail2ban # <--- 核心修改：一句话极简卸载
-            rm -rf /etc/fail2ban
-            echo -e "${GREEN}✅ Fail2ban 已彻底卸载！${PLAIN}"
+            quarantine_path /etc/fail2ban "/etc/vps-optimize/quarantine" >/dev/null 2>&1 || true
+            echo -e "${GREEN}✅ Fail2ban 已卸载，旧配置已隔离到 /etc/vps-optimize/quarantine。${PLAIN}"
             ;;
         0) return ;;
         *) echo -e "${RED}❌ 无效的输入！${PLAIN}"; sleep 1 ;;
@@ -4656,7 +4699,7 @@ manage_compose_project() {
         echo -e "${GREEN}  2. 重启服务${PLAIN}"
         echo -e "${GREEN}  3. 更新镜像并重建${PLAIN}"
         echo -e "${YELLOW}  4. 停止并移除容器（保留目录数据）${PLAIN}"
-        echo -e "${RED}  5. 删除部署目录（删除配置/数据）${PLAIN}"
+        echo -e "${RED}  5. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}"
         echo -e "${RED}  0. 返回上级菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
@@ -4689,19 +4732,23 @@ manage_compose_project() {
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
             5)
-                echo -e "${RED}⚠️  高风险：这会删除 ${project_dir}，包括配置、数据库或本地数据。${PLAIN}"
-                read_trimmed yn "请输入 DELETE 确认删除部署目录: "
-                if [[ "$yn" == "DELETE" ]]; then
+                echo -e "${RED}⚠️  高风险：这会停止容器并把 ${project_dir} 移入隔离目录，配置、数据库或本地数据不再原地可用。${PLAIN}"
+                echo -e "${YELLOW}隔离后如需彻底清理，请确认无误后手动处理隔离目录。${PLAIN}"
+                read_trimmed yn "请输入 ARCHIVE 确认归档部署目录: "
+                if [[ "$yn" == "ARCHIVE" ]]; then
                     if ! is_managed_compose_dir "$project_dir"; then
-                        echo -e "${RED}❌ 安全检查未通过，拒绝删除非脚本托管目录：${project_dir}${PLAIN}"
+                        echo -e "${RED}❌ 安全检查未通过，拒绝归档非脚本托管目录：${project_dir}${PLAIN}"
                     else
                         ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
                         (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down -v)
-                        rm -rf -- "$project_dir"
-                        echo -e "${GREEN}✅ 已删除 ${project_name} 部署目录。${PLAIN}"
+                        if quarantine_path "$project_dir" "/opt/.vps-optimize-quarantine"; then
+                            echo -e "${GREEN}✅ 已归档 ${project_name} 部署目录。${PLAIN}"
+                        else
+                            echo -e "${RED}❌ 归档失败，请手动检查目录：${project_dir}${PLAIN}"
+                        fi
                     fi
                 else
-                    echo -e "${BLUE}已取消删除。${PLAIN}"
+                    echo -e "${BLUE}已取消归档。${PLAIN}"
                 fi
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
@@ -5335,7 +5382,7 @@ func_backup_center() {
                 fi
 
                 if [[ "$copied" -eq 0 ]]; then
-                    rm -rf "$work_dir"
+                    quarantine_path "$work_dir" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
                     echo -e "${YELLOW}⚠️ 未检测到可备份配置文件，已取消创建。${PLAIN}"
                 else
                     if tar -czf "$tar_file" -C "$work_dir" . >/dev/null 2>&1; then
@@ -5343,7 +5390,7 @@ func_backup_center() {
                     else
                         echo -e "${RED}❌ 备份打包失败，请检查磁盘空间与权限。${PLAIN}"
                     fi
-                    rm -rf "$work_dir"
+                    quarantine_path "$work_dir" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
                 fi
                 ;;
 
@@ -5395,7 +5442,7 @@ func_backup_center() {
                 mkdir -p "$restore_dir"
 
                 if ! tar -xzf "$target_file" -C "$restore_dir" >/dev/null 2>&1; then
-                    rm -rf "$restore_dir"
+                    quarantine_path "$restore_dir" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
                     echo -e "${RED}❌ 备份解压失败，回滚中止。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
@@ -5418,7 +5465,7 @@ func_backup_center() {
                 systemctl restart docker >/dev/null 2>&1
                 systemctl restart fail2ban >/dev/null 2>&1
 
-                rm -rf "$restore_dir"
+                quarantine_path "$restore_dir" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
                 echo -e "${GREEN}✅ 回滚完成！建议立即验证 SSH、反代和容器服务状态。${PLAIN}"
                 ;;
 
@@ -5679,6 +5726,36 @@ func_sni_stack_quick_menu() {
     done
 }
 
+normalize_main_choice() {
+    local choice
+    choice="$(trim_input "$1")"
+    choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
+
+    case "$choice" in
+        q|quit|exit|0|退出) echo "0" ;;
+        pre|preflight|check|体检|预检) echo "1" ;;
+        init|base|初始化) echo "2" ;;
+        env|docker|caddy|组件) echo "3" ;;
+        panel|node|nodes|面板|节点) echo "4" ;;
+        ssh) echo "5" ;;
+        key|pubkey|公钥) echo "6" ;;
+        fail2ban|f2b) echo "7" ;;
+        fw|firewall|防火墙) echo "8" ;;
+        tweak|system|系统) echo "9" ;;
+        net|kernel|bbr|网络|内核) echo "10" ;;
+        docker-safe|docker安全) echo "11" ;;
+        test|speed|测速) echo "12" ;;
+        port|端口) echo "13" ;;
+        info|hardware|探针) echo "14" ;;
+        h|health|健康) echo "15" ;;
+        b|backup|bak|备份) echo "16" ;;
+        u|upd|update|更新) echo "17" ;;
+        reboot|重启) echo "18" ;;
+        sni|443|单入口) echo "19" ;;
+        *) echo "$choice" ;;
+    esac
+}
+
 # ---------------------------------------------------------
 # 界面主循环 (新增 IP 防送中 & SublinkPro)
 # ---------------------------------------------------------
@@ -5690,6 +5767,7 @@ main_menu() {
         echo -e " ${BOLD}🚀 VPS 全能控制面板 (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${YELLOW}新机器建议先跑 [1] 预检；部署面板/节点优先看 [4]；443 相关都进 [19]。${PLAIN}"
+        echo -e " ${YELLOW}快捷输入：443 直达单入口，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
         echo -e " ${YELLOW}高风险操作会要求输入 YES；不确定时先做 [16] 备份。${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
@@ -5726,7 +5804,8 @@ main_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         
         local choice
-        read_trimmed choice "👉 请输入对应数字选择功能: "
+        read_trimmed choice "👉 请输入数字或快捷词选择功能: "
+        choice=$(normalize_main_choice "$choice")
         
         case $choice in
             1) func_preflight_check ;;

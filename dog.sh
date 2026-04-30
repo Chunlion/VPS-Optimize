@@ -43,6 +43,57 @@ read_secret_trimmed() {
     printf -v "$__target" '%s' "$(trim_input "$input")"
 }
 
+quarantine_path() {
+    local target="$1"
+    local quarantine_root="${2:-/root/port-traffic-dog-quarantine}"
+    local resolved base dest
+
+    if [[ -z "$target" || "$target" == *"*"* || "$target" == *"?"* ]]; then
+        echo -e "${RED}拒绝隔离空路径或通配符路径: ${target}${NC}"
+        return 1
+    fi
+
+    [[ -e "$target" || -L "$target" ]] || return 0
+
+    resolved=$(readlink -f -- "$target" 2>/dev/null || realpath -m -- "$target" 2>/dev/null || printf '%s' "$target")
+    case "$resolved" in
+        /|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/opt|/proc|/root|/run|/sbin|/sys|/tmp|/usr|/var)
+            echo -e "${RED}拒绝隔离系统根级目录: ${resolved}${NC}"
+            return 1
+            ;;
+    esac
+
+    mkdir -p "$quarantine_root" || return 1
+    base=$(basename "$resolved")
+    dest="${quarantine_root%/}/$(date +%Y%m%d_%H%M%S)_${base}"
+    while [[ -e "$dest" ]]; do
+        dest="${dest}_$RANDOM"
+    done
+
+    mv -- "$target" "$dest"
+    echo -e "${YELLOW}已隔离: ${resolved} -> ${dest}${NC}"
+}
+
+normalize_main_choice() {
+    local choice
+    choice="$(trim_input "$1")"
+    choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
+
+    case "$choice" in
+        q|quit|exit|0|退出) echo "0" ;;
+        add|port|端口) echo "1" ;;
+        limit|quota|限额|限速) echo "2" ;;
+        reset|重置) echo "3" ;;
+        config|配置) echo "4" ;;
+        update|upd|u|更新) echo "5" ;;
+        uninstall|remove|卸载) echo "6" ;;
+        tg|telegram|通知) echo "7" ;;
+        mode|口径) echo "8" ;;
+        report|trend|日报|趋势) echo "9" ;;
+        *) echo "$choice" ;;
+    esac
+}
+
 # 网络超时设置
 readonly SHORT_CONNECT_TIMEOUT=5
 readonly SHORT_MAX_TIMEOUT=7
@@ -143,10 +194,12 @@ setup_script_permissions() {
 confirm_danger() {
     local title="$1"
     local impact="$2"
+    local rollback="${3:-取消后不会改动当前配置；继续前建议先导出配置。}"
     local confirm
     echo -e "${RED}高风险操作: ${title}${NC}"
     echo -e "${YELLOW}影响: ${impact}${NC}"
-    read_trimmed confirm "确认继续请输入 YES: "
+    echo -e "${BLUE}回退: ${rollback}${NC}"
+    read_trimmed confirm "确认继续请输入 YES（直接回车取消）: "
     [[ "$confirm" == "YES" ]]
 }
 
@@ -452,10 +505,10 @@ save_traffic_data() {
     fi
 }
 
-# 优化2：兜底清理临时文件，防止产生大量 /tmp 垃圾文件
+# 退出时只保存计数数据；临时文件在创建点按明确路径清理。
 setup_exit_hooks() {
-    trap 'save_traffic_data_on_exit; rm -f /tmp/port-traffic-dog-*' EXIT
-    trap 'save_traffic_data_on_exit; rm -f /tmp/port-traffic-dog-*; exit 1' INT TERM
+    trap 'save_traffic_data_on_exit' EXIT
+    trap 'save_traffic_data_on_exit; exit 1' INT TERM
 }
 
 save_traffic_data_on_exit() { save_traffic_data >/dev/null 2>&1; }
@@ -1072,6 +1125,7 @@ show_main_menu() {
     echo -e "${GREEN}介绍主页:${NC}https://zywe.de | ${GREEN}原项目:${NC}https://github.com/zywe03/realm-xwPF"
     echo -e "${GREEN}项目地址：https://github.com/Chunlion/VPS-Optimize 作者修改了部分代码 | 快捷命令: dog${NC}"
     echo -e "${YELLOW}用途：按端口统计流量、设置配额/限速、日报趋势和 Telegram 查询。${NC}"
+    echo -e "${YELLOW}快捷输入：add 添加端口，limit 配额/限速，tg 通知，report 报表，u 更新，q 退出。${NC}"
     echo
     echo -e "${GREEN}状态: 监控中${NC} | ${BLUE}守护端口: ${port_count}个${NC}"
     echo -e "${YELLOW}端口单向(用户实际/出站): $port_single_total${NC} | ${YELLOW}端口双向(入站+出站): $port_dual_total${NC}"
@@ -1093,7 +1147,8 @@ show_main_menu() {
     echo -e "${BLUE}8.${NC} 流量口径说明            ${BLUE}9.${NC} 日报与趋势报表"
     echo -e "${BLUE}0.${NC} 退出"
     echo
-    read_trimmed choice "请选择操作 [0-9]: "
+    read_trimmed choice "请选择操作 [0-9 或快捷词]: "
+    choice=$(normalize_main_choice "$choice")
 
     case $choice in
         1) manage_port_monitoring ;;
@@ -1941,11 +1996,11 @@ uninstall_script() {
     echo "  3. 删除 Telegram/企业微信/自动重置等定时任务"
     echo "  4. 停止并删除 TG 交互机器人后台服务 (Systemd)"
     echo "  5. 删除快捷命令 dog"
-    echo "  6. 删除所有配置文件及日志 (/etc/port-traffic-dog)" 
+    echo "  6. 隔离配置文件及日志 (/etc/port-traffic-dog)"
     echo "  7. 删除脚本本身" 
     echo
     echo -e "${RED}🔴 警告：此操作不可逆，所有历史流量数据将永久丢失！${NC}" 
-    if confirm_danger "卸载端口流量狗" "会删除 nftables/tc 规则、定时任务、机器人服务、快捷命令、配置和历史流量数据。"; then
+    if confirm_danger "卸载端口流量狗" "会删除 nftables/tc 规则、定时任务、机器人服务和快捷命令；配置目录会先隔离保留。" "隔离目录可用于手动恢复配置；重新运行脚本后可导入或比对旧配置。"; then
         echo -e "${YELLOW}正在全力卸载中...${NC}"
 
         local active_ports=($(get_active_ports 2>/dev/null || true))
@@ -1967,10 +2022,10 @@ uninstall_script() {
         remove_telegram_notification_cron 2>/dev/null || true
         remove_wecom_notification_cron 2>/dev/null || true
 
-        rm -rf "$CONFIG_DIR" 2>/dev/null || true 
+        quarantine_path "$CONFIG_DIR" "/root/port-traffic-dog-quarantine" >/dev/null 2>&1 || true
         rm -f "/usr/local/bin/$SHORTCUT_COMMAND" 2>/dev/null || true
         
-        echo -e "${GREEN}✅ 卸载完成！${NC}" 
+        echo -e "${GREEN}✅ 卸载完成，旧配置目录已隔离到 /root/port-traffic-dog-quarantine。${NC}"
         echo -e "${YELLOW}感谢使用，江湖路远，有缘再见！👋${NC}" 
         
         rm -f "$SCRIPT_PATH" 2>/dev/null || true 
