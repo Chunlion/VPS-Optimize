@@ -26,18 +26,18 @@ trim_input() {
 read_trimmed() {
     local __target="$1"
     local prompt="${2:-}"
-    local input
-    read -r -p "$prompt" input
-    printf -v "$__target" '%s' "$(trim_input "$input")"
+    local __raw_input
+    read -r -p "$prompt" __raw_input
+    printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
 }
 
 read_secret_trimmed() {
     local __target="$1"
     local prompt="${2:-}"
-    local input
-    read -r -s -p "$prompt" input
+    local __raw_input
+    read -r -s -p "$prompt" __raw_input
     echo ""
-    printf -v "$__target" '%s' "$(trim_input "$input")"
+    printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
 }
 
 pause_return() {
