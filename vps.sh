@@ -115,28 +115,85 @@ is_redhat() {
 # --- 全局包管理抽象  ---
 install_pkg() {
     local pkgs="$*"
+    local rc=0
     if is_debian; then
         # 使用 apt-get 代替 apt，消除 "stable CLI interface" 警告 
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -qq >/dev/null 2>&1
         apt-get install -y -qq $pkgs >/dev/null 2>&1
+        rc=$?
         unset DEBIAN_FRONTEND
     elif is_redhat; then
-        yum install -y -q $pkgs >/dev/null 2>&1
+        if command -v dnf >/dev/null 2>&1; then
+            dnf install -y -q $pkgs >/dev/null 2>&1
+        else
+            yum install -y -q $pkgs >/dev/null 2>&1
+        fi
+        rc=$?
     fi
+    return "$rc"
 }
 
 remove_pkg() {
     local pkgs="$*"
+    local rc=0
     if is_debian; then
         export DEBIAN_FRONTEND=noninteractive
         apt-get purge -y -qq $pkgs >/dev/null 2>&1
+        rc=$?
         unset DEBIAN_FRONTEND
     elif is_redhat; then
-        yum remove -y -q $pkgs >/dev/null 2>&1
+        if command -v dnf >/dev/null 2>&1; then
+            dnf remove -y -q $pkgs >/dev/null 2>&1
+        else
+            yum remove -y -q $pkgs >/dev/null 2>&1
+        fi
+        rc=$?
     fi
+    return "$rc"
 }
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh"
+
+minimal_compat_packages() {
+    if is_debian; then
+        printf '%s\n' \
+            ca-certificates curl wget gnupg gpg lsb-release apt-transport-https debian-archive-keyring \
+            iproute2 iptables procps psmisc cron dbus chrony jq unzip tar gzip openssl
+    elif is_redhat; then
+        printf '%s\n' \
+            ca-certificates curl wget gnupg2 redhat-lsb-core iproute iptables procps-ng psmisc cronie \
+            dbus chrony jq unzip tar gzip openssl
+    fi
+}
+
+ensure_minimal_system_compat() {
+    local pkgs=()
+    local pkg
+
+    while IFS= read -r pkg; do
+        [[ -n "$pkg" ]] && pkgs+=("$pkg")
+    done < <(minimal_compat_packages)
+
+    if [[ ${#pkgs[@]} -gt 0 ]]; then
+        echo -e "${CYAN}▶ 正在补齐精简系统兼容组件...${PLAIN}"
+        if install_pkg "${pkgs[@]}"; then
+            echo -e "${GREEN}✅ 精简系统兼容组件已检查/补齐。${PLAIN}"
+        else
+            echo -e "${YELLOW}⚠️ 部分兼容组件安装失败，请检查软件源或网络。${PLAIN}"
+            echo -e "${CYAN}▶ 正在降级为逐个组件补齐，尽量提高兼容性...${PLAIN}"
+            for pkg in "${pkgs[@]}"; do
+                install_pkg "$pkg" || echo -e "${YELLOW}  - 跳过不可安装组件: ${pkg}${PLAIN}"
+            done
+        fi
+    fi
+
+    systemctl enable --now cron >/dev/null 2>&1 || true
+    systemctl enable --now crond >/dev/null 2>&1 || true
+    systemctl enable --now dbus >/dev/null 2>&1 || true
+    systemctl enable --now chrony >/dev/null 2>&1 || true
+    systemctl enable --now chronyd >/dev/null 2>&1 || true
+    update-ca-certificates >/dev/null 2>&1 || update-ca-trust >/dev/null 2>&1 || true
+}
 
 # --- 全局快捷键注册 ---
 create_shortcut() {
@@ -175,6 +232,8 @@ func_base_init() {
         yum update -y
         install_pkg curl wget git nano unzip htop iptables iproute epel-release sqlite jq
     fi
+
+    ensure_minimal_system_compat
 
     # 限制系统日志最大 100M
     mkdir -p /etc/systemd/journald.conf.d/
@@ -3803,25 +3862,41 @@ func_fail2ban() {
         1|2)
             if [[ "$f_choice" == "1" ]]; then
                 echo -e "${CYAN}正在安装 Fail2ban...${PLAIN}"
-                install_pkg fail2ban # <--- 核心修改：一句话代替之前的多行系统判定
+                if is_debian; then
+                    install_pkg fail2ban python3-systemd
+                else
+                    install_pkg fail2ban
+                fi
             fi
             
             if command -v fail2ban-server >/dev/null 2>&1; then
                 echo -e "${CYAN}正在写入配置并绑定端口 $current_p ...${PLAIN}"
+                local f2b_backend="auto"
+                if command -v journalctl >/dev/null 2>&1; then
+                    f2b_backend="systemd"
+                fi
                 cat <<EOF > /etc/fail2ban/jail.local
 [DEFAULT]
 bantime = 86400
 findtime = 600
 maxretry = 5
+ignoreip = 127.0.0.1/8 ::1
 
 [sshd]
 enabled = true
 port = $current_p
+backend = $f2b_backend
 EOF
                 systemctl enable fail2ban >/dev/null 2>&1
                 systemctl restart fail2ban >/dev/null 2>&1
-                echo -e "${GREEN}✅ Fail2ban 配置完成并已启动！(保护端口: $current_p)${PLAIN}"
-                echo -e "${YELLOW}💡 规则：10分钟内密码错误5次，自动封禁该IP 24小时。${PLAIN}"
+                if systemctl is-active --quiet fail2ban; then
+                    echo -e "${GREEN}✅ Fail2ban 配置完成并已启动！(保护端口: $current_p，日志后端: $f2b_backend)${PLAIN}"
+                    echo -e "${YELLOW}💡 规则：10分钟内密码错误5次，自动封禁该IP 24小时。${PLAIN}"
+                else
+                    echo -e "${RED}❌ Fail2ban 启动失败，正在显示关键日志：${PLAIN}"
+                    fail2ban-client -t 2>/dev/null || true
+                    journalctl -u fail2ban -n 20 --no-pager 2>/dev/null || true
+                fi
             else
                 echo -e "${RED}❌ Fail2ban 安装或检测失败，请检查网络源。${PLAIN}"
             fi
@@ -4195,9 +4270,27 @@ EOF
 # ---------------------------------------------------------
 # 9. 安装/切换优化内核 (Cloud/KVM 稳定优先 + XanMod 高级可选)
 # ---------------------------------------------------------
+normalize_kernel_arch() {
+    case "$(uname -m)" in
+        x86_64|amd64) echo "amd64" ;;
+        aarch64|arm64) echo "arm64" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+apt_pkg_available() {
+    local pkg="$1"
+    apt-cache show "$pkg" >/dev/null 2>&1
+}
+
 set_grub_default_kernel_by_keyword() {
     local kernel_keyword="$1"
     local target_v menu_1 menu_2
+
+    if ! command -v dpkg >/dev/null 2>&1 || [[ ! -f /etc/default/grub ]]; then
+        echo -e "${YELLOW}⚠️ 未检测到 dpkg/GRUB 配置，已跳过自动接管引导。${PLAIN}"
+        return 0
+    fi
 
     target_v=$(dpkg -l | awk '/^ii[[:space:]]+linux-image-[0-9]/ && /'"$kernel_keyword"'/ {print $2}' | sed 's/linux-image-//' | sort -V | tail -n 1)
     if [[ -z "$target_v" ]]; then
@@ -4206,15 +4299,30 @@ set_grub_default_kernel_by_keyword() {
     fi
 
     echo -e "${CYAN}▶ 正在接管 GRUB 底层引导，锁定启动内核为: $target_v ...${PLAIN}"
-    sed -i 's/^GRUB_DEFAULT=.*/GRUB_DEFAULT=saved/' /etc/default/grub
+    if grep -q '^GRUB_DEFAULT=' /etc/default/grub; then
+        sed -i 's/^GRUB_DEFAULT=.*/GRUB_DEFAULT=saved/' /etc/default/grub
+    else
+        echo "GRUB_DEFAULT=saved" >> /etc/default/grub
+    fi
     grep -q "^GRUB_SAVEDEFAULT=true" /etc/default/grub || echo "GRUB_SAVEDEFAULT=true" >> /etc/default/grub
-    update-grub >/dev/null 2>&1
+    if command -v update-grub >/dev/null 2>&1; then
+        update-grub >/dev/null 2>&1
+    elif command -v grub2-mkconfig >/dev/null 2>&1; then
+        grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1 || true
+    fi
 
-    menu_1=$(grep -i "submenu 'Advanced options for" /boot/grub/grub.cfg | cut -d"'" -f2 | head -n 1)
-    menu_2=$(grep -i "menuentry '.*$target_v.*'" /boot/grub/grub.cfg | grep -iv "recovery" | cut -d"'" -f2 | head -n 1)
+    local grub_cfg="/boot/grub/grub.cfg"
+    [[ -f "$grub_cfg" ]] || grub_cfg="/boot/grub2/grub.cfg"
+    if [[ ! -f "$grub_cfg" ]]; then
+        echo -e "${YELLOW}⚠️ 未找到 grub.cfg，新内核已安装，但请重启后手动确认默认启动项。${PLAIN}"
+        return 0
+    fi
+
+    menu_1=$(grep -i "submenu 'Advanced options for" "$grub_cfg" | cut -d"'" -f2 | head -n 1)
+    menu_2=$(grep -i "menuentry '.*$target_v.*'" "$grub_cfg" | grep -iv "recovery" | cut -d"'" -f2 | head -n 1)
 
     if [[ -n "$menu_1" && -n "$menu_2" ]]; then
-        grub-set-default "$menu_1>$menu_2"
+        grub-set-default "$menu_1>$menu_2" 2>/dev/null || grub2-set-default "$menu_1>$menu_2" 2>/dev/null || true
         echo -e "${GREEN}✅ GRUB 引导接管成功！重启后将优先进入：$target_v${PLAIN}"
         return 0
     fi
@@ -4224,30 +4332,128 @@ set_grub_default_kernel_by_keyword() {
 }
 
 install_cloud_kvm_kernel() {
-    local kernel_keyword=""
+    local arch kernel_keyword="" pkg
+    local candidates=()
 
-    if uname -r | grep -qE "kvm|cloud"; then
-        echo -e "${GREEN}✅ 系统当前已运行 KVM/Cloud 优化内核 ($(uname -r))，无需重复安装！${PLAIN}"
+    if uname -r | grep -qE "kvm|cloud|virtual"; then
+        echo -e "${GREEN}✅ 系统当前已运行 KVM/Cloud/Virtual 优化内核 ($(uname -r))，无需重复安装！${PLAIN}"
         return 0
     fi
 
-    echo -e "${CYAN}▶ 正在安装发行版官方 Cloud/KVM 内核...${PLAIN}"
-    if [[ "$OS" == "debian" ]]; then
-        install_pkg linux-image-cloud-amd64 || return 1
-        kernel_keyword="cloud"
-    elif [[ "$OS" == "ubuntu" ]]; then
-        install_pkg linux-image-kvm || return 1
-        kernel_keyword="kvm"
-    else
-        echo -e "${RED}❌ Cloud/KVM 内核功能目前仅支持 Debian 和 Ubuntu。${PLAIN}"
+    arch=$(normalize_kernel_arch)
+    if [[ "$arch" == "unknown" ]]; then
+        echo -e "${RED}❌ 当前架构 $(uname -m) 暂不支持自动切换精简内核。${PLAIN}"
         return 1
     fi
 
-    set_grub_default_kernel_by_keyword "$kernel_keyword"
+    echo -e "${CYAN}▶ 正在安装发行版官方 Cloud/KVM/Virtual 精简内核...${PLAIN}"
+    ensure_minimal_system_compat
+
+    if [[ "$OS" == "debian" ]]; then
+        if [[ "$arch" == "amd64" ]]; then
+            candidates=("linux-image-cloud-amd64" "linux-image-amd64")
+        else
+            candidates=("linux-image-cloud-arm64" "linux-image-arm64")
+        fi
+        kernel_keyword="cloud|${arch}"
+    elif [[ "$OS" == "ubuntu" ]]; then
+        if [[ "$arch" == "amd64" ]]; then
+            candidates=("linux-kvm" "linux-virtual" "linux-generic")
+        else
+            candidates=("linux-virtual" "linux-generic")
+        fi
+        kernel_keyword="kvm|virtual|generic"
+    else
+        echo -e "${RED}❌ Cloud/KVM/Virtual 内核功能目前仅支持 Debian 和 Ubuntu。${PLAIN}"
+        return 1
+    fi
+
+    if is_debian; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq >/dev/null 2>&1
+        unset DEBIAN_FRONTEND
+    fi
+
+    for pkg in "${candidates[@]}"; do
+        if ! apt_pkg_available "$pkg"; then
+            echo -e "${YELLOW}  - 当前源未提供 ${pkg}，尝试下一个候选...${PLAIN}"
+            continue
+        fi
+        echo -e "${CYAN}▶ 尝试安装内核包: ${pkg}${PLAIN}"
+        if install_pkg "$pkg"; then
+            echo -e "${GREEN}✅ 已安装内核包: ${pkg}${PLAIN}"
+            set_grub_default_kernel_by_keyword "$kernel_keyword"
+            return $?
+        fi
+        echo -e "${YELLOW}  - ${pkg} 安装失败，尝试下一个候选...${PLAIN}"
+    done
+
+    echo -e "${RED}❌ 未能安装可用的官方精简内核，请检查系统版本、架构和软件源。${PLAIN}"
+    return 1
+}
+
+xanmod_cpu_level() {
+    local flags level="x64v1"
+    flags=$(awk -F: '/flags/ {print $2; exit}' /proc/cpuinfo 2>/dev/null)
+    if [[ "$flags" =~ avx2 ]] && [[ "$flags" =~ bmi2 ]] && [[ "$flags" =~ fma ]] && [[ "$flags" =~ movbe ]]; then
+        level="x64v3"
+    fi
+    if [[ "$flags" =~ avx512f ]] && [[ "$flags" =~ avx512bw ]] && [[ "$flags" =~ avx512vl ]]; then
+        level="x64v4"
+    fi
+    if [[ "$flags" =~ cx16 ]] && [[ "$flags" =~ lahf_lm ]] && [[ "$flags" =~ popcnt ]] && [[ "$flags" =~ sse4_2 ]]; then
+        [[ "$level" == "x64v1" ]] && level="x64v2"
+    fi
+    echo "$level"
+}
+
+xanmod_candidate_packages() {
+    local level="${1:-x64v1}"
+    case "$level" in
+        x64v4) printf '%s\n' linux-xanmod-lts-x64v4 linux-xanmod-x64v4 linux-xanmod-lts-x64v3 linux-xanmod-x64v3 linux-xanmod-lts-x64v2 linux-xanmod-x64v2 linux-xanmod-lts-x64v1 linux-xanmod-x64v1 ;;
+        x64v3) printf '%s\n' linux-xanmod-lts-x64v3 linux-xanmod-x64v3 linux-xanmod-lts-x64v2 linux-xanmod-x64v2 linux-xanmod-lts-x64v1 linux-xanmod-x64v1 ;;
+        x64v2) printf '%s\n' linux-xanmod-lts-x64v2 linux-xanmod-x64v2 linux-xanmod-lts-x64v1 linux-xanmod-x64v1 ;;
+        *) printf '%s\n' linux-xanmod-lts-x64v1 linux-xanmod-x64v1 ;;
+    esac
+}
+
+xanmod_supported_codename() {
+    case "$1" in
+        bookworm|trixie|forky|sid|jammy|noble|plucky) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+add_xanmod_repo() {
+    local codename="$1"
+    mkdir -p /etc/apt/keyrings
+    rm -f /etc/apt/keyrings/xanmod-archive-keyring.gpg
+    if ! curl -fsSL https://dl.xanmod.org/archive.key | gpg --dearmor -o /etc/apt/keyrings/xanmod-archive-keyring.gpg; then
+        echo -e "${RED}❌ XanMod GPG key 下载或写入失败。${PLAIN}"
+        return 1
+    fi
+    echo "deb [signed-by=/etc/apt/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org ${codename} main" > /etc/apt/sources.list.d/xanmod-release.list
+    apt-get update -qq
+}
+
+install_xanmod_kernel_package() {
+    local preferred_level="$1"
+    local pkg
+    while IFS= read -r pkg; do
+        apt_pkg_available "$pkg" || continue
+        echo -e "${CYAN}▶ 尝试安装 XanMod 包: ${pkg}${PLAIN}"
+        if apt-get install -y -qq "$pkg"; then
+            echo -e "${GREEN}✅ 已安装 XanMod 内核包: ${pkg}${PLAIN}"
+            return 0
+        fi
+        echo -e "${YELLOW}  - ${pkg} 安装失败，尝试更保守候选...${PLAIN}"
+    done < <(xanmod_candidate_packages "$preferred_level")
+
+    return 1
 }
 
 install_xanmod_kernel() {
-    local codename confirm
+    local codename confirm arch cpu_level
 
     if uname -r | grep -qi "xanmod"; then
         echo -e "${GREEN}✅ 系统当前已运行 XanMod 内核 ($(uname -r))，无需重复安装！${PLAIN}"
@@ -4259,6 +4465,13 @@ install_xanmod_kernel() {
         return 1
     fi
 
+    arch=$(normalize_kernel_arch)
+    if [[ "$arch" != "amd64" ]]; then
+        echo -e "${RED}❌ XanMod 官方 x64v 内核仅支持 x86_64/amd64，本机为 $(uname -m)。${PLAIN}"
+        echo -e "${YELLOW}建议改用官方 Cloud/Virtual 内核。${PLAIN}"
+        return 1
+    fi
+
     codename="${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}"
     if [[ -z "$codename" ]] && command -v lsb_release >/dev/null 2>&1; then
         codename=$(lsb_release -sc 2>/dev/null)
@@ -4267,27 +4480,28 @@ install_xanmod_kernel() {
         echo -e "${RED}❌ 无法识别系统代号，无法安全添加 XanMod 源。${PLAIN}"
         return 1
     fi
+    if ! xanmod_supported_codename "$codename"; then
+        echo -e "${YELLOW}⚠️ 当前系统代号 ${codename} 可能不在脚本内置 XanMod 兼容列表中。${PLAIN}"
+        echo -e "${YELLOW}脚本仍会尝试添加源；若 apt update 失败，请改用官方 Cloud/Virtual 内核。${PLAIN}"
+    fi
+
+    cpu_level=$(xanmod_cpu_level)
 
     echo -e "${RED}⚠️  XanMod 是第三方性能内核，可能影响 DKMS/驱动/部分云厂商兼容性。${PLAIN}"
+    echo -e "${YELLOW}检测到 CPU 兼容级别：${cpu_level}，将从对应 XanMod LTS 包开始尝试，并自动向下兜底。${PLAIN}"
     echo -e "${YELLOW}建议先确认有快照、救援控制台，且知道如何从 GRUB 切回旧内核。${PLAIN}"
-    read_trimmed confirm "确认安装 XanMod LTS 兼容版内核请输入 yes（大小写均可）: "
+    read_trimmed confirm "确认安装 XanMod 内核请输入 yes（大小写均可）: "
     is_yes "$confirm" || { echo -e "${BLUE}已取消 XanMod 安装。${PLAIN}"; return 1; }
 
-    echo -e "${CYAN}▶ 正在添加 XanMod 官方 APT 源并安装 LTS 兼容版内核...${PLAIN}"
-    install_pkg ca-certificates curl gpg || return 1
-    mkdir -p /etc/apt/keyrings
-    rm -f /etc/apt/keyrings/xanmod-archive-keyring.gpg
-    if ! curl -fsSL https://dl.xanmod.org/archive.key | gpg --dearmor -o /etc/apt/keyrings/xanmod-archive-keyring.gpg; then
-        echo -e "${RED}❌ XanMod GPG key 下载或写入失败。${PLAIN}"
+    echo -e "${CYAN}▶ 正在添加 XanMod 官方 APT 源并安装兼容内核...${PLAIN}"
+    ensure_minimal_system_compat
+    install_pkg ca-certificates curl gpg gnupg || return 1
+    add_xanmod_repo "$codename" || return 1
+
+    if ! install_xanmod_kernel_package "$cpu_level"; then
+        echo -e "${RED}❌ XanMod 内核安装失败，可能是当前系统代号/软件源/CPU 级别暂不兼容。${PLAIN}"
         return 1
     fi
-    echo "deb [signed-by=/etc/apt/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org ${codename} main" > /etc/apt/sources.list.d/xanmod-release.list
-
-    apt-get update -qq || return 1
-    apt-get install -y -qq linux-xanmod-lts-x64v1 || {
-        echo -e "${RED}❌ XanMod 内核安装失败，可能是当前系统代号暂未被 XanMod 源支持。${PLAIN}"
-        return 1
-    }
 
     set_grub_default_kernel_by_keyword "xanmod"
 }
@@ -4297,10 +4511,10 @@ func_install_kernel() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}☁️  安装/切换优化内核${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${GREEN}  1. Cloud/KVM 官方云内核${PLAIN} ${YELLOW}(推荐：稳定、轻量、云厂商兼容更好)${PLAIN}"
-    echo -e "     适合：普通 VPS、节点、Caddy、Docker、生产环境、小内存机器。"
-    echo -e "${GREEN}  2. XanMod LTS 性能内核${PLAIN} ${YELLOW}(高级：BBRv3/新调度/第三方性能 patch)${PLAIN}"
-    echo -e "     适合：愿意折腾、追求低延迟/新特性；需要快照或救援控制台兜底。"
+    echo -e "${GREEN}  1. Cloud/KVM/Virtual 官方云内核${PLAIN} ${YELLOW}(推荐：稳定、轻量、云厂商兼容更好)${PLAIN}"
+    echo -e "     Debian/Ubuntu 会按架构自动尝试 cloud/kvm/virtual/generic 候选。"
+    echo -e "${GREEN}  2. XanMod 性能内核${PLAIN} ${YELLOW}(高级：自动匹配 x64v1-v4 并向下兜底)${PLAIN}"
+    echo -e "     适合：愿意折腾、追求低延迟/新特性；仅 amd64，建议有快照或救援控制台。"
     echo -e "------------------------------------------------"
     echo -e "${RED}  0. 返回${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
@@ -4318,8 +4532,16 @@ func_install_kernel() {
         return
     fi
 
-    if [[ "$(uname -m)" != "x86_64" ]]; then
-        echo -e "${RED}❌ 致命错误：优化内核仅支持 x86_64 (amd64) 架构，本机为 $(uname -m)！${PLAIN}"
+    local arch
+    arch=$(normalize_kernel_arch)
+    if [[ "$arch" == "unknown" ]]; then
+        echo -e "${RED}❌ 致命错误：当前架构暂不支持自动切换内核，本机为 $(uname -m)！${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+    if [[ "$kernel_choice" == "2" && "$arch" != "amd64" ]]; then
+        echo -e "${RED}❌ XanMod x64v 内核仅支持 x86_64/amd64，本机为 $(uname -m)。${PLAIN}"
+        echo -e "${YELLOW}建议选择 [1] 官方 Cloud/KVM/Virtual 内核。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -4364,11 +4586,11 @@ func_clean_kernel() {
     echo -e "${BOLD}🧹 清理冗余旧内核${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "当前正在运行的内核为: ${GREEN}${current_k}${PLAIN}"
-    echo -e "${RED}⚠️ 系统已自动为您屏蔽正在运行的内核以及基础元包。${PLAIN}"
+    echo -e "${RED}⚠️ 系统已自动为您屏蔽正在运行的内核以及常用云/虚拟化/性能内核。${PLAIN}"
     echo -e "------------------------------------------------"
     
     # 自动提取所有非当前的内核包存入数组 (排除元包，采用高可用字段匹配)
-    mapfile -t old_kernels < <(dpkg -l | awk '$1 == "ii" && $2 ~ /^linux-image-[0-9]/ {print $2}' | grep -v "$current_k" | grep -vE "linux-image-(generic|virtual|kvm|cloud-amd64)")
+    mapfile -t old_kernels < <(dpkg -l | awk '$1 == "ii" && $2 ~ /^linux-image-[0-9]/ {print $2}' | grep -v "$current_k" | grep -Ev "cloud|kvm|virtual|generic|xanmod")
 
     if [[ ${#old_kernels[@]} -eq 0 ]]; then
         echo -e "${GREEN}✅ 系统非常干净，没有发现需要清理的冗余旧内核。${PLAIN}"
@@ -5850,17 +6072,67 @@ preflight_install_missing_commands() {
     install_pkg "${pkgs[@]}"
 }
 
+preflight_missing_minimal_compat_items() {
+    local missing=()
+    local cmd svc
+    local commands=(curl wget ss ip getent tar gzip openssl jq awk sed grep pgrep journalctl timedatectl)
+    local services=()
+
+    for cmd in "${commands[@]}"; do
+        command -v "$cmd" >/dev/null 2>&1 || missing+=("cmd:$cmd")
+    done
+
+    if is_debian; then
+        services=(cron dbus chrony)
+    elif is_redhat; then
+        services=(crond dbus chronyd)
+    fi
+
+    for svc in "${services[@]}"; do
+        systemctl list-unit-files "${svc}.service" --no-legend 2>/dev/null | awk 'NF {found=1} END {exit found ? 0 : 1}' || missing+=("svc:$svc")
+    done
+
+    printf '%s\n' "${missing[@]}"
+}
+
 preflight_enable_ntp() {
+    local ntp_sync
     echo -e "${CYAN}▶ 正在尝试开启系统 NTP 时间同步...${PLAIN}"
+
+    if is_debian; then
+        install_pkg chrony
+    elif is_redhat; then
+        install_pkg chrony
+    fi
+
     timedatectl set-ntp true >/dev/null 2>&1 || true
-    systemctl enable --now systemd-timesyncd >/dev/null 2>&1 || true
+    systemctl enable --now chrony >/dev/null 2>&1 || true
     systemctl enable --now chronyd >/dev/null 2>&1 || true
+
+    if command -v chronyc >/dev/null 2>&1; then
+        chronyc -a 'burst 4/4' >/dev/null 2>&1 || true
+        chronyc -a makestep >/dev/null 2>&1 || true
+    else
+        systemctl enable --now systemd-timesyncd >/dev/null 2>&1 || true
+    fi
+
+    sleep 2
+    ntp_sync=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
+    if [[ "$ntp_sync" == "yes" ]]; then
+        echo -e "${GREEN}✅ NTP 时间同步已恢复。${PLAIN}"
+    else
+        echo -e "${YELLOW}⚠️ NTP 仍未同步，下面是诊断信息：${PLAIN}"
+        timedatectl status 2>/dev/null || true
+        chronyc tracking 2>/dev/null || true
+        chronyc sources -v 2>/dev/null || true
+        journalctl -u chrony -u chronyd -u systemd-timesyncd -n 20 --no-pager 2>/dev/null || true
+    fi
 }
 
 func_preflight_check() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧪 一键运维预检 (网络/系统/资源/包管理)${PLAIN}"
+    echo -e "${BOLD}🧪 一键运维预检 (网络/系统/资源/包管理/精简系统兼容)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local ok_count=0
@@ -5965,7 +6237,7 @@ func_preflight_check() {
         ((ok_count++))
     fi
 
-    echo -e "${YELLOW}▶ [8/8] 检查关键命令可用性...${PLAIN}"
+    echo -e "${YELLOW}▶ [8/9] 检查关键命令可用性...${PLAIN}"
     local cmd_miss=()
     command -v curl >/dev/null 2>&1 || cmd_miss+=("curl")
     command -v wget >/dev/null 2>&1 || cmd_miss+=("wget")
@@ -5978,6 +6250,18 @@ func_preflight_check() {
         ((err_count++))
     fi
 
+    echo -e "${YELLOW}▶ [9/9] 检查精简系统兼容组件...${PLAIN}"
+    local minimal_miss=()
+    mapfile -t minimal_miss < <(preflight_missing_minimal_compat_items)
+    if [[ ${#minimal_miss[@]} -eq 0 ]]; then
+        echo -e "${GREEN}✅ 精简系统兼容组件齐全${PLAIN}"
+        ((ok_count++))
+    else
+        echo -e "${YELLOW}⚠️ 检测到精简系统缺少组件/服务:${PLAIN}"
+        printf '  - %s\n' "${minimal_miss[@]}"
+        ((warn_count++))
+    fi
+
     echo -e "------------------------------------------------"
     echo -e "${CYAN}📌 预检汇总: ${GREEN}${ok_count} 正常${PLAIN} / ${YELLOW}${warn_count} 警告${PLAIN} / ${RED}${err_count} 异常${PLAIN}"
     if [[ "$err_count" -gt 0 ]]; then
@@ -5988,14 +6272,16 @@ func_preflight_check() {
         echo -e "${GREEN}🎉 当前环境健康，可直接进行后续部署。${PLAIN}"
     fi
 
-    if ! $pkg_busy && { $can_fix_ntp || [[ ${#cmd_miss[@]} -gt 0 ]]; }; then
+    if ! $pkg_busy && { $can_fix_ntp || [[ ${#cmd_miss[@]} -gt 0 ]] || [[ ${#minimal_miss[@]} -gt 0 ]]; }; then
         local fix_confirm rerun_confirm
         echo -e "------------------------------------------------"
         echo -e "${CYAN}🛠️ 可自动处理的简单问题:${PLAIN}"
         $can_fix_ntp && echo -e "  - 开启 NTP 时间同步"
         [[ ${#cmd_miss[@]} -gt 0 ]] && echo -e "  - 安装缺失基础命令: ${cmd_miss[*]}"
+        [[ ${#minimal_miss[@]} -gt 0 ]] && echo -e "  - 补齐精简系统兼容组件"
         read_trimmed fix_confirm "是否现在自动修复这些简单问题？(y/N): "
         if [[ "$fix_confirm" =~ ^[Yy]$ ]]; then
+            [[ ${#minimal_miss[@]} -gt 0 ]] && ensure_minimal_system_compat
             $can_fix_ntp && preflight_enable_ntp
             [[ ${#cmd_miss[@]} -gt 0 ]] && preflight_install_missing_commands "${cmd_miss[@]}"
             echo -e "${GREEN}✅ 简单修复已执行。${PLAIN}"
