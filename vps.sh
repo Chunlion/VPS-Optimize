@@ -989,7 +989,7 @@ func_env_install() {
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 443 单入口分流${PLAIN} ${YELLOW}(推荐：Nginx Stream + Caddy + REALITY)${PLAIN}"
         echo -e "${GREEN} 18. 首次配置 443 单入口${PLAIN}       ${YELLOW}(面板/订阅/REALITY/网站共用公网 443)${PLAIN}"
-        echo -e "${GREEN} 19. 443 单入口维护中心${PLAIN}        ${YELLOW}(体检/重签/修复/回滚/订阅提示)${PLAIN}"
+        echo -e "${GREEN} 19. 443 证书与维护中心${PLAIN}        ${YELLOW}(体检/重签/修复/回滚/订阅提示)${PLAIN}"
         echo -e "${GREEN} 20. 管理 443 网站/反代${PLAIN}        ${YELLOW}(后续新增/删除网站，不重跑完整向导)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
@@ -1671,7 +1671,7 @@ sni_stack_health_check() {
 check_sni_stack_subscription_hint() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🔎 订阅端口与 External Proxy 检查提示${PLAIN}"
+    echo -e "${BOLD}🔎 订阅链接与 External Proxy 检查提示${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     echo -e "请在 3x-ui 的 REALITY 入站里开启 External Proxy，并确保："
@@ -3043,24 +3043,24 @@ func_caddy_cf_maintenance_menu() {
         echo -e "${BOLD}${BLUE}▶ 443 单入口常用${PLAIN}"
         echo -e "${GREEN}  1. 443 链路与安全体检${PLAIN}       ${YELLOW}(Nginx/Caddy/REALITY/面板/版本隐藏)${PLAIN}"
         echo -e "${GREEN}  2. 管理 443 网站/反代域名${PLAIN}    ${YELLOW}(新增/删除/查看，最常用)${PLAIN}"
-        echo -e "${GREEN}  3. 重新应用上次 443 配置${PLAIN}     ${YELLOW}(读取 sni-stack.env 重建配置)${PLAIN}"
-        echo -e "${GREEN}  4. 订阅端口 / External Proxy 提示${PLAIN} ${YELLOW}(节点链接应输出公网 443)${PLAIN}"
-        echo -e "${RED}  5. 回滚 443 单入口配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}"
-        echo -e "${GREEN} 16. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
+        echo -e "${GREEN}  3. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
+        echo -e "${GREEN}  4. 重新应用上次 443 配置${PLAIN}     ${YELLOW}(读取 sni-stack.env 重建配置)${PLAIN}"
+        echo -e "${GREEN}  5. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}"
+        echo -e "${RED}  6. 回滚 443 单入口配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 证书与 Cloudflare${PLAIN}"
-        echo -e "${GREEN}  6. 查看已管理域名 / 证书路径${PLAIN}"
-        echo -e "${GREEN}  7. 更新 Cloudflare API Token${PLAIN}"
-        echo -e "${GREEN}  8. 重新签发某个域名证书${PLAIN}"
-        echo -e "${GREEN}  9. 重建 /root/cert 证书软链接${PLAIN}"
-        echo -e "${GREEN} 10. 重建证书清单文件${PLAIN}"
+        echo -e "${GREEN}  7. 查看已管理域名 / 证书路径${PLAIN}"
+        echo -e "${GREEN}  8. 更新 Cloudflare API Token${PLAIN}"
+        echo -e "${GREEN}  9. 重新签发某个域名证书${PLAIN}"
+        echo -e "${GREEN} 10. 重建 /root/cert 证书软链接${PLAIN}"
+        echo -e "${GREEN} 11. 重建证书清单文件${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ Caddy 修复与清理${PLAIN}"
-        echo -e "${GREEN} 11. 校验并重载 Caddy${PLAIN}"
-        echo -e "${GREEN} 12. Caddy/证书一键体检${PLAIN}       ${YELLOW}(Token/证书/监听/后端)${PLAIN}"
-        echo -e "${GREEN} 13. 一键自动修复常见问题${PLAIN}"
-        echo -e "${GREEN} 14. 隔离旧 Caddy 配置${PLAIN}        ${YELLOW}(避免抢占 443)${PLAIN}"
-        echo -e "${RED} 15. 删除某个域名的 Caddy 配置与证书${PLAIN}"
+        echo -e "${GREEN} 12. 校验并重载 Caddy${PLAIN}"
+        echo -e "${GREEN} 13. Caddy/证书一键体检${PLAIN}       ${YELLOW}(Token/证书/监听/后端)${PLAIN}"
+        echo -e "${GREEN} 14. 一键自动修复常见问题${PLAIN}"
+        echo -e "${GREEN} 15. 隔离旧 Caddy 配置${PLAIN}        ${YELLOW}(避免抢占 443)${PLAIN}"
+        echo -e "${RED} 16. 隔离某个域名的 Caddy 配置与证书${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -3071,20 +3071,20 @@ func_caddy_cf_maintenance_menu() {
         case "$m_choice" in
             1) m_choice=11 ;;
             2) m_choice=15 ;;
-            3) m_choice=12 ;;
-            4) m_choice=13 ;;
-            5) m_choice=14 ;;
-            6) m_choice=1 ;;
-            7) m_choice=2 ;;
-            8) m_choice=3 ;;
-            9) m_choice=4 ;;
-            10) m_choice=7 ;;
-            11) m_choice=6 ;;
-            12) m_choice=8 ;;
-            13) m_choice=9 ;;
-            14) m_choice=10 ;;
-            15) m_choice=5 ;;
-            16) m_choice=16 ;;
+            3) m_choice=16 ;;
+            4) m_choice=12 ;;
+            5) m_choice=13 ;;
+            6) m_choice=14 ;;
+            7) m_choice=1 ;;
+            8) m_choice=2 ;;
+            9) m_choice=3 ;;
+            10) m_choice=4 ;;
+            11) m_choice=7 ;;
+            12) m_choice=6 ;;
+            13) m_choice=8 ;;
+            14) m_choice=9 ;;
+            15) m_choice=10 ;;
+            16) m_choice=5 ;;
         esac
 
         case $m_choice in
@@ -3226,7 +3226,7 @@ func_caddy_cf_maintenance_menu() {
 
             5)
                 local domain purge_acme
-                read_trimmed domain "👉 请输入要删除的域名: "
+                read_trimmed domain "👉 请输入要隔离的域名: "
                 domain=$(normalize_domain_input "$domain")
                 if ! is_valid_domain "$domain"; then
                     echo -e "${RED}❌ 域名格式无效。${PLAIN}"
@@ -3234,19 +3234,23 @@ func_caddy_cf_maintenance_menu() {
                     continue
                 fi
 
-                read_trimmed yn "❓ 确认删除 ${domain} 的配置与证书？(y/n): "
-                if [[ ! "$yn" =~ ^[Yy]$ ]]; then
-                    echo -e "${BLUE}已取消删除。${PLAIN}"
+                read_trimmed yn "❓ 确认隔离 ${domain} 的配置与证书？(y/n): "
+                if ! is_yes "$yn"; then
+                    echo -e "${BLUE}已取消隔离。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
 
-                rm -f "/etc/caddy/conf.d/${domain}.caddy"
-                rm -f "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"
-                rm -f "/root/cert/${domain}.crt" "/root/cert/${domain}.key"
+                local domain_quarantine_dir="/etc/vps-optimize/quarantine/caddy-domain-${domain}-$(date +%s)"
+                mkdir -p "$domain_quarantine_dir"
+                quarantine_path "/etc/caddy/conf.d/${domain}.caddy" "$domain_quarantine_dir" >/dev/null 2>&1 || true
+                quarantine_path "/etc/caddy/certs/${domain}.crt" "$domain_quarantine_dir" >/dev/null 2>&1 || true
+                quarantine_path "/etc/caddy/certs/${domain}.key" "$domain_quarantine_dir" >/dev/null 2>&1 || true
+                quarantine_path "/root/cert/${domain}.crt" "$domain_quarantine_dir" >/dev/null 2>&1 || true
+                quarantine_path "/root/cert/${domain}.key" "$domain_quarantine_dir" >/dev/null 2>&1 || true
 
                 read_trimmed purge_acme "❓ 是否同时删除 acme.sh 历史记录？(y/n，默认n，建议保留): "
-                if [[ "$purge_acme" =~ ^[Yy]$ ]]; then
+                if is_yes "$purge_acme"; then
                     /root/.acme.sh/acme.sh --remove -d "$domain" --ecc >/dev/null 2>&1 || true
                     quarantine_path "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
                     quarantine_path "/root/.acme.sh/${domain}" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
@@ -3256,7 +3260,7 @@ func_caddy_cf_maintenance_menu() {
                     systemctl restart caddy >/dev/null 2>&1
                 fi
                 generate_caddy_cf_manifest
-                echo -e "${GREEN}✅ ${domain} 已清理完成。${PLAIN}"
+                echo -e "${GREEN}✅ ${domain} 的 Caddy 配置与证书已隔离到：${domain_quarantine_dir}${PLAIN}"
                 ;;
 
             6)
@@ -6238,7 +6242,7 @@ func_sni_stack_quick_menu() {
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 配置维护${PLAIN}"
         echo -e "${CYAN}  4. 重新应用上次配置${PLAIN}           ${YELLOW}(读取 sni-stack.env 重新生成配置)${PLAIN}"
-        echo -e "${CYAN}  5. 订阅端口 / External Proxy 提示${PLAIN} ${YELLOW}(检查订阅节点是否输出 443)${PLAIN}"
+        echo -e "${CYAN}  5. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}"
         echo -e "${CYAN}  6. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
         echo -e "${CYAN}  7. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
         echo -e "------------------------------------------------"
