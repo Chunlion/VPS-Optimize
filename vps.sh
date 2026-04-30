@@ -663,6 +663,12 @@ caddy_path_match_tokens() {
     printf '%s' "${tokens% }"
 }
 
+is_yes() {
+    local value
+    value="$(trim_input "$1")"
+    [[ "$value" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
 is_suspicious_public_ipv4() {
     local ip="$1"
     local a b c d
@@ -724,8 +730,8 @@ check_domain_dns_sanity() {
         echo -e "${YELLOW}请在 VPS 上复查 DNS。若只在本地电脑开启了 fake-ip，198.18.x.x 可能只是本地代理映射；若 VPS/公共 DNS 也看到此地址，请把 A 记录改成真实 VPS 公网 IP。${PLAIN}"
         echo -e "${YELLOW}如果使用 Cloudflare 小云朵，公共 DNS 应看到 Cloudflare 边缘 IP，而不是 198.18/10/127/192.168 等地址。${PLAIN}"
         if [[ "$mode" == "prompt" ]]; then
-            read_trimmed confirm "仍要继续请输入 YES（不推荐）: "
-            [[ "$confirm" == "YES" ]] || return 1
+            read_trimmed confirm "仍要继续请输入 yes（不推荐，大小写均可）: "
+            is_yes "$confirm" || return 1
         else
             return 1
         fi
@@ -1422,8 +1428,8 @@ warn_if_public_bind() {
     if [[ "$listen_addr" == "0.0.0.0" || "$listen_addr" == "::" ]]; then
         echo -e "${RED}⚠️  高风险：${service_name} 将监听公网 ${listen_addr}:${listen_port}${PLAIN}"
         echo -e "${RED}这会破坏默认的本地监听安全模型，可能导致端口直接暴露。${PLAIN}"
-        read_trimmed confirm "如确认继续，请输入 YES: "
-        [[ "$confirm" == "YES" ]] || return 1
+        read_trimmed confirm "如确认继续，请输入 yes（大小写均可）: "
+        is_yes "$confirm" || return 1
     fi
     return 0
 }
@@ -1436,8 +1442,8 @@ confirm_danger() {
     echo -e "${RED}⚠️ 高风险操作：${title}${PLAIN}"
     echo -e "${YELLOW}影响：${impact}${PLAIN}"
     echo -e "${BLUE}回退：${rollback}${PLAIN}"
-    read_trimmed confirm "确认继续请输入 YES: "
-    [[ "$confirm" == "YES" ]]
+    read_trimmed confirm "确认继续请输入 yes（大小写均可）: "
+    is_yes "$confirm"
 }
 
 format_hostport() {
@@ -1501,10 +1507,10 @@ print_sni_stack_preview() {
     echo -e "${BOLD}即将写入的 443 单入口分流配置预览${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Nginx stream"
-    echo -e "面板域名：${PANEL_DOMAIN} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "面板域名：${PANEL_DOMAIN} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "面板路径：https://${PANEL_DOMAIN}${PANEL_WEB_PATH:-/panel/}"
-    echo -e "普通订阅路径：https://${PANEL_DOMAIN}${SUB_URI_PATH:-/sub/} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
-    echo -e "Clash/Mihomo 路径：https://${PANEL_DOMAIN}${CLASH_URI_PATH:-/clash/} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
+    echo -e "普通订阅路径：https://${PANEL_DOMAIN}${SUB_URI_PATH:-/sub/} -> http://${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
+    echo -e "Clash/Mihomo 路径：https://${PANEL_DOMAIN}${CLASH_URI_PATH:-/clash/} -> http://${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i
         for i in "${!SITE_DOMAINS[@]}"; do
@@ -1516,8 +1522,8 @@ print_sni_stack_preview() {
     echo -e ""
     echo -e "${YELLOW}确认后会备份现有配置，并隔离旧的 /etc/nginx/stream.d/vps_sni_*.conf。${PLAIN}"
     local confirm
-    read_trimmed confirm "确认写入并重启 Nginx/Caddy？输入 YES 继续: "
-    [[ "$confirm" == "YES" ]]
+    read_trimmed confirm "确认写入并重启 Nginx/Caddy？输入 yes 继续（大小写均可）: "
+    is_yes "$confirm"
 }
 
 caddy_format_configs() {
@@ -1538,7 +1544,6 @@ load_sni_stack_env() {
     fi
     # shellcheck disable=SC1090
     source "$env_file"
-    PANEL_INTERNAL_SSL=${PANEL_INTERNAL_SSL:-off}
     PANEL_WEB_PATH=$(normalize_path_prefix "${PANEL_WEB_PATH:-/panel/}")
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
     CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
@@ -1706,6 +1711,7 @@ edit_sni_stack_panel_subscription_profile() {
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     echo -e "${YELLOW}适用于：你在 3x-ui 里修改了面板端口、订阅端口、普通订阅路径或 Clash/Mihomo 路径。${PLAIN}"
+    echo -e "${YELLOW}注意：3x-ui 面板设置 -> 常规 -> 证书、订阅设置 -> 证书 路径必须清空，Caddy 才能按 HTTP 反代。${PLAIN}"
     echo -e "${YELLOW}修改前请先在 3x-ui 面板里保存对应设置，再来这里同步脚本。${PLAIN}"
     echo -e "------------------------------------------------"
     echo -e "当前面板后端：${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
@@ -1720,8 +1726,8 @@ edit_sni_stack_panel_subscription_profile() {
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath" "$PANEL_WEB_PATH")")
     SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "$SUB_LISTEN_ADDR")
     SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口" "$SUB_LISTEN_PORT")
-    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "普通订阅路径前缀（不带订阅密钥）" "$SUB_URI_PATH")")
-    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "Clash/Mihomo 订阅路径前缀（不带订阅密钥）" "$CLASH_URI_PATH")")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "普通订阅路径前缀（不带订阅密钥，建议写 /sub/）" "$SUB_URI_PATH")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "Clash/Mihomo 订阅路径前缀（不带订阅密钥，建议写 /clash/）" "$CLASH_URI_PATH")")
 
     is_valid_listen_addr "$PANEL_LISTEN_ADDR" || { echo -e "${RED}❌ 面板监听地址无效：${PANEL_LISTEN_ADDR}${PLAIN}"; return 1; }
     is_valid_listen_addr "$SUB_LISTEN_ADDR" || { echo -e "${RED}❌ 订阅监听地址无效：${SUB_LISTEN_ADDR}${PLAIN}"; return 1; }
@@ -1795,14 +1801,55 @@ edit_sni_stack_entry_profile() {
     save_and_offer_reapply_sni_stack
 }
 
+edit_sni_stack_panel_domain_profile() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}修改面板域名${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+
+    local cf_env_file="/root/.config/vps-panel/cloudflare.env"
+    if [[ ! -f "$cf_env_file" ]]; then
+        echo -e "${RED}❌ 未找到 Cloudflare Token，请先到证书维护菜单更新 Token。${PLAIN}"
+        return 1
+    fi
+    # shellcheck disable=SC1090
+    source "$cf_env_file"
+    if [[ -z "${CF_Token:-}" ]]; then
+        echo -e "${RED}❌ Cloudflare Token 为空，请先到证书维护菜单更新。${PLAIN}"
+        return 1
+    fi
+
+    local old_domain new_domain existing confirm old_conf
+    old_domain="$PANEL_DOMAIN"
+    echo -e "当前面板域名：${old_domain}"
+    echo -e "${YELLOW}修改前请先把新域名解析到当前 VPS，并确认 Cloudflare Token 有该 zone 权限。${PLAIN}"
+    new_domain=$(normalize_domain_input "$(ask_with_default "新的面板域名" "$PANEL_DOMAIN")")
+    [[ "$new_domain" == "$old_domain" ]] && { echo -e "${BLUE}面板域名未变化。${PLAIN}"; return 0; }
+    is_valid_domain "$new_domain" || { echo -e "${RED}❌ 面板域名无效：${new_domain}${PLAIN}"; return 1; }
+    [[ "$new_domain" == "$REALITY_SNI" ]] && { echo -e "${RED}❌ 面板域名不能和 REALITY SNI 相同。${PLAIN}"; return 1; }
+    for existing in "${SITE_DOMAINS[@]}"; do
+        [[ "$new_domain" == "$existing" ]] && { echo -e "${RED}❌ 面板域名不能和网站/反代域名相同。${PLAIN}"; return 1; }
+    done
+    check_domain_dns_sanity "$new_domain" "新的面板域名" "prompt" || return 1
+    read_trimmed confirm "确认为 ${new_domain} 签发证书并替换面板域名？输入 yes 继续（大小写均可）: "
+    is_yes "$confirm" || return 1
+
+    issue_and_install_cert_for_domain "$new_domain" "$CF_Token" || return 1
+    old_conf="/etc/caddy/conf.d/${old_domain}.caddy"
+    [[ -f "$old_conf" ]] && quarantine_path "$old_conf" "/etc/caddy/conf.d_quarantine" >/dev/null 2>&1 || true
+    PANEL_DOMAIN="$new_domain"
+    save_and_offer_reapply_sni_stack
+}
+
 edit_sni_stack_runtime_profile() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🧭 修改 443 本地端口 / 路径配置${PLAIN}"
+        echo -e "${BOLD}🧭 修改 443 分流参数${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：3x-ui 后续改了端口或订阅路径时，不用重跑首次配置，也不用重签证书。${PLAIN}"
-        echo -e "${YELLOW}修改域名和证书仍建议走首次配置或证书维护；这里主要改本地监听和路径。${PLAIN}"
+        echo -e "${YELLOW}用途：后续修改面板端口/路径、订阅端口/路径、REALITY SNI、入口端口时使用。${PLAIN}"
+        echo -e "${YELLOW}新增网站请走 [19] -> [2]，不用重跑首次配置。${PLAIN}"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
             echo -e "面板：${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
@@ -1814,10 +1861,11 @@ edit_sni_stack_runtime_profile() {
             return 1
         fi
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 修改 3x-ui 面板/订阅端口与路径${PLAIN}"
+        echo -e "${GREEN}  1. 修改面板/订阅端口与路径${PLAIN}"
         echo -e "${GREEN}  2. 修改 REALITY 本地监听 / 伪装 SNI${PLAIN}"
         echo -e "${GREEN}  3. 修改 Nginx 公网入口 / Caddy 本地 TLS${PLAIN}"
-        echo -e "${GREEN}  4. 重新应用当前保存的配置${PLAIN}"
+        echo -e "${GREEN}  4. 修改面板域名${PLAIN}"
+        echo -e "${GREEN}  5. 重新应用当前保存的配置${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -1828,7 +1876,8 @@ edit_sni_stack_runtime_profile() {
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;
             3) edit_sni_stack_entry_profile ;;
-            4) reapply_sni_stack_from_env ;;
+            4) edit_sni_stack_panel_domain_profile ;;
+            5) reapply_sni_stack_from_env ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择。${PLAIN}"; sleep 1 ;;
         esac
@@ -1869,8 +1918,8 @@ rollback_sni_stack_config() {
     fi
     echo -e "${YELLOW}即将回滚到备份：${backup_dir}${PLAIN}"
     local confirm
-    read_trimmed confirm "这会覆盖当前 Nginx/Caddy 的相关配置，输入 YES 继续: "
-    [[ "$confirm" == "YES" ]] || return 1
+    read_trimmed confirm "这会覆盖当前 Nginx/Caddy 的相关配置，输入 yes 继续（大小写均可）: "
+    is_yes "$confirm" || return 1
 
     [[ -f "$backup_dir/nginx.conf" ]] && cp -a "$backup_dir/nginx.conf" /etc/nginx/nginx.conf
     mkdir -p /etc/nginx/stream.d /etc/caddy/conf.d
@@ -1932,8 +1981,8 @@ collect_sni_stack_config() {
     PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "40000")
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath（必须和面板 url 根路径一致）" "/panel/")")
     SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（若与面板同端口请输入 40000）" "2096")
-    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和订阅密钥，例如 /sub/ 或 /sublinkqq/）" "/sub/")")
-    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带订阅密钥，例如 /clash/ 或 /mihomo/）" "/clash/")")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和订阅密钥，建议写 /sub/）" "/sub/")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带订阅密钥，建议写 /clash/）" "/clash/")")
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i default_site_port
         default_site_port=3000
@@ -1951,16 +2000,11 @@ collect_sni_stack_config() {
         done
     fi
 
-    PANEL_INTERNAL_SSL="off"
-    local panel_ssl_enabled
-    read_trimmed panel_ssl_enabled "3x-ui 面板是否已经开启内置 SSL/填写证书路径？(y/n，默认 n): "
-    if [[ "$panel_ssl_enabled" =~ ^[Yy]$ ]]; then
-        PANEL_INTERNAL_SSL="on"
-        echo -e "${RED}⚠️  当前架构要求 3x-ui 面板关闭内置 SSL，证书只给 Caddy 使用。${PLAIN}"
-        echo -e "${YELLOW}如果 3x-ui 继续启用 SSL，Caddy 默认会用 HTTP 连接 HTTPS 后端，常见结果是 502 或面板打不开。${PLAIN}"
-        read_trimmed panel_ssl_confirm "请确认稍后会在 3x-ui 中关闭面板 SSL 并清空证书路径，输入 YES 继续: "
-        [[ "$panel_ssl_confirm" == "YES" ]] || return 1
-    fi
+    echo -e "${YELLOW}请确认 3x-ui 面板设置 -> 常规 -> 证书、订阅设置 -> 证书 路径已经清空。${PLAIN}"
+    echo -e "${YELLOW}本向导会让 Caddy 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}"
+    local cert_clear_confirm
+    read_trimmed cert_clear_confirm "确认已经清空面板证书和订阅证书路径？(y/n): "
+    is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
 
     echo -e "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}"
     read_secret_trimmed CF_TOKEN "CF Token: "
@@ -2290,7 +2334,6 @@ SITE_BACKEND_ADDR='${SITE_BACKEND_ADDRS[0]:-127.0.0.1}'
 SITE_BACKEND_PORT='${SITE_BACKEND_PORTS[0]:-3000}'
 SITE_BACKEND_ADDRS_CSV='${site_backend_addrs_csv}'
 SITE_BACKEND_PORTS_CSV='${site_backend_ports_csv}'
-PANEL_INTERNAL_SSL='${PANEL_INTERNAL_SSL}'
 EOF
     chmod 600 /etc/vps-optimize/sni-stack.env
 }
@@ -2350,17 +2393,15 @@ print_sni_stack_result() {
     echo -e "  面板监听地址：${PANEL_LISTEN_ADDR}"
     echo -e "  面板端口：    ${PANEL_LISTEN_PORT}"
     echo -e "  webBasePath： ${PANEL_WEB_PATH}"
-    echo -e "  面板 SSL/HTTPS：关闭"
-    echo -e "  证书路径/私钥路径：留空，不要填写 Caddy 证书"
+    echo -e "  面板证书路径/私钥路径：清空"
+    echo -e "  Caddy 后端连接：http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
     echo -e "  Subscription URI Path：${SUB_URI_PATH}"
     echo -e "  Subscription External URL：https://${PANEL_DOMAIN}${SUB_URI_PATH}"
     echo -e "  Clash/Mihomo URI Path：${CLASH_URI_PATH}"
     echo -e "  Clash/Mihomo External URL：https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
     echo -e "${YELLOW}  不建议使用 webBasePath=/，随机面板路径能降低被批量扫描命中的概率。${PLAIN}"
-    if [[ "$PANEL_INTERNAL_SSL" == "on" ]]; then
-        echo -e "${RED}  重要：你刚才表示 3x-ui 已启用内置 SSL，请先关闭它，否则容易 404/502/重定向循环。${PLAIN}"
-    fi
+    echo -e "  订阅证书路径/私钥路径：清空"
     echo -e ""
     echo -e "${BOLD}三、Xray / 3x-ui REALITY 入站这样填${PLAIN}"
     echo -e "  入站监听地址 listen：${XRAY_LISTEN_ADDR}"
@@ -2378,9 +2419,9 @@ print_sni_stack_result() {
     echo -e ""
     echo -e "${BOLD}四、常见错误怎么判断${PLAIN}"
     echo -e "  ERR_SSL_PROTOCOL_ERROR：通常是访问了内部端口，外部只访问 https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
-    echo -e "  ERR_TOO_MANY_REDIRECTS：通常是 3x-ui 面板还开着 SSL/强制 HTTPS，请关闭并清空证书路径"
+    echo -e "  ERR_TOO_MANY_REDIRECTS：通常是 3x-ui 面板或订阅证书路径没清空，或外部地址/路径配置不一致"
     echo -e "  HTTP 404：先检查访问路径是否等于 3x-ui 的 webBasePath，再检查 Caddy 是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
-    echo -e "  502 Bad Gateway：通常是 3x-ui 没启动、端口不对，或 3x-ui 开了 HTTPS 但 Caddy 按 HTTP 连接"
+    echo -e "  502 Bad Gateway：通常是 3x-ui 没启动、端口不对，或 3x-ui 后端仍是 HTTPS"
     echo -e ""
     echo -e "${BOLD}五、监听状态应该长这样${PLAIN}"
     echo -e "  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> nginx"
@@ -2405,7 +2446,7 @@ print_sni_stack_result() {
     echo -e "  journalctl -u caddy -n 80 --no-pager"
     echo -e "  journalctl -u x-ui -u 3x-ui -n 80 --no-pager"
     echo -e ""
-    echo -e "${RED}绝对不要做：Caddy 监听公网 443；Xray 监听公网 443；3x-ui 面板暴露公网；把 Caddy 证书填进 3x-ui 面板 SSL；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+    echo -e "${RED}绝对不要做：Caddy 监听公网 443；Xray 监听公网 443；3x-ui 面板暴露公网；3x-ui 证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
 }
 
 apply_sni_stack_runtime_config() {
@@ -2508,8 +2549,8 @@ add_sni_stack_site() {
 
     echo -e ""
     echo -e "${CYAN}即将添加：${site_domain} -> ${site_addr}:${site_port}${PLAIN}"
-    read_trimmed confirm "确认申请证书并更新 Nginx/Caddy？输入 YES 继续: "
-    [[ "$confirm" == "YES" ]] || return 1
+    read_trimmed confirm "确认申请证书并更新 Nginx/Caddy？输入 yes 继续（大小写均可）: "
+    is_yes "$confirm" || return 1
 
     idx=${#SITE_DOMAINS[@]}
     SITE_DOMAINS[$idx]="$site_domain"
@@ -2552,8 +2593,8 @@ remove_sni_stack_site() {
 
     idx=$((choice - 1))
     domain="${SITE_DOMAINS[$idx]}"
-    read_trimmed confirm "确认从 443 分流中删除 ${domain}？输入 YES 继续: "
-    [[ "$confirm" == "YES" ]] || return 1
+    read_trimmed confirm "确认从 443 分流中删除 ${domain}？输入 yes 继续（大小写均可）: "
+    is_yes "$confirm" || return 1
 
     new_domains=()
     new_addrs=()
@@ -3005,7 +3046,7 @@ func_caddy_cf_maintenance_menu() {
         echo -e "${GREEN}  3. 重新应用上次 443 配置${PLAIN}     ${YELLOW}(读取 sni-stack.env 重建配置)${PLAIN}"
         echo -e "${GREEN}  4. 订阅端口 / External Proxy 提示${PLAIN} ${YELLOW}(节点链接应输出公网 443)${PLAIN}"
         echo -e "${RED}  5. 回滚 443 单入口配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}"
-        echo -e "${GREEN} 16. 修改本地端口 / 订阅路径${PLAIN}   ${YELLOW}(面板端口、订阅路径、REALITY 等)${PLAIN}"
+        echo -e "${GREEN} 16. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 证书与 Cloudflare${PLAIN}"
         echo -e "${GREEN}  6. 查看已管理域名 / 证书路径${PLAIN}"
@@ -4138,8 +4179,8 @@ install_xanmod_kernel() {
 
     echo -e "${RED}⚠️  XanMod 是第三方性能内核，可能影响 DKMS/驱动/部分云厂商兼容性。${PLAIN}"
     echo -e "${YELLOW}建议先确认有快照、救援控制台，且知道如何从 GRUB 切回旧内核。${PLAIN}"
-    read_trimmed confirm "确认安装 XanMod LTS 兼容版内核请输入 YES: "
-    [[ "$confirm" == "YES" ]] || { echo -e "${BLUE}已取消 XanMod 安装。${PLAIN}"; return 1; }
+    read_trimmed confirm "确认安装 XanMod LTS 兼容版内核请输入 yes（大小写均可）: "
+    is_yes "$confirm" || { echo -e "${BLUE}已取消 XanMod 安装。${PLAIN}"; return 1; }
 
     echo -e "${CYAN}▶ 正在添加 XanMod 官方 APT 源并安装 LTS 兼容版内核...${PLAIN}"
     install_pkg ca-certificates curl gpg || return 1
@@ -5490,19 +5531,20 @@ func_migrate_compose_to_dockge() {
     read -n 1 -s -r -p "按任意键返回..."
 }
 # ---------------------------------------------------------
-# 18. 面板救砖/重置 SSL (DRY 优化 + 强健寻径)
+# 18. 面板救砖/重置 SSL (兼容新版 3x-ui 证书字段)
 # ---------------------------------------------------------
 func_rescue_panel() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🚑 面板紧急救砖 / SSL 重置工具${PLAIN}"
+    echo -e "${BOLD}🚑 面板紧急救砖 / SSL 清理工具${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}⚠️ 核心作用：强制修改面板底层数据库，擦除 SSL 证书路径。${PLAIN}"
-    echo -e "当您因为面板开启了 HTTPS 导致：打不开网页、重定向次数过多时，用此功能自救。"
+    echo -e "${YELLOW}用途：清空 3x-ui 面板证书路径，让 Caddy 可以按 HTTP 反代本机面板。${PLAIN}"
+    echo -e "更推荐在 3x-ui 面板里手动进入：面板设置 -> 常规 -> 证书，把证书路径和私钥路径清空后保存重启。"
+    echo -e "本功能只作为打不开面板时的救急方案，会尝试清空常见证书字段：webCertFile/webKeyFile/CertFile/KeyFile 等。"
     echo -e "------------------------------------------------"
     
     local yn
-    read_trimmed yn "❓ 确定要重置面板为 HTTP 模式吗？(y/n): "
+    read_trimmed yn "❓ 确定要清空面板证书路径并尝试退回 HTTP 吗？(y/n): "
     if [[ "$yn" =~ ^[Yy]$ ]]; then
         
         # 核心修改：使用我们的全局极简包管理器！兼容了包名差异。
@@ -5511,18 +5553,51 @@ func_rescue_panel() {
             install_pkg sqlite3 sqlite
         fi
         
+        local xui_bin=""
+        if [[ -x /usr/local/x-ui/x-ui ]]; then
+            xui_bin="/usr/local/x-ui/x-ui"
+        elif command -v x-ui >/dev/null 2>&1; then
+            xui_bin="$(command -v x-ui)"
+        elif command -v 3x-ui >/dev/null 2>&1; then
+            xui_bin="$(command -v 3x-ui)"
+        fi
+        if [[ -n "$xui_bin" ]]; then
+            echo -e "${CYAN}当前 3x-ui 证书状态：${PLAIN}"
+            "$xui_bin" setting -getCert true 2>/dev/null || true
+            echo -e "------------------------------------------------"
+        fi
+
         # 停服务
         systemctl stop x-ui >/dev/null 2>&1
+        systemctl stop 3x-ui >/dev/null 2>&1
         systemctl stop x-panel >/dev/null 2>&1
         
-        # 找数据库并擦除
+        # 找数据库并擦除。新版/旧版字段名不完全一致，所以按 key 的小写形式批量兼容。
         local db_found=false
-        for db_path in "/etc/x-ui/x-ui.db" "/etc/x-panel/x-panel.db"; do
+        local db_candidates=(
+            "/etc/x-ui/x-ui.db"
+            "/usr/local/x-ui/x-ui.db"
+            "/usr/local/x-ui/bin/x-ui.db"
+            "/etc/x-panel/x-panel.db"
+        )
+        local extra_db
+        while IFS= read -r extra_db; do
+            db_candidates+=("$extra_db")
+        done < <(find /etc /usr/local/x-ui /opt -maxdepth 4 -type f \( -name "x-ui.db" -o -name "x-panel.db" \) 2>/dev/null | sort -u)
+
+        local db_path
+        local seen_dbs=" "
+        for db_path in "${db_candidates[@]}"; do
+            [[ -f "$db_path" ]] || continue
+            [[ "$seen_dbs" == *" ${db_path} "* ]] && continue
+            seen_dbs+=" ${db_path} "
             if [[ -f "$db_path" ]]; then
-                sqlite3 "$db_path" "update settings set value='' where key='webCertFile';" 2>/dev/null
-                sqlite3 "$db_path" "update settings set value='' where key='webKeyFile';" 2>/dev/null
-                echo -e "${GREEN}✅ 数据库底层的 SSL 证书路径已成功抹除！(操作数据库: $db_path)${PLAIN}"
-                db_found=true
+                if sqlite3 "$db_path" "update settings set value='' where lower(key) in ('webcertfile','webkeyfile','webcert','webcertkey','webcertkeyfile','certfile','keyfile','cert','key');" 2>/dev/null; then
+                    echo -e "${GREEN}✅ 已清空常见 SSL 证书字段：${db_path}${PLAIN}"
+                    db_found=true
+                else
+                    echo -e "${YELLOW}⚠️ 数据库存在但更新失败：${db_path}${PLAIN}"
+                fi
             fi
         done
         
@@ -5531,12 +5606,19 @@ func_rescue_panel() {
         fi
         
         # 重启服务
-        systemctl start x-ui >/dev/null 2>&1
+        systemctl restart x-ui >/dev/null 2>&1 || systemctl start x-ui >/dev/null 2>&1
+        systemctl restart 3x-ui >/dev/null 2>&1 || systemctl start 3x-ui >/dev/null 2>&1
         systemctl start x-panel >/dev/null 2>&1
         
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}✅ 面板已尝试降级回 HTTP 模式运行。${PLAIN}"
-        echo -e "${YELLOW}💡 强烈建议：立刻打开浏览器的【无痕模式】，使用 http://IP:端口 进行访问测试！${PLAIN}"
+        if [[ -n "$xui_bin" ]]; then
+            echo -e "${CYAN}清理后的 3x-ui 证书状态：${PLAIN}"
+            "$xui_bin" setting -getCert true 2>/dev/null || true
+            echo -e "------------------------------------------------"
+        fi
+        echo -e "${GREEN}✅ 已尝试清空证书路径。${PLAIN}"
+        echo -e "${YELLOW}请用本机测试确认协议：curl -I http://127.0.0.1:面板端口/你的面板路径/${PLAIN}"
+        echo -e "${YELLOW}如果 HTTP 仍不通，请先进入 3x-ui 官方菜单或面板设置确认常规证书、订阅证书路径都已清空并重启面板。${PLAIN}"
     else
         echo -e "${BLUE}已取消操作。${PLAIN}"
     fi
@@ -6107,7 +6189,7 @@ func_panel_deploy_menu() {
         echo -e "${GREEN}  8. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
         echo -e "${BOLD}${YELLOW}  9. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
         echo -e "${GREEN} 10. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
-        echo -e "${GREEN} 11. 面板救砖 / 重置 SSL${PLAIN}   ${YELLOW}(回退 HTTP 访问)${PLAIN}"
+        echo -e "${GREEN} 11. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
         echo -e "${GREEN} 12. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
         echo -e "${GREEN} 13. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
         echo -e "${GREEN} 14. 端口流量监控${PLAIN}          ${YELLOW}(Port Traffic Dog)${PLAIN}"
@@ -6158,7 +6240,7 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}  4. 重新应用上次配置${PLAIN}           ${YELLOW}(读取 sni-stack.env 重新生成配置)${PLAIN}"
         echo -e "${CYAN}  5. 订阅端口 / External Proxy 提示${PLAIN} ${YELLOW}(检查订阅节点是否输出 443)${PLAIN}"
         echo -e "${CYAN}  6. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
-        echo -e "${CYAN}  7. 修改本地端口 / 订阅路径${PLAIN}   ${YELLOW}(面板端口、订阅端口、REALITY、/sub、/clash)${PLAIN}"
+        echo -e "${CYAN}  7. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -6223,7 +6305,7 @@ main_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${YELLOW}新机器建议先跑 [1] 预检；部署面板/节点优先看 [4]；443 相关都进 [19]。${PLAIN}"
         echo -e " ${YELLOW}快捷输入：443 直达单入口，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
-        echo -e " ${YELLOW}高风险操作会要求输入 YES；不确定时先做 [16] 备份。${PLAIN}"
+        echo -e " ${YELLOW}高风险操作会要求输入 yes（大小写均可）；不确定时先做 [16] 备份。${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         echo -e " ${BOLD}${BLUE}▶ ① 推荐流程：新机器先跑这里${PLAIN}"
