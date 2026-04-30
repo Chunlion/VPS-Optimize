@@ -38,7 +38,7 @@
 | --- | --- | --- | --- |
 | 面板域名 | `panel.example.com` | 当前 VPS IP | 浏览器打开 3x-ui 面板 |
 | 节点域名 | `node.example.com` | 当前 VPS IP | 客户端连接用，可选，没有时可暂用面板域名 |
-| 网站/订阅域名 | `sub.example.com` | 当前 VPS IP | SublinkPro、Dockge、Sub-Store 等 |
+| 网站/订阅域名 | `sub.example.com` | 当前 VPS IP | SublinkPro、Dockge、Sub-Store、Komari 等 |
 | REALITY 伪装 SNI | `www.microsoft.com` | 不指向你的 VPS | 必须是外部真实 HTTPS 站点 |
 
 Cloudflare API Token 至少需要：
@@ -193,6 +193,7 @@ Cloudflare API Token：用于 DNS 签发证书
 sub.example.com      -> 127.0.0.1:3000  -> SublinkPro
 dockge.example.com   -> 127.0.0.1:5001  -> Dockge
 mmw.example.com      -> 127.0.0.1:8080  -> 妙妙屋订阅管理
+komari.example.com   -> 127.0.0.1:25774 -> Komari 探针监控
 ```
 
 新增流程会自动做这些事：
@@ -335,6 +336,7 @@ vless://uuid@node.example.com:443?security=reality&sni=your-reality-sni.example.
 - `mmw.example.com -> 127.0.0.1:8080`：妙妙屋订阅管理
 - `substore.example.com -> 127.0.0.1:9876`：Sub-Store 前端或服务
 - `dockge.example.com -> 127.0.0.1:5001`：Dockge Compose 管理
+- `komari.example.com -> 127.0.0.1:25774`：Komari 探针监控
 - `blog.example.com -> 127.0.0.1:2368`：博客或普通网站
 - `status.example.com -> 127.0.0.1:3001`：状态页
 
@@ -391,7 +393,7 @@ curl -I http://127.0.0.1:40000/
 检查监听：
 
 ```bash
-ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096|:3000|:5001|:8080'
+ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096|:3000|:5001|:8080|:25774'
 ```
 
 期望类似：
@@ -405,6 +407,7 @@ ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096|:3000|:5001|:8080'
 127.0.0.1:3000    -> SublinkPro 或其他网站后端，可选
 127.0.0.1:5001    -> Dockge，可选
 127.0.0.1:8080    -> 妙妙屋，可选
+127.0.0.1:25774   -> Komari，可选
 ```
 
 检查配置：

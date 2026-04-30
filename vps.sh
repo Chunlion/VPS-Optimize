@@ -4649,6 +4649,74 @@ EOF
     read -n 1 -s -r -p "按任意键返回..."
 }
 
+func_komari() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}安装 Komari 探针监控面板 (Docker Compose)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}Komari 用于服务器探针监控。默认只监听本地地址，建议后续接入 [19] 443 单入口反代。${PLAIN}"
+    echo -e "${YELLOW}如果探针客户端需要直连端口，可把监听地址改为 0.0.0.0，并确认云安全组已放行。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+
+    local install_dir="/opt/komari"
+    local komari_bind_addr="127.0.0.1"
+    local komari_port="25774"
+    local yn
+
+    komari_bind_addr=$(ask_with_default "Komari 监听地址" "$komari_bind_addr")
+    is_valid_listen_addr "$komari_bind_addr" || { echo -e "${RED}❌ 监听地址无效。${PLAIN}"; read -n 1 -s -r -p "按任意键返回..."; return; }
+
+    while true; do
+        komari_port=$(ask_with_default "Komari 访问端口" "$komari_port")
+        if is_valid_port "$komari_port"; then break; fi
+        echo -e "${RED}❌ 端口无效，请输入 1-65535 之间的数字。${PLAIN}"
+    done
+    warn_if_public_bind "Komari 探针监控面板" "$komari_bind_addr" "$komari_port" || return 1
+
+    echo -e "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}"
+    echo -e "${YELLOW}数据目录：${CYAN}${install_dir}/data${PLAIN}"
+    echo -e "${YELLOW}监听地址：${CYAN}${komari_bind_addr}:${komari_port}${PLAIN}"
+    echo -e "------------------------------------------------"
+    read_trimmed yn "确认现在部署 Komari 吗？(y/n): "
+    if [[ "$yn" =~ ^[Yy]$ ]]; then
+        mkdir -p "$install_dir/data"
+        cd "$install_dir" || return
+
+        cat <<EOF > docker-compose.yml
+version: '3.8'
+services:
+  komari:
+    image: ghcr.io/komari-monitor/komari:latest
+    container_name: komari
+    ports:
+      - "${komari_bind_addr}:${komari_port}:25774"
+    volumes:
+      - ./data:/app/data
+    environment:
+      # 可选：如需自定义初始管理员账号，请停止容器后取消注释并填写。
+      # ADMIN_USERNAME: admin
+      # ADMIN_PASSWORD: yourpassword
+    restart: unless-stopped
+EOF
+
+        echo -e "${CYAN}▶ 正在拉取镜像并启动 Komari...${PLAIN}"
+        $DOCKER_COMPOSE_CMD up -d
+
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}✅ Komari 部署完成！${PLAIN}"
+        echo -e "访问地址：${BOLD}http://${komari_bind_addr}:${komari_port}${PLAIN}"
+        echo -e "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}"
+        echo -e "${YELLOW}默认管理员账号请查看日志：${CYAN}$DOCKER_COMPOSE_CMD logs komari${PLAIN}"
+        echo -e "${YELLOW}如需公网 HTTPS 访问，建议回到主菜单使用 [19] -> [2] 添加反代域名。${PLAIN}"
+    else
+        echo -e "${BLUE}已安全取消部署。${PLAIN}"
+    fi
+
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
 find_compose_file() {
     local dir="$1"
     local file
@@ -4664,7 +4732,7 @@ find_compose_file() {
 is_managed_compose_dir() {
     local dir="${1%/}"
     case "$dir" in
-        /opt/sublinkpro|/opt/miaomiaowu|/opt/sub-store|/opt/dockge)
+        /opt/sublinkpro|/opt/miaomiaowu|/opt/sub-store|/opt/dockge|/opt/komari)
             return 0
             ;;
         *)
@@ -4774,6 +4842,10 @@ func_manage_dockge() {
     manage_compose_project "Dockge" "/opt/dockge" "Dockge 数据在 /opt/dockge/data；Stacks 默认在 /opt/stacks，不会随 Dockge 目录删除"
 }
 
+func_manage_komari() {
+    manage_compose_project "Komari" "/opt/komari" "Komari 数据会保存在 /opt/komari/data"
+}
+
 func_service_action_menu() {
     local title="$1"
     local usage="$2"
@@ -4858,6 +4930,10 @@ func_substore_menu() {
 
 func_dockge_menu() {
     func_service_action_menu "Dockge 管理" "安装或管理 Docker Compose 部署的 Dockge。" "安装 Dockge" func_dockge "管理 / 卸载 Dockge" func_manage_dockge
+}
+
+func_komari_menu() {
+    func_service_action_menu "Komari 探针监控" "安装或管理 Docker Compose 部署的 Komari 探针监控面板。" "安装 Komari" func_komari "管理 / 卸载 Komari" func_manage_komari
 }
 
 is_dockge_migration_seen() {
@@ -5643,7 +5719,7 @@ func_panel_deploy_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：管理 3x-ui、S-UI、Sing-box、Xray、订阅工具、Dockge 和节点辅助工具。${PLAIN}"
+        echo -e "${YELLOW}用途：管理 3x-ui、S-UI、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
         echo -e "${YELLOW}提示：面板或订阅工具对外访问，推荐后续接入 [19] 443 单入口。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 管理 3x-ui 面板${PLAIN}       ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
@@ -5660,6 +5736,7 @@ func_panel_deploy_menu() {
         echo -e "${GREEN} 12. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
         echo -e "${GREEN} 13. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
         echo -e "${GREEN} 14. 端口流量监控${PLAIN}          ${YELLOW}(Port Traffic Dog)${PLAIN}"
+        echo -e "${GREEN} 15. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -5681,6 +5758,7 @@ func_panel_deploy_menu() {
             12) func_dns_unlock ;;
             13) func_ip_sentinel ;;
             14) func_port_dog ;;
+            15) func_komari_menu ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
