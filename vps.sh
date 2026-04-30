@@ -627,6 +627,111 @@ is_valid_domain() {
     echo "$domain" | grep -Eq '^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
 }
 
+normalize_path_prefix() {
+    local path
+    path="$(trim_input "$1")"
+    if [[ "$path" =~ ^https?://[^/]+(/.*)?$ ]]; then
+        path="${BASH_REMATCH[1]:-/}"
+    fi
+    path="${path%%\?*}"
+    path="${path%%#*}"
+    [[ -z "$path" ]] && path="/sub/"
+    [[ "$path" != /* ]] && path="/${path}"
+    [[ "$path" != */ ]] && path="${path}/"
+    printf '%s' "$path"
+}
+
+is_valid_path_prefix() {
+    local path="$1"
+    [[ "$path" != "/" && "$path" != *".."* ]] && echo "$path" | grep -Eq '^/[A-Za-z0-9._~/-]+/$'
+}
+
+caddy_path_match_tokens() {
+    local path
+    local exact
+    local seen=" "
+    for path in "$@"; do
+        path=$(normalize_path_prefix "$path")
+        exact="${path%/}"
+        if [[ "$seen" == *" ${exact} "* ]]; then
+            continue
+        fi
+        printf '%s %s/* ' "$exact" "$exact"
+        seen+=" ${exact} "
+    done
+}
+
+is_suspicious_public_ipv4() {
+    local ip="$1"
+    local a b c d
+
+    [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+    IFS='.' read -r a b c d <<< "$ip"
+    for octet in "$a" "$b" "$c" "$d"; do
+        [[ "$octet" =~ ^[0-9]+$ ]] && ((10#$octet <= 255)) || return 1
+    done
+
+    # Public panel domains should not resolve to private, loopback, test, multicast,
+    # or benchmark/fake-ip ranges. Run this on the VPS side; local proxy fake-ip
+    # mode may intentionally return 198.18.0.0/15 on the user's own computer.
+    ((10#$a == 0 || 10#$a == 10 || 10#$a == 127 || 10#$a >= 224)) && return 0
+    ((10#$a == 100 && 10#$b >= 64 && 10#$b <= 127)) && return 0
+    ((10#$a == 169 && 10#$b == 254)) && return 0
+    ((10#$a == 172 && 10#$b >= 16 && 10#$b <= 31)) && return 0
+    ((10#$a == 192 && 10#$b == 168)) && return 0
+    ((10#$a == 198 && (10#$b == 18 || 10#$b == 19))) && return 0
+    ((10#$a == 192 && 10#$b == 0 && 10#$c == 2)) && return 0
+    ((10#$a == 198 && 10#$b == 51 && 10#$c == 100)) && return 0
+    ((10#$a == 203 && 10#$b == 0 && 10#$c == 113)) && return 0
+    return 1
+}
+
+resolve_domain_a_records() {
+    local domain="$1"
+    if command -v dig >/dev/null 2>&1; then
+        dig +short A "$domain" @1.1.1.1 2>/dev/null | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | sort -u
+    elif command -v nslookup >/dev/null 2>&1; then
+        nslookup -type=A "$domain" 1.1.1.1 2>/dev/null | awk '/^Address: / {print $2}' | grep -Ev '^1\.1\.1\.1$' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | sort -u
+    elif command -v getent >/dev/null 2>&1; then
+        getent ahostsv4 "$domain" 2>/dev/null | awk '{print $1}' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | sort -u
+    fi
+}
+
+check_domain_dns_sanity() {
+    local domain="$1"
+    local label="${2:-域名}"
+    local mode="${3:-warn}"
+    local ips ip suspect=0 confirm
+
+    ips=$(resolve_domain_a_records "$domain")
+    if [[ -z "$ips" ]]; then
+        echo -e "${YELLOW}⚠️ ${label} ${domain} 未解析到 A 记录；如果只配置了 IPv6/AAAA，请确认客户端和 VPS 都支持 IPv6。${PLAIN}"
+        return 1
+    fi
+
+    echo -e "${CYAN}▶ ${label} ${domain} 当前 A 记录: $(echo "$ips" | tr '\n' ' ')${PLAIN}"
+    while IFS= read -r ip; do
+        [[ -z "$ip" ]] && continue
+        if is_suspicious_public_ipv4 "$ip"; then
+            echo -e "${RED}❌ ${label} ${domain} 解析到可疑地址 ${ip}，这不是正常公网 VPS 地址。${PLAIN}"
+            suspect=1
+        fi
+    done <<< "$ips"
+
+    if [[ "$suspect" -eq 1 ]]; then
+        echo -e "${YELLOW}请在 VPS 上复查 DNS。若只在本地电脑开启了 fake-ip，198.18.x.x 可能只是本地代理映射；若 VPS/公共 DNS 也看到此地址，请把 A 记录改成真实 VPS 公网 IP。${PLAIN}"
+        echo -e "${YELLOW}如果使用 Cloudflare 小云朵，公共 DNS 应看到 Cloudflare 边缘 IP，而不是 198.18/10/127/192.168 等地址。${PLAIN}"
+        if [[ "$mode" == "prompt" ]]; then
+            read_trimmed confirm "仍要继续请输入 YES（不推荐）: "
+            [[ "$confirm" == "YES" ]] || return 1
+        else
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
 get_acme_account_email() {
     local account_conf="/root/.acme.sh/account.conf"
     if [[ -f "$account_conf" ]]; then
@@ -1395,6 +1500,8 @@ print_sni_stack_preview() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Nginx stream"
     echo -e "面板域名：${PANEL_DOMAIN} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "普通订阅路径：https://${PANEL_DOMAIN}${SUB_URI_PATH:-/sub/} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
+    echo -e "Clash/Mihomo 路径：https://${PANEL_DOMAIN}${CLASH_URI_PATH:-/clash/} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i
         for i in "${!SITE_DOMAINS[@]}"; do
@@ -1429,6 +1536,8 @@ load_sni_stack_env() {
     # shellcheck disable=SC1090
     source "$env_file"
     PANEL_INTERNAL_SSL=${PANEL_INTERNAL_SSL:-off}
+    SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
+    CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
     normalize_site_stack_arrays
 }
 
@@ -1501,6 +1610,24 @@ sni_stack_health_check() {
     fi
 
     echo -e "------------------------------------------------"
+    if check_domain_dns_sanity "$PANEL_DOMAIN" "面板域名" "warn"; then
+        ((ok++))
+    else
+        ((warn++))
+    fi
+    if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
+        local dns_site
+        for dns_site in "${SITE_DOMAINS[@]}"; do
+            [[ -z "$dns_site" ]] && continue
+            if check_domain_dns_sanity "$dns_site" "网站/反代域名" "warn"; then
+                ((ok++))
+            else
+                ((warn++))
+            fi
+        done
+    fi
+
+    echo -e "------------------------------------------------"
     nginx -t >/dev/null 2>&1 && echo -e "${GREEN}✅ nginx -t 通过${PLAIN}" && ((ok++)) || { echo -e "${RED}❌ nginx -t 失败${PLAIN}"; ((fail++)); }
     caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 && echo -e "${GREEN}✅ Caddy 配置校验通过${PLAIN}" && ((ok++)) || { echo -e "${RED}❌ Caddy 配置校验失败${PLAIN}"; ((fail++)); }
     if grep -Eq '^[[:space:]]*server_tokens[[:space:]]+off;' /etc/nginx/nginx.conf 2>/dev/null; then
@@ -1546,7 +1673,156 @@ check_sni_stack_subscription_hint() {
     echo -e "复制节点链接后应该看到："
     echo -e "  vless://...@节点地址:${NGINX_LISTEN_PORT}?security=reality&sni=${REALITY_SNI}&..."
     echo -e ""
+    echo -e "订阅公网入口应为："
+    echo -e "  普通订阅：      https://${PANEL_DOMAIN}${SUB_URI_PATH}"
+    echo -e "  Clash/Mihomo：  https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
+    echo -e "${YELLOW}不要把公网订阅地址写成 :${SUB_LISTEN_PORT}，该端口只给 Caddy 在本机访问。${PLAIN}"
+    echo -e ""
     echo -e "${YELLOW}如果链接里还是 :${XRAY_LISTEN_PORT}，说明 3x-ui 订阅仍在输出本地入站端口，请回到入站设置检查 External Proxy。${PLAIN}"
+}
+
+save_and_offer_reapply_sni_stack() {
+    local yn
+    save_sni_stack_env
+    echo -e "${GREEN}✅ 已保存新的 443 单入口运行参数。${PLAIN}"
+    echo -e "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的端口或路径。${PLAIN}"
+    read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？(Y/n): "
+    if [[ -z "$yn" || "$yn" =~ ^[Yy]$ ]]; then
+        reapply_sni_stack_from_env
+    else
+        echo -e "${YELLOW}稍后可执行 [19] -> [4] 重新应用上次配置。${PLAIN}"
+    fi
+}
+
+edit_sni_stack_panel_subscription_profile() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}修改 3x-ui 面板 / 订阅端口与路径${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    echo -e "${YELLOW}适用于：你在 3x-ui 里修改了面板端口、订阅端口、普通订阅路径或 Clash/Mihomo 路径。${PLAIN}"
+    echo -e "${YELLOW}修改前请先在 3x-ui 面板里保存对应设置，再来这里同步脚本。${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "当前面板后端：${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "当前订阅后端：${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
+    echo -e "当前普通订阅路径：${SUB_URI_PATH}"
+    echo -e "当前 Clash/Mihomo 路径：${CLASH_URI_PATH}"
+    echo -e "------------------------------------------------"
+
+    PANEL_LISTEN_ADDR=$(ask_with_default "3x-ui 面板监听地址" "$PANEL_LISTEN_ADDR")
+    PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "$PANEL_LISTEN_PORT")
+    SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "$SUB_LISTEN_ADDR")
+    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口" "$SUB_LISTEN_PORT")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "普通订阅公网路径" "$SUB_URI_PATH")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "Clash/Mihomo 订阅公网路径" "$CLASH_URI_PATH")")
+
+    is_valid_listen_addr "$PANEL_LISTEN_ADDR" || { echo -e "${RED}❌ 面板监听地址无效：${PANEL_LISTEN_ADDR}${PLAIN}"; return 1; }
+    is_valid_listen_addr "$SUB_LISTEN_ADDR" || { echo -e "${RED}❌ 订阅监听地址无效：${SUB_LISTEN_ADDR}${PLAIN}"; return 1; }
+    is_valid_port "$PANEL_LISTEN_PORT" || { echo -e "${RED}❌ 面板端口无效：${PANEL_LISTEN_PORT}${PLAIN}"; return 1; }
+    is_valid_port "$SUB_LISTEN_PORT" || { echo -e "${RED}❌ 订阅端口无效：${SUB_LISTEN_PORT}${PLAIN}"; return 1; }
+    is_valid_path_prefix "$SUB_URI_PATH" || { echo -e "${RED}❌ 普通订阅路径无效：${SUB_URI_PATH}${PLAIN}"; return 1; }
+    is_valid_path_prefix "$CLASH_URI_PATH" || { echo -e "${RED}❌ Clash/Mihomo 路径无效：${CLASH_URI_PATH}${PLAIN}"; return 1; }
+    warn_if_public_bind "3x-ui 面板" "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT" || return 1
+    warn_if_public_bind "3x-ui 订阅服务" "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT" || return 1
+
+    save_and_offer_reapply_sni_stack
+}
+
+edit_sni_stack_reality_profile() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}修改 REALITY 本地监听与伪装 SNI${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    echo -e "${YELLOW}适用于：你在 3x-ui REALITY 入站里修改了监听端口、监听地址，或更换了伪装 SNI。${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "当前 REALITY：${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
+    echo -e "当前 REALITY SNI：${REALITY_SNI}"
+    echo -e "------------------------------------------------"
+
+    XRAY_LISTEN_ADDR=$(ask_with_default "Xray/3x-ui REALITY 本地监听地址" "$XRAY_LISTEN_ADDR")
+    XRAY_LISTEN_PORT=$(ask_with_default "Xray/3x-ui REALITY 本地监听端口" "$XRAY_LISTEN_PORT")
+    REALITY_SNI=$(normalize_domain_input "$(ask_with_default "REALITY 伪装 SNI" "$REALITY_SNI")")
+
+    is_valid_listen_addr "$XRAY_LISTEN_ADDR" || { echo -e "${RED}❌ REALITY 监听地址无效：${XRAY_LISTEN_ADDR}${PLAIN}"; return 1; }
+    is_valid_port "$XRAY_LISTEN_PORT" || { echo -e "${RED}❌ REALITY 端口无效：${XRAY_LISTEN_PORT}${PLAIN}"; return 1; }
+    is_valid_domain "$REALITY_SNI" || { echo -e "${RED}❌ REALITY SNI 无效：${REALITY_SNI}${PLAIN}"; return 1; }
+    [[ "$REALITY_SNI" == "$PANEL_DOMAIN" ]] && { echo -e "${RED}❌ REALITY SNI 不能写面板域名。${PLAIN}"; return 1; }
+    warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
+    probe_reality_sni "$REALITY_SNI" || return 1
+
+    save_and_offer_reapply_sni_stack
+}
+
+edit_sni_stack_entry_profile() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}修改 Nginx / Caddy 单入口监听${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    echo -e "${YELLOW}适用于：你要调整公网入口端口、Caddy 本地 TLS 端口，或修正监听地址。普通用户建议保持默认。${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "当前公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT}"
+    echo -e "当前 Caddy 本地 TLS：${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
+    echo -e "------------------------------------------------"
+
+    NGINX_LISTEN_ADDR=$(ask_with_default "Nginx 公网监听地址" "$NGINX_LISTEN_ADDR")
+    NGINX_LISTEN_PORT=$(ask_with_default "Nginx 公网监听端口" "$NGINX_LISTEN_PORT")
+    CADDY_LISTEN_ADDR=$(ask_with_default "Caddy 本地监听地址" "$CADDY_LISTEN_ADDR")
+    CADDY_LISTEN_PORT=$(ask_with_default "Caddy 本地监听端口" "$CADDY_LISTEN_PORT")
+
+    is_valid_listen_addr "$NGINX_LISTEN_ADDR" || { echo -e "${RED}❌ Nginx 监听地址无效：${NGINX_LISTEN_ADDR}${PLAIN}"; return 1; }
+    is_valid_listen_addr "$CADDY_LISTEN_ADDR" || { echo -e "${RED}❌ Caddy 监听地址无效：${CADDY_LISTEN_ADDR}${PLAIN}"; return 1; }
+    is_valid_port "$NGINX_LISTEN_PORT" || { echo -e "${RED}❌ Nginx 端口无效：${NGINX_LISTEN_PORT}${PLAIN}"; return 1; }
+    is_valid_port "$CADDY_LISTEN_PORT" || { echo -e "${RED}❌ Caddy 端口无效：${CADDY_LISTEN_PORT}${PLAIN}"; return 1; }
+    warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
+    if [[ "$NGINX_LISTEN_PORT" != "443" ]]; then
+        echo -e "${YELLOW}⚠️  Nginx 公网入口不是 443。请确认云安全组、防火墙和客户端地址都同步改了。${PLAIN}"
+    fi
+
+    save_and_offer_reapply_sni_stack
+}
+
+edit_sni_stack_runtime_profile() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🧭 修改 443 本地端口 / 路径配置${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}用途：3x-ui 后续改了端口或订阅路径时，不用重跑首次配置，也不用重签证书。${PLAIN}"
+        echo -e "${YELLOW}修改域名和证书仍建议走首次配置或证书维护；这里主要改本地监听和路径。${PLAIN}"
+        echo -e "------------------------------------------------"
+        if load_sni_stack_env >/dev/null 2>&1; then
+            echo -e "面板：${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+            echo -e "订阅：${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} | 普通 ${SUB_URI_PATH} | Clash/Mihomo ${CLASH_URI_PATH}"
+            echo -e "REALITY：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
+            echo -e "入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Caddy ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
+        else
+            echo -e "${RED}未找到 443 配置，请先运行 [19] -> [1]。${PLAIN}"
+            return 1
+        fi
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 修改 3x-ui 面板/订阅端口与路径${PLAIN}"
+        echo -e "${GREEN}  2. 修改 REALITY 本地监听 / 伪装 SNI${PLAIN}"
+        echo -e "${GREEN}  3. 修改 Nginx 公网入口 / Caddy 本地 TLS${PLAIN}"
+        echo -e "${GREEN}  4. 重新应用当前保存的配置${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local choice
+        read_trimmed choice "👉 请选择要修改的配置: "
+        case "$choice" in
+            1) edit_sni_stack_panel_subscription_profile ;;
+            2) edit_sni_stack_reality_profile ;;
+            3) edit_sni_stack_entry_profile ;;
+            4) reapply_sni_stack_from_env ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择。${PLAIN}"; sleep 1 ;;
+        esac
+        echo ""
+        read -n 1 -s -r -p "按任意键继续..."
+    done
 }
 
 reapply_sni_stack_from_env() {
@@ -1641,6 +1917,8 @@ collect_sni_stack_config() {
     XRAY_LISTEN_PORT=$(ask_with_default "Xray REALITY 本地监听端口" "1443")
     PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "40000")
     SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（若与面板同端口请输入 40000）" "2096")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅公网路径（浏览器访问不带端口，例如 /sub/ 或 /sublinkqq/）" "/sub/")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅公网路径（例如 /clash/ 或 /mihomo/）" "/clash/")")
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i default_site_port
         default_site_port=3000
@@ -1681,6 +1959,8 @@ collect_sni_stack_config() {
 
     if ! is_valid_domain "$PANEL_DOMAIN"; then echo -e "${RED}❌ 面板域名无效。${PLAIN}"; return 1; fi
     if ! is_valid_domain "$REALITY_SNI"; then echo -e "${RED}❌ REALITY SNI 无效。${PLAIN}"; return 1; fi
+    check_domain_dns_sanity "$PANEL_DOMAIN" "面板域名" "prompt" || return 1
+    check_domain_dns_sanity "$REALITY_SNI" "REALITY SNI" "prompt" || return 1
     local site_domain seen_domains
     seen_domains=" ${PANEL_DOMAIN} ${REALITY_SNI} "
     for site_domain in "${SITE_DOMAINS[@]}"; do
@@ -1690,6 +1970,7 @@ collect_sni_stack_config() {
             echo -e "${RED}❌ 面板域名、网站/反代域名、REALITY SNI 不能相同：${site_domain}${PLAIN}"
             return 1
         fi
+        check_domain_dns_sanity "$site_domain" "网站/反代域名" "prompt" || return 1
         seen_domains+=" ${site_domain} "
     done
 
@@ -1700,6 +1981,8 @@ collect_sni_stack_config() {
     for a in "$NGINX_LISTEN_ADDR" "$CADDY_LISTEN_ADDR" "$XRAY_LISTEN_ADDR" "$PANEL_LISTEN_ADDR" "$SUB_LISTEN_ADDR" "${SITE_BACKEND_ADDRS[@]}"; do
         is_valid_listen_addr "$a" || { echo -e "${RED}❌ 监听地址无效：${a}${PLAIN}"; return 1; }
     done
+    is_valid_path_prefix "$SUB_URI_PATH" || { echo -e "${RED}❌ 普通订阅公网路径无效：${SUB_URI_PATH}${PLAIN}"; return 1; }
+    is_valid_path_prefix "$CLASH_URI_PATH" || { echo -e "${RED}❌ Clash/Mihomo 订阅公网路径无效：${CLASH_URI_PATH}${PLAIN}"; return 1; }
     SITE_DOMAIN="${SITE_DOMAINS[0]:-}"
     SITE_BACKEND_ADDR="${SITE_BACKEND_ADDRS[0]:-127.0.0.1}"
     SITE_BACKEND_PORT="${SITE_BACKEND_PORTS[0]:-3000}"
@@ -1868,30 +2151,40 @@ EOF
 write_caddy_panel_config() {
     local panel_backend
     local sub_backend
+    local sub_match_paths
     panel_backend=$(format_hostport "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT")
     sub_backend=$(format_hostport "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT")
+    SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
+    CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
+    sub_match_paths=$(caddy_path_match_tokens "$SUB_URI_PATH" "$CLASH_URI_PATH")
     cat <<EOF > "/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy"
 https://${PANEL_DOMAIN}:${CADDY_LISTEN_PORT} {
     bind ${CADDY_LISTEN_ADDR}
     tls /etc/caddy/certs/${PANEL_DOMAIN}.crt /etc/caddy/certs/${PANEL_DOMAIN}.key
     encode gzip
 
-    @sub path /sub /sub/*
+    @sub path ${sub_match_paths}
     handle @sub {
         reverse_proxy ${sub_backend} {
             header_up Host {http.request.host}
+            header_up X-Forwarded-Host {http.request.host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
             header_up X-Real-IP {remote_host}
+            header_up Range {http.request.header.Range}
+            header_up If-Range {http.request.header.If-Range}
         }
     }
 
     handle {
         reverse_proxy ${panel_backend} {
             header_up Host {http.request.host}
+            header_up X-Forwarded-Host {http.request.host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
             header_up X-Real-IP {remote_host}
+            header_up Range {http.request.header.Range}
+            header_up If-Range {http.request.header.If-Range}
         }
     }
 }
@@ -1970,6 +2263,8 @@ PANEL_LISTEN_ADDR='${PANEL_LISTEN_ADDR}'
 PANEL_LISTEN_PORT='${PANEL_LISTEN_PORT}'
 SUB_LISTEN_ADDR='${SUB_LISTEN_ADDR}'
 SUB_LISTEN_PORT='${SUB_LISTEN_PORT}'
+SUB_URI_PATH='${SUB_URI_PATH}'
+CLASH_URI_PATH='${CLASH_URI_PATH}'
 SITE_BACKEND_ADDR='${SITE_BACKEND_ADDRS[0]:-127.0.0.1}'
 SITE_BACKEND_PORT='${SITE_BACKEND_PORTS[0]:-3000}'
 SITE_BACKEND_ADDRS_CSV='${site_backend_addrs_csv}'
@@ -2019,7 +2314,8 @@ print_sni_stack_result() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}一、以后从外面只访问这些地址${PLAIN}"
     echo -e "  面板入口：      https://${PANEL_DOMAIN}${suggested_panel_path}"
-    echo -e "  订阅入口：      https://${PANEL_DOMAIN}/sub/"
+    echo -e "  普通订阅入口：  https://${PANEL_DOMAIN}${SUB_URI_PATH}"
+    echo -e "  Clash/Mihomo：  https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i
         for i in "${!SITE_DOMAINS[@]}"; do
@@ -2038,8 +2334,10 @@ print_sni_stack_result() {
     echo -e "  面板 SSL/HTTPS：关闭"
     echo -e "  证书路径/私钥路径：留空，不要填写 Caddy 证书"
     echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}${suggested_panel_path}"
-    echo -e "  Subscription URI Path：/sub/"
-    echo -e "  Subscription External URL：https://${PANEL_DOMAIN}/sub/"
+    echo -e "  Subscription URI Path：${SUB_URI_PATH}"
+    echo -e "  Subscription External URL：https://${PANEL_DOMAIN}${SUB_URI_PATH}"
+    echo -e "  Clash/Mihomo URI Path：${CLASH_URI_PATH}"
+    echo -e "  Clash/Mihomo External URL：https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
     echo -e "${YELLOW}  不建议使用 webBasePath=/，随机面板路径能降低被批量扫描命中的概率。${PLAIN}"
     if [[ "$PANEL_INTERNAL_SSL" == "on" ]]; then
         echo -e "${RED}  重要：你刚才表示 3x-ui 已启用内置 SSL，请先关闭它，否则容易 404/502/重定向循环。${PLAIN}"
@@ -2308,7 +2606,7 @@ func_caddy_cf_reality_wizard() {
         echo -e "${YELLOW}如果只是新增网站或反代域名，请返回并选择 [2] 管理网站/反代域名。${PLAIN}"
         echo -e "${YELLOW}继续首次配置会重写 Nginx/Caddy/REALITY 分流核心配置。${PLAIN}"
         echo -e "------------------------------------------------"
-        grep -E '^(PANEL_DOMAIN|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT)=' /etc/vps-optimize/sni-stack.env 2>/dev/null || true
+        grep -E '^(PANEL_DOMAIN|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null || true
         echo -e "------------------------------------------------"
         confirm_danger "重新执行 443 首次配置" "将基于新输入重写 443 单入口核心配置，并重启 Nginx/Caddy。" "脚本会先创建备份，可从 443 维护菜单或备份目录回滚。" || return 1
     fi
@@ -2688,6 +2986,7 @@ func_caddy_cf_maintenance_menu() {
         echo -e "${GREEN}  3. 重新应用上次 443 配置${PLAIN}     ${YELLOW}(读取 sni-stack.env 重建配置)${PLAIN}"
         echo -e "${GREEN}  4. 订阅端口 / External Proxy 提示${PLAIN} ${YELLOW}(节点链接应输出公网 443)${PLAIN}"
         echo -e "${RED}  5. 回滚 443 单入口配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}"
+        echo -e "${GREEN} 16. 修改本地端口 / 订阅路径${PLAIN}   ${YELLOW}(面板端口、订阅路径、REALITY 等)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 证书与 Cloudflare${PLAIN}"
         echo -e "${GREEN}  6. 查看已管理域名 / 证书路径${PLAIN}"
@@ -2725,9 +3024,14 @@ func_caddy_cf_maintenance_menu() {
             13) m_choice=9 ;;
             14) m_choice=10 ;;
             15) m_choice=5 ;;
+            16) m_choice=16 ;;
         esac
 
         case $m_choice in
+            16)
+                edit_sni_stack_runtime_profile
+                ;;
+
             1)
                 generate_caddy_cf_manifest
                 echo -e "${CYAN}👇 当前清单内容：${PLAIN}"
@@ -5835,6 +6139,7 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}  4. 重新应用上次配置${PLAIN}           ${YELLOW}(读取 sni-stack.env 重新生成配置)${PLAIN}"
         echo -e "${CYAN}  5. 订阅端口 / External Proxy 提示${PLAIN} ${YELLOW}(检查订阅节点是否输出 443)${PLAIN}"
         echo -e "${CYAN}  6. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
+        echo -e "${CYAN}  7. 修改本地端口 / 订阅路径${PLAIN}   ${YELLOW}(面板端口、订阅端口、REALITY、/sub、/clash)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -5848,6 +6153,7 @@ func_sni_stack_quick_menu() {
             4) reapply_sni_stack_from_env ;;
             5) check_sni_stack_subscription_hint ;;
             6) func_caddy_cf_maintenance_menu; continue ;;
+            7) edit_sni_stack_runtime_profile; continue ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac

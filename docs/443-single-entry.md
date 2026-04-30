@@ -29,6 +29,7 @@
 - 3x-ui 面板不要再开启自己的 SSL，证书交给 Caddy 管。
 - REALITY 的 `dest` / `serverNames` 写外部真实 HTTPS 站点，不写面板域名。
 - 后续新增网站走 `19 -> 2`，不要重跑首次配置。
+- 配置顺序必须是：先把 3x-ui 面板和入站调整好，再跑 443 单入口分流。
 
 ## 1. 你需要提前准备什么
 
@@ -54,19 +55,280 @@ Zone.DNS.Edit
 - 当前机器没有其他服务占用公网 `443`，可用 `ss -lntp | grep ':443'` 查看。
 - 已经保留当前 SSH 会话，必要时先做 VPS 快照。
 
-## 2. 最短配置路径
+## 2. 推荐完整流程：先配置 3x-ui，再配置 443
 
-第一次配置：
+这套方案最容易出错的地方不是 443 本身，而是顺序反了。建议按下面顺序走：
 
 ```text
-1. 先把域名 A/AAAA 记录解析到当前 VPS
-2. 进入 cy 主菜单
-3. 选择 19. 443 单入口管理中心
-4. 选择 1. 首次配置 443 单入口
-5. 按提示填写面板域名、REALITY SNI、Cloudflare Token
-6. 到 3x-ui 中关闭面板 SSL，并确认面板监听 127.0.0.1:40000
-7. 到 3x-ui REALITY 入站中确认监听 127.0.0.1:1443
-8. 回到脚本运行 19 -> 3 做链路体检
+1. DNS 先解析好面板域名、节点域名。
+2. 安装 3x-ui，并处理安装器要求的 SSL 选项。
+3. 进入 3x-ui，把面板改成 127.0.0.1:40000，关闭面板 SSL。
+4. 在 3x-ui 里配置面板路径、普通订阅路径、Clash/Mihomo 订阅路径。
+5. 在 3x-ui 里新增 REALITY 入站，监听 127.0.0.1:1443。
+6. 确认 3x-ui 本地面板、订阅、REALITY 都在监听。
+7. 再进入 cy -> 19 -> 1 配置 443 单入口。
+8. 跑 cy -> 19 -> 3 做链路体检。
+```
+
+### 2.1 安装 3x-ui 时 SSL 证书怎么选
+
+有些 3x-ui 安装器会强制让你在下面三个选项里选一个：
+
+```text
+1. 为域名申请证书
+2. 为 IP 申请证书
+3. 选择已有证书位置
+```
+
+在本项目的 443 单入口架构里，推荐这样选：
+
+```text
+优先选择：为域名申请证书
+域名填写：你的面板域名，例如 panel.example.com
+如果安装器问是否把证书设置给面板：选择 n
+```
+
+核心原则是：**可以让安装器申请证书来完成安装，但不要让 3x-ui 面板自己启用 HTTPS**。最终对外 HTTPS 由 Caddy 负责，3x-ui 面板只做本机 HTTP 后端。
+
+如果安装器没有“不要设置给面板”的选项，或者你已经选了 IP 证书/已有证书位置，也没关系。安装完成后立刻执行：
+
+```text
+cy -> 4 -> 11 面板救砖 / 重置 SSL
+```
+
+这个功能会清空 3x-ui 数据库里的面板证书路径，让面板回到 HTTP 模式。做完后再进入 3x-ui 官方菜单确认面板 SSL 已关闭。
+
+不推荐长期使用：
+
+```text
+为 IP 申请证书
+把 IP 证书路径填进 3x-ui 面板 SSL
+把 Caddy 证书路径填进 3x-ui 面板 SSL
+```
+
+这些做法常见后果是 `ERR_TOO_MANY_REDIRECTS`、`502 Bad Gateway`、订阅链接带内部端口，或者面板完全打不开。
+
+如果安装器问你是否自定义面板端口、路径、用户名密码等，建议选择自定义。先按下面值填，让 3x-ui 从一开始就作为本机后端运行：
+
+```text
+面板监听 IP：127.0.0.1
+面板监听域名：留空
+面板监听端口：40000
+面板 url 根路径：/cuty/  或你自己的随机路径
+面板 SSL/HTTPS：关闭
+证书路径：留空
+私钥路径：留空
+```
+
+`/cuty/` 只是示例，可以换成你自己的路径。它必须以 `/` 开头、以 `/` 结尾。后续公网面板入口就是：
+
+```text
+https://panel.example.com/cuty/
+```
+
+如果安装器还问会话时长、分页大小等普通面板参数，可以按个人习惯设置：
+
+```text
+会话时长：360
+分页大小：默认值即可；设置 0 通常表示禁用分页
+```
+
+### 2.2 3x-ui 面板先改成本机 HTTP 后端
+
+安装完成后，先进入 3x-ui，建议这样设置：
+
+```text
+面板监听地址：127.0.0.1
+面板端口：40000
+webBasePath：/panel-a8f3c9/  或你自己的随机路径
+面板 SSL/HTTPS：关闭
+证书路径：留空
+私钥路径：留空
+Panel URL / Public URL / External URL：https://panel.example.com/panel-a8f3c9/
+```
+
+`webBasePath` 可以自定义，但不要用 `/`。建议使用随机路径，例如：
+
+```text
+/panel-a8f3c9/
+/my-xui-9d2k/
+/admin-7q2m4x/
+```
+
+浏览器以后访问面板时，要带这个路径：
+
+```text
+https://panel.example.com/panel-a8f3c9/
+```
+
+不要访问：
+
+```text
+https://panel.example.com/
+https://panel.example.com:40000/
+https://panel.example.com:8443/
+```
+
+### 2.3 普通订阅和 Clash/Mihomo 订阅路径都先在 3x-ui 里定好
+
+3x-ui 通常会有两个订阅入口：
+
+```text
+普通订阅：/sub/
+Clash/Mihomo 订阅：/clash/
+```
+
+这两个路径都可以自定义。你可以使用默认：
+
+```text
+Subscription URI Path：/sub/
+Subscription External URL：https://panel.example.com/sub/
+Clash/Mihomo URI Path：/clash/
+Clash/Mihomo External URL：https://panel.example.com/clash/
+```
+
+也可以改成你自己的路径，例如：
+
+```text
+普通订阅路径：/sublinkqq/
+普通订阅外部地址：https://panel.example.com/sublinkqq/
+Clash/Mihomo 路径：/mihomoqq/
+Clash/Mihomo 外部地址：https://panel.example.com/mihomoqq/
+```
+
+如果 3x-ui 的订阅设置页面显示这些字段，建议这样填：
+
+```text
+监听 IP：127.0.0.1
+监听域名：留空
+监听端口：2096
+
+URI 路径：/sublinkqq/          # 普通订阅，默认可用 /sub/
+反向代理 URI：/sublinkqq/      # 和 URI 路径保持一致
+
+URI 路径 (Clash)：/clash/      # Clash/Mihomo 订阅
+反向代理 URI (Clash)：/clash/  # 和 URI 路径 (Clash) 保持一致
+```
+
+`监听域名` 建议留空，让 Caddy 通过 Host 头和路径转发过来。`反向代理 URI` 的推荐值是和对应的 `URI 路径` 一样；本项目默认不做路径剥离或改写，所以不要一个填 `/sub/`、另一个填 `/sublinkqq/`，除非你非常清楚自己在 Caddy 里做了 rewrite。
+
+注意三件事：
+
+- 外部订阅地址不要带 `:2096`。
+- 3x-ui 面板里的路径、443 向导里填写的路径、Caddy 的 `@sub path` 必须一致。
+- 路径建议以 `/` 开头并以 `/` 结尾，例如 `/sub/`、`/clash/`、`/sublinkqq/`。
+- 路径建议只使用英文、数字、点、下划线和短横线，避免空格、中文和特殊符号。
+
+### 2.4 REALITY 入站先建好
+
+如果你要让未知 SNI 默认落到 REALITY，必须先在 3x-ui 里建一个 REALITY 入站：
+
+```text
+协议：VLESS
+监听地址：127.0.0.1
+监听端口：1443
+传输：TCP / RAW
+Security：Reality
+uTLS：chrome
+Target / dest：外部真实 HTTPS 站点:443，例如 www.microsoft.com:443
+serverNames / SNI：同一个外部真实 HTTPS 站点，例如 www.microsoft.com
+SpiderX：/
+Fallbacks：留空
+```
+
+不要把 `Target / dest` 写成：
+
+```text
+panel.example.com:443
+127.0.0.1:8443
+自己的节点域名:443
+```
+
+然后在该入站里配置 `External Proxy`，让客户端最终连接公网 443：
+
+```text
+类型：相同
+地址：节点域名、面板域名或服务器公网 IP
+端口：443
+```
+
+保存后复制节点链接，应看到公网端口是 `443`，不是 `1443`。
+
+### 2.5 本地状态确认
+
+在跑 443 分流前，先检查本地监听：
+
+```bash
+ss -lntp | grep -E ':40000|:2096|:1443'
+curl -I http://127.0.0.1:40000/
+curl -I http://127.0.0.1:2096/sub/
+curl -I http://127.0.0.1:2096/clash/
+```
+
+`/sub/` 和 `/clash/` 如果你改成了自定义路径，就用你的真实路径测试。
+
+### 2.6 再配置 443 单入口
+
+确认 3x-ui 已经配置好后，再进入：
+
+```text
+cy -> 19 -> 1 首次配置 443 单入口
+```
+
+建议普通用户保持默认本地监听，只按自己的实际情况填写：
+
+```text
+面板域名：panel.example.com
+网站/反代域名：首次可以留空
+REALITY 伪装 SNI：www.microsoft.com 或其他外部真实 HTTPS 站点
+Nginx 公网监听地址：0.0.0.0
+Nginx 公网监听端口：443
+Caddy 本地监听地址：127.0.0.1
+Caddy 本地监听端口：8443
+Xray REALITY 本地监听地址：127.0.0.1
+Xray REALITY 本地监听端口：1443
+3x-ui 面板监听地址：127.0.0.1
+3x-ui 面板端口：40000
+3x-ui 订阅服务监听地址：127.0.0.1
+3x-ui 订阅服务端口：2096
+3x-ui 普通订阅公网路径：/sub/ 或你的自定义路径
+3x-ui Clash/Mihomo 订阅公网路径：/clash/ 或你的自定义路径
+3x-ui 面板是否已经开启内置 SSL：n
+Cloudflare API Token：用于 DNS 签发 Caddy 证书
+```
+
+如果你刚才安装时已经误开了 3x-ui SSL，这里不要硬继续，先返回执行：
+
+```text
+cy -> 4 -> 11 面板救砖 / 重置 SSL
+```
+
+### 2.7 配置完成后的公网访问方式
+
+假设你使用默认路径：
+
+```text
+面板：https://panel.example.com/panel-a8f3c9/
+普通订阅：https://panel.example.com/sub/订阅密钥
+Clash/Mihomo：https://panel.example.com/clash/订阅密钥
+节点连接：node.example.com:443 或 panel.example.com:443
+```
+
+如果你使用自定义路径：
+
+```text
+面板：https://panel.example.com/my-xui-9d2k/
+普通订阅：https://panel.example.com/sublinkqq/订阅密钥
+Clash/Mihomo：https://panel.example.com/mihomoqq/订阅密钥
+```
+
+不要从公网访问这些内部端口：
+
+```text
+https://panel.example.com:40000/
+https://panel.example.com:2096/sub/xxxx
+https://panel.example.com:8443/
+https://panel.example.com:1443/
 ```
 
 后续新增网站：
@@ -76,6 +338,25 @@ Zone.DNS.Edit
 2. 管理网站/反代域名
 2. 新增网站/反代域名
 ```
+
+后续修改 3x-ui 面板端口、订阅端口、REALITY 端口或订阅路径：
+
+```text
+19. 443 单入口管理中心
+7. 修改本地端口 / 订阅路径
+```
+
+常见场景：
+
+```text
+3x-ui 面板端口从 40000 改成 41000
+订阅服务端口从 2096 改成 3096
+普通订阅路径从 /sub/ 改成 /sublinkqq/
+Clash/Mihomo 路径从 /clash/ 改成 /mihomo/
+REALITY 本地端口从 1443 改成 2443
+```
+
+先在 3x-ui 里保存新端口或路径，再进入这个菜单同步脚本并重新应用。不要为这种小改动重跑首次配置，也不需要重签证书。
 
 排错优先入口：
 
@@ -156,6 +437,8 @@ Xray REALITY 本地监听端口：1443
 3x-ui 面板端口：40000
 3x-ui 订阅服务监听地址：127.0.0.1
 3x-ui 订阅服务端口：2096
+3x-ui 普通订阅公网路径：/sub/
+3x-ui Clash/Mihomo 订阅公网路径：/clash/
 网站/反代后端地址：127.0.0.1
 网站/反代后端端口：3000
 Cloudflare API Token：用于 DNS 签发证书
@@ -263,14 +546,17 @@ https://dockge.example.com:8443/
 
 ```text
 面板监听地址：127.0.0.1
+面板监听域名：留空
 面板端口：40000
 webBasePath：/panel-a8f3c9/
 面板 SSL / HTTPS：关闭
 证书路径：留空
 私钥路径：留空
 Panel URL / Public URL / External URL：https://panel.example.com/panel-a8f3c9/
-Subscription URI Path：/sub/
-Subscription External URL：https://panel.example.com/sub/
+Subscription URI Path：/sub/，也可以用自定义路径如 /sublinkqq/
+Subscription External URL：https://panel.example.com/sub/，不要带 :2096
+Clash/Mihomo URI Path：/clash/，也可以用自定义路径如 /mihomoqq/
+Clash/Mihomo External URL：https://panel.example.com/clash/，不要带 :2096
 ```
 
 `webBasePath` 不建议使用根路径 `/`。建议设置一个不容易被猜到的随机路径，例如 `/panel-a8f3c9/`、`/my-xui-9d2k/`，并让面板 URL 同步带上这个路径。这样公网访问 `https://panel.example.com/` 时不会直接暴露面板登录页，能降低被批量扫描命中的概率。
@@ -354,6 +640,51 @@ vless://uuid@node.example.com:443?security=reality&sni=your-reality-sni.example.
 
 如果链接里还是 `:1443`，说明 External Proxy 没有生效。把这个订阅交给 SublinkPro、妙妙屋或 Sub-Store 转换后，也可能继续得到错误端口。
 
+3x-ui 订阅服务端口真实监听在本机：
+
+```text
+127.0.0.1:2096
+```
+
+公网访问时不要打开：
+
+```text
+https://panel.example.com:2096/sublinkqq/xxxx
+```
+
+应该通过 443 单入口访问：
+
+```text
+https://panel.example.com/sublinkqq/xxxx
+```
+
+如果你把 `Subscription URI Path` 设置成 `/sublinkqq/`，443 向导里的“3x-ui 普通订阅公网路径”也要填 `/sublinkqq/`，这样 Caddy 才会把该路径转发到本机订阅端口。
+
+如果你把 Clash/Mihomo 路径设置成 `/mihomoqq/`，443 向导里的“3x-ui Clash/Mihomo 订阅公网路径”也要填 `/mihomoqq/`。
+
+`/sub/`、`/sublinkqq/`、`/clash/`、`/mihomoqq/` 都只是路径示例。浏览器访问的路径、3x-ui 中对应的 URI Path、Caddy 的 `@sub path` 三者必须一致；否则 HTTPS 正常也会返回 404。
+
+脚本会为面板域名生成类似下面的 Caddy 规则：
+
+```caddy
+@sub path /sub /sub/* /clash /clash/*
+handle @sub {
+    reverse_proxy 127.0.0.1:2096 {
+        header_up Host {http.request.host}
+        header_up X-Forwarded-Host {http.request.host}
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Port 443
+        header_up X-Real-IP {remote_host}
+    }
+}
+```
+
+如果你自定义为 `/sublinkqq/` 和 `/mihomoqq/`，对应规则应变成：
+
+```caddy
+@sub path /sublinkqq /sublinkqq/* /mihomoqq /mihomoqq/*
+```
+
 ## 9. 可以反代哪些服务
 
 只要服务提供普通 HTTP 后端，并且能监听本机端口，就可以放到 443 分流里。
@@ -380,10 +711,12 @@ vless://uuid@node.example.com:443?security=reality&sni=your-reality-sni.example.
 | 浏览器提示 SSL 协议错误 | 访问了内部端口，或 SNI 没进 Caddy | 只访问 `https://域名/`，不要带 `:8443` |
 | 面板 502 | 3x-ui 面板没启动或端口不是 `40000` | `curl -I http://127.0.0.1:40000/` |
 | 面板 404 | 访问路径和 `webBasePath` 不一致 | 面板 URL 是否带 `/panel-a8f3c9/` 这类路径 |
+| 订阅 404 | 普通订阅或 Clash/Mihomo 路径不一致 | 对比 3x-ui URI Path、Caddy `@sub path`、浏览器访问路径 |
 | 面板循环跳转 | 3x-ui 面板 SSL/HTTPS 仍开启 | 关闭面板 SSL，清空证书和私钥路径 |
 | 节点链接仍是 `:1443` | External Proxy 没生效 | 3x-ui 入站 External Proxy 地址和端口 |
 | REALITY 不通 | 入站没监听本机 `1443`，或 SNI/dest 写错 | `ss -lntp`、REALITY `Target` / `serverNames` |
 | 证书签发失败 | Cloudflare Token 权限不足或域名不在该账号 | Token 权限、域名 zone、脚本证书维护菜单 |
+| `ERR_EMPTY_RESPONSE` | 访问了 `http://` 被 Nginx 80 默认丢弃、Cloudflare SSL 模式错误、面板 SNI 没有进入 Caddy、或默认 REALITY 后端未监听 | 使用完整 `https://面板域名/webBasePath/`，检查 Cloudflare SSL/TLS 为 Full/Full(strict)，再跑 `19 -> 3` |
 
 ### 具体错误判断
 
@@ -402,6 +735,21 @@ vless://uuid@node.example.com:443?security=reality&sni=your-reality-sni.example.
 
 通常是 3x-ui 面板还开启了 SSL 或强制 HTTPS。关闭面板 SSL，并清空证书和私钥路径。
 
+如果出现在订阅路径上，再确认两件事：
+
+- 订阅外部地址不要带内部端口，写 `https://panel.example.com/sublinkqq/`，不要写 `https://panel.example.com:2096/sublinkqq/`。
+- Caddy 反代块需要带 `X-Forwarded-Host`、`X-Forwarded-Proto`、`X-Forwarded-Port`，否则 3x-ui 可能拼出错误跳转地址。
+
+`ERR_EMPTY_RESPONSE`：
+
+先确认浏览器地址是完整的 `https://panel.example.com/panel-a8f3c9/`，不是 `http://panel.example.com/`。本项目会把公网 `80` 的未知访问直接丢弃，所以访问 HTTP 时浏览器可能显示“未发送任何数据”。
+
+如果你本地代理开启了 fake-ip 模式，本机查到 `198.18.x.x` 不一定代表公网 DNS 错误；请在 VPS 上或可信公共 DNS/DoH 上复查。若 VPS 侧也解析到 `198.18.x.x`、`10.x.x.x`、`127.x.x.x`、`192.168.x.x` 等地址，说明面板域名没有指向真实公网入口。
+
+使用 Cloudflare 小云朵时，SSL/TLS 模式建议使用 `Full` 或 `Full (strict)`；`Flexible` 会让 Cloudflare 用 HTTP 回源，容易撞上 80 端口丢弃规则。
+
+如果还没有创建 REALITY 入站，`127.0.0.1:1443` 通常不会监听。面板域名精确匹配时不会受影响；但如果 Nginx SNI 表里没有这个面板域名，或访问了其他域名，流量会落到默认 REALITY 后端，浏览器也可能显示空响应。
+
 `HTTP 404`：
 
 先检查后端本地是否正常：
@@ -411,6 +759,15 @@ curl -I http://127.0.0.1:40000/
 ```
 
 如果本地也是 404，优先检查你访问的路径是否和 3x-ui 的 `webBasePath` 一致。例如 `webBasePath` 设置为 `/panel-a8f3c9/`，面板入口就应该访问 `https://panel.example.com/panel-a8f3c9/`。
+
+如果 404 出现在订阅链接，分别测试普通订阅和 Clash/Mihomo 后端：
+
+```bash
+curl -I http://127.0.0.1:2096/sub/订阅密钥
+curl -I http://127.0.0.1:2096/clash/订阅密钥
+```
+
+如果你用了自定义路径，就把 `/sub/`、`/clash/` 换成你的真实路径。若本地 `127.0.0.1:2096` 都返回 404，说明 3x-ui 里的路径或密钥不对；若本地正常、公网 404，说明 Caddy 的 `@sub path` 没有包含该路径。
 
 `502 Bad Gateway`：
 
@@ -473,6 +830,8 @@ journalctl -u x-ui -u 3x-ui -n 80 --no-pager
 
 ```text
 浏览器打开：https://panel.example.com/panel-a8f3c9/
+普通订阅：https://panel.example.com/sub/订阅密钥
+Clash/Mihomo：https://panel.example.com/clash/订阅密钥
 浏览器打开：https://sub.example.com/
 客户端连接：node.example.com:443
 3x-ui 面板监听：127.0.0.1:40000
@@ -486,6 +845,8 @@ Nginx stream 监听：0.0.0.0:443
 ```text
 浏览器打开：https://panel.example.com:40000/
 浏览器打开：https://panel.example.com:8443/
+订阅打开：https://panel.example.com:2096/sub/订阅密钥
+Clash/Mihomo 打开：https://panel.example.com:2096/clash/订阅密钥
 REALITY dest 写 panel.example.com:443
 3x-ui 面板开启 SSL 并填写 Caddy 证书
 Caddy 直接监听公网 0.0.0.0:443
@@ -496,6 +857,7 @@ Caddy 直接监听公网 0.0.0.0:443
 - 不要让 Caddy 监听公网 `443`。
 - 不要让 Xray/3x-ui REALITY 直接监听公网 `443`。
 - 不要让 3x-ui 面板暴露公网 `40000`。
+- 不要从公网访问或放行 `2096` 订阅端口，订阅也走公网 `443`。
 - 不要把 Caddy 的证书路径填进 3x-ui 面板 SSL。
 - 不要把 REALITY 的 `dest/serverNames` 写成面板域名。
 - 不要把网站分流继续交给 Xray fallback。
