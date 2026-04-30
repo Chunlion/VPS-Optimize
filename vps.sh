@@ -5804,14 +5804,17 @@ func_reboot_server() {
 # ---------------------------------------------------------
 func_update_script() {
     clear
+    local tmp_file
+    tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh)
     echo -e "${CYAN}👉 正在从 GitHub 源地址拉取最新版本...${PLAIN}"
-    if curl -sL "$UPDATE_URL" -o /tmp/cy_new.sh && bash -n /tmp/cy_new.sh; then
-        mv /tmp/cy_new.sh /usr/local/bin/cy
+    if curl -fsSL --connect-timeout 10 --max-time 90 "$UPDATE_URL" -o "$tmp_file" && bash -n "$tmp_file" && grep -q "VPS 全能控制面板" "$tmp_file" 2>/dev/null; then
+        mv "$tmp_file" /usr/local/bin/cy
         chmod +x /usr/local/bin/cy
         echo -e "${GREEN}✅ 更新下载并覆盖完成！正在重启面板...${PLAIN}"
         sleep 1
         exec bash /usr/local/bin/cy
     else
+        rm -f "$tmp_file"
         echo -e "${RED}❌ 更新失败！请检查您的网络连通性或 GitHub 地址是否正确。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
     fi

@@ -487,7 +487,10 @@ get_nftables_counter_data() {
 save_traffic_data() {
     local temp_file=$(mktemp /tmp/port-traffic-dog-data.XXXXXX)
     local active_ports=($(get_active_ports 2>/dev/null || true))
-    if [ ${#active_ports[@]} -eq 0 ]; then return 0; fi
+    if [ ${#active_ports[@]} -eq 0 ]; then
+        rm -f "$temp_file"
+        return 0
+    fi
     echo '{}' > "$temp_file"
 
     for port in "${active_ports[@]}"; do
@@ -1933,8 +1936,21 @@ import_config() {
     read_trimmed package_path "配置包路径: "
     if [ -f "$package_path" ]; then
         if confirm_danger "导入配置包" "会把配置包内容解压到系统根目录，覆盖现有 Port Traffic Dog 配置。"; then
-            tar -xzf "$package_path" -C / 2>/dev/null
-            echo -e "${GREEN}配置包已恢复，重启脚本生效。${NC}"
+            if tar -tzf "$package_path" 2>/dev/null | awk '
+                BEGIN { ok = 1; seen = 0 }
+                /^\/|(^|\/)\.\.(\/|$)/ { ok = 0 }
+                !/^etc\/port-traffic-dog(\/|$)/ && !/^\.\/etc\/port-traffic-dog(\/|$)/ { ok = 0 }
+                /^etc\/port-traffic-dog(\/|$)/ || /^\.\/etc\/port-traffic-dog(\/|$)/ { seen = 1 }
+                END { exit (ok && seen) ? 0 : 1 }
+            '; then
+                if tar -xzf "$package_path" -C / 2>/dev/null; then
+                    echo -e "${GREEN}配置包已恢复，重启脚本生效。${NC}"
+                else
+                    echo -e "${RED}配置包解压失败，请检查文件是否完整。${NC}"
+                fi
+            else
+                echo -e "${RED}配置包校验失败：仅允许导入 /etc/port-traffic-dog 内的相对路径。${NC}"
+            fi
         fi
     fi
     sleep 2; manage_configuration
@@ -1957,10 +1973,10 @@ install_update_script() {
     echo "────────────────────────────────────────────────────────"
     echo -e "${YELLOW}正在从远程仓库获取最新版本...${NC}"
 
-    local temp_file=$(mktemp /tmp/port-traffic-dog-update.XXXXXX)
+    local temp_file=$(mktemp /tmp/port-traffic-dog-update.XXXXXX.sh)
     
     if download_with_sources "$SCRIPT_URL" "$temp_file"; then
-        if [ -s "$temp_file" ] && grep -q "端口流量狗" "$temp_file" 2>/dev/null; then
+        if [ -s "$temp_file" ] && grep -q "端口流量狗" "$temp_file" 2>/dev/null && bash -n "$temp_file" >/dev/null 2>&1; then
             echo -e "${GREEN}下载成功，正在进行热替换...${NC}"
             
             mv "$temp_file" "$SCRIPT_PATH"
@@ -1975,7 +1991,7 @@ install_update_script() {
             
             exec bash "$SCRIPT_PATH"
         else
-            echo -e "${RED}错误：下载的文件验证失败，请检查网络或 URL。${NC}"
+            echo -e "${RED}错误：下载的文件验证失败或语法检查未通过，请检查网络或 URL。${NC}"
             rm -f "$temp_file"
         fi
     else
