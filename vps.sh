@@ -650,15 +650,17 @@ caddy_path_match_tokens() {
     local path
     local exact
     local seen=" "
+    local tokens=""
     for path in "$@"; do
         path=$(normalize_path_prefix "$path")
         exact="${path%/}"
         if [[ "$seen" == *" ${exact} "* ]]; then
             continue
         fi
-        printf '%s %s/* ' "$exact" "$exact"
+        tokens+="${exact} ${exact}/* "
         seen+=" ${exact} "
     done
+    printf '%s' "${tokens% }"
 }
 
 is_suspicious_public_ipv4() {
@@ -1500,6 +1502,7 @@ print_sni_stack_preview() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Nginx stream"
     echo -e "面板域名：${PANEL_DOMAIN} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "面板路径：https://${PANEL_DOMAIN}${PANEL_WEB_PATH:-/panel/}"
     echo -e "普通订阅路径：https://${PANEL_DOMAIN}${SUB_URI_PATH:-/sub/} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
     echo -e "Clash/Mihomo 路径：https://${PANEL_DOMAIN}${CLASH_URI_PATH:-/clash/} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
@@ -1536,6 +1539,7 @@ load_sni_stack_env() {
     # shellcheck disable=SC1090
     source "$env_file"
     PANEL_INTERNAL_SSL=${PANEL_INTERNAL_SSL:-off}
+    PANEL_WEB_PATH=$(normalize_path_prefix "${PANEL_WEB_PATH:-/panel/}")
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
     CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
     normalize_site_stack_arrays
@@ -1669,6 +1673,7 @@ check_sni_stack_subscription_hint() {
     echo -e "  类型：相同"
     echo -e "  地址：你的节点域名或服务器 IP"
     echo -e "  端口：${NGINX_LISTEN_PORT}"
+    echo -e "${YELLOW}提示：REALITY 节点地址必须直连 VPS。若面板域名开了 Cloudflare 橙云，不要拿面板域名当节点地址。${PLAIN}"
     echo -e ""
     echo -e "复制节点链接后应该看到："
     echo -e "  vless://...@节点地址:${NGINX_LISTEN_PORT}?security=reality&sni=${REALITY_SNI}&..."
@@ -1688,7 +1693,7 @@ save_and_offer_reapply_sni_stack() {
     echo -e "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的端口或路径。${PLAIN}"
     read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？(Y/n): "
     if [[ -z "$yn" || "$yn" =~ ^[Yy]$ ]]; then
-        reapply_sni_stack_from_env
+        reapply_sni_stack_from_env --yes
     else
         echo -e "${YELLOW}稍后可执行 [19] -> [4] 重新应用上次配置。${PLAIN}"
     fi
@@ -1704,6 +1709,7 @@ edit_sni_stack_panel_subscription_profile() {
     echo -e "${YELLOW}修改前请先在 3x-ui 面板里保存对应设置，再来这里同步脚本。${PLAIN}"
     echo -e "------------------------------------------------"
     echo -e "当前面板后端：${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "当前面板公网路径：${PANEL_WEB_PATH}"
     echo -e "当前订阅后端：${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
     echo -e "当前普通订阅路径：${SUB_URI_PATH}"
     echo -e "当前 Clash/Mihomo 路径：${CLASH_URI_PATH}"
@@ -1711,17 +1717,23 @@ edit_sni_stack_panel_subscription_profile() {
 
     PANEL_LISTEN_ADDR=$(ask_with_default "3x-ui 面板监听地址" "$PANEL_LISTEN_ADDR")
     PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "$PANEL_LISTEN_PORT")
+    PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath" "$PANEL_WEB_PATH")")
     SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "$SUB_LISTEN_ADDR")
     SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口" "$SUB_LISTEN_PORT")
-    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "普通订阅公网路径" "$SUB_URI_PATH")")
-    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "Clash/Mihomo 订阅公网路径" "$CLASH_URI_PATH")")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "普通订阅路径前缀（不带订阅密钥）" "$SUB_URI_PATH")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "Clash/Mihomo 订阅路径前缀（不带订阅密钥）" "$CLASH_URI_PATH")")
 
     is_valid_listen_addr "$PANEL_LISTEN_ADDR" || { echo -e "${RED}❌ 面板监听地址无效：${PANEL_LISTEN_ADDR}${PLAIN}"; return 1; }
     is_valid_listen_addr "$SUB_LISTEN_ADDR" || { echo -e "${RED}❌ 订阅监听地址无效：${SUB_LISTEN_ADDR}${PLAIN}"; return 1; }
     is_valid_port "$PANEL_LISTEN_PORT" || { echo -e "${RED}❌ 面板端口无效：${PANEL_LISTEN_PORT}${PLAIN}"; return 1; }
     is_valid_port "$SUB_LISTEN_PORT" || { echo -e "${RED}❌ 订阅端口无效：${SUB_LISTEN_PORT}${PLAIN}"; return 1; }
+    is_valid_path_prefix "$PANEL_WEB_PATH" || { echo -e "${RED}❌ 面板公网路径无效：${PANEL_WEB_PATH}${PLAIN}"; return 1; }
     is_valid_path_prefix "$SUB_URI_PATH" || { echo -e "${RED}❌ 普通订阅路径无效：${SUB_URI_PATH}${PLAIN}"; return 1; }
     is_valid_path_prefix "$CLASH_URI_PATH" || { echo -e "${RED}❌ Clash/Mihomo 路径无效：${CLASH_URI_PATH}${PLAIN}"; return 1; }
+    if [[ "$PANEL_WEB_PATH" == "$SUB_URI_PATH" || "$PANEL_WEB_PATH" == "$CLASH_URI_PATH" || "$SUB_URI_PATH" == "$CLASH_URI_PATH" ]]; then
+        echo -e "${RED}❌ 面板路径、普通订阅路径、Clash/Mihomo 路径不能相同。${PLAIN}"
+        return 1
+    fi
     warn_if_public_bind "3x-ui 面板" "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT" || return 1
     warn_if_public_bind "3x-ui 订阅服务" "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT" || return 1
 
@@ -1793,7 +1805,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "${YELLOW}修改域名和证书仍建议走首次配置或证书维护；这里主要改本地监听和路径。${PLAIN}"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
-            echo -e "面板：${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+            echo -e "面板：${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
             echo -e "订阅：${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} | 普通 ${SUB_URI_PATH} | Clash/Mihomo ${CLASH_URI_PATH}"
             echo -e "REALITY：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
             echo -e "入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Caddy ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
@@ -1827,7 +1839,9 @@ edit_sni_stack_runtime_profile() {
 
 reapply_sni_stack_from_env() {
     load_sni_stack_env || return 1
-    print_sni_stack_preview || return 1
+    if [[ "${1:-}" != "--yes" ]]; then
+        print_sni_stack_preview || return 1
+    fi
     create_sni_stack_backup
     install_nginx_stream_stack || return 1
     harden_nginx_public_errors
@@ -1916,9 +1930,10 @@ collect_sni_stack_config() {
     CADDY_LISTEN_PORT=$(ask_with_default "Caddy 本地监听端口" "8443")
     XRAY_LISTEN_PORT=$(ask_with_default "Xray REALITY 本地监听端口" "1443")
     PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "40000")
+    PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath（必须和面板 url 根路径一致）" "/panel/")")
     SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（若与面板同端口请输入 40000）" "2096")
-    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅公网路径（浏览器访问不带端口，例如 /sub/ 或 /sublinkqq/）" "/sub/")")
-    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅公网路径（例如 /clash/ 或 /mihomo/）" "/clash/")")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和订阅密钥，例如 /sub/ 或 /sublinkqq/）" "/sub/")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带订阅密钥，例如 /clash/ 或 /mihomo/）" "/clash/")")
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i default_site_port
         default_site_port=3000
@@ -1981,8 +1996,13 @@ collect_sni_stack_config() {
     for a in "$NGINX_LISTEN_ADDR" "$CADDY_LISTEN_ADDR" "$XRAY_LISTEN_ADDR" "$PANEL_LISTEN_ADDR" "$SUB_LISTEN_ADDR" "${SITE_BACKEND_ADDRS[@]}"; do
         is_valid_listen_addr "$a" || { echo -e "${RED}❌ 监听地址无效：${a}${PLAIN}"; return 1; }
     done
-    is_valid_path_prefix "$SUB_URI_PATH" || { echo -e "${RED}❌ 普通订阅公网路径无效：${SUB_URI_PATH}${PLAIN}"; return 1; }
-    is_valid_path_prefix "$CLASH_URI_PATH" || { echo -e "${RED}❌ Clash/Mihomo 订阅公网路径无效：${CLASH_URI_PATH}${PLAIN}"; return 1; }
+    is_valid_path_prefix "$PANEL_WEB_PATH" || { echo -e "${RED}❌ 面板公网路径无效：${PANEL_WEB_PATH}${PLAIN}"; return 1; }
+    is_valid_path_prefix "$SUB_URI_PATH" || { echo -e "${RED}❌ 普通订阅路径前缀无效：${SUB_URI_PATH}${PLAIN}"; return 1; }
+    is_valid_path_prefix "$CLASH_URI_PATH" || { echo -e "${RED}❌ Clash/Mihomo 订阅路径前缀无效：${CLASH_URI_PATH}${PLAIN}"; return 1; }
+    if [[ "$PANEL_WEB_PATH" == "$SUB_URI_PATH" || "$PANEL_WEB_PATH" == "$CLASH_URI_PATH" || "$SUB_URI_PATH" == "$CLASH_URI_PATH" ]]; then
+        echo -e "${RED}❌ 面板路径、普通订阅路径、Clash/Mihomo 路径不能相同。${PLAIN}"
+        return 1
+    fi
     SITE_DOMAIN="${SITE_DOMAINS[0]:-}"
     SITE_BACKEND_ADDR="${SITE_BACKEND_ADDRS[0]:-127.0.0.1}"
     SITE_BACKEND_PORT="${SITE_BACKEND_PORTS[0]:-3000}"
@@ -2261,6 +2281,7 @@ XRAY_LISTEN_ADDR='${XRAY_LISTEN_ADDR}'
 XRAY_LISTEN_PORT='${XRAY_LISTEN_PORT}'
 PANEL_LISTEN_ADDR='${PANEL_LISTEN_ADDR}'
 PANEL_LISTEN_PORT='${PANEL_LISTEN_PORT}'
+PANEL_WEB_PATH='${PANEL_WEB_PATH}'
 SUB_LISTEN_ADDR='${SUB_LISTEN_ADDR}'
 SUB_LISTEN_PORT='${SUB_LISTEN_PORT}'
 SUB_URI_PATH='${SUB_URI_PATH}'
@@ -2307,13 +2328,11 @@ harden_single_443_firewall() {
 }
 
 print_sni_stack_result() {
-    local suggested_panel_path
-    suggested_panel_path="/panel-$(tr -dc 'a-z0-9' < /dev/urandom | head -c 8 2>/dev/null || echo "$RANDOM$RANDOM")/"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${GREEN}✅ 443 单入口分流配置完成${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}一、以后从外面只访问这些地址${PLAIN}"
-    echo -e "  面板入口：      https://${PANEL_DOMAIN}${suggested_panel_path}"
+    echo -e "  面板入口：      https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
     echo -e "  普通订阅入口：  https://${PANEL_DOMAIN}${SUB_URI_PATH}"
     echo -e "  Clash/Mihomo：  https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
@@ -2330,10 +2349,10 @@ print_sni_stack_result() {
     echo -e "${BOLD}二、3x-ui 面板设置建议${PLAIN}"
     echo -e "  面板监听地址：${PANEL_LISTEN_ADDR}"
     echo -e "  面板端口：    ${PANEL_LISTEN_PORT}"
-    echo -e "  webBasePath： ${suggested_panel_path}"
+    echo -e "  webBasePath： ${PANEL_WEB_PATH}"
     echo -e "  面板 SSL/HTTPS：关闭"
     echo -e "  证书路径/私钥路径：留空，不要填写 Caddy 证书"
-    echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}${suggested_panel_path}"
+    echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
     echo -e "  Subscription URI Path：${SUB_URI_PATH}"
     echo -e "  Subscription External URL：https://${PANEL_DOMAIN}${SUB_URI_PATH}"
     echo -e "  Clash/Mihomo URI Path：${CLASH_URI_PATH}"
@@ -2358,7 +2377,7 @@ print_sni_stack_result() {
     echo -e "${YELLOW}  注意：REALITY 的 dest/serverNames 必须是外部真实站点，不要写面板域名。${PLAIN}"
     echo -e ""
     echo -e "${BOLD}四、常见错误怎么判断${PLAIN}"
-    echo -e "  ERR_SSL_PROTOCOL_ERROR：通常是访问了内部端口，外部只访问 https://${PANEL_DOMAIN}${suggested_panel_path}"
+    echo -e "  ERR_SSL_PROTOCOL_ERROR：通常是访问了内部端口，外部只访问 https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
     echo -e "  ERR_TOO_MANY_REDIRECTS：通常是 3x-ui 面板还开着 SSL/强制 HTTPS，请关闭并清空证书路径"
     echo -e "  HTTP 404：先检查访问路径是否等于 3x-ui 的 webBasePath，再检查 Caddy 是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  502 Bad Gateway：通常是 3x-ui 没启动、端口不对，或 3x-ui 开了 HTTPS 但 Caddy 按 HTTP 连接"
@@ -2606,7 +2625,7 @@ func_caddy_cf_reality_wizard() {
         echo -e "${YELLOW}如果只是新增网站或反代域名，请返回并选择 [2] 管理网站/反代域名。${PLAIN}"
         echo -e "${YELLOW}继续首次配置会重写 Nginx/Caddy/REALITY 分流核心配置。${PLAIN}"
         echo -e "------------------------------------------------"
-        grep -E '^(PANEL_DOMAIN|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null || true
+        grep -E '^(PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null || true
         echo -e "------------------------------------------------"
         confirm_danger "重新执行 443 首次配置" "将基于新输入重写 443 单入口核心配置，并重启 Nginx/Caddy。" "脚本会先创建备份，可从 443 维护菜单或备份目录回滚。" || return 1
     fi
