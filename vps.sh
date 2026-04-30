@@ -1601,7 +1601,13 @@ normalize_site_stack_arrays() {
     default_port=3000
     for i in "${!SITE_DOMAINS[@]}"; do
         SITE_BACKEND_ADDRS[$i]="${SITE_BACKEND_ADDRS[$i]:-127.0.0.1}"
-        SITE_BACKEND_PORTS[$i]="${SITE_BACKEND_PORTS[$i]:-$default_port}"
+        if [[ -z "${SITE_BACKEND_PORTS[$i]:-}" ]]; then
+            if [[ "$i" -eq 0 && -n "${SITE_BACKEND_PORT:-}" ]]; then
+                SITE_BACKEND_PORTS[$i]="$SITE_BACKEND_PORT"
+            else
+                SITE_BACKEND_PORTS[$i]="$default_port"
+            fi
+        fi
         default_port=$((default_port + 1))
     done
 
@@ -2590,6 +2596,56 @@ add_sni_stack_site() {
     apply_sni_stack_runtime_config || return 1
     echo -e "${GREEN}✅ 已添加网站入口：https://${site_domain}/${PLAIN}"
     echo -e "${YELLOW}提醒：后端服务需要监听 ${site_addr}:${site_port}，浏览器只访问 https://${site_domain}/。${PLAIN}"
+    echo -e "${CYAN}当前 Caddy 后端：reverse_proxy ${site_addr}:${site_port}${PLAIN}"
+}
+
+edit_sni_stack_site_backend() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}修改 443 网站/反代后端${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+
+    if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}当前没有可修改的网站/反代域名。${PLAIN}"
+        return 0
+    fi
+
+    local i num choice idx domain new_addr new_port confirm
+    for i in "${!SITE_DOMAINS[@]}"; do
+        num=$((i + 1))
+        echo -e "${GREEN}${num}.${PLAIN} ${SITE_DOMAINS[$i]} -> ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]}"
+    done
+    echo -e "------------------------------------------------"
+    read_trimmed choice "请输入要修改的序号: "
+    if [[ -z "$choice" || "$choice" == "0" ]]; then
+        echo -e "${BLUE}已取消修改。${PLAIN}"
+        return 0
+    fi
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#SITE_DOMAINS[@]} )); then
+        echo -e "${RED}❌ 序号无效。${PLAIN}"
+        return 1
+    fi
+
+    idx=$((choice - 1))
+    domain="${SITE_DOMAINS[$idx]}"
+    new_addr=$(ask_with_default "后端监听地址" "${SITE_BACKEND_ADDRS[$idx]}")
+    new_port=$(ask_with_default "后端端口" "${SITE_BACKEND_PORTS[$idx]}")
+
+    is_valid_listen_addr "$new_addr" || { echo -e "${RED}❌ 后端监听地址无效：${new_addr}${PLAIN}"; return 1; }
+    is_valid_port "$new_port" || { echo -e "${RED}❌ 后端端口无效：${new_port}${PLAIN}"; return 1; }
+    warn_if_public_bind "网站/反代后端 ${domain}" "$new_addr" "$new_port" || return 1
+
+    echo -e ""
+    echo -e "${CYAN}即将修改：${domain} -> ${new_addr}:${new_port}${PLAIN}"
+    read_trimmed confirm "确认更新 Caddy/Nginx 配置？输入 yes 继续（大小写均可）: "
+    is_yes "$confirm" || return 1
+
+    SITE_BACKEND_ADDRS[$idx]="$new_addr"
+    SITE_BACKEND_PORTS[$idx]="$new_port"
+    apply_sni_stack_runtime_config || return 1
+    echo -e "${GREEN}✅ 已更新网站后端：https://${domain}/ -> ${new_addr}:${new_port}${PLAIN}"
+    echo -e "${CYAN}当前 Caddy 后端：reverse_proxy ${new_addr}:${new_port}${PLAIN}"
 }
 
 remove_sni_stack_site() {
@@ -2663,9 +2719,10 @@ manage_sni_stack_sites() {
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 查看当前网站/反代域名${PLAIN}"
         echo -e "${GREEN}  2. 新增网站/反代域名${PLAIN}"
-        echo -e "${GREEN}  3. 删除网站/反代域名${PLAIN}"
-        echo -e "${GREEN}  4. 重新应用并重启 Nginx/Caddy${PLAIN}"
-        echo -e "${GREEN}  5. 443 单入口链路体检${PLAIN}"
+        echo -e "${GREEN}  3. 修改网站/反代后端端口${PLAIN}"
+        echo -e "${GREEN}  4. 删除网站/反代域名${PLAIN}"
+        echo -e "${GREEN}  5. 重新应用并重启 Nginx/Caddy${PLAIN}"
+        echo -e "${GREEN}  6. 443 单入口链路体检${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -2675,9 +2732,10 @@ manage_sni_stack_sites() {
         case "$choice" in
             1) list_sni_stack_sites ;;
             2) add_sni_stack_site ;;
-            3) remove_sni_stack_site ;;
-            4) reapply_sni_stack_from_env ;;
-            5) sni_stack_health_check ;;
+            3) edit_sni_stack_site_backend ;;
+            4) remove_sni_stack_site ;;
+            5) reapply_sni_stack_from_env ;;
+            6) sni_stack_health_check ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
