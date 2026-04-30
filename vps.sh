@@ -6092,7 +6092,9 @@ preflight_missing_minimal_compat_items() {
         systemctl list-unit-files "${svc}.service" --no-legend 2>/dev/null | awk 'NF {found=1} END {exit found ? 0 : 1}' || missing+=("svc:$svc")
     done
 
-    printf '%s\n' "${missing[@]}"
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        printf '%s\n' "${missing[@]}"
+    fi
 }
 
 preflight_enable_ntp() {
