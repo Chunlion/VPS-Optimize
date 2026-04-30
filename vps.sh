@@ -1678,7 +1678,7 @@ check_sni_stack_subscription_hint() {
     echo -e "  类型：相同"
     echo -e "  地址：你的节点域名或服务器 IP"
     echo -e "  端口：${NGINX_LISTEN_PORT}"
-    echo -e "${YELLOW}提示：REALITY 节点地址必须直连 VPS。若面板域名开了 Cloudflare 橙云，不要拿面板域名当节点地址。${PLAIN}"
+    echo -e "${YELLOW}提示：本教程推荐 Cloudflare 灰云 / DNS only。REALITY 节点地址必须直连 VPS，可填灰云节点域名或服务器公网 IP。${PLAIN}"
     echo -e ""
     echo -e "复制节点链接后应该看到："
     echo -e "  vless://...@节点地址:${NGINX_LISTEN_PORT}?security=reality&sni=${REALITY_SNI}&..."
@@ -1726,8 +1726,8 @@ edit_sni_stack_panel_subscription_profile() {
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath" "$PANEL_WEB_PATH")")
     SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "$SUB_LISTEN_ADDR")
     SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口" "$SUB_LISTEN_PORT")
-    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "普通订阅路径前缀（不带订阅密钥，建议写 /sub/）" "$SUB_URI_PATH")")
-    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "Clash/Mihomo 订阅路径前缀（不带订阅密钥，建议写 /clash/）" "$CLASH_URI_PATH")")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "普通订阅路径前缀（不带客户端 Subscription，建议写 /sub/）" "$SUB_URI_PATH")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "$CLASH_URI_PATH")")
 
     is_valid_listen_addr "$PANEL_LISTEN_ADDR" || { echo -e "${RED}❌ 面板监听地址无效：${PANEL_LISTEN_ADDR}${PLAIN}"; return 1; }
     is_valid_listen_addr "$SUB_LISTEN_ADDR" || { echo -e "${RED}❌ 订阅监听地址无效：${SUB_LISTEN_ADDR}${PLAIN}"; return 1; }
@@ -1981,8 +1981,8 @@ collect_sni_stack_config() {
     PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "40000")
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath（必须和面板 url 根路径一致）" "/panel/")")
     SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（若与面板同端口请输入 40000）" "2096")
-    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和订阅密钥，建议写 /sub/）" "/sub/")")
-    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带订阅密钥，建议写 /clash/）" "/clash/")")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和客户端 Subscription，建议写 /sub/）" "/sub/")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "/clash/")")
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i default_site_port
         default_site_port=3000

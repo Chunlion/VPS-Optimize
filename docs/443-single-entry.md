@@ -20,8 +20,8 @@
 
 ```text
 面板：https://panel.example.com/你的面板根路径/
-普通订阅：https://panel.example.com/你的普通订阅路径/订阅密钥
-Clash/Mihomo：https://panel.example.com/你的 Clash 路径/订阅密钥
+普通订阅：https://panel.example.com/你的普通订阅路径/客户端 Subscription
+Clash/Mihomo：https://panel.example.com/你的 Clash 路径/客户端 Subscription
 REALITY 节点：node.example.com:443 或 服务器公网IP:443
 ```
 
@@ -47,10 +47,13 @@ REALITY 伪装 SNI：www.microsoft.com 这类外部真实 HTTPS 站点
 Cloudflare 小云朵建议：
 
 ```text
-面板域名：可以橙云，也可以灰云
-节点域名：建议灰云 / DNS only，必须能直连 VPS
+面板域名：推荐灰云 / DNS only
+节点域名：推荐灰云 / DNS only，必须能直连 VPS
+网站/反代域名：推荐灰云 / DNS only
 REALITY 伪装 SNI：不要指向你的 VPS，不要写面板域名
 ```
+
+本教程不推荐开启 Cloudflare 代理。灰云能让域名直连 VPS，Nginx stream 才能稳定按 SNI 分流；也能避免 REALITY、订阅链接和 External Proxy 因为走 Cloudflare 代理而出现连接异常。
 
 Cloudflare API Token 需要：
 
@@ -129,16 +132,16 @@ http://panel.example.com:40000/panel/
 
 同样把证书路径、私钥路径全部清空。
 
-然后设置订阅服务：
+然后先设置订阅服务的本机监听和路径：
 
 ```text
 监听 IP：先留空或用默认；443 分流完成后再改 127.0.0.1
 监听域名：留空
 监听端口：2096
 URI 路径：/sub/，建议改成自己能记住且不容易被猜到的路径
-反向代理 URI：/sub/
+反向代理 URI：先留空，443 分流完成后再填写公网地址
 URI 路径 (Clash)：/clash/
-反向代理 URI (Clash)：/clash/
+反向代理 URI (Clash)：先留空，443 分流完成后再填写公网地址
 ```
 
 注意：**3x-ui 的 URI 路径不会自动补 `/`**。你必须手动写成：
@@ -155,10 +158,10 @@ URI 路径 (Clash)：/clash/
 sub
 /sub
 sub/
-/sub/673kkdohpwplhywm
+/sub/客户端 Subscription
 ```
 
-443 向导里也填同样的路径前缀，不要带订阅密钥。
+443 向导里填的是路径前缀，例如 `/sub/`、`/clash/`，不要填写面板域名，也不要带入站下面客户端的 `Subscription`。
 
 保存并重启面板。
 
@@ -253,27 +256,34 @@ panel.example.com -> Caddy 127.0.0.1:8443 -> 3x-ui 面板 127.0.0.1:40000
 cy -> 19 -> 7 -> 1 修改面板/订阅端口与路径
 ```
 
-### 6.2 检查订阅路径和反向代理 URI
+### 6.2 设置订阅反向代理 URI
 
-订阅设置里保持：
+443 分流跑通后，再回到 3x-ui 的订阅设置，把反向代理 URI 改成公网 443 地址：
 
 ```text
 URI 路径：/sub/
-反向代理 URI：/sub/
+反向代理 URI：https://panel.example.com/sub/
 URI 路径 (Clash)：/clash/
-反向代理 URI (Clash)：/clash/
+反向代理 URI (Clash)：https://panel.example.com/clash/
+```
+
+如果你把订阅路径改成了 `/sublinkqq/` 或 `/mihomo/`，这里也要同步改成：
+
+```text
+反向代理 URI：https://panel.example.com/sublinkqq/
+反向代理 URI (Clash)：https://panel.example.com/mihomo/
 ```
 
 普通订阅公网地址应该是：
 
 ```text
-https://panel.example.com/sub/订阅密钥
+https://panel.example.com/sub/客户端 Subscription
 ```
 
 Clash/Mihomo 公网地址应该是：
 
 ```text
-https://panel.example.com/clash/订阅密钥
+https://panel.example.com/clash/客户端 Subscription
 ```
 
 不要带 `:2096`。
@@ -288,7 +298,7 @@ https://panel.example.com/clash/订阅密钥
 端口：443
 ```
 
-如果 `panel.example.com` 开了 Cloudflare 橙云，不要把它填到 External Proxy。REALITY 节点要直连 VPS。
+推荐所有用于本教程的域名都使用 Cloudflare 灰云 / DNS only。External Proxy 的地址必须能直连 VPS，可以填灰云节点域名或服务器公网 IP。
 
 保存后复制节点链接，端口应该是：
 
@@ -401,7 +411,7 @@ curl -I http://127.0.0.1:40000/panel/
 curl -I http://127.0.0.1:2096/sub/
 ```
 
-订阅不带密钥返回 404 不一定代表端口坏了，主要看是不是连接拒绝。
+订阅不带入站下面客户端的 `Subscription` 返回 404 不一定代表端口坏了，主要看是不是连接拒绝。
 
 ### 节点不能用
 
@@ -410,7 +420,7 @@ curl -I http://127.0.0.1:2096/sub/
 ```text
 REALITY 入站监听：127.0.0.1:1443
 External Proxy：地址是 node.example.com 或服务器公网 IP，端口 443
-节点域名不是 Cloudflare 橙云
+节点域名是 Cloudflare 灰云 / DNS only
 REALITY dest/serverNames 是外部真实 HTTPS 站点
 ```
 
@@ -448,6 +458,6 @@ Nginx stream 监听：0.0.0.0:443
 把 REALITY dest 写成 panel.example.com:443
 3x-ui 证书路径没清空就跑 443 分流
 订阅 URI 路径写成 sub 或 /sub
-把订阅密钥填进 443 向导的路径前缀
+把入站下面客户端的 Subscription 填进 443 向导的路径前缀
 让 Caddy、Xray、3x-ui 面板同时抢公网 443
 ```
