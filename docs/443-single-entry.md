@@ -359,9 +359,28 @@ https://dockge.example.com/
 
 ## 8. 快速排错
 
+先看这一张表，定位方向后再看下面对应小节：
+
+| 报错 / 现象 | 重点判断 | 优先处理 |
+| --- | --- | --- |
+| `ERR_TOO_MANY_REDIRECTS` | 3x-ui 仍在启用 HTTPS 或重复跳转 | 清空面板和订阅证书路径，确认 Caddy 反代 HTTP |
+| `ERR_EMPTY_RESPONSE` | 请求没有进入正确 Web 后端 | 检查访问地址、Nginx SNI、Cloudflare 灰云 |
+| `ERR_CONNECTION_CLOSED` | 连接被提前断开 | 检查 Nginx/Caddy/REALITY 监听和服务状态 |
+| `ERR_SSL_PROTOCOL_ERROR` | 协议或端口错了 | 确认公网 `443` 只由 Nginx 监听 |
+| `HTTP 404` | 证书大概率没问题，路径分流不匹配 | 对齐 3x-ui URI 路径、443 向导路径、Caddy `@sub path` |
+| `502 Bad Gateway` | Caddy 找不到后端 | 检查 3x-ui 是否启动、端口是否一致、后端是否 HTTP |
+| 订阅链接仍带 `:2096` | 订阅公网地址没设置好 | 设置订阅反向代理 URI 为 `https://面板域名/路径/` |
+| 节点链接仍带 `:1443` | External Proxy 没生效 | 在 REALITY 入站里设置 External Proxy 为公网 `443` |
+| 节点不能用 | REALITY 或节点地址问题 | 检查 SNI、灰云、External Proxy，必要时重启 VPS |
+| 证书签发失败 | Cloudflare / DNS 问题 | 检查 Token 权限、域名 zone、DNS 解析 |
+
 ### ERR_TOO_MANY_REDIRECTS
 
-优先检查：
+**重点：3x-ui 面板或订阅还在启用自己的 HTTPS，导致和 Caddy 重复跳转。**
+
+这个报错通常说明浏览器已经进入了面板域名，但 3x-ui 和反向代理之间出现了重复 HTTPS 或重复跳转。
+
+优先检查 3x-ui 证书是否清空：
 
 ```text
 3x-ui 面板设置 -> 常规 -> 证书路径是否已清空
@@ -375,11 +394,139 @@ https://dockge.example.com/
 https://panel.example.com/panel/
 ```
 
+如果你刚刚清空过证书，浏览器仍然循环跳转，可以用无痕窗口重新测试，或者换一个浏览器测试。
+
+VPS 上检查 Caddy 是否按 HTTP 反代本机 3x-ui：
+
+```bash
+grep -n "reverse_proxy" /etc/caddy/conf.d/panel.example.com.caddy
+```
+
+正确方向应该类似：
+
+```text
+reverse_proxy 127.0.0.1:40000
+reverse_proxy 127.0.0.1:2096
+```
+
+如果你看到 `reverse_proxy https://127.0.0.1:40000`，说明还在反代 HTTPS 后端。按本教程推荐路线，应清空 3x-ui 证书路径，再重新应用 443 配置：
+
+```text
+cy -> 19 -> 7 -> 5 重新应用当前保存的配置
+```
+
+### ERR_EMPTY_RESPONSE
+
+**重点：请求没有进入正确的 Web 后端，常见于地址写错或面板 SNI 没命中 Caddy。**
+
+这个报错通常说明浏览器连到了入口，但对端没有返回 HTTP 内容。常见原因是访问了错误协议、错误端口、SNI 没命中 Caddy，或者流量落到了 REALITY 后端。
+
+先确认浏览器地址必须是：
+
+```text
+https://panel.example.com/panel/
+```
+
+不要访问：
+
+```text
+http://panel.example.com/
+https://panel.example.com:8443/
+https://panel.example.com:1443/
+https://panel.example.com:40000/
+```
+
+然后在 VPS 上跑链路体检：
+
+```text
+cy -> 19 -> 3 443 单入口链路体检
+```
+
+如果体检提示面板 SNI 没有命中 Caddy，检查 Nginx stream 配置里是否包含面板域名：
+
+```bash
+grep -n "panel.example.com" /etc/nginx/stream.d/*.conf
+```
+
+如果没有，重新应用 443 配置：
+
+```text
+cy -> 19 -> 7 -> 5 重新应用当前保存的配置
+```
+
+如果你使用 Cloudflare，请确认本教程相关域名都是灰云 / DNS only，不推荐开启代理。
+
+### ERR_CONNECTION_CLOSED
+
+**重点：连接被提前关闭，优先看 Nginx stream、Caddy、REALITY 有没有按端口监听。**
+
+这个报错通常说明 TCP/TLS 连接建立过程中被提前关闭。常见原因是 Nginx stream 把面板域名分到了 REALITY 后端，或者 Caddy 没有正常监听本地 TLS 端口。
+
+先检查监听：
+
+```bash
+ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096'
+```
+
+期望看到：
+
+```text
+0.0.0.0:443       nginx
+127.0.0.1:8443    caddy
+127.0.0.1:1443    x-ui / 3x-ui / xray
+127.0.0.1:40000   x-ui / 3x-ui
+127.0.0.1:2096    x-ui / 3x-ui
+```
+
+再检查配置：
+
+```bash
+nginx -t
+caddy validate --config /etc/caddy/Caddyfile
+systemctl restart nginx
+systemctl restart caddy
+```
+
+如果 Nginx 或 Caddy 重启失败，查看日志：
+
+```bash
+journalctl -u nginx -n 80 --no-pager
+journalctl -u caddy -n 80 --no-pager
+```
+
+### ERR_SSL_PROTOCOL_ERROR
+
+**重点：协议或端口不匹配，公网 `443` 只能交给 Nginx stream。**
+
+这个报错通常是协议层不匹配。最常见是访问了内部端口，或者公网 `443` 被 Caddy、Xray、3x-ui 多个服务同时抢占。
+
+先确认公网只应该由 Nginx 监听 `443`：
+
+```bash
+ss -lntp | grep ':443'
+```
+
+正确结果应只有 Nginx 监听公网 `443`。Caddy 应监听 `127.0.0.1:8443`，REALITY 应监听 `127.0.0.1:1443`，3x-ui 面板应监听 `127.0.0.1:40000`。
+
+如果 Caddy 或 3x-ui 也在监听公网 `443`，先回 3x-ui 清空证书路径并改成本机监听，再重新应用：
+
+```text
+cy -> 19 -> 7 -> 5 重新应用当前保存的配置
+```
+
 ### HTTP 404
 
-通常是路径不一致。
+**重点：404 多数不是证书问题，而是路径分流不一致。**
 
-检查三处是否完全一致：
+如果访问订阅地址返回 404，例如：
+
+```text
+https://panel.example.com/clash/客户端 Subscription
+```
+
+通常说明证书和公网 HTTPS 已经不是主要问题，问题在路径分流：浏览器访问的是 `/clash/`，那么 3x-ui 和 Caddy 都必须使用 `/clash/` 这个订阅路径。
+
+先检查三处是否完全一致：
 
 ```text
 3x-ui URI 路径
@@ -393,7 +540,64 @@ https://panel.example.com/panel/
 /sublinkqq/
 ```
 
+如果你访问的是 `/clash/客户端 Subscription`，3x-ui 里应确认：
+
+```text
+URI 路径 (Clash)：/clash/
+反向代理 URI (Clash)：https://panel.example.com/clash/
+```
+
+然后同步脚本里的路径：
+
+```text
+cy -> 19 -> 7 -> 1 修改面板/订阅端口与路径
+```
+
+把 `3x-ui Clash/Mihomo 订阅路径前缀` 填成：
+
+```text
+/clash/
+```
+
+保存后选择重新应用配置。
+
+如果需要手动修复 Caddy，可以编辑面板域名配置：
+
+```bash
+nano /etc/caddy/conf.d/panel.example.com.caddy
+```
+
+确认订阅匹配包含你的真实路径，例如只使用 `/clash/` 时：
+
+```caddy
+@sub path /clash /clash/*
+handle @sub {
+    reverse_proxy 127.0.0.1:2096 {
+        header_up Host {http.request.host}
+        header_up X-Forwarded-Host {http.request.host}
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Port 443
+        header_up X-Real-IP {remote_host}
+    }
+}
+```
+
+保存后执行：
+
+```bash
+caddy validate --config /etc/caddy/Caddyfile
+systemctl reload caddy || systemctl restart caddy
+```
+
+注意：如果普通订阅和 Clash/Mihomo 都要使用，Caddy 的 `@sub path` 应同时包含两个路径，例如：
+
+```caddy
+@sub path /sub /sub/* /clash /clash/*
+```
+
 ### 502 Bad Gateway
+
+**重点：Caddy 已经接到请求，但连不上 3x-ui 后端。**
 
 通常是：
 
@@ -413,7 +617,68 @@ curl -I http://127.0.0.1:2096/sub/
 
 订阅不带入站下面客户端的 `Subscription` 返回 404 不一定代表端口坏了，主要看是不是连接拒绝。
 
+如果本机 `curl` 也连接拒绝，说明 3x-ui 没监听对应端口，先回 3x-ui 检查面板端口和订阅端口。
+如果本机正常、公网 502，说明 Caddy 反代地址或端口和 3x-ui 实际监听不一致，进入：
+
+```text
+cy -> 19 -> 7 -> 1 修改面板/订阅端口与路径
+```
+
+同步端口后重新应用配置。
+
+### 订阅链接仍然带 :2096
+
+**重点：订阅的公网地址没设置好，3x-ui 还在输出本机订阅端口。**
+
+这个现象说明 3x-ui 生成订阅时仍在使用本机订阅端口，没有使用公网 443 地址。
+
+443 分流跑通后，回到 3x-ui：
+
+```text
+订阅设置 -> 反向代理 URI
+```
+
+填公网地址：
+
+```text
+反向代理 URI：https://panel.example.com/sub/
+反向代理 URI (Clash)：https://panel.example.com/clash/
+```
+
+不要写：
+
+```text
+https://panel.example.com:2096/sub/
+http://127.0.0.1:2096/sub/
+```
+
+保存并重启面板后，重新复制订阅链接。
+
+### 节点链接仍然带 :1443
+
+**重点：REALITY 入站的 `External Proxy` 没生效。**
+
+这个现象说明 REALITY 入站的 `External Proxy` 没有生效，客户端还在使用本机 REALITY 入站端口。
+
+回到 3x-ui 的 REALITY 入站，打开 `External Proxy`：
+
+```text
+类型：相同
+地址：node.example.com 或服务器公网 IP
+端口：443
+```
+
+保存后重新复制节点链接。正确链接应该类似：
+
+```text
+vless://...@node.example.com:443?...&sni=www.microsoft.com...
+```
+
+如果节点域名通过 Cloudflare 解析，必须是灰云 / DNS only。
+
 ### 节点不能用
+
+**重点：先确认 REALITY 入站、External Proxy、节点域名灰云和 REALITY SNI。**
 
 检查：
 
@@ -436,12 +701,47 @@ reboot
 cy -> 19 -> 3 443 单入口链路体检
 ```
 
+### 证书签发失败
+
+**重点：证书签发失败通常和 3x-ui 无关，优先查 Cloudflare Token、域名 zone 和 DNS。**
+
+证书签发失败通常和 3x-ui 无关，优先检查 Cloudflare Token、域名 zone 和 DNS。
+
+确认 Cloudflare Token 权限至少有：
+
+```text
+Zone.Zone.Read
+Zone.DNS.Edit
+```
+
+确认域名在这个 Cloudflare 账号里，并且已经解析到当前 VPS。然后进入维护菜单：
+
+```text
+cy -> 19 -> 6 CF DNS / Caddy 证书维护
+```
+
+推荐顺序：
+
+```text
+1. 443 链路与安全体检
+8. 更新 Cloudflare API Token
+9. 重新签发某个域名证书
+12. 校验并重载 Caddy
+```
+
+如果你手动验证 Caddy 配置，使用：
+
+```bash
+caddy validate --config /etc/caddy/Caddyfile
+systemctl reload caddy || systemctl restart caddy
+```
+
 ## 9. 最终正确示例
 
 ```text
 面板：https://panel.example.com/panel/
-普通订阅：https://panel.example.com/sub/673kkdohpwplhywm
-Clash/Mihomo：https://panel.example.com/clash/673kkdohpwplhywm
+普通订阅：https://panel.example.com/sub/客户端 Subscription
+Clash/Mihomo：https://panel.example.com/clash/客户端 Subscription
 REALITY 节点：node.example.com:443
 3x-ui 面板监听：127.0.0.1:40000
 3x-ui 订阅监听：127.0.0.1:2096
