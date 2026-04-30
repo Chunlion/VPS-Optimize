@@ -5823,6 +5823,40 @@ func_update_script() {
 # ---------------------------------------------------------
 # 20. 一键运维预检
 # ---------------------------------------------------------
+preflight_install_missing_commands() {
+    local missing=("$@")
+    local pkgs=()
+    local cmd
+
+    for cmd in "${missing[@]}"; do
+        case "$cmd" in
+            curl) pkgs+=("curl") ;;
+            wget) pkgs+=("wget") ;;
+            ss)
+                if is_debian; then
+                    pkgs+=("iproute2")
+                elif is_redhat; then
+                    pkgs+=("iproute")
+                fi
+                ;;
+        esac
+    done
+
+    if [[ ${#pkgs[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    echo -e "${CYAN}▶ 正在安装缺失基础命令: ${missing[*]}${PLAIN}"
+    install_pkg "${pkgs[@]}"
+}
+
+preflight_enable_ntp() {
+    echo -e "${CYAN}▶ 正在尝试开启系统 NTP 时间同步...${PLAIN}"
+    timedatectl set-ntp true >/dev/null 2>&1 || true
+    systemctl enable --now systemd-timesyncd >/dev/null 2>&1 || true
+    systemctl enable --now chronyd >/dev/null 2>&1 || true
+}
+
 func_preflight_check() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -5835,12 +5869,14 @@ func_preflight_check() {
 
     echo -e "${YELLOW}▶ [1/8] 检查系统运行状态...${PLAIN}"
     local sys_state
-    sys_state=$(systemctl is-system-running 2>/dev/null || echo "unknown")
+    sys_state=$(systemctl is-system-running 2>/dev/null)
+    sys_state=${sys_state:-unknown}
     if [[ "$sys_state" == "running" ]]; then
         echo -e "${GREEN}✅ systemd 状态正常: $sys_state${PLAIN}"
         ((ok_count++))
     elif [[ "$sys_state" == "degraded" ]]; then
         echo -e "${YELLOW}⚠️ systemd 状态降级: $sys_state${PLAIN}"
+        systemctl --failed --no-legend --no-pager 2>/dev/null | awk 'NF {print "   - " $1 " (" $2 ")"}' | head -n 8
         ((warn_count++))
     else
         echo -e "${RED}❌ systemd 状态异常: $sys_state${PLAIN}"
@@ -5869,12 +5905,14 @@ func_preflight_check() {
 
     echo -e "${YELLOW}▶ [4/8] 检查时间同步状态...${PLAIN}"
     local ntp_sync
+    local can_fix_ntp=false
     ntp_sync=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
     if [[ "$ntp_sync" == "yes" ]]; then
         echo -e "${GREEN}✅ NTP 时间同步正常${PLAIN}"
         ((ok_count++))
     else
         echo -e "${YELLOW}⚠️ NTP 未同步，可能影响证书签发与仓库校验${PLAIN}"
+        can_fix_ntp=true
         ((warn_count++))
     fi
 
@@ -5948,6 +5986,27 @@ func_preflight_check() {
         echo -e "${YELLOW}💡 当前可继续操作，但建议先处理警告项以提升稳定性。${PLAIN}"
     else
         echo -e "${GREEN}🎉 当前环境健康，可直接进行后续部署。${PLAIN}"
+    fi
+
+    if ! $pkg_busy && { $can_fix_ntp || [[ ${#cmd_miss[@]} -gt 0 ]]; }; then
+        local fix_confirm rerun_confirm
+        echo -e "------------------------------------------------"
+        echo -e "${CYAN}🛠️ 可自动处理的简单问题:${PLAIN}"
+        $can_fix_ntp && echo -e "  - 开启 NTP 时间同步"
+        [[ ${#cmd_miss[@]} -gt 0 ]] && echo -e "  - 安装缺失基础命令: ${cmd_miss[*]}"
+        read_trimmed fix_confirm "是否现在自动修复这些简单问题？(y/N): "
+        if [[ "$fix_confirm" =~ ^[Yy]$ ]]; then
+            $can_fix_ntp && preflight_enable_ntp
+            [[ ${#cmd_miss[@]} -gt 0 ]] && preflight_install_missing_commands "${cmd_miss[@]}"
+            echo -e "${GREEN}✅ 简单修复已执行。${PLAIN}"
+            read_trimmed rerun_confirm "是否立即重新体检？(y/N): "
+            if [[ "$rerun_confirm" =~ ^[Yy]$ ]]; then
+                func_preflight_check
+                return
+            fi
+        fi
+    elif $pkg_busy; then
+        echo -e "${YELLOW}ℹ️ 包管理器正在运行，本次跳过自动安装类修复。${PLAIN}"
     fi
 
     read -n 1 -s -r -p "按任意键返回..."
