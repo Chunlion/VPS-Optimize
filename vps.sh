@@ -1550,6 +1550,38 @@ load_sni_stack_env() {
     normalize_site_stack_arrays
 }
 
+get_listen_line_by_port() {
+    local port="$1"
+    local line
+    line=$(ss -lntp 2>/dev/null | grep ":${port}[[:space:]]" | head -n1 || true)
+    echo "${line:-未监听}"
+}
+
+print_sni_stack_current_summary() {
+    local env_file="/etc/vps-optimize/sni-stack.env"
+    local caddy_conf="/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy"
+    local nginx_conf="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
+
+    echo -e "${BOLD}当前保存的 443 分流配置${PLAIN} ${CYAN}(${env_file})${PLAIN}"
+    echo -e "面板：      https://${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "普通订阅：  https://${PANEL_DOMAIN}${SUB_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
+    echo -e "Clash 订阅：https://${PANEL_DOMAIN}${CLASH_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
+    echo -e "REALITY：   ${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
+    echo -e "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Caddy ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
+    echo -e "配置文件：  Nginx ${nginx_conf}"
+    echo -e "           Caddy ${caddy_conf}"
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}当前实际监听状态${PLAIN}"
+    echo -e "Nginx 入口：  $(get_listen_line_by_port "$NGINX_LISTEN_PORT")"
+    echo -e "Caddy 本地：  $(get_listen_line_by_port "$CADDY_LISTEN_PORT")"
+    echo -e "面板后端：    $(get_listen_line_by_port "$PANEL_LISTEN_PORT")"
+    echo -e "订阅后端：    $(get_listen_line_by_port "$SUB_LISTEN_PORT")"
+    echo -e "REALITY 后端：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")"
+    if [[ "$SUB_LISTEN_PORT" != "2096" ]]; then
+        echo -e "${YELLOW}提示：3x-ui 订阅推荐默认端口是 2096。当前保存为 ${SUB_LISTEN_PORT}，如需改回请选择 [1]。${PLAIN}"
+    fi
+}
+
 normalize_site_stack_arrays() {
     SITE_DOMAINS=()
     SITE_BACKEND_ADDRS=()
@@ -1725,7 +1757,7 @@ edit_sni_stack_panel_subscription_profile() {
     PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "$PANEL_LISTEN_PORT")
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath" "$PANEL_WEB_PATH")")
     SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "$SUB_LISTEN_ADDR")
-    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口" "$SUB_LISTEN_PORT")
+    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口" "2096")
     SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "普通订阅路径前缀（不带客户端 Subscription，建议写 /sub/）" "$SUB_URI_PATH")")
     CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "$CLASH_URI_PATH")")
 
@@ -1852,10 +1884,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "${YELLOW}新增网站请走 [19] -> [2]，不用重跑首次配置。${PLAIN}"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
-            echo -e "面板：${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
-            echo -e "订阅：${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} | 普通 ${SUB_URI_PATH} | Clash/Mihomo ${CLASH_URI_PATH}"
-            echo -e "REALITY：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
-            echo -e "入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Caddy ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
+            print_sni_stack_current_summary
         else
             echo -e "${RED}未找到 443 配置，请先运行 [19] -> [1]。${PLAIN}"
             return 1
@@ -1980,7 +2009,7 @@ collect_sni_stack_config() {
     XRAY_LISTEN_PORT=$(ask_with_default "Xray REALITY 本地监听端口" "1443")
     PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "40000")
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath（必须和面板 url 根路径一致）" "/panel/")")
-    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（若与面板同端口请输入 40000）" "2096")
+    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（推荐默认 2096）" "2096")
     SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和客户端 Subscription，建议写 /sub/）" "/sub/")")
     CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "/clash/")")
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
