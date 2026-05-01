@@ -1,8 +1,15 @@
 # 3x-ui 外置增强管理脚本
 
-`xui-custom-manager.sh` 是给 3x-ui / x-ui 准备的外置维护工具，主要补充面板里没有或不方便直接操作的功能。
+`xui-custom-manager.sh` 是给 3x-ui / x-ui 准备的外置维护工具，只专注做面板外更适合脚本处理的维护功能：
 
-它不负责编译或替换 3x-ui 程序。脚本重点放在已经安装好的 3x-ui / x-ui 环境上，做流量重置、数据库校准、备份恢复和健康检查。
+- 自定义重置日期
+- 流量校准
+- 备份恢复
+- 健康检查
+- 查看日志
+- 清理旧备份
+
+它不编译、不替换 3x-ui 程序，也不会自动修改面板里的 `traffic_reset`。
 
 ## 快速运行
 
@@ -17,82 +24,151 @@ wget -qO xui-custom-manager.sh https://raw.githubusercontent.com/Chunlion/VPS-Op
 16. 3x-ui 外置增强管理
 ```
 
-## 适用场景
+首次打开菜单时，脚本会自动注册快捷命令：
 
-- 需要按指定日期分别重置入站自身流量或不同客户端流量。
-- 需要手动触发一次自定义重置检查。
-- 需要禁用 3x-ui 原版 monthly 自动重置，改用外置规则。
-- 需要在面板更新后继续沿用之前设置的外置重置日期。
-- 需要查看、校准或修改 `up` / `down` / `total` 流量数据。
-- 需要备份或恢复 x-ui 数据库、配置目录、程序目录。
-- 需要检查 x-ui 服务状态、数据库完整性、关键端口监听和最近日志。
+```bash
+xcm
+```
 
-## 主要功能
+## 推荐架构
 
-| 功能 | 说明 |
-| --- | --- |
-| 自定义每月重置日期 | 入站和客户端分开设置；客户端没有单独日期时，默认不会跟随入站重置 |
-| 手动重置检查 | 不等 systemd timer，立即执行一次规则检查 |
-| systemd timer | 安装或更新外置自动重置定时器，并检测面板更新 |
-| 禁用原版 monthly 重置 | 只处理外置配置里已启用的入站，避免误改未托管入站 |
-| 外置规则复查 | 每次重置检查都会读取原外置配置，并把已启用外置规则的入站 `traffic_reset='monthly'` 恢复为 `never` |
-| 流量查看与校准 | 入站和客户端分开修改；多个客户端会逐个写入并独立计算 `all_time` |
-| 备份恢复 | 备份和恢复数据库、配置目录、程序目录 |
-| 健康检查 | 检查服务、数据库、日志关键词和实际监听端口 |
-| 旧备份清理 | 每类备份只删除用户明确选择的单个旧备份文件 |
+`/usr/local/bin/xcm` 是手动入口：
+
+- 每次运行优先从 GitHub raw 拉取最新版 `xui-custom-manager.sh`。
+- 拉取成功后更新本地缓存并打开菜单。
+- 拉取失败时使用本地缓存版本。
+- `xcm` 只给用户手动打开菜单用，不给 timer 调用。
+
+`/usr/local/bin/xui-custom-manager.sh` 是本地稳定执行器：
+
+- 启用自定义重置时自动安装或更新。
+- systemd timer 只调用这个本地文件。
+- 不依赖 GitHub，不会每天联网拉取脚本。
+
+systemd timer：
+
+- 只在启用“自定义重置日期”时安装并启用。
+- 每天执行一次 `/usr/bin/env bash /usr/local/bin/xui-custom-manager.sh --reset-check`。
+- 使用 `/var/lib/xui-custom-manager/reset-state.json` 记录本月是否已重置，避免重复执行。
+- 支持错过日期后补执行：例如设置每月 10 号，10 号离线、11 号上线时会补执行一次。
+
+## monthly 提醒
+
+使用外置自定义重置日期前，建议在 3x-ui 面板里把对应入站的原生 monthly 重置改成 `never` / 不重置。
+
+脚本只做检测和提醒：
+
+- 不接管面板原生 monthly。
+- 不会自动把 `traffic_reset='monthly'` 改成 `never`。
+- 如果外置管理的入站仍启用 monthly，菜单、dry-run 和健康检查会显示提醒，避免重复重置。
+
+## 流量校准
+
+流量校准只修改已用流量字段：
+
+- 入站：只写 `inbounds.up` / `inbounds.down`
+- 客户端：只写 `client_traffics.up` / `client_traffics.down`
+- 不修改 `total`
+- 不提供清零流量或修改上限入口
+
+清零流量和修改流量上限请在 3x-ui 面板里操作。
+
+所有流量显示和输入统一使用 GiB：
+
+```text
+1 GiB = 1024^3 bytes
+```
+
+写数据库前会自动使用 SQLite `.backup` 备份数据库，并要求输入 `YES` 确认。
+
+## dry-run 预览
+
+菜单里的“自定义重置日期 -> 立即检查一次”会先执行 dry-run：
+
+- 预览本次会重置哪些入站和客户端。
+- 显示不会重置的原因。
+- 显示 monthly 冲突提醒。
+- 不写数据库。
+- 不停止或启动 x-ui。
+- 不更新状态文件。
+
+确认预览结果后，输入 `YES` 才会真实执行重置。
+
+也可以直接命令行预览：
+
+```bash
+./xui-custom-manager.sh --reset-check --dry-run
+./xui-custom-manager.sh --dry-run
+```
+
+真实执行一次检查：
+
+```bash
+./xui-custom-manager.sh --reset-check
+```
 
 ## 默认路径
 
-| 配置项 | 默认值 |
+| 项目 | 路径 |
 | --- | --- |
-| 配置文件 | `/etc/xui-custom-manager.conf` |
+| 手动入口 | `/usr/local/bin/xcm` |
+| 本地稳定执行器 | `/usr/local/bin/xui-custom-manager.sh` |
+| 用户配置 | `/etc/xui-custom-reset.json` |
+| 状态文件 | `/var/lib/xui-custom-manager/reset-state.json` |
+| 备份目录 | `/root/x-ui-backups` |
+| 日志文件 | `/var/log/xui-custom-manager.log` |
 | x-ui 数据库 | `/etc/x-ui/x-ui.db` |
 | x-ui 配置目录 | `/etc/x-ui` |
 | x-ui 程序目录 | `/usr/local/x-ui` |
-| 备份目录 | `/root/x-ui-backups` |
-| 日志文件 | `/var/log/xui-custom-manager.log` |
-| 重置配置 | `/etc/xui-custom-reset.json` |
-| 重置状态 | `/var/lib/xui-custom-manager/reset-state.json` |
 | systemd service | `/etc/systemd/system/xui-custom-reset.service` |
 | systemd timer | `/etc/systemd/system/xui-custom-reset.timer` |
 
-如需改默认路径，可以创建 `/etc/xui-custom-manager.conf`：
+可选配置文件：
+
+```bash
+/etc/xui-custom-manager.conf
+```
+
+常用覆盖项示例：
 
 ```bash
 BACKUP_DIR="/root/x-ui-backups"
 XUI_DB="/etc/x-ui/x-ui.db"
-# 可选：额外指定必须监听的端口；不设置时自动读取已启用入站端口和 x-ui 进程监听端口
-EXPECTED_LISTEN_PORTS=""
+XUI_ETC_DIR="/etc/x-ui"
+XUI_PROGRAM_DIR="/usr/local/x-ui"
 ```
 
-## 命令参数
+## 配置结构
 
-```bash
-./xui-custom-manager.sh
-./xui-custom-manager.sh --run-reset-check
-./xui-custom-manager.sh --show-reset-config
+`/etc/xui-custom-reset.json` 示例：
+
+```json
+{
+  "enabled": true,
+  "default_day": 1,
+  "inbounds": {
+    "1": {
+      "enabled": true,
+      "day": 10,
+      "reset_inbound": true,
+      "reset_clients_without_custom_day": false,
+      "clients": {
+        "user@example.com": {
+          "enabled": true,
+          "day": 20
+        }
+      }
+    }
+  }
+}
 ```
 
-`--run-reset-check` 适合给 systemd service 调用；`--show-reset-config` 用于快速查看当前自定义重置配置。
+`default_day`、入站日期和客户端日期范围都是 `1-31`。如果某月没有对应日期，例如 2 月没有 31 号，会使用当月最后一天。
 
-## 面板更新后的重置日期
+## 安全说明
 
-自定义重置日期保存在 `/etc/xui-custom-reset.json`，不保存在面板程序文件里，所以普通更新 3x-ui / x-ui 面板不会覆盖这些日期。
-
-安装 `systemd timer` 后，脚本每天会执行一次 `--run-reset-check`。执行时会记录并比较 `XUI_BIN` 指向的面板程序状态；如果检测到面板程序已经更新，会提示继续沿用原来的外置配置。
-
-无论是否检测到程序文件变化，脚本每次检查都会读取 `/etc/xui-custom-reset.json`，自动确认已启用外置规则的入站是否又变成 `traffic_reset='monthly'`。如果发现这种情况，脚本会备份数据库后把它改回 `never`，避免原版 monthly 重置和外置自定义日期同时生效。
-
-如果刚更新完面板、想立即复查，可以在菜单中执行：
-
-```text
-2. 手动执行一次自定义重置检查
-```
-
-## 安全建议
-
-1. 修改数据库、恢复备份或禁用原版重置前，先做快照或执行脚本内备份。
-2. 数据库写入类操作会临时停止 `x-ui`，完成后会尝试重新启动服务。
-3. 恢复程序目录或数据库前，请确认选择的是正确备份。
-4. 旧备份清理不会批量删除；每类备份只删除一个明确选择的文件。
-5. 如果面板正在线上使用，建议在低峰期执行流量校准和恢复操作。
+1. 写数据库前会先备份数据库；备份目录权限为 `700`，数据库备份尽量设为 `600`。
+2. 恢复数据库、程序目录或配置目录前，会先备份当前状态，并要求输入 `YES`。
+3. 配置文件和状态文件使用临时文件原子替换，并设置为 `600`。
+4. 旧备份清理不会批量删除；每次只删除用户明确选择的单个文件。
+5. 如果配置文件或状态文件 JSON 损坏，脚本会提示错误并停止，不会直接覆盖旧文件。
