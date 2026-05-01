@@ -61,8 +61,8 @@ wget -qO xui-custom-manager.sh https://raw.githubusercontent.com/Chunlion/VPS-Op
 ```bash
 BACKUP_DIR="/root/x-ui-backups"
 XUI_DB="/etc/x-ui/x-ui.db"
-# 可选：额外指定必须监听的端口；不设置时会自动读取已启用入站端口和 x-ui 进程监听端口
-EXPECTED_LISTEN_PORTS="40000 1443"
+# 可选：额外指定必须监听的端口；不设置时自动读取已启用入站端口和 x-ui 进程监听端口
+EXPECTED_LISTEN_PORTS=""
 ```
 
 ## 命令参数

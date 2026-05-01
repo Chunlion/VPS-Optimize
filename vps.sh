@@ -1636,9 +1636,6 @@ print_sni_stack_current_summary() {
     echo -e "面板后端：    $(get_listen_line_by_port "$PANEL_LISTEN_PORT")"
     echo -e "订阅后端：    $(get_listen_line_by_port "$SUB_LISTEN_PORT")"
     echo -e "REALITY 后端：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")"
-    if [[ "$SUB_LISTEN_PORT" != "2096" ]]; then
-        echo -e "${YELLOW}提示：3x-ui 订阅推荐默认端口是 2096。当前保存为 ${SUB_LISTEN_PORT}，如需改回请选择 [1]。${PLAIN}"
-    fi
 }
 
 normalize_site_stack_arrays() {
@@ -1822,7 +1819,7 @@ edit_sni_stack_panel_subscription_profile() {
     PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "$PANEL_LISTEN_PORT")
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath" "$PANEL_WEB_PATH")")
     SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "$SUB_LISTEN_ADDR")
-    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口" "2096")
+    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口" "$SUB_LISTEN_PORT")
     SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "普通订阅路径前缀（不带客户端 Subscription，建议写 /sub/）" "$SUB_URI_PATH")")
     CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "$CLASH_URI_PATH")")
 
@@ -2074,7 +2071,7 @@ collect_sni_stack_config() {
     XRAY_LISTEN_PORT=$(ask_with_default "Xray REALITY 本地监听端口" "1443")
     PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "40000")
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath（必须和面板 url 根路径一致）" "/panel/")")
-    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（推荐默认 2096）" "2096")
+    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（可自定义）" "2096")
     SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和客户端 Subscription，建议写 /sub/）" "/sub/")")
     CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "/clash/")")
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
@@ -2465,6 +2462,19 @@ harden_single_443_firewall() {
 }
 
 print_sni_stack_result() {
+    local check_ports=()
+    local check_regex=""
+    local p
+    check_ports=("$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}")
+    mapfile -t check_ports < <(printf '%s\n' "${check_ports[@]}" | grep -E '^[0-9]+$' | awk '!seen[$0]++')
+    for p in "${check_ports[@]}"; do
+        if [[ -z "$check_regex" ]]; then
+            check_regex=":${p}([[:space:]]|$)"
+        else
+            check_regex="${check_regex}|:${p}([[:space:]]|$)"
+        fi
+    done
+
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${GREEN}✅ 443 单入口分流配置完成${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
@@ -2531,7 +2541,11 @@ print_sni_stack_result() {
     fi
     echo -e ""
     echo -e "${BOLD}六、检查命令${PLAIN}"
-    echo -e "  ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096|:3000'"
+    if [[ -n "$check_regex" ]]; then
+        echo -e "  ss -lntp | grep -E '${check_regex}'"
+    else
+        echo -e "  ss -lntp"
+    fi
     echo -e "  nginx -t"
     echo -e "  caddy validate --config /etc/caddy/Caddyfile"
     echo -e "  curl -I http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}/"
