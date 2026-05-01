@@ -15,6 +15,7 @@
 - [🧰 功能地图](#features)
 - [🧩 443 单入口分流](#single-443-entry)
 - [📡 订阅管理与节点工具](#node-tools)
+- [🧭 3x-ui 外置增强管理](#xui-custom-manager)
 - [📊 端口流量狗](#traffic-dog)
 - [🛡️ 安全与回滚](#safety)
 - [🔄 更新与卸载](#update-uninstall)
@@ -204,11 +205,32 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 13. 防 IP 送中脚本
 14. 端口流量监控
 15. 管理 Komari 探针监控
+16. 3x-ui 外置增强管理
 ```
 
 Docker Compose 部署项目都有独立的“管理 / 归档”入口。普通停止会保留部署目录和数据；归档部署目录需要输入 `ARCHIVE` 二次确认，目录会移动到隔离区，避免误删配置和数据库。
 
 Komari 默认部署到 `/opt/komari`，数据保存在 `/opt/komari/data`。安装时可选择自定义初始管理员账号和密码；如果不自定义，安装完成后可查看容器日志获取默认管理员账号。如需 HTTPS 访问，建议通过 `19 -> 2` 添加 443 单入口反代域名。
+
+<a id="xui-custom-manager"></a>
+## 🧭 3x-ui 外置增强管理
+
+项目包含 `xui-custom-manager.sh`，用于补充 3x-ui / x-ui 面板内没有或不方便直接操作的维护功能，例如自定义每月流量重置、手动重置检查、数据库流量校准、备份恢复和健康检查。
+
+入口：
+
+```text
+4. 面板、节点与订阅工具
+16. 3x-ui 外置增强管理
+```
+
+单独运行：
+
+```bash
+wget -qO xui-custom-manager.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh && chmod +x xui-custom-manager.sh && ./xui-custom-manager.sh
+```
+
+详细说明请看：[README_xui_custom_manager.md](README_xui_custom_manager.md)。
 
 <a id="traffic-dog"></a>
 ## 📊 端口流量狗

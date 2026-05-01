@@ -4752,6 +4752,18 @@ func_xpanel_manage() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
+func_xui_custom_manager() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧭 3x-ui 外置增强管理${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}用途：补充 3x-ui 面板内没有的维护能力，例如自定义流量重置、数据库流量校准、备份恢复和健康检查。${PLAIN}"
+    echo -e "${YELLOW}建议：修改数据库或恢复备份前，先做快照或通过脚本备份 x-ui 数据。${PLAIN}"
+    echo -e "------------------------------------------------"
+    run_remote_script "运行 3x-ui 外置增强管理脚本" "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
+}
+
 func_sui_panel() {
     clear
     echo -e "${CYAN}👉 正在拉取 alireza0 的 S-UI 官方安装脚本...${PLAIN}"
@@ -6635,6 +6647,7 @@ func_panel_deploy_menu() {
         echo -e "${GREEN} 13. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
         echo -e "${GREEN} 14. 端口流量监控${PLAIN}          ${YELLOW}(Port Traffic Dog)${PLAIN}"
         echo -e "${GREEN} 15. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
+        echo -e "${GREEN} 16. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(面板缺失功能 / 流量重置 / 备份恢复)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -6657,6 +6670,7 @@ func_panel_deploy_menu() {
             13) func_ip_sentinel ;;
             14) func_port_dog ;;
             15) func_komari_menu ;;
+            16) func_xui_custom_manager ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac

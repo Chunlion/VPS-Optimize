@@ -3,12 +3,6 @@ set -Eeuo pipefail
 
 CONFIG_FILE="${CONFIG_FILE:-/etc/xui-custom-manager.conf}"
 
-GITHUB_USER="${GITHUB_USER:-Chunlion}"
-REPO_NAME="${REPO_NAME:-3x-ui}"
-CUSTOM_BRANCH="${CUSTOM_BRANCH:-release/custom}"
-UPSTREAM_REPO="${UPSTREAM_REPO:-https://github.com/MHSanaei/3x-ui.git}"
-
-WORKDIR="${WORKDIR:-/root/3x-ui-custom}"
 BACKUP_DIR="${BACKUP_DIR:-/root/x-ui-backups}"
 XUI_DB="${XUI_DB:-/etc/x-ui/x-ui.db}"
 XUI_ETC_DIR="${XUI_ETC_DIR:-/etc/x-ui}"
@@ -25,16 +19,18 @@ RESET_STATE="${RESET_STATE:-/var/lib/xui-custom-manager/reset-state.json}"
 RESET_SERVICE="${RESET_SERVICE:-/etc/systemd/system/xui-custom-reset.service}"
 RESET_TIMER="${RESET_TIMER:-/etc/systemd/system/xui-custom-reset.timer}"
 
-GO_VERSION="${GO_VERSION:-1.22.12}"
-
 if [ -f "$CONFIG_FILE" ]; then
     # shellcheck source=/etc/xui-custom-manager.conf
     source "$CONFIG_FILE"
 fi
 
-GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
-GO_URL="https://go.dev/dl/${GO_TARBALL}"
-ORIGIN_REPO="${ORIGIN_REPO:-https://github.com/${GITHUB_USER}/${REPO_NAME}.git}"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+PLAIN='\033[0m'
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "请用 root 用户运行。"
@@ -77,41 +73,20 @@ ensure_dirs() {
     mkdir -p "$BACKUP_DIR"
 }
 
-install_deps() {
-    echo "安装依赖..."
-    apt update
-    apt install -y git curl ca-certificates build-essential sqlite3 python3
-}
-
 install_runtime_deps() {
+    if command -v sqlite3 >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+        return
+    fi
+
     echo "安装运行依赖..."
     apt update
     apt install -y sqlite3 python3
 }
 
-install_go_if_needed() {
-    if command -v go >/dev/null 2>&1; then
-        echo "已检测到 Go：$(go version)"
-        return
-    fi
-
-    if [ -d /usr/local/go ]; then
-        echo "检测到 /usr/local/go 已存在，但当前 PATH 中没有 go。"
-        echo "请先确认 Go 目录状态，或把 /usr/local/go/bin 加入 PATH 后重新运行。"
-        exit 1
-    fi
-
-    echo "未检测到 Go，安装 Go ${GO_VERSION}..."
-    cd /tmp
-    curl -L -o "$GO_TARBALL" "$GO_URL"
-    tar -C /usr/local -xzf "$GO_TARBALL"
-
-    cat >/etc/profile.d/go.sh <<'EOF'
-export PATH=/usr/local/go/bin:$PATH
-EOF
-
-    export PATH="/usr/local/go/bin:$PATH"
-    echo "Go 安装完成：$(go version)"
+sqlite_has_column() {
+    local table="$1"
+    local column="$2"
+    sqlite3 "$XUI_DB" "PRAGMA table_info(${table});" | awk -F'|' -v col="$column" '$2==col{found=1} END{exit !found}'
 }
 
 cleanup_backups_by_pattern() {
@@ -137,16 +112,29 @@ cleanup_backups_by_pattern() {
     done
 
     echo
-    echo "$label 备份超过保留数量 $keep，以下旧备份可清理："
-    printf '  %s\n' "${delete_files[@]}"
-
-    for file in "${delete_files[@]}"; do
-        if [ -f "$file" ]; then
-            confirm_action "删除旧备份文件：$file" || continue
-            echo "删除旧备份：$file"
-            rm -f -- "$file"
-        fi
+    echo "$label 备份超过保留数量 $keep，以下旧备份可清理。"
+    echo "为避免误删，本脚本每类备份只删除一个明确选择的文件。"
+    for idx in "${!delete_files[@]}"; do
+        printf '  %s) %s\n' "$((idx + 1))" "${delete_files[$idx]}"
     done
+
+    local choice
+    read -rp "请输入要删除的文件序号，直接回车跳过： " choice
+    if [ -z "$choice" ]; then
+        echo "已跳过 $label 清理。"
+        return
+    fi
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#delete_files[@]}" ]; then
+        echo "无效选择，已跳过。"
+        return
+    fi
+
+    local file="${delete_files[$((choice - 1))]}"
+    if [ -f "$file" ]; then
+        confirm_action "删除旧备份文件：$file" || return
+        echo "删除旧备份：$file"
+        rm -f -- "$file"
+    fi
 }
 
 cleanup_backups() {
@@ -184,51 +172,6 @@ backup_all() {
     if [ "$cleanup_after" = "yes" ]; then
         cleanup_backups
     fi
-}
-
-clone_or_update_repo() {
-    echo "准备源码目录：$WORKDIR"
-
-    if [ ! -d "$WORKDIR/.git" ]; then
-        if [ -e "$WORKDIR" ]; then
-            echo "$WORKDIR 已存在但不是 Git 仓库。为避免误删，请手动处理后重试。"
-            exit 1
-        fi
-        git clone "$ORIGIN_REPO" "$WORKDIR"
-    fi
-
-    cd "$WORKDIR"
-
-    if ! git remote get-url origin >/dev/null 2>&1; then
-        git remote add origin "$ORIGIN_REPO"
-    else
-        git remote set-url origin "$ORIGIN_REPO"
-    fi
-
-    if ! git remote get-url upstream >/dev/null 2>&1; then
-        git remote add upstream "$UPSTREAM_REPO"
-    fi
-
-    git fetch origin
-    git checkout "$CUSTOM_BRANCH"
-    confirm_action "将 $WORKDIR 重置到 origin/${CUSTOM_BRANCH}" || exit 1
-    git reset --hard "origin/${CUSTOM_BRANCH}"
-
-    echo "当前分支：$(git branch --show-current)"
-    echo "当前提交：$(git log --oneline -1)"
-}
-
-build_xui() {
-    cd "$WORKDIR"
-    export PATH="/usr/local/go/bin:$PATH"
-
-    echo "下载 Go 依赖..."
-    go mod download
-
-    echo "编译 x-ui..."
-    go build -trimpath -ldflags "-s -w" -o /tmp/x-ui-custom-build main.go
-
-    ls -lh /tmp/x-ui-custom-build
 }
 
 show_service_status_and_logs() {
@@ -305,92 +248,9 @@ health_check() {
     return "$has_problem"
 }
 
-deploy_xui() {
-    confirm_action "停止 x-ui 并覆盖安装 $XUI_BIN" || return
-
-    echo "停止 x-ui..."
-    systemctl stop x-ui || true
-
-    backup_all
-
-    echo "覆盖安装自定义 x-ui..."
-    install -m 755 /tmp/x-ui-custom-build "$XUI_BIN"
-
-    echo "启动 x-ui..."
-    systemctl start x-ui
-
-    show_service_status_and_logs
-    health_check || true
-}
-
-build_and_deploy() {
-    need_root
-    install_deps
-    install_go_if_needed
-    clone_or_update_repo
-    build_xui
-    deploy_xui
-    echo
-    echo "完成。请打开面板并强制刷新页面。"
-}
-
-sync_upstream() {
-    need_root
-    install_deps
-
-    if [ ! -d "$WORKDIR/.git" ]; then
-        if [ -e "$WORKDIR" ]; then
-            echo "$WORKDIR 已存在但不是 Git 仓库。为避免误删，请手动处理后重试。"
-            exit 1
-        fi
-        git clone "$ORIGIN_REPO" "$WORKDIR"
-    fi
-
-    cd "$WORKDIR"
-
-    git remote set-url origin "$ORIGIN_REPO"
-
-    if ! git remote get-url upstream >/dev/null 2>&1; then
-        git remote add upstream "$UPSTREAM_REPO"
-    fi
-
-    echo "拉取 origin 和 upstream..."
-    git fetch origin
-    git fetch upstream
-
-    echo "同步 main 到 upstream/main..."
-    git checkout main || git checkout -b main origin/main
-    confirm_action "将 main 重置到 origin/main 并 fast-forward 合并 upstream/main" || exit 1
-    git reset --hard origin/main
-    git merge --ff-only upstream/main || {
-        echo "main 无法 fast-forward 合并 upstream/main，请手动处理。"
-        exit 1
-    }
-
-    echo "推送 main 到你的 fork..."
-    git push origin main
-
-    echo "rebase 自定义分支 $CUSTOM_BRANCH 到 main..."
-    git checkout "$CUSTOM_BRANCH"
-    confirm_action "将 $CUSTOM_BRANCH 重置到 origin/${CUSTOM_BRANCH} 并 rebase 到 main" || exit 1
-    git reset --hard "origin/${CUSTOM_BRANCH}"
-    git rebase main || {
-        echo
-        echo "rebase 出现冲突。请进入 $WORKDIR 手动解决："
-        echo "cd $WORKDIR"
-        echo "git status"
-        echo "解决冲突后：git add . && git rebase --continue"
-        echo "完成后再运行：git push --force-with-lease origin $CUSTOM_BRANCH"
-        exit 1
-    }
-
-    echo "推送自定义分支..."
-    git push --force-with-lease origin "$CUSTOM_BRANCH"
-
-    echo "同步完成。"
-}
-
 show_traffic() {
+    install_runtime_deps
+
     if [ ! -f "$XUI_DB" ]; then
         echo "未找到数据库：$XUI_DB"
         return
@@ -398,15 +258,22 @@ show_traffic() {
 
     echo
     echo "入站流量："
-    sqlite3 -header -column "$XUI_DB" "
+    if sqlite_has_column "inbounds" "last_traffic_reset_time"; then
+        sqlite3 -header -column "$XUI_DB" "
 SELECT id, remark, port, up, down, up + down AS used, total, traffic_reset, last_traffic_reset_time
 FROM inbounds;
 "
+    else
+        sqlite3 -header -column "$XUI_DB" "
+SELECT id, remark, port, up, down, up + down AS used, total, traffic_reset
+FROM inbounds;
+"
+    fi
 
     echo
     echo "客户端流量："
 
-    if sqlite3 "$XUI_DB" "PRAGMA table_info(client_traffics);" | awk -F'|' '$2=="all_time"{found=1} END{exit !found}'; then
+    if sqlite_has_column "client_traffics" "all_time"; then
         sqlite3 -header -column "$XUI_DB" "
 SELECT id, inbound_id, email, up, down, up + down AS used, all_time, total
 FROM client_traffics
@@ -662,13 +529,13 @@ while True:
         "enabled": True,
         "day": config.get("default_day", 1),
         "reset_inbound": True,
-        "reset_clients_without_custom_day": True,
+        "reset_clients_without_custom_day": False,
         "clients": {},
     })
     inbound_cfg.setdefault("enabled", True)
     inbound_cfg.setdefault("day", config.get("default_day", 1))
     inbound_cfg.setdefault("reset_inbound", True)
-    inbound_cfg.setdefault("reset_clients_without_custom_day", True)
+    inbound_cfg.setdefault("reset_clients_without_custom_day", False)
     inbound_cfg.setdefault("clients", {})
 
     clients = cur.execute("""
@@ -684,7 +551,7 @@ ORDER BY id;
         print(f"1) 启用外置重置：{inbound_cfg.get('enabled', True)}")
         print(f"2) 入站重置日期：{inbound_cfg.get('day', config.get('default_day', 1))}")
         print(f"3) 重置入站自身流量：{inbound_cfg.get('reset_inbound', True)}")
-        print(f"4) 重置未单独设置日期的客户端：{inbound_cfg.get('reset_clients_without_custom_day', True)}")
+        print(f"4) 未单独设置日期的客户端跟随入站重置：{inbound_cfg.get('reset_clients_without_custom_day', False)}")
         print("5) 设置/删除客户端自定义日期")
         print("B) 返回入站列表")
         sub = input_choice("请选择： ", {"1", "2", "3", "4", "5", "B", "b"}, allow_quit=False)
@@ -699,8 +566,8 @@ ORDER BY id;
             inbound_cfg["reset_inbound"] = yes_no("是否重置入站自身 up/down？", bool(inbound_cfg.get("reset_inbound", True)))
         elif sub == "4":
             inbound_cfg["reset_clients_without_custom_day"] = yes_no(
-                "是否重置未单独设置日期的客户端 up/down？",
-                bool(inbound_cfg.get("reset_clients_without_custom_day", True)),
+                "是否让未单独设置日期的客户端跟随入站日期重置 up/down？",
+                bool(inbound_cfg.get("reset_clients_without_custom_day", False)),
             )
         elif sub == "5":
             if not clients:
@@ -743,7 +610,7 @@ run_custom_reset_check() {
         return 1
     fi
 
-    XUI_DB="$XUI_DB" BACKUP_DIR="$BACKUP_DIR" RESET_CONFIG="$RESET_CONFIG" RESET_STATE="$RESET_STATE" python3 <<'PY'
+    XUI_DB="$XUI_DB" XUI_BIN="$XUI_BIN" BACKUP_DIR="$BACKUP_DIR" RESET_CONFIG="$RESET_CONFIG" RESET_STATE="$RESET_STATE" python3 <<'PY'
 import calendar
 import json
 import os
@@ -756,6 +623,7 @@ from datetime import date
 from pathlib import Path
 
 db = Path(os.environ["XUI_DB"])
+xui_bin = Path(os.environ["XUI_BIN"])
 backup_dir = Path(os.environ["BACKUP_DIR"])
 config_path = Path(os.environ["RESET_CONFIG"])
 state_path = Path(os.environ["RESET_STATE"])
@@ -798,6 +666,16 @@ def systemctl(action):
     print(f"systemctl {action} x-ui")
     subprocess.run(["systemctl", action, "x-ui"], check=False)
 
+def panel_signature(path):
+    if not path.exists():
+        return None
+    stat = path.stat()
+    return {
+        "path": str(path),
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+    }
+
 if not config_path.exists():
     print(f"未找到自定义重置配置：{config_path}，跳过。")
     sys.exit(0)
@@ -812,12 +690,21 @@ today_text = today.isoformat()
 state = load_json(state_path, {"inbounds": {}, "clients": {}})
 state.setdefault("inbounds", {})
 state.setdefault("clients", {})
+current_panel_signature = panel_signature(xui_bin)
+previous_panel_signature = state.get("panel_signature")
+panel_seen_first_time = current_panel_signature and not previous_panel_signature
+panel_changed = bool(current_panel_signature and previous_panel_signature and current_panel_signature != previous_panel_signature)
+if panel_seen_first_time:
+    print(f"记录当前面板程序状态：{xui_bin}")
+elif panel_changed:
+    print(f"检测到面板程序已更新：{xui_bin}")
+    print("自定义重置日期配置保存在外置配置文件中，将继续沿用。")
 
 conn = sqlite3.connect(db)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
-inbounds = cur.execute("SELECT id, up, down FROM inbounds ORDER BY id").fetchall()
+inbounds = cur.execute("SELECT id, up, down, traffic_reset FROM inbounds ORDER BY id").fetchall()
 clients = cur.execute("SELECT inbound_id, email, up, down FROM client_traffics ORDER BY inbound_id, email").fetchall()
 clients_by_inbound = {}
 existing_client_keys = set()
@@ -828,6 +715,7 @@ for client in clients:
 
 planned_inbounds = []
 planned_clients = []
+reapply_inbounds = []
 default_day = int(config.get("default_day", 1) or 1)
 configured_inbounds = config.get("inbounds", {})
 
@@ -836,6 +724,8 @@ for inbound in inbounds:
     inbound_cfg = configured_inbounds.get(inbound_id, {})
     if not inbound_cfg.get("enabled", False):
         continue
+    if inbound["traffic_reset"] == "monthly":
+        reapply_inbounds.append(inbound_id)
     inbound_day = int(inbound_cfg.get("day", default_day) or default_day)
     client_cfgs = inbound_cfg.get("clients", {})
     has_inbound_due = is_due(today, inbound_day)
@@ -843,7 +733,7 @@ for inbound in inbounds:
     if has_inbound_due and state["inbounds"].get(inbound_id) != today_text and inbound_cfg.get("reset_inbound", True):
         planned_inbounds.append(inbound_id)
 
-    if has_inbound_due and inbound_cfg.get("reset_clients_without_custom_day", True):
+    if has_inbound_due and inbound_cfg.get("reset_clients_without_custom_day", False):
         for client in clients_by_inbound.get(inbound_id, []):
             email = client["email"]
             cfg = client_cfgs.get(email, {})
@@ -873,12 +763,17 @@ for item in planned_clients:
         seen.add(item[2])
 planned_clients = unique_clients
 
-if not planned_inbounds and not planned_clients:
+if not planned_inbounds and not planned_clients and not reapply_inbounds:
+    if current_panel_signature:
+        state["panel_signature"] = current_panel_signature
+        save_json(state_path, state)
     print(f"{today_text} 没有需要执行的自定义重置。")
     conn.close()
     sys.exit(0)
 
-print(f"{today_text} 准备执行自定义重置：")
+print(f"{today_text} 准备执行外置规则维护：")
+for inbound_id in reapply_inbounds:
+    print(f"  重套外置规则：入站 {inbound_id} traffic_reset monthly -> never")
 for inbound_id in planned_inbounds:
     print(f"  入站：{inbound_id}")
 for inbound_id, email, _ in planned_clients:
@@ -895,6 +790,9 @@ try:
     now_ms = int(time.time() * 1000)
     inbound_has_reset_time = has_column(cur, "inbounds", "last_traffic_reset_time")
     client_has_reset_time = has_column(cur, "client_traffics", "last_traffic_reset_time")
+
+    for inbound_id in reapply_inbounds:
+        cur.execute("UPDATE inbounds SET traffic_reset = 'never' WHERE id = ? AND traffic_reset = 'monthly'", (inbound_id,))
 
     for inbound_id in planned_inbounds:
         if inbound_has_reset_time:
@@ -918,8 +816,10 @@ try:
 
     integrity_check(cur, "修改后")
     conn.commit()
+    if current_panel_signature:
+        state["panel_signature"] = current_panel_signature
     save_json(state_path, state)
-    print("自定义重置执行完成。")
+    print("外置规则维护执行完成。")
 except Exception:
     conn.rollback()
     raise
@@ -981,47 +881,104 @@ disable_monthly_reset() {
         return
     fi
 
-    echo
-    echo "检测原版 monthly 自动重置入站："
-    local monthly_rows
-    monthly_rows="$(sqlite3 -header -column "$XUI_DB" "
+    if [ ! -f "$RESET_CONFIG" ]; then
+        echo "未找到自定义重置配置：$RESET_CONFIG"
+        echo "请先进入 1) 自定义每月重置日期设置，启用需要外置管理的入站。"
+        return 1
+    fi
+
+    set +e
+    XUI_DB="$XUI_DB" RESET_CONFIG="$RESET_CONFIG" BACKUP_DIR="$BACKUP_DIR" python3 <<'PY'
+import json
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+db = Path(os.environ["XUI_DB"])
+config_path = Path(os.environ["RESET_CONFIG"])
+backup_dir = Path(os.environ["BACKUP_DIR"])
+
+def integrity_check(cur, stage):
+    result = cur.execute("PRAGMA integrity_check").fetchone()
+    value = result[0] if result else ""
+    print(f"{stage}数据库完整性检查：{value}")
+    if value != "ok":
+        raise RuntimeError(f"{stage}数据库完整性检查失败：{value}")
+
+def systemctl(action):
+    print(f"systemctl {action} x-ui")
+    subprocess.run(["systemctl", action, "x-ui"], check=False)
+
+with config_path.open("r", encoding="utf-8") as f:
+    config = json.load(f)
+
+enabled_ids = [
+    int(inbound_id)
+    for inbound_id, cfg in config.get("inbounds", {}).items()
+    if cfg.get("enabled", False)
+]
+if not enabled_ids:
+    print("当前没有启用外置重置的入站。")
+    sys.exit(0)
+
+conn = sqlite3.connect(db)
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+placeholders = ",".join("?" for _ in enabled_ids)
+rows = cur.execute(f"""
 SELECT id, remark, port, traffic_reset
 FROM inbounds
-WHERE traffic_reset = 'monthly'
-ORDER BY id;
-" || true)"
+WHERE traffic_reset = 'monthly' AND id IN ({placeholders})
+ORDER BY id
+""", enabled_ids).fetchall()
 
-    if ! echo "$monthly_rows" | grep -q "monthly"; then
-        echo "未检测到 traffic_reset='monthly' 的入站。"
-        return
+if not rows:
+    print("外置管理的入站里没有检测到 traffic_reset='monthly'。")
+    conn.close()
+    sys.exit(0)
+
+print("以下已启用外置规则的入站仍是原版 monthly，将改为 never：")
+for row in rows:
+    print(f"  ID={row['id']} | 端口={row['port']} | 备注={row['remark'] or '无备注'} | {row['traffic_reset']}")
+
+answer = input("请输入 YES 确认写入： ").strip()
+if answer != "YES":
+    print("已取消。")
+    conn.close()
+    sys.exit(0)
+
+systemctl("stop")
+try:
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_path = backup_dir / f"x-ui.db.{time.strftime('%Y-%m-%d_%H%M%S')}.bak"
+    shutil.copy2(db, backup_path)
+    print(f"数据库备份：{backup_path}")
+    integrity_check(cur, "修改前")
+    target_ids = [int(row["id"]) for row in rows]
+    target_placeholders = ",".join("?" for _ in target_ids)
+    cur.execute(
+        f"UPDATE inbounds SET traffic_reset = 'never' WHERE traffic_reset = 'monthly' AND id IN ({target_placeholders})",
+        target_ids,
+    )
+    integrity_check(cur, "修改后")
+    conn.commit()
+    print("已禁用外置管理入站的原版 monthly 自动重置。")
+except Exception:
+    conn.rollback()
+    raise
+finally:
+    conn.close()
+    systemctl("start")
+PY
+    local py_status=$?
+    set -e
+    if [ "$py_status" -ne 0 ]; then
+        return "$py_status"
     fi
-
-    echo "$monthly_rows"
-    confirm_action "将上述入站 traffic_reset 从 monthly 改为 never，交由外置脚本管理" || return
-
-    systemctl stop x-ui || true
-    backup_all no
-
-    local integrity_result
-    integrity_result="$(sqlite3 "$XUI_DB" "PRAGMA integrity_check;" 2>&1 || true)"
-    if [ "$integrity_result" != "ok" ]; then
-        echo "修改前数据库完整性检查失败：$integrity_result"
-        systemctl start x-ui
-        return 1
-    fi
-    sqlite3 "$XUI_DB" "
-UPDATE inbounds
-SET traffic_reset = 'never'
-WHERE traffic_reset = 'monthly';
-"
-    integrity_result="$(sqlite3 "$XUI_DB" "PRAGMA integrity_check;" 2>&1 || true)"
-    if [ "$integrity_result" != "ok" ]; then
-        echo "修改后数据库完整性检查失败：$integrity_result"
-        systemctl start x-ui
-        return 1
-    fi
-
-    systemctl start x-ui
     show_traffic
 }
 
@@ -1246,7 +1203,7 @@ edit_traffic() {
     confirm_action "停止 x-ui、备份数据库并修改流量数据" || return
 
     systemctl stop x-ui || true
-    backup_all
+    backup_all no
 
     set +e
     local tmp_py
@@ -1319,7 +1276,7 @@ try:
     integrity_check(cur, "修改前")
 
     inbounds = cur.execute("""
-SELECT id, remark, port, up, down, total, traffic_reset, last_traffic_reset_time
+SELECT id, remark, port, up, down, total, traffic_reset
 FROM inbounds
 ORDER BY id;
 """).fetchall()
@@ -1354,9 +1311,8 @@ ORDER BY id;
 
     print()
     print(f"已选择入站 ID={inbound_id}。")
-    print("请选择客户端修改范围：")
-    print("0) 只修改入站总流量，不修改客户端")
-    print("A) 修改入站总流量，并同步修改该入站下所有客户端")
+    print("请选择修改对象：")
+    print("0) 只修改入站自身流量")
 
     for idx, row in enumerate(clients, start=1):
         used = int(row["up"] or 0) + int(row["down"] or 0)
@@ -1366,19 +1322,42 @@ ORDER BY id;
             f"已用={human_size(used)} | 上行={human_size(row['up'])} | 下行={human_size(row['down'])} | "
             f"上限={human_size(total)}"
         )
+    if clients:
+        print("A) 逐个修改该入站下所有客户端")
 
-    valid_client_choices = {"0", "A", "a"} | {str(i) for i in range(1, len(clients) + 1)}
-    client_choice = input_choice("\n输入编号选择客户端，A=全部客户端，0=只改入站，q=退出： ", valid_client_choices)
+    valid_client_choices = {"0"} | {str(i) for i in range(1, len(clients) + 1)}
+    if clients:
+        valid_client_choices |= {"A", "a"}
+    client_choice = input_choice("\n输入编号选择客户端，A=逐个客户端，0=只改入站，q=退出： ", valid_client_choices)
 
     if client_choice == "0":
-        client_mode = "inbound_only"
-        selected_clients = []
+        edit_mode = "inbound"
+        targets = [{
+            "kind": "inbound",
+            "id": inbound_id,
+            "label": f"入站 ID={inbound_id}",
+            "up": inbound["up"],
+            "down": inbound["down"],
+        }]
     elif client_choice.lower() == "a":
-        client_mode = "all"
-        selected_clients = clients
+        edit_mode = "clients"
+        targets = [{
+            "kind": "client",
+            "id": int(client["id"]),
+            "label": f"客户端 {client['email']}",
+            "up": client["up"],
+            "down": client["down"],
+        } for client in clients]
     else:
-        client_mode = "single"
-        selected_clients = [clients[int(client_choice) - 1]]
+        edit_mode = "clients"
+        client = clients[int(client_choice) - 1]
+        targets = [{
+            "kind": "client",
+            "id": int(client["id"]),
+            "label": f"客户端 {client['email']}",
+            "up": client["up"],
+            "down": client["down"],
+        }]
 
     print()
     print("请选择单位：")
@@ -1395,28 +1374,39 @@ ORDER BY id;
     print("3) 只输入总流量，按当前 up/down 比例分配")
     input_mode = input_choice("请选择 [1/2/3]，默认 1： ", {"", "1", "2", "3"}, allow_quit=False) or "1"
 
-    while True:
-        try:
-            if input_mode == "1":
-                up_value = input(f"\n请输入上传流量数值（{unit_label}），例如 54.25： ").strip()
-                down_value = input(f"请输入下载流量数值（{unit_label}），例如 59.51： ").strip()
-                up_bytes = to_bytes(up_value, unit)
-                down_bytes = to_bytes(down_value, unit)
-                input_summary = f"上传={up_value}{unit_label}，下载={down_value}{unit_label}"
-            else:
-                total_value = input(f"\n请输入总流量数值（{unit_label}），例如 113.76： ").strip()
-                used_bytes = to_bytes(total_value, unit)
-                if input_mode == "2":
-                    up_bytes = 0
-                    down_bytes = used_bytes
+    writes = []
+    for target in targets:
+        while True:
+            try:
+                print()
+                print(f"设置 {target['label']}：")
+                if input_mode == "1":
+                    up_value = input(f"请输入上传流量数值（{unit_label}），例如 54.25： ").strip()
+                    down_value = input(f"请输入下载流量数值（{unit_label}），例如 59.51： ").strip()
+                    up_bytes = to_bytes(up_value, unit)
+                    down_bytes = to_bytes(down_value, unit)
+                    input_summary = f"上传={up_value}{unit_label}，下载={down_value}{unit_label}"
                 else:
-                    up_bytes, down_bytes = split_by_ratio(used_bytes, inbound["up"], inbound["down"])
-                input_summary = f"总流量={total_value}{unit_label}"
-            break
-        except Exception as exc:
-            print(f"流量数值格式不正确：{exc}")
-
-    used_bytes = up_bytes + down_bytes
+                    total_value = input(f"请输入总流量数值（{unit_label}），例如 113.76： ").strip()
+                    used_bytes = to_bytes(total_value, unit)
+                    if input_mode == "2":
+                        up_bytes = 0
+                        down_bytes = used_bytes
+                    else:
+                        up_bytes, down_bytes = split_by_ratio(used_bytes, target["up"], target["down"])
+                    input_summary = f"总流量={total_value}{unit_label}"
+                writes.append({
+                    "kind": target["kind"],
+                    "id": target["id"],
+                    "label": target["label"],
+                    "up": up_bytes,
+                    "down": down_bytes,
+                    "used": up_bytes + down_bytes,
+                    "summary": input_summary,
+                })
+                break
+            except Exception as exc:
+                print(f"流量数值格式不正确：{exc}")
 
     print()
     update_all_time = input("是否同时把累计总流量 all_time 改为 上传+下载？[Y/n] ").strip().lower()
@@ -1425,64 +1415,45 @@ ORDER BY id;
     print()
     print("即将写入：")
     print(f"入站 ID：{inbound_id}")
-    print(f"输入：{input_summary}")
-    print(f"上传：{up_bytes} bytes = {human_size(up_bytes)}")
-    print(f"下载：{down_bytes} bytes = {human_size(down_bytes)}")
-    print(f"合计：{used_bytes} bytes = {human_size(used_bytes)}")
     print(f"修改累计总流量 all_time：{'是' if update_all_time else '否'}")
-
-    if client_mode == "inbound_only":
-        print("客户端修改范围：不修改客户端，只改入站")
-    elif client_mode == "all":
-        print("客户端修改范围：该入站下全部客户端")
-        for c in selected_clients:
-            print(f"  - {c['email']}")
+    if edit_mode == "inbound":
+        print("修改范围：只修改入站自身，不修改任何客户端")
     else:
-        print("客户端修改范围：指定客户端")
-        for c in selected_clients:
-            print(f"  - {c['email']}")
+        print("修改范围：只修改下面列出的客户端，不修改入站自身")
+    for item in writes:
+        print(
+            f"  - {item['label']} | 输入：{item['summary']} | "
+            f"上传={human_size(item['up'])} | 下载={human_size(item['down'])} | 合计={human_size(item['used'])}"
+        )
 
     confirm = input("\n确认写入数据库？请输入 YES： ").strip()
     if confirm != "YES":
         print("已取消，没有修改数据库。")
         sys.exit(0)
 
-    cur.execute(
-        "UPDATE inbounds SET up = ?, down = ? WHERE id = ?",
-        (up_bytes, down_bytes, inbound_id)
-    )
-
-    if update_all_time and has_column(cur, "inbounds", "all_time"):
-        cur.execute(
-            "UPDATE inbounds SET all_time = ? WHERE id = ?",
-            (used_bytes, inbound_id)
-        )
-
-    if client_mode == "all":
-        cur.execute(
-            "UPDATE client_traffics SET up = ?, down = ? WHERE inbound_id = ?",
-            (up_bytes, down_bytes, inbound_id)
-        )
-
-        if update_all_time and has_column(cur, "client_traffics", "all_time"):
+    inbound_has_all_time = has_column(cur, "inbounds", "all_time")
+    client_has_all_time = has_column(cur, "client_traffics", "all_time")
+    for item in writes:
+        if item["kind"] == "inbound":
             cur.execute(
-                "UPDATE client_traffics SET all_time = ? WHERE inbound_id = ?",
-                (used_bytes, inbound_id)
+                "UPDATE inbounds SET up = ?, down = ? WHERE id = ?",
+                (item["up"], item["down"], item["id"])
             )
-
-    elif client_mode == "single":
-        client_id = int(selected_clients[0]["id"])
-
-        cur.execute(
-            "UPDATE client_traffics SET up = ?, down = ? WHERE id = ?",
-            (up_bytes, down_bytes, client_id)
-        )
-
-        if update_all_time and has_column(cur, "client_traffics", "all_time"):
+            if update_all_time and inbound_has_all_time:
+                cur.execute(
+                    "UPDATE inbounds SET all_time = ? WHERE id = ?",
+                    (item["used"], item["id"])
+                )
+        else:
             cur.execute(
-                "UPDATE client_traffics SET all_time = ? WHERE id = ?",
-                (used_bytes, client_id)
+                "UPDATE client_traffics SET up = ?, down = ? WHERE id = ?",
+                (item["up"], item["down"], item["id"])
             )
+            if update_all_time and client_has_all_time:
+                cur.execute(
+                    "UPDATE client_traffics SET all_time = ? WHERE id = ?",
+                    (item["used"], item["id"])
+                )
 
     integrity_check(cur, "修改后")
     conn.commit()
@@ -1520,29 +1491,32 @@ main_menu() {
 
     while true; do
         clear
-        echo "x-ui 自定义版管理脚本"
-        echo "作者 fork：${GITHUB_USER}/${REPO_NAME}"
-        echo "自定义分支：${CUSTOM_BRANCH}"
-        echo "源码目录：${WORKDIR}"
-        echo "备份目录：${BACKUP_DIR}"
-        echo "日志文件：${LOG_FILE}"
-        echo "重置配置：${RESET_CONFIG}"
-        echo
-        echo "1) 自定义每月重置日期设置"
-        echo "2) 手动执行一次自定义重置检查"
-        echo "3) 安装/更新自定义重置 systemd timer"
-        echo "4) 查看自定义重置日志"
-        echo "5) 禁用 3x-ui 原版 monthly 自动重置"
-        echo "6) 手动重置流量 / 修改流量上限 total"
-        echo "7) 查看当前流量数据"
-        echo "8) 修改流量数据（校准 up/down）"
-        echo "9) 备份 x-ui 数据/配置/程序"
-        echo "10) 恢复程序备份"
-        echo "11) 恢复数据库备份"
-        echo "12) 执行健康检查"
-        echo "13) 清理旧备份"
-        echo "0) 退出"
-        echo
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🧭 3x-ui 外置增强管理脚本${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}用途：补充面板内没有的维护能力，例如自定义流量重置、数据库流量校准、备份恢复和健康检查。${PLAIN}"
+        echo -e "${YELLOW}提示：修改数据库或恢复备份前会停止 x-ui，建议先确认已有快照或备份。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${BLUE}备份目录：${BACKUP_DIR}${PLAIN}"
+        echo -e "${BLUE}日志文件：${LOG_FILE}${PLAIN}"
+        echo -e "${BLUE}重置配置：${RESET_CONFIG}${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 自定义每月重置日期设置${PLAIN}"
+        echo -e "${GREEN}  2. 手动执行一次自定义重置检查${PLAIN}"
+        echo -e "${GREEN}  3. 安装 / 更新自定义重置 systemd timer${PLAIN}"
+        echo -e "${GREEN}  4. 查看自定义重置日志${PLAIN}"
+        echo -e "${GREEN}  5. 禁用 3x-ui 原版 monthly 自动重置${PLAIN}"
+        echo -e "${GREEN}  6. 手动重置流量 / 修改流量上限 total${PLAIN}"
+        echo -e "${GREEN}  7. 查看当前流量数据${PLAIN}"
+        echo -e "${GREEN}  8. 修改流量数据（校准 up/down）${PLAIN}"
+        echo -e "${GREEN}  9. 备份 x-ui 数据 / 配置 / 程序${PLAIN}"
+        echo -e "${GREEN} 10. 恢复程序备份${PLAIN}"
+        echo -e "${GREEN} 11. 恢复数据库备份${PLAIN}"
+        echo -e "${GREEN} 12. 执行健康检查${PLAIN}"
+        echo -e "${GREEN} 13. 清理旧备份${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 退出${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
         read -rp "请选择： " choice
 
         case "$choice" in
@@ -1602,7 +1576,7 @@ main_menu() {
                 exit 0
                 ;;
             *)
-                echo "无效选择。"
+                echo -e "${RED}无效选择。${PLAIN}"
                 pause
                 ;;
         esac
