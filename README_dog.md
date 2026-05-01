@@ -232,11 +232,13 @@ Chat ID
 6. 卸载脚本
 ```
 
-卸载会清除 `nftables` / `tc` 规则、定时任务、Telegram 后台服务和快捷命令；配置目录会移动到隔离目录：
+卸载会清除 `nftables` / `tc` 运行规则和定时任务；配置目录、Telegram 后台服务文件和快捷命令会优先移动到隔离目录：
 
 ```text
 /root/port-traffic-dog-quarantine
 ```
+
+配置文件默认保存在 `/etc/port-traffic-dog/config.json`，脚本会尽量将配置目录权限收紧为 `700`、配置文件收紧为 `600`，避免 Bot Token 等敏感信息被普通用户读取。
 
 确认隔离内容无用后，再手动清理。
 

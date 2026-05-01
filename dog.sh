@@ -293,6 +293,7 @@ EOF
     fi
     chmod 600 "$CONFIG_FILE" 2>/dev/null || true
     ensure_global_defaults
+    sanitize_nftables_config
     ensure_daily_usage_files
     init_nftables
     setup_exit_hooks
@@ -303,6 +304,26 @@ EOF
         restore_traffic_data_from_backup
         # 2. 恢复所有的 nftables、TC限速 以及 cron 重置任务
         restore_all_monitoring_rules
+    fi
+}
+
+sanitize_nftables_config() {
+    local family
+    local table_name
+    family=$(jq -r '.nftables.family // "inet"' "$CONFIG_FILE" 2>/dev/null || echo "inet")
+    table_name=$(jq -r '.nftables.table_name // "port_traffic_monitor"' "$CONFIG_FILE" 2>/dev/null || echo "port_traffic_monitor")
+
+    case "$family" in
+        ip|ip6|inet|arp|bridge|netdev) ;;
+        *)
+            echo -e "${YELLOW}检测到异常 nftables family，已恢复为 inet。${NC}"
+            update_config '.nftables.family = "inet"'
+            ;;
+    esac
+
+    if ! [[ "$table_name" =~ ^[A-Za-z_][A-Za-z0-9_]{0,63}$ ]]; then
+        echo -e "${YELLOW}检测到异常 nftables table_name，已恢复为 port_traffic_monitor。${NC}"
+        update_config '.nftables.table_name = "port_traffic_monitor"'
     fi
 }
 
@@ -333,15 +354,15 @@ get_default_interface() {
 }
 
 format_bytes() {
-    local bytes=$1
+    local bytes=${1:-0}
     if ! [[ "$bytes" =~ ^[0-9]+$ ]]; then bytes=0; fi
-    if [ $bytes -ge 1073741824 ]; then
+    if ((bytes >= 1073741824)); then
         local gb=$(awk "BEGIN {printf \"%.2f\", $bytes / 1073741824}")
         echo "${gb}GB"
-    elif [ $bytes -ge 1048576 ]; then
+    elif ((bytes >= 1048576)); then
         local mb=$(echo "scale=2; $bytes / 1048576" | bc)
         echo "${mb}MB"
-    elif [ $bytes -ge 1024 ]; then
+    elif ((bytes >= 1024)); then
         local kb=$(echo "scale=2; $bytes / 1024" | bc)
         echo "${kb}KB"
     else
@@ -503,11 +524,11 @@ get_nftables_counter_data() {
 
     if is_port_range "$port"; then
         local port_safe=$(echo "$port" | tr '-' '_')
-        input_bytes=$(nft list counter $family $table_name "port_${port_safe}_in" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || true)
-        output_bytes=$(nft list counter $family $table_name "port_${port_safe}_out" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || true)
+        input_bytes=$(nft list counter "$family" "$table_name" "port_${port_safe}_in" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || true)
+        output_bytes=$(nft list counter "$family" "$table_name" "port_${port_safe}_out" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || true)
     else
-        input_bytes=$(nft list counter $family $table_name "port_${port}_in" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || true)
-        output_bytes=$(nft list counter $family $table_name "port_${port}_out" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || true)
+        input_bytes=$(nft list counter "$family" "$table_name" "port_${port}_in" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || true)
+        output_bytes=$(nft list counter "$family" "$table_name" "port_${port}_out" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || true)
     fi
     input_bytes=${input_bytes:-0}
     output_bytes=${output_bytes:-0}
@@ -549,11 +570,15 @@ save_traffic_data_on_exit() { save_traffic_data >/dev/null 2>&1; }
 restore_monitoring_if_needed() {
     local active_ports=($(get_active_ports 2>/dev/null || true))
     if [ ${#active_ports[@]} -eq 0 ]; then return 0; fi
+    local table_name
+    local family
+    table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
+    family=$(jq -r '.nftables.family' "$CONFIG_FILE")
     
     for port in "${active_ports[@]}"; do
         local p_safe=$(echo "$port" | tr '-' '_')
         # 如果内核里找不到这个端口的计数器，说明规则丢了，自动重新下发
-        if ! nft list counter inet port_traffic_monitor "port_${p_safe}_out" >/dev/null 2>&1; then
+        if ! nft list counter "$family" "$table_name" "port_${p_safe}_out" >/dev/null 2>&1; then
             echo -e "${YELLOW}检测到规则丢失，正在为端口 $port 重新下发监控规则...${NC}"
             add_nftables_rules "$port"
             
@@ -588,11 +613,11 @@ restore_counter_value() {
 
     if is_port_range "$port"; then
         local port_safe=$(echo "$port" | tr '-' '_')
-        nft add counter $family $table_name "port_${port_safe}_in" { packets 0 bytes $target_input } 2>/dev/null || true
-        nft add counter $family $table_name "port_${port_safe}_out" { packets 0 bytes $target_output } 2>/dev/null || true
+        nft add counter "$family" "$table_name" "port_${port_safe}_in" { packets 0 bytes "$target_input" } 2>/dev/null || true
+        nft add counter "$family" "$table_name" "port_${port_safe}_out" { packets 0 bytes "$target_output" } 2>/dev/null || true
     else
-        nft add counter $family $table_name "port_${port}_in" { packets 0 bytes $target_input } 2>/dev/null || true
-        nft add counter $family $table_name "port_${port}_out" { packets 0 bytes $target_output } 2>/dev/null || true
+        nft add counter "$family" "$table_name" "port_${port}_in" { packets 0 bytes "$target_input" } 2>/dev/null || true
+        nft add counter "$family" "$table_name" "port_${port}_out" { packets 0 bytes "$target_output" } 2>/dev/null || true
     fi
 }
 
@@ -1443,7 +1468,7 @@ add_nftables_rules() {
     local batch_cmds=""
 
     local port_safe=$(echo "$port" | tr '-' '_')
-    if nft list chain $family $table_name output 2>/dev/null | grep -q "port_${port_safe}_out"; then
+    if nft list chain "$family" "$table_name" output 2>/dev/null | grep -q "port_${port_safe}_out"; then
         return 0
     fi
 
@@ -1457,14 +1482,14 @@ add_nftables_rules() {
     fi
 
     # 1. 注入出站规则 (Out & Forward Out)
-    nft list counter $family $table_name "port_${port_safe}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_out\n"
+    nft list counter "$family" "$table_name" "port_${port_safe}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_out\n"
     for proto in tcp udp; do
         batch_cmds+="add rule $family $table_name output $proto $sport_expr counter name \"port_${port_safe}_out\"\n"
         batch_cmds+="add rule $family $table_name forward $proto $sport_expr counter name \"port_${port_safe}_out\"\n"
     done
 
     # 2. 注入入站规则 (In & Forward In)
-    nft list counter $family $table_name "port_${port_safe}_in" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_in\n"
+    nft list counter "$family" "$table_name" "port_${port_safe}_in" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_in\n"
     for proto in tcp udp; do
         batch_cmds+="add rule $family $table_name input $proto $match_expr counter name \"port_${port_safe}_in\"\n"
         batch_cmds+="add rule $family $table_name forward $proto $match_expr counter name \"port_${port_safe}_in\"\n"
@@ -1489,10 +1514,10 @@ remove_nftables_rules() {
 
     local deleted_count=0
     while true; do
-        local handle=$(nft -a list table $family $table_name 2>/dev/null | grep -E "(tcp|udp).*(dport|sport).*$search_pattern" | head -n1 | sed -n 's/.*# handle \([0-9]\+\)$/\1/p')
+        local handle=$(nft -a list table "$family" "$table_name" 2>/dev/null | grep -E "(tcp|udp).*(dport|sport).*$search_pattern" | head -n1 | sed -n 's/.*# handle \([0-9]\+\)$/\1/p')
         if [ -z "$handle" ]; then break; fi
         for chain in input output forward; do
-            if nft delete rule $family $table_name $chain handle $handle 2>/dev/null; then
+            if nft delete rule "$family" "$table_name" "$chain" handle "$handle" 2>/dev/null; then
                 deleted_count=$((deleted_count + 1))
                 break
             fi
@@ -1502,11 +1527,11 @@ remove_nftables_rules() {
 
     if is_port_range "$port"; then
         local port_safe=$(echo "$port" | tr '-' '_')
-        nft delete counter $family $table_name "port_${port_safe}_in" 2>/dev/null || true
-        nft delete counter $family $table_name "port_${port_safe}_out" 2>/dev/null || true
+        nft delete counter "$family" "$table_name" "port_${port_safe}_in" 2>/dev/null || true
+        nft delete counter "$family" "$table_name" "port_${port_safe}_out" 2>/dev/null || true
     else
-        nft delete counter $family $table_name "port_${port}_in" 2>/dev/null || true
-        nft delete counter $family $table_name "port_${port}_out" 2>/dev/null || true
+        nft delete counter "$family" "$table_name" "port_${port}_in" 2>/dev/null || true
+        nft delete counter "$family" "$table_name" "port_${port}_out" 2>/dev/null || true
     fi
 }
 
@@ -1696,8 +1721,8 @@ apply_nftables_quota() {
     local port_safe=$(echo "$port" | tr '-' '_')
     local quota_name="port_${port_safe}_quota"
     
-    nft delete quota $family $table_name $quota_name 2>/dev/null || true
-    nft add quota $family $table_name $quota_name { over $effective_quota_bytes bytes used $effective_used_bytes bytes } 2>/dev/null || true
+    nft delete quota "$family" "$table_name" "$quota_name" 2>/dev/null || true
+    nft add quota "$family" "$table_name" "$quota_name" { over "$effective_quota_bytes" bytes used "$effective_used_bytes" bytes } 2>/dev/null || true
 
     # 出站与转发过滤规则
     for proto in tcp udp; do
@@ -1731,17 +1756,17 @@ remove_nftables_quota() {
 
     local deleted_count=0
     while true; do
-        local handle=$(nft -a list table $family $table_name 2>/dev/null | grep "quota name \"$quota_name\"" | head -n1 | sed -n 's/.*# handle \([0-9]\+\)$/\1/p')
+        local handle=$(nft -a list table "$family" "$table_name" 2>/dev/null | grep "quota name \"$quota_name\"" | head -n1 | sed -n 's/.*# handle \([0-9]\+\)$/\1/p')
         if [ -z "$handle" ]; then break; fi
         for chain in input output forward; do
-            if nft delete rule $family $table_name $chain handle $handle 2>/dev/null; then
+            if nft delete rule "$family" "$table_name" "$chain" handle "$handle" 2>/dev/null; then
                 deleted_count=$((deleted_count + 1))
                 break
             fi
         done
         if [ $deleted_count -ge 150 ]; then break; fi
     done
-    nft delete quota $family $table_name "$quota_name" 2>/dev/null || true
+    nft delete quota "$family" "$table_name" "$quota_name" 2>/dev/null || true
 }
 
 apply_tc_limit() {
@@ -1929,13 +1954,13 @@ reset_port_nftables_counters() {
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
     if is_port_range "$port"; then
         local port_safe=$(echo "$port" | tr '-' '_')
-        nft reset counter $family $table_name "port_${port_safe}_in" >/dev/null 2>&1 || true
-        nft reset counter $family $table_name "port_${port_safe}_out" >/dev/null 2>&1 || true
-        nft reset quota $family $table_name "port_${port_safe}_quota" >/dev/null 2>&1 || true
+        nft reset counter "$family" "$table_name" "port_${port_safe}_in" >/dev/null 2>&1 || true
+        nft reset counter "$family" "$table_name" "port_${port_safe}_out" >/dev/null 2>&1 || true
+        nft reset quota "$family" "$table_name" "port_${port_safe}_quota" >/dev/null 2>&1 || true
     else
-        nft reset counter $family $table_name "port_${port}_in" >/dev/null 2>&1 || true
-        nft reset counter $family $table_name "port_${port}_out" >/dev/null 2>&1 || true
-        nft reset quota $family $table_name "port_${port}_quota" >/dev/null 2>&1 || true
+        nft reset counter "$family" "$table_name" "port_${port}_in" >/dev/null 2>&1 || true
+        nft reset counter "$family" "$table_name" "port_${port}_out" >/dev/null 2>&1 || true
+        nft reset quota "$family" "$table_name" "port_${port}_quota" >/dev/null 2>&1 || true
     fi
 }
 
@@ -2051,13 +2076,13 @@ uninstall_script() {
     echo "  1. 清除所有端口的流量监控规则 (nftables)" 
     echo "  2. 清除所有端口的带宽限制规则 (TC)"
     echo "  3. 删除 Telegram/企业微信/自动重置等定时任务"
-    echo "  4. 停止并删除 TG 交互机器人后台服务 (Systemd)"
-    echo "  5. 删除快捷命令 dog"
+    echo "  4. 停止并隔离 TG 交互机器人后台服务 (Systemd)"
+    echo "  5. 隔离快捷命令 dog"
     echo "  6. 隔离配置文件及日志 (/etc/port-traffic-dog)"
     echo "  7. 删除脚本本身" 
     echo
-    echo -e "${RED}🔴 警告：此操作不可逆，所有历史流量数据将永久丢失！${NC}" 
-    if confirm_danger "卸载端口流量狗" "会删除 nftables/tc 规则、定时任务、机器人服务和快捷命令；配置目录会先隔离保留。" "隔离目录可用于手动恢复配置；重新运行脚本后可导入或比对旧配置。"; then
+    echo -e "${RED}🔴 警告：此操作会移除当前 nftables/tc 运行规则，历史配置会尽量隔离保留。${NC}"
+    if confirm_danger "卸载端口流量狗" "会删除 nftables/tc 运行规则、定时任务；机器人服务文件、快捷命令和配置目录会先隔离保留。" "隔离目录可用于手动恢复配置；重新运行脚本后可导入或比对旧配置。"; then
         echo -e "${YELLOW}正在全力卸载中...${NC}"
 
         local active_ports=($(get_active_ports 2>/dev/null || true))
@@ -2075,20 +2100,20 @@ uninstall_script() {
 
         systemctl stop port-tg-bot 2>/dev/null || true
         systemctl disable port-tg-bot 2>/dev/null || true
-        rm -f /etc/systemd/system/port-tg-bot.service 2>/dev/null
+        quarantine_path /etc/systemd/system/port-tg-bot.service "/root/port-traffic-dog-quarantine/systemd" >/dev/null 2>&1 || true
         systemctl daemon-reload >/dev/null 2>&1 || true
 
         remove_telegram_notification_cron 2>/dev/null || true
         remove_wecom_notification_cron 2>/dev/null || true
 
         quarantine_path "$CONFIG_DIR" "/root/port-traffic-dog-quarantine" >/dev/null 2>&1 || true
-        rm -f "/usr/local/bin/$SHORTCUT_COMMAND" 2>/dev/null || true
+        quarantine_path "/usr/local/bin/$SHORTCUT_COMMAND" "/root/port-traffic-dog-quarantine/bin" >/dev/null 2>&1 || true
         
-        echo -e "${GREEN}✅ 卸载完成，旧配置目录已隔离到 /root/port-traffic-dog-quarantine。${NC}"
-        echo -e "${YELLOW}感谢使用，江湖路远，有缘再见！👋${NC}" 
-        
-        rm -f "$SCRIPT_PATH" 2>/dev/null || true 
-        exit 0 
+        quarantine_path "$SCRIPT_PATH" "/root/port-traffic-dog-quarantine/bin" >/dev/null 2>&1 || true
+
+        echo -e "${GREEN}✅ 卸载完成，旧配置目录和脚本文件已隔离到 /root/port-traffic-dog-quarantine。${NC}"
+        echo -e "${YELLOW}感谢使用，江湖路远，有缘再见！👋${NC}"
+        exit 0
     else
         echo "取消卸载，返回主菜单。"
         sleep 1
@@ -2160,12 +2185,12 @@ EOF
 }
 
 stop_interactive_tg() {
-    echo -e "${YELLOW}正在停止并卸载 Telegram 交互机器人服务...${NC}"
+    echo -e "${YELLOW}正在停止并隔离 Telegram 交互机器人服务...${NC}"
     systemctl stop port-tg-bot 2>/dev/null || true
     systemctl disable port-tg-bot 2>/dev/null || true
-    rm -f /etc/systemd/system/port-tg-bot.service
-    systemctl daemon-reload
-    echo -e "${GREEN}✅ 交互式机器人服务已完全停止。${NC}"
+    quarantine_path /etc/systemd/system/port-tg-bot.service "/root/port-traffic-dog-quarantine/systemd" >/dev/null 2>&1 || true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    echo -e "${GREEN}✅ 交互式机器人服务已停止，服务文件已隔离。${NC}"
     sleep 2
     manage_notifications
 }
@@ -2205,12 +2230,12 @@ tg_send_message() {
     local parse_mode="${4:-HTML}"
 
     if [ -n "$parse_mode" ]; then
-        curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" \
+        curl -fsS --connect-timeout 10 --max-time 20 --retry 1 --retry-delay 1 -X POST "https://api.telegram.org/bot${token}/sendMessage" \
             --data-urlencode "chat_id=${chat_id}" \
             --data-urlencode "text=${text}" \
             --data-urlencode "parse_mode=${parse_mode}" >/dev/null 2>&1 || true
     else
-        curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" \
+        curl -fsS --connect-timeout 10 --max-time 20 --retry 1 --retry-delay 1 -X POST "https://api.telegram.org/bot${token}/sendMessage" \
             --data-urlencode "chat_id=${chat_id}" \
             --data-urlencode "text=${text}" >/dev/null 2>&1 || true
     fi
@@ -2358,7 +2383,7 @@ run_tg_listener() {
     echo "TG交互查询机器人正在后台守望..."
 
     while true; do
-        local updates=$(curl -s --max-time 60 "https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=50")
+        local updates=$(curl -fsS --connect-timeout 10 --max-time 70 --retry 1 --retry-delay 1 "https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=50" 2>/dev/null || true)
         local latest_id=$(echo "$updates" | jq -r '.result[-1].update_id // empty' 2>/dev/null || true)
         
         # 增加纯数字判断容错，防止非预期响应导致 bash 算数报错

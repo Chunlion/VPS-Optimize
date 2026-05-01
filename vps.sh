@@ -537,10 +537,11 @@ func_system_tweaks() {
             1)
                 read_trimmed yn "❓ 开启 IPv6？(y 开启 / n 关闭): "
                 if [[ "$yn" =~ ^[Yy]$ ]]; then 
-                    rm -f /etc/sysctl.d/99-disable-ipv6.conf
+                    quarantine_path /etc/sysctl.d/99-disable-ipv6.conf "/etc/vps-optimize/quarantine/sysctl" >/dev/null 2>&1 || true
                     sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null 2>&1
                     echo -e "${GREEN}✅ IPv6 已开启${PLAIN}"
                 elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                    [[ -f /etc/sysctl.d/99-disable-ipv6.conf ]] && cp -p /etc/sysctl.d/99-disable-ipv6.conf "/etc/sysctl.d/99-disable-ipv6.conf.bak_$(date +%s)" 2>/dev/null || true
                     echo "net.ipv6.conf.all.disable_ipv6 = 1" > /etc/sysctl.d/99-disable-ipv6.conf
                     sysctl -p /etc/sysctl.d/99-disable-ipv6.conf >/dev/null 2>&1
                     echo -e "${RED}✅ IPv6 已禁用${PLAIN}"
@@ -548,19 +549,24 @@ func_system_tweaks() {
             2)
                 read_trimmed yn "❓ 设置 IPv4 为最高出站优先级？(y 开启 / n 恢复默认): "
                 if [[ "$yn" =~ ^[Yy]$ ]]; then 
+                    [[ -f /etc/gai.conf ]] || touch /etc/gai.conf
+                    cp -p /etc/gai.conf "/etc/gai.conf.bak_$(date +%s)" 2>/dev/null || true
                     sed -Ei '/^[[:space:]]*#?[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+100\b.*?$/ {s/.+100\b([[:space:]]*#.*)?$/precedence ::ffff:0:0\/96  100\1/; :a;n;b a}; /^[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+[0-9]+.*$/ {s/^.*precedence.+::ffff:0:0\/96[^0-9]+([0-9]+).*$/precedence ::ffff:0:0\/96  100\t#原值为 \1/; :a;n;ba;}; $aprecedence ::ffff:0:0\/96  100' /etc/gai.conf
                     echo -e "${GREEN}✅ 已设为 IPv4 优先${PLAIN}"
                 elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                    [[ -f /etc/gai.conf ]] || touch /etc/gai.conf
+                    cp -p /etc/gai.conf "/etc/gai.conf.bak_$(date +%s)" 2>/dev/null || true
                     sed -i '/precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
                     echo -e "${BLUE}已恢复系统默认${PLAIN}"
                 fi; sleep 1 ;;
             3)
                 read_trimmed yn "❓ 允许被 Ping？(y 允许 / n 禁止): "
                 if [[ "$yn" =~ ^[Yy]$ ]]; then 
-                    rm -f /etc/sysctl.d/99-disable-ping.conf
+                    quarantine_path /etc/sysctl.d/99-disable-ping.conf "/etc/vps-optimize/quarantine/sysctl" >/dev/null 2>&1 || true
                     sysctl -w net.ipv4.icmp_echo_ignore_all=0 >/dev/null 2>&1
                     echo -e "${GREEN}✅ 已允许被 Ping${PLAIN}"
                 elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                    [[ -f /etc/sysctl.d/99-disable-ping.conf ]] && cp -p /etc/sysctl.d/99-disable-ping.conf "/etc/sysctl.d/99-disable-ping.conf.bak_$(date +%s)" 2>/dev/null || true
                     echo "net.ipv4.icmp_echo_ignore_all = 1" > /etc/sysctl.d/99-disable-ping.conf
                     sysctl -p /etc/sysctl.d/99-disable-ping.conf >/dev/null 2>&1
                     echo -e "${RED}✅ 已开启禁 Ping 保护${PLAIN}"
@@ -569,11 +575,11 @@ func_system_tweaks() {
                 read_trimmed yn "❓ 开启系统自动更新？(y 开启 / n 关闭): "
                 if [[ "$yn" =~ ^[Yy]$ ]]; then 
                     if [[ "$OS" =~ debian|ubuntu ]]; then
-                        apt install -y unattended-upgrades -qq >/dev/null 2>&1
-                        systemctl enable --now unattended-upgrades >/dev/null 2>&1
+                        install_pkg unattended-upgrades || { echo -e "${RED}❌ unattended-upgrades 安装失败。${PLAIN}"; sleep 1; continue; }
+                        systemctl enable --now unattended-upgrades >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ unattended-upgrades 服务启用失败，请手动检查。${PLAIN}"
                     else
-                        yum install -y dnf-automatic -q >/dev/null 2>&1
-                        systemctl enable --now dnf-automatic.timer >/dev/null 2>&1
+                        install_pkg dnf-automatic || { echo -e "${RED}❌ dnf-automatic 安装失败。${PLAIN}"; sleep 1; continue; }
+                        systemctl enable --now dnf-automatic.timer >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ dnf-automatic.timer 启用失败，请手动检查。${PLAIN}"
                     fi
                     echo -e "${GREEN}✅ 自动更新已开启${PLAIN}"
                 elif [[ "$yn" =~ ^[Nn]$ ]]; then 
@@ -1098,9 +1104,7 @@ func_env_install() {
                 run_remote_script "安装 Docker 引擎" "https://get.docker.com" || echo -e "${RED}❌ Docker 安装失败，请检查网络！${PLAIN}"
                 ;;
             2) run_remote_script "安装 Python 环境" "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh" ;;
-            3) 
-                if is_debian; then run_safe "安装 iperf3" apt install iperf3 -y; else run_safe "安装 iperf3" yum install iperf3 -y; fi 
-                ;;
+            3) run_safe "安装 iperf3" install_pkg iperf3 ;;
             4) run_remote_script "安装 Realm 端口转发" "https://raw.githubusercontent.com/zhouh047/realm-oneclick-install/main/realm.sh" -i ;;
             5) run_remote_script "安装 Gost 隧道" "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh" ;;
             6) run_remote_script "安装极光面板" "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh" ;;
@@ -1556,6 +1560,46 @@ create_sni_stack_backup() {
     echo -e "${GREEN}✅ 已创建配置备份：${backup_dir}${PLAIN}"
 }
 
+restore_sni_stack_backup_files() {
+    local backup_dir="$1"
+    local domain conf_file
+    [[ -n "$backup_dir" && -d "$backup_dir" ]] || return 1
+
+    mkdir -p /etc/nginx/stream.d /etc/caddy/conf.d /etc/vps-optimize
+    [[ -f "$backup_dir/nginx.conf" ]] && cp -a "$backup_dir/nginx.conf" /etc/nginx/nginx.conf
+    [[ -f "$backup_dir/Caddyfile" ]] && cp -a "$backup_dir/Caddyfile" /etc/caddy/Caddyfile
+    [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]] && cp -a "$backup_dir/vps-optimize/sni-stack.env" /etc/vps-optimize/sni-stack.env
+
+    while IFS= read -r conf_file; do
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-sni" >/dev/null 2>&1 || true
+    done < <(find /etc/nginx/stream.d -maxdepth 1 -type f -name 'vps_sni_*.conf' 2>/dev/null | sort)
+    cp -a "$backup_dir/nginx_stream.d/"*.conf /etc/nginx/stream.d/ 2>/dev/null || true
+
+    for domain in "$PANEL_DOMAIN" "${SITE_DOMAINS[@]}"; do
+        [[ -n "$domain" ]] || continue
+        conf_file="/etc/caddy/conf.d/${domain}.caddy"
+        [[ -e "$conf_file" ]] && quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/caddy-sni" >/dev/null 2>&1 || true
+    done
+    cp -a "$backup_dir/caddy_conf.d/"*.caddy /etc/caddy/conf.d/ 2>/dev/null || true
+}
+
+rollback_sni_stack_after_failure() {
+    local backup_dir="$1"
+    local reason="${2:-配置应用失败}"
+    echo -e "${RED}❌ ${reason}${PLAIN}"
+    echo -e "${YELLOW}▶ 正在从本次操作前备份回滚 Nginx/Caddy 配置...${PLAIN}"
+    if restore_sni_stack_backup_files "$backup_dir"; then
+        nginx -t >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ Nginx 回滚后语法检查仍未通过，请手动检查 /etc/nginx/nginx.conf。${PLAIN}"
+        caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ Caddy 回滚后配置检查仍未通过，请手动检查 /etc/caddy/Caddyfile。${PLAIN}"
+        restart_service_if_available nginx >/dev/null 2>&1 || true
+        restart_service_if_available caddy >/dev/null 2>&1 || true
+        echo -e "${YELLOW}已回滚到：${backup_dir}${PLAIN}"
+    else
+        echo -e "${RED}❌ 自动回滚失败，请手动使用备份目录恢复：${backup_dir}${PLAIN}"
+    fi
+    return 1
+}
+
 cleanup_old_nginx_sni_stream_configs() {
     mkdir -p /etc/nginx/stream.d
     local old_dir="/etc/nginx/stream.d/backup_vps_sni_$(date +%Y%m%d_%H%M%S)"
@@ -2003,21 +2047,23 @@ edit_sni_stack_runtime_profile() {
 
 reapply_sni_stack_from_env() {
     load_sni_stack_env || return 1
+    local backup_dir
     if [[ "${1:-}" != "--yes" ]]; then
         print_sni_stack_preview || return 1
     fi
     create_sni_stack_backup
-    install_nginx_stream_stack || return 1
+    backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
+    install_nginx_stream_stack || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 组件安装/配置失败"; return 1; }
     harden_nginx_public_errors
-    ensure_caddy_local_base_config || return 1
+    ensure_caddy_local_base_config || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 基础配置初始化失败"; return 1; }
     cleanup_old_nginx_sni_stream_configs
     write_caddy_panel_config
     write_caddy_site_config
     caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
-    write_nginx_sni_stream_config || return 1
-    systemctl restart caddy || return 1
-    systemctl restart nginx || return 1
+    caddy validate --config /etc/caddy/Caddyfile || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 配置校验失败"; return 1; }
+    write_nginx_sni_stream_config || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 配置校验失败"; return 1; }
+    systemctl restart caddy || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 服务重启失败"; return 1; }
+    systemctl restart nginx || { rollback_sni_stack_after_failure "$backup_dir" "Nginx 服务重启失败"; return 1; }
     print_sni_stack_result
 }
 
@@ -2036,23 +2082,16 @@ rollback_sni_stack_config() {
     read_trimmed confirm "这会覆盖当前 Nginx/Caddy 的相关配置，输入 yes 继续（大小写均可）: "
     is_yes "$confirm" || return 1
 
-    [[ -f "$backup_dir/nginx.conf" ]] && cp -a "$backup_dir/nginx.conf" /etc/nginx/nginx.conf
-    mkdir -p /etc/nginx/stream.d /etc/caddy/conf.d
-    while IFS= read -r stream_conf; do
-        quarantine_path "$stream_conf" "/etc/nginx/stream.d_quarantine" >/dev/null 2>&1 || true
-    done < <(find /etc/nginx/stream.d -maxdepth 1 -type f -name 'vps_sni_*.conf' 2>/dev/null | sort)
-    cp -a "$backup_dir/nginx_stream.d/"*.conf /etc/nginx/stream.d/ 2>/dev/null || true
-    [[ -f "$backup_dir/Caddyfile" ]] && cp -a "$backup_dir/Caddyfile" /etc/caddy/Caddyfile
-    if [[ -d "$backup_dir/caddy_conf.d" ]]; then
-        cp -a "$backup_dir/caddy_conf.d/"*.caddy /etc/caddy/conf.d/ 2>/dev/null || true
-    fi
-    [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]] && cp -a "$backup_dir/vps-optimize/sni-stack.env" /etc/vps-optimize/sni-stack.env
+    restore_sni_stack_backup_files "$backup_dir" || { echo -e "${RED}❌ 回滚文件恢复失败。${PLAIN}"; return 1; }
 
-    nginx -t && caddy validate --config /etc/caddy/Caddyfile && {
-        systemctl restart nginx >/dev/null 2>&1 || true
-        systemctl restart caddy >/dev/null 2>&1 || true
+    if nginx -t && caddy validate --config /etc/caddy/Caddyfile; then
+        restart_service_if_available nginx >/dev/null 2>&1 || true
+        restart_service_if_available caddy >/dev/null 2>&1 || true
         echo -e "${GREEN}✅ 回滚完成。${PLAIN}"
-    }
+    else
+        echo -e "${RED}❌ 回滚文件已恢复，但配置校验失败，请手动检查备份：${backup_dir}${PLAIN}"
+        return 1
+    fi
 }
 
 collect_sni_stack_config() {
@@ -2197,22 +2236,26 @@ install_caddy_if_needed() {
         key_tmp=$(mktemp /tmp/caddy-key.XXXXXX) || return 1
         repo_tmp=$(mktemp /tmp/caddy-repo.XXXXXX) || { rm -f "$key_tmp"; return 1; }
         if ! curl -fsSL --connect-timeout 10 --max-time 60 --retry 2 --retry-delay 1 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' -o "$key_tmp"; then
-            rm -f "$key_tmp" "$repo_tmp"
+            rm -f "$key_tmp"
+            rm -f "$repo_tmp"
             echo -e "${RED}❌ Caddy GPG key 下载失败。${PLAIN}"
             return 1
         fi
         if ! gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg "$key_tmp"; then
-            rm -f "$key_tmp" "$repo_tmp"
+            rm -f "$key_tmp"
+            rm -f "$repo_tmp"
             echo -e "${RED}❌ Caddy GPG key 写入失败。${PLAIN}"
             return 1
         fi
         if ! curl -fsSL --connect-timeout 10 --max-time 60 --retry 2 --retry-delay 1 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' -o "$repo_tmp"; then
-            rm -f "$key_tmp" "$repo_tmp"
+            rm -f "$key_tmp"
+            rm -f "$repo_tmp"
             echo -e "${RED}❌ Caddy APT 源配置下载失败。${PLAIN}"
             return 1
         fi
         if ! mv "$repo_tmp" /etc/apt/sources.list.d/caddy-stable.list; then
-            rm -f "$key_tmp" "$repo_tmp"
+            rm -f "$key_tmp"
+            rm -f "$repo_tmp"
             echo -e "${RED}❌ Caddy APT 源配置写入失败。${PLAIN}"
             return 1
         fi
@@ -2253,7 +2296,7 @@ install_nginx_stream_stack() {
         install_pkg nginx libnginx-mod-stream
     elif is_redhat; then
         install_pkg nginx
-        yum install -y -q nginx-mod-stream >/dev/null 2>&1 || true
+        install_pkg nginx-mod-stream || echo -e "${YELLOW}⚠️ nginx-mod-stream 安装失败或仓库未提供，将继续检测 Nginx stream 支持。${PLAIN}"
     fi
     command -v nginx >/dev/null 2>&1 || { echo -e "${RED}❌ Nginx 安装失败。${PLAIN}"; return 1; }
     mkdir -p /etc/nginx/stream.d
@@ -2627,20 +2670,22 @@ print_sni_stack_result() {
 }
 
 apply_sni_stack_runtime_config() {
+    local backup_dir
     create_sni_stack_backup
-    install_nginx_stream_stack || return 1
+    backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
+    install_nginx_stream_stack || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 组件安装/配置失败"; return 1; }
     harden_nginx_public_errors
-    ensure_caddy_local_base_config || return 1
+    ensure_caddy_local_base_config || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 基础配置初始化失败"; return 1; }
     cleanup_old_nginx_sni_stream_configs
     write_caddy_panel_config
     write_caddy_site_config
     caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
-    write_nginx_sni_stream_config || return 1
+    caddy validate --config /etc/caddy/Caddyfile || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 配置校验失败"; return 1; }
+    write_nginx_sni_stream_config || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 配置校验失败"; return 1; }
     systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
+    systemctl restart caddy || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 服务重启失败"; return 1; }
     systemctl enable nginx >/dev/null 2>&1 || true
-    systemctl restart nginx || return 1
+    systemctl restart nginx || { rollback_sni_stack_after_failure "$backup_dir" "Nginx 服务重启失败"; return 1; }
     save_sni_stack_env
     generate_caddy_cf_manifest
 }
@@ -2835,16 +2880,18 @@ remove_sni_stack_site() {
     SITE_DOMAINS=("${new_domains[@]}")
     SITE_BACKEND_ADDRS=("${new_addrs[@]}")
     SITE_BACKEND_PORTS=("${new_ports[@]}")
-    rm -f "/etc/caddy/conf.d/${domain}.caddy"
+    quarantine_path "/etc/caddy/conf.d/${domain}.caddy" "/etc/vps-optimize/quarantine/caddy-sni" >/dev/null 2>&1 || true
 
     apply_sni_stack_runtime_config || return 1
 
-    read_trimmed delete_cert "是否同时删除 ${domain} 的 Caddy 证书文件？(y/n，默认 n): "
+    read_trimmed delete_cert "是否同时隔离 ${domain} 的 Caddy 证书文件？(y/n，默认 n): "
     if [[ "$delete_cert" =~ ^[Yy]$ ]]; then
-        rm -f "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"
-        rm -f "/root/cert/${domain}.crt" "/root/cert/${domain}.key"
+        quarantine_path "/etc/caddy/certs/${domain}.crt" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
+        quarantine_path "/etc/caddy/certs/${domain}.key" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
+        quarantine_path "/root/cert/${domain}.crt" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
+        quarantine_path "/root/cert/${domain}.key" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
         generate_caddy_cf_manifest
-        echo -e "${GREEN}✅ 已删除 ${domain} 的配置与本地证书文件。${PLAIN}"
+        echo -e "${GREEN}✅ 已移除 ${domain} 的配置，并隔离本地证书文件。${PLAIN}"
     else
         echo -e "${GREEN}✅ 已删除 ${domain} 的分流配置，证书文件已保留。${PLAIN}"
     fi
@@ -2911,10 +2958,12 @@ func_caddy_cf_reality_wizard() {
     printf "CF_Token='%s'\n" "$escaped_token" > "$cf_env_file"
     chmod 600 "$cf_env_file"
 
+    local backup_dir
     create_sni_stack_backup
-    install_nginx_stream_stack || return 1
+    backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
+    install_nginx_stream_stack || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 组件安装/配置失败"; return 1; }
     harden_nginx_public_errors
-    ensure_caddy_local_base_config || return 1
+    ensure_caddy_local_base_config || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 基础配置初始化失败"; return 1; }
     cleanup_old_nginx_sni_stream_configs
     quarantine_legacy_caddy_443_configs
     issue_and_install_cert_for_domain "$PANEL_DOMAIN" "$CF_TOKEN" || return 1
@@ -2928,12 +2977,12 @@ func_caddy_cf_reality_wizard() {
     write_caddy_panel_config
     write_caddy_site_config
     caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
-    write_nginx_sni_stream_config || return 1
+    caddy validate --config /etc/caddy/Caddyfile || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 配置校验失败"; return 1; }
+    write_nginx_sni_stream_config || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 配置校验失败"; return 1; }
     systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
+    systemctl restart caddy || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 服务重启失败"; return 1; }
     systemctl enable nginx >/dev/null 2>&1 || true
-    systemctl restart nginx || return 1
+    systemctl restart nginx || { rollback_sni_stack_after_failure "$backup_dir" "Nginx 服务重启失败"; return 1; }
     save_sni_stack_env
     harden_single_443_firewall
     generate_caddy_cf_manifest
@@ -3718,9 +3767,9 @@ func_caddy_delete_cert() {
         # 4. 外科手术：模块化安全删除
         local domain_conf="/etc/caddy/conf.d/${domain}.caddy"
         if [[ -f "$domain_conf" ]]; then
-            echo -e "${YELLOW}⏳ [4/4] 检测到专属配置文件，正在销毁...${PLAIN}"
-            rm -f "$domain_conf"
-            echo -e "${GREEN}✅ [4/4] 专属配置文件 ($domain_conf) 已安全移除！${PLAIN}"
+            echo -e "${YELLOW}⏳ [4/4] 检测到专属配置文件，正在隔离...${PLAIN}"
+            quarantine_path "$domain_conf" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
+            echo -e "${GREEN}✅ [4/4] 专属配置文件 ($domain_conf) 已隔离！${PLAIN}"
         else
             echo -e "${GREEN}✅ [4/4] 未发现该域名的专属配置文件。${PLAIN}"
         fi
@@ -3767,6 +3816,15 @@ func_caddy_add_insecure() {
     
     mkdir -p /etc/caddy/conf.d
     local conf_file="/etc/caddy/conf.d/${domain}.caddy"
+    local backup_file=""
+    if [[ -f "$conf_file" ]]; then
+        backup_file="${conf_file}.bak_$(date +%s)"
+        if ! cp -p "$conf_file" "$backup_file"; then
+            echo -e "${RED}❌ 现有配置备份失败，已取消操作。${PLAIN}"
+            read -n 1 -s -r -p "按任意键继续..."
+            return
+        fi
+    fi
     
     cat <<EOF > "$conf_file"
 $domain {
@@ -3782,7 +3840,8 @@ EOF
         echo -e "${GREEN}✅ 独立跳过验证配置已成功建立并生效！${PLAIN}"
     else
         echo -e "${RED}❌ 致命错误：追加的配置导致语法错误！正在回滚...${PLAIN}"
-        rm -f "$conf_file"
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
+        [[ -n "$backup_file" && -f "$backup_file" ]] && mv "$backup_file" "$conf_file"
     fi
 
     read -n 1 -s -r -p "按任意键继续..."
@@ -4051,14 +4110,40 @@ func_add_ssh_key() {
         if grep -q -F -x "$ssh_key" ~/.ssh/authorized_keys; then
             echo -e "${YELLOW}⚠️ 该公钥已存在于 ~/.ssh/authorized_keys 中，无需重复添加。${PLAIN}"
         else
+            local backup_file sshd_bin restart_ok=false
+            sshd_bin=$(command -v sshd 2>/dev/null || true)
+            backup_file="/etc/ssh/sshd_config.bak_pubkey_$(date +%s)"
+            if [[ -f /etc/ssh/sshd_config ]]; then
+                cp -p /etc/ssh/sshd_config "$backup_file" || {
+                    echo -e "${RED}❌ SSH 配置备份失败，已取消添加公钥。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    return
+                }
+            fi
             echo "$ssh_key" >> ~/.ssh/authorized_keys
             
             # 自动修改 sshd_config 确保开启了公钥登录选项
-            sed -i 's/^#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-            sed -i 's/^PubkeyAuthentication no/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-            systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
+            if [[ -f /etc/ssh/sshd_config ]]; then
+                sed -i 's/^#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+                sed -i 's/^PubkeyAuthentication no/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+                if [[ -n "$sshd_bin" ]] && ! "$sshd_bin" -t; then
+                    echo -e "${RED}❌ SSH 配置语法检查失败，正在回滚。${PLAIN}"
+                    mv "$backup_file" /etc/ssh/sshd_config
+                    read -n 1 -s -r -p "按任意键继续..."
+                    return
+                fi
+                if systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null; then
+                    restart_ok=true
+                fi
+                if ! $restart_ok; then
+                    echo -e "${YELLOW}⚠️ 公钥已写入，但 SSH 服务重启失败；原配置备份保留在 ${backup_file}${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    return
+                fi
+            fi
             
             echo -e "${GREEN}✅ 公钥添加成功！现在您可以尝试使用对应的私钥免密登录本服务器了。${PLAIN}"
+            [[ -f "$backup_file" ]] && echo -e "${CYAN}SSH 配置备份已保留：${backup_file}${PLAIN}"
             echo -e "${YELLOW}💡 进阶建议：当您确认公钥登录 100% 成功后，可以手动编辑 /etc/ssh/sshd_config 将 PasswordAuthentication 改为 no，彻底关闭密码登录。${PLAIN}"
         fi
     else
@@ -4102,20 +4187,28 @@ func_docker_manage() {
                 mkdir -p /etc/docker
                 local conf_file="/etc/docker/daemon.json"
                 local backup_file="${conf_file}.bak_$(date +%s)"
+                local tmp_json
+                tmp_json=$(mktemp /tmp/docker-daemon.XXXXXX) || { echo -e "${RED}❌ 临时文件创建失败，已取消操作。${PLAIN}"; sleep 1; continue; }
                 
                 # 检查并备份
                 if [[ -f "$conf_file" ]]; then
-                    cp "$conf_file" "$backup_file"
+                    if ! cp -p "$conf_file" "$backup_file"; then
+                        echo -e "${RED}❌ Docker 配置备份失败，已取消操作。${PLAIN}"
+                        rm -f "$tmp_json"
+                        sleep 1
+                        continue
+                    fi
                     echo -e "${YELLOW}⚠️ 已备份原有配置至 $backup_file${PLAIN}"
                     
                     # 使用 jq 进行非破坏性合并，保留用户原有配置
-                    if ! jq '. + {"ip": "127.0.0.1", "log-driver": "json-file", "log-opts": {"max-size": "50m", "max-file": "3"}}' "$conf_file" > /tmp/daemon_tmp.json 2>/dev/null; then
+                    if ! jq '. + {"ip": "127.0.0.1", "log-driver": "json-file", "log-opts": {"max-size": "50m", "max-file": "3"}}' "$conf_file" > "$tmp_json" 2>/dev/null; then
                         echo -e "${RED}❌ 原 daemon.json 格式损坏，合并失败！操作中止。${PLAIN}"
-                        rm -f "$backup_file"
+                        rm -f "$tmp_json"
+                        echo -e "${YELLOW}备份已保留：$backup_file${PLAIN}"
                         read -n 1 -s -r -p "按任意键继续..."
                         continue
                     fi
-                    mv /tmp/daemon_tmp.json "$conf_file"
+                    mv "$tmp_json" "$conf_file"
                 else
                     # 文件不存在时初始生成
                     cat <<EOF > "$conf_file"
@@ -4133,13 +4226,13 @@ EOF
                 # 防宕机重启机制：如果新配置导致引擎崩溃，立刻回滚！
                 if systemctl restart docker >/dev/null 2>&1; then
                     echo -e "${GREEN}✅ 已开启安全保护，Docker 容器端口仅限本地反代访问！${PLAIN}"
-                    [[ -f "$backup_file" ]] && rm -f "$backup_file" # 成功则清理备份
+                    [[ -f "$backup_file" ]] && echo -e "${CYAN}Docker 配置备份已保留：$backup_file${PLAIN}"
                 else
                     echo -e "${RED}❌ 致命错误：新配置导致 Docker 引擎无法启动！正在自动回滚...${PLAIN}"
                     if [[ -f "$backup_file" ]]; then
                         mv "$backup_file" "$conf_file"
                     else
-                        rm -f "$conf_file"
+                        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/docker" >/dev/null 2>&1 || true
                     fi
                     systemctl restart docker >/dev/null 2>&1
                 fi
@@ -4150,20 +4243,28 @@ EOF
                 if [[ -f "$conf_file" ]]; then
                     echo -e "${CYAN}▶ 正在安全移除 Docker 端口限制...${PLAIN}"
                     local backup_file="${conf_file}.bak_$(date +%s)"
-                    cp "$conf_file" "$backup_file"
+                    local tmp_json
+                    tmp_json=$(mktemp /tmp/docker-daemon.XXXXXX) || { echo -e "${RED}❌ 临时文件创建失败，已取消操作。${PLAIN}"; sleep 1; continue; }
+                    if ! cp -p "$conf_file" "$backup_file"; then
+                        echo -e "${RED}❌ Docker 配置备份失败，已取消操作。${PLAIN}"
+                        rm -f "$tmp_json"
+                        sleep 1
+                        continue
+                    fi
 
                     # 核心修复：只精准删除 ip 限制，绝不误删国内镜像源等其他配置！
-                    if ! jq 'del(.ip)' "$conf_file" > /tmp/daemon_tmp.json 2>/dev/null; then
+                    if ! jq 'del(.ip)' "$conf_file" > "$tmp_json" 2>/dev/null; then
                         echo -e "${RED}❌ JSON 解析失败，操作中止。${PLAIN}"
-                        rm -f "$backup_file"
+                        rm -f "$tmp_json"
+                        echo -e "${YELLOW}备份已保留：$backup_file${PLAIN}"
                         read -n 1 -s -r -p "按任意键继续..."
                         continue
                     fi
-                    mv /tmp/daemon_tmp.json "$conf_file"
+                    mv "$tmp_json" "$conf_file"
 
                     if systemctl restart docker >/dev/null 2>&1; then
                         echo -e "${GREEN}✅ 已解除限制，容器端口恢复公网可访状态！${PLAIN}"
-                        rm -f "$backup_file"
+                        echo -e "${CYAN}Docker 配置备份已保留：$backup_file${PLAIN}"
                     else
                         echo -e "${RED}❌ 卸载异常：导致引擎无法启动！正在回滚...${PLAIN}"
                         mv "$backup_file" "$conf_file"
@@ -4185,7 +4286,8 @@ EOF
 func_bbr_manage() {
     clear
     echo -e "${CYAN}👉 正在调用 ylx2016 网络极速脚本...${PLAIN}"
-    wget -O tcpx.sh "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh" && chmod +x tcpx.sh && ./tcpx.sh
+    run_remote_script "运行 ylx2016 网络极速脚本" "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
 # ---------------------------------------------------------
@@ -4298,7 +4400,10 @@ func_zram_swap() {
     echo -e "${CYAN}▶ 正在进行第一阶段：整理底层磁盘 Swap (保留 512M 保底防假死)...${PLAIN}"
     
     swapoff -a >/dev/null 2>&1
-    rm -f /swapfile /swap.img /var/swap /var/swapfile >/dev/null 2>&1
+    local old_swap
+    for old_swap in /swapfile /swap.img /var/swap /var/swapfile; do
+        quarantine_path "$old_swap" "/root/vps-optimize-quarantine/swap" >/dev/null 2>&1 || true
+    done
     
     dd if=/dev/zero of=/swapfile bs=1M count=512 status=none
     chmod 600 /swapfile
@@ -4356,7 +4461,7 @@ if grep -q zram /proc/swaps; then
         
         # 1. 扩容保底 Swap：从 512M 升级至 1024M (1GB)
         swapoff /swapfile >/dev/null 2>&1
-        rm -f /swapfile >/dev/null 2>&1
+        quarantine_path /swapfile "/root/vps-optimize-quarantine/swap" >/dev/null 2>&1 || true
         dd if=/dev/zero of=/swapfile bs=1M count=1024 status=none
         chmod 600 /swapfile
         mkswap /swapfile >/dev/null 2>&1
@@ -4537,12 +4642,21 @@ xanmod_supported_codename() {
 
 add_xanmod_repo() {
     local codename="$1"
+    local key_tmp
     mkdir -p /etc/apt/keyrings
-    rm -f /etc/apt/keyrings/xanmod-archive-keyring.gpg
-    if ! curl -fsSL https://dl.xanmod.org/archive.key | gpg --dearmor -o /etc/apt/keyrings/xanmod-archive-keyring.gpg; then
+    quarantine_path /etc/apt/keyrings/xanmod-archive-keyring.gpg "/etc/vps-optimize/quarantine/apt-keyrings" >/dev/null 2>&1 || true
+    key_tmp=$(mktemp /tmp/xanmod-key.XXXXXX) || return 1
+    if ! curl -fsSL --connect-timeout 10 --max-time 60 --retry 2 --retry-delay 1 https://dl.xanmod.org/archive.key -o "$key_tmp"; then
+        rm -f "$key_tmp"
+        echo -e "${RED}❌ XanMod GPG key 下载失败。${PLAIN}"
+        return 1
+    fi
+    if ! gpg --batch --yes --dearmor -o /etc/apt/keyrings/xanmod-archive-keyring.gpg "$key_tmp"; then
+        rm -f "$key_tmp"
         echo -e "${RED}❌ XanMod GPG key 下载或写入失败。${PLAIN}"
         return 1
     fi
+    rm -f "$key_tmp"
     echo "deb [signed-by=/etc/apt/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org ${codename} main" > /etc/apt/sources.list.d/xanmod-release.list
     apt-get update -qq
 }
@@ -5014,7 +5128,7 @@ func_dns_unlock() {
     local yn
     read_trimmed yn "❓ 确认现在运行 Alice DNS 解锁脚本吗？(y/n): "
     if [[ "$yn" =~ ^[Yy]$ ]]; then
-        wget https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh && bash dns-unlock.sh
+        run_remote_script "运行 Alice DNS 解锁脚本" "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"
     else
         echo -e "${BLUE}已安全取消操作。${PLAIN}"
     fi
@@ -5043,6 +5157,31 @@ func_ip_sentinel() {
 # ---------------------------------------------------------
 # 新增功能：安装 SublinkPro (强大的订阅转换与管理面板)
 # ---------------------------------------------------------
+install_docker_compose_standalone() {
+    local compose_url tmp_file
+    compose_url="https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)"
+    tmp_file=$(mktemp /tmp/docker-compose.XXXXXX) || { echo -e "${RED}❌ 临时文件创建失败。${PLAIN}"; return 1; }
+
+    if ! download_remote_script "$compose_url" "$tmp_file"; then
+        rm -f "$tmp_file"
+        echo -e "${RED}❌ Docker Compose 下载失败，请检查网络或 GitHub 访问。${PLAIN}"
+        return 1
+    fi
+
+    if [[ ! -s "$tmp_file" ]]; then
+        rm -f "$tmp_file"
+        echo -e "${RED}❌ Docker Compose 下载文件为空，已取消安装。${PLAIN}"
+        return 1
+    fi
+
+    if ! mv "$tmp_file" /usr/local/bin/docker-compose; then
+        rm -f "$tmp_file"
+        echo -e "${RED}❌ Docker Compose 写入 /usr/local/bin 失败。${PLAIN}"
+        return 1
+    fi
+    chmod +x /usr/local/bin/docker-compose || return 1
+}
+
 ensure_docker_compose_ready() {
     DOCKER_COMPOSE_CMD=""
     if ! command -v docker >/dev/null 2>&1; then
@@ -5056,8 +5195,7 @@ ensure_docker_compose_ready() {
         DOCKER_COMPOSE_CMD="docker-compose"
     else
         echo -e "${YELLOW}⚠️ 未检测到 Docker Compose 插件，正在为您安装...${PLAIN}"
-        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose 2>/dev/null
-        chmod +x /usr/local/bin/docker-compose
+        install_docker_compose_standalone || return 1
         DOCKER_COMPOSE_CMD="docker-compose"
         echo -e "${GREEN}✅ Docker Compose 安装完成。${PLAIN}"
     fi
@@ -5092,8 +5230,10 @@ func_sublinkpro() {
         compose_cmd="docker-compose"
     else
         echo -e "${YELLOW}⚠️ 未检测到 Docker Compose 插件，正在为您静默安装...${PLAIN}"
-        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose 2>/dev/null
-        chmod +x /usr/local/bin/docker-compose
+        install_docker_compose_standalone || {
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        }
         compose_cmd="docker-compose"
         echo -e "${GREEN}✅ Docker Compose 安装完成。${PLAIN}"
     fi
@@ -5137,7 +5277,7 @@ EOF
         $compose_cmd up -d
         
         local ip
-        ip=$(curl -s4 icanhazip.com 2>/dev/null || echo "您的服务器IP")
+        ip=$(curl -s4 --max-time 3 icanhazip.com 2>/dev/null || echo "您的服务器IP")
         
         echo -e "------------------------------------------------"
         echo -e "${GREEN}🎉 SublinkPro 部署并启动成功！${PLAIN}"
@@ -5224,7 +5364,7 @@ EOF
         $DOCKER_COMPOSE_CMD up -d
 
         local ip
-        ip=$(curl -s4 icanhazip.com 2>/dev/null || echo "您的服务器IP")
+        ip=$(curl -s4 --max-time 3 icanhazip.com 2>/dev/null || echo "您的服务器IP")
         echo -e "------------------------------------------------"
         echo -e "${GREEN}✅ 妙妙屋订阅管理部署完成！${PLAIN}"
         echo -e "访问地址：${BOLD}http://${ip}:${mmw_port}${PLAIN}"

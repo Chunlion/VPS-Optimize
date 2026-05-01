@@ -265,6 +265,12 @@ dog
 /root/.acme.sh/_quarantine
 /opt/.vps-optimize-quarantine
 /etc/vps-optimize/quarantine
+/etc/vps-optimize/quarantine/nginx-sni
+/etc/vps-optimize/quarantine/caddy-sni
+/etc/vps-optimize/quarantine/caddy-certs
+/etc/vps-optimize/quarantine/caddy-conf
+/etc/vps-optimize/quarantine/docker
+/etc/vps-optimize/quarantine/sysctl
 /etc/vps-optimize/quarantine/manual-backups
 /root/port-traffic-dog-quarantine
 ```
@@ -282,7 +288,7 @@ dog
 | 证书缓存隔离 | 可能需要重新签发 HTTPS 证书 | 确认域名和证书路径 |
 | 旧内核清理 | 误删云厂商定制内核会影响启动 | 不要删除当前内核和 `cloud` 内核 |
 | Docker 本地防穿透 | 会改变 Docker 默认端口绑定行为 | 确认容器是否需要公网直连 |
-| 443 单入口 | 会接管公网 `443` | 先确认没有其他服务占用公网 `443` |
+| 443 单入口 | 会接管公网 `443` | 先确认没有其他服务占用公网 `443`，失败时优先用脚本生成的 SNI stack 备份回滚 |
 
 <a id="update-uninstall"></a>
 ## 🔄 更新与卸载

@@ -237,6 +237,17 @@ panel.example.com -> Caddy 127.0.0.1:8443 -> 3x-ui 面板 127.0.0.1:40000
 其他 REALITY SNI -> 3x-ui REALITY 127.0.0.1:1443
 ```
 
+每次首次配置、重新应用或增删网站/反代域名时，脚本都会先创建 SNI stack 备份。若 `nginx -t`、`caddy validate` 或服务重启失败，会尝试自动回滚到本次操作前的备份，并把新生成的异常配置移入隔离目录。
+
+常见备份和隔离目录：
+
+```text
+/etc/vps-optimize/backups/sni-stack_*
+/etc/vps-optimize/quarantine/nginx-sni
+/etc/vps-optimize/quarantine/caddy-sni
+/etc/vps-optimize/quarantine/caddy-certs
+```
+
 ## 6. 443 完成后回到 3x-ui 收尾
 
 ### 6.1 把监听 IP 改成本机
