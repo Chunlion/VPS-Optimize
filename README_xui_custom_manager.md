@@ -38,7 +38,7 @@ wget -qO xui-custom-manager.sh https://raw.githubusercontent.com/Chunlion/VPS-Op
 | 外置规则复查 | 每次重置检查都会读取原外置配置，并把已启用外置规则的入站 `traffic_reset='monthly'` 恢复为 `never` |
 | 流量查看与校准 | 入站和客户端分开修改；多个客户端会逐个写入并独立计算 `all_time` |
 | 备份恢复 | 备份和恢复数据库、配置目录、程序目录 |
-| 健康检查 | 检查服务、数据库、日志关键词和监听端口 |
+| 健康检查 | 检查服务、数据库、日志关键词和实际监听端口 |
 | 旧备份清理 | 每类备份只删除用户明确选择的单个旧备份文件 |
 
 ## 默认路径
@@ -61,7 +61,8 @@ wget -qO xui-custom-manager.sh https://raw.githubusercontent.com/Chunlion/VPS-Op
 ```bash
 BACKUP_DIR="/root/x-ui-backups"
 XUI_DB="/etc/x-ui/x-ui.db"
-EXPECTED_LISTEN_PORTS="40000 1443 2096"
+# 可选：额外指定必须监听的端口；不设置时会自动读取已启用入站端口和 x-ui 进程监听端口
+EXPECTED_LISTEN_PORTS="40000 1443"
 ```
 
 ## 命令参数

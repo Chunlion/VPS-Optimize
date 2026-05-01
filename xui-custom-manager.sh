@@ -13,7 +13,7 @@ DB_BACKUP_KEEP="${DB_BACKUP_KEEP:-20}"
 PROGRAM_BACKUP_KEEP="${PROGRAM_BACKUP_KEEP:-10}"
 ETC_BACKUP_KEEP="${ETC_BACKUP_KEEP:-10}"
 LOG_FILE="${LOG_FILE:-/var/log/xui-custom-manager.log}"
-EXPECTED_LISTEN_PORTS="${EXPECTED_LISTEN_PORTS:-40000 1443 2096}"
+EXPECTED_LISTEN_PORTS="${EXPECTED_LISTEN_PORTS:-}"
 RESET_CONFIG="${RESET_CONFIG:-/etc/xui-custom-reset.json}"
 RESET_STATE="${RESET_STATE:-/var/lib/xui-custom-manager/reset-state.json}"
 RESET_SERVICE="${RESET_SERVICE:-/etc/systemd/system/xui-custom-reset.service}"
@@ -67,6 +67,31 @@ confirm_action() {
         echo "已取消。"
         return 1
     fi
+}
+
+print_line() {
+    echo -e "${CYAN}================================================${PLAIN}"
+}
+
+print_split() {
+    echo -e "${CYAN}------------------------------------------------${PLAIN}"
+}
+
+print_title() {
+    print_line
+    echo -e "${BOLD}$1${PLAIN}"
+    print_line
+}
+
+print_section() {
+    echo -e " ${BOLD}${BLUE}▶ $1${PLAIN}"
+}
+
+print_item() {
+    local number="$1"
+    local label="$2"
+    local hint="$3"
+    printf " %b%2s.%b %-22s %b(%s)%b\n" "$GREEN" "$number" "$PLAIN" "$label" "$YELLOW" "$hint" "$PLAIN"
 }
 
 ensure_dirs() {
@@ -184,10 +209,16 @@ show_service_status_and_logs() {
 }
 
 health_check() {
+    install_runtime_deps
+
     local has_problem=0
     local integrity_result
     local recent_logs
     local port
+    local ports=()
+    local db_ports=()
+    local proc_ports=()
+    local item
 
     echo
     echo "执行健康检查..."
@@ -223,14 +254,42 @@ health_check() {
     fi
 
     if command -v ss >/dev/null 2>&1; then
-        for port in $EXPECTED_LISTEN_PORTS; do
-            if ss -ltnH | awk '{print $4}' | grep -Eq "(^|:)$port$"; then
-                echo "OK：端口 $port 正在监听。"
+        if [ -n "$EXPECTED_LISTEN_PORTS" ]; then
+            for item in $EXPECTED_LISTEN_PORTS; do
+                [[ "$item" =~ ^[0-9]+$ ]] && ports+=("$item")
+            done
+        fi
+
+        if [ -f "$XUI_DB" ] && command -v sqlite3 >/dev/null 2>&1; then
+            if sqlite_has_column "inbounds" "enable"; then
+                mapfile -t db_ports < <(sqlite3 "$XUI_DB" "SELECT DISTINCT port FROM inbounds WHERE port IS NOT NULL AND port > 0 AND enable = 1 ORDER BY port;" 2>/dev/null || true)
             else
-                echo "!!! 警告：端口 $port 未监听。"
-                has_problem=1
+                mapfile -t db_ports < <(sqlite3 "$XUI_DB" "SELECT DISTINCT port FROM inbounds WHERE port IS NOT NULL AND port > 0 ORDER BY port;" 2>/dev/null || true)
             fi
+            for item in "${db_ports[@]}"; do
+                [[ "$item" =~ ^[0-9]+$ ]] && ports+=("$item")
+            done
+        fi
+
+        mapfile -t proc_ports < <(ss -ltnpH 2>/dev/null | awk '/x-ui|3x-ui/ {print $4}' | awk -F: '{print $NF}' | sort -n -u || true)
+        for item in "${proc_ports[@]}"; do
+            [[ "$item" =~ ^[0-9]+$ ]] && ports+=("$item")
         done
+
+        if [ "${#ports[@]}" -eq 0 ]; then
+            echo "提示：未找到需要检查的端口。可在 $CONFIG_FILE 中设置 EXPECTED_LISTEN_PORTS。"
+        else
+            mapfile -t ports < <(printf '%s\n' "${ports[@]}" | awk 'NF && !seen[$0]++' | sort -n)
+            echo "端口检查范围：${ports[*]}"
+            for port in "${ports[@]}"; do
+                if ss -ltnH | awk '{print $4}' | grep -Eq "(^|:)$port$"; then
+                    echo "OK：端口 $port 正在监听。"
+                else
+                    echo "!!! 警告：端口 $port 未监听。"
+                    has_problem=1
+                fi
+            done
+        fi
     else
         echo "!!! 警告：未找到 ss，无法检查端口监听状态。"
         has_problem=1
@@ -307,8 +366,9 @@ restore_program_backup() {
         printf '%s) %s\n' "$((i + 1))" "${backups[$i]}"
     done
 
-    read -rp "请输入编号选择备份，或 q 退出： " choice
-    if [[ "$choice" =~ ^[Qq]$ ]]; then
+    echo "0) 返回上级"
+    read -rp "请输入编号选择备份： " choice
+    if [ "$choice" = "0" ]; then
         echo "已取消。"
         return
     fi
@@ -355,8 +415,9 @@ restore_database_backup() {
         printf '%s) %s\n' "$((i + 1))" "${backups[$i]}"
     done
 
-    read -rp "请输入编号选择备份，或 q 退出： " choice
-    if [[ "$choice" =~ ^[Qq]$ ]]; then
+    echo "0) 返回上级"
+    read -rp "请输入编号选择备份： " choice
+    if [ "$choice" = "0" ]; then
         echo "已取消。"
         return
     fi
@@ -441,7 +502,7 @@ def save_config(data):
 def input_choice(prompt, valid=None, allow_quit=True):
     while True:
         value = input(prompt).strip()
-        if allow_quit and value.lower() in ("q", "quit", "exit"):
+        if allow_quit and value == "0":
             print("已取消。")
             sys.exit(0)
         if valid is None or value in valid:
@@ -463,13 +524,6 @@ def input_day(prompt, allow_zero=False):
             return day
         print("日期范围必须是 1-31；客户端输入 0 表示继承入站。")
 
-def yes_no(prompt, current):
-    default = "Y/n" if current else "y/N"
-    value = input(f"{prompt} [{default}] ").strip().lower()
-    if value in ("",):
-        return current
-    return value in ("y", "yes")
-
 conn = sqlite3.connect(db)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
@@ -485,45 +539,68 @@ if not inbounds:
 
 config = load_config()
 
-while True:
+def print_header(title):
     print()
-    print("自定义每月重置日期设置")
-    print(f"全局启用：{config.get('enabled', True)}")
-    print(f"默认日期：{config.get('default_day', 1)}")
-    print("G) 切换全局启用/禁用")
-    print("D) 设置默认日期")
-    print("S) 保存并退出")
-    print("Q) 不保存退出")
-    print()
-    print("入站列表：")
+    print("=" * 48)
+    print(title)
+    print("=" * 48)
+
+def choose_inbound():
+    print_header("选择入站")
     for idx, row in enumerate(inbounds, start=1):
         inbound_cfg = config["inbounds"].get(str(row["id"]), {})
-        enabled = inbound_cfg.get("enabled", False)
+        enabled = "开" if inbound_cfg.get("enabled", False) else "关"
         day = inbound_cfg.get("day", config.get("default_day", 1))
         remark = row["remark"] or "无备注"
         print(
             f"{idx}) ID={row['id']} | 端口={row['port']} | 备注={remark} | "
-            f"原版重置={row['traffic_reset']} | 外置启用={enabled} | 日期={day}"
+            f"原版={row['traffic_reset']} | 外置={enabled} | 日期={day}"
         )
+    print("0) 返回上级")
+    choice = input_choice("请选择入站编号： ", {"0"} | {str(i) for i in range(1, len(inbounds) + 1)}, allow_quit=False)
+    if choice == "0":
+        return None
+    return inbounds[int(choice) - 1]
 
-    choice = input("\n选择入站编号，或 G/D/S/Q： ").strip()
-    if choice.lower() == "q":
-        print("未保存。")
-        sys.exit(0)
-    if choice.lower() == "s":
+def manage_clients(inbound_id, inbound_cfg):
+    clients = cur.execute("""
+SELECT id, email, up, down, total
+FROM client_traffics
+WHERE inbound_id = ?
+ORDER BY id;
+""", (int(inbound_id),)).fetchall()
+
+    if not clients:
+        print("该入站下没有客户端。")
+        return
+
+    while True:
+        print_header(f"客户端自定义日期 | 入站 ID={inbound_id}")
+        for cidx, client in enumerate(clients, start=1):
+            email = client["email"]
+            client_cfg = inbound_cfg["clients"].get(email)
+            if client_cfg and client_cfg.get("enabled", True) and int(client_cfg.get("day", 0) or 0) > 0:
+                custom = f"自定义日期={client_cfg['day']}"
+            else:
+                custom = "不单独设置"
+            print(f"{cidx}) {email} | {custom}")
+        print("0) 返回上级")
+
+        cchoice = input_choice("请选择客户端编号： ", {"0"} | {str(i) for i in range(1, len(clients) + 1)}, allow_quit=False)
+        if cchoice == "0":
+            return
+        client = clients[int(cchoice) - 1]
+        email = client["email"]
+        day = input_day("请输入客户端自定义日期 [1-31]，输入 0 删除自定义日期： ", allow_zero=True)
+        if day == 0:
+            inbound_cfg["clients"].pop(email, None)
+            print(f"已删除客户端 {email} 的自定义日期。")
+        else:
+            inbound_cfg["clients"][email] = {"enabled": True, "day": day}
+            print(f"已设置客户端 {email} 每月 {day} 号重置。")
         save_config(config)
-        sys.exit(0)
-    if choice.lower() == "g":
-        config["enabled"] = not bool(config.get("enabled", True))
-        continue
-    if choice.lower() == "d":
-        config["default_day"] = input_day("请输入默认每月重置日期 [1-31]： ")
-        continue
-    if not choice.isdigit() or int(choice) < 1 or int(choice) > len(inbounds):
-        print("无效选择。")
-        continue
 
-    inbound = inbounds[int(choice) - 1]
+def manage_inbound(inbound):
     inbound_id = str(inbound["id"])
     inbound_cfg = config["inbounds"].setdefault(inbound_id, {
         "enabled": True,
@@ -538,61 +615,59 @@ while True:
     inbound_cfg.setdefault("reset_clients_without_custom_day", False)
     inbound_cfg.setdefault("clients", {})
 
-    clients = cur.execute("""
-SELECT id, email, up, down, total
-FROM client_traffics
-WHERE inbound_id = ?
-ORDER BY id;
-""", (int(inbound_id),)).fetchall()
-
     while True:
-        print()
-        print(f"入站 ID={inbound_id} 设置")
-        print(f"1) 启用外置重置：{inbound_cfg.get('enabled', True)}")
-        print(f"2) 入站重置日期：{inbound_cfg.get('day', config.get('default_day', 1))}")
-        print(f"3) 重置入站自身流量：{inbound_cfg.get('reset_inbound', True)}")
-        print(f"4) 未单独设置日期的客户端跟随入站重置：{inbound_cfg.get('reset_clients_without_custom_day', False)}")
-        print("5) 设置/删除客户端自定义日期")
-        print("B) 返回入站列表")
-        sub = input_choice("请选择： ", {"1", "2", "3", "4", "5", "B", "b"}, allow_quit=False)
+        enabled = "开启" if inbound_cfg.get("enabled", True) else "关闭"
+        reset_inbound = "是" if inbound_cfg.get("reset_inbound", True) else "否"
+        follow_clients = "是" if inbound_cfg.get("reset_clients_without_custom_day", False) else "否"
+        remark = inbound["remark"] or "无备注"
+        print_header(f"入站设置 | ID={inbound_id} | {remark}")
+        print(f"1) 外置重置：{enabled}")
+        print(f"2) 入站重置日期：每月 {inbound_cfg.get('day', config.get('default_day', 1))} 号")
+        print(f"3) 重置入站自身 up/down：{reset_inbound}")
+        print(f"4) 未单独设置日期的客户端跟随入站：{follow_clients}")
+        print("5) 管理客户端自定义日期")
+        print("0) 返回上级")
 
-        if sub.lower() == "b":
-            break
+        sub = input_choice("请选择： ", {"0", "1", "2", "3", "4", "5"}, allow_quit=False)
+        if sub == "0":
+            return
         if sub == "1":
             inbound_cfg["enabled"] = not bool(inbound_cfg.get("enabled", True))
+            save_config(config)
         elif sub == "2":
             inbound_cfg["day"] = input_day("请输入该入站每月重置日期 [1-31]： ")
+            save_config(config)
         elif sub == "3":
-            inbound_cfg["reset_inbound"] = yes_no("是否重置入站自身 up/down？", bool(inbound_cfg.get("reset_inbound", True)))
+            inbound_cfg["reset_inbound"] = not bool(inbound_cfg.get("reset_inbound", True))
+            save_config(config)
         elif sub == "4":
-            inbound_cfg["reset_clients_without_custom_day"] = yes_no(
-                "是否让未单独设置日期的客户端跟随入站日期重置 up/down？",
-                bool(inbound_cfg.get("reset_clients_without_custom_day", False)),
-            )
+            inbound_cfg["reset_clients_without_custom_day"] = not bool(inbound_cfg.get("reset_clients_without_custom_day", False))
+            save_config(config)
         elif sub == "5":
-            if not clients:
-                print("该入站下没有客户端。")
-                continue
-            print()
-            print("客户端列表：")
-            for cidx, client in enumerate(clients, start=1):
-                email = client["email"]
-                client_cfg = inbound_cfg["clients"].get(email)
-                if client_cfg and client_cfg.get("enabled", True) and int(client_cfg.get("day", 0) or 0) > 0:
-                    custom = f"自定义日期={client_cfg['day']}"
-                else:
-                    custom = "继承入站"
-                print(f"{cidx}) {email} | {custom}")
-            cchoice = input_choice("选择客户端编号，或 q 返回： ", {str(i) for i in range(1, len(clients) + 1)})
-            client = clients[int(cchoice) - 1]
-            email = client["email"]
-            day = input_day("请输入客户端自定义日期 [1-31]，输入 0 删除自定义日期并继承入站： ", allow_zero=True)
-            if day == 0:
-                inbound_cfg["clients"].pop(email, None)
-                print(f"已删除客户端 {email} 的自定义日期。")
-            else:
-                inbound_cfg["clients"][email] = {"enabled": True, "day": day}
-                print(f"已设置客户端 {email} 每月 {day} 号重置。")
+            manage_clients(inbound_id, inbound_cfg)
+
+while True:
+    print_header("自定义每月重置日期设置")
+    print(f"全局启用：{config.get('enabled', True)}")
+    print(f"默认日期：{config.get('default_day', 1)}")
+    print("1) 切换全局启用/禁用")
+    print("2) 设置默认重置日期")
+    print("3) 管理入站/客户端日期")
+    print("0) 返回菜单")
+
+    choice = input_choice("请选择： ", {"0", "1", "2", "3"}, allow_quit=False)
+    if choice == "0":
+        sys.exit(0)
+    if choice == "1":
+        config["enabled"] = not bool(config.get("enabled", True))
+        save_config(config)
+    elif choice == "2":
+        config["default_day"] = input_day("请输入默认每月重置日期 [1-31]： ")
+        save_config(config)
+    elif choice == "3":
+        inbound = choose_inbound()
+        if inbound is not None:
+            manage_inbound(inbound)
 PY
     set +e
     XUI_DB="$XUI_DB" RESET_CONFIG="$RESET_CONFIG" python3 "$tmp_py"
@@ -949,7 +1024,7 @@ answer = input("请输入 YES 确认写入： ").strip()
 if answer != "YES":
     print("已取消。")
     conn.close()
-    sys.exit(0)
+    sys.exit(100)
 
 systemctl("stop")
 try:
@@ -976,6 +1051,9 @@ finally:
 PY
     local py_status=$?
     set -e
+    if [ "$py_status" -eq 100 ]; then
+        return 0
+    fi
     if [ "$py_status" -ne 0 ]; then
         return "$py_status"
     fi
@@ -1022,9 +1100,9 @@ def human_size(num):
 def input_choice(prompt, valid=None, allow_quit=True):
     while True:
         value = input(prompt).strip()
-        if allow_quit and value.lower() in ("q", "quit", "exit"):
+        if allow_quit and value == "0":
             print("已取消。")
-            sys.exit(0)
+            sys.exit(100)
         if valid is None or value in valid:
             return value
         print("输入无效，请重新选择。")
@@ -1055,6 +1133,12 @@ def stop_start(action):
     print(f"systemctl {action} x-ui")
     subprocess.run(["systemctl", action, "x-ui"], check=False)
 
+def print_header(title):
+    print()
+    print("=" * 48)
+    print(title)
+    print("=" * 48)
+
 conn = sqlite3.connect(db)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
@@ -1068,14 +1152,13 @@ if not inbounds:
     print("没有找到任何入站。")
     sys.exit(1)
 
-print()
-print("请选择操作：")
+print_header("流量清零 / 上限修改")
 print("1) 手动清零指定入站/客户端 up/down")
 print("2) 修改指定入站/客户端流量上限 total")
+print("0) 返回菜单")
 action = input_choice("请选择 [1/2]： ", {"1", "2"})
 
-print()
-print("入站列表：")
+print_header("选择入站")
 for idx, row in enumerate(inbounds, start=1):
     remark = row["remark"] or "无备注"
     used = int(row["up"] or 0) + int(row["down"] or 0)
@@ -1084,7 +1167,7 @@ for idx, row in enumerate(inbounds, start=1):
         f"已用={human_size(used)} | 上限={human_size(row['total'])}"
     )
 
-inbound_choice = input_choice("请选择入站编号，或 q 退出： ", {str(i) for i in range(1, len(inbounds) + 1)})
+inbound_choice = input_choice("请选择入站编号，输入 0 返回： ", {str(i) for i in range(1, len(inbounds) + 1)})
 inbound = inbounds[int(inbound_choice) - 1]
 inbound_id = int(inbound["id"])
 
@@ -1095,14 +1178,13 @@ WHERE inbound_id = ?
 ORDER BY id;
 """, (inbound_id,)).fetchall()
 
-print()
-print("请选择对象：")
+print_header("选择对象")
 print("0) 入站自身")
 for idx, client in enumerate(clients, start=1):
     used = int(client["up"] or 0) + int(client["down"] or 0)
     print(f"{idx}) 客户端={client['email']} | 已用={human_size(used)} | 上限={human_size(client['total'])}")
 
-target_choice = input_choice("请选择对象编号，或 q 退出： ", {"0"} | {str(i) for i in range(1, len(clients) + 1)})
+target_choice = input_choice("请选择对象编号，输入 0 选择入站自身： ", {"0"} | {str(i) for i in range(1, len(clients) + 1)}, allow_quit=False)
 target_is_inbound = target_choice == "0"
 target_client = None if target_is_inbound else clients[int(target_choice) - 1]
 
@@ -1111,7 +1193,7 @@ if action == "1":
     confirm = input(f"确认清零 {target_text} 的 up/down？请输入 YES： ").strip()
     if confirm != "YES":
         print("已取消。")
-        sys.exit(0)
+        sys.exit(100)
 
     stop_start("stop")
     try:
@@ -1156,7 +1238,7 @@ else:
     confirm = input("确认写入？请输入 YES： ").strip()
     if confirm != "YES":
         print("已取消。")
-        sys.exit(0)
+        sys.exit(100)
 
     stop_start("stop")
     try:
@@ -1182,6 +1264,9 @@ PY
     py_status=$?
     rm -f "$tmp_py"
     set -e
+    if [ "$py_status" -eq 100 ]; then
+        return 0
+    fi
     if [ "$py_status" -ne 0 ]; then
         return "$py_status"
     fi
@@ -1234,9 +1319,9 @@ def human_size(num):
 def input_choice(prompt, valid=None, allow_quit=True):
     while True:
         s = input(prompt).strip()
-        if allow_quit and s.lower() in ("q", "quit", "exit"):
+        if allow_quit and s == "0":
             print("已取消。")
-            sys.exit(0)
+            sys.exit(100)
         if valid is None or s in valid:
             return s
         print("输入无效，请重新选择。")
@@ -1268,6 +1353,12 @@ def split_by_ratio(total_bytes, current_up, current_down):
     down = total_bytes - up
     return up, down
 
+def print_header(title):
+    print()
+    print("=" * 48)
+    print(title)
+    print("=" * 48)
+
 conn = sqlite3.connect(db)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
@@ -1285,8 +1376,9 @@ ORDER BY id;
         print("没有找到任何入站。")
         sys.exit(1)
 
-    print()
-    print("请选择要修改的入站：")
+    print_header("校准当前流量")
+    print("先选入站，再选择只改入站或改某个客户端。")
+    print_header("选择入站")
     for idx, row in enumerate(inbounds, start=1):
         remark = row["remark"] or "无备注"
         used = int(row["up"] or 0) + int(row["down"] or 0)
@@ -1298,7 +1390,7 @@ ORDER BY id;
         )
 
     valid_inbound_choices = {str(i) for i in range(1, len(inbounds) + 1)}
-    choice = input_choice("\n输入编号选择入站，或 q 退出： ", valid_inbound_choices)
+    choice = input_choice("\n输入编号选择入站，输入 0 返回： ", valid_inbound_choices)
     inbound = inbounds[int(choice) - 1]
     inbound_id = int(inbound["id"])
 
@@ -1309,8 +1401,7 @@ WHERE inbound_id = ?
 ORDER BY id;
 """, (inbound_id,)).fetchall()
 
-    print()
-    print(f"已选择入站 ID={inbound_id}。")
+    print_header(f"选择对象 | 入站 ID={inbound_id}")
     print("请选择修改对象：")
     print("0) 只修改入站自身流量")
 
@@ -1322,13 +1413,14 @@ ORDER BY id;
             f"已用={human_size(used)} | 上行={human_size(row['up'])} | 下行={human_size(row['down'])} | "
             f"上限={human_size(total)}"
         )
+    all_clients_choice = str(len(clients) + 1)
     if clients:
-        print("A) 逐个修改该入站下所有客户端")
+        print(f"{all_clients_choice}) 逐个修改该入站下所有客户端")
 
     valid_client_choices = {"0"} | {str(i) for i in range(1, len(clients) + 1)}
     if clients:
-        valid_client_choices |= {"A", "a"}
-    client_choice = input_choice("\n输入编号选择客户端，A=逐个客户端，0=只改入站，q=退出： ", valid_client_choices)
+        valid_client_choices.add(all_clients_choice)
+    client_choice = input_choice("\n请输入编号选择对象： ", valid_client_choices, allow_quit=False)
 
     if client_choice == "0":
         edit_mode = "inbound"
@@ -1339,7 +1431,7 @@ ORDER BY id;
             "up": inbound["up"],
             "down": inbound["down"],
         }]
-    elif client_choice.lower() == "a":
+    elif client_choice == all_clients_choice:
         edit_mode = "clients"
         targets = [{
             "kind": "client",
@@ -1359,16 +1451,14 @@ ORDER BY id;
             "down": client["down"],
         }]
 
-    print()
-    print("请选择单位：")
+    print_header("选择单位")
     print("1) GB，十进制，1GB = 1000^3 bytes，适合对齐商家后台")
     print("2) GiB，二进制，1GiB = 1024^3 bytes，适合让 3x-ui 面板显示接近输入值")
     unit_choice = input_choice("请选择 [1/2]，默认 2： ", {"", "1", "2"}, allow_quit=False)
     unit = "gb" if unit_choice == "1" else "gib"
     unit_label = "GB" if unit == "gb" else "GiB"
 
-    print()
-    print("请选择输入模式：")
+    print_header("输入方式")
     print("1) 分别输入上传和下载")
     print("2) 只输入总流量，全部写入 down")
     print("3) 只输入总流量，按当前 up/down 比例分配")
@@ -1408,11 +1498,14 @@ ORDER BY id;
             except Exception as exc:
                 print(f"流量数值格式不正确：{exc}")
 
-    print()
-    update_all_time = input("是否同时把累计总流量 all_time 改为 上传+下载？[Y/n] ").strip().lower()
-    update_all_time = update_all_time not in ("n", "no")
+    print_header("累计总流量")
+    print("是否同时把 all_time 改为本次输入的 上传+下载？")
+    print("1) 是")
+    print("2) 否")
+    update_all_time_choice = input_choice("请选择 [1/2]，默认 1： ", {"", "1", "2"}, allow_quit=False)
+    update_all_time = update_all_time_choice != "2"
 
-    print()
+    print_header("写入确认")
     print("即将写入：")
     print(f"入站 ID：{inbound_id}")
     print(f"修改累计总流量 all_time：{'是' if update_all_time else '否'}")
@@ -1429,7 +1522,7 @@ ORDER BY id;
     confirm = input("\n确认写入数据库？请输入 YES： ").strip()
     if confirm != "YES":
         print("已取消，没有修改数据库。")
-        sys.exit(0)
+        sys.exit(100)
 
     inbound_has_all_time = has_column(cur, "inbounds", "all_time")
     client_has_all_time = has_column(cur, "client_traffics", "all_time")
@@ -1472,6 +1565,10 @@ PY
 
     systemctl start x-ui
 
+    if [ "$py_status" -eq 100 ]; then
+        return 0
+    fi
+
     if [ "$py_status" -ne 0 ]; then
         echo "流量修改未完成或失败，已尝试启动 x-ui。"
         show_service_status_and_logs
@@ -1491,40 +1588,38 @@ main_menu() {
 
     while true; do
         clear
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🧭 3x-ui 外置增强管理${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}补充面板没有的功能：自定义重置、流量校准、备份恢复、健康检查。${PLAIN}"
-        echo -e "${YELLOW}写数据库或恢复备份前会自动备份；不确定时先选 [9]。${PLAIN}"
-        echo -e "${CYAN}------------------------------------------------${PLAIN}"
-        echo -e "${BLUE}配置：${RESET_CONFIG}${PLAIN}"
-        echo -e "${BLUE}备份：${BACKUP_DIR}${PLAIN}"
-        echo -e "${BLUE}日志：${LOG_FILE}${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
+        print_title "🧭 3x-ui 外置增强管理"
+        echo -e " ${YELLOW}用于自定义重置、流量校准、备份恢复和健康检查。${PLAIN}"
+        echo -e " ${YELLOW}写库前会备份；看不准时先做 [9] 立即备份。${PLAIN}"
+        print_split
+        echo -e " ${BLUE}配置：${RESET_CONFIG}${PLAIN}"
+        echo -e " ${BLUE}备份：${BACKUP_DIR}${PLAIN}"
+        echo -e " ${BLUE}日志：${LOG_FILE}${PLAIN}"
+        print_line
 
-        echo -e " ${BOLD}${BLUE}▶ 常用操作${PLAIN}"
-        echo -e "  ${GREEN}1.${PLAIN} 自定义重置日期        ${YELLOW}(入站/客户端分开设置)${PLAIN}"
-        echo -e "  ${GREEN}2.${PLAIN} 立即执行重置检查      ${YELLOW}(更新面板后也可手动跑一次)${PLAIN}"
-        echo -e "  ${GREEN}3.${PLAIN} 安装/更新自动检查     ${YELLOW}(systemd timer，每天执行)${PLAIN}"
-        echo -e "  ${GREEN}4.${PLAIN} 查看重置日志          ${YELLOW}(脚本日志和 timer 日志)${PLAIN}"
+        print_section "重置"
+        print_item 1 "自定义重置日期" "入站/客户端分开设置"
+        print_item 2 "立即检查重置" "手动执行一次"
+        print_item 3 "安装自动检查" "每天定时执行"
+        print_item 4 "查看重置日志" "脚本与 timer 日志"
 
-        echo -e " ${BOLD}${BLUE}▶ 流量维护${PLAIN}"
-        echo -e "  ${GREEN}5.${PLAIN} 接管原版 monthly      ${YELLOW}(仅处理已启用外置规则的入站)${PLAIN}"
-        echo -e "  ${GREEN}6.${PLAIN} 清零/修改流量上限      ${YELLOW}(up/down 清零或 total 上限)${PLAIN}"
-        echo -e "  ${GREEN}7.${PLAIN} 查看当前流量          ${YELLOW}(入站和客户端分开显示)${PLAIN}"
-        echo -e "  ${GREEN}8.${PLAIN} 校准当前流量          ${YELLOW}(入站/客户端分开写入)${PLAIN}"
+        print_section "流量"
+        print_item 5 "接管 monthly" "只处理外置管理入站"
+        print_item 6 "清零/改上限" "up/down 或 total"
+        print_item 7 "查看流量" "入站/客户端分开显示"
+        print_item 8 "校准流量" "入站/客户端分开写入"
 
-        echo -e " ${BOLD}${BLUE}▶ 备份恢复${PLAIN}"
-        echo -e "  ${GREEN}9.${PLAIN} 立即备份              ${YELLOW}(数据库/配置/程序目录)${PLAIN}"
-        echo -e " ${GREEN}10.${PLAIN} 恢复程序备份          ${YELLOW}(恢复 /usr/local/x-ui)${PLAIN}"
-        echo -e " ${GREEN}11.${PLAIN} 恢复数据库备份        ${YELLOW}(恢复 x-ui.db)${PLAIN}"
+        print_section "备份"
+        print_item 9 "立即备份" "数据库/配置/程序"
+        print_item 10 "恢复程序" "/usr/local/x-ui"
+        print_item 11 "恢复数据库" "x-ui.db"
 
-        echo -e " ${BOLD}${BLUE}▶ 诊断维护${PLAIN}"
-        echo -e " ${GREEN}12.${PLAIN} 健康检查              ${YELLOW}(服务/数据库/日志/端口)${PLAIN}"
-        echo -e " ${GREEN}13.${PLAIN} 清理旧备份            ${YELLOW}(每类只删一个明确文件)${PLAIN}"
-        echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 退出${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
+        print_section "诊断"
+        print_item 12 "健康检查" "服务/数据库/日志/端口"
+        print_item 13 "清理旧备份" "每类只删一个"
+        print_split
+        echo -e " ${RED} 0.${PLAIN} 退出"
+        print_line
         read -rp "请选择： " choice
 
         case "$choice" in
