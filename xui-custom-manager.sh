@@ -81,7 +81,7 @@ register_xcm_shortcut() {
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-URL="[https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh](https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh)"
+URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh"
 CACHE_DIR="/usr/local/lib/xui-custom-manager"
 CACHE_FILE="$CACHE_DIR/xui-custom-manager.sh"
 TMP_FILE="$(mktemp)"
@@ -625,6 +625,7 @@ run_edit_traffic_ui() {
     local tmp_py
     tmp_py="$(mktemp --suffix=.py)"
     cat > "$tmp_py" <<'PY'
+import json
 import os
 import sqlite3
 import sys
