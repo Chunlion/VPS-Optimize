@@ -114,20 +114,21 @@ is_redhat() {
 }
 # --- 全局包管理抽象  ---
 install_pkg() {
-    local pkgs="$*"
+    local pkgs=("$@")
     local rc=0
+    [[ ${#pkgs[@]} -gt 0 ]] || return 0
     if is_debian; then
         # 使用 apt-get 代替 apt，消除 "stable CLI interface" 警告 
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -qq >/dev/null 2>&1
-        apt-get install -y -qq $pkgs >/dev/null 2>&1
+        apt-get install -y -qq "${pkgs[@]}" >/dev/null 2>&1
         rc=$?
         unset DEBIAN_FRONTEND
     elif is_redhat; then
         if command -v dnf >/dev/null 2>&1; then
-            dnf install -y -q $pkgs >/dev/null 2>&1
+            dnf install -y -q "${pkgs[@]}" >/dev/null 2>&1
         else
-            yum install -y -q $pkgs >/dev/null 2>&1
+            yum install -y -q "${pkgs[@]}" >/dev/null 2>&1
         fi
         rc=$?
     fi
@@ -135,18 +136,19 @@ install_pkg() {
 }
 
 remove_pkg() {
-    local pkgs="$*"
+    local pkgs=("$@")
     local rc=0
+    [[ ${#pkgs[@]} -gt 0 ]] || return 0
     if is_debian; then
         export DEBIAN_FRONTEND=noninteractive
-        apt-get purge -y -qq $pkgs >/dev/null 2>&1
+        apt-get purge -y -qq "${pkgs[@]}" >/dev/null 2>&1
         rc=$?
         unset DEBIAN_FRONTEND
     elif is_redhat; then
         if command -v dnf >/dev/null 2>&1; then
-            dnf remove -y -q $pkgs >/dev/null 2>&1
+            dnf remove -y -q "${pkgs[@]}" >/dev/null 2>&1
         else
-            yum remove -y -q $pkgs >/dev/null 2>&1
+            yum remove -y -q "${pkgs[@]}" >/dev/null 2>&1
         fi
         rc=$?
     fi
@@ -200,16 +202,27 @@ create_shortcut() {
     local script_path="/usr/local/bin/cy"
     if [[ ! -f "$script_path" ]]; then
         # 优先尝试从远端直接拉取
-        if ! curl -fsL "$UPDATE_URL" -o "$script_path" 2>/dev/null; then
+        if ! download_remote_script "$UPDATE_URL" "$script_path" 2>/dev/null; then
             # 若远端拉取失败，且检测到 $0 确实是本地存在的物理文件，才允许复制
             if [[ -f "$0" ]]; then
-                cp "$(readlink -f "$0")" "$script_path" 2>/dev/null
+                cp "$(readlink -f "$0")" "$script_path" 2>/dev/null || {
+                    echo -e "${YELLOW}⚠️ 快捷指令本地注册失败，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
+                    return
+                }
             else
                 echo -e "${YELLOW}⚠️ 快捷指令本地注册挂起，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
                 return
             fi
         fi
-        chmod +x "$script_path"
+        if ! bash -n "$script_path" >/dev/null 2>&1; then
+            quarantine_path "$script_path" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
+            echo -e "${RED}❌ 快捷指令脚本未通过语法检查，已隔离异常文件。${PLAIN}"
+            return
+        fi
+        chmod +x "$script_path" || {
+            echo -e "${YELLOW}⚠️ 快捷指令授权失败，请检查 /usr/local/bin 权限。${PLAIN}"
+            return
+        }
         echo -e "${GREEN}✅ 快捷指令 'cy' 已全局注册！下次可直接输入 cy 唤出面板。${PLAIN}"
         sleep 1
     fi
@@ -602,13 +615,23 @@ run_safe() {
     fi
 }
 
+restart_service_if_available() {
+    local svc="$1"
+    command -v systemctl >/dev/null 2>&1 || return 2
+    if systemctl list-unit-files "${svc}.service" --no-legend 2>/dev/null | grep -q . || systemctl list-units "${svc}.service" --no-legend 2>/dev/null | grep -q .; then
+        systemctl restart "$svc" >/dev/null 2>&1
+    else
+        return 2
+    fi
+}
+
 download_remote_script() {
     local url="$1"
     local output_file="$2"
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --connect-timeout 10 --max-time 90 "$url" -o "$output_file"
+        curl -fsSL --connect-timeout 10 --max-time 90 --retry 2 --retry-delay 1 --retry-connrefused "$url" -o "$output_file"
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$output_file" "$url"
+        wget -q --timeout=15 --tries=3 -O "$output_file" "$url"
     else
         echo -e "${RED}❌ 缺少 curl/wget，无法下载远程脚本。${PLAIN}"
         return 1
@@ -623,13 +646,25 @@ run_remote_script() {
     local yn tmp_file rc
     echo -e "${CYAN}▶ ${desc}${PLAIN}"
     echo -e "${YELLOW}脚本来源：${url}${PLAIN}"
-    read_trimmed yn "确认下载并执行该远程脚本？(y/N): "
-    if [[ ! "$yn" =~ ^[Yy]$ ]]; then
-        echo -e "${BLUE}已取消执行。${PLAIN}"
-        return 1
+    if [[ "$url" != https://* ]]; then
+        echo -e "${RED}⚠️ 该来源不是 HTTPS，存在被劫持或篡改风险。仅在你信任来源并理解风险时继续。${PLAIN}"
+        read_trimmed yn "如仍要执行，请输入 YES（直接回车取消）: "
+        if [[ "$yn" != "YES" ]]; then
+            echo -e "${BLUE}已取消执行。${PLAIN}"
+            return 1
+        fi
+    else
+        read_trimmed yn "确认下载并执行该远程脚本？(y/N): "
+        if [[ ! "$yn" =~ ^[Yy]$ ]]; then
+            echo -e "${BLUE}已取消执行。${PLAIN}"
+            return 1
+        fi
     fi
 
-    tmp_file=$(mktemp /tmp/vps-remote.XXXXXX.sh)
+    tmp_file=$(mktemp /tmp/vps-remote.XXXXXX.sh) || {
+        echo -e "${RED}❌ 临时文件创建失败，已取消执行。${PLAIN}"
+        return 1
+    }
     if ! download_remote_script "$url" "$tmp_file"; then
         rm -f "$tmp_file"
         echo -e "${RED}❌ 下载失败，请检查网络或脚本来源。${PLAIN}"
@@ -1082,20 +1117,15 @@ func_env_install() {
             12) run_remote_script "安装 Argox 节点" "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh" ;;
             13)
                 echo -e "${CYAN}▶ 正在检查并安装 Caddy...${PLAIN}"
-                if ! command -v caddy >/dev/null 2>&1; then
-                    if is_debian; then 
-                        apt install -y debian-keyring debian-archive-keyring apt-transport-https -qq >/dev/null 2>&1
-                        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-                        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
-                        apt update -qq && apt install caddy -y >/dev/null 2>&1
-                    else 
-                        yum install -y yum-utils >/dev/null 2>&1 && yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo >/dev/null 2>&1 && yum install caddy -y >/dev/null 2>&1
-                    fi
+                if ! install_caddy_if_needed; then
+                    echo -e "${RED}❌ Caddy 安装失败，请检查软件源、网络或系统版本。${PLAIN}"
+                    pause_return "按任意键继续..."
+                    continue
                 fi
-                
-                mkdir -p /etc/caddy/conf.d
-                if [[ -f /etc/caddy/Caddyfile ]] && ! grep -q "import conf.d/\*" /etc/caddy/Caddyfile; then
-                    echo -e "\nimport conf.d/*" >> /etc/caddy/Caddyfile
+                if ! ensure_caddy_module_layout; then
+                    echo -e "${RED}❌ Caddy 配置目录初始化失败，请检查 /etc/caddy 权限。${PLAIN}"
+                    pause_return "按任意键继续..."
+                    continue
                 fi
                 
                 local domain port is_https
@@ -1108,16 +1138,17 @@ func_env_install() {
                     echo -e "${RED}❌ 域名或端口格式错误！域名不要带 http(s)://、路径或端口，端口必须是 1-65535。${PLAIN}"
                 else
                     # 严谨的冲突判定，同时检查 Caddyfile 和 conf.d 目录
-                    if grep -q "^[[:space:]]*$domain" /etc/caddy/Caddyfile 2>/dev/null || ls /etc/caddy/conf.d/${domain}.caddy >/dev/null 2>&1; then
-                        echo -e "${RED}❌ 错误：已存在该域名的配置块！请先使用功能 [17] 彻底清理，然后再添加。${PLAIN}"
+                    local domain_conf="/etc/caddy/conf.d/${domain}.caddy"
+                    if grep -q "^[[:space:]]*$domain" /etc/caddy/Caddyfile 2>/dev/null || [[ -e "$domain_conf" ]]; then
+                        echo -e "${RED}❌ 错误：已存在该域名的配置块！请先清理或更换域名后再添加。${PLAIN}"
                     else
                         read_trimmed is_https "❓ 后端面板是否开启了自带的 SSL 证书？(y/n): "
                         
                         local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
-                        [[ -f /etc/caddy/Caddyfile ]] && cp /etc/caddy/Caddyfile "$backup_file"
+                        [[ -f /etc/caddy/Caddyfile ]] && cp -p /etc/caddy/Caddyfile "$backup_file"
                         
                         if [[ "$is_https" =~ ^[Yy]$ ]]; then
-                            cat <<EOF > "/etc/caddy/conf.d/${domain}.caddy"
+                            cat <<EOF > "$domain_conf"
 $domain {
     reverse_proxy https://127.0.0.1:$port {
         transport http {
@@ -1127,7 +1158,7 @@ $domain {
 }
 EOF
                         else
-                            cat <<EOF > "/etc/caddy/conf.d/${domain}.caddy"
+                            cat <<EOF > "$domain_conf"
 $domain {
     reverse_proxy localhost:$port
 }
@@ -1136,12 +1167,19 @@ EOF
                         
                         echo -e "${CYAN}▶ 正在校验 Caddy 配置文件...${PLAIN}"
                         if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
-                            systemctl reload caddy >/dev/null 2>&1
-                            echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
+                            if systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1; then
+                                echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
+                                echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
+                            else
+                                echo -e "${RED}❌ Caddy 配置校验通过，但服务重载失败，正在回滚...${PLAIN}"
+                                [[ -f "$backup_file" ]] && mv "$backup_file" /etc/caddy/Caddyfile
+                                quarantine_path "$domain_conf" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
+                                systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true
+                            fi
                         else
                             echo -e "${RED}❌ 致命错误：生成的配置存在语法异常！正在自动回滚...${PLAIN}"
                             [[ -f "$backup_file" ]] && mv "$backup_file" /etc/caddy/Caddyfile
-                            rm -f "/etc/caddy/conf.d/${domain}.caddy" # 核心修复：清理掉错误的模块化文件
+                            quarantine_path "$domain_conf" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
                         fi
                     fi
                 fi
@@ -1210,21 +1248,7 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
         return
     fi
 
-    if ! command -v caddy >/dev/null 2>&1; then
-        echo -e "${CYAN}▶ 未检测到 Caddy，正在安装...${PLAIN}"
-        if is_debian; then
-            apt install -y debian-keyring debian-archive-keyring apt-transport-https -qq >/dev/null 2>&1
-            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-            curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
-            apt update -qq >/dev/null 2>&1
-            apt install caddy -y -qq >/dev/null 2>&1
-        elif is_redhat; then
-            yum install -y yum-utils -q >/dev/null 2>&1
-            yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo >/dev/null 2>&1
-            yum install caddy -y -q >/dev/null 2>&1
-        fi
-    fi
-    if ! command -v caddy >/dev/null 2>&1; then
+    if ! install_caddy_if_needed; then
         echo -e "${RED}❌ Caddy 安装失败，请检查网络后重试。${PLAIN}"
         return
     fi
@@ -2166,16 +2190,61 @@ install_caddy_if_needed() {
     command -v caddy >/dev/null 2>&1 && return 0
     echo -e "${CYAN}▶ 未检测到 Caddy，正在安装...${PLAIN}"
     if is_debian; then
-        install_pkg debian-keyring debian-archive-keyring apt-transport-https curl gpg
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
-        install_pkg caddy
+        local key_tmp repo_tmp
+        install_pkg debian-keyring debian-archive-keyring apt-transport-https curl gpg || return 1
+        command -v curl >/dev/null 2>&1 || { echo -e "${RED}❌ 缺少 curl，无法添加 Caddy 源。${PLAIN}"; return 1; }
+        command -v gpg >/dev/null 2>&1 || { echo -e "${RED}❌ 缺少 gpg，无法校验 Caddy 源。${PLAIN}"; return 1; }
+        key_tmp=$(mktemp /tmp/caddy-key.XXXXXX) || return 1
+        repo_tmp=$(mktemp /tmp/caddy-repo.XXXXXX) || { rm -f "$key_tmp"; return 1; }
+        if ! curl -fsSL --connect-timeout 10 --max-time 60 --retry 2 --retry-delay 1 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' -o "$key_tmp"; then
+            rm -f "$key_tmp" "$repo_tmp"
+            echo -e "${RED}❌ Caddy GPG key 下载失败。${PLAIN}"
+            return 1
+        fi
+        if ! gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg "$key_tmp"; then
+            rm -f "$key_tmp" "$repo_tmp"
+            echo -e "${RED}❌ Caddy GPG key 写入失败。${PLAIN}"
+            return 1
+        fi
+        if ! curl -fsSL --connect-timeout 10 --max-time 60 --retry 2 --retry-delay 1 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' -o "$repo_tmp"; then
+            rm -f "$key_tmp" "$repo_tmp"
+            echo -e "${RED}❌ Caddy APT 源配置下载失败。${PLAIN}"
+            return 1
+        fi
+        if ! mv "$repo_tmp" /etc/apt/sources.list.d/caddy-stable.list; then
+            rm -f "$key_tmp" "$repo_tmp"
+            echo -e "${RED}❌ Caddy APT 源配置写入失败。${PLAIN}"
+            return 1
+        fi
+        rm -f "$key_tmp"
+        install_pkg caddy || return 1
     elif is_redhat; then
-        install_pkg yum-utils
-        yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo >/dev/null 2>&1 || true
-        install_pkg caddy
+        install_pkg yum-utils || true
+        if command -v yum-config-manager >/dev/null 2>&1; then
+            yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo >/dev/null 2>&1 || return 1
+        else
+            echo -e "${YELLOW}⚠️ 未检测到 yum-config-manager，将尝试直接从系统源安装 Caddy。${PLAIN}"
+        fi
+        install_pkg caddy || return 1
+    else
+        echo -e "${RED}❌ 暂不支持当前系统自动安装 Caddy。${PLAIN}"
+        return 1
     fi
     command -v caddy >/dev/null 2>&1
+}
+
+ensure_caddy_module_layout() {
+    mkdir -p /etc/caddy/conf.d || return 1
+    if [[ ! -f /etc/caddy/Caddyfile ]]; then
+        cat <<'EOF' > /etc/caddy/Caddyfile
+import conf.d/*
+EOF
+        return 0
+    fi
+    if ! grep -q "import conf.d/\*" /etc/caddy/Caddyfile; then
+        cp -p /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak_$(date +%s)" 2>/dev/null || true
+        printf '\nimport conf.d/*\n' >> /etc/caddy/Caddyfile
+    fi
 }
 
 install_nginx_stream_stack() {
@@ -3730,10 +3799,11 @@ func_security() {
     echo -e "------------------------------------------------"
     
     # 1. 极致精准：读取内存和进程，获取当前真实生效的 SSH 端口
-    local current_p
+    local current_p sshd_bin
+    sshd_bin=$(command -v sshd 2>/dev/null || true)
     current_p=$(ss -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | sort -u | head -n1)
-    if [[ -z "$current_p" ]]; then
-        current_p=$(sshd -T 2>/dev/null | grep -i "^port " | awk '{print $2}' | head -n1)
+    if [[ -z "$current_p" && -n "$sshd_bin" ]]; then
+        current_p=$("$sshd_bin" -T 2>/dev/null | grep -i "^port " | awk '{print $2}' | head -n1)
     fi
     current_p=${current_p:-22}
 
@@ -3743,7 +3813,16 @@ func_security() {
     final_p=${final_p:-$current_p}
 
     if [[ "$final_p" != "$current_p" ]]; then
-        
+        if [[ -z "$sshd_bin" ]]; then
+            echo -e "${RED}❌ 未找到 sshd 命令，无法安全校验 SSH 配置，已取消。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        fi
+        if ! command -v systemctl >/dev/null 2>&1; then
+            echo -e "${RED}❌ 未检测到 systemctl，无法安全重启 SSH 服务，已取消。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        fi
         # [严格检验] 端口合法性
         if ! [[ "$final_p" =~ ^[0-9]+$ ]] || (( 10#$final_p < 10000 || 10#$final_p > 65535 )); then
             echo -e "${RED}❌ 错误：无效的端口号！必须是 10000-65535 之间的纯数字。${PLAIN}"
@@ -3751,15 +3830,31 @@ func_security() {
             return
         fi
 
+        echo -e "${YELLOW}即将修改：/etc/ssh/sshd_config、SSH systemd 服务、系统防火墙放行规则。${PLAIN}"
+        echo -e "${YELLOW}请先确认云厂商安全组已经放行 ${final_p}/tcp，并保留当前 SSH 会话。${PLAIN}"
+        confirm_danger "修改 SSH 端口为 ${final_p}" "新端口未放行会导致后续无法重新连接 SSH。" "脚本会先备份 sshd_config，校验语法失败或服务重启失败时自动回滚。" || {
+            echo -e "${BLUE}已取消 SSH 端口修改。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        }
+
         echo -e "${CYAN}▶ 正在备份原生 SSH 配置文件...${PLAIN}"
         local backup_file="/etc/ssh/sshd_config.bak_$(date +%s)"
-        cp /etc/ssh/sshd_config "$backup_file"
+        if ! cp -p /etc/ssh/sshd_config "$backup_file"; then
+            echo -e "${RED}❌ SSH 配置备份失败，已取消修改。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        fi
 
         # 2. 核心黑科技：安全的置顶替换
         # - 先安全删除所有带 Port 的行 (忽略注释符和空格)
         # - 然后在文件绝对第一行 (1i) 插入新端口，秒杀所有 include 配置覆盖！
-        sed -i '/^[[:space:]]*#\?Port /d' /etc/ssh/sshd_config
-        sed -i "1i Port $final_p" /etc/ssh/sshd_config
+        if ! sed -i '/^[[:space:]]*#\?Port /d' /etc/ssh/sshd_config || ! sed -i "1i Port $final_p" /etc/ssh/sshd_config; then
+            echo -e "${RED}❌ 写入 SSH 配置失败，正在恢复备份。${PLAIN}"
+            mv "$backup_file" /etc/ssh/sshd_config
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        fi
 
         # 3. [CentOS 专属] SELinux 放行
         if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce)" == "Enforcing" ]]; then
@@ -3775,7 +3870,7 @@ func_security() {
         fi
 
         # 4. 防失联核心：验证新配置语法
-        if ! sshd -t; then
+        if ! "$sshd_bin" -t; then
             echo -e "${RED}❌ 致命错误：SSH 配置存在语法异常！正在全盘恢复...${PLAIN}"
             mv "$backup_file" /etc/ssh/sshd_config
             read -n 1 -s -r -p "按任意键返回..."
@@ -3788,7 +3883,9 @@ func_security() {
             firewall-cmd --permanent --add-port="$final_p"/tcp >/dev/null 2>&1
             firewall-cmd --reload >/dev/null 2>&1
         fi
-        iptables -I INPUT -p tcp --dport "$final_p" -j ACCEPT 2>/dev/null
+        if command -v iptables >/dev/null 2>&1; then
+            iptables -I INPUT -p tcp --dport "$final_p" -j ACCEPT 2>/dev/null || true
+        fi
         
         # 6. Ubuntu 的 Socket 端口接管 (防宕机冲突)
         local use_socket=false
@@ -3814,8 +3911,8 @@ EOF
         fi
         
         if $restart_ok; then
-            rm -f "$backup_file" 
             echo -e "${GREEN}✅ SSH 端口已成功更改为 $final_p 并自动放行！${PLAIN}"
+            echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
         else
             echo -e "${RED}❌ 致命错误：重启 SSH 服务失败！正在回滚至原端口...${PLAIN}"
             mv "$backup_file" /etc/ssh/sshd_config
@@ -6053,9 +6150,13 @@ func_reboot_server() {
 func_update_script() {
     clear
     local tmp_file
-    tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh)
+    tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh) || {
+        echo -e "${RED}❌ 临时文件创建失败，更新已取消。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return 1
+    }
     echo -e "${CYAN}👉 正在从 GitHub 源地址拉取最新版本...${PLAIN}"
-    if curl -fsSL --connect-timeout 10 --max-time 90 "$UPDATE_URL" -o "$tmp_file" && bash -n "$tmp_file" && grep -q "VPS 全能控制面板" "$tmp_file" 2>/dev/null; then
+    if download_remote_script "$UPDATE_URL" "$tmp_file" && bash -n "$tmp_file" && grep -q "VPS 全能控制面板" "$tmp_file" 2>/dev/null; then
         mv "$tmp_file" /usr/local/bin/cy
         chmod +x /usr/local/bin/cy
         echo -e "${GREEN}✅ 更新下载并覆盖完成！正在重启面板...${PLAIN}"
@@ -6343,7 +6444,7 @@ func_backup_center() {
         echo -e "${GREEN}  1. 创建全量配置备份${PLAIN}       ${YELLOW}(系统/面板/Caddy/脚本配置)${PLAIN}"
         echo -e "${GREEN}  2. 查看现有备份列表${PLAIN}"
         echo -e "${GREEN}  3. 从备份一键回滚${PLAIN}"
-        echo -e "${GREEN}  4. 清理旧备份${PLAIN}             ${YELLOW}(仅保留最近 5 份)${PLAIN}"
+        echo -e "${GREEN}  4. 隔离旧备份${PLAIN}             ${YELLOW}(仅保留最近 5 份，旧文件移入隔离区)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -6431,12 +6532,11 @@ func_backup_center() {
                 fi
 
                 local target_file="${backups[$((r_choice-1))]}"
-                read_trimmed yn "❓ 确认从 [$(basename "$target_file")] 回滚系统配置吗？(y/n): "
-                if [[ ! "$yn" =~ ^[Yy]$ ]]; then
+                confirm_danger "从备份回滚系统配置" "会覆盖 SSH、Caddy、Docker、Fail2ban、sysctl 等已纳入备份的当前配置。" "回滚后脚本会尝试重启相关服务；请保持当前 SSH 会话并准备好云厂商救援控制台。" || {
                     echo -e "${BLUE}已取消回滚操作。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
-                fi
+                }
 
                 local restore_dir="/tmp/vps_restore_$(date +%s)"
                 mkdir -p "$restore_dir"
@@ -6460,13 +6560,28 @@ func_backup_center() {
                     sysctl --system >/dev/null 2>&1
                 fi
 
-                systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
-                systemctl restart caddy >/dev/null 2>&1
-                systemctl restart docker >/dev/null 2>&1
-                systemctl restart fail2ban >/dev/null 2>&1
+                local restart_failed=0
+                local restart_rc=0
+                restart_service_if_available sshd
+                restart_rc=$?
+                if [[ "$restart_rc" -eq 2 ]]; then
+                    restart_service_if_available ssh
+                    restart_rc=$?
+                fi
+                [[ "$restart_rc" -eq 1 ]] && restart_failed=1
+
+                for svc in caddy docker fail2ban; do
+                    restart_service_if_available "$svc"
+                    restart_rc=$?
+                    [[ "$restart_rc" -eq 1 ]] && restart_failed=1
+                done
 
                 quarantine_path "$restore_dir" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
-                echo -e "${GREEN}✅ 回滚完成！建议立即验证 SSH、反代和容器服务状态。${PLAIN}"
+                if [[ "$restart_failed" -eq 0 ]]; then
+                    echo -e "${GREEN}✅ 回滚完成！建议立即验证 SSH、反代和容器服务状态。${PLAIN}"
+                else
+                    echo -e "${YELLOW}⚠️ 回滚文件已写入，但至少一个服务重启失败，请立即查看 systemctl status。${PLAIN}"
+                fi
                 ;;
 
             4)
@@ -6474,12 +6589,17 @@ func_backup_center() {
                 if [[ ${#backups[@]} -le 5 ]]; then
                     echo -e "${BLUE}当前备份数量不超过 5 份，无需清理。${PLAIN}"
                 else
+                    confirm_danger "隔离旧备份" "会把第 6 份及更早的备份移入隔离目录，不会直接删除。" "如需恢复，可到 /etc/vps-optimize/quarantine/manual-backups 手动查看。保留最近 5 份不动。" || {
+                        echo -e "${BLUE}已取消旧备份隔离。${PLAIN}"
+                        read -n 1 -s -r -p "按任意键继续..."
+                        continue
+                    }
                     for i in "${!backups[@]}"; do
                         if [[ "$i" -ge 5 ]]; then
-                            rm -f "${backups[$i]}"
+                            quarantine_path "${backups[$i]}" "/etc/vps-optimize/quarantine/manual-backups" >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ 隔离失败: ${backups[$i]}${PLAIN}"
                         fi
                     done
-                    echo -e "${GREEN}✅ 清理完成，仅保留最近 5 份备份。${PLAIN}"
+                    echo -e "${GREEN}✅ 旧备份隔离完成，最近 5 份备份已保留。${PLAIN}"
                 fi
                 ;;
 

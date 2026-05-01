@@ -250,6 +250,7 @@ check_root() {
 
 init_config() {
     mkdir -p "$CONFIG_DIR" "$(dirname "$LOG_FILE")"
+    chmod 700 "$CONFIG_DIR" 2>/dev/null || true
     download_notification_modules >/dev/null 2>&1 || true
 
     if [ ! -f "$CONFIG_FILE" ]; then
@@ -290,6 +291,7 @@ init_config() {
 }
 EOF
     fi
+    chmod 600 "$CONFIG_FILE" 2>/dev/null || true
     ensure_global_defaults
     ensure_daily_usage_files
     init_nftables
@@ -307,10 +309,10 @@ EOF
 init_nftables() {
     local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
-    nft add table $family $table_name 2>/dev/null || true
-    nft add chain $family $table_name input { type filter hook input priority 0\; } 2>/dev/null || true
-    nft add chain $family $table_name output { type filter hook output priority 0\; } 2>/dev/null || true
-    nft add chain $family $table_name forward { type filter hook forward priority 0\; } 2>/dev/null || true
+    nft add table "$family" "$table_name" 2>/dev/null || true
+    nft add chain "$family" "$table_name" input { type filter hook input priority 0\; } 2>/dev/null || true
+    nft add chain "$family" "$table_name" output { type filter hook output priority 0\; } 2>/dev/null || true
+    nft add chain "$family" "$table_name" forward { type filter hook forward priority 0\; } 2>/dev/null || true
 }
 
 get_network_interfaces() {
@@ -352,10 +354,38 @@ get_beijing_time() { TZ='Asia/Shanghai' date "$@"; }
 # 优化1：增加文件锁，防止高并发导致配置脏读/损坏
 update_config() {
     local jq_expression="$1"
+    local temp_file
     (
         flock -w 5 9 || { echo -e "${RED}配置文件正忙，稍后重试${NC}"; return 1; }
-        jq "$jq_expression" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
-        mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+        temp_file=$(mktemp "${CONFIG_DIR}/config.XXXXXX.tmp") || return 1
+        if jq "$jq_expression" "$CONFIG_FILE" > "$temp_file"; then
+            mv "$temp_file" "$CONFIG_FILE"
+            chmod 600 "$CONFIG_FILE" 2>/dev/null || true
+        else
+            rm -f "$temp_file"
+            echo -e "${RED}配置更新失败，已保留原配置。${NC}"
+            return 1
+        fi
+    ) 9> "${CONFIG_DIR}/.config.lock"
+}
+
+update_telegram_config() {
+    local bot_token="$1"
+    local chat_id="$2"
+    local temp_file
+    (
+        flock -w 5 9 || { echo -e "${RED}配置文件正忙，稍后重试${NC}"; return 1; }
+        temp_file=$(mktemp "${CONFIG_DIR}/config.XXXXXX.tmp") || return 1
+        if jq --arg bot_token "$bot_token" --arg chat_id "$chat_id" \
+            '.notifications.telegram.bot_token = $bot_token | .notifications.telegram.chat_id = $chat_id | .notifications.telegram.enabled = true' \
+            "$CONFIG_FILE" > "$temp_file"; then
+            mv "$temp_file" "$CONFIG_FILE"
+            chmod 600 "$CONFIG_FILE" 2>/dev/null || true
+        else
+            rm -f "$temp_file"
+            echo -e "${RED}Telegram 配置写入失败，已保留原配置。${NC}"
+            return 1
+        fi
     ) 9> "${CONFIG_DIR}/.config.lock"
 }
 
@@ -1957,15 +1987,20 @@ import_config() {
 }
 
 download_with_sources() {
-    local url=$1
-    local output_file=$2
+    local url="$1"
+    local output_file="$2"
 
-    if curl -sL --connect-timeout 5 --max-time 7 "$url" -o "$output_file" 2>/dev/null; then
+    if ! command -v curl >/dev/null 2>&1; then
+        echo -e "${RED}错误：缺少 curl，无法下载远程脚本。${NC}"
+        return 1
+    fi
+
+    if curl -fsSL --connect-timeout 5 --max-time 30 --retry 2 --retry-delay 1 --retry-connrefused "$url" -o "$output_file" 2>/dev/null; then
         if [ -s "$output_file" ]; then
             return 0
         fi
     fi
-    return 1 
+    return 1
 }
 
 install_update_script() {
@@ -1973,7 +2008,13 @@ install_update_script() {
     echo "────────────────────────────────────────────────────────"
     echo -e "${YELLOW}正在从远程仓库获取最新版本...${NC}"
 
-    local temp_file=$(mktemp /tmp/port-traffic-dog-update.XXXXXX.sh)
+    local temp_file
+    temp_file=$(mktemp /tmp/port-traffic-dog-update.XXXXXX.sh) || {
+        echo -e "${RED}错误：临时文件创建失败，更新已取消。${NC}"
+        read -r -p "按回车键返回菜单..."
+        show_main_menu
+        return
+    }
     
     if download_with_sources "$SCRIPT_URL" "$temp_file"; then
         if [ -s "$temp_file" ] && grep -q "端口流量狗" "$temp_file" 2>/dev/null && bash -n "$temp_file" >/dev/null 2>&1; then
@@ -2026,14 +2067,16 @@ uninstall_script() {
             remove_port_auto_reset_cron "$port" 2>/dev/null || true
         done
 
-        local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE" 2>/dev/null || echo "port_traffic_monitor")
-        local family=$(jq -r '.nftables.family' "$CONFIG_FILE" 2>/dev/null || echo "inet")
-        nft delete table $family $table_name >/dev/null 2>&1 || true
+        local table_name
+        local family
+        table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE" 2>/dev/null || echo "port_traffic_monitor")
+        family=$(jq -r '.nftables.family' "$CONFIG_FILE" 2>/dev/null || echo "inet")
+        nft delete table "$family" "$table_name" >/dev/null 2>&1 || true
 
         systemctl stop port-tg-bot 2>/dev/null || true
         systemctl disable port-tg-bot 2>/dev/null || true
         rm -f /etc/systemd/system/port-tg-bot.service 2>/dev/null
-        systemctl daemon-reload
+        systemctl daemon-reload >/dev/null 2>&1 || true
 
         remove_telegram_notification_cron 2>/dev/null || true
         remove_wecom_notification_cron 2>/dev/null || true
@@ -2069,9 +2112,19 @@ setup_interactive_tg() {
         return
     fi
 
-    update_config ".notifications.telegram.bot_token = \"$bot_token\" | .notifications.telegram.chat_id = \"$chat_id\" | .notifications.telegram.enabled = true"
+    if ! update_telegram_config "$bot_token" "$chat_id"; then
+        sleep 2
+        manage_notifications
+        return
+    fi
 
     echo -e "${YELLOW}正在部署 Systemd 守护进程...${NC}"
+    if ! command -v systemctl >/dev/null 2>&1; then
+        echo -e "${RED}未检测到 systemctl，无法部署后台机器人服务。${NC}"
+        sleep 2
+        manage_notifications
+        return
+    fi
     
     cat > /etc/systemd/system/port-tg-bot.service << EOF
 [Unit]
@@ -2089,9 +2142,14 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-    systemctl daemon-reload
+    systemctl daemon-reload >/dev/null 2>&1 || true
     systemctl enable port-tg-bot 2>/dev/null || true
-    systemctl restart port-tg-bot
+    if ! systemctl restart port-tg-bot; then
+        echo -e "${RED}TG 后台服务启动失败，请查看：systemctl status port-tg-bot --no-pager${NC}"
+        read -r -p "按回车键返回..."
+        manage_notifications
+        return
+    fi
 
     echo -e "${GREEN}✅ 部署成功！机器人已在后台常驻运行。${NC}"
     echo -e "💡 提示: 请确保在 @BotFather 关闭了机器人的 Group Privacy (Turn OFF)"

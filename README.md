@@ -258,13 +258,14 @@ dog
 
 高风险功能会要求输入 `YES`。不确定时先做 `16. 配置备份与回滚`。
 
-脚本现在对目录级清理采用“隔离/归档优先”的策略：旧证书缓存、Compose 部署目录、Fail2ban 配置、Port Traffic Dog 配置等会尽量移动到隔离目录，而不是直接递归删除。常见隔离目录包括：
+脚本现在对目录级清理采用“隔离/归档优先”的策略：旧证书缓存、Compose 部署目录、Fail2ban 配置、手动旧备份、Port Traffic Dog 配置等会尽量移动到隔离目录，而不是直接递归删除。常见隔离目录包括：
 
 ```text
 /root/vps-optimize-quarantine
 /root/.acme.sh/_quarantine
 /opt/.vps-optimize-quarantine
 /etc/vps-optimize/quarantine
+/etc/vps-optimize/quarantine/manual-backups
 /root/port-traffic-dog-quarantine
 ```
 

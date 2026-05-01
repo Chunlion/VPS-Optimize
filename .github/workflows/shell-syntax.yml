@@ -1,4 +1,4 @@
-name: Shell Syntax
+name: Shell Quality
 
 on:
   push:
@@ -8,13 +8,32 @@ on:
   workflow_dispatch:
 
 jobs:
-  bash-syntax:
+  shell-quality:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install shell tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck shfmt
+
       - name: Check Bash syntax
         run: |
           bash -n vps.sh
           bash -n dog.sh
+          bash -n xui-custom-manager.sh
+
+      - name: Run ShellCheck high-priority checks
+        run: |
+          shellcheck -S error vps.sh dog.sh xui-custom-manager.sh
+
+      - name: Check shell formatting (advisory)
+        continue-on-error: true
+        run: |
+          shfmt -d -i 4 -ci vps.sh dog.sh xui-custom-manager.sh
+
+      - name: Run smoke tests
+        run: |
+          bash tests/smoke.sh
