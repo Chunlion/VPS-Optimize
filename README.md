@@ -1,5 +1,12 @@
 # 🚀 VPS-Optimize
 
+![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&logoColor=white)
+![License](https://img.shields.io/github/license/Chunlion/VPS-Optimize)
+![Release](https://img.shields.io/github/v/release/Chunlion/VPS-Optimize?display_name=tag&sort=semver)
+![Stars](https://img.shields.io/github/stars/Chunlion/VPS-Optimize?style=social)
+
+一个 `cy` 命令，完成 VPS 初始化、安全加固、面板部署、443 单入口、订阅工具和故障排查。
+
 一个面向 VPS 日常运维的 Bash 控制面板，把新机器预检、系统初始化、安全加固、网络优化、面板部署、订阅工具、备份回滚和 `443` 单入口分流集中到一个 `cy` 命令里。
 
 它适合有一定 Linux/VPS 基础、希望少记命令但仍保留可控性的用户。第一次部署建议按 README 的推荐流程走；后续维护通常只需要进入 `cy` 面板选择对应入口。
@@ -20,8 +27,12 @@
 ## 📚 目录
 
 - [⚡ 快速开始](#quick-start)
+- [🧭 我该选哪个？](#choose-path)
+- [✅ 运行前检查清单](#pre-run-checklist)
+- [🖥️ 支持系统矩阵](#supported-systems)
 - [⚠️ 使用前必读](#before-you-start)
 - [🧭 推荐流程](#recommended-flow)
+- [📖 场景教程](#tutorials)
 - [🧰 功能地图](#features)
 - [⌨️ 快捷输入](#shortcuts)
 - [🧩 443 单入口分流](#single-443-entry)
@@ -51,6 +62,47 @@ cy
 
 ![VPS-Optimize 面板预览](https://i.mji.rip/2026/04/28/ed5bf23f4ebf88300819ff3520bac2df.png)
 
+查看脚本版本：进入 `cy` 主菜单顶部会显示 `VPS-Optimize <版本号>`；也可以运行：
+
+```bash
+grep '^SCRIPT_VERSION=' /usr/local/bin/cy 2>/dev/null || grep '^SCRIPT_VERSION=' vps.sh
+```
+
+<a id="choose-path"></a>
+## 🧭 我该选哪个？
+
+第一次使用先从这里选路径。旧用户仍可直接进入完整菜单，菜单编号尽量保持兼容。
+
+| 你的目标 | 推荐路径 |
+|---|---|
+| 新买 VPS，先安全初始化 | `cy -> 新手向导 -> 1`，或完整菜单 `cy -> 1 -> 2 -> 5 -> 6 -> 7 -> 8 -> 10 -> 16` |
+| 只想部署 3x-ui + REALITY | `cy -> 1 -> 4 -> 19` |
+| 已有面板，想接入 443 单入口 | 先看 [`docs/443-single-entry.md`](docs/443-single-entry.md)，再跑 `cy -> 19 -> 1` |
+| 面板打不开 / 订阅 404 / 证书失败 | `cy -> 19 -> 3`，再看 [`docs/443-single-entry-troubleshooting.md`](docs/443-single-entry-troubleshooting.md) |
+| 只想看流量统计 | 单独运行 `dog.sh` 或进入 `cy -> 4 -> 14` |
+
+<a id="pre-run-checklist"></a>
+## ✅ 运行前检查清单
+
+- [ ] 已创建 VPS 快照
+- [ ] 当前 SSH 会话保持不断开
+- [ ] 云厂商安全组已放行 SSH 端口
+- [ ] 域名 DNS 已解析到当前 VPS
+- [ ] 如使用 Cloudflare，相关域名为 DNS only / 灰云
+- [ ] 已准备 Cloudflare API Token
+- [ ] 已确认服务器系统版本在支持范围内
+
+<a id="supported-systems"></a>
+## 🖥️ 支持系统矩阵
+
+| 系统 | 支持状态 | 备注 |
+|---|---|---|
+| Debian 11/12 | 推荐 | 最稳 |
+| Ubuntu 20.04/22.04/24.04 | 推荐 | 最稳 |
+| Rocky/Alma/CentOS Stream | 可用 | 部分组件依赖源 |
+| Alpine | 不支持 | 不建议运行 |
+| OpenVZ 老系统 | 不建议 | 内核功能可能缺失 |
+
 <a id="before-you-start"></a>
 ## ⚠️ 使用前必读
 
@@ -79,6 +131,15 @@ cy
 | 部署面板、节点和订阅工具 | `1` 运维预检 → `3` 基础组件与反代分流 → `4` 面板、节点与订阅工具 → `19` 443 单入口管理中心 → `15` 健康总览 → `16` 备份 |
 | 后续维护 | `15` 健康总览 → `13` 端口排查 → `16` 备份/回滚 → `17` 更新脚本 → `19` 443 单入口维护 |
 | 新增网站或反代域名 | `19` 443 单入口管理中心 → `2` 管理网站/反代域名 |
+
+<a id="tutorials"></a>
+## 📖 场景教程
+
+| 场景 | 教程 |
+|---|---|
+| 新 VPS 先做初始化和安全加固 | [01-new-vps-hardening.md](tutorials/01-new-vps-hardening.md) |
+| 部署 3x-ui + REALITY 并接入 443 | [02-3x-ui-reality-443.md](tutorials/02-3x-ui-reality-443.md) |
+| 用 Caddy 接入订阅工具 | [03-subscription-tools-with-caddy.md](tutorials/03-subscription-tools-with-caddy.md) |
 
 <a id="features"></a>
 ## 🧰 功能地图
@@ -155,7 +216,12 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 
 如果机器上已经有普通 Caddy 反代，启用 443 单入口前请先备份并记录旧站点的域名、后端地址和端口。脚本会隔离可能抢占公网 `443` 的旧 Caddy 配置，但不会自动把旧反代规则迁移成新的 443 单入口站点；启用后需要通过 `19 -> 2` 手动补录旧网站。
 
-完整教程请看：[443 单入口分流详细教程](docs/443-single-entry.md)。
+第一次配置建议看完整教程；出错再看排错版。
+
+| 文档 | 适合情况 |
+|---|---|
+| [443 单入口排错手册](docs/443-single-entry-troubleshooting.md) | 面板打不开、订阅 404、证书失败、REALITY 连不上 |
+| [443 单入口分流详细教程](docs/443-single-entry.md) | 需要理解 Nginx stream、Caddy、REALITY 和 3x-ui 的关系 |
 
 <a id="node-tools"></a>
 ## 📡 订阅管理与节点工具
@@ -278,7 +344,7 @@ dog
 更新主脚本：
 
 ```text
-17. UPD 更新脚本
+17. 更新脚本  快捷词：u / update / upd
 ```
 
 手动更新：
@@ -333,7 +399,7 @@ systemctl status sshd --no-pager
 - 云安全组是否放行 `443`。
 - 面板域名 DNS 是否解析到当前服务器。
 
-详细排错请看：[443 单入口分流详细教程](docs/443-single-entry.md)。
+详细排错请看：[443 单入口排错手册](docs/443-single-entry-troubleshooting.md)。需要从头配置时先看：[443 单入口分流详细教程](docs/443-single-entry.md)。
 
 ### 🌐 浏览器访问内部端口报错
 

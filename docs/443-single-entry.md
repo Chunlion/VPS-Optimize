@@ -1,5 +1,7 @@
 # 443 单入口分流教程
 
+遇到面板打不开、订阅 404、证书失败或 REALITY 连接失败时，先看：[443 单入口排错手册](443-single-entry-troubleshooting.md)。
+
 这篇文档教你把 VPS 的公网 `443` 统一交给 Nginx stream，再按 SNI 分流到 Caddy、3x-ui 面板、订阅服务、网站反代和 REALITY 入站。
 
 推荐架构是：

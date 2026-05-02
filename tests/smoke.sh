@@ -14,7 +14,7 @@ if grep -En "$dangerous_patterns" vps.sh dog.sh; then
     exit 1
 fi
 
-source <(sed -n '1,91p' vps.sh)
+source <(sed -n '1,96p' vps.sh)
 [[ "$(trim_input "  q  ")" == "q" ]]
 [[ "$(normalize_domain_input " HTTPS://Panel.Example.COM:443/path ")" == "panel.example.com" ]]
 
@@ -30,6 +30,10 @@ declare -f update_telegram_config >/dev/null
 grep -q 'func_sni_stack_quick_menu' vps.sh
 grep -q 'func_health_dashboard' vps.sh
 grep -q 'func_backup_center' vps.sh
+grep -q 'SCRIPT_VERSION=' vps.sh
+grep -q 'confirm_risk_action' vps.sh
+grep -q 'func_beginner_menu' vps.sh
+grep -q 'generate_issue_diagnostics' vps.sh
 grep -q 'install_update_script' dog.sh
 
 echo "Smoke tests passed."

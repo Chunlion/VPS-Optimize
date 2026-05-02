@@ -15,6 +15,12 @@ CYAN='\033[1;36m'
 PLAIN='\033[0m'
 BOLD='\033[1m'
 
+SCRIPT_VERSION="v1.6-unreleased"
+
+print_breadcrumb() {
+    echo -e "${CYAN}VPS-Optimize > $*${PLAIN}"
+}
+
 trim_input() {
     local value="$*"
     value="${value//$'\r'/}"
@@ -276,6 +282,7 @@ func_firewall_manage() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "防火墙规则管理"
         echo -e "${BOLD}🛡️ 防火墙规则管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
@@ -301,7 +308,8 @@ func_firewall_manage() {
         echo -e "${GREEN}  4. 查看防火墙放行列表${PLAIN}"
         echo -e "${RED}  5. 关闭防火墙${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${BLUE}  0. 返回上一级菜单${PLAIN}"
+        echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
+        echo -e "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local fw_choice
@@ -418,6 +426,14 @@ func_firewall_manage() {
                 fi
                 
                 if is_valid_port_rule_input "$del_p"; then
+                    confirm_risk_action "删除防火墙放行规则 ${del_p}" \
+                        "系统防火墙端口放行规则" \
+                        "重新进入防火墙菜单手动放行端口，或通过云厂商控制台/VNC 修复" \
+                        "确认不会删除当前 SSH 端口或业务必需端口。" || {
+                        echo -e "${BLUE}已取消删除端口规则。${PLAIN}"
+                        sleep 1
+                        continue
+                    }
                     if [[ "$OS" =~ debian|ubuntu ]]; then
                         install_pkg ufw
                         if ! command -v ufw >/dev/null 2>&1; then
@@ -469,6 +485,14 @@ func_firewall_manage() {
                 read -n 1 -s -r -p "按任意键继续..."
                 ;;
             5)
+                confirm_risk_action "关闭系统防火墙" \
+                    "ufw/firewalld 服务状态和系统侧访问控制" \
+                    "重新启用防火墙并恢复放行规则；必要时从云厂商安全组限制暴露面" \
+                    "确认关闭后不会暴露数据库、面板或内部服务。" || {
+                    echo -e "${BLUE}已取消关闭防火墙。${PLAIN}"
+                    sleep 1
+                    continue
+                }
                 echo -e "${RED}⚠️ 正在关闭防火墙...${PLAIN}"
                 if [[ "$OS" =~ debian|ubuntu ]]; then
                     ufw disable >/dev/null 2>&1
@@ -478,7 +502,8 @@ func_firewall_manage() {
                 echo -e "${GREEN}✅ 防火墙已彻底禁用！${PLAIN}"
                 sleep 2
                 ;;
-            0) break ;;
+            "?"|help) echo "防火墙菜单用于放行、删除、查看或关闭系统防火墙规则。删除规则和关闭防火墙都必须输入 YES。"; pause_return ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -1068,6 +1093,7 @@ func_env_install() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "基础组件与反代分流中心"
         echo -e "${BOLD}📦 基础组件与反代分流中心${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：安装基础组件、常用服务、普通 Caddy 反代，以及进入 443 单入口相关向导。${PLAIN}"
@@ -1092,7 +1118,8 @@ func_env_install() {
         echo -e "${GREEN} 19. 443 证书与维护中心${PLAIN}        ${YELLOW}(体检/重签/修复/回滚/订阅提示)${PLAIN}"
         echo -e "${GREEN} 20. 管理 443 网站/反代${PLAIN}        ${YELLOW}(后续新增/删除网站，不重跑完整向导)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local env_choice
@@ -1195,7 +1222,8 @@ EOF
             18) func_caddy_cf_reality_wizard ;;
             19) func_caddy_cf_maintenance_menu ;;
             20) manage_sni_stack_sites ;;
-            0) break ;;
+            "?"|help) echo "基础组件菜单用于安装 Docker、Caddy、WARP、普通反代，并提供 443 单入口向导入口。"; pause_return ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
         esac
         echo ""
@@ -1513,10 +1541,10 @@ warn_if_public_bind() {
     local listen_port="$3"
     local confirm
     if [[ "$listen_addr" == "0.0.0.0" || "$listen_addr" == "::" ]]; then
-        echo -e "${RED}⚠️  高风险：${service_name} 将监听公网 ${listen_addr}:${listen_port}${PLAIN}"
-        echo -e "${RED}这会破坏默认的本地监听安全模型，可能导致端口直接暴露。${PLAIN}"
-        read_trimmed confirm "如确认继续，请输入 yes（大小写均可）: "
-        is_yes "$confirm" || return 1
+        confirm_risk_action "${service_name} 监听公网 ${listen_addr}:${listen_port}" \
+            "${service_name} 监听地址将从本地模型改为公网可访问" \
+            "改回 127.0.0.1 后重新应用配置并重启相关服务" \
+            "仅在你明确需要公网直连该服务时继续。" || return 1
     fi
     return 0
 }
@@ -1525,12 +1553,35 @@ confirm_danger() {
     local title="$1"
     local impact="$2"
     local rollback="$3"
+    local advice="${4:-}"
     local confirm
     echo -e "${RED}⚠️ 高风险操作：${title}${PLAIN}"
-    echo -e "${YELLOW}影响：${impact}${PLAIN}"
-    echo -e "${BLUE}回退：${rollback}${PLAIN}"
-    read_trimmed confirm "确认继续请输入 yes（大小写均可）: "
-    is_yes "$confirm"
+    echo ""
+    echo -e "${YELLOW}即将修改：${PLAIN}"
+    echo -e "- ${impact}"
+    echo ""
+    echo -e "${YELLOW}可能风险：${PLAIN}"
+    echo "- 操作失败可能导致 SSH、面板、反代、证书、容器或网络服务短暂不可用。"
+    echo "- 如果云厂商安全组、防火墙、监听地址或证书配置不匹配，可能导致远程访问中断。"
+    echo ""
+    echo -e "${BLUE}回滚方式：${PLAIN}"
+    echo -e "- ${rollback}"
+    echo "- 使用当前未断开的 SSH 会话恢复配置。"
+    echo "- 使用云厂商控制台、VNC 或救援模式恢复。"
+    echo "- 使用备份与回滚入口恢复已纳入备份的配置。"
+    echo ""
+    echo -e "${CYAN}建议：${PLAIN}"
+    echo "- 已创建 VPS 快照。"
+    echo "- 已确认云厂商安全组和系统防火墙规则。"
+    echo "- 当前 SSH 会话不要断开。"
+    [[ -n "$advice" ]] && echo -e "- ${advice}"
+    echo ""
+    read_trimmed confirm "继续请输入 YES，直接回车取消: "
+    [[ "$confirm" == "YES" ]]
+}
+
+confirm_risk_action() {
+    confirm_danger "$@"
 }
 
 format_hostport() {
@@ -1648,9 +1699,10 @@ print_sni_stack_preview() {
     echo -e "默认/未知 SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
     echo -e ""
     echo -e "${YELLOW}确认后会备份现有配置，并隔离旧的 /etc/nginx/stream.d/vps_sni_*.conf。${PLAIN}"
-    local confirm
-    read_trimmed confirm "确认写入并重启 Nginx/Caddy？输入 yes 继续（大小写均可）: "
-    is_yes "$confirm"
+    confirm_risk_action "写入 Nginx/Caddy 443 单入口配置" \
+        "Nginx stream、Caddy 配置和 443 分流规则" \
+        "使用本次自动备份目录恢复，或进入 443 维护菜单回滚" \
+        "确认公网 443 没有其他服务需要直接占用。"
 }
 
 caddy_format_configs() {
@@ -1858,8 +1910,8 @@ save_and_offer_reapply_sni_stack() {
     save_sni_stack_env
     echo -e "${GREEN}✅ 已保存新的 443 单入口运行参数。${PLAIN}"
     echo -e "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的端口或路径。${PLAIN}"
-    read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？(Y/n): "
-    if [[ -z "$yn" || "$yn" =~ ^[Yy]$ ]]; then
+    read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？输入 YES 继续，直接回车取消: "
+    if [[ "$yn" == "YES" ]]; then
         reapply_sni_stack_from_env --yes
     else
         echo -e "${YELLOW}稍后可执行 [19] -> [4] 重新应用上次配置。${PLAIN}"
@@ -1994,8 +2046,10 @@ edit_sni_stack_panel_domain_profile() {
         [[ "$new_domain" == "$existing" ]] && { echo -e "${RED}❌ 面板域名不能和网站/反代域名相同。${PLAIN}"; return 1; }
     done
     check_domain_dns_sanity "$new_domain" "新的面板域名" "prompt" || return 1
-    read_trimmed confirm "确认为 ${new_domain} 签发证书并替换面板域名？输入 yes 继续（大小写均可）: "
-    is_yes "$confirm" || return 1
+    confirm_risk_action "替换 443 面板域名为 ${new_domain}" \
+        "面板域名、证书和 Caddy/Nginx 相关配置" \
+        "使用 443 单入口备份恢复旧域名配置" \
+        "确认新域名 DNS 已解析到当前 VPS，且 Token 有该 zone 权限。" || return 1
 
     issue_and_install_cert_for_domain "$new_domain" "$CF_Token" || return 1
     old_conf="/etc/caddy/conf.d/${old_domain}.caddy"
@@ -2078,9 +2132,10 @@ rollback_sni_stack_config() {
         return 1
     fi
     echo -e "${YELLOW}即将回滚到备份：${backup_dir}${PLAIN}"
-    local confirm
-    read_trimmed confirm "这会覆盖当前 Nginx/Caddy 的相关配置，输入 yes 继续（大小写均可）: "
-    is_yes "$confirm" || return 1
+    confirm_risk_action "回滚覆盖 Nginx/Caddy 443 配置" \
+        "当前 Nginx/Caddy/443 单入口相关配置" \
+        "如回滚后仍异常，请用云厂商控制台或手动恢复备份目录" \
+        "回滚会覆盖当前配置，请确认已选中正确备份。" || return 1
 
     restore_sni_stack_backup_files "$backup_dir" || { echo -e "${RED}❌ 回滚文件恢复失败。${PLAIN}"; return 1; }
 
@@ -2771,8 +2826,10 @@ add_sni_stack_site() {
 
     echo -e ""
     echo -e "${CYAN}即将添加：${site_domain} -> ${site_addr}:${site_port}${PLAIN}"
-    read_trimmed confirm "确认申请证书并更新 Nginx/Caddy？输入 yes 继续（大小写均可）: "
-    is_yes "$confirm" || return 1
+    confirm_risk_action "新增 443 网站/反代域名 ${site_domain}" \
+        "证书、Caddy 站点配置和 Nginx SNI 分流配置" \
+        "使用 443 单入口备份恢复，或从网站管理菜单删除该域名" \
+        "确认域名已解析到当前 VPS，后端端口可从本机访问。" || return 1
 
     idx=${#SITE_DOMAINS[@]}
     SITE_DOMAINS[$idx]="$site_domain"
@@ -2825,8 +2882,10 @@ edit_sni_stack_site_backend() {
 
     echo -e ""
     echo -e "${CYAN}即将修改：${domain} -> ${new_addr}:${new_port}${PLAIN}"
-    read_trimmed confirm "确认更新 Caddy/Nginx 配置？输入 yes 继续（大小写均可）: "
-    is_yes "$confirm" || return 1
+    confirm_risk_action "修改 443 网站/反代后端" \
+        "Caddy 反代后端和 Nginx SNI 分流配置" \
+        "使用 443 单入口备份恢复修改前配置" \
+        "确认新后端地址和端口已经在本机监听。" || return 1
 
     SITE_BACKEND_ADDRS[$idx]="$new_addr"
     SITE_BACKEND_PORTS[$idx]="$new_port"
@@ -2865,8 +2924,10 @@ remove_sni_stack_site() {
 
     idx=$((choice - 1))
     domain="${SITE_DOMAINS[$idx]}"
-    read_trimmed confirm "确认从 443 分流中删除 ${domain}？输入 yes 继续（大小写均可）: "
-    is_yes "$confirm" || return 1
+    confirm_risk_action "从 443 分流中移除 ${domain}" \
+        "该域名的 Caddy 站点和 Nginx SNI 分流规则" \
+        "使用 443 单入口备份恢复，或重新新增该网站/反代域名" \
+        "确认该域名不再承载线上面板、订阅或网站。" || return 1
 
     new_domains=()
     new_addrs=()
@@ -2895,6 +2956,74 @@ remove_sni_stack_site() {
     else
         echo -e "${GREEN}✅ 已删除 ${domain} 的分流配置，证书文件已保留。${PLAIN}"
     fi
+}
+
+show_main_help() {
+    echo -e "${CYAN}VPS-Optimize > 主菜单 > 帮助${PLAIN}"
+    echo "1/2 适合新机器先体检和初始化。"
+    echo "4   管理 3x-ui、S-UI、Sing-box、Xray 和订阅工具。"
+    echo "8   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
+    echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
+    echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
+    echo "16  备份与回滚，高风险操作前建议先跑。"
+    echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
+    echo "? 查看帮助，0/q 退出。"
+}
+
+show_beginner_help() {
+    echo -e "${CYAN}VPS-Optimize > 新手向导 > 帮助${PLAIN}"
+    echo "1 新机器初始化：按安全顺序引导预检、初始化、SSH、公钥、Fail2ban、防火墙、备份。"
+    echo "2 安装面板/节点：进入面板、节点与订阅工具菜单。"
+    echo "3 配置 443 单入口：进入 443 管理中心，适合面板、订阅和 REALITY 共用 443。"
+    echo "4 健康检查：查看服务、端口、证书，并可生成反馈诊断信息。"
+    echo "5 备份/回滚：创建备份或从已有备份恢复。"
+    echo "? 查看帮助，0/q 返回主菜单。"
+}
+
+show_panel_help() {
+    echo -e "${CYAN}VPS-Optimize > 面板、节点与订阅工具 > 帮助${PLAIN}"
+    echo "1 管理 3x-ui / x-ui，适合安装、进入官方菜单、修复面板。"
+    echo "3/4 分别管理 Sing-box 和 Xray。"
+    echo "5/6/7 管理订阅工具，部署后建议用 Caddy 或 443 单入口对外访问。"
+    echo "11 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
+    echo "14 端口流量监控，单独管理 Port Traffic Dog。"
+    echo "? 查看帮助，0/q 返回主菜单。"
+}
+
+show_sni_help() {
+    echo -e "${CYAN}VPS-Optimize > 443 单入口管理中心 > 帮助${PLAIN}"
+    echo "1 首次配置：会接管公网 443，必须先做快照并确认 DNS/Token。"
+    echo "2 管理网站/反代域名：后续新增或删除网站，不需要重跑首次配置。"
+    echo "3 链路体检：排查 Nginx、Caddy、REALITY、面板和证书。"
+    echo "4 重新应用：读取已保存参数并重写 Nginx/Caddy 配置。"
+    echo "6 证书维护：处理 Cloudflare Token、重签和证书缓存问题。"
+    echo "7 修改参数：调整面板、订阅、REALITY 和入口监听。"
+    echo "? 查看帮助，0/q 返回主菜单。"
+}
+
+show_backup_help() {
+    echo -e "${CYAN}VPS-Optimize > 备份与回滚 > 帮助${PLAIN}"
+    echo "1 创建备份：高风险操作前先用。"
+    echo "2 查看备份：确认可用备份和时间。"
+    echo "3 回滚：会覆盖当前配置，必须输入 YES。"
+    echo "4 隔离旧备份：只移动到隔离目录，不直接删除。"
+    echo "? 查看帮助，0/q 返回主菜单。"
+}
+
+show_net_kernel_help() {
+    echo -e "${CYAN}VPS-Optimize > 网络/内核优化 > 帮助${PLAIN}"
+    echo "1 BBR / 拥塞控制：调用外部调优脚本，执行前建议备份。"
+    echo "2 TCP 参数：修改 sysctl，适合有明确参数需求的用户。"
+    echo "3 ZRAM / Swap：适合小内存 VPS。"
+    echo "4 安装/切换内核：高风险，必须确认快照和救援控制台可用。"
+    echo "5 清理旧内核：不要删除当前内核和云厂商定制内核。"
+    echo "? 查看帮助，0/q 返回主菜单。"
+}
+
+show_health_help() {
+    echo -e "${CYAN}VPS-Optimize > 诊断/健康检查 > 帮助${PLAIN}"
+    echo "健康总览会检查关键服务、监听端口和证书摘要。"
+    echo "生成反馈诊断信息用于提交 GitHub Issue，会尽量避免输出 Token、私钥和敏感密钥。"
 }
 
 manage_sni_stack_sites() {
@@ -3432,6 +3561,14 @@ func_caddy_cf_maintenance_menu() {
 
                 # shellcheck disable=SC1090
                 source "$cf_env_file"
+                confirm_risk_action "重签并安装 ${domain} 的证书" \
+                    "acme.sh 证书缓存、/etc/caddy/certs 和 /root/cert 软链接" \
+                    "使用现有 Caddy/证书备份恢复，或重新运行证书维护菜单签发" \
+                    "确认域名 DNS 已解析，Cloudflare Token 权限正确。" || {
+                    echo -e "${BLUE}已取消证书重签。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                }
                 echo -e "${CYAN}▶ 正在重签证书: ${domain}${PLAIN}"
 
                 if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
@@ -3512,8 +3649,10 @@ func_caddy_cf_maintenance_menu() {
                     continue
                 fi
 
-                read_trimmed yn "❓ 确认隔离 ${domain} 的配置与证书？(y/n): "
-                if ! is_yes "$yn"; then
+                if ! confirm_risk_action "隔离 ${domain} 的配置与证书" \
+                    "Caddy 配置、证书文件和可选 acme.sh 历史记录" \
+                    "从隔离目录手动移回，或重新签发证书并恢复 Caddy 配置" \
+                    "确认该域名不再承载线上服务，或已经准备好重新签发。"; then
                     echo -e "${BLUE}已取消隔离。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
@@ -4172,6 +4311,7 @@ func_docker_manage() {
         docker_ver=$(docker -v | awk '{print $3}' | tr -d ',')
         
         echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "Docker 安全管理"
         echo -e "${BOLD}🐳 Docker 安全管理 (版本: ${GREEN}${docker_ver}${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${GREEN}  1. 开启 Docker 本地防穿透${PLAIN} ${YELLOW}(限制映射端口仅 127.0.0.1 访问)${PLAIN}"
@@ -4183,6 +4323,10 @@ func_docker_manage() {
         read_trimmed c "👉 请选择操作: "
         case $c in
             1) 
+                confirm_risk_action "开启 Docker 本地防穿透" \
+                    "Docker daemon.json 和 Docker 服务重启" \
+                    "使用自动备份的 daemon.json 恢复并重启 Docker" \
+                    "确认现有容器不依赖公网直连映射端口。" || { echo -e "${BLUE}已取消操作。${PLAIN}"; sleep 1; continue; }
                 echo -e "${CYAN}▶ 正在配置 Docker 安全策略...${PLAIN}"
                 mkdir -p /etc/docker
                 local conf_file="/etc/docker/daemon.json"
@@ -4241,6 +4385,10 @@ EOF
             2) 
                 local conf_file="/etc/docker/daemon.json"
                 if [[ -f "$conf_file" ]]; then
+                    confirm_risk_action "解除 Docker 本地防穿透" \
+                        "Docker daemon.json 和 Docker 服务重启" \
+                        "使用自动备份的 daemon.json 恢复并重启 Docker" \
+                        "解除后容器映射端口可能重新公网可达，请确认防火墙和云安全组。" || { echo -e "${BLUE}已取消操作。${PLAIN}"; sleep 1; continue; }
                     echo -e "${CYAN}▶ 正在安全移除 Docker 端口限制...${PLAIN}"
                     local backup_file="${conf_file}.bak_$(date +%s)"
                     local tmp_json
@@ -4715,8 +4863,10 @@ install_xanmod_kernel() {
     echo -e "${RED}⚠️  XanMod 是第三方性能内核，可能影响 DKMS/驱动/部分云厂商兼容性。${PLAIN}"
     echo -e "${YELLOW}检测到 CPU 兼容级别：${cpu_level}，将从对应 XanMod LTS 包开始尝试，并自动向下兜底。${PLAIN}"
     echo -e "${YELLOW}建议先确认有快照、救援控制台，且知道如何从 GRUB 切回旧内核。${PLAIN}"
-    read_trimmed confirm "确认安装 XanMod 内核请输入 yes（大小写均可）: "
-    is_yes "$confirm" || { echo -e "${BLUE}已取消 XanMod 安装。${PLAIN}"; return 1; }
+    confirm_risk_action "安装 XanMod 内核" \
+        "内核包、引导配置和 GRUB 菜单" \
+        "使用当前可启动内核或云厂商救援模式恢复" \
+        "建议先创建 VPS 快照，并确认不是 OpenVZ 老系统。" || { echo -e "${BLUE}已取消 XanMod 安装。${PLAIN}"; return 1; }
 
     echo -e "${CYAN}▶ 正在添加 XanMod 官方 APT 源并安装兼容内核...${PLAIN}"
     ensure_minimal_system_compat
@@ -5781,8 +5931,10 @@ manage_compose_project() {
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
             4)
-                read_trimmed yn "确认停止并移除 ${project_name} 容器？目录数据会保留。(y/n): "
-                if [[ "$yn" =~ ^[Yy]$ ]]; then
+                if confirm_risk_action "停止并移除 ${project_name} 容器" \
+                    "Docker Compose 容器运行状态" \
+                    "在 ${project_dir} 中重新执行 compose up -d，或回到管理菜单重建" \
+                    "目录数据会保留，但服务会立即中断。"; then
                     ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
                     (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down)
                     echo -e "${GREEN}✅ 已停止并移除容器，部署目录仍保留：${project_dir}${PLAIN}"
@@ -5794,8 +5946,10 @@ manage_compose_project() {
             5)
                 echo -e "${RED}⚠️  高风险：这会停止容器并把 ${project_dir} 移入隔离目录，配置、数据库或本地数据不再原地可用。${PLAIN}"
                 echo -e "${YELLOW}隔离后如需彻底清理，请确认无误后手动处理隔离目录。${PLAIN}"
-                read_trimmed yn "请输入 ARCHIVE 确认归档部署目录: "
-                if [[ "$yn" == "ARCHIVE" ]]; then
+                if confirm_risk_action "归档 ${project_name} 部署目录" \
+                    "Docker Compose 容器、部署目录、配置和本地数据位置" \
+                    "从 /opt/.vps-optimize-quarantine 手动移回原路径后重新启动" \
+                    "确认已经备份数据库和配置，且服务可以中断。"; then
                     if ! is_managed_compose_dir "$project_dir"; then
                         echo -e "${RED}❌ 安全检查未通过，拒绝归档非脚本托管目录：${project_dir}${PLAIN}"
                     else
@@ -5850,20 +6004,21 @@ func_service_action_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "面板、节点与订阅工具 > ${title}"
         echo -e "${BOLD}🧭 ${title}${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}${usage}${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. ${install_label}${PLAIN}"
         echo -e "${GREEN}  2. ${manage_label}${PLAIN}"
-        echo -e "${RED}  0. 返回上级菜单${PLAIN}"
+        echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         read_trimmed choice "👉 请选择操作: "
 
         case "$choice" in
             1) "$install_func" ;;
             2) "$manage_func" ;;
-            0) return ;;
+            0|q|Q) return ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -6005,8 +6160,10 @@ migrate_compose_project_to_dockge() {
     echo -e "${YELLOW}Compose：${CYAN}${source_compose}${PLAIN}"
     echo -e "${YELLOW}说明：会移动整个项目目录，保留相对挂载的数据目录。${PLAIN}"
     echo -e "${YELLOW}如果项目使用 Docker 命名卷，建议保持 stack 名称与原目录名一致。${PLAIN}"
-    read_trimmed yn "确认迁移这个项目吗？(y/n): "
-    [[ "$yn" =~ ^[Yy]$ ]] || { echo -e "${BLUE}已取消迁移 ${source_dir}。${PLAIN}"; return 0; }
+    confirm_risk_action "迁移 Compose 项目到 Dockge" \
+        "Compose 项目目录、容器停止/启动位置和 Dockge stack 路径" \
+        "把 ${target_dir} 手动移回 ${source_dir}，并用原 compose 文件重新启动" \
+        "确认项目没有绝对路径依赖，且已备份重要数据。" || { echo -e "${BLUE}已取消迁移 ${source_dir}。${PLAIN}"; return 0; }
 
     read_trimmed restart_confirm "是否先停止旧容器并在新目录重新启动？(Y/n): "
     if [[ "$restart_confirm" =~ ^[Nn]$ ]]; then
@@ -6577,6 +6734,7 @@ func_backup_center() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "备份与回滚"
         echo -e "${BOLD}🗂️ 配置备份与回滚中心${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "当前备份目录: ${YELLOW}${backup_root}${PLAIN}"
@@ -6586,7 +6744,8 @@ func_backup_center() {
         echo -e "${GREEN}  3. 从备份一键回滚${PLAIN}"
         echo -e "${GREEN}  4. 隔离旧备份${PLAIN}             ${YELLOW}(仅保留最近 5 份，旧文件移入隔离区)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local b_choice
@@ -6743,7 +6902,8 @@ func_backup_center() {
                 fi
                 ;;
 
-            0) break ;;
+            "?"|help) show_backup_help ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
 
@@ -6755,9 +6915,97 @@ func_backup_center() {
 # ---------------------------------------------------------
 # 22. 服务健康总览
 # ---------------------------------------------------------
+service_state_for_issue() {
+    local svc="$1"
+    if systemctl list-unit-files "${svc}.service" >/dev/null 2>&1 || systemctl status "$svc" >/dev/null 2>&1; then
+        if systemctl is-active --quiet "$svc"; then
+            echo "运行中"
+        else
+            echo "已安装/未运行"
+        fi
+    else
+        echo "未检测到"
+    fi
+}
+
+recent_journal_for_issue() {
+    local svc="$1"
+    if systemctl list-unit-files "${svc}.service" >/dev/null 2>&1 || systemctl status "$svc" >/dev/null 2>&1; then
+        journalctl -u "$svc" -n 8 --no-pager 2>/dev/null | sed -E 's/(token|Token|TOKEN|password|passwd|secret|key)=([^[:space:]]+)/\1=***REDACTED***/g'
+    else
+        echo "未检测到 ${svc} 服务"
+    fi
+}
+
+generate_issue_diagnostics() {
+    local os_desc kernel arch now script_path firewall_status latest_backups log_path
+    os_desc="未知"
+    if [[ -r /etc/os-release ]]; then
+        # shellcheck disable=SC1091
+        . /etc/os-release
+        os_desc="${PRETTY_NAME:-${ID:-unknown} ${VERSION_ID:-}}"
+    fi
+    kernel=$(uname -r 2>/dev/null || echo "未知")
+    arch=$(uname -m 2>/dev/null || echo "未知")
+    now=$(date -Is 2>/dev/null || date)
+    script_path=$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")
+
+    if command -v ufw >/dev/null 2>&1; then
+        firewall_status=$(ufw status 2>/dev/null | head -n 5 | tr '\n' '; ')
+    elif command -v firewall-cmd >/dev/null 2>&1; then
+        firewall_status=$(firewall-cmd --state 2>/dev/null || echo "firewalld 未运行")
+    else
+        firewall_status="未检测到 ufw/firewalld"
+    fi
+
+    latest_backups=$(find /etc/vps-optimize/backups -maxdepth 3 -type f -o -type d 2>/dev/null | sort -r | head -n 10)
+    [[ -z "$latest_backups" ]] && latest_backups="未检测到"
+
+    log_path=$(find /var/log /tmp /etc/vps-optimize -maxdepth 3 -type f \( -iname '*vps*optimize*.log' -o -iname '*cy*.log' \) 2>/dev/null | sort -r | head -n 5)
+    [[ -z "$log_path" ]] && log_path="未检测到"
+
+    echo ""
+    echo "===== VPS-Optimize 反馈诊断信息 ====="
+    echo "系统版本: ${os_desc}"
+    echo "内核版本: ${kernel}"
+    echo "CPU 架构: ${arch}"
+    echo "脚本版本: ${SCRIPT_VERSION}"
+    echo "脚本路径: ${script_path}"
+    echo "当前时间: ${now}"
+    echo ""
+    echo "关键服务状态:"
+    for svc in nginx caddy docker x-ui xray sing-box; do
+        echo "- ${svc}: $(service_state_for_issue "$svc")"
+    done
+    echo "- 3x-ui: $(service_state_for_issue "3x-ui")"
+    echo ""
+    echo "监听端口摘要:"
+    ss -tulnp 2>/dev/null | sed -E 's/users:\(\("[^"]+",pid=[0-9]+,fd=[0-9]+\)\)/users:(process-redacted)/g' | head -n 30 || echo "未检测到 ss 输出"
+    echo ""
+    echo "443 占用情况:"
+    ss -tulnp 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' || echo "未检测到 443 监听"
+    echo ""
+    echo "防火墙状态:"
+    echo "${firewall_status}"
+    echo ""
+    echo "最近 Nginx 错误日志摘要:"
+    recent_journal_for_issue nginx
+    echo ""
+    echo "最近 Caddy 错误日志摘要:"
+    recent_journal_for_issue caddy
+    echo ""
+    echo "最近脚本日志路径:"
+    echo "${log_path}"
+    echo ""
+    echo "最近备份列表:"
+    echo "${latest_backups}"
+    echo "===== 诊断信息结束，请提交前再次检查是否有敏感信息 ====="
+}
+
 func_health_dashboard() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "诊断/健康检查"
     echo -e "${BOLD}📈 服务健康总览${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
 
@@ -6857,7 +7105,14 @@ func_health_dashboard() {
 
     echo -e "------------------------------------------------"
     echo -e "${YELLOW}💡 若失败单元 > 0，可执行: systemctl --failed 查看详情。${PLAIN}"
-    read -n 1 -s -r -p "按任意键返回..."
+    echo -e "${CYAN}输入 d 生成反馈诊断信息，输入 ? 查看帮助，其他任意键返回。${PLAIN}"
+    local health_choice
+    read -n 1 -s -r health_choice
+    echo ""
+    case "$health_choice" in
+        d|D) generate_issue_diagnostics; pause_return ;;
+        "?") show_health_help; pause_return ;;
+    esac
 }
 
 # ---------------------------------------------------------
@@ -6867,6 +7122,7 @@ func_net_kernel_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "网络/内核优化"
         echo -e "${BOLD}🚀 网络性能与内核管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：调整网络栈、内存压缩和内核；涉及内核安装/清理前建议先做快照。${PLAIN}"
@@ -6877,18 +7133,20 @@ func_net_kernel_menu() {
         echo -e "${GREEN}  4. 安装/切换优化内核${PLAIN}   ${YELLOW}(Cloud/KVM 稳定推荐 / XanMod 高级可选)${PLAIN}"
         echo -e "${GREEN}  5. 清理旧内核${PLAIN}           ${YELLOW}(释放磁盘空间，谨慎操作)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local nk_choice
         read_trimmed nk_choice "👉 请选择操作: "
         case $nk_choice in
-            1) func_bbr_manage ;;
-            2) func_tcp_tune ;;
+            1) confirm_risk_action "BBR / 拥塞控制管理" "内核网络模块、拥塞控制和 TCP 参数" "从快照恢复，或重新进入本菜单切换回原配置" "外部调优脚本可能安装/切换内核，请确认救援控制台可用。" && func_bbr_manage ;;
+            2) confirm_risk_action "动态 TCP 参数调优" "sysctl TCP 参数和网络栈配置" "恢复 /etc/sysctl.d 中的备份配置，或手动回退参数" "确认参数来源可信，错误参数可能影响网络连接。" && func_tcp_tune ;;
             3) func_zram_swap ;;
-            4) func_install_kernel ;;
+            4) confirm_risk_action "安装/切换优化内核" "内核包、引导配置和 GRUB 菜单" "从云厂商控制台选择旧内核启动，或使用救援模式恢复" "确认已创建快照，且当前 VPS 不是 OpenVZ 老系统。" && func_install_kernel ;;
             5) func_clean_kernel ;;
-            0) break ;;
+            "?"|help) show_net_kernel_help; pause_return ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -6901,6 +7159,7 @@ func_panel_deploy_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "面板、节点与订阅工具"
         echo -e "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：管理 3x-ui、S-UI、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
@@ -6923,7 +7182,8 @@ func_panel_deploy_menu() {
         echo -e "${GREEN} 15. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
         echo -e "${GREEN} 16. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(面板缺失功能 / 流量重置 / 备份恢复)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local pd_choice
@@ -6945,7 +7205,8 @@ func_panel_deploy_menu() {
             14) func_port_dog ;;
             15) func_komari_menu ;;
             16) func_xui_custom_manager ;;
-            0) break ;;
+            "?"|help) show_panel_help; pause_return ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -6955,6 +7216,7 @@ func_sni_stack_quick_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "443 单入口管理中心"
         echo -e "${BOLD}🧩 443 单入口管理中心${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：公网只开放 443，由 Nginx 按 SNI 分流到 Caddy、REALITY、3x-ui 和本地网站。${PLAIN}"
@@ -6971,7 +7233,8 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}  6. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
         echo -e "${CYAN}  7. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local sni_choice
@@ -6984,7 +7247,8 @@ func_sni_stack_quick_menu() {
             5) check_sni_stack_subscription_hint ;;
             6) func_caddy_cf_maintenance_menu; continue ;;
             7) edit_sni_stack_runtime_profile; continue ;;
-            0) break ;;
+            "?"|help) show_sni_help; pause_return ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
         echo ""
@@ -7022,6 +7286,48 @@ normalize_main_choice() {
     esac
 }
 
+func_beginner_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "新手向导"
+        echo -e "${BOLD}VPS-Optimize ${SCRIPT_VERSION}${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}这是简化入口，只保留第一次部署最常用的路径；老用户可返回完整菜单。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 新机器初始化${PLAIN}       ${YELLOW}(预检 -> 初始化 -> SSH/公钥/Fail2ban/防火墙 -> 备份)${PLAIN}"
+        echo -e "${GREEN}  2. 安装面板/节点${PLAIN}     ${YELLOW}(进入面板、节点与订阅工具菜单)${PLAIN}"
+        echo -e "${GREEN}  3. 配置 443 单入口${PLAIN}   ${YELLOW}(面板/订阅/REALITY 共用公网 443)${PLAIN}"
+        echo -e "${GREEN}  4. 健康检查${PLAIN}          ${YELLOW}(服务状态、端口、证书、反馈诊断)${PLAIN}"
+        echo -e "${GREEN}  5. 备份/回滚${PLAIN}         ${YELLOW}(创建备份或恢复配置)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local beginner_choice
+        read_trimmed beginner_choice "👉 请选择操作: "
+        case "$beginner_choice" in
+            1)
+                func_preflight_check
+                func_base_init
+                func_security
+                func_add_ssh_key
+                func_fail2ban
+                func_firewall_manage
+                func_backup_center
+                ;;
+            2) func_panel_deploy_menu ;;
+            3) func_sni_stack_quick_menu ;;
+            4) func_health_dashboard ;;
+            5) func_backup_center ;;
+            "?"|help|h) show_beginner_help; echo ""; pause_return ;;
+            0|q|Q) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
 # ---------------------------------------------------------
 # 界面主循环 (新增 IP 防送中 & SublinkPro)
 # ---------------------------------------------------------
@@ -7030,11 +7336,16 @@ main_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e " ${BOLD}🚀 VPS 全能控制面板 (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
+        print_breadcrumb "主菜单"
+        echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${YELLOW}新机器建议先跑 [1] 预检；部署面板/节点优先看 [4]；443 相关都进 [19]。${PLAIN}"
         echo -e " ${YELLOW}快捷输入：443 直达单入口，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
-        echo -e " ${YELLOW}高风险操作会要求输入 yes（大小写均可）；不确定时先做 [16] 备份。${PLAIN}"
+        echo -e " ${YELLOW}高风险操作必须输入大写 YES；不确定时先做 [16] 备份。${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e " ${BOLD}${BLUE}▶ 模式入口${PLAIN}"
+        echo -e "  ${GREEN}n.${PLAIN} 新手向导              ${YELLOW}(只显示核心路径)${PLAIN}"
+        echo -e "  ${GREEN}?.${PLAIN} 当前菜单帮助          ${YELLOW}(解释关键入口)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         echo -e " ${BOLD}${BLUE}▶ ① 推荐流程：新机器先跑这里${PLAIN}"
@@ -7060,7 +7371,7 @@ main_menu() {
         echo -e " ${GREEN}14.${PLAIN} 系统硬件探针          ${YELLOW}(CPU/内存/磁盘/网络实时信息)${PLAIN}"
         echo -e " ${GREEN}15.${PLAIN} 服务健康总览          ${YELLOW}(服务状态/证书摘要/端口概览)${PLAIN}"
         echo -e " ${GREEN}16.${PLAIN} 配置备份与回滚        ${YELLOW}(备份/列表/恢复/清理)${PLAIN}"
-        echo -e " ${BOLD}${YELLOW}17.${PLAIN} UPD 更新脚本          ${CYAN}(同步 GitHub 最新代码)${PLAIN}"
+        echo -e " ${BOLD}${YELLOW}17.${PLAIN} 更新脚本              ${CYAN}(快捷词：u / update / upd)${PLAIN}"
         echo -e " ${RED}18.${PLAIN} 重启服务器"
         echo -e ""
         echo -e " ${BOLD}${BLUE}▶ ⑤ 高频直达${PLAIN}"
@@ -7074,6 +7385,8 @@ main_menu() {
         choice=$(normalize_main_choice "$choice")
         
         case $choice in
+            n|N|newbie|guide|新手|向导) func_beginner_menu ;;
+            "?"|help|帮助) show_main_help; echo ""; pause_return ;;
             1) func_preflight_check ;;
             2) func_base_init ;;
             3) func_env_install ;;
