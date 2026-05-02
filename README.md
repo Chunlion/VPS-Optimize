@@ -306,6 +306,8 @@ dog
 
 高风险功能会要求输入 `YES`。不确定时先做 `16. 配置备份与回滚`。
 
+手动备份会尽量覆盖 SSH、Nginx/Caddy、443 单入口、证书、Cloudflare Token、Docker、Fail2ban、sysctl 和 3x-ui 关键配置。备份文件保存在 root 权限目录下，但其中可能包含私钥、面板数据库和 API Token，不要公开分享。
+
 脚本现在对目录级清理采用“隔离/归档优先”的策略：旧证书缓存、Compose 部署目录、Fail2ban 配置、手动旧备份、Port Traffic Dog 配置等会尽量移动到隔离目录，而不是直接递归删除。常见隔离目录包括：
 
 ```text
@@ -320,6 +322,8 @@ dog
 /etc/vps-optimize/quarantine/docker
 /etc/vps-optimize/quarantine/sysctl
 /etc/vps-optimize/quarantine/manual-backups
+/etc/vps-optimize/quarantine/manual-restore
+/etc/vps-optimize/quarantine/manual-temp
 /root/port-traffic-dog-quarantine
 ```
 

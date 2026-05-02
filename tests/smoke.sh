@@ -14,7 +14,7 @@ if grep -En "$dangerous_patterns" vps.sh dog.sh; then
     exit 1
 fi
 
-source <(sed -n '1,96p' vps.sh)
+source <(sed -n '1,/^# --- 权限检查 ---/p' vps.sh | sed '$d')
 [[ "$(trim_input "  q  ")" == "q" ]]
 [[ "$(normalize_domain_input " HTTPS://Panel.Example.COM:443/path ")" == "panel.example.com" ]]
 
