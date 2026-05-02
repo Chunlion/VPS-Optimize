@@ -60,7 +60,7 @@ cy
 
 面板预览：
 
-![VPS-Optimize 面板预览](https://i.mji.rip/2026/04/28/ed5bf23f4ebf88300819ff3520bac2df.png)
+![VPS-Optimize 面板预览](https://i.mji.rip/2026/05/02/53aa776a44cef18d91eb29cd7d7883fb.png)
 
 查看脚本版本：进入 `cy` 主菜单顶部会显示 `VPS-Optimize <版本号>`；也可以运行：
 
