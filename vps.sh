@@ -5772,7 +5772,7 @@ func_komari() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}安装 Komari 探针监控面板 (Docker Compose)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}Komari 用于服务器探针监控。默认只监听本地地址，建议后续接入 [19] 443 单入口反代。${PLAIN}"
+    echo -e "${YELLOW}Komari 用于服务器探针监控。默认只监听本地地址；公网 HTTPS 可走普通 Caddy 反代，已启用 443 单入口时走 [19] -> [2]。${PLAIN}"
     echo -e "${YELLOW}如果探针客户端需要直连端口，可把监听地址改为 0.0.0.0，并确认云安全组已放行。${PLAIN}"
     echo -e "------------------------------------------------"
 
@@ -5880,7 +5880,7 @@ EOF
         else
             echo -e "${YELLOW}默认管理员账号请查看日志：${CYAN}$DOCKER_COMPOSE_CMD logs komari${PLAIN}"
         fi
-        echo -e "${YELLOW}如需公网 HTTPS 访问，建议回到主菜单使用 [19] -> [2] 添加反代域名。${PLAIN}"
+        echo -e "${YELLOW}如需公网 HTTPS 访问：未启用 443 单入口可用 [3] -> [13] 普通 Caddy 反代；已启用 443 单入口请用 [19] -> [2] 添加反代域名。${PLAIN}"
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
     fi
@@ -7324,7 +7324,7 @@ func_panel_deploy_menu() {
         echo -e "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：管理 3x-ui、S-UI、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
-        echo -e "${YELLOW}提示：面板或订阅工具对外访问，推荐后续接入 [19] 443 单入口。${PLAIN}"
+        echo -e "${YELLOW}提示：面板或订阅工具对外访问，可用普通 Caddy 反代；已启用 443 单入口时用 [19] 统一管理。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 管理 3x-ui 面板${PLAIN}       ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
         echo -e "${GREEN}  2. 管理 S-UI 面板${PLAIN}        ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
