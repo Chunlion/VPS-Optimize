@@ -63,25 +63,18 @@ cy
 
 ![VPS-Optimize 面板预览](https://i.mji.rip/2026/05/02/53aa776a44cef18d91eb29cd7d7883fb.png)
 
-查看脚本版本：进入 `cy` 主菜单顶部会显示 `VPS-Optimize <版本号>`；也可以运行：
-
-```bash
-grep '^SCRIPT_VERSION=' /usr/local/bin/cy 2>/dev/null || grep '^SCRIPT_VERSION=' vps.sh
-```
-
 <a id="docs"></a>
 ## 🗂️ 文档导航
 
-第一次使用建议先看 [INSTALL.md](INSTALL.md)。菜单编号和文案对应关系看 [docs/menu-map.md](docs/menu-map.md)。
+第一次使用建议先看 [INSTALL.md](INSTALL.md)。
 
 | 文档 | 适合情况 |
 |---|---|
 | [INSTALL.md](INSTALL.md) | 第一次安装，不知道该走哪条路线 |
-| [docs/menu-map.md](docs/menu-map.md) | 想确认菜单编号和真实文案 |
-| [docs/compatibility.md](docs/compatibility.md) | 不确定系统、虚拟化、IPv6、Docker 是否适合 |
 | [docs/existing-server-migration.md](docs/existing-server-migration.md) | 已有 3x-ui、Caddy/Nginx、网站或订阅工具，需要迁移 |
 | [docs/recovery-runbook.md](docs/recovery-runbook.md) | SSH 失联、防火墙误封、443 改坏、服务起不来 |
-| [docs/config-paths.md](docs/config-paths.md) | 查配置文件、证书、备份、隔离目录 |
+| [docs/compatibility.md](docs/compatibility.md) | 系统、虚拟化、IPv6、Docker 兼容性不确定 |
+| [docs/config-paths.md](docs/config-paths.md) | 真正排错时查配置、证书、备份路径 |
 
 <a id="choose-path"></a>
 ## 🧭 我该选哪个？

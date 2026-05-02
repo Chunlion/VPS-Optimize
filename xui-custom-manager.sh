@@ -1365,7 +1365,7 @@ def print_preview(plan_inbounds, plan_clients, skipped, warnings):
     print("本次重置预览")
     print("================================================")
     print(f"日期：{today.isoformat()}")
-    print("模式：dry-run，只预览，不写数据库")
+    print("模式：预览模式，只预览，不写数据库")
     print()
     if not plan_inbounds and not plan_clients:
         print("本次没有需要重置的入站或客户端。")
@@ -1506,7 +1506,7 @@ def main():
             print("本次重置预览")
             print("================================================")
             print(f"日期：{today.isoformat()}")
-            print("模式：dry-run，只预览，不写数据库")
+            print("模式：预览模式，只预览，不写数据库")
             print()
             print("自定义重置已禁用，跳过。")
             print("================================================")
@@ -1787,7 +1787,7 @@ print_health_report() {
         echo -e "  ${GREEN}未发现明显错误关键词。${PLAIN}"
     fi
 
-    echo "dry-run："
+    echo "预览模式："
     echo "  可在“自定义重置日期 -> 立即检查一次”预览本次计划。"
 }
 

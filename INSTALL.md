@@ -16,7 +16,7 @@
 主菜单 [19 443 单入口管理中心] -> [3 443 单入口链路体检]
 ```
 
-如果菜单文案和本文档不一致，以脚本当前显示为准；完整菜单可看 [docs/menu-map.md](docs/menu-map.md)。
+如果菜单文案和本文档不一致，以脚本当前显示为准。
 
 ## 安装前准备
 
@@ -257,6 +257,5 @@ wget -qO dog.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog
 | SSH 断开、防火墙误封、服务起不来 | [docs/recovery-runbook.md](docs/recovery-runbook.md) |
 | 443、证书、Caddy、REALITY 异常 | [docs/443-single-entry-troubleshooting.md](docs/443-single-entry-troubleshooting.md) |
 | 已有站点或面板迁移 | [docs/existing-server-migration.md](docs/existing-server-migration.md) |
-| 找不到菜单入口 | [docs/menu-map.md](docs/menu-map.md) |
 | 不确定系统是否支持 | [docs/compatibility.md](docs/compatibility.md) |
 | 想知道配置和备份在哪里 | [docs/config-paths.md](docs/config-paths.md) |

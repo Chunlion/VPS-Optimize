@@ -14,6 +14,34 @@
 
 请脱敏域名以外的 Token、私钥、订阅密钥后再公开粘贴。
 
+## 网站选择建议
+
+新增网站、反代域名或填写 REALITY 伪装 SNI 时，尽量选择没有 CDN 防护、能直接访问源站的 HTTPS 网站。开启 CDN、防火墙托管或强跳转规则的网站，可能会影响证书验证、SNI 分流和 REALITY 连接判断，排错时容易把 CDN 行为误判成脚本配置问题。
+
+如果使用 Cloudflare 管理自己的面板、节点、订阅或网站域名，建议保持 DNS only / 灰云。
+
+## 基础检查命令
+
+先看监听位置是否符合预期：
+
+```bash
+ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096'
+nginx -t
+caddy validate --config /etc/caddy/Caddyfile
+systemctl status nginx --no-pager
+systemctl status caddy --no-pager
+```
+
+正常情况下大致应该是：
+
+```text
+0.0.0.0:443       nginx
+127.0.0.1:8443    caddy
+127.0.0.1:1443    x-ui / 3x-ui / xray
+127.0.0.1:40000   x-ui / 3x-ui
+127.0.0.1:2096    x-ui / 3x-ui
+```
+
 ## ERR_TOO_MANY_REDIRECTS
 
 ### 现象
@@ -38,6 +66,7 @@ curl -I http://127.0.0.1:40000/panel/
 - 清空 3x-ui 面板证书路径，并重启面板。
 - 让 Caddy 反代到本地 HTTP 后端。
 - 443 单入口相关域名建议使用 DNS only / 灰云。
+- 如果刚清空证书，浏览器仍循环跳转，用无痕窗口重新测试。
 
 ### 相关菜单入口
 
@@ -45,6 +74,87 @@ curl -I http://127.0.0.1:40000/panel/
 主菜单 [4 面板、节点与订阅工具] -> [11 面板救砖 / SSL 清理]
 主菜单 [19 443 单入口管理中心] -> [7 修改 443 分流参数]
 主菜单 [19 443 单入口管理中心] -> [3 443 单入口链路体检]
+```
+
+## ERR_EMPTY_RESPONSE
+
+### 现象
+
+浏览器提示 `ERR_EMPTY_RESPONSE`，页面没有正常返回内容。
+
+### 常见原因
+
+- 访问了内部端口，例如 `:8443`、`:1443`、`:40000`。
+- SNI 没命中 Caddy，流量落到了 REALITY。
+- Nginx stream 没包含面板或网站域名。
+
+### 检查命令
+
+```bash
+grep -n "panel.example.com" /etc/nginx/stream.d/*.conf
+ss -lntp | grep -E ':443|:8443|:1443'
+```
+
+正确访问地址应是：
+
+```text
+https://panel.example.com/panel/
+```
+
+不要访问：
+
+```text
+https://panel.example.com:8443/
+https://panel.example.com:1443/
+https://panel.example.com:40000/
+```
+
+### 解决方法
+
+- 确认访问的是域名的标准 HTTPS 地址，不带内部端口。
+- 确认面板、订阅或网站域名已经写入 Nginx stream 分流配置。
+- 重新应用当前保存的 443 配置。
+
+### 相关菜单入口
+
+```text
+主菜单 [19 443 单入口管理中心] -> [7 修改 443 分流参数] -> [5 重新应用当前保存的配置]
+主菜单 [19 443 单入口管理中心] -> [3 443 单入口链路体检]
+```
+
+## ERR_CONNECTION_CLOSED / ERR_SSL_PROTOCOL_ERROR
+
+### 现象
+
+浏览器提示连接被关闭，或提示 SSL 协议错误。
+
+### 常见原因
+
+- 公网 `443` 不是 Nginx stream 在监听。
+- Caddy、3x-ui、REALITY 或旧 Nginx server 抢占了公网 `443`。
+- TLS 流量被转发到了不该接收浏览器 HTTPS 的后端。
+
+### 检查命令
+
+```bash
+ss -lntp | grep ':443'
+systemctl status nginx --no-pager
+systemctl status caddy --no-pager
+```
+
+### 解决方法
+
+- 确认公网 `443` 只由 Nginx stream 监听。
+- Caddy 使用 `127.0.0.1:8443`。
+- REALITY 使用 `127.0.0.1:1443`。
+- 面板和订阅后端只作为本机 HTTP 服务。
+
+### 相关菜单入口
+
+```text
+主菜单 [13 端口排查与释放]
+主菜单 [19 443 单入口管理中心] -> [7 修改 443 分流参数]
+主菜单 [19 443 单入口管理中心] -> [4 重新应用上次配置]
 ```
 
 ## 404
@@ -64,18 +174,53 @@ curl -I http://127.0.0.1:40000/panel/
 ```bash
 curl -I https://panel.example.com/panel/
 curl -I http://127.0.0.1:40000/panel/
+curl -I http://127.0.0.1:2096/sub/
 grep -R "panel.example.com" /etc/caddy/conf.d /etc/caddy/Caddyfile 2>/dev/null
+grep -n "path" /etc/caddy/conf.d/panel.example.com.caddy
+grep -n "reverse_proxy" /etc/caddy/conf.d/panel.example.com.caddy
 ```
 
 ### 解决方法
 
 - 统一面板路径，例如 `/panel/`。
 - 统一订阅路径，例如 `/sub/`、`/clash/`。
+- 443 向导里填的是路径前缀，不要把客户端的 `Subscription` 一起填进去。
 - 重新应用 443 配置。
+
+例如 Clash/Mihomo 使用 `/clash/` 时，三处都应该一致：
+
+```text
+3x-ui URI 路径 (Clash)：/clash/
+443 向导 Clash/Mihomo 路径前缀：/clash/
+https://panel.example.com/clash/客户端 Subscription
+```
+
+只使用 `/clash/` 时，Caddy 里应能看到类似配置：
+
+```caddy
+@sub path /clash /clash/*
+handle @sub {
+    reverse_proxy 127.0.0.1:2096
+}
+```
+
+如果普通订阅和 Clash/Mihomo 都要使用，`@sub path` 应同时包含两个路径：
+
+```caddy
+@sub path /sub /sub/* /clash /clash/*
+```
+
+手动改过 Caddy 后，记得校验并重载：
+
+```bash
+caddy validate --config /etc/caddy/Caddyfile
+systemctl reload caddy || systemctl restart caddy
+```
 
 ### 相关菜单入口
 
 ```text
+主菜单 [19 443 单入口管理中心] -> [7 修改 443 分流参数] -> [1 修改面板/订阅端口与路径]
 主菜单 [19 443 单入口管理中心] -> [7 修改 443 分流参数]
 主菜单 [19 443 单入口管理中心] -> [4 重新应用上次配置]
 主菜单 [19 443 单入口管理中心] -> [3 443 单入口链路体检]
@@ -108,12 +253,90 @@ curl -I http://127.0.0.1:2096/
 - 在 `主菜单 [19 443 单入口管理中心] -> [7 修改 443 分流参数]` 修正后端监听地址和端口。
 - 重新应用配置并体检。
 
+如果本机测试能通，但公网仍是 502，通常是 Caddy 反代地址或端口和实际监听不一致。
+
 ### 相关菜单入口
 
 ```text
 主菜单 [4 面板、节点与订阅工具] -> [1 管理 3x-ui 面板]
 主菜单 [19 443 单入口管理中心] -> [7 修改 443 分流参数]
 主菜单 [19 443 单入口管理中心] -> [3 443 单入口链路体检]
+```
+
+## 订阅链接仍带 :2096
+
+### 现象
+
+复制出来的订阅链接仍然包含 `:2096`，例如：
+
+```text
+https://panel.example.com:2096/sub/xxxx
+```
+
+### 常见原因
+
+- 3x-ui 订阅反向代理 URI 没设置。
+- Public URL / External Proxy 仍输出内部端口。
+
+### 解决方法
+
+回到 3x-ui：
+
+```text
+订阅设置 -> 反向代理 URI
+```
+
+填写公网地址：
+
+```text
+反向代理 URI：https://panel.example.com/sub/
+反向代理 URI (Clash)：https://panel.example.com/clash/
+```
+
+不要写：
+
+```text
+https://panel.example.com:2096/sub/
+http://127.0.0.1:2096/sub/
+```
+
+保存并重启面板后，重新复制订阅链接。
+
+### 相关菜单入口
+
+```text
+主菜单 [19 443 单入口管理中心] -> [5 订阅链接 / External Proxy 提示]
+主菜单 [19 443 单入口管理中心] -> [7 修改 443 分流参数]
+```
+
+## 节点链接仍带 :1443
+
+### 现象
+
+客户端节点链接仍然包含 `:1443`，没有使用公网 `443`。
+
+### 常见原因
+
+- REALITY 入站没有设置 External Proxy。
+- 节点域名走了 Cloudflare 代理，客户端无法直连 VPS。
+
+### 解决方法
+
+回到 3x-ui 的 REALITY 入站，设置 `External Proxy`：
+
+```text
+类型：相同
+地址：node.example.com 或服务器公网 IP
+端口：443
+```
+
+节点域名如果走 Cloudflare，必须是灰云 / DNS only。
+
+### 相关菜单入口
+
+```text
+主菜单 [19 443 单入口管理中心] -> [5 订阅链接 / External Proxy 提示]
+主菜单 [19 443 单入口管理中心] -> [7 修改 443 分流参数]
 ```
 
 ## 证书申请失败
@@ -144,6 +367,15 @@ journalctl -u caddy -n 80 --no-pager
 - 使用 DNS only / 灰云。
 - 修正 Token 权限后重新签发。
 - 开启 NTP 时间同步。
+
+推荐顺序：
+
+```text
+1. 443 链路与安全体检
+8. 更新 Cloudflare API Token
+9. 重新签发某个域名证书
+12. 校验并重载 Caddy
+```
 
 ### 相关菜单入口
 
