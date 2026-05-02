@@ -73,6 +73,7 @@ quarantine_path() {
     esac
 
     mkdir -p "$quarantine_root" || return 1
+    chmod 700 "$quarantine_root" 2>/dev/null || true
     base=$(basename "$resolved")
     dest="${quarantine_root%/}/$(date +%Y%m%d_%H%M%S)_${base}"
     while [[ -e "$dest" ]]; do
@@ -6755,9 +6756,89 @@ func_preflight_check() {
 # ---------------------------------------------------------
 # 21. 配置备份与回滚中心
 # ---------------------------------------------------------
+make_secure_temp_dir() {
+    local prefix="$1"
+    local tmp_dir
+    tmp_dir=$(mktemp -d "/tmp/${prefix}.XXXXXX") || return 1
+    chmod 700 "$tmp_dir" 2>/dev/null || true
+    printf '%s' "$tmp_dir"
+}
+
+backup_copy_path() {
+    local src="$1"
+    local dest_rel="$2"
+    local manifest_file="$3"
+    local work_dir="$4"
+    local dest_dir
+
+    [[ -e "$src" || -L "$src" ]] || return 1
+    dest_dir=$(dirname "$dest_rel")
+    mkdir -p "$work_dir/$dest_dir" || return 1
+
+    if cp -a -- "$src" "$work_dir/$dest_rel" 2>/dev/null; then
+        echo " - $src" >> "$manifest_file"
+        return 0
+    fi
+    return 1
+}
+
+backup_copy_xui_databases() {
+    local manifest_file="$1"
+    local work_dir="$2"
+    local copied=1
+    local db suffix src
+    local db_paths=(
+        "/etc/x-ui/x-ui.db"
+        "/usr/local/x-ui/x-ui.db"
+        "/usr/local/x-ui/bin/x-ui.db"
+    )
+
+    for db in "${db_paths[@]}"; do
+        for suffix in "" "-wal" "-shm"; do
+            src="${db}${suffix}"
+            if backup_copy_path "$src" "${src#/}" "$manifest_file" "$work_dir"; then
+                copied=0
+            fi
+        done
+    done
+    return "$copied"
+}
+
+restore_backup_file() {
+    local snapshot="$1"
+    local target="$2"
+
+    [[ -f "$snapshot" || -L "$snapshot" ]] || return 0
+    mkdir -p "$(dirname "$target")" || return 1
+    cp -af -- "$snapshot" "$target"
+}
+
+restore_backup_dir() {
+    local snapshot="$1"
+    local target="$2"
+    local quarantine_root="$3"
+
+    [[ -d "$snapshot" ]] || return 0
+    mkdir -p "$(dirname "$target")" || return 1
+    if [[ -e "$target" || -L "$target" ]]; then
+        quarantine_path "$target" "$quarantine_root" >/dev/null 2>&1 || return 1
+    fi
+    cp -a -- "$snapshot" "$target"
+}
+
+redact_sensitive_output() {
+    sed -E \
+        -e 's/(authorization:[[:space:]]*(bearer|basic)[[:space:]]+)[^[:space:]]+/\1***REDACTED***/gI' \
+        -e 's/((^|[^[:alnum:]_])(token|password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|CF_Token|CF_Key)[[:space:]]*[=:][[:space:]]*)[^[:space:],;"'\''}]+/\1***REDACTED***/gI' \
+        -e 's/("(token|password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|CF_Token|CF_Key)"[[:space:]]*:[[:space:]]*")[^"]+/\1***REDACTED***/gI' \
+        -e 's/([?&](token|password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)=)[^&[:space:]]+/\1***REDACTED***/gI' \
+        -e 's#(https?://)[^/@[:space:]]+@#\1***REDACTED***@#g'
+}
+
 func_backup_center() {
     local backup_root="/etc/vps-optimize/backups/manual"
     mkdir -p "$backup_root"
+    chmod 700 "$backup_root" 2>/dev/null || true
 
     while true; do
         clear
@@ -6783,12 +6864,17 @@ func_backup_center() {
             1)
                 local ts
                 ts=$(date +%Y%m%d_%H%M%S)
-                local work_dir="/tmp/vps_backup_${ts}"
+                local work_dir
                 local tar_file="${backup_root}/backup_${ts}.tar.gz"
-                local manifest_file="${work_dir}/manifest.txt"
+                local manifest_file
                 local copied=0
 
-                mkdir -p "$work_dir"
+                work_dir=$(make_secure_temp_dir "vps_backup_${ts}") || {
+                    echo -e "${RED}❌ 无法创建安全临时目录，备份已取消。${PLAIN}"
+                    sleep 2
+                    continue
+                }
+                manifest_file="${work_dir}/manifest.txt"
                 {
                     echo "VPS-Optimize backup manifest"
                     echo "Created: $(date -Is 2>/dev/null || date)"
@@ -6796,29 +6882,38 @@ func_backup_center() {
                     echo "Included paths:"
                 } > "$manifest_file"
 
-                [[ -f /etc/ssh/sshd_config ]] && mkdir -p "$work_dir/etc/ssh" && cp -a /etc/ssh/sshd_config "$work_dir/etc/ssh/" && echo " - /etc/ssh/sshd_config" >> "$manifest_file" && copied=1
-                [[ -f /etc/caddy/Caddyfile ]] && mkdir -p "$work_dir/etc/caddy" && cp -a /etc/caddy/Caddyfile "$work_dir/etc/caddy/" && echo " - /etc/caddy/Caddyfile" >> "$manifest_file" && copied=1
-                [[ -d /etc/caddy/conf.d ]] && mkdir -p "$work_dir/etc/caddy" && cp -a /etc/caddy/conf.d "$work_dir/etc/caddy/" && echo " - /etc/caddy/conf.d" >> "$manifest_file" && copied=1
-                [[ -f /etc/docker/daemon.json ]] && mkdir -p "$work_dir/etc/docker" && cp -a /etc/docker/daemon.json "$work_dir/etc/docker/" && echo " - /etc/docker/daemon.json" >> "$manifest_file" && copied=1
-                [[ -f /etc/fail2ban/jail.local ]] && mkdir -p "$work_dir/etc/fail2ban" && cp -a /etc/fail2ban/jail.local "$work_dir/etc/fail2ban/" && echo " - /etc/fail2ban/jail.local" >> "$manifest_file" && copied=1
-
-                if compgen -G "/etc/sysctl.d/*.conf" >/dev/null 2>&1; then
-                    mkdir -p "$work_dir/etc/sysctl.d"
-                    cp -a /etc/sysctl.d/*.conf "$work_dir/etc/sysctl.d/" 2>/dev/null
-                    echo " - /etc/sysctl.d/*.conf" >> "$manifest_file"
-                    copied=1
-                fi
+                backup_copy_path /etc/ssh/sshd_config etc/ssh/sshd_config "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/nginx/nginx.conf etc/nginx/nginx.conf "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/nginx/stream.d etc/nginx/stream.d "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/nginx/conf.d etc/nginx/conf.d "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/nginx/sites-available etc/nginx/sites-available "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/nginx/sites-enabled etc/nginx/sites-enabled "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/caddy/Caddyfile etc/caddy/Caddyfile "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/caddy/conf.d etc/caddy/conf.d "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/caddy/certs etc/caddy/certs "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /root/cert root/cert "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /root/.acme.sh root/.acme.sh "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /root/.config/vps-panel/cloudflare.env root/.config/vps-panel/cloudflare.env "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/vps-optimize/sni-stack.env etc/vps-optimize/sni-stack.env "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/vps-optimize/sni-stack.last-backup etc/vps-optimize/sni-stack.last-backup "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/docker/daemon.json etc/docker/daemon.json "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/fail2ban/jail.local etc/fail2ban/jail.local "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/sysctl.d etc/sysctl.d "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/x-ui etc/x-ui "$manifest_file" "$work_dir" && copied=1
+                backup_copy_xui_databases "$manifest_file" "$work_dir" && copied=1
 
                 if [[ "$copied" -eq 0 ]]; then
-                    quarantine_path "$work_dir" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
+                    quarantine_path "$work_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
                     echo -e "${YELLOW}⚠️ 未检测到可备份配置文件，已取消创建。${PLAIN}"
                 else
-                    if tar -czf "$tar_file" -C "$work_dir" . >/dev/null 2>&1; then
+                    if ( umask 077 && tar -czf "$tar_file" -C "$work_dir" . ) >/dev/null 2>&1; then
+                        chmod 600 "$tar_file" 2>/dev/null || true
                         echo -e "${GREEN}✅ 备份创建成功: ${tar_file}${PLAIN}"
+                        echo -e "${YELLOW}⚠️ 备份包含证书私钥、面板数据库和 API Token 等敏感配置，请妥善保管。${PLAIN}"
                     else
                         echo -e "${RED}❌ 备份打包失败，请检查磁盘空间与权限。${PLAIN}"
                     fi
-                    quarantine_path "$work_dir" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
+                    quarantine_path "$work_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
                 fi
                 ;;
 
@@ -6865,25 +6960,61 @@ func_backup_center() {
                     continue
                 }
 
-                local restore_dir="/tmp/vps_restore_$(date +%s)"
-                mkdir -p "$restore_dir"
+                local restore_dir
+                local restore_failed=0
+                local restore_quarantine="/etc/vps-optimize/quarantine/manual-restore"
+                restore_dir=$(make_secure_temp_dir "vps_restore") || {
+                    echo -e "${RED}❌ 无法创建安全临时目录，回滚中止。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                }
+
+                if ! tar -tzf "$target_file" >/dev/null 2>&1; then
+                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                    echo -e "${RED}❌ 备份文件无法读取，回滚中止。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
+                if tar -tzf "$target_file" 2>/dev/null | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                    echo -e "${RED}❌ 备份文件包含不安全路径，回滚中止。${PLAIN}"
+                    read -n 1 -s -r -p "按任意键继续..."
+                    continue
+                fi
 
                 if ! tar -xzf "$target_file" -C "$restore_dir" >/dev/null 2>&1; then
-                    quarantine_path "$restore_dir" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
+                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
                     echo -e "${RED}❌ 备份解压失败，回滚中止。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
 
-                [[ -f "$restore_dir/etc/ssh/sshd_config" ]] && cp -af "$restore_dir/etc/ssh/sshd_config" /etc/ssh/sshd_config
-                [[ -f "$restore_dir/etc/caddy/Caddyfile" ]] && cp -af "$restore_dir/etc/caddy/Caddyfile" /etc/caddy/Caddyfile
-                [[ -d "$restore_dir/etc/caddy/conf.d" ]] && mkdir -p /etc/caddy && cp -af "$restore_dir/etc/caddy/conf.d" /etc/caddy/
-                [[ -f "$restore_dir/etc/docker/daemon.json" ]] && mkdir -p /etc/docker && cp -af "$restore_dir/etc/docker/daemon.json" /etc/docker/daemon.json
-                [[ -f "$restore_dir/etc/fail2ban/jail.local" ]] && mkdir -p /etc/fail2ban && cp -af "$restore_dir/etc/fail2ban/jail.local" /etc/fail2ban/jail.local
+                restore_backup_file "$restore_dir/etc/ssh/sshd_config" /etc/ssh/sshd_config || restore_failed=1
+                restore_backup_file "$restore_dir/etc/nginx/nginx.conf" /etc/nginx/nginx.conf || restore_failed=1
+                restore_backup_dir "$restore_dir/etc/nginx/stream.d" /etc/nginx/stream.d "$restore_quarantine" || restore_failed=1
+                restore_backup_dir "$restore_dir/etc/nginx/conf.d" /etc/nginx/conf.d "$restore_quarantine" || restore_failed=1
+                restore_backup_dir "$restore_dir/etc/nginx/sites-available" /etc/nginx/sites-available "$restore_quarantine" || restore_failed=1
+                restore_backup_dir "$restore_dir/etc/nginx/sites-enabled" /etc/nginx/sites-enabled "$restore_quarantine" || restore_failed=1
+                restore_backup_file "$restore_dir/etc/caddy/Caddyfile" /etc/caddy/Caddyfile || restore_failed=1
+                restore_backup_dir "$restore_dir/etc/caddy/conf.d" /etc/caddy/conf.d "$restore_quarantine" || restore_failed=1
+                restore_backup_dir "$restore_dir/etc/caddy/certs" /etc/caddy/certs "$restore_quarantine" || restore_failed=1
+                restore_backup_dir "$restore_dir/root/cert" /root/cert "$restore_quarantine" || restore_failed=1
+                restore_backup_dir "$restore_dir/root/.acme.sh" /root/.acme.sh "$restore_quarantine" || restore_failed=1
+                restore_backup_file "$restore_dir/root/.config/vps-panel/cloudflare.env" /root/.config/vps-panel/cloudflare.env || restore_failed=1
+                restore_backup_file "$restore_dir/etc/vps-optimize/sni-stack.env" /etc/vps-optimize/sni-stack.env || restore_failed=1
+                restore_backup_file "$restore_dir/etc/vps-optimize/sni-stack.last-backup" /etc/vps-optimize/sni-stack.last-backup || restore_failed=1
+                restore_backup_file "$restore_dir/etc/docker/daemon.json" /etc/docker/daemon.json || restore_failed=1
+                restore_backup_file "$restore_dir/etc/fail2ban/jail.local" /etc/fail2ban/jail.local || restore_failed=1
+                restore_backup_dir "$restore_dir/etc/sysctl.d" /etc/sysctl.d "$restore_quarantine" || restore_failed=1
+                restore_backup_dir "$restore_dir/etc/x-ui" /etc/x-ui "$restore_quarantine" || restore_failed=1
+                restore_backup_file "$restore_dir/usr/local/x-ui/x-ui.db" /usr/local/x-ui/x-ui.db || restore_failed=1
+                restore_backup_file "$restore_dir/usr/local/x-ui/x-ui.db-wal" /usr/local/x-ui/x-ui.db-wal || restore_failed=1
+                restore_backup_file "$restore_dir/usr/local/x-ui/x-ui.db-shm" /usr/local/x-ui/x-ui.db-shm || restore_failed=1
+                restore_backup_file "$restore_dir/usr/local/x-ui/bin/x-ui.db" /usr/local/x-ui/bin/x-ui.db || restore_failed=1
+                restore_backup_file "$restore_dir/usr/local/x-ui/bin/x-ui.db-wal" /usr/local/x-ui/bin/x-ui.db-wal || restore_failed=1
+                restore_backup_file "$restore_dir/usr/local/x-ui/bin/x-ui.db-shm" /usr/local/x-ui/bin/x-ui.db-shm || restore_failed=1
 
                 if [[ -d "$restore_dir/etc/sysctl.d" ]]; then
-                    mkdir -p /etc/sysctl.d
-                    cp -af "$restore_dir/etc/sysctl.d/"*.conf /etc/sysctl.d/ 2>/dev/null
                     sysctl --system >/dev/null 2>&1
                 fi
 
@@ -6897,15 +7028,17 @@ func_backup_center() {
                 fi
                 [[ "$restart_rc" -eq 1 ]] && restart_failed=1
 
-                for svc in caddy docker fail2ban; do
+                for svc in nginx caddy docker fail2ban x-ui 3x-ui xray sing-box; do
                     restart_service_if_available "$svc"
                     restart_rc=$?
                     [[ "$restart_rc" -eq 1 ]] && restart_failed=1
                 done
 
-                quarantine_path "$restore_dir" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
-                if [[ "$restart_failed" -eq 0 ]]; then
+                quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                if [[ "$restore_failed" -eq 0 && "$restart_failed" -eq 0 ]]; then
                     echo -e "${GREEN}✅ 回滚完成！建议立即验证 SSH、反代和容器服务状态。${PLAIN}"
+                elif [[ "$restore_failed" -ne 0 ]]; then
+                    echo -e "${YELLOW}⚠️ 部分备份文件恢复失败，请检查权限、磁盘空间和 ${restore_quarantine}。${PLAIN}"
                 else
                     echo -e "${YELLOW}⚠️ 回滚文件已写入，但至少一个服务重启失败，请立即查看 systemctl status。${PLAIN}"
                 fi
@@ -6959,7 +7092,7 @@ service_state_for_issue() {
 recent_journal_for_issue() {
     local svc="$1"
     if systemctl list-unit-files "${svc}.service" >/dev/null 2>&1 || systemctl status "$svc" >/dev/null 2>&1; then
-        journalctl -u "$svc" -n 8 --no-pager 2>/dev/null | sed -E 's/(token|Token|TOKEN|password|passwd|secret|key)=([^[:space:]]+)/\1=***REDACTED***/g'
+        journalctl -u "$svc" -n 8 --no-pager 2>/dev/null | redact_sensitive_output
     else
         echo "未检测到 ${svc} 服务"
     fi

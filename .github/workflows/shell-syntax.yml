@@ -25,9 +25,9 @@ jobs:
           bash -n dog.sh
           bash -n xui-custom-manager.sh
 
-      - name: Run ShellCheck advisory
+      - name: Run ShellCheck error checks
         run: |
-          shellcheck vps.sh dog.sh xui-custom-manager.sh || true
+          shellcheck -S error vps.sh dog.sh xui-custom-manager.sh
 
       - name: Run smoke tests
         run: |
