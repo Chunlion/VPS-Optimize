@@ -15,8 +15,11 @@ LOCAL_RUNNER="/usr/local/bin/xui-custom-manager.sh"
 XCM_PATH="/usr/local/bin/xcm"
 
 RED='\033[0;31m'
-GREEN='\033[0;32m'
+GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[1;34m'
+CYAN='\033[1;36m'
+BOLD='\033[1m'
 PLAIN='\033[0m'
 
 RUN_CHECK=0
@@ -90,6 +93,28 @@ need_tty() {
         echo "错误：该功能需要交互式终端。"
         return 1
     fi
+}
+
+require_interactive_menu() {
+    if [ -t 0 ]; then
+        return 0
+    fi
+    if [ -r /dev/tty ]; then
+        exec </dev/tty
+        return 0
+    fi
+    echo "错误：管理菜单需要交互式终端，当前没有可读取的 stdin。"
+    echo "请在 SSH 终端中直接运行：bash $LOCAL_RUNNER"
+    echo "非交互环境请使用：bash $LOCAL_RUNNER --reset-check --dry-run"
+    return 1
+}
+
+read_menu_choice() {
+    local __var_name="$1"
+    local __prompt="${2:-👉 请选择操作: }"
+    local __value
+    read -rp "$__prompt" __value
+    printf -v "$__var_name" '%s' "$__value"
 }
 
 ensure_dirs() {
@@ -336,9 +361,9 @@ restore_backup() {
         if [ "${#files[@]}" -eq 0 ]; then
             echo "未找到 $label 备份。"
             echo "------------------------------------------------"
-            echo " 0. 返回上级"
+            echo -e "${RED}  0. 返回上级 / q 返回${PLAIN}"
             echo "================================================"
-            read -rp "请选择： " _
+            read_menu_choice _ "👉 请选择操作: "
             return 0
         fi
 
@@ -347,16 +372,16 @@ restore_backup() {
             echo " $((i + 1)). ${files[$i]}"
         done
         echo "------------------------------------------------"
-        echo " 0. 返回上级"
+        echo -e "${RED}  0. 返回上级 / q 返回${PLAIN}"
         echo "================================================"
 
         local choice
-        read -rp "请选择备份文件： " choice
-        if [ "$choice" = "0" ]; then
+        read_menu_choice choice "👉 请选择备份文件: "
+        if [[ "$choice" =~ ^(0|q|Q)$ ]]; then
             return 0
         fi
         if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#files[@]}" ]; then
-            echo "无效选择。"
+            echo -e "${RED}❌ 无效选择！${PLAIN}"
             sleep 1
             continue
         fi
@@ -416,11 +441,11 @@ cleanup_backups() {
                 echo " $((idx + 1)). ${files[$idx]}"
             fi
         done
-        echo " 0. 跳过"
+        echo -e "${RED}  0. 跳过 / q 跳过${PLAIN}"
 
         local choice
-        read -rp "请选择要删除的备份： " choice
-        if [ "$choice" = "0" ]; then
+        read_menu_choice choice "👉 请选择要删除的备份: "
+        if [[ "$choice" =~ ^(0|q|Q)$ ]]; then
             continue
         fi
         if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 11 ] && [ "$choice" -le "${#files[@]}" ]; then
@@ -441,6 +466,7 @@ run_custom_reset_ui() {
 
     local tmp_py
     tmp_py="$(mktemp --suffix=.py)"
+    trap 'rm -f "$tmp_py"' RETURN
 
     cat > "$tmp_py" <<'PY'
 import json
@@ -585,7 +611,7 @@ for client in clients:
 def show_config():
     clear_screen()
     print("================================================")
-    print("当前自定义重置配置")
+    print("🧭 3x-ui 外置增强管理 - 当前自定义重置配置")
     print("================================================")
     print(json.dumps(config, ensure_ascii=False, indent=2))
     pause()
@@ -595,7 +621,7 @@ def manage_clients(inbound_id, inbound_cfg):
     while True:
         clear_screen()
         print("================================================")
-        print("客户端单独日期")
+        print("🧭 3x-ui 外置增强管理 - 客户端单独日期")
         print("================================================")
         print(f"入站 ID：{inbound_id}")
         print("说明：不单独设置时，客户端按入站规则处理。")
@@ -614,12 +640,12 @@ def manage_clients(inbound_id, inbound_cfg):
             print(f"    {status}")
 
         print("------------------------------------------------")
-        print(" 0. 返回上级")
+        print(" 0. 返回上级 / q 返回")
         print("================================================")
 
-        valid = {"0"} | {str(i) for i in range(1, len(clients_for_inbound) + 1)}
-        choice = input_choice("请选择客户端： ", valid)
-        if choice == "0":
+        valid = {"0", "q", "Q"} | {str(i) for i in range(1, len(clients_for_inbound) + 1)}
+        choice = input_choice("👉 请选择客户端: ", valid)
+        if choice in {"0", "q", "Q"}:
             return
 
         email = clients_for_inbound[int(choice) - 1]["email"] or ""
@@ -647,7 +673,7 @@ def manage_inbound(inbound):
     while True:
         clear_screen()
         print("================================================")
-        print("入站设置")
+        print("🧭 3x-ui 外置增强管理 - 入站设置")
         print("================================================")
         print(f"ID：{iid}")
         print(f"端口：{inbound['port']}")
@@ -667,11 +693,11 @@ def manage_inbound(inbound):
         print(" 4. 开启/关闭客户端跟随入站")
         print(" 5. 管理客户端单独日期")
         print("------------------------------------------------")
-        print(" 0. 返回上级")
+        print(" 0. 返回上级 / q 返回")
         print("================================================")
 
-        choice = input_choice("请选择： ", {"0", "1", "2", "3", "4", "5"})
-        if choice == "0":
+        choice = input_choice("👉 请选择操作: ", {"0", "q", "Q", "1", "2", "3", "4", "5"})
+        if choice in {"0", "q", "Q"}:
             return
         if choice == "1":
             cfg["enabled"] = not cfg.get("enabled", False)
@@ -689,7 +715,7 @@ def choose_inbound():
     while True:
         clear_screen()
         print("================================================")
-        print("选择入站")
+        print("🧭 3x-ui 外置增强管理 - 选择入站")
         print("================================================")
 
         if not inbounds:
@@ -708,19 +734,19 @@ def choose_inbound():
             print()
 
         print("------------------------------------------------")
-        print(" 0. 返回上级")
+        print(" 0. 返回上级 / q 返回")
         print("================================================")
 
-        valid = {"0"} | {str(i) for i in range(1, len(inbounds) + 1)}
-        choice = input_choice("请选择入站： ", valid)
-        if choice == "0":
+        valid = {"0", "q", "Q"} | {str(i) for i in range(1, len(inbounds) + 1)}
+        choice = input_choice("👉 请选择入站: ", valid)
+        if choice in {"0", "q", "Q"}:
             return
         manage_inbound(inbounds[int(choice) - 1])
 
 while True:
     clear_screen()
     print("================================================")
-    print("自定义重置日期")
+    print("🧭 3x-ui 外置增强管理 - 自定义重置日期")
     print("================================================")
     print(f"全局状态：{'启用' if config.get('enabled') else '禁用'}")
     print(f"默认日期：每月 {config.get('default_day', 1)} 号")
@@ -734,11 +760,11 @@ while True:
     print(" 4. 立即检查一次 先预览，确认后执行")
     print(" 5. 查看当前配置")
     print("------------------------------------------------")
-    print(" 0. 返回主菜单")
+    print(" 0. 返回主菜单 / q 返回")
     print("================================================")
 
-    choice = input_choice("请选择： ", {"0", "1", "2", "3", "4", "5"})
-    if choice == "0":
+    choice = input_choice("👉 请选择操作: ", {"0", "q", "Q", "1", "2", "3", "4", "5"})
+    if choice in {"0", "q", "Q"}:
         sys.exit(0)
     if choice == "1":
         config["enabled"] = not config.get("enabled", False)
@@ -759,6 +785,7 @@ PY
     XUI_DB="$XUI_DB" CONFIG_FILE="$CONFIG_FILE" python3 "$tmp_py" </dev/tty
     local ret=$?
     rm -f "$tmp_py"
+    trap - RETURN
     set -e
 
     case "$ret" in
@@ -798,6 +825,7 @@ run_traffic_ui() {
     local writes_file tmp_py
     writes_file="$(mktemp)"
     tmp_py="$(mktemp --suffix=.py)"
+    trap 'rm -f "$tmp_py" "$writes_file"' RETURN
 
     cat > "$tmp_py" <<'PY'
 import json
@@ -882,7 +910,7 @@ def build_write(target, up, down):
 def calibrate_target(target):
     clear_screen()
     print("================================================")
-    print("输入校准流量")
+    print("🧭 3x-ui 外置增强管理 - 输入校准流量")
     print("================================================")
     print(f"对象：{target['label']}")
     print(f"当前已用：{format_gib((target['up'] or 0) + (target['down'] or 0))}")
@@ -892,10 +920,10 @@ def calibrate_target(target):
     print(" 2. 输入总已用流量，按当前 up/down 比例分配")
     print(" 3. 分别输入 up 和 down")
     print("------------------------------------------------")
-    print(" 0. 返回上级")
+    print(" 0. 返回上级 / q 返回")
     print("================================================")
-    mode = input_choice("请选择： ", {"0", "1", "2", "3"})
-    if mode == "0":
+    mode = input_choice("👉 请选择操作: ", {"0", "q", "Q", "1", "2", "3"})
+    if mode in {"0", "q", "Q"}:
         return None
 
     cur_up = int(target["up"] or 0)
@@ -918,7 +946,7 @@ def calibrate_target(target):
 while True:
     clear_screen()
     print("================================================")
-    print("流量校准")
+    print("🧭 3x-ui 外置增强管理 - 流量校准")
     print("================================================")
     print("说明：这里只校准已用流量 up/down，不修改流量上限 total。")
     print("单位：GiB，1 GiB = 1024^3 bytes")
@@ -935,12 +963,12 @@ while True:
         print()
 
     print("------------------------------------------------")
-    print(" 0. 返回主菜单")
+    print(" 0. 返回主菜单 / q 返回")
     print("================================================")
 
-    valid_inbounds = {"0"} | {str(i) for i in range(1, len(inbounds) + 1)}
-    choice = input_choice("请选择入站： ", valid_inbounds)
-    if choice == "0":
+    valid_inbounds = {"0", "q", "Q"} | {str(i) for i in range(1, len(inbounds) + 1)}
+    choice = input_choice("👉 请选择入站: ", valid_inbounds)
+    if choice in {"0", "q", "Q"}:
         sys.exit(100)
 
     inbound = inbounds[int(choice) - 1]
@@ -957,7 +985,7 @@ while True:
     while True:
         clear_screen()
         print("================================================")
-        print("选择校准对象")
+        print("🧭 3x-ui 外置增强管理 - 选择校准对象")
         print("================================================")
         print(f"入站 ID：{inbound_id}")
         print(f"端口：{inbound['port']}")
@@ -981,15 +1009,15 @@ while True:
         if clients:
             print(f" {all_clients_choice}. 逐个校准全部客户端")
         print("------------------------------------------------")
-        print(" 0. 返回上级")
+        print(" 0. 返回上级 / q 返回")
         print("================================================")
 
-        valid_objects = {"0", "1"} | {str(i) for i in range(2, len(clients) + 2)}
+        valid_objects = {"0", "q", "Q", "1"} | {str(i) for i in range(2, len(clients) + 2)}
         if clients:
             valid_objects.add(all_clients_choice)
 
-        obj_choice = input_choice("请选择对象： ", valid_objects)
-        if obj_choice == "0":
+        obj_choice = input_choice("👉 请选择对象: ", valid_objects)
+        if obj_choice in {"0", "q", "Q"}:
             break
 
         targets = []
@@ -1033,7 +1061,7 @@ while True:
 
         clear_screen()
         print("================================================")
-        print("确认写入")
+        print("🧭 3x-ui 外置增强管理 - 确认写入")
         print("================================================")
         print("以下操作只会修改 up/down，不会修改 total。")
         print("写库前会自动备份数据库，并重启 x-ui。")
@@ -1067,12 +1095,14 @@ PY
 
     if [ "$ret" -eq 100 ]; then
         rm -f "$writes_file"
+        trap - RETURN
         return 0
     fi
     if [ "$ret" -ne 200 ]; then
         rm -f "$writes_file"
         echo "流量校准已取消或失败。"
         pause
+        trap - RETURN
         return 0
     fi
 
@@ -1081,6 +1111,7 @@ PY
     db_backup="$(backup_database)" || {
         rm -f "$writes_file"
         pause
+        trap - RETURN
         return 1
     }
     echo "数据库备份：$db_backup"
@@ -1130,6 +1161,7 @@ PY
     set -e
 
     rm -f "$writes_file"
+    trap - RETURN
     echo "启动 x-ui..."
     systemctl start x-ui || true
 
@@ -1355,7 +1387,7 @@ def build_plan(config, state, inbounds, clients):
                 due, reason = should_reset(inbound_day, state["clients"].get(key, {}))
                 label = f"客户端 {email or '无邮箱'}，入站 ID={iid}"
                 if due:
-                    plan_clients.append({"inbound_id": str(iid), "email": email, "key": key, "label": label, "reason": f"跟随入站，{reason}"})
+                    plan_clients.append({"inbound_id": str(iid), "email": email, "key": key, "label": label, "reason": f"跟随入站，{reason}", "reset_scope": "inbound"})
                 else:
                     skipped.append((label, reason))
 
@@ -1373,7 +1405,7 @@ def build_plan(config, state, inbounds, clients):
             key = f"{iid}|{email}"
             due, reason = should_reset(cday, state["clients"].get(key, {}))
             if due:
-                plan_clients.append({"inbound_id": str(iid), "email": email, "key": key, "label": label, "reason": f"客户端单独日期，{reason}"})
+                plan_clients.append({"inbound_id": str(iid), "email": email, "key": key, "label": label, "reason": f"客户端单独日期，{reason}", "reset_scope": "client"})
             else:
                 skipped.append((label, reason))
 
@@ -1385,7 +1417,7 @@ def print_preview(plan_inbounds, plan_clients, skipped, warnings):
     print("================================================")
     print(f"日期：{today.isoformat()}")
     print("模式：预览模式，只预览，不写数据库")
-    print("说明：真实执行时会先把本月 up/down 累加到状态文件的历史总流量，再清零本月流量")
+    print("说明：真实执行时只重置本月 up/down；客户端会按官方逻辑重新启用；不修改 all_time 和 total")
     print()
     if not plan_inbounds and not plan_clients:
         print("本次没有需要重置的入站或客户端。")
@@ -1455,6 +1487,12 @@ def add_preserved_traffic(state_record, up, down):
     totals["total"] = totals["up"] + totals["down"]
     return totals
 
+def get_table_columns(cur, table):
+    try:
+        return {row[1] for row in cur.execute(f"PRAGMA table_info({table})").fetchall()}
+    except Exception:
+        return set()
+
 def execute_plan(plan_inbounds, plan_clients, state):
     print("准备执行自定义重置...")
     backup_path = backup_database()
@@ -1473,6 +1511,10 @@ def execute_plan(plan_inbounds, plan_clients, state):
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
         cur.execute("BEGIN")
+        inbound_columns = get_table_columns(cur, "inbounds")
+        client_columns = get_table_columns(cur, "client_traffics")
+        reset_time_ms = int(time.time() * 1000)
+        inbounds_to_mark = set()
 
         for item in plan_inbounds:
             row = cur.execute("SELECT up, down FROM inbounds WHERE id=?", (item["id"],)).fetchone()
@@ -1487,6 +1529,7 @@ def execute_plan(plan_inbounds, plan_clients, state):
                     row[1],
                 )
                 updated_inbounds.append(item)
+                inbounds_to_mark.add(item["id"])
             else:
                 skipped_write.append((item["label"], "写入时入站已不存在"))
 
@@ -1498,10 +1541,16 @@ def execute_plan(plan_inbounds, plan_clients, state):
             if row is None:
                 skipped_write.append((item["label"], "写入时客户端已不存在"))
                 continue
-            cur.execute(
-                "UPDATE client_traffics SET up=0, down=0 WHERE inbound_id=? AND email=?",
-                (item["inbound_id"], item["email"]),
-            )
+            if "enable" in client_columns:
+                cur.execute(
+                    "UPDATE client_traffics SET enable=1, up=0, down=0 WHERE inbound_id=? AND email=?",
+                    (item["inbound_id"], item["email"]),
+                )
+            else:
+                cur.execute(
+                    "UPDATE client_traffics SET up=0, down=0 WHERE inbound_id=? AND email=?",
+                    (item["inbound_id"], item["email"]),
+                )
             if cur.rowcount > 0:
                 item["preserved_totals"] = add_preserved_traffic(
                     state["clients"].setdefault(item["key"], {}),
@@ -1509,8 +1558,17 @@ def execute_plan(plan_inbounds, plan_clients, state):
                     row[1],
                 )
                 updated_clients.append(item)
+                if item.get("reset_scope") == "inbound":
+                    inbounds_to_mark.add(item["inbound_id"])
             else:
                 skipped_write.append((item["label"], "写入时客户端已不存在"))
+
+        if "last_traffic_reset_time" in inbound_columns:
+            for inbound_id in sorted(inbounds_to_mark, key=lambda value: int(value) if str(value).isdigit() else str(value)):
+                cur.execute(
+                    "UPDATE inbounds SET last_traffic_reset_time=? WHERE id=?",
+                    (reset_time_ms, inbound_id),
+                )
 
         conn.commit()
 
@@ -1559,7 +1617,7 @@ def main():
             print("================================================")
             print(f"日期：{today.isoformat()}")
             print("模式：预览模式，只预览，不写数据库")
-            print("说明：真实执行时会先把本月 up/down 累加到状态文件的历史总流量，再清零本月流量")
+            print("说明：真实执行时只重置本月 up/down；客户端会按官方逻辑重新启用；不修改 all_time 和 total")
             print()
             print("自定义重置已禁用，跳过。")
             print("================================================")
@@ -1846,53 +1904,79 @@ print_health_report() {
 
 health_check() {
     clear_screen
-    echo "================================================"
-    echo "健康检查"
-    echo "================================================"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧪 3x-ui 外置增强管理 - 健康检查${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
     print_health_report
 }
 
 menu_logs() {
     while true; do
         clear_screen
-        echo "================================================"
-        echo "查看日志"
-        echo "================================================"
-        echo " 1. 查看脚本日志"
-        echo " 2. 查看自动检查 timer 日志"
-        echo " 3. 查看 x-ui 服务日志"
-        echo "------------------------------------------------"
-        echo " 0. 返回主菜单"
-        echo "================================================"
-        read -rp "请选择： " choice
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🧾 3x-ui 外置增强管理 - 查看日志${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}用途：查看外置脚本、自动检查 timer 和 x-ui 服务日志。${PLAIN}"
+        echo -e "${YELLOW}提示：脚本日志包含历史记录，旧菜单或 read error 可能是旧版本留下的。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 查看脚本日志${PLAIN}              ${YELLOW}(/var/log/xui-custom-manager.log)${PLAIN}"
+        echo -e "${GREEN}  2. 只看 reset-check 日志${PLAIN}      ${YELLOW}(过滤自动重置检查记录)${PLAIN}"
+        echo -e "${GREEN}  3. 查看自动检查 timer 日志${PLAIN}    ${YELLOW}(xui-custom-reset.service)${PLAIN}"
+        echo -e "${GREEN}  4. 查看 x-ui 服务日志${PLAIN}         ${YELLOW}(x-ui.service)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        read_menu_choice choice
 
         case "$choice" in
             1)
                 clear_screen
                 echo "脚本日志：$LOG_FILE"
+                echo "提示：这里包含历史记录，旧菜单或 read error 可能是以前版本留下的日志。"
                 echo "------------------------------------------------"
                 tail -n 100 "$LOG_FILE" || true
                 pause
                 ;;
             2)
                 clear_screen
+                echo "reset-check 日志：$LOG_FILE"
+                echo "------------------------------------------------"
+                if [ -f "$LOG_FILE" ]; then
+                    local reset_log
+                    reset_log="$(awk '
+                        /^===== .*reset-check 执行 =====/ { printing=1; print; next }
+                        /^===== / && printing { printing=0 }
+                        printing { print }
+                    ' "$LOG_FILE" | tail -n 120)"
+                    if [ -n "$reset_log" ]; then
+                        echo "$reset_log"
+                    else
+                        echo "暂无 reset-check 日志记录。"
+                    fi
+                else
+                    echo "日志文件不存在。"
+                fi
+                pause
+                ;;
+            3)
+                clear_screen
                 echo "自动检查 timer 日志"
                 echo "------------------------------------------------"
                 journalctl -u xui-custom-reset.service -n 100 --no-pager || true
                 pause
                 ;;
-            3)
+            4)
                 clear_screen
                 echo "x-ui 服务日志"
                 echo "------------------------------------------------"
                 journalctl -u x-ui -n 100 --no-pager || true
                 pause
                 ;;
-            0)
+            0|q|Q)
                 return 0
                 ;;
             *)
-                echo "无效选择。"
+                echo -e "${RED}❌ 无效选择！${PLAIN}"
                 sleep 1
                 ;;
         esac
@@ -1902,19 +1986,20 @@ menu_logs() {
 menu_backup_restore() {
     while true; do
         clear_screen
-        echo "================================================"
-        echo "备份与恢复"
-        echo "================================================"
-        echo "备份目录：$BACKUP_DIR"
-        echo "------------------------------------------------"
-        echo " 1. 立即备份"
-        echo " 2. 恢复数据库"
-        echo " 3. 恢复程序目录"
-        echo " 4. 恢复配置目录"
-        echo "------------------------------------------------"
-        echo " 0. 返回主菜单"
-        echo "================================================"
-        read -rp "请选择： " choice
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}💾 3x-ui 外置增强管理 - 备份与恢复${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}用途：备份或恢复 x-ui 数据库、配置目录和程序目录。${PLAIN}"
+        echo -e "${YELLOW}备份目录：$BACKUP_DIR${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 立即备份${PLAIN}                  ${YELLOW}(数据库 / 配置 / 程序)${PLAIN}"
+        echo -e "${GREEN}  2. 恢复数据库${PLAIN}                ${YELLOW}(x-ui.db)${PLAIN}"
+        echo -e "${GREEN}  3. 恢复程序目录${PLAIN}              ${YELLOW}(/usr/local/x-ui)${PLAIN}"
+        echo -e "${GREEN}  4. 恢复配置目录${PLAIN}              ${YELLOW}(/etc/x-ui)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        read_menu_choice choice
 
         case "$choice" in
             1)
@@ -1934,11 +2019,11 @@ menu_backup_restore() {
                 restore_backup "etc"
                 pause
                 ;;
-            0)
+            0|q|Q)
                 return 0
                 ;;
             *)
-                echo "无效选择。"
+                echo -e "${RED}❌ 无效选择！${PLAIN}"
                 sleep 1
                 ;;
         esac
@@ -1950,28 +2035,31 @@ main_menu() {
 
     while true; do
         clear_screen
-        echo "================================================"
-        echo "x-ui 自定义管理器"
-        echo "================================================"
-        echo "用于自定义重置日期、流量校准、备份恢复和健康检查。"
-        echo
-        echo "配置：$CONFIG_FILE"
-        echo "备份：$BACKUP_DIR"
-        echo "日志：$LOG_FILE"
-        echo "自动检查：$(timer_active_status)"
-        echo "本地执行器：$(runner_status)"
-        echo "快捷命令：xcm"
-        echo "------------------------------------------------"
-        echo " 1. 自定义重置日期"
-        echo " 2. 流量校准"
-        echo " 3. 备份与恢复"
-        echo " 4. 健康检查"
-        echo " 5. 查看日志"
-        echo " 6. 清理旧备份"
-        echo "------------------------------------------------"
-        echo " 0. 退出"
-        echo "================================================"
-        read -rp "请选择： " choice
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🧭 3x-ui 外置增强管理${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}用途：补充 3x-ui 面板缺失能力，例如自定义重置、流量校准、备份恢复和健康检查。${PLAIN}"
+        echo -e "${YELLOW}提示：写库前会自动备份；看不准时先做备份，再执行写入操作。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "配置：$CONFIG_FILE"
+        echo -e "备份：$BACKUP_DIR"
+        echo -e "日志：$LOG_FILE"
+        echo -e "自动检查：$(timer_active_status) | 本地执行器：$(runner_status) | 快捷命令：xcm"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD} ▶ 重置${PLAIN}"
+        echo -e "${GREEN}  1. 自定义重置日期${PLAIN}            ${YELLOW}(入站 / 客户端分开设置)${PLAIN}"
+        echo -e "${BOLD} ▶ 流量${PLAIN}"
+        echo -e "${GREEN}  2. 流量校准${PLAIN}                  ${YELLOW}(只改 up/down，不改 total)${PLAIN}"
+        echo -e "${BOLD} ▶ 备份${PLAIN}"
+        echo -e "${GREEN}  3. 备份与恢复${PLAIN}                ${YELLOW}(数据库 / 配置 / 程序)${PLAIN}"
+        echo -e "${BOLD} ▶ 诊断${PLAIN}"
+        echo -e "${GREEN}  4. 健康检查${PLAIN}                  ${YELLOW}(服务 / 数据库 / 日志 / timer)${PLAIN}"
+        echo -e "${GREEN}  5. 查看日志${PLAIN}                  ${YELLOW}(脚本 / reset-check / systemd)${PLAIN}"
+        echo -e "${GREEN}  6. 清理旧备份${PLAIN}                ${YELLOW}(每次只删一个明确备份文件)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 退出 / q 返回上一级${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        read_menu_choice choice
 
         case "$choice" in
             1)
@@ -1994,12 +2082,12 @@ main_menu() {
                 cleanup_backups
                 pause
                 ;;
-            0)
+            0|q|Q)
                 clear_screen
                 exit 0
                 ;;
             *)
-                echo "无效选择。"
+                echo -e "${RED}❌ 无效选择！${PLAIN}"
                 sleep 1
                 ;;
         esac
@@ -2009,5 +2097,6 @@ main_menu() {
 if [ "$RUN_CHECK" -eq 1 ] || [ "$DRY_RUN" -eq 1 ]; then
     run_reset_engine
 else
+    require_interactive_menu || exit 1
     main_menu
 fi
