@@ -1180,6 +1180,13 @@ def write_plan_count(count):
     except Exception:
         pass
 
+def non_negative_int(value, default=0):
+    try:
+        parsed = int(value or default)
+    except Exception:
+        parsed = default
+    return max(parsed, 0)
+
 def load_config():
     if not config_path.exists():
         return {"enabled": False, "default_day": 1, "inbounds": {}}
@@ -1202,7 +1209,7 @@ def load_config():
 
 def load_state():
     if not state_path.exists():
-        return {"schema_version": 1, "inbounds": {}, "clients": {}}
+        return {"schema_version": 2, "inbounds": {}, "clients": {}}
     try:
         with state_path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -1216,17 +1223,29 @@ def load_state():
         return None
     if "schema_version" not in data:
         data = {
-            "schema_version": 1,
+            "schema_version": 2,
             "inbounds": data.get("inbounds", {}) if isinstance(data.get("inbounds"), dict) else {},
             "clients": data.get("clients", {}) if isinstance(data.get("clients"), dict) else {},
         }
-    data.setdefault("schema_version", 1)
+    data["schema_version"] = max(non_negative_int(data.get("schema_version", 1), 1), 2)
     data.setdefault("inbounds", {})
     data.setdefault("clients", {})
     if not isinstance(data["inbounds"], dict):
         data["inbounds"] = {}
     if not isinstance(data["clients"], dict):
         data["clients"] = {}
+    for records in (data["inbounds"], data["clients"]):
+        for key, record in list(records.items()):
+            if not isinstance(record, dict):
+                records[key] = {"traffic_totals": {"up": 0, "down": 0, "total": 0}}
+                continue
+            totals = record.get("traffic_totals")
+            if not isinstance(totals, dict):
+                totals = {}
+            totals["up"] = non_negative_int(totals.get("up", 0))
+            totals["down"] = non_negative_int(totals.get("down", 0))
+            totals["total"] = totals["up"] + totals["down"]
+            record["traffic_totals"] = totals
     return data
 
 def save_state(data):
@@ -1366,6 +1385,7 @@ def print_preview(plan_inbounds, plan_clients, skipped, warnings):
     print("================================================")
     print(f"日期：{today.isoformat()}")
     print("模式：预览模式，只预览，不写数据库")
+    print("说明：真实执行时会先把本月 up/down 累加到状态文件的历史总流量，再清零本月流量")
     print()
     if not plan_inbounds and not plan_clients:
         print("本次没有需要重置的入站或客户端。")
@@ -1424,6 +1444,17 @@ def quick_health():
     except Exception as exc:
         print(f"  数据库完整性：检查失败：{exc}")
 
+def add_preserved_traffic(state_record, up, down):
+    totals = state_record.setdefault("traffic_totals", {})
+    previous_up = non_negative_int(totals.get("up", 0))
+    previous_down = non_negative_int(totals.get("down", 0))
+    up = non_negative_int(up)
+    down = non_negative_int(down)
+    totals["up"] = previous_up + up
+    totals["down"] = previous_down + down
+    totals["total"] = totals["up"] + totals["down"]
+    return totals
+
 def execute_plan(plan_inbounds, plan_clients, state):
     print("准备执行自定义重置...")
     backup_path = backup_database()
@@ -1444,18 +1475,39 @@ def execute_plan(plan_inbounds, plan_clients, state):
         cur.execute("BEGIN")
 
         for item in plan_inbounds:
+            row = cur.execute("SELECT up, down FROM inbounds WHERE id=?", (item["id"],)).fetchone()
+            if row is None:
+                skipped_write.append((item["label"], "写入时入站已不存在"))
+                continue
             cur.execute("UPDATE inbounds SET up=0, down=0 WHERE id=?", (item["id"],))
             if cur.rowcount > 0:
+                item["preserved_totals"] = add_preserved_traffic(
+                    state["inbounds"].setdefault(item["id"], {}),
+                    row[0],
+                    row[1],
+                )
                 updated_inbounds.append(item)
             else:
                 skipped_write.append((item["label"], "写入时入站已不存在"))
 
         for item in plan_clients:
+            row = cur.execute(
+                "SELECT up, down FROM client_traffics WHERE inbound_id=? AND email=?",
+                (item["inbound_id"], item["email"]),
+            ).fetchone()
+            if row is None:
+                skipped_write.append((item["label"], "写入时客户端已不存在"))
+                continue
             cur.execute(
                 "UPDATE client_traffics SET up=0, down=0 WHERE inbound_id=? AND email=?",
                 (item["inbound_id"], item["email"]),
             )
             if cur.rowcount > 0:
+                item["preserved_totals"] = add_preserved_traffic(
+                    state["clients"].setdefault(item["key"], {}),
+                    row[0],
+                    row[1],
+                )
                 updated_clients.append(item)
             else:
                 skipped_write.append((item["label"], "写入时客户端已不存在"))
@@ -1463,17 +1515,17 @@ def execute_plan(plan_inbounds, plan_clients, state):
         conn.commit()
 
         for item in updated_inbounds:
-            state["inbounds"][item["id"]] = {"last_reset_month": current_month, "last_reset_date": today.isoformat()}
+            state["inbounds"].setdefault(item["id"], {}).update({"last_reset_month": current_month, "last_reset_date": today.isoformat()})
         for item in updated_clients:
-            state["clients"][item["key"]] = {"last_reset_month": current_month, "last_reset_date": today.isoformat()}
+            state["clients"].setdefault(item["key"], {}).update({"last_reset_month": current_month, "last_reset_date": today.isoformat()})
         save_state(state)
 
         if updated_inbounds or updated_clients:
             print("重置完成：")
             for item in updated_inbounds:
-                print(f"  {item['label']}")
+                print(f"  {item['label']}，累计历史总流量已保留 {item['preserved_totals']['total']} bytes")
             for item in updated_clients:
-                print(f"  {item['label']}")
+                print(f"  {item['label']}，累计历史总流量已保留 {item['preserved_totals']['total']} bytes")
         else:
             print("没有对象被写入，状态文件未新增记录。")
         for label, reason in skipped_write:
@@ -1507,6 +1559,7 @@ def main():
             print("================================================")
             print(f"日期：{today.isoformat()}")
             print("模式：预览模式，只预览，不写数据库")
+            print("说明：真实执行时会先把本月 up/down 累加到状态文件的历史总流量，再清零本月流量")
             print()
             print("自定义重置已禁用，跳过。")
             print("================================================")

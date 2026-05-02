@@ -84,6 +84,8 @@ timer 只调用这个本地文件
 /var/lib/xui-custom-manager/reset-state.json
 ```
 
+真实执行外置重置时，脚本只清零 x-ui 数据库中的本月已用流量 `up/down`，不会修改官方数据库里的历史累计字段 `all_time`，也不会修改 `total` 流量上限。脚本会在清零前额外把本月 `up/down` 写入状态文件，作为外置累计备份。
+
 如果错过日期会补执行。例如设置每月 10 号，10 号机器离线，11 号上线时会补执行一次。
 
 日期规则：
@@ -259,6 +261,24 @@ XUI_PROGRAM_DIR="/usr/local/x-ui"
 | `reset_inbound` | 是否重置入站总流量 |
 | `reset_clients_without_custom_day` | 是否重置未单独设置日期的客户端 |
 | `clients.<email>.day` | 指定客户端的重置日期 |
+
+3x-ui 官方面板的“累计总流量”通常来自数据库里的 `all_time` 字段。脚本不会修改这个官方字段，避免重复累加；状态文件的 `traffic_totals` 只作为外置累计备份：
+
+```json
+{
+  "inbounds": {
+    "1": {
+      "last_reset_month": "2026-05",
+      "last_reset_date": "2026-05-02",
+      "traffic_totals": {
+        "up": 1073741824,
+        "down": 2147483648,
+        "total": 3221225472
+      }
+    }
+  }
+}
+```
 
 ## 安全说明
 
