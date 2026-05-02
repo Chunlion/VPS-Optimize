@@ -5087,6 +5087,13 @@ func_port_dog() {
 
 func_xpanel() {
     clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}安装 3x-ui / x-ui 面板${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}账号密码说明：本入口会运行 3x-ui 官方安装器。${PLAIN}"
+    echo -e "${YELLOW}管理员账号、密码和面板路径通常由官方安装器交互设置或在安装结束时输出。${PLAIN}"
+    echo -e "${YELLOW}请留意安装结束输出并及时保存；后续也可通过 x-ui / 3x-ui 官方菜单修改。${PLAIN}"
+    echo -e "------------------------------------------------"
     echo -e "${CYAN}👉 正在拉取 mhsanaei 的官方 x-panel 一键脚本...${PLAIN}"
     run_remote_script "安装 3x-ui / x-ui 面板" "https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
     pause_after_external_script "操作结束，按回车键返回菜单..."
@@ -5141,6 +5148,13 @@ func_xui_custom_manager() {
 
 func_sui_panel() {
     clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}安装 S-UI 面板${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}账号密码说明：本入口会运行 S-UI 官方安装器。${PLAIN}"
+    echo -e "${YELLOW}管理员账号、密码和面板访问参数由官方安装器设置或在安装结束时输出。${PLAIN}"
+    echo -e "${YELLOW}请留意安装结束输出并及时保存；后续也可通过 s-ui 官方菜单修改。${PLAIN}"
+    echo -e "------------------------------------------------"
     echo -e "${CYAN}👉 正在拉取 alireza0 的 S-UI 官方安装脚本...${PLAIN}"
     run_remote_script "安装 S-UI 面板" "https://raw.githubusercontent.com/alireza0/s-ui/master/install.sh"
     pause_after_external_script "操作结束，按回车键返回菜单..."
@@ -5401,6 +5415,9 @@ func_sublinkpro() {
 
     echo -e "${YELLOW}💡 SublinkPro 将被安全部署在: ${CYAN}$install_dir${PLAIN}"
     echo -e "${YELLOW}💡 SublinkPro 对外访问端口将使用: ${CYAN}$sublink_port${PLAIN}"
+    echo -e "${YELLOW}账号密码说明：当前安装流程不提供自定义后台账号密码。${PLAIN}"
+    echo -e "${YELLOW}默认后台账号：${CYAN}admin${PLAIN} / 默认后台密码：${CYAN}123456${PLAIN}"
+    echo -e "${YELLOW}部署完成后请尽快登录后台修改默认密码。${PLAIN}"
     echo -e "------------------------------------------------"
     
     read_trimmed yn "❓ 确认现在开始一键安装吗？(y/n): "
@@ -5435,6 +5452,7 @@ EOF
         echo -e "🌐 ${BOLD}面板访问地址:${PLAIN} http://$ip:${sublink_port}"
         echo -e "👤 ${BOLD}默认后台账号:${PLAIN} admin"
         echo -e "🔑 ${BOLD}默认后台密码:${PLAIN} 123456"
+        echo -e "${YELLOW}⚠️ 当前安装流程未提供自定义账号密码，请登录后尽快修改默认密码。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${YELLOW}⚠️ 核心防丢提示：${PLAIN}"
         echo -e "系统产生的数据库、模板和日志都已持久化映射在 ${CYAN}$install_dir${PLAIN} 下。"
@@ -5474,6 +5492,8 @@ func_miaomiaowu() {
     echo -e "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}"
     echo -e "${YELLOW}访问端口：${CYAN}${mmw_port}${PLAIN}"
     echo -e "${YELLOW}数据目录：${CYAN}${install_dir}/data、subscribes、rule_templates${PLAIN}"
+    echo -e "${YELLOW}账号密码说明：当前安装流程不预设账号密码。${PLAIN}"
+    echo -e "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}"
     echo -e "------------------------------------------------"
 
     local yn
@@ -5518,6 +5538,7 @@ EOF
         echo -e "------------------------------------------------"
         echo -e "${GREEN}✅ 妙妙屋订阅管理部署完成！${PLAIN}"
         echo -e "访问地址：${BOLD}http://${ip}:${mmw_port}${PLAIN}"
+        echo -e "账号密码：${YELLOW}无默认账号密码，首次打开页面创建管理员账号。${PLAIN}"
         echo -e "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}"
         echo -e "${YELLOW}请定期备份 ${install_dir}/data、subscribes、rule_templates。${PLAIN}"
     else
@@ -5562,6 +5583,8 @@ func_substore() {
     echo -e "${YELLOW}HTTP-META：${CYAN}127.0.0.1:${meta_port}${PLAIN}"
     echo -e "${YELLOW}前端后端路径：${CYAN}${backend_path}${PLAIN}"
     echo -e "${YELLOW}默认使用 host 网络并绑定 127.0.0.1，如需公网访问建议再接 Caddy/Nginx 反代。${PLAIN}"
+    echo -e "${YELLOW}账号密码说明：当前 Sub-Store 部署不使用登录账号密码。${PLAIN}"
+    echo -e "${YELLOW}请保存随机后端路径；公网访问建议通过反代额外加认证。${PLAIN}"
     echo -e "------------------------------------------------"
 
     local yn
@@ -5597,6 +5620,7 @@ EOF
         echo -e "${GREEN}✅ Sub-Store 部署完成！${PLAIN}"
         echo -e "本地后端地址：${BOLD}http://127.0.0.1:${backend_port}${backend_path}${PLAIN}"
         echo -e "HTTP-META 地址：${BOLD}http://127.0.0.1:${meta_port}${PLAIN}"
+        echo -e "账号密码：${YELLOW}无默认登录账号密码，请妥善保存上面的随机后端路径。${PLAIN}"
         echo -e "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}"
         echo -e "${YELLOW}请定期备份 ${install_dir}/data。${PLAIN}"
     else
@@ -5700,6 +5724,8 @@ func_dockge() {
     echo -e "${YELLOW}Dockge 目录：${CYAN}${install_dir}${PLAIN}"
     echo -e "${YELLOW}Stacks 目录：${CYAN}${stacks_dir}${PLAIN}"
     echo -e "${YELLOW}监听地址：${CYAN}${dockge_bind_addr}:${dockge_port}${PLAIN}"
+    echo -e "${YELLOW}账号密码说明：Dockge 不预设默认账号密码。${PLAIN}"
+    echo -e "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}"
     echo -e "------------------------------------------------"
 
     local yn
@@ -5731,6 +5757,7 @@ EOF
         echo -e "${GREEN}✅ Dockge 部署完成！${PLAIN}"
         echo -e "访问地址：${BOLD}http://${dockge_bind_addr}:${dockge_port}${PLAIN}"
         echo -e "Stacks 目录：${CYAN}${stacks_dir}${PLAIN}"
+        echo -e "账号密码：${YELLOW}无默认账号密码，首次打开页面创建管理员账号。${PLAIN}"
         echo -e "${YELLOW}已有 compose 项目可返回部署菜单选择 [10] 迁移到 Dockge 后，在 Dockge 里扫描 stacks 目录。${PLAIN}"
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
@@ -5799,6 +5826,7 @@ func_komari() {
     if [[ -n "$admin_username" ]]; then
         echo -e "${YELLOW}初始管理员：${CYAN}${admin_username}${PLAIN}"
     else
+        echo -e "${YELLOW}账号密码说明：未自定义时 Komari 会生成默认管理员账号。${PLAIN}"
         echo -e "${YELLOW}初始管理员：${CYAN}使用 Komari 默认生成账号，请安装后查看容器日志${PLAIN}"
     fi
     echo -e "------------------------------------------------"
