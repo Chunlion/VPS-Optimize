@@ -15,7 +15,7 @@ CYAN='\033[1;36m'
 PLAIN='\033[0m'
 BOLD='\033[1m'
 
-SCRIPT_VERSION="v1.6-unreleased"
+SCRIPT_VERSION="v1.6"
 
 print_breadcrumb() {
     echo -e "${CYAN}VPS-Optimize > $*${PLAIN}"
