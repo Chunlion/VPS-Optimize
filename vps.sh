@@ -252,7 +252,7 @@ func_base_init() {
     # 更新系统软件包并优雅调用全局安装函数
     if is_debian; then
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update -y && apt-get upgrade -y
+        apt-get update -y && apt-get upgrade -y && APT_UPDATED=1
         unset DEBIAN_FRONTEND
         install_pkg curl wget git nano unzip htop iptables iproute2 sqlite3 jq
     elif is_redhat; then
@@ -2684,14 +2684,28 @@ EOF
 install_nginx_stream_stack() {
     echo -e "${CYAN}▶ 正在检查 Nginx stream 组件...${PLAIN}"
     local need_install=0
+    local nginx_build
     if ! command -v nginx >/dev/null 2>&1; then
         echo -e "${YELLOW}⚠️ 未检测到 Nginx，正在安装基础组件...${PLAIN}"
         need_install=1
-    elif ! nginx -V 2>&1 | grep -Eq -- '--with-stream(=dynamic)?|--with-stream_ssl_preread_module'; then
-        echo -e "${YELLOW}⚠️ 未确认 Nginx stream 支持，正在尝试补齐模块...${PLAIN}"
-        need_install=1
     else
-        echo -e "${GREEN}✅ 已检测到 Nginx stream 支持，跳过安装步骤。${PLAIN}"
+        nginx_build=$(nginx -V 2>&1 || true)
+    fi
+
+    if [[ "$need_install" -eq 0 ]]; then
+        if [[ "$nginx_build" == *"--with-stream=dynamic"* ]]; then
+            if grep -Rqs 'load_module .*ngx_stream_module\.so' /etc/nginx/nginx.conf /etc/nginx/modules-enabled 2>/dev/null; then
+                echo -e "${GREEN}✅ 已检测到 Nginx stream 动态模块加载配置，跳过安装步骤。${PLAIN}"
+            else
+                echo -e "${YELLOW}⚠️ Nginx 支持动态 stream 模块，但未确认模块已加载，正在尝试补齐模块...${PLAIN}"
+                need_install=1
+            fi
+        elif [[ "$nginx_build" == *"--with-stream"* || "$nginx_build" == *"--with-stream_ssl_preread_module"* ]]; then
+            echo -e "${GREEN}✅ 已检测到 Nginx stream 静态支持，跳过安装步骤。${PLAIN}"
+        else
+            echo -e "${YELLOW}⚠️ 未确认 Nginx stream 支持，正在尝试补齐模块...${PLAIN}"
+            need_install=1
+        fi
     fi
 
     if [[ "$need_install" -eq 1 ]]; then
@@ -5433,7 +5447,7 @@ install_cloud_kvm_kernel() {
 
     if is_debian; then
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update -qq >/dev/null 2>&1
+        apt_update_once || true
         unset DEBIAN_FRONTEND
     fi
 
@@ -5505,7 +5519,7 @@ add_xanmod_repo() {
     fi
     rm -f "$key_tmp"
     echo "deb [signed-by=/etc/apt/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org ${codename} main" > /etc/apt/sources.list.d/xanmod-release.list
-    apt-get update -qq
+    apt-get update -qq && APT_UPDATED=1
 }
 
 install_xanmod_kernel_package() {
@@ -5514,7 +5528,7 @@ install_xanmod_kernel_package() {
     while IFS= read -r pkg; do
         apt_pkg_available "$pkg" || continue
         echo -e "${CYAN}▶ 尝试安装 XanMod 包: ${pkg}${PLAIN}"
-        if apt-get install -y -qq "$pkg"; then
+        if install_pkg "$pkg"; then
             echo -e "${GREEN}✅ 已安装 XanMod 内核包: ${pkg}${PLAIN}"
             return 0
         fi
