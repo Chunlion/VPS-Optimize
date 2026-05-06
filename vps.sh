@@ -2154,15 +2154,28 @@ check_sni_stack_subscription_hint() {
 }
 
 save_and_offer_reapply_sni_stack() {
-    local yn
+    local yn env_file env_backup
+    env_file="/etc/vps-optimize/sni-stack.env"
+    env_backup=""
+    if [[ -f "$env_file" ]]; then
+        env_backup="${env_file}.pre_reapply_$(date +%Y%m%d_%H%M%S)"
+        cp -p "$env_file" "$env_backup" 2>/dev/null || env_backup=""
+    fi
     save_sni_stack_env
     echo -e "${GREEN}✅ 已保存新的 443 单入口运行参数。${PLAIN}"
     echo -e "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的端口或路径。${PLAIN}"
     read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？输入 YES 继续，直接回车取消: "
     if [[ "$yn" == "YES" ]]; then
-        reapply_sni_stack_from_env --yes
+        if ! reapply_sni_stack_from_env --yes; then
+            if [[ -n "$env_backup" && -f "$env_backup" ]]; then
+                cp -p "$env_backup" "$env_file" 2>/dev/null || true
+                echo -e "${YELLOW}⚠️ 已恢复重新应用前的参数文件：${env_backup}${PLAIN}"
+            fi
+            return 1
+        fi
     else
         echo -e "${YELLOW}稍后可执行 [19] -> [4] 重新应用上次配置。${PLAIN}"
+        [[ -n "$env_backup" ]] && echo -e "${CYAN}参数修改前备份已保留：${env_backup}${PLAIN}"
     fi
 }
 
@@ -3130,6 +3143,8 @@ add_sni_stack_site() {
     echo -e ""
 
     local site_domain site_addr site_port advanced_mode existing idx confirm
+    local enable_ip_whitelist whitelist_input whitelist_ranges current_client_ip
+    local -a whitelist_array=()
     read_trimmed site_domain "请输入新网站/反代域名（例如 sub.example.com）: "
     site_domain=$(normalize_domain_input "$site_domain")
     if [[ -z "$site_domain" || "$site_domain" == "0" ]]; then
@@ -3165,8 +3180,18 @@ add_sni_stack_site() {
     is_valid_port "$site_port" || { echo -e "${RED}❌ 后端端口无效：${site_port}${PLAIN}"; return 1; }
     warn_if_public_bind "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
 
+    read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
+    if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
+        current_client_ip=$(detect_ssh_client_ip)
+        [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
+        read_trimmed whitelist_input "请输入允许访问 ${site_domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
+        normalize_ip_whitelist_input "$whitelist_input" whitelist_array || return 1
+        whitelist_ranges=$(join_array_by_space "${whitelist_array[@]}")
+    fi
+
     echo -e ""
     echo -e "${CYAN}即将添加：${site_domain} -> ${site_addr}:${site_port}${PLAIN}"
+    [[ -n "${whitelist_ranges:-}" ]] && echo -e "${YELLOW}IP 白名单：${whitelist_ranges}${PLAIN}"
     confirm_risk_action "新增 443 网站/反代域名 ${site_domain}" \
         "证书、Caddy 站点配置和 Nginx SNI 分流配置" \
         "使用 443 单入口备份恢复，或从网站管理菜单删除该域名" \
@@ -3176,6 +3201,7 @@ add_sni_stack_site() {
     SITE_DOMAINS[$idx]="$site_domain"
     SITE_BACKEND_ADDRS[$idx]="$site_addr"
     SITE_BACKEND_PORTS[$idx]="$site_port"
+    [[ -n "${whitelist_ranges:-}" ]] && set_sni_ip_whitelist_for_domain "$site_domain" "$whitelist_ranges"
 
     issue_and_install_cert_for_domain "$site_domain" "$CF_Token" || return 1
     apply_sni_stack_runtime_config || return 1
@@ -4320,6 +4346,12 @@ func_caddy_manage_ip_whitelist() {
     echo -e "${YELLOW}适用于未启用 443 单入口、由 Caddy 直接对外服务的域名。${PLAIN}"
     echo -e "${YELLOW}如果该域名已接入 443 单入口，请用 [19] -> [8]，不要在 Caddy 层限制。${PLAIN}"
     echo -e "------------------------------------------------"
+
+    if ! command -v caddy >/dev/null 2>&1 || [[ ! -f /etc/caddy/Caddyfile ]]; then
+        echo -e "${RED}❌ 未检测到 Caddy 或 /etc/caddy/Caddyfile，请先配置普通 Caddy 反代。${PLAIN}"
+        read -n 1 -s -r -p "按任意键继续..."
+        return
+    fi
 
     local domain conf_file first_site_line action backup_file
     read_trimmed domain "请输入要管理的域名 (如 panel.example.com): "
