@@ -1113,7 +1113,6 @@ func_env_install() {
         echo -e "${CYAN} 15. Caddy 跳过后端证书校验${PLAIN}   ${YELLOW}(后端自签 HTTPS 时使用)${PLAIN}"
         echo -e "${CYAN} 16. 清空 Caddy 配置${PLAIN}           ${YELLOW}(危险操作，清理反代配置)${PLAIN}"
         echo -e "${RED} 17. 删除底层 ACME 证书${PLAIN}        ${YELLOW}(危险操作，清理签发记录)${PLAIN}"
-        echo -e "${CYAN} 21. 普通 Caddy 域名 IP 白名单${PLAIN} ${YELLOW}(未启用 443 单入口时使用)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 443 单入口分流${PLAIN} ${YELLOW}(推荐：Nginx Stream + Caddy + REALITY)${PLAIN}"
         echo -e "${GREEN} 18. 首次配置 443 单入口${PLAIN}       ${YELLOW}(面板/订阅/REALITY/网站共用公网 443)${PLAIN}"
@@ -1176,22 +1175,6 @@ func_env_install() {
                         echo -e "${RED}❌ 错误：已存在该域名的配置块！请先清理或更换域名后再添加。${PLAIN}"
                     else
                         read_trimmed is_https "❓ 后端面板是否开启了自带的 SSL 证书？(y/n): "
-
-                        local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
-                        local -a ip_whitelist_array=()
-                        read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
-                        if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
-                            current_client_ip=$(detect_ssh_client_ip)
-                            [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}"
-                            read_trimmed ip_whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
-                            if ! normalize_ip_whitelist_input "$ip_whitelist_input" ip_whitelist_array; then
-                                echo -e "${RED}❌ 白名单为空或格式错误，已取消本次反代配置。${PLAIN}"
-                                continue
-                            fi
-                            ip_whitelist_ranges=$(join_array_by_space "${ip_whitelist_array[@]}")
-                        else
-                            ip_whitelist_ranges=""
-                        fi
                         
                         local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
                         [[ -f /etc/caddy/Caddyfile ]] && cp -p /etc/caddy/Caddyfile "$backup_file"
@@ -1199,7 +1182,7 @@ func_env_install() {
                         if [[ "$is_https" =~ ^[Yy]$ ]]; then
                             cat <<EOF > "$domain_conf"
 $domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://127.0.0.1:$port {
+    reverse_proxy https://127.0.0.1:$port {
         transport http {
             tls_insecure_skip_verify
         }
@@ -1209,7 +1192,7 @@ EOF
                         else
                             cat <<EOF > "$domain_conf"
 $domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy localhost:$port
+    reverse_proxy localhost:$port
 }
 EOF
                         fi
@@ -1218,7 +1201,6 @@ EOF
                         if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
                             if systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1; then
                                 echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
-                                [[ -n "$ip_whitelist_ranges" ]] && echo -e "${GREEN}✅ 已为 ${domain} 启用 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
                                 echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
                             else
                                 echo -e "${RED}❌ Caddy 配置校验通过，但服务重载失败，正在回滚...${PLAIN}"
@@ -1238,7 +1220,6 @@ EOF
             15) func_caddy_add_insecure ;;
             16) func_caddy_clear_config ;;
             17) func_caddy_delete_cert ;;
-            21) func_caddy_manage_ip_whitelist ;;
             18) func_caddy_cf_reality_wizard ;;
             19) func_caddy_cf_maintenance_menu ;;
             20) manage_sni_stack_sites ;;
@@ -1478,113 +1459,6 @@ split_csv_to_array() {
     done
 }
 
-split_pipe_to_array() {
-    local input="$1"
-    local -n out_array=$2
-    local item cleaned
-    local raw_array=()
-    out_array=()
-    IFS='|' read -ra raw_array <<< "$input"
-    for item in "${raw_array[@]}"; do
-        cleaned=$(trim_input "$item")
-        [[ -n "$cleaned" ]] && out_array+=("$cleaned")
-    done
-}
-
-is_valid_ipv4_cidr() {
-    local value="$1"
-    local ip prefix a b c d octet
-    ip="${value%%/*}"
-    prefix=""
-    [[ "$value" == */* ]] && prefix="${value##*/}"
-
-    [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
-    IFS='.' read -r a b c d <<< "$ip"
-    for octet in "$a" "$b" "$c" "$d"; do
-        [[ "$octet" =~ ^[0-9]+$ ]] || return 1
-        (( 10#$octet >= 0 && 10#$octet <= 255 )) || return 1
-    done
-    if [[ -n "$prefix" ]]; then
-        [[ "$prefix" =~ ^[0-9]+$ ]] || return 1
-        (( 10#$prefix >= 0 && 10#$prefix <= 32 )) || return 1
-    fi
-}
-
-is_valid_ipv6_cidr() {
-    local value="$1"
-    local ip prefix
-    ip="${value%%/*}"
-    prefix=""
-    [[ "$value" == */* ]] && prefix="${value##*/}"
-
-    [[ "$ip" == *:* ]] || return 1
-    [[ "$ip" =~ ^[0-9a-fA-F:]+$ ]] || return 1
-    [[ "$ip" != *:::* ]] || return 1
-    if [[ -n "$prefix" ]]; then
-        [[ "$prefix" =~ ^[0-9]+$ ]] || return 1
-        (( 10#$prefix >= 0 && 10#$prefix <= 128 )) || return 1
-    fi
-}
-
-is_valid_ip_cidr() {
-    local value="$1"
-    [[ -n "$value" && "$value" != *";"* && "$value" != *"{"* && "$value" != *"}"* ]] || return 1
-    is_valid_ipv4_cidr "$value" || is_valid_ipv6_cidr "$value"
-}
-
-normalize_ip_whitelist_input() {
-    local input="$1"
-    local -n out_array=$2
-    local item normalized seen
-    input="${input//，/,}"
-    input="${input//;/ }"
-    input="${input//,/ }"
-    input="${input//$'\r'/ }"
-    input="${input//$'\n'/ }"
-    out_array=()
-    seen=" "
-    for item in $input; do
-        normalized=$(echo "$(trim_input "$item")" | tr '[:upper:]' '[:lower:]')
-        [[ -z "$normalized" ]] && continue
-        if ! is_valid_ip_cidr "$normalized"; then
-            echo -e "${RED}❌ IP/CIDR 格式无效：${normalized}${PLAIN}"
-            return 1
-        fi
-        if [[ "$seen" != *" ${normalized} "* ]]; then
-            out_array+=("$normalized")
-            seen+=" ${normalized} "
-        fi
-    done
-    [[ ${#out_array[@]} -gt 0 ]]
-}
-
-join_array_by_space() {
-    local IFS=' '
-    echo "$*"
-}
-
-detect_ssh_client_ip() {
-    local client_ip=""
-    if [[ -n "${SSH_CONNECTION:-}" ]]; then
-        client_ip="${SSH_CONNECTION%% *}"
-    elif [[ -n "${SSH_CLIENT:-}" ]]; then
-        client_ip="${SSH_CLIENT%% *}"
-    fi
-    echo "$client_ip"
-}
-
-caddy_ip_whitelist_block() {
-    local ranges="$1"
-    [[ -z "$ranges" ]] && return 0
-    cat <<EOF
-    # vps-optimize-ip-whitelist-start
-    @vps_ip_denied not remote_ip ${ranges}
-    abort @vps_ip_denied
-    # vps-optimize-ip-whitelist-end
-
-EOF
-}
-
 is_valid_port() {
     local port="$1"
     [[ "$port" =~ ^[0-9]+$ ]] && (( 10#$port >= 1 && 10#$port <= 65535 ))
@@ -1822,13 +1696,6 @@ print_sni_stack_preview() {
             echo -e "网站/反代域名：${SITE_DOMAINS[$i]} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]}"
         done
     fi
-    if [[ ${#SNI_IP_WHITELIST_DOMAINS[@]} -gt 0 ]]; then
-        echo -e "${YELLOW}域名 IP 白名单：${PLAIN}"
-        local wl_i
-        for wl_i in "${!SNI_IP_WHITELIST_DOMAINS[@]}"; do
-            echo -e "  ${SNI_IP_WHITELIST_DOMAINS[$wl_i]} 仅允许 ${SNI_IP_WHITELIST_RANGES[$wl_i]}"
-        done
-    fi
     echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
     echo -e "默认/未知 SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
     echo -e ""
@@ -1861,7 +1728,6 @@ load_sni_stack_env() {
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
     CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
     normalize_site_stack_arrays
-    normalize_sni_ip_whitelist_arrays
 }
 
 get_listen_line_by_port() {
@@ -1884,7 +1750,6 @@ print_sni_stack_current_summary() {
     echo -e "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Caddy ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
     echo -e "配置文件：  Nginx ${nginx_conf}"
     echo -e "           Caddy ${caddy_conf}"
-    print_sni_ip_whitelist_summary
     echo -e "------------------------------------------------"
     echo -e "${BOLD}当前实际监听状态${PLAIN}"
     echo -e "Nginx 入口：  $(get_listen_line_by_port "$NGINX_LISTEN_PORT")"
@@ -1926,118 +1791,6 @@ normalize_site_stack_arrays() {
     SITE_DOMAIN="${SITE_DOMAINS[0]:-}"
     SITE_BACKEND_ADDR="${SITE_BACKEND_ADDRS[0]:-127.0.0.1}"
     SITE_BACKEND_PORT="${SITE_BACKEND_PORTS[0]:-3000}"
-}
-
-is_sni_stack_web_domain() {
-    local domain="$1"
-    local site_domain
-    [[ "$domain" == "$PANEL_DOMAIN" ]] && return 0
-    for site_domain in "${SITE_DOMAINS[@]}"; do
-        [[ "$domain" == "$site_domain" ]] && return 0
-    done
-    return 1
-}
-
-nginx_var_suffix_for_domain() {
-    local domain="$1"
-    domain=$(echo "$domain" | tr '.-' '__' | tr -cd 'a-zA-Z0-9_')
-    printf '%s' "$domain"
-}
-
-normalize_sni_ip_whitelist_arrays() {
-    local domains_input="${SNI_IP_WHITELIST_DOMAINS_CSV:-}"
-    local ranges_input="${SNI_IP_WHITELIST_RANGES_PIPE:-}"
-    local -a raw_domains=()
-    local -a raw_ranges=()
-    local -a clean_domains=()
-    local -a clean_ranges=()
-    local -a range_array=()
-    local i domain ranges
-
-    SNI_IP_WHITELIST_DOMAINS=()
-    SNI_IP_WHITELIST_RANGES=()
-
-    [[ -n "$domains_input" ]] && split_csv_to_array "$domains_input" raw_domains
-    [[ -n "$ranges_input" ]] && split_pipe_to_array "$ranges_input" raw_ranges
-
-    for i in "${!raw_domains[@]}"; do
-        domain=$(normalize_domain_input "${raw_domains[$i]}")
-        ranges="${raw_ranges[$i]:-}"
-        [[ -n "$domain" && -n "$ranges" ]] || continue
-        is_valid_domain "$domain" || continue
-        is_sni_stack_web_domain "$domain" || continue
-        if normalize_ip_whitelist_input "$ranges" range_array; then
-            clean_domains+=("$domain")
-            clean_ranges+=("$(join_array_by_space "${range_array[@]}")")
-        fi
-    done
-
-    SNI_IP_WHITELIST_DOMAINS=("${clean_domains[@]}")
-    SNI_IP_WHITELIST_RANGES=("${clean_ranges[@]}")
-}
-
-sni_ip_whitelist_index() {
-    local domain="$1"
-    local i
-    for i in "${!SNI_IP_WHITELIST_DOMAINS[@]}"; do
-        [[ "$domain" == "${SNI_IP_WHITELIST_DOMAINS[$i]}" ]] && { echo "$i"; return 0; }
-    done
-    return 1
-}
-
-sni_ip_whitelist_ranges_for_domain() {
-    local domain="$1"
-    local idx
-    idx=$(sni_ip_whitelist_index "$domain" 2>/dev/null) || return 0
-    echo "${SNI_IP_WHITELIST_RANGES[$idx]:-}"
-}
-
-set_sni_ip_whitelist_for_domain() {
-    local domain="$1"
-    local ranges="$2"
-    local idx
-    idx=$(sni_ip_whitelist_index "$domain" 2>/dev/null) || idx=""
-    if [[ -n "$idx" ]]; then
-        SNI_IP_WHITELIST_RANGES[$idx]="$ranges"
-    else
-        SNI_IP_WHITELIST_DOMAINS+=("$domain")
-        SNI_IP_WHITELIST_RANGES+=("$ranges")
-    fi
-}
-
-remove_sni_ip_whitelist_for_domain() {
-    local domain="$1"
-    local i
-    local -a new_domains=()
-    local -a new_ranges=()
-    for i in "${!SNI_IP_WHITELIST_DOMAINS[@]}"; do
-        [[ "$domain" == "${SNI_IP_WHITELIST_DOMAINS[$i]}" ]] && continue
-        new_domains+=("${SNI_IP_WHITELIST_DOMAINS[$i]}")
-        new_ranges+=("${SNI_IP_WHITELIST_RANGES[$i]}")
-    done
-    SNI_IP_WHITELIST_DOMAINS=("${new_domains[@]}")
-    SNI_IP_WHITELIST_RANGES=("${new_ranges[@]}")
-}
-
-rename_sni_ip_whitelist_domain() {
-    local old_domain="$1"
-    local new_domain="$2"
-    local idx
-    idx=$(sni_ip_whitelist_index "$old_domain" 2>/dev/null) || return 0
-    SNI_IP_WHITELIST_DOMAINS[$idx]="$new_domain"
-}
-
-print_sni_ip_whitelist_summary() {
-    if [[ ${#SNI_IP_WHITELIST_DOMAINS[@]} -eq 0 ]]; then
-        echo -e "IP 白名单：  未启用"
-        return 0
-    fi
-
-    local i
-    echo -e "IP 白名单："
-    for i in "${!SNI_IP_WHITELIST_DOMAINS[@]}"; do
-        echo -e "  - ${SNI_IP_WHITELIST_DOMAINS[$i]} 仅允许：${SNI_IP_WHITELIST_RANGES[$i]}"
-    done
 }
 
 sni_stack_health_check() {
@@ -2303,7 +2056,6 @@ edit_sni_stack_panel_domain_profile() {
     old_conf="/etc/caddy/conf.d/${old_domain}.caddy"
     [[ -f "$old_conf" ]] && quarantine_path "$old_conf" "/etc/caddy/conf.d_quarantine" >/dev/null 2>&1 || true
     PANEL_DOMAIN="$new_domain"
-    rename_sni_ip_whitelist_domain "$old_domain" "$new_domain"
     save_and_offer_reapply_sni_stack
 }
 
@@ -2410,8 +2162,6 @@ collect_sni_stack_config() {
     SITE_DOMAINS=()
     SITE_BACKEND_ADDRS=()
     SITE_BACKEND_PORTS=()
-    SNI_IP_WHITELIST_DOMAINS=()
-    SNI_IP_WHITELIST_RANGES=()
     local site_domains_input
     site_domains_input=$(ask_with_default "网站/反代域名（可选，多个用英文逗号分隔，例如 site1.example.com,site2.example.com）" "")
     split_csv_to_array "$site_domains_input" SITE_DOMAINS
@@ -2443,16 +2193,6 @@ collect_sni_stack_config() {
     SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（可自定义）" "2096")
     SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和客户端 Subscription，建议写 /sub/）" "/sub/")")
     CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "/clash/")")
-    local panel_whitelist_enabled panel_whitelist_input panel_whitelist_ranges current_client_ip
-    local -a panel_whitelist_array=()
-    read_trimmed panel_whitelist_enabled "是否为面板域名启用 IP 白名单？(y/n，默认 n): "
-    if [[ "$panel_whitelist_enabled" =~ ^[Yy]$ ]]; then
-        current_client_ip=$(detect_ssh_client_ip)
-        [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
-        read_trimmed panel_whitelist_input "请输入允许访问面板域名的 IP/CIDR（多个用空格或英文逗号分隔）: "
-        normalize_ip_whitelist_input "$panel_whitelist_input" panel_whitelist_array || return 1
-        panel_whitelist_ranges=$(join_array_by_space "${panel_whitelist_array[@]}")
-    fi
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i default_site_port
         default_site_port=3000
@@ -2520,9 +2260,6 @@ collect_sni_stack_config() {
     SITE_DOMAIN="${SITE_DOMAINS[0]:-}"
     SITE_BACKEND_ADDR="${SITE_BACKEND_ADDRS[0]:-127.0.0.1}"
     SITE_BACKEND_PORT="${SITE_BACKEND_PORTS[0]:-3000}"
-    if [[ -n "${panel_whitelist_ranges:-}" ]]; then
-        set_sni_ip_whitelist_for_domain "$PANEL_DOMAIN" "$panel_whitelist_ranges"
-    fi
     [[ "$NGINX_LISTEN_PORT" != "443" ]] && echo -e "${YELLOW}⚠️  Nginx 公网端口不是 443，不推荐。${PLAIN}"
 
     warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
@@ -2682,45 +2419,11 @@ write_nginx_sni_stream_config() {
     local second_listen="    listen [::]:${NGINX_LISTEN_PORT};"
     local caddy_backend
     local xray_backend
-    local guarded_backend_var="\$vps_sni_backend"
-    local -a whitelist_block_vars=()
     [[ "$NGINX_LISTEN_ADDR" == "::" || "$NGINX_LISTEN_ADDR" == "::1" ]] && first_listen="listen [${NGINX_LISTEN_ADDR}]:${NGINX_LISTEN_PORT};"
     [[ "$NGINX_LISTEN_ADDR" == "::" ]] && second_listen=""
     caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
-
-    : > "$conf_file"
-    if [[ ${#SNI_IP_WHITELIST_DOMAINS[@]} -gt 0 ]]; then
-        local i domain ranges suffix allow_var block_var range
-        for i in "${!SNI_IP_WHITELIST_DOMAINS[@]}"; do
-            domain="${SNI_IP_WHITELIST_DOMAINS[$i]}"
-            ranges="${SNI_IP_WHITELIST_RANGES[$i]}"
-            [[ -n "$domain" && -n "$ranges" ]] || continue
-            is_sni_stack_web_domain "$domain" || continue
-            suffix=$(nginx_var_suffix_for_domain "$domain")
-            allow_var="vps_ip_allow_${suffix}"
-            block_var="vps_ip_block_${suffix}"
-            whitelist_block_vars+=("\$${block_var}")
-            cat <<EOF >> "$conf_file"
-geo \$${allow_var} {
-    default 0;
-EOF
-            for range in $ranges; do
-                echo "    ${range} 1;" >> "$conf_file"
-            done
-            cat <<EOF >> "$conf_file"
-}
-
-map "\$ssl_preread_server_name:\$${allow_var}" \$${block_var} {
-    default 0;
-    "${domain}:0" 1;
-}
-
-EOF
-        done
-    fi
-
-    cat <<EOF >> "$conf_file"
+    cat <<EOF > "$conf_file"
 map \$ssl_preread_server_name \$vps_sni_backend {
     ${PANEL_DOMAIN} caddy_backend;
 EOF
@@ -2735,27 +2438,6 @@ EOF
     default xray_backend;
 }
 
-EOF
-    if [[ ${#whitelist_block_vars[@]} -gt 0 ]]; then
-        local whitelist_key
-        whitelist_key=$(printf '%s' "${whitelist_block_vars[@]}")
-        guarded_backend_var="\$vps_sni_guarded_backend"
-        cat <<EOF >> "$conf_file"
-map "${whitelist_key}" \$vps_sni_ip_blocked {
-    default 0;
-    ~1 1;
-}
-
-map \$vps_sni_ip_blocked \$vps_sni_guarded_backend {
-    1 vps_ip_reject_backend;
-    default \$vps_sni_backend;
-}
-
-EOF
-    fi
-
-    cat <<EOF >> "$conf_file"
-
 upstream caddy_backend {
     server ${caddy_backend};
 }
@@ -2764,22 +2446,11 @@ upstream xray_backend {
     server ${xray_backend};
 }
 
-EOF
-    if [[ ${#whitelist_block_vars[@]} -gt 0 ]]; then
-        cat <<'EOF' >> "$conf_file"
-upstream vps_ip_reject_backend {
-    server 127.0.0.1:9;
-}
-
-EOF
-    fi
-
-    cat <<EOF >> "$conf_file"
 server {
     ${first_listen}
 ${second_listen}
     ssl_preread on;
-    proxy_pass ${guarded_backend_var};
+    proxy_pass \$vps_sni_backend;
     proxy_connect_timeout 10s;
     proxy_timeout 24h;
 }
@@ -2897,12 +2568,9 @@ issue_and_install_cert_for_domain() {
 save_sni_stack_env() {
     mkdir -p /etc/vps-optimize
     local site_domains_csv site_backend_addrs_csv site_backend_ports_csv
-    local sni_ip_whitelist_domains_csv sni_ip_whitelist_ranges_pipe
     site_domains_csv=$(IFS=','; echo "${SITE_DOMAINS[*]}")
     site_backend_addrs_csv=$(IFS=','; echo "${SITE_BACKEND_ADDRS[*]}")
     site_backend_ports_csv=$(IFS=','; echo "${SITE_BACKEND_PORTS[*]}")
-    sni_ip_whitelist_domains_csv=$(IFS=','; echo "${SNI_IP_WHITELIST_DOMAINS[*]}")
-    sni_ip_whitelist_ranges_pipe=$(IFS='|'; echo "${SNI_IP_WHITELIST_RANGES[*]}")
     cat <<EOF > /etc/vps-optimize/sni-stack.env
 PANEL_DOMAIN='${PANEL_DOMAIN}'
 SITE_DOMAIN='${SITE_DOMAINS[0]:-}'
@@ -2925,8 +2593,6 @@ SITE_BACKEND_ADDR='${SITE_BACKEND_ADDRS[0]:-127.0.0.1}'
 SITE_BACKEND_PORT='${SITE_BACKEND_PORTS[0]:-3000}'
 SITE_BACKEND_ADDRS_CSV='${site_backend_addrs_csv}'
 SITE_BACKEND_PORTS_CSV='${site_backend_ports_csv}'
-SNI_IP_WHITELIST_DOMAINS_CSV='${sni_ip_whitelist_domains_csv}'
-SNI_IP_WHITELIST_RANGES_PIPE='${sni_ip_whitelist_ranges_pipe}'
 EOF
     chmod 600 /etc/vps-optimize/sni-stack.env
 }
@@ -3086,9 +2752,6 @@ list_sni_stack_sites() {
     echo -e "${BOLD}当前 443 单入口网站/反代域名${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "面板域名：${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
-    local panel_ranges
-    panel_ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
-    [[ -n "$panel_ranges" ]] && echo -e "${YELLOW}面板域名 IP 白名单：${panel_ranges}${PLAIN}"
     echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
     echo -e "------------------------------------------------"
     if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
@@ -3100,9 +2763,6 @@ list_sni_stack_sites() {
     for i in "${!SITE_DOMAINS[@]}"; do
         num=$((i + 1))
         echo -e "${GREEN}${num}.${PLAIN} https://${SITE_DOMAINS[$i]}/ -> ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]}"
-        local site_ranges
-        site_ranges=$(sni_ip_whitelist_ranges_for_domain "${SITE_DOMAINS[$i]}")
-        [[ -n "$site_ranges" ]] && echo -e "   ${YELLOW}IP 白名单：${site_ranges}${PLAIN}"
     done
 }
 
@@ -3282,7 +2942,6 @@ remove_sni_stack_site() {
     SITE_DOMAINS=("${new_domains[@]}")
     SITE_BACKEND_ADDRS=("${new_addrs[@]}")
     SITE_BACKEND_PORTS=("${new_ports[@]}")
-    remove_sni_ip_whitelist_for_domain "$domain"
     quarantine_path "/etc/caddy/conf.d/${domain}.caddy" "/etc/vps-optimize/quarantine/caddy-sni" >/dev/null 2>&1 || true
 
     apply_sni_stack_runtime_config || return 1
@@ -3298,99 +2957,6 @@ remove_sni_stack_site() {
     else
         echo -e "${GREEN}✅ 已删除 ${domain} 的分流配置，证书文件已保留。${PLAIN}"
     fi
-}
-
-manage_sni_stack_ip_whitelist() {
-    while true; do
-        clear
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🔐 443 域名 IP 白名单${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-        load_sni_stack_env || return 1
-        echo -e "${YELLOW}只限制你选择的域名；未设置白名单的域名、REALITY SNI 和未知 SNI 仍按原 443 分流规则工作。${PLAIN}"
-        echo -e "${YELLOW}443 单入口会在 Nginx stream 层按 SNI + 源 IP 拦截，避免影响同入口其他服务。${PLAIN}"
-        echo -e "------------------------------------------------"
-
-        local -a domains=("$PANEL_DOMAIN")
-        local -a labels=("面板/订阅")
-        local site_domain i num domain current_ranges
-        for site_domain in "${SITE_DOMAINS[@]}"; do
-            [[ -z "$site_domain" ]] && continue
-            domains+=("$site_domain")
-            labels+=("网站/反代")
-        done
-
-        for i in "${!domains[@]}"; do
-            num=$((i + 1))
-            current_ranges=$(sni_ip_whitelist_ranges_for_domain "${domains[$i]}")
-            if [[ -n "$current_ranges" ]]; then
-                echo -e "${GREEN}${num}.${PLAIN} [${labels[$i]}] ${domains[$i]}  ${YELLOW}仅允许：${current_ranges}${PLAIN}"
-            else
-                echo -e "${GREEN}${num}.${PLAIN} [${labels[$i]}] ${domains[$i]}  ${BLUE}未启用${PLAIN}"
-            fi
-        done
-        echo -e "------------------------------------------------"
-        echo -e "${RED}0. 返回上一级${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-
-        local choice idx action whitelist_input whitelist_ranges current_client_ip
-        local -a whitelist_array=()
-        read_trimmed choice "请输入要管理的域名序号: "
-        [[ "$choice" == "0" || -z "$choice" ]] && break
-        if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#domains[@]} )); then
-            echo -e "${RED}❌ 序号无效。${PLAIN}"
-            pause_return
-            continue
-        fi
-
-        idx=$((choice - 1))
-        domain="${domains[$idx]}"
-        current_ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
-        echo -e "当前域名：${domain}"
-        echo -e "当前白名单：${current_ranges:-未启用}"
-        echo -e "1. 设置/覆盖白名单"
-        echo -e "2. 清除白名单"
-        echo -e "0. 取消"
-        read_trimmed action "请选择操作: "
-        case "$action" in
-            1)
-                current_client_ip=$(detect_ssh_client_ip)
-                [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
-                read_trimmed whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
-                if ! normalize_ip_whitelist_input "$whitelist_input" whitelist_array; then
-                    echo -e "${RED}❌ 白名单为空或格式错误，已取消。${PLAIN}"
-                    pause_return
-                    continue
-                fi
-                whitelist_ranges=$(join_array_by_space "${whitelist_array[@]}")
-                confirm_risk_action "为 ${domain} 启用 IP 白名单" \
-                    "Nginx stream 会仅对该 SNI 做源 IP 限制" \
-                    "使用 443 单入口自动备份回滚，或清除该域名白名单后重新应用" \
-                    "确认你的管理 IP 已包含在白名单中，且该域名不是 Cloudflare 橙云代理访问。" || continue
-                set_sni_ip_whitelist_for_domain "$domain" "$whitelist_ranges"
-                save_and_offer_reapply_sni_stack
-                ;;
-            2)
-                if [[ -z "$current_ranges" ]]; then
-                    echo -e "${BLUE}该域名未启用白名单。${PLAIN}"
-                    pause_return
-                    continue
-                fi
-                confirm_risk_action "清除 ${domain} 的 IP 白名单" \
-                    "该域名会恢复为普通 443 分流访问" \
-                    "重新设置该域名白名单" \
-                    "确认这是你想要的公网访问策略。" || continue
-                remove_sni_ip_whitelist_for_domain "$domain"
-                save_and_offer_reapply_sni_stack
-                ;;
-            0|"")
-                ;;
-            *)
-                echo -e "${RED}❌ 无效操作。${PLAIN}"
-                pause_return
-                ;;
-        esac
-    done
 }
 
 show_main_help() {
@@ -3433,8 +2999,6 @@ show_sni_help() {
     echo "4 重新应用：读取已保存参数并重写 Nginx/Caddy 配置。"
     echo "6 证书维护：处理 Cloudflare Token、重签和证书缓存问题。"
     echo "7 修改参数：调整面板、订阅、REALITY 和入口监听。"
-    echo "8 域名 IP 白名单：只对指定域名限制源 IP，不影响其他 SNI。"
-    echo "普通 Caddy 未接入 443 单入口时，用 [3] -> [21] 管理域名 IP 白名单。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -3476,9 +3040,8 @@ manage_sni_stack_sites() {
         echo -e "${GREEN}  2. 新增网站/反代域名${PLAIN}"
         echo -e "${GREEN}  3. 修改网站/反代后端端口${PLAIN}"
         echo -e "${GREEN}  4. 删除网站/反代域名${PLAIN}"
-        echo -e "${GREEN}  5. 管理域名 IP 白名单${PLAIN}       ${YELLOW}(只限制被选择的域名)${PLAIN}"
-        echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"
-        echo -e "${GREEN}  7. 443 单入口链路体检${PLAIN}"
+        echo -e "${GREEN}  5. 重新应用并重启 Nginx/Caddy${PLAIN}"
+        echo -e "${GREEN}  6. 443 单入口链路体检${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -3490,9 +3053,8 @@ manage_sni_stack_sites() {
             2) add_sni_stack_site ;;
             3) edit_sni_stack_site_backend ;;
             4) remove_sni_stack_site ;;
-            5) manage_sni_stack_ip_whitelist ;;
-            6) reapply_sni_stack_from_env ;;
-            7) sni_stack_health_check ;;
+            5) reapply_sni_stack_from_env ;;
+            6) sni_stack_health_check ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
@@ -4279,142 +3841,6 @@ func_caddy_clear_config() {
     fi
     read -n 1 -s -r -p "按任意键继续..."
 }
-
-strip_caddy_ip_whitelist_block() {
-    local conf_file="$1"
-    local tmp_file
-    tmp_file=$(mktemp /tmp/caddy-ipwl.XXXXXX) || return 1
-    awk '
-        /# vps-optimize-ip-whitelist-start/ {skip=1; next}
-        /# vps-optimize-ip-whitelist-end/ {skip=0; next}
-        !skip {print}
-    ' "$conf_file" > "$tmp_file" || { rm -f "$tmp_file"; return 1; }
-    mv "$tmp_file" "$conf_file"
-}
-
-insert_caddy_ip_whitelist_block() {
-    local conf_file="$1"
-    local ranges="$2"
-    local tmp_file block
-    strip_caddy_ip_whitelist_block "$conf_file" || return 1
-    tmp_file=$(mktemp /tmp/caddy-ipwl.XXXXXX) || return 1
-    block=$(caddy_ip_whitelist_block "$ranges")
-    awk -v block="$block" '
-        inserted == 0 && /^[[:space:]]*[^#[:space:]].*\{[[:space:]]*$/ {
-            print
-            printf "%s", block
-            inserted=1
-            next
-        }
-        {print}
-        END { if (inserted == 0) exit 1 }
-    ' "$conf_file" > "$tmp_file" || { rm -f "$tmp_file"; return 1; }
-    mv "$tmp_file" "$conf_file"
-}
-
-func_caddy_manage_ip_whitelist() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🔐 普通 Caddy 域名 IP 白名单${PLAIN}"
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}适用于未启用 443 单入口、由 Caddy 直接对外服务的域名。${PLAIN}"
-    echo -e "${YELLOW}如果该域名已接入 443 单入口，请用 [19] -> [8]，不要在 Caddy 层限制。${PLAIN}"
-    echo -e "------------------------------------------------"
-
-    local domain conf_file first_site_line action backup_file
-    read_trimmed domain "请输入要管理的域名 (如 panel.example.com): "
-    domain=$(normalize_domain_input "$domain")
-    if ! is_valid_domain "$domain"; then
-        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
-        read -n 1 -s -r -p "按任意键继续..."
-        return
-    fi
-
-    conf_file="/etc/caddy/conf.d/${domain}.caddy"
-    if [[ ! -f "$conf_file" ]]; then
-        echo -e "${RED}❌ 未找到 ${conf_file}。该入口只管理脚本创建的模块化 Caddy 域名配置。${PLAIN}"
-        read -n 1 -s -r -p "按任意键继续..."
-        return
-    fi
-
-    first_site_line=$(grep -m1 -E '^[[:space:]]*[^#[:space:]].*\{' "$conf_file" 2>/dev/null | sed 's/^[[:space:]]*//')
-    if [[ "$first_site_line" != "$domain "* && "$first_site_line" != "$domain{"* && "$first_site_line" != "https://${domain}"* ]]; then
-        echo -e "${RED}❌ ${conf_file} 的首个站点块不是 ${domain}，为避免误改已取消。${PLAIN}"
-        read -n 1 -s -r -p "按任意键继续..."
-        return
-    fi
-    if [[ "$first_site_line" =~ ^https://[^[:space:]]+:[0-9]+[[:space:]]*\{ ]]; then
-        echo -e "${RED}❌ 这个配置看起来属于 443 单入口本地 Caddy TLS 站点。请改用 [19] -> [8] 管理白名单。${PLAIN}"
-        read -n 1 -s -r -p "按任意键继续..."
-        return
-    fi
-
-    echo -e "当前配置文件：${conf_file}"
-    if grep -q '# vps-optimize-ip-whitelist-start' "$conf_file" 2>/dev/null; then
-        echo -e "${YELLOW}当前状态：已启用脚本管理的 IP 白名单。${PLAIN}"
-    else
-        echo -e "${BLUE}当前状态：未启用脚本管理的 IP 白名单。${PLAIN}"
-    fi
-    echo -e "1. 设置/覆盖白名单"
-    echo -e "2. 清除白名单"
-    echo -e "0. 取消"
-    read_trimmed action "请选择操作: "
-
-    backup_file="${conf_file}.bak_$(date +%s)"
-    case "$action" in
-        1)
-            local ip_whitelist_input ip_whitelist_ranges current_client_ip
-            local -a ip_whitelist_array=()
-            current_client_ip=$(detect_ssh_client_ip)
-            [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
-            read_trimmed ip_whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
-            if ! normalize_ip_whitelist_input "$ip_whitelist_input" ip_whitelist_array; then
-                echo -e "${RED}❌ 白名单为空或格式错误，已取消操作。${PLAIN}"
-                read -n 1 -s -r -p "按任意键继续..."
-                return
-            fi
-            ip_whitelist_ranges=$(join_array_by_space "${ip_whitelist_array[@]}")
-            cp -p "$conf_file" "$backup_file" || { echo -e "${RED}❌ 备份失败，已取消。${PLAIN}"; read -n 1 -s -r -p "按任意键继续..."; return; }
-            if insert_caddy_ip_whitelist_block "$conf_file" "$ip_whitelist_ranges" && caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
-                if systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1; then
-                    echo -e "${GREEN}✅ 已为 ${domain} 启用 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
-                    echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
-                else
-                    echo -e "${RED}❌ Caddy 重载失败，正在回滚...${PLAIN}"
-                    mv "$backup_file" "$conf_file"
-                    systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true
-                fi
-            else
-                echo -e "${RED}❌ 写入后 Caddy 校验失败，正在回滚...${PLAIN}"
-                mv "$backup_file" "$conf_file"
-            fi
-            ;;
-        2)
-            if ! grep -q '# vps-optimize-ip-whitelist-start' "$conf_file" 2>/dev/null; then
-                echo -e "${BLUE}该域名没有脚本管理的白名单块，无需清除。${PLAIN}"
-                read -n 1 -s -r -p "按任意键继续..."
-                return
-            fi
-            cp -p "$conf_file" "$backup_file" || { echo -e "${RED}❌ 备份失败，已取消。${PLAIN}"; read -n 1 -s -r -p "按任意键继续..."; return; }
-            if strip_caddy_ip_whitelist_block "$conf_file" && caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
-                systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true
-                echo -e "${GREEN}✅ 已清除 ${domain} 的 IP 白名单。${PLAIN}"
-                echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
-            else
-                echo -e "${RED}❌ 清除后 Caddy 校验失败，正在回滚...${PLAIN}"
-                mv "$backup_file" "$conf_file"
-            fi
-            ;;
-        0|"")
-            echo -e "${BLUE}已取消。${PLAIN}"
-            ;;
-        *)
-            echo -e "${RED}❌ 无效操作。${PLAIN}"
-            ;;
-    esac
-
-    read -n 1 -s -r -p "按任意键继续..."
-}
 # ---------------------------------------------------------
 # 优化重构：核弹级域名证书清理与解除端口占用 (模块化安全版)
 # ---------------------------------------------------------
@@ -4515,8 +3941,6 @@ func_caddy_add_insecure() {
     
     local domain
     local port
-    local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
-    local -a ip_whitelist_array=()
     read_trimmed domain "👉 请输入解析后的域名 (如 panel.site.com): "
     read_trimmed port "👉 请输入面板 HTTPS 本地映射端口 (如 40000): "
     domain=$(normalize_domain_input "$domain")
@@ -4525,21 +3949,6 @@ func_caddy_add_insecure() {
         echo -e "${RED}❌ 域名为空或端口格式错误！已取消操作。${PLAIN}"
         read -n 1 -s -r -p "按任意键继续..."
         return
-    fi
-
-    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
-    if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
-        current_client_ip=$(detect_ssh_client_ip)
-        [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
-        read_trimmed ip_whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
-        if ! normalize_ip_whitelist_input "$ip_whitelist_input" ip_whitelist_array; then
-            echo -e "${RED}❌ 白名单为空或格式错误，已取消操作。${PLAIN}"
-            read -n 1 -s -r -p "按任意键继续..."
-            return
-        fi
-        ip_whitelist_ranges=$(join_array_by_space "${ip_whitelist_array[@]}")
-    else
-        ip_whitelist_ranges=""
     fi
     
     # 确保主文件包含模块化目录
@@ -4559,7 +3968,7 @@ func_caddy_add_insecure() {
     
     cat <<EOF > "$conf_file"
 $domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://127.0.0.1:$port {
+    reverse_proxy https://127.0.0.1:$port {
         transport http {
             tls_insecure_skip_verify
         }
@@ -4569,7 +3978,6 @@ EOF
     if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
         systemctl reload caddy >/dev/null 2>&1
         echo -e "${GREEN}✅ 独立跳过验证配置已成功建立并生效！${PLAIN}"
-        [[ -n "$ip_whitelist_ranges" ]] && echo -e "${GREEN}✅ 已为 ${domain} 启用 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
     else
         echo -e "${RED}❌ 致命错误：追加的配置导致语法错误！正在回滚...${PLAIN}"
         quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
@@ -7985,7 +7393,6 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}  5. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}"
         echo -e "${CYAN}  6. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
         echo -e "${CYAN}  7. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
-        echo -e "${CYAN}  8. 管理域名 IP 白名单${PLAIN}        ${YELLOW}(只限制选中的域名)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -8001,7 +7408,6 @@ func_sni_stack_quick_menu() {
             5) check_sni_stack_subscription_hint ;;
             6) func_caddy_cf_maintenance_menu; continue ;;
             7) edit_sni_stack_runtime_profile; continue ;;
-            8) manage_sni_stack_ip_whitelist; continue ;;
             "?"|help) show_sni_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
