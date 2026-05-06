@@ -1188,6 +1188,7 @@ func_env_install() {
                                 echo -e "${RED}❌ 白名单为空或格式错误，已取消本次反代配置。${PLAIN}"
                                 continue
                             fi
+                            append_vps_public_ips_to_whitelist ip_whitelist_array
                             ip_whitelist_ranges=$(join_array_by_space "${ip_whitelist_array[@]}")
                         else
                             ip_whitelist_ranges=""
@@ -1556,6 +1557,56 @@ normalize_ip_whitelist_input() {
         fi
     done
     [[ ${#out_array[@]} -gt 0 ]]
+}
+
+detect_vps_public_ip_by_family() {
+    local family="$1"
+    local curl_flag="-4"
+    local endpoint ip
+    local endpoints=()
+
+    command -v curl >/dev/null 2>&1 || return 1
+
+    if [[ "$family" == "6" ]]; then
+        curl_flag="-6"
+        endpoints=("https://api6.ipify.org" "https://ipv6.icanhazip.com")
+    else
+        endpoints=("https://api.ipify.org" "https://ipv4.icanhazip.com")
+    fi
+
+    for endpoint in "${endpoints[@]}"; do
+        ip=$(curl "$curl_flag" -fsS --connect-timeout 3 --max-time 5 "$endpoint" 2>/dev/null | tr -d '\r' | awk 'NF {print $1; exit}')
+        ip=$(trim_input "$ip")
+        if [[ "$family" == "6" ]]; then
+            is_valid_ipv6_cidr "$ip" && { echo "$ip"; return 0; }
+        else
+            is_valid_ipv4_cidr "$ip" && ! is_suspicious_public_ipv4 "$ip" && { echo "$ip"; return 0; }
+        fi
+    done
+    return 1
+}
+
+append_vps_public_ips_to_whitelist() {
+    local -n out_array=$1
+    local ip existing seen added=0
+    seen=" "
+    for existing in "${out_array[@]}"; do
+        seen+=" ${existing} "
+    done
+
+    for ip in "$(detect_vps_public_ip_by_family 4 2>/dev/null)" "$(detect_vps_public_ip_by_family 6 2>/dev/null)"; do
+        [[ -n "$ip" ]] || continue
+        if [[ "$seen" != *" ${ip} "* ]]; then
+            out_array+=("$ip")
+            seen+=" ${ip} "
+            echo -e "${GREEN}✅ 已自动加入 VPS 本机公网 IP：${ip}${PLAIN}"
+            added=1
+        fi
+    done
+
+    if [[ "$added" -eq 0 ]]; then
+        echo -e "${YELLOW}⚠️ 未能自动获取 VPS 本机公网 IP；如需要本机自测访问，请手动加入 VPS 公网 IP。${PLAIN}"
+    fi
 }
 
 join_array_by_space() {
@@ -2464,6 +2515,7 @@ collect_sni_stack_config() {
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
         read_trimmed panel_whitelist_input "请输入允许访问面板域名的 IP/CIDR（多个用空格或英文逗号分隔）: "
         normalize_ip_whitelist_input "$panel_whitelist_input" panel_whitelist_array || return 1
+        append_vps_public_ips_to_whitelist panel_whitelist_array
         panel_whitelist_ranges=$(join_array_by_space "${panel_whitelist_array[@]}")
     fi
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
@@ -3186,6 +3238,7 @@ add_sni_stack_site() {
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
         read_trimmed whitelist_input "请输入允许访问 ${site_domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
         normalize_ip_whitelist_input "$whitelist_input" whitelist_array || return 1
+        append_vps_public_ips_to_whitelist whitelist_array
         whitelist_ranges=$(join_array_by_space "${whitelist_array[@]}")
     fi
 
@@ -3388,6 +3441,7 @@ manage_sni_stack_ip_whitelist() {
                     pause_return
                     continue
                 fi
+                append_vps_public_ips_to_whitelist whitelist_array
                 whitelist_ranges=$(join_array_by_space "${whitelist_array[@]}")
                 confirm_risk_action "为 ${domain} 启用 IP 白名单" \
                     "Nginx stream 会仅对该 SNI 做源 IP 限制" \
@@ -4405,6 +4459,7 @@ func_caddy_manage_ip_whitelist() {
                 read -n 1 -s -r -p "按任意键继续..."
                 return
             fi
+            append_vps_public_ips_to_whitelist ip_whitelist_array
             ip_whitelist_ranges=$(join_array_by_space "${ip_whitelist_array[@]}")
             cp -p "$conf_file" "$backup_file" || { echo -e "${RED}❌ 备份失败，已取消。${PLAIN}"; read -n 1 -s -r -p "按任意键继续..."; return; }
             if insert_caddy_ip_whitelist_block "$conf_file" "$ip_whitelist_ranges" && caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
@@ -4569,6 +4624,7 @@ func_caddy_add_insecure() {
             read -n 1 -s -r -p "按任意键继续..."
             return
         fi
+        append_vps_public_ips_to_whitelist ip_whitelist_array
         ip_whitelist_ranges=$(join_array_by_space "${ip_whitelist_array[@]}")
     else
         ip_whitelist_ranges=""
