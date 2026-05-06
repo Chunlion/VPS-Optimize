@@ -2427,7 +2427,7 @@ reapply_sni_stack_from_env() {
     fi
     create_sni_stack_backup
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
-    install_nginx_stream_stack || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 组件安装/配置失败"; return 1; }
+    install_nginx_stream_stack || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 组件检查/配置失败"; return 1; }
     harden_nginx_public_errors
     ensure_caddy_local_base_config || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 基础配置初始化失败"; return 1; }
     cleanup_old_nginx_sni_stream_configs
@@ -2682,12 +2682,25 @@ EOF
 }
 
 install_nginx_stream_stack() {
-    echo -e "${CYAN}▶ 正在安装 Nginx stream 组件...${PLAIN}"
-    if is_debian; then
-        install_pkg nginx libnginx-mod-stream
-    elif is_redhat; then
-        install_pkg nginx
-        install_pkg nginx-mod-stream || echo -e "${YELLOW}⚠️ nginx-mod-stream 安装失败或仓库未提供，将继续检测 Nginx stream 支持。${PLAIN}"
+    echo -e "${CYAN}▶ 正在检查 Nginx stream 组件...${PLAIN}"
+    local need_install=0
+    if ! command -v nginx >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ 未检测到 Nginx，正在安装基础组件...${PLAIN}"
+        need_install=1
+    elif ! nginx -V 2>&1 | grep -Eq -- '--with-stream(=dynamic)?|--with-stream_ssl_preread_module'; then
+        echo -e "${YELLOW}⚠️ 未确认 Nginx stream 支持，正在尝试补齐模块...${PLAIN}"
+        need_install=1
+    else
+        echo -e "${GREEN}✅ 已检测到 Nginx stream 支持，跳过安装步骤。${PLAIN}"
+    fi
+
+    if [[ "$need_install" -eq 1 ]]; then
+        if is_debian; then
+            install_pkg nginx libnginx-mod-stream
+        elif is_redhat; then
+            install_pkg nginx
+            install_pkg nginx-mod-stream || echo -e "${YELLOW}⚠️ nginx-mod-stream 安装失败或仓库未提供，将继续检测 Nginx stream 支持。${PLAIN}"
+        fi
     fi
     command -v nginx >/dev/null 2>&1 || { echo -e "${RED}❌ Nginx 安装失败。${PLAIN}"; return 1; }
     mkdir -p /etc/nginx/stream.d
@@ -3133,7 +3146,7 @@ apply_sni_stack_runtime_config() {
     local backup_dir
     create_sni_stack_backup
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
-    install_nginx_stream_stack || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 组件安装/配置失败"; return 1; }
+    install_nginx_stream_stack || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 组件检查/配置失败"; return 1; }
     harden_nginx_public_errors
     ensure_caddy_local_base_config || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 基础配置初始化失败"; return 1; }
     cleanup_old_nginx_sni_stream_configs
@@ -3614,7 +3627,7 @@ func_caddy_cf_reality_wizard() {
     local backup_dir
     create_sni_stack_backup
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
-    install_nginx_stream_stack || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 组件安装/配置失败"; return 1; }
+    install_nginx_stream_stack || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 组件检查/配置失败"; return 1; }
     harden_nginx_public_errors
     ensure_caddy_local_base_config || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 基础配置初始化失败"; return 1; }
     cleanup_old_nginx_sni_stream_configs
