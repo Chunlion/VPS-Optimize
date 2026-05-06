@@ -119,8 +119,10 @@ install_missing_tools() {
     local missing_tools=("$@")
     local system_type=$(detect_system)
     local pkg_cmd
+    local packages=()
+    local tool pkg
     case $system_type in
-        "ubuntu") pkg_cmd="apt" ;;
+        "ubuntu") pkg_cmd="apt-get" ;;
         "debian") pkg_cmd="apt-get" ;;
         *)
             echo -e "${RED}不支持的系统类型: $system_type${NC}"
@@ -129,23 +131,25 @@ install_missing_tools() {
     esac
 
     echo -e "${YELLOW}检测到缺少工具: ${missing_tools[*]}${NC}"
-    $pkg_cmd update -qq
     for tool in "${missing_tools[@]}"; do
         case $tool in
-            "nft") $pkg_cmd install -y nftables ;;
-            "tc"|"ss") $pkg_cmd install -y iproute2 ;;
-            "jq") $pkg_cmd install -y jq ;;
-            "awk") $pkg_cmd install -y gawk ;;
-            "bc") $pkg_cmd install -y bc ;;
-            "curl") $pkg_cmd install -y curl ;;
-            "cron")
-                $pkg_cmd install -y cron
-                systemctl enable cron 2>/dev/null || true
-                systemctl start cron 2>/dev/null || true
-                ;;
-            *) $pkg_cmd install -y "$tool" ;;
+            "nft") pkg="nftables" ;;
+            "tc"|"ss") pkg="iproute2" ;;
+            "awk") pkg="gawk" ;;
+            *) pkg="$tool" ;;
         esac
+        [[ " ${packages[*]} " == *" $pkg "* ]] || packages+=("$pkg")
     done
+
+    export DEBIAN_FRONTEND=noninteractive
+    $pkg_cmd update -qq
+    $pkg_cmd install -y "${packages[@]}"
+    unset DEBIAN_FRONTEND
+
+    if [[ " ${missing_tools[*]} " == *" cron "* ]]; then
+        systemctl enable cron 2>/dev/null || true
+        systemctl start cron 2>/dev/null || true
+    fi
     echo -e "${GREEN}依赖工具安装完成${NC}"
 }
 

@@ -134,13 +134,15 @@ install_runtime_deps() {
         return 0
     fi
 
-    if ! command -v apt >/dev/null 2>&1; then
-        echo "错误：缺少依赖：${missing[*]}，且未找到 apt，请手动安装后重试。"
+    if ! command -v apt-get >/dev/null 2>&1; then
+        echo "错误：缺少依赖：${missing[*]}，且未找到 apt-get，请手动安装后重试。"
         return 1
     fi
 
-    apt update
-    apt install -y sqlite3 python3
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y "${missing[@]}"
+    unset DEBIAN_FRONTEND
 }
 
 timer_active_status() {

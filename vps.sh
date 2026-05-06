@@ -120,6 +120,13 @@ is_redhat() {
     [[ "$OS" =~ centos|rhel|rocky|almalinux|fedora ]] || [[ "$OS_LIKE" =~ centos|rhel|fedora ]]
 }
 # --- 全局包管理抽象  ---
+APT_UPDATED=0
+
+apt_update_once() {
+    [[ "$APT_UPDATED" == "1" ]] && return 0
+    apt-get update -qq >/dev/null 2>&1 && APT_UPDATED=1
+}
+
 install_pkg() {
     local pkgs=("$@")
     local rc=0
@@ -127,7 +134,7 @@ install_pkg() {
     if is_debian; then
         # 使用 apt-get 代替 apt，消除 "stable CLI interface" 警告 
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update -qq >/dev/null 2>&1
+        apt_update_once || true
         apt-get install -y -qq "${pkgs[@]}" >/dev/null 2>&1
         rc=$?
         unset DEBIAN_FRONTEND
@@ -2884,7 +2891,6 @@ https://${PANEL_DOMAIN}:${CADDY_LISTEN_PORT} {
     handle @sub {
         reverse_proxy ${sub_backend} {
             header_up Host {http.request.host}
-            header_up X-Forwarded-Host {http.request.host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
             header_up X-Real-IP {remote_host}
@@ -2896,7 +2902,6 @@ https://${PANEL_DOMAIN}:${CADDY_LISTEN_PORT} {
     handle {
         reverse_proxy ${panel_backend} {
             header_up Host {http.request.host}
-            header_up X-Forwarded-Host {http.request.host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
             header_up X-Real-IP {remote_host}

@@ -17,8 +17,12 @@ fi
 source <(sed -n '1,/^# --- 权限检查 ---/p' vps.sh | sed '$d')
 [[ "$(trim_input "  q  ")" == "q" ]]
 [[ "$(normalize_domain_input " HTTPS://Panel.Example.COM:443/path ")" == "panel.example.com" ]]
+source <(sed -n '/^APT_UPDATED=0/,/^install_pkg()/p' vps.sh | sed '$d')
+APT_UPDATED=1
+apt_update_once
+[[ "$APT_UPDATED" == "1" ]]
 
-source <(sed -n '1,411p' dog.sh)
+source <(sed -n '1,/^show_port_list()/p' dog.sh | sed '$d')
 [[ "$(normalize_main_choice " add ")" == "1" ]]
 [[ "$(normalize_main_choice "tg")" == "7" ]]
 [[ "$(normalize_main_choice "q")" == "0" ]]
