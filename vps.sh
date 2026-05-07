@@ -1779,6 +1779,17 @@ is_valid_listen_addr() {
     return 1
 }
 
+is_loopback_listen_addr() {
+    local addr="$1"
+    [[ "$addr" == "127.0.0.1" || "$addr" == "localhost" || "$addr" == "::1" ]]
+}
+
+normalize_loopback_addr() {
+    local addr="$1"
+    [[ "$addr" == "localhost" ]] && addr="127.0.0.1"
+    printf '%s' "$addr"
+}
+
 normalize_port_rule_input() {
     local value="$1"
     value="${value//，/,}"
@@ -1993,6 +2004,12 @@ print_sni_stack_preview() {
             echo -e "网站/反代域名：${SITE_DOMAINS[$i]} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]}"
         done
     fi
+    if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local tcp_i
+        for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
+            echo -e "TCP/SNI 入站：${TCP_ROUTE_SNIS[$tcp_i]} -> ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]}"
+        done
+    fi
     if [[ ${#SNI_IP_WHITELIST_DOMAINS[@]} -gt 0 ]]; then
         echo -e "${YELLOW}域名 IP 白名单：${PLAIN}"
         local wl_i
@@ -2032,6 +2049,7 @@ load_sni_stack_env() {
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
     CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
     normalize_site_stack_arrays
+    normalize_tcp_route_arrays
     normalize_sni_ip_whitelist_arrays
 }
 
@@ -2052,6 +2070,12 @@ print_sni_stack_current_summary() {
     echo -e "普通订阅：  https://${PANEL_DOMAIN}${SUB_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
     echo -e "Clash 订阅：https://${PANEL_DOMAIN}${CLASH_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
     echo -e "REALITY：   ${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
+    if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local tcp_i
+        for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
+            echo -e "TCP/SNI：   ${TCP_ROUTE_SNIS[$tcp_i]} -> ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]}"
+        done
+    fi
     echo -e "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Caddy ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
     echo -e "配置文件：  Nginx ${nginx_conf}"
     echo -e "           Caddy ${caddy_conf}"
@@ -2063,6 +2087,12 @@ print_sni_stack_current_summary() {
     echo -e "面板后端：    $(get_listen_line_by_port "$PANEL_LISTEN_PORT")"
     echo -e "订阅后端：    $(get_listen_line_by_port "$SUB_LISTEN_PORT")"
     echo -e "REALITY 后端：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")"
+    if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local tcp_i
+        for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
+            echo -e "TCP/SNI 后端 ${TCP_ROUTE_SNIS[$tcp_i]}：$(get_listen_line_by_port "${TCP_ROUTE_PORTS[$tcp_i]}")"
+        done
+    fi
 }
 
 normalize_site_stack_arrays() {
@@ -2099,14 +2129,52 @@ normalize_site_stack_arrays() {
     SITE_BACKEND_PORT="${SITE_BACKEND_PORTS[0]:-3000}"
 }
 
-is_sni_stack_web_domain() {
+normalize_tcp_route_arrays() {
+    local -a raw_snis=()
+    local -a raw_addrs=()
+    local -a raw_ports=()
+    local -a clean_snis=()
+    local -a clean_addrs=()
+    local -a clean_ports=()
+    local i sni addr port
+
+    if [[ -n "${TCP_ROUTE_SNIS_CSV:-}" ]]; then
+        split_csv_to_array "$TCP_ROUTE_SNIS_CSV" raw_snis
+        split_csv_to_array "${TCP_ROUTE_ADDRS_CSV:-}" raw_addrs
+        split_csv_to_array "${TCP_ROUTE_PORTS_CSV:-}" raw_ports
+    fi
+
+    for i in "${!raw_snis[@]}"; do
+        sni=$(normalize_domain_input "${raw_snis[$i]}")
+        addr=$(normalize_loopback_addr "${raw_addrs[$i]:-127.0.0.1}")
+        port="${raw_ports[$i]:-8443}"
+        if is_valid_domain "$sni" && is_loopback_listen_addr "$addr" && is_valid_port "$port"; then
+            clean_snis+=("$sni")
+            clean_addrs+=("$addr")
+            clean_ports+=("$port")
+        fi
+    done
+
+    TCP_ROUTE_SNIS=("${clean_snis[@]}")
+    TCP_ROUTE_ADDRS=("${clean_addrs[@]}")
+    TCP_ROUTE_PORTS=("${clean_ports[@]}")
+}
+
+is_sni_stack_managed_domain() {
     local domain="$1"
     local site_domain
     [[ "$domain" == "$PANEL_DOMAIN" ]] && return 0
     for site_domain in "${SITE_DOMAINS[@]}"; do
         [[ "$domain" == "$site_domain" ]] && return 0
     done
+    for site_domain in "${TCP_ROUTE_SNIS[@]}"; do
+        [[ "$domain" == "$site_domain" ]] && return 0
+    done
     return 1
+}
+
+is_sni_stack_web_domain() {
+    is_sni_stack_managed_domain "$1"
 }
 
 nginx_var_suffix_for_domain() {
@@ -2250,6 +2318,12 @@ sni_stack_health_check() {
             check_listen "网站后端 ${SITE_DOMAINS[$i]}" "${SITE_BACKEND_PORTS[$i]}" "${SITE_BACKEND_ADDRS[$i]}"
         done
     fi
+    if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local tcp_i
+        for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
+            check_listen "TCP/SNI 入站 ${TCP_ROUTE_SNIS[$tcp_i]}" "${TCP_ROUTE_PORTS[$tcp_i]}" "${TCP_ROUTE_ADDRS[$tcp_i]}"
+        done
+    fi
 
     echo -e "------------------------------------------------"
     if check_domain_dns_sanity "$PANEL_DOMAIN" "面板域名" "warn"; then
@@ -2264,6 +2338,18 @@ sni_stack_health_check() {
             if check_domain_dns_sanity "$dns_site" "网站/反代域名" "warn"; then
                 ((ok++))
             else
+                ((warn++))
+            fi
+        done
+    fi
+    if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local tcp_sni
+        for tcp_sni in "${TCP_ROUTE_SNIS[@]}"; do
+            [[ -z "$tcp_sni" ]] && continue
+            if check_domain_dns_sanity "$tcp_sni" "TCP/SNI 入站域名" "warn"; then
+                ((ok++))
+            else
+                echo -e "${YELLOW}⚠️ 如果客户端使用服务器 IP 连接并手动指定 SNI，可忽略该 DNS 警告。${PLAIN}"
                 ((warn++))
             fi
         done
@@ -2412,6 +2498,10 @@ edit_sni_stack_reality_profile() {
     is_valid_port "$XRAY_LISTEN_PORT" || { echo -e "${RED}❌ REALITY 端口无效：${XRAY_LISTEN_PORT}${PLAIN}"; return 1; }
     is_valid_domain "$REALITY_SNI" || { echo -e "${RED}❌ REALITY SNI 无效：${REALITY_SNI}${PLAIN}"; return 1; }
     [[ "$REALITY_SNI" == "$PANEL_DOMAIN" ]] && { echo -e "${RED}❌ REALITY SNI 不能写面板域名。${PLAIN}"; return 1; }
+    local existing
+    for existing in "${SITE_DOMAINS[@]}" "${TCP_ROUTE_SNIS[@]}"; do
+        [[ "$REALITY_SNI" == "$existing" ]] && { echo -e "${RED}❌ REALITY SNI 不能和其他 443 分流域名相同：${existing}${PLAIN}"; return 1; }
+    done
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
     probe_reality_sni "$REALITY_SNI" || return 1
 
@@ -2476,6 +2566,9 @@ edit_sni_stack_panel_domain_profile() {
     [[ "$new_domain" == "$REALITY_SNI" ]] && { echo -e "${RED}❌ 面板域名不能和 REALITY SNI 相同。${PLAIN}"; return 1; }
     for existing in "${SITE_DOMAINS[@]}"; do
         [[ "$new_domain" == "$existing" ]] && { echo -e "${RED}❌ 面板域名不能和网站/反代域名相同。${PLAIN}"; return 1; }
+    done
+    for existing in "${TCP_ROUTE_SNIS[@]}"; do
+        [[ "$new_domain" == "$existing" ]] && { echo -e "${RED}❌ 面板域名不能和 TCP/SNI 入站域名相同。${PLAIN}"; return 1; }
     done
     check_domain_dns_sanity "$new_domain" "新的面板域名" "prompt" || return 1
     confirm_risk_action "替换 443 面板域名为 ${new_domain}" \
@@ -2594,6 +2687,9 @@ collect_sni_stack_config() {
     SITE_DOMAINS=()
     SITE_BACKEND_ADDRS=()
     SITE_BACKEND_PORTS=()
+    TCP_ROUTE_SNIS=()
+    TCP_ROUTE_ADDRS=()
+    TCP_ROUTE_PORTS=()
     SNI_IP_WHITELIST_DOMAINS=()
     SNI_IP_WHITELIST_RANGES=()
     local site_domains_input
@@ -2942,6 +3038,13 @@ EOF
             [[ -n "$site_domain" ]] && echo "    ${site_domain} caddy_backend;" >> "$conf_file"
         done
     fi
+    if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local tcp_i tcp_sni
+        for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
+            tcp_sni="${TCP_ROUTE_SNIS[$tcp_i]}"
+            [[ -n "$tcp_sni" ]] && echo "    ${tcp_sni} vps_tcp_route_${tcp_i}_backend;" >> "$conf_file"
+        done
+    fi
     cat <<EOF >> "$conf_file"
     ${REALITY_SNI} xray_backend;
     default xray_backend;
@@ -2977,6 +3080,20 @@ upstream xray_backend {
 }
 
 EOF
+    if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local tcp_i tcp_sni tcp_backend
+        for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
+            tcp_sni="${TCP_ROUTE_SNIS[$tcp_i]}"
+            [[ -n "$tcp_sni" ]] || continue
+            tcp_backend=$(format_hostport "${TCP_ROUTE_ADDRS[$tcp_i]}" "${TCP_ROUTE_PORTS[$tcp_i]}")
+            cat <<EOF >> "$conf_file"
+upstream vps_tcp_route_${tcp_i}_backend {
+    server ${tcp_backend};
+}
+
+EOF
+        done
+    fi
     if [[ ${#whitelist_block_vars[@]} -gt 0 ]]; then
         cat <<'EOF' >> "$conf_file"
 upstream vps_ip_reject_backend {
@@ -3107,10 +3224,14 @@ issue_and_install_cert_for_domain() {
 save_sni_stack_env() {
     mkdir -p /etc/vps-optimize
     local site_domains_csv site_backend_addrs_csv site_backend_ports_csv
+    local tcp_route_snis_csv tcp_route_addrs_csv tcp_route_ports_csv
     local sni_ip_whitelist_domains_csv sni_ip_whitelist_ranges_pipe
     site_domains_csv=$(IFS=','; echo "${SITE_DOMAINS[*]}")
     site_backend_addrs_csv=$(IFS=','; echo "${SITE_BACKEND_ADDRS[*]}")
     site_backend_ports_csv=$(IFS=','; echo "${SITE_BACKEND_PORTS[*]}")
+    tcp_route_snis_csv=$(IFS=','; echo "${TCP_ROUTE_SNIS[*]}")
+    tcp_route_addrs_csv=$(IFS=','; echo "${TCP_ROUTE_ADDRS[*]}")
+    tcp_route_ports_csv=$(IFS=','; echo "${TCP_ROUTE_PORTS[*]}")
     sni_ip_whitelist_domains_csv=$(IFS=','; echo "${SNI_IP_WHITELIST_DOMAINS[*]}")
     sni_ip_whitelist_ranges_pipe=$(IFS='|'; echo "${SNI_IP_WHITELIST_RANGES[*]}")
     cat <<EOF > /etc/vps-optimize/sni-stack.env
@@ -3135,6 +3256,9 @@ SITE_BACKEND_ADDR='${SITE_BACKEND_ADDRS[0]:-127.0.0.1}'
 SITE_BACKEND_PORT='${SITE_BACKEND_PORTS[0]:-3000}'
 SITE_BACKEND_ADDRS_CSV='${site_backend_addrs_csv}'
 SITE_BACKEND_PORTS_CSV='${site_backend_ports_csv}'
+TCP_ROUTE_SNIS_CSV='${tcp_route_snis_csv}'
+TCP_ROUTE_ADDRS_CSV='${tcp_route_addrs_csv}'
+TCP_ROUTE_PORTS_CSV='${tcp_route_ports_csv}'
 SNI_IP_WHITELIST_DOMAINS_CSV='${sni_ip_whitelist_domains_csv}'
 SNI_IP_WHITELIST_RANGES_PIPE='${sni_ip_whitelist_ranges_pipe}'
 EOF
@@ -3149,7 +3273,7 @@ harden_single_443_firewall() {
     [[ "$yn" =~ ^[Yy]$ ]] || return 0
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}
-    remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "40000" "8443" "1443" "2096" "3000")
+    remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}" "40000" "8443" "1443" "2096" "3000")
     if command -v ufw >/dev/null 2>&1; then
         ufw allow "${ssh_port}/tcp" >/dev/null 2>&1 || true
         ufw allow "${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || true
@@ -3177,7 +3301,7 @@ print_sni_stack_result() {
     local check_ports=()
     local check_regex=""
     local p
-    check_ports=("$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}")
+    check_ports=("$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}")
     mapfile -t check_ports < <(printf '%s\n' "${check_ports[@]}" | grep -E '^[0-9]+$' | awk '!seen[$0]++')
     for p in "${check_ports[@]}"; do
         if [[ -z "$check_regex" ]]; then
@@ -3200,9 +3324,15 @@ print_sni_stack_result() {
             echo -e "  网站/反代入口： https://${SITE_DOMAINS[$i]}/"
         done
     fi
+    if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local tcp_i
+        for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
+            echo -e "  TCP/SNI 入站：  ${TCP_ROUTE_SNIS[$tcp_i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]}"
+        done
+    fi
     echo -e "  REALITY 端口：  ${NGINX_LISTEN_PORT}"
     echo -e ""
-    echo -e "${YELLOW}不要从公网访问这些内部端口：${CADDY_LISTEN_PORT}/${XRAY_LISTEN_PORT}/${PANEL_LISTEN_PORT}/${SUB_LISTEN_PORT}/${SITE_BACKEND_PORTS[*]}${PLAIN}"
+    echo -e "${YELLOW}不要从公网访问这些内部端口：${CADDY_LISTEN_PORT}/${XRAY_LISTEN_PORT}/${PANEL_LISTEN_PORT}/${SUB_LISTEN_PORT}/${SITE_BACKEND_PORTS[*]} ${TCP_ROUTE_PORTS[*]}${PLAIN}"
     echo -e "${YELLOW}它们应该只给本机内部服务互相连接，不是浏览器入口。${PLAIN}"
     echo -e ""
     echo -e "${BOLD}二、3x-ui 面板设置建议${PLAIN}"
@@ -3251,6 +3381,12 @@ print_sni_stack_result() {
             echo -e "  ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]} -> ${SITE_DOMAINS[$i]} 网站后端"
         done
     fi
+    if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local tcp_i
+        for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
+            echo -e "  ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]} -> ${TCP_ROUTE_SNIS[$tcp_i]} TCP/SNI 入站"
+        done
+    fi
     echo -e ""
     echo -e "${BOLD}六、检查命令${PLAIN}"
     if [[ -n "$check_regex" ]]; then
@@ -3266,7 +3402,7 @@ print_sni_stack_result() {
     echo -e "  journalctl -u caddy -n 80 --no-pager"
     echo -e "  journalctl -u x-ui -u 3x-ui -n 80 --no-pager"
     echo -e ""
-    echo -e "${RED}绝对不要做：Caddy 监听公网 443；Xray 监听公网 443；3x-ui 面板暴露公网；3x-ui 证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+    echo -e "${RED}绝对不要做：Caddy 监听公网 443；Xray 监听公网 443；3x-ui 面板或新增 TCP/SNI 入站暴露公网；3x-ui 证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
 }
 
 apply_sni_stack_runtime_config() {
@@ -3300,6 +3436,7 @@ list_sni_stack_sites() {
     panel_ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
     [[ -n "$panel_ranges" ]] && echo -e "${YELLOW}面板域名 IP 白名单：${panel_ranges}${PLAIN}"
     echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
+    [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#TCP_ROUTE_SNIS[@]} 个 TCP/SNI 入站，请在 [19] -> [9] 查看。${PLAIN}"
     echo -e "------------------------------------------------"
     if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
         echo -e "${YELLOW}当前没有额外的网站/反代域名。${PLAIN}"
@@ -3360,6 +3497,12 @@ add_sni_stack_site() {
     for existing in "${SITE_DOMAINS[@]}"; do
         if [[ "$site_domain" == "$existing" ]]; then
             echo -e "${RED}❌ 该域名已经在 443 分流列表中。${PLAIN}"
+            return 1
+        fi
+    done
+    for existing in "${TCP_ROUTE_SNIS[@]}"; do
+        if [[ "$site_domain" == "$existing" ]]; then
+            echo -e "${RED}❌ 该域名已经作为 TCP/SNI 入站使用。${PLAIN}"
             return 1
         fi
     done
@@ -3524,6 +3667,254 @@ remove_sni_stack_site() {
     fi
 }
 
+list_sni_stack_tcp_routes() {
+    load_sni_stack_env || return 1
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}当前 443 TCP/SNI 本地入站分流${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT}"
+    echo -e "REALITY 默认后端：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
+    echo -e "------------------------------------------------"
+    if [[ ${#TCP_ROUTE_SNIS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}当前没有额外 TCP/SNI 入站分流。${PLAIN}"
+        return 0
+    fi
+
+    local i num route_ranges
+    for i in "${!TCP_ROUTE_SNIS[@]}"; do
+        num=$((i + 1))
+        echo -e "${GREEN}${num}.${PLAIN} ${TCP_ROUTE_SNIS[$i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$i]}:${TCP_ROUTE_PORTS[$i]}"
+        route_ranges=$(sni_ip_whitelist_ranges_for_domain "${TCP_ROUTE_SNIS[$i]}")
+        [[ -n "$route_ranges" ]] && echo -e "   ${YELLOW}IP 白名单：${route_ranges}${PLAIN}"
+    done
+}
+
+add_sni_stack_tcp_route() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}新增 443 TCP/SNI 本地入站分流${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    echo -e "${YELLOW}用途：你已在 3x-ui 新增本地入站，本功能只把某个 SNI 通过公网 ${NGINX_LISTEN_PORT} 分流到该本地端口。${PLAIN}"
+    echo -e "${YELLOW}要求：协议必须是 TCP 且客户端握手能带 SNI；UDP/QUIC/Hysteria2/TUIC 或无 SNI 的裸协议不适用。${PLAIN}"
+    echo -e "${YELLOW}安全边界：后端只允许 127.0.0.1/localhost/::1，不会开放新公网端口。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local route_sni route_addr route_port existing idx enable_ip_whitelist whitelist_input whitelist_ranges current_client_ip
+    local -a whitelist_array=()
+    read_trimmed route_sni "请输入用于分流的新 SNI/域名（例如 relay.example.com）: "
+    route_sni=$(normalize_domain_input "$route_sni")
+    if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
+        echo -e "${BLUE}已取消新增 TCP/SNI 入站。${PLAIN}"
+        return 0
+    fi
+    is_valid_domain "$route_sni" || { echo -e "${RED}❌ SNI/域名格式无效。${PLAIN}"; return 1; }
+    if [[ "$route_sni" == "$PANEL_DOMAIN" || "$route_sni" == "$REALITY_SNI" ]]; then
+        echo -e "${RED}❌ TCP/SNI 入站域名不能和面板域名或 REALITY SNI 相同。${PLAIN}"
+        return 1
+    fi
+    for existing in "${SITE_DOMAINS[@]}"; do
+        [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已作为网站/反代域名使用。${PLAIN}"; return 1; }
+    done
+    for existing in "${TCP_ROUTE_SNIS[@]}"; do
+        [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该 TCP/SNI 入站已经存在。${PLAIN}"; return 1; }
+    done
+
+    check_domain_dns_sanity "$route_sni" "TCP/SNI 入站域名" "warn" || echo -e "${YELLOW}⚠️ 如果客户端使用服务器 IP 连接并手动指定 SNI，可忽略该 DNS 警告。${PLAIN}"
+    route_addr=$(ask_with_default "3x-ui 新入站本地监听地址（只允许本地）" "127.0.0.1")
+    route_addr=$(normalize_loopback_addr "$route_addr")
+    route_port=$(ask_with_default "3x-ui 新入站本地监听端口" "8443")
+    is_loopback_listen_addr "$route_addr" || { echo -e "${RED}❌ 为保证安全，TCP/SNI 入站后端只允许 127.0.0.1、localhost 或 ::1。${PLAIN}"; return 1; }
+    is_valid_port "$route_port" || { echo -e "${RED}❌ 入站端口无效：${route_port}${PLAIN}"; return 1; }
+    if [[ "$route_port" == "$NGINX_LISTEN_PORT" || "$route_port" == "$CADDY_LISTEN_PORT" || "$route_port" == "$PANEL_LISTEN_PORT" || "$route_port" == "$SUB_LISTEN_PORT" ]]; then
+        echo -e "${RED}❌ 入站端口不能复用公网入口、Caddy、面板或订阅服务端口。${PLAIN}"
+        return 1
+    fi
+
+    read_trimmed enable_ip_whitelist "是否为 ${route_sni} 启用 IP 白名单？(y/n，默认 n): "
+    if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
+        current_client_ip=$(detect_ssh_client_ip)
+        [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
+        read_trimmed whitelist_input "请输入允许访问 ${route_sni} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
+        normalize_ip_whitelist_input "$whitelist_input" whitelist_array || return 1
+        append_vps_public_ips_to_whitelist whitelist_array
+        whitelist_ranges=$(join_array_by_space "${whitelist_array[@]}")
+    fi
+
+    echo -e ""
+    echo -e "${CYAN}即将添加 TCP/SNI 分流：${route_sni}:${NGINX_LISTEN_PORT} -> ${route_addr}:${route_port}${PLAIN}"
+    echo -e "${YELLOW}请确认 3x-ui 入站已监听 ${route_addr}:${route_port}，且客户端连接端口使用 ${NGINX_LISTEN_PORT}。${PLAIN}"
+    [[ -n "${whitelist_ranges:-}" ]] && echo -e "${YELLOW}IP 白名单：${whitelist_ranges}${PLAIN}"
+    confirm_risk_action "新增 443 TCP/SNI 入站 ${route_sni}" \
+        "Nginx stream SNI 分流规则，会把该 SNI 直通到本地 3x-ui 入站" \
+        "使用 443 单入口备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" \
+        "确认后端只监听本地地址，不要在安全组或防火墙开放 ${route_port}。" || return 1
+
+    idx=${#TCP_ROUTE_SNIS[@]}
+    TCP_ROUTE_SNIS[$idx]="$route_sni"
+    TCP_ROUTE_ADDRS[$idx]="$route_addr"
+    TCP_ROUTE_PORTS[$idx]="$route_port"
+    [[ -n "${whitelist_ranges:-}" ]] && set_sni_ip_whitelist_for_domain "$route_sni" "$whitelist_ranges"
+    save_and_offer_reapply_sni_stack
+}
+
+edit_sni_stack_tcp_route() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}修改 443 TCP/SNI 本地入站分流${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    if [[ ${#TCP_ROUTE_SNIS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}当前没有可修改的 TCP/SNI 入站分流。${PLAIN}"
+        return 0
+    fi
+
+    local i num choice idx old_sni new_sni new_addr new_port existing
+    for i in "${!TCP_ROUTE_SNIS[@]}"; do
+        num=$((i + 1))
+        echo -e "${GREEN}${num}.${PLAIN} ${TCP_ROUTE_SNIS[$i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$i]}:${TCP_ROUTE_PORTS[$i]}"
+    done
+    echo -e "------------------------------------------------"
+    read_trimmed choice "请输入要修改的序号: "
+    if [[ -z "$choice" || "$choice" == "0" ]]; then
+        echo -e "${BLUE}已取消修改。${PLAIN}"
+        return 0
+    fi
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#TCP_ROUTE_SNIS[@]} )); then
+        echo -e "${RED}❌ 序号无效。${PLAIN}"
+        return 1
+    fi
+
+    idx=$((choice - 1))
+    old_sni="${TCP_ROUTE_SNIS[$idx]}"
+    new_sni=$(normalize_domain_input "$(ask_with_default "SNI/域名" "$old_sni")")
+    new_addr=$(ask_with_default "本地监听地址（只允许本地）" "${TCP_ROUTE_ADDRS[$idx]}")
+    new_addr=$(normalize_loopback_addr "$new_addr")
+    new_port=$(ask_with_default "本地监听端口" "${TCP_ROUTE_PORTS[$idx]}")
+
+    is_valid_domain "$new_sni" || { echo -e "${RED}❌ SNI/域名格式无效。${PLAIN}"; return 1; }
+    if [[ "$new_sni" == "$PANEL_DOMAIN" || "$new_sni" == "$REALITY_SNI" ]]; then
+        echo -e "${RED}❌ TCP/SNI 入站域名不能和面板域名或 REALITY SNI 相同。${PLAIN}"
+        return 1
+    fi
+    for existing in "${SITE_DOMAINS[@]}"; do
+        [[ "$new_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已作为网站/反代域名使用。${PLAIN}"; return 1; }
+    done
+    for i in "${!TCP_ROUTE_SNIS[@]}"; do
+        [[ "$i" -eq "$idx" ]] && continue
+        [[ "$new_sni" == "${TCP_ROUTE_SNIS[$i]}" ]] && { echo -e "${RED}❌ 该 TCP/SNI 入站已经存在。${PLAIN}"; return 1; }
+    done
+    is_loopback_listen_addr "$new_addr" || { echo -e "${RED}❌ 为保证安全，TCP/SNI 入站后端只允许 127.0.0.1、localhost 或 ::1。${PLAIN}"; return 1; }
+    is_valid_port "$new_port" || { echo -e "${RED}❌ 入站端口无效：${new_port}${PLAIN}"; return 1; }
+    if [[ "$new_port" == "$NGINX_LISTEN_PORT" || "$new_port" == "$CADDY_LISTEN_PORT" || "$new_port" == "$PANEL_LISTEN_PORT" || "$new_port" == "$SUB_LISTEN_PORT" ]]; then
+        echo -e "${RED}❌ 入站端口不能复用公网入口、Caddy、面板或订阅服务端口。${PLAIN}"
+        return 1
+    fi
+
+    echo -e ""
+    echo -e "${CYAN}即将修改：${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}"
+    confirm_risk_action "修改 443 TCP/SNI 入站 ${old_sni}" \
+        "Nginx stream SNI 分流规则和本地后端端口" \
+        "使用 443 单入口备份恢复修改前配置" \
+        "确认 3x-ui 入站已按新地址和端口监听，且未开放该内部端口。" || return 1
+
+    TCP_ROUTE_SNIS[$idx]="$new_sni"
+    TCP_ROUTE_ADDRS[$idx]="$new_addr"
+    TCP_ROUTE_PORTS[$idx]="$new_port"
+    if [[ "$old_sni" != "$new_sni" ]]; then
+        rename_sni_ip_whitelist_domain "$old_sni" "$new_sni"
+    fi
+    save_and_offer_reapply_sni_stack
+}
+
+remove_sni_stack_tcp_route() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}删除 443 TCP/SNI 本地入站分流${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    if [[ ${#TCP_ROUTE_SNIS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}当前没有可删除的 TCP/SNI 入站分流。${PLAIN}"
+        return 0
+    fi
+
+    local i num choice idx route_sni
+    local -a new_snis=()
+    local -a new_addrs=()
+    local -a new_ports=()
+    for i in "${!TCP_ROUTE_SNIS[@]}"; do
+        num=$((i + 1))
+        echo -e "${GREEN}${num}.${PLAIN} ${TCP_ROUTE_SNIS[$i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$i]}:${TCP_ROUTE_PORTS[$i]}"
+    done
+    echo -e "------------------------------------------------"
+    read_trimmed choice "请输入要删除的序号: "
+    if [[ -z "$choice" || "$choice" == "0" ]]; then
+        echo -e "${BLUE}已取消删除。${PLAIN}"
+        return 0
+    fi
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#TCP_ROUTE_SNIS[@]} )); then
+        echo -e "${RED}❌ 序号无效。${PLAIN}"
+        return 1
+    fi
+
+    idx=$((choice - 1))
+    route_sni="${TCP_ROUTE_SNIS[$idx]}"
+    confirm_risk_action "从 443 分流中移除 TCP/SNI 入站 ${route_sni}" \
+        "该 SNI 的 Nginx stream 直通规则" \
+        "使用 443 单入口备份恢复，或重新新增该 TCP/SNI 入站" \
+        "确认没有客户端仍依赖该 SNI 连接。" || return 1
+
+    for i in "${!TCP_ROUTE_SNIS[@]}"; do
+        [[ "$i" -eq "$idx" ]] && continue
+        new_snis+=("${TCP_ROUTE_SNIS[$i]}")
+        new_addrs+=("${TCP_ROUTE_ADDRS[$i]}")
+        new_ports+=("${TCP_ROUTE_PORTS[$i]}")
+    done
+    TCP_ROUTE_SNIS=("${new_snis[@]}")
+    TCP_ROUTE_ADDRS=("${new_addrs[@]}")
+    TCP_ROUTE_PORTS=("${new_ports[@]}")
+    remove_sni_ip_whitelist_for_domain "$route_sni"
+    save_and_offer_reapply_sni_stack
+}
+
+manage_sni_stack_tcp_routes() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🔀 443 TCP/SNI 本地入站管理${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}用途：把你已在 3x-ui 配好的本地 TCP 入站，通过不同 SNI 统一接入公网 ${NGINX_LISTEN_PORT}。${PLAIN}"
+        echo -e "${YELLOW}本功能不开放新端口，不改 3x-ui 协议；只写 Nginx stream SNI -> 本地端口规则。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 查看当前 TCP/SNI 入站${PLAIN}"
+        echo -e "${GREEN}  2. 新增 TCP/SNI 入站${PLAIN}"
+        echo -e "${GREEN}  3. 修改 TCP/SNI 入站${PLAIN}"
+        echo -e "${GREEN}  4. 删除 TCP/SNI 入站${PLAIN}"
+        echo -e "${GREEN}  5. 管理域名 IP 白名单${PLAIN}       ${YELLOW}(可限制某个 TCP/SNI 入站来源 IP)${PLAIN}"
+        echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"
+        echo -e "${GREEN}  7. 443 单入口链路体检${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local choice
+        read_trimmed choice "👉 请选择操作: "
+        case "$choice" in
+            1) list_sni_stack_tcp_routes ;;
+            2) add_sni_stack_tcp_route ;;
+            3) edit_sni_stack_tcp_route ;;
+            4) remove_sni_stack_tcp_route ;;
+            5) manage_sni_stack_ip_whitelist ;;
+            6) reapply_sni_stack_from_env ;;
+            7) sni_stack_health_check ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
+        esac
+        echo ""
+        read -n 1 -s -r -p "按任意键继续..."
+    done
+}
+
 manage_sni_stack_ip_whitelist() {
     while true; do
         clear
@@ -3531,7 +3922,7 @@ manage_sni_stack_ip_whitelist() {
         echo -e "${BOLD}🔐 443 域名 IP 白名单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         load_sni_stack_env || return 1
-        echo -e "${YELLOW}只限制你选择的域名；未设置白名单的域名、REALITY SNI 和未知 SNI 仍按原 443 分流规则工作。${PLAIN}"
+        echo -e "${YELLOW}只限制你选择的域名；支持面板、网站/反代和 TCP/SNI 入站，REALITY SNI 与未知 SNI 仍按原分流规则工作。${PLAIN}"
         echo -e "${YELLOW}443 单入口会在 Nginx stream 层按 SNI + 源 IP 拦截，避免影响同入口其他服务。${PLAIN}"
         echo -e "------------------------------------------------"
 
@@ -3542,6 +3933,11 @@ manage_sni_stack_ip_whitelist() {
             [[ -z "$site_domain" ]] && continue
             domains+=("$site_domain")
             labels+=("网站/反代")
+        done
+        for site_domain in "${TCP_ROUTE_SNIS[@]}"; do
+            [[ -z "$site_domain" ]] && continue
+            domains+=("$site_domain")
+            labels+=("TCP/SNI 入站")
         done
 
         for i in "${!domains[@]}"; do
@@ -3659,6 +4055,7 @@ show_sni_help() {
     echo "6 证书维护：处理 Cloudflare Token、重签和证书缓存问题。"
     echo "7 修改参数：调整面板、订阅、REALITY 和入口监听。"
     echo "8 域名 IP 白名单：只对指定域名限制源 IP，不影响其他 SNI。"
+    echo "9 TCP/SNI 入站：把 3x-ui 已配置的本地 TCP 入站接入公网 443，不开放新端口。"
     echo "普通 Caddy 未接入 443 单入口时，用 [3] -> [21] 管理域名 IP 白名单。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
@@ -8460,6 +8857,7 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}  6. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
         echo -e "${CYAN}  7. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
         echo -e "${CYAN}  8. 管理域名 IP 白名单${PLAIN}        ${YELLOW}(只限制选中的域名)${PLAIN}"
+        echo -e "${CYAN}  9. 管理 TCP/SNI 本地入站${PLAIN}     ${YELLOW}(3x-ui 新入站走公网 443)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -8476,6 +8874,7 @@ func_sni_stack_quick_menu() {
             6) func_caddy_cf_maintenance_menu; continue ;;
             7) edit_sni_stack_runtime_profile; continue ;;
             8) manage_sni_stack_ip_whitelist; continue ;;
+            9) manage_sni_stack_tcp_routes; continue ;;
             "?"|help) show_sni_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;

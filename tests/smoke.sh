@@ -32,6 +32,8 @@ declare -f sanitize_nftables_config >/dev/null
 declare -f update_telegram_config >/dev/null
 
 grep -q 'func_sni_stack_quick_menu' vps.sh
+grep -q 'manage_sni_stack_tcp_routes' vps.sh
+grep -q 'TCP_ROUTE_SNIS_CSV' vps.sh
 grep -q 'func_health_dashboard' vps.sh
 grep -q 'func_backup_center' vps.sh
 grep -q 'SCRIPT_VERSION=' vps.sh
