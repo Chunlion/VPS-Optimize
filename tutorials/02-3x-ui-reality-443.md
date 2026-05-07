@@ -283,7 +283,7 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 主菜单 [19 443 单入口管理中心] -> [3 443 单入口链路体检]
 ```
 
-体检会检查 Nginx、Caddy、REALITY、面板后端、证书和安全项。
+体检会检查 Nginx、Caddy、REALITY、面板后端、3x-ui 面板/订阅证书路径残留和安全项。
 
 手动补充检查：
 

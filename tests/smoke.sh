@@ -21,6 +21,11 @@ source <(sed -n '/^APT_UPDATED=0/,/^install_pkg()/p' vps.sh | sed '$d')
 APT_UPDATED=1
 apt_update_once
 [[ "$APT_UPDATED" == "1" ]]
+source <(sed -n '/^format_hostport()/,/^sni_stack_backup_dir()/p' vps.sh | sed '$d')
+[[ "$(nginx_stream_listen_directives "127.0.0.1" "443")" == "    listen 127.0.0.1:443;" ]]
+[[ "$(nginx_stream_listen_directives "0.0.0.0" "443" | grep -c '^    listen ')" == "2" ]]
+[[ "$(nginx_stream_listen_directives "::1" "443")" == "    listen [::1]:443;" ]]
+[[ "$(xui_cert_setting_key_sql_list)" == *"subcertfile"* ]]
 
 source <(sed -n '1,/^show_port_list()/p' dog.sh | sed '$d')
 [[ "$(normalize_main_choice " add ")" == "1" ]]

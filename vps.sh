@@ -1903,6 +1903,88 @@ format_hostport() {
     fi
 }
 
+nginx_stream_listen_directives() {
+    local addr="$1"
+    local port="$2"
+
+    if [[ "$addr" == "::" || "$addr" == "::1" ]]; then
+        printf '    listen [%s]:%s;\n' "$addr" "$port"
+        return 0
+    fi
+
+    printf '    listen %s:%s;\n' "$addr" "$port"
+    if [[ "$addr" == "0.0.0.0" ]]; then
+        printf '    listen [::]:%s;\n' "$port"
+    fi
+}
+
+xui_cert_setting_key_sql_list() {
+    printf '%s' "'webcertfile','webkeyfile','webcert','webcertkey','webcertkeyfile','certfile','keyfile','cert','key','subcertfile','subkeyfile','subcert','subkey','subcertkey','subcertkeyfile'"
+}
+
+find_xui_database_candidates() {
+    local db_path extra_db
+    local seen_dbs=" "
+    local db_candidates=(
+        "/etc/x-ui/x-ui.db"
+        "/usr/local/x-ui/x-ui.db"
+        "/usr/local/x-ui/bin/x-ui.db"
+        "/etc/x-panel/x-panel.db"
+    )
+
+    for db_path in "${db_candidates[@]}"; do
+        [[ -f "$db_path" ]] || continue
+        [[ "$seen_dbs" == *" ${db_path} "* ]] && continue
+        seen_dbs+=" ${db_path} "
+        echo "$db_path"
+    done
+
+    while IFS= read -r extra_db; do
+        [[ -f "$extra_db" ]] || continue
+        [[ "$seen_dbs" == *" ${extra_db} "* ]] && continue
+        seen_dbs+=" ${extra_db} "
+        echo "$extra_db"
+    done < <(find /etc /usr/local/x-ui /opt -maxdepth 4 -type f \( -name "x-ui.db" -o -name "x-panel.db" \) 2>/dev/null | sort -u)
+}
+
+check_xui_cert_settings_for_single_443() {
+    local cert_key_sql db_path rows key value
+    local checked=0 found=0
+
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ 未检测到 sqlite3，跳过 3x-ui 证书路径数据库检查。${PLAIN}"
+        return 2
+    fi
+
+    cert_key_sql=$(xui_cert_setting_key_sql_list)
+    while IFS= read -r db_path; do
+        [[ -n "$db_path" ]] || continue
+        checked=1
+        rows=$(sqlite3 -separator '|' "$db_path" "select key,value from settings where lower(key) in (${cert_key_sql}) and length(trim(coalesce(value,''))) > 0;" 2>/dev/null || true)
+        [[ -n "$rows" ]] || continue
+
+        found=1
+        echo -e "${YELLOW}⚠️ ${db_path} 仍有 3x-ui 面板/订阅证书路径，443 单入口下建议清空：${PLAIN}"
+        while IFS='|' read -r key value; do
+            [[ -n "$key" ]] || continue
+            echo -e "  ${key}=${value}"
+        done <<< "$rows"
+    done < <(find_xui_database_candidates)
+
+    if [[ "$checked" -eq 0 ]]; then
+        echo -e "${YELLOW}⚠️ 未找到 3x-ui 数据库，跳过证书路径检查。${PLAIN}"
+        return 2
+    fi
+
+    if [[ "$found" -eq 1 ]]; then
+        echo -e "${YELLOW}建议：进入 [4] -> [11] 面板救砖 / SSL 清理，或在 3x-ui 面板里清空证书路径并重启。${PLAIN}"
+        return 1
+    fi
+
+    echo -e "${GREEN}✅ 3x-ui 面板/订阅证书路径未发现残留${PLAIN}"
+    return 0
+}
+
 sni_stack_backup_dir() {
     echo "/etc/vps-optimize/backups/sni-stack_$(date +%Y%m%d_%H%M%S)"
 }
@@ -2323,6 +2405,13 @@ sni_stack_health_check() {
         for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
             check_listen "TCP/SNI 入站 ${TCP_ROUTE_SNIS[$tcp_i]}" "${TCP_ROUTE_PORTS[$tcp_i]}" "${TCP_ROUTE_ADDRS[$tcp_i]}"
         done
+    fi
+
+    echo -e "------------------------------------------------"
+    if check_xui_cert_settings_for_single_443; then
+        ((ok++))
+    else
+        ((warn++))
     fi
 
     echo -e "------------------------------------------------"
@@ -2986,14 +3075,12 @@ EOF
 
 write_nginx_sni_stream_config() {
     local conf_file="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
-    local first_listen="listen ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT};"
-    local second_listen="    listen [::]:${NGINX_LISTEN_PORT};"
+    local listen_directives
     local caddy_backend
     local xray_backend
     local guarded_backend_var="\$vps_sni_backend"
     local -a whitelist_block_vars=()
-    [[ "$NGINX_LISTEN_ADDR" == "::" || "$NGINX_LISTEN_ADDR" == "::1" ]] && first_listen="listen [${NGINX_LISTEN_ADDR}]:${NGINX_LISTEN_PORT};"
-    [[ "$NGINX_LISTEN_ADDR" == "::" ]] && second_listen=""
+    listen_directives=$(nginx_stream_listen_directives "$NGINX_LISTEN_ADDR" "$NGINX_LISTEN_PORT")
     caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
 
@@ -3105,8 +3192,7 @@ EOF
 
     cat <<EOF >> "$conf_file"
 server {
-    ${first_listen}
-${second_listen}
+${listen_directives}
     ssl_preread on;
     proxy_pass ${guarded_backend_var};
     proxy_connect_timeout 10s;
@@ -7557,37 +7643,36 @@ func_rescue_panel() {
         systemctl stop 3x-ui >/dev/null 2>&1
         systemctl stop x-panel >/dev/null 2>&1
         
-        # 找数据库并擦除。新版/旧版字段名不完全一致，所以按 key 的小写形式批量兼容。
-        local db_found=false
-        local db_candidates=(
-            "/etc/x-ui/x-ui.db"
-            "/usr/local/x-ui/x-ui.db"
-            "/usr/local/x-ui/bin/x-ui.db"
-            "/etc/x-panel/x-panel.db"
-        )
-        local extra_db
-        while IFS= read -r extra_db; do
-            db_candidates+=("$extra_db")
-        done < <(find /etc /usr/local/x-ui /opt -maxdepth 4 -type f \( -name "x-ui.db" -o -name "x-panel.db" \) 2>/dev/null | sort -u)
+        local cert_cmd_done=false
+        if [[ -n "$xui_bin" ]]; then
+            if "$xui_bin" cert -webCert "" -webCertKey "" >/dev/null 2>&1; then
+                echo -e "${GREEN}✅ 已通过 3x-ui 官方 cert 命令清空面板与订阅证书路径。${PLAIN}"
+                cert_cmd_done=true
+            else
+                echo -e "${YELLOW}⚠️ 官方 cert 命令清理失败，将继续尝试直接修正数据库。${PLAIN}"
+            fi
+        fi
 
+        # 新版/旧版字段名不完全一致，所以按 key 的小写形式兼容面板和订阅证书字段。
+        local db_found=false
+        local cert_key_sql
         local db_path
-        local seen_dbs=" "
-        for db_path in "${db_candidates[@]}"; do
-            [[ -f "$db_path" ]] || continue
-            [[ "$seen_dbs" == *" ${db_path} "* ]] && continue
-            seen_dbs+=" ${db_path} "
+        cert_key_sql=$(xui_cert_setting_key_sql_list)
+        while IFS= read -r db_path; do
             if [[ -f "$db_path" ]]; then
-                if sqlite3 "$db_path" "update settings set value='' where lower(key) in ('webcertfile','webkeyfile','webcert','webcertkey','webcertkeyfile','certfile','keyfile','cert','key');" 2>/dev/null; then
+                if sqlite3 "$db_path" "update settings set value='' where lower(key) in (${cert_key_sql});" 2>/dev/null; then
                     echo -e "${GREEN}✅ 已清空常见 SSL 证书字段：${db_path}${PLAIN}"
                     db_found=true
                 else
                     echo -e "${YELLOW}⚠️ 数据库存在但更新失败：${db_path}${PLAIN}"
                 fi
             fi
-        done
+        done < <(find_xui_database_candidates)
         
-        if ! $db_found; then
+        if ! $db_found && ! $cert_cmd_done; then
             echo -e "${RED}❌ 未检测到常见面板的数据库文件！您可能没有安装 x-ui 或 x-panel。${PLAIN}"
+        elif ! $db_found; then
+            echo -e "${YELLOW}⚠️ 未在常见路径找到数据库，已依赖官方 cert 命令处理。${PLAIN}"
         fi
         
         # 重启服务
