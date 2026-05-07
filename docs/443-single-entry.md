@@ -74,7 +74,7 @@ https://panel.example.com:1443/
 2001:db8::/32
 ```
 
-启用前请把当前管理 IP 放进白名单，否则可能把自己挡在面板外。脚本会提示当前 SSH 来源 IP，并会自动尝试把 VPS 本机公网 IPv4/IPv6 加入白名单；如果自动探测失败，请手动补上 VPS 公网 IP。
+启用前请把当前管理 IP 放进白名单，否则可能把自己挡在面板外。脚本会提示当前 SSH 来源 IP，并会自动尝试把 VPS 本机公网 IPv4/IPv6、loopback 地址和当前 Docker 网络子网加入白名单；如果自动探测失败，请手动补上 VPS 公网 IP 或订阅工具所在的 Docker 子网。
 
 注意：本方案建议相关域名保持 Cloudflare 灰云 / DNS only。若域名开了橙云代理，服务器看到的源 IP 可能是 Cloudflare 边缘 IP，而不是你的真实访问 IP，白名单应改为 Cloudflare 边缘段或先关闭代理。
 

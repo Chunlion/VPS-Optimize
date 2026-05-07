@@ -1727,6 +1727,38 @@ append_vps_public_ips_to_whitelist() {
     if [[ "$added" -eq 0 ]]; then
         echo -e "${YELLOW}⚠️ 未能自动获取 VPS 本机公网 IP；如需要本机自测访问，请手动加入 VPS 公网 IP。${PLAIN}"
     fi
+
+    append_local_service_ips_to_whitelist "$1" seen
+}
+
+append_local_service_ips_to_whitelist() {
+    local -n out_array=$1
+    local -n seen_ref=$2
+    local entry subnet local_added=0
+    local -a local_ranges=("127.0.0.1/32" "::1/128")
+
+    if command -v docker >/dev/null 2>&1; then
+        while IFS= read -r subnet; do
+            subnet=$(trim_input "$subnet")
+            [[ -n "$subnet" ]] && local_ranges+=("$subnet")
+        done < <(docker network inspect $(docker network ls -q 2>/dev/null) \
+            --format '{{range .IPAM.Config}}{{if .Subnet}}{{.Subnet}}{{"\n"}}{{end}}{{end}}' 2>/dev/null | sort -u)
+    fi
+
+    for entry in "${local_ranges[@]}"; do
+        [[ -n "$entry" ]] || continue
+        is_valid_ip_cidr "$entry" || continue
+        if [[ "$seen_ref" != *" ${entry} "* ]]; then
+            out_array+=("$entry")
+            seen_ref+=" ${entry} "
+            echo -e "${GREEN}✅ 已自动加入本机/容器访问来源：${entry}${PLAIN}"
+            local_added=1
+        fi
+    done
+
+    if [[ "$local_added" -eq 0 ]]; then
+        echo -e "${BLUE}ℹ️ 本机/容器访问来源已在白名单中，无需重复加入。${PLAIN}"
+    fi
 }
 
 join_array_by_space() {
