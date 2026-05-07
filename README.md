@@ -164,6 +164,8 @@ cy
 | 安装面板、节点、订阅工具 | `主菜单 [4 面板、节点与订阅工具]` | 3x-ui、S-UI、Sing-box、Xray、订阅管理、Dockge、Komari |
 | 改 SSH 端口 | `主菜单 [5 SSH 安全加固]` | 改前先放行云厂商安全组新端口 |
 | 管理防火墙端口 | `主菜单 [8 防火墙规则管理]` | 放行、删除、查看、关闭系统防火墙规则 |
+| 修改主机名 | `主菜单 [9 系统开关与清理] -> [6 修改主机名]` | 修改运行时主机名，并同步 `/etc/hostname` 和 `/etc/hosts` |
+| DNS 更改优化 | `主菜单 [10 网络与内核优化] -> [6 DNS 更改优化]` | 国内/国外默认 DNS，也可自定义 IPv4 和 IPv6 DNS |
 | 网络与内核优化 | `主菜单 [10 网络与内核优化]` | BBR/TCP/ZRAM/轻量内核 |
 | 测速和质量检测 | `主菜单 [12 测速与质量检测]` | YABS、流媒体、回程、IP 质量 |
 | 排查端口占用 | `主菜单 [13 端口排查与释放]` | 查看监听端口，必要时释放端口 |
@@ -328,7 +330,7 @@ dog
 
 高风险功能会要求输入 `YES`。不确定时先做 `主菜单 [16 配置备份与回滚]`。
 
-手动备份会尽量覆盖 SSH、Nginx/Caddy、443 单入口、证书、Cloudflare Token、Docker、Fail2ban、sysctl 和 3x-ui 关键配置。备份文件保存在 root 权限目录下，但其中可能包含私钥、面板数据库和 API Token，不要公开分享。
+手动备份会尽量覆盖 SSH、主机名、Nginx/Caddy、443 单入口、DNS、证书、Cloudflare Token、Docker、Fail2ban、sysctl 和 3x-ui 关键配置。备份文件保存在 root 权限目录下，但其中可能包含私钥、面板数据库和 API Token，不要公开分享。
 
 脚本现在对目录级清理采用“隔离/归档优先”的策略：旧证书缓存、Compose 部署目录、Fail2ban 配置、手动旧备份、Port Traffic Dog 配置等会尽量移动到隔离目录，而不是直接递归删除。常见隔离目录包括：
 
@@ -343,6 +345,7 @@ dog
 /etc/vps-optimize/quarantine/caddy-conf
 /etc/vps-optimize/quarantine/docker
 /etc/vps-optimize/quarantine/sysctl
+/etc/vps-optimize/quarantine/dns
 /etc/vps-optimize/quarantine/manual-backups
 /etc/vps-optimize/quarantine/manual-restore
 /etc/vps-optimize/quarantine/manual-temp
@@ -357,6 +360,7 @@ dog
 | --- | --- | --- |
 | SSH 改端口 | 云安全组未放行会失联 | 先开安全组，保留当前 SSH 会话 |
 | 防火墙关闭/删除规则 | 可能暴露服务或阻断连接 | 修改前记录现有规则 |
+| DNS 更改优化 | DNS 不可达会导致域名解析失败 | 先确认 IPv4/IPv6 连通性，必要时恢复最近一次 DNS 备份 |
 | 端口强杀 | 可能杀掉 `sshd`、数据库、面板 | 不要强杀 SSH 端口和未知关键服务 |
 | Caddy 配置重置 | 可能导致反代暂时失效 | 先备份 `/etc/caddy` |
 | 证书缓存隔离 | 可能需要重新签发 HTTPS 证书 | 确认域名和证书路径 |

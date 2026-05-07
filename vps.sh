@@ -169,6 +169,8 @@ remove_pkg() {
     return "$rc"
 }
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh"
+DNS_OPTIMIZE_BACKUP_DIR="/etc/vps-optimize/backups/dns"
+DNS_OPTIMIZE_RESOLVED_DROPIN="/etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf"
 
 minimal_compat_packages() {
     if is_debian; then
@@ -283,6 +285,7 @@ EOF
     echo -e "${GREEN}✅ 基础初始化完成，原生 BBR 已激活！${PLAIN}"
     read -n 1 -s -r -p "按任意键返回主菜单..."
 }
+
 # ---------------------------------------------------------
 # ★ 防火墙专属管理面板 (安全追加模式 + 批量多端口支持)
 # ---------------------------------------------------------
@@ -516,6 +519,109 @@ func_firewall_manage() {
         esac
     done
 }
+is_valid_hostname() {
+    local name="$1"
+    local label
+    [[ -n "$name" && ${#name} -le 253 ]] || return 1
+    [[ "$name" != .* && "$name" != *. ]] || return 1
+    [[ "$name" =~ ^[A-Za-z0-9.-]+$ ]] || return 1
+    IFS='.' read -ra labels <<< "$name"
+    for label in "${labels[@]}"; do
+        [[ -n "$label" && ${#label} -le 63 ]] || return 1
+        [[ "$label" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]] || return 1
+    done
+    return 0
+}
+
+update_hosts_hostname_entry() {
+    local old_name="$1"
+    local new_name="$2"
+    local tmp_file
+
+    tmp_file=$(mktemp /tmp/vps-hosts.XXXXXX) || return 1
+    awk -v old="$old_name" -v new="$new_name" '
+        BEGIN { updated = 0 }
+        $1 == "127.0.1.1" {
+            print "127.0.1.1\t" new
+            updated = 1
+            next
+        }
+        {
+            for (i = 2; i <= NF; i++) {
+                if ($i == old) {
+                    $i = new
+                    updated = 1
+                }
+            }
+            print
+        }
+        END {
+            if (!updated) {
+                print "127.0.1.1\t" new
+            }
+        }
+    ' /etc/hosts > "$tmp_file" || {
+        rm -f "$tmp_file"
+        return 1
+    }
+    cp "$tmp_file" /etc/hosts
+    rm -f "$tmp_file"
+}
+
+func_change_hostname() {
+    local current_name new_name ts
+    current_name=$(hostnamectl --static 2>/dev/null || hostname 2>/dev/null || cat /etc/hostname 2>/dev/null)
+    current_name="$(trim_input "$current_name")"
+    current_name="${current_name:-localhost}"
+
+    echo -e "当前主机名: ${CYAN}${current_name}${PLAIN}"
+    echo -e "${YELLOW}主机名建议只使用字母、数字、连字符和点号；每段不能以连字符开头或结尾。${PLAIN}"
+    read_trimmed new_name "请输入新的主机名（回车取消）: "
+    [[ -z "$new_name" || "$new_name" == "0" ]] && { echo -e "${BLUE}已取消修改主机名。${PLAIN}"; return 0; }
+
+    if ! is_valid_hostname "$new_name"; then
+        echo -e "${RED}❌ 主机名格式无效。示例：vps01 或 node-1.example.com${PLAIN}"
+        return 1
+    fi
+
+    if [[ "$new_name" == "$current_name" ]]; then
+        echo -e "${BLUE}主机名未变化。${PLAIN}"
+        return 0
+    fi
+
+    confirm_risk_action "修改主机名为 ${new_name}" \
+        "/etc/hostname、/etc/hosts 和当前运行时 hostname" \
+        "使用本功能改回 ${current_name}，或从 /etc/*.bak_时间戳 恢复" \
+        "少数服务会在重启后才读取新主机名。" || return 1
+
+    ts=$(date +%s)
+    [[ -f /etc/hostname ]] && cp -p /etc/hostname "/etc/hostname.bak_${ts}" 2>/dev/null || true
+    [[ -f /etc/hosts ]] && cp -p /etc/hosts "/etc/hosts.bak_${ts}" 2>/dev/null || true
+
+    echo "$new_name" > /etc/hostname || {
+        echo -e "${RED}❌ 写入 /etc/hostname 失败。${PLAIN}"
+        return 1
+    }
+
+    if [[ -f /etc/hosts ]]; then
+        update_hosts_hostname_entry "$current_name" "$new_name" || echo -e "${YELLOW}⚠️ /etc/hosts 更新失败，请稍后手动检查。${PLAIN}"
+    else
+        {
+            echo "127.0.0.1	localhost"
+            echo "127.0.1.1	$new_name"
+        } > /etc/hosts
+    fi
+
+    if command -v hostnamectl >/dev/null 2>&1; then
+        hostnamectl set-hostname "$new_name" >/dev/null 2>&1 || hostname "$new_name" 2>/dev/null || true
+    else
+        hostname "$new_name" 2>/dev/null || true
+    fi
+
+    echo -e "${GREEN}✅ 主机名已修改为：${new_name}${PLAIN}"
+    echo -e "${YELLOW}如部分服务仍显示旧名称，重启对应服务或下次重启系统后会完全生效。${PLAIN}"
+}
+
 # ---------------------------------------------------------
 # 2. 系统高级开关 (已修复显示丢失问题)
 # ---------------------------------------------------------
@@ -553,12 +659,18 @@ func_system_tweaks() {
         fi
         if [[ "$update_status" == "active" ]]; then str_update="${GREEN}开启中${PLAIN}"; else str_update="${RED}已关闭${PLAIN}"; fi
 
+        local current_hostname
+        current_hostname=$(hostnamectl --static 2>/dev/null || hostname 2>/dev/null || cat /etc/hostname 2>/dev/null)
+        current_hostname="$(trim_input "$current_hostname")"
+        current_hostname="${current_hostname:-未知}"
+
         # 完美修复：一字不落的菜单显示
         echo -e "${GREEN}  1. IPv6 开关${PLAIN}              当前: [ $str_ipv6 ]"
         echo -e "${GREEN}  2. IPv4 出站优先${PLAIN}          当前: [ $str_ipv4_first ]"
         echo -e "${GREEN}  3. Ping 响应开关${PLAIN}          当前: [ $str_ping ]"
         echo -e "${GREEN}  4. 自动安全更新开关${PLAIN}       当前: [ $str_update ]"
         echo -e "${GREEN}  5. 清理系统垃圾${PLAIN}           (日志/缓存/无用包)"
+        echo -e "${GREEN}  6. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -632,6 +744,7 @@ func_system_tweaks() {
                 journalctl --vacuum-time=1d > /dev/null 2>&1
                 echo -e "${GREEN}✅ 清理完成！${PLAIN}"
                 sleep 1 ;;
+            6) func_change_hostname; sleep 1 ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
@@ -3566,6 +3679,7 @@ show_net_kernel_help() {
     echo "3 ZRAM / Swap：适合小内存 VPS。"
     echo "4 安装/切换内核：高风险，必须确认快照和救援控制台可用。"
     echo "5 清理旧内核：不要删除当前内核和云厂商定制内核。"
+    echo "6 DNS 更改优化：国内/国外默认 DNS，也支持自定义 IPv4 和 IPv6。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -7595,6 +7709,8 @@ func_backup_center() {
                 } > "$manifest_file"
 
                 backup_copy_path /etc/ssh/sshd_config etc/ssh/sshd_config "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/hostname etc/hostname "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/hosts etc/hosts "$manifest_file" "$work_dir" && copied=1
                 backup_copy_path /etc/nginx/nginx.conf etc/nginx/nginx.conf "$manifest_file" "$work_dir" && copied=1
                 backup_copy_path /etc/nginx/stream.d etc/nginx/stream.d "$manifest_file" "$work_dir" && copied=1
                 backup_copy_path /etc/nginx/conf.d etc/nginx/conf.d "$manifest_file" "$work_dir" && copied=1
@@ -7608,6 +7724,8 @@ func_backup_center() {
                 backup_copy_path /root/.config/vps-panel/cloudflare.env root/.config/vps-panel/cloudflare.env "$manifest_file" "$work_dir" && copied=1
                 backup_copy_path /etc/vps-optimize/sni-stack.env etc/vps-optimize/sni-stack.env "$manifest_file" "$work_dir" && copied=1
                 backup_copy_path /etc/vps-optimize/sni-stack.last-backup etc/vps-optimize/sni-stack.last-backup "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/resolv.conf etc/resolv.conf "$manifest_file" "$work_dir" && copied=1
+                backup_copy_path /etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf "$manifest_file" "$work_dir" && copied=1
                 backup_copy_path /etc/docker/daemon.json etc/docker/daemon.json "$manifest_file" "$work_dir" && copied=1
                 backup_copy_path /etc/fail2ban/jail.local etc/fail2ban/jail.local "$manifest_file" "$work_dir" && copied=1
                 backup_copy_path /etc/sysctl.d etc/sysctl.d "$manifest_file" "$work_dir" && copied=1
@@ -7702,6 +7820,8 @@ func_backup_center() {
                 fi
 
                 restore_backup_file "$restore_dir/etc/ssh/sshd_config" /etc/ssh/sshd_config || restore_failed=1
+                restore_backup_file "$restore_dir/etc/hostname" /etc/hostname || restore_failed=1
+                restore_backup_file "$restore_dir/etc/hosts" /etc/hosts || restore_failed=1
                 restore_backup_file "$restore_dir/etc/nginx/nginx.conf" /etc/nginx/nginx.conf || restore_failed=1
                 restore_backup_dir "$restore_dir/etc/nginx/stream.d" /etc/nginx/stream.d "$restore_quarantine" || restore_failed=1
                 restore_backup_dir "$restore_dir/etc/nginx/conf.d" /etc/nginx/conf.d "$restore_quarantine" || restore_failed=1
@@ -7715,6 +7835,8 @@ func_backup_center() {
                 restore_backup_file "$restore_dir/root/.config/vps-panel/cloudflare.env" /root/.config/vps-panel/cloudflare.env || restore_failed=1
                 restore_backup_file "$restore_dir/etc/vps-optimize/sni-stack.env" /etc/vps-optimize/sni-stack.env || restore_failed=1
                 restore_backup_file "$restore_dir/etc/vps-optimize/sni-stack.last-backup" /etc/vps-optimize/sni-stack.last-backup || restore_failed=1
+                restore_backup_file "$restore_dir/etc/resolv.conf" /etc/resolv.conf || restore_failed=1
+                restore_backup_file "$restore_dir/etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf" /etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf || restore_failed=1
                 restore_backup_file "$restore_dir/etc/docker/daemon.json" /etc/docker/daemon.json || restore_failed=1
                 restore_backup_file "$restore_dir/etc/fail2ban/jail.local" /etc/fail2ban/jail.local || restore_failed=1
                 restore_backup_dir "$restore_dir/etc/sysctl.d" /etc/sysctl.d "$restore_quarantine" || restore_failed=1
@@ -7729,6 +7851,14 @@ func_backup_center() {
                 if [[ -d "$restore_dir/etc/sysctl.d" ]]; then
                     sysctl --system >/dev/null 2>&1
                 fi
+                if [[ -f "$restore_dir/etc/hostname" ]]; then
+                    local restored_hostname
+                    restored_hostname=$(cat /etc/hostname 2>/dev/null | head -n1)
+                    restored_hostname="$(trim_input "$restored_hostname")"
+                    if [[ -n "$restored_hostname" ]]; then
+                        hostnamectl set-hostname "$restored_hostname" >/dev/null 2>&1 || hostname "$restored_hostname" 2>/dev/null || true
+                    fi
+                fi
 
                 local restart_failed=0
                 local restart_rc=0
@@ -7740,7 +7870,7 @@ func_backup_center() {
                 fi
                 [[ "$restart_rc" -eq 1 ]] && restart_failed=1
 
-                for svc in nginx caddy docker fail2ban x-ui 3x-ui xray sing-box; do
+                for svc in nginx caddy docker fail2ban systemd-resolved x-ui 3x-ui xray sing-box; do
                     restart_service_if_available "$svc"
                     restart_rc=$?
                     [[ "$restart_rc" -eq 1 ]] && restart_failed=1
@@ -7988,6 +8118,228 @@ func_health_dashboard() {
     esac
 }
 
+dns_is_valid_ipv4() {
+    local ip="$1"
+    local octet
+    [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+    local IFS=.
+    local -a octets=($ip)
+    for octet in "${octets[@]}"; do
+        [[ "$octet" =~ ^[0-9]+$ ]] || return 1
+        (( 10#$octet >= 0 && 10#$octet <= 255 )) || return 1
+    done
+    return 0
+}
+
+dns_is_valid_ipv6() {
+    local ip="$1"
+    [[ "$ip" == *:* ]] || return 1
+    [[ "$ip" =~ ^[0-9A-Fa-f:]+$ ]] || return 1
+    [[ "$ip" != *:::* ]]
+}
+
+dns_normalize_servers() {
+    local family="$1"
+    local raw="$2"
+    local item
+    local items=()
+    local result=()
+
+    raw="${raw//，/,}"
+    raw="${raw//;/,}"
+    raw="${raw// /,}"
+    raw="${raw//$'\t'/,}"
+    IFS=',' read -ra items <<< "$raw"
+
+    for item in "${items[@]}"; do
+        item="$(trim_input "$item")"
+        [[ -z "$item" ]] && continue
+        if [[ "$family" == "4" ]]; then
+            dns_is_valid_ipv4 "$item" || return 1
+        else
+            dns_is_valid_ipv6 "$item" || return 1
+        fi
+        result+=("$item")
+    done
+
+    [[ ${#result[@]} -gt 0 ]] || return 1
+    (IFS=' '; printf '%s' "${result[*]}")
+}
+
+dns_backup_current_config() {
+    local ts backup_dir
+    ts=$(date +%Y%m%d_%H%M%S)
+    backup_dir="${DNS_OPTIMIZE_BACKUP_DIR}/${ts}"
+    mkdir -p "$backup_dir"
+    chmod 700 "$DNS_OPTIMIZE_BACKUP_DIR" "$backup_dir" 2>/dev/null || true
+    [[ -e /etc/resolv.conf || -L /etc/resolv.conf ]] && cp -a /etc/resolv.conf "$backup_dir/resolv.conf" 2>/dev/null || true
+    [[ -f "$DNS_OPTIMIZE_RESOLVED_DROPIN" ]] && cp -a "$DNS_OPTIMIZE_RESOLVED_DROPIN" "$backup_dir/99-vps-optimize-dns.conf" 2>/dev/null || true
+    echo "$backup_dir" > "${DNS_OPTIMIZE_BACKUP_DIR}/last" 2>/dev/null || true
+    echo "$backup_dir"
+}
+
+dns_write_static_resolv_conf() {
+    local v4_servers="$1"
+    local v6_servers="$2"
+    local server
+
+    if [[ -L /etc/resolv.conf ]]; then
+        quarantine_path /etc/resolv.conf "/etc/vps-optimize/quarantine/dns" >/dev/null 2>&1 || return 1
+    fi
+
+    {
+        echo "# Generated by VPS-Optimize DNS optimization"
+        echo "# Updated: $(date -Is 2>/dev/null || date)"
+        for server in $v4_servers; do
+            echo "nameserver $server"
+        done
+        for server in $v6_servers; do
+            echo "nameserver $server"
+        done
+        echo "options timeout:2 attempts:3 rotate"
+    } > /etc/resolv.conf
+}
+
+dns_apply_profile() {
+    local profile_name="$1"
+    local v4_servers="$2"
+    local v6_servers="$3"
+    local backup_dir all_servers resolved_active resolv_target
+
+    confirm_risk_action "更改系统 DNS 为 ${profile_name}" \
+        "/etc/resolv.conf 和 systemd-resolved DNS 配置" \
+        "进入本菜单选择 [5] 恢复最近一次 DNS 备份，或手动恢复 ${DNS_OPTIMIZE_BACKUP_DIR}" \
+        "DNS 写错会导致域名解析失败；当前 SSH 连接通常不会立即断开。" || return 1
+
+    backup_dir=$(dns_backup_current_config)
+    all_servers="${v4_servers} ${v6_servers}"
+
+    resolved_active=0
+    if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet systemd-resolved 2>/dev/null; then
+        resolved_active=1
+    fi
+
+    if [[ "$resolved_active" -eq 1 ]]; then
+        mkdir -p /etc/systemd/resolved.conf.d
+        {
+            echo "[Resolve]"
+            echo "DNS=${all_servers}"
+            echo "FallbackDNS="
+        } > "$DNS_OPTIMIZE_RESOLVED_DROPIN"
+        systemctl restart systemd-resolved >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ systemd-resolved 重启失败，已继续写入静态 resolv.conf。${PLAIN}"
+
+        resolv_target=$(readlink -f /etc/resolv.conf 2>/dev/null || true)
+        if [[ "$resolv_target" != /run/systemd/resolve/* ]]; then
+            dns_write_static_resolv_conf "$v4_servers" "$v6_servers" || return 1
+        fi
+    else
+        dns_write_static_resolv_conf "$v4_servers" "$v6_servers" || return 1
+    fi
+
+    echo -e "${GREEN}✅ DNS 已切换为 ${profile_name}${PLAIN}"
+    echo -e "IPv4 DNS: ${CYAN}${v4_servers}${PLAIN}"
+    echo -e "IPv6 DNS: ${CYAN}${v6_servers}${PLAIN}"
+    echo -e "${YELLOW}已备份旧配置：${backup_dir}${PLAIN}"
+
+    if getent hosts raw.githubusercontent.com >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ DNS 解析测试通过。${PLAIN}"
+    else
+        echo -e "${YELLOW}⚠️ DNS 解析测试未通过，请检查网络、IPv6 可用性或 DNS 服务器连通性。${PLAIN}"
+    fi
+}
+
+dns_restore_latest_backup() {
+    local backup_dir
+    backup_dir=$(cat "${DNS_OPTIMIZE_BACKUP_DIR}/last" 2>/dev/null || true)
+    if [[ -z "$backup_dir" || ! -d "$backup_dir" ]]; then
+        echo -e "${YELLOW}⚠️ 未找到最近一次 DNS 备份。${PLAIN}"
+        return 1
+    fi
+
+    confirm_risk_action "恢复最近一次 DNS 备份" \
+        "/etc/resolv.conf 和 VPS-Optimize 写入的 systemd-resolved DNS 配置" \
+        "重新进入 DNS 优化菜单选择国内/国外/自定义 DNS" \
+        "恢复后如果解析异常，请重新选择一个 DNS 配置。" || return 1
+
+    if [[ -e "$backup_dir/resolv.conf" || -L "$backup_dir/resolv.conf" ]]; then
+        [[ -e /etc/resolv.conf || -L /etc/resolv.conf ]] && quarantine_path /etc/resolv.conf "/etc/vps-optimize/quarantine/dns" >/dev/null 2>&1 || true
+        cp -a "$backup_dir/resolv.conf" /etc/resolv.conf
+    fi
+
+    if [[ -f "$DNS_OPTIMIZE_RESOLVED_DROPIN" ]]; then
+        quarantine_path "$DNS_OPTIMIZE_RESOLVED_DROPIN" "/etc/vps-optimize/quarantine/dns" >/dev/null 2>&1 || true
+    fi
+    if [[ -f "$backup_dir/99-vps-optimize-dns.conf" ]]; then
+        mkdir -p /etc/systemd/resolved.conf.d
+        cp -a "$backup_dir/99-vps-optimize-dns.conf" "$DNS_OPTIMIZE_RESOLVED_DROPIN"
+    fi
+
+    systemctl restart systemd-resolved >/dev/null 2>&1 || true
+    echo -e "${GREEN}✅ 已恢复 DNS 备份：${backup_dir}${PLAIN}"
+}
+
+func_dns_optimize() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "网络/内核优化 > DNS 更改优化"
+        echo -e "${BOLD}DNS 更改优化${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}国内默认：IPv4 223.5.5.5 / 119.29.29.29，IPv6 2400:3200::1 / 2402:4e00::${PLAIN}"
+        echo -e "${YELLOW}国外默认：IPv4 1.1.1.1 / 8.8.8.8，IPv6 2606:4700:4700::1111 / 2001:4860:4860::8888${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 使用国内 DNS${PLAIN}       ${YELLOW}(阿里 DNS + DNSPod)${PLAIN}"
+        echo -e "${GREEN}  2. 使用国外 DNS${PLAIN}       ${YELLOW}(Cloudflare + Google)${PLAIN}"
+        echo -e "${GREEN}  3. 自定义 DNS${PLAIN}         ${YELLOW}(分别输入 IPv4 / IPv6)${PLAIN}"
+        echo -e "${GREEN}  4. 查看当前 DNS${PLAIN}"
+        echo -e "${GREEN}  5. 恢复最近一次 DNS 备份${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local choice v4_servers v6_servers raw_v4 raw_v6
+        read_trimmed choice "👉 请选择操作: "
+        case "$choice" in
+            1)
+                dns_apply_profile "国内 DNS" "223.5.5.5 119.29.29.29" "2400:3200::1 2402:4e00::"
+                pause_return
+                ;;
+            2)
+                dns_apply_profile "国外 DNS" "1.1.1.1 8.8.8.8" "2606:4700:4700::1111 2001:4860:4860::8888"
+                pause_return
+                ;;
+            3)
+                read_trimmed raw_v4 "请输入 IPv4 DNS（用逗号或空格分隔）: "
+                read_trimmed raw_v6 "请输入 IPv6 DNS（用逗号或空格分隔）: "
+                v4_servers=$(dns_normalize_servers 4 "$raw_v4") || {
+                    echo -e "${RED}❌ IPv4 DNS 格式无效。${PLAIN}"
+                    pause_return
+                    continue
+                }
+                v6_servers=$(dns_normalize_servers 6 "$raw_v6") || {
+                    echo -e "${RED}❌ IPv6 DNS 格式无效。${PLAIN}"
+                    pause_return
+                    continue
+                }
+                dns_apply_profile "自定义 DNS" "$v4_servers" "$v6_servers"
+                pause_return
+                ;;
+            4)
+                echo -e "${CYAN}--- /etc/resolv.conf ---${PLAIN}"
+                sed -n '1,80p' /etc/resolv.conf 2>/dev/null || true
+                if command -v resolvectl >/dev/null 2>&1; then
+                    echo -e "\n${CYAN}--- resolvectl dns ---${PLAIN}"
+                    resolvectl dns 2>/dev/null || true
+                fi
+                pause_return
+                ;;
+            5) dns_restore_latest_backup; pause_return ;;
+            0|q|Q) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
 # ---------------------------------------------------------
 # 23. 网络加速与内核优化菜单 (二级直达)
 # ---------------------------------------------------------
@@ -8005,6 +8357,7 @@ func_net_kernel_menu() {
         echo -e "${GREEN}  3. ZRAM / Swap 内存调优${PLAIN} ${YELLOW}(按内存分档优化小鸡)${PLAIN}"
         echo -e "${GREEN}  4. 安装/切换优化内核${PLAIN}   ${YELLOW}(Cloud/KVM 稳定推荐 / XanMod 高级可选)${PLAIN}"
         echo -e "${GREEN}  5. 清理旧内核${PLAIN}           ${YELLOW}(释放磁盘空间，谨慎操作)${PLAIN}"
+        echo -e "${GREEN}  6. DNS 更改优化${PLAIN}         ${YELLOW}(国内/国外/自定义，IPv4+IPv6)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -8018,6 +8371,7 @@ func_net_kernel_menu() {
             3) func_zram_swap ;;
             4) confirm_risk_action "安装/切换优化内核" "内核包、引导配置和 GRUB 菜单" "从云厂商控制台选择旧内核启动，或使用救援模式恢复" "确认已创建快照，且当前 VPS 不是 OpenVZ 老系统。" && func_install_kernel ;;
             5) func_clean_kernel ;;
+            6) func_dns_optimize ;;
             "?"|help) show_net_kernel_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
@@ -8233,10 +8587,10 @@ main_menu() {
         echo -e "  ${GREEN}6.${PLAIN} 添加 SSH 公钥         ${YELLOW}(免密登录)${PLAIN}"
         echo -e "  ${GREEN}7.${PLAIN} Fail2ban 防爆破       ${YELLOW}(自动封禁 SSH 爆破 IP)${PLAIN}"
         echo -e "  ${GREEN}8.${PLAIN} 防火墙规则管理        ${YELLOW}(放行/删除/查看/关闭)${PLAIN}"
-        echo -e "  ${GREEN}9.${PLAIN} 系统开关与清理        ${YELLOW}(IPv6/IPv4优先/Ping/自动更新/垃圾清理)${PLAIN}"
+        echo -e "  ${GREEN}9.${PLAIN} 系统开关与清理        ${YELLOW}(IPv6/IPv4优先/Ping/主机名/清理)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ③ 网络性能与容器${PLAIN}"
-        echo -e " ${GREEN}10.${PLAIN} 网络与内核优化        ${YELLOW}(BBR/TCP/ZRAM/轻量内核)${PLAIN}"
+        echo -e " ${GREEN}10.${PLAIN} 网络与内核优化        ${YELLOW}(BBR/TCP/ZRAM/DNS/轻量内核)${PLAIN}"
         echo -e " ${GREEN}11.${PLAIN} Docker 安全管理       ${YELLOW}(本地防穿透/恢复访问)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ④ 诊断、备份与维护${PLAIN}"
