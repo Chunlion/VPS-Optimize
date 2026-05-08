@@ -102,7 +102,26 @@ grep -q 'func_traffic_guard_menu' dist/vps.sh
 grep -q 'install_traffic_guard_checker' dist/vps.sh
 grep -q 'vps-traffic-guard.timer' dist/vps.sh
 grep -q 'TRAFFIC_GUARD_CONFIG=' dist/vps.sh
-grep -q 'traffic|quota|bill|流量|达量|账单' dist/vps.sh
+grep -q 'traffic_guard_detect_initial_used_bytes' dist/vps.sh
+grep -q 'traffic_guard_gb_to_bytes_zero_ok' dist/vps.sh
+grep -q 'traffic_guard_cycle_date_for_month' dist/vps.sh
+grep -q 'cycle_date_for_month' dist/vps.sh
+grep -q '每月套餐/账单重置日 1-31' dist/vps.sh
+if grep -q '重置日只支持 1-28' dist/vps.sh; then
+    echo "Traffic guard reset day must support 1-31." >&2
+    exit 1
+fi
+grep -q 'counter reset detected on ${IFACE}, baseline reset and preserved' dist/vps.sh
+grep -q 'traffic|quota|bill|流量|达量|账单) echo "10"' dist/vps.sh
+if grep -q '20\..*流量达量关机保护' dist/vps.sh; then
+    echo "Traffic guard must stay in the network submenu, not the main menu." >&2
+    exit 1
+fi
+grep -q 'curl_rc=' dist/vps.sh
+if grep -q 'HTTP ${code}${PLAIN}' dist/vps.sh && grep -q '|| echo "000"' dist/vps.sh; then
+    echo "443 curl probe must not concatenate fallback HTTP 000 values." >&2
+    exit 1
+fi
 awk "/<<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" dist/vps.sh | bash -n
 grep -q 'func_health_dashboard' dist/vps.sh
 grep -q 'func_backup_center' dist/vps.sh
