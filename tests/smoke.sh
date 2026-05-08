@@ -97,12 +97,20 @@ grep -q 'func_443_network_test' dist/vps.sh
 grep -q 'func_docker_443_exposure_audit' dist/vps.sh
 grep -q 'func_docker_project_status' dist/vps.sh
 grep -q 'print_project_runtime_overview' dist/vps.sh
+grep -q 'xui_panel_status_compact' dist/vps.sh
+grep -q '3x-ui面板' dist/vps.sh
+if grep -q 'x-ui\[$(service_status_compact x-ui)\]' dist/vps.sh; then
+    echo "Health overview must not show x-ui as a separate installed product." >&2
+    exit 1
+fi
 grep -q 'print_auto_update_notice' dist/vps.sh
 grep -q 'func_traffic_guard_menu' dist/vps.sh
 grep -q 'install_traffic_guard_checker' dist/vps.sh
 grep -q 'vps-traffic-guard.timer' dist/vps.sh
 grep -q 'TRAFFIC_GUARD_CONFIG=' dist/vps.sh
 grep -q 'traffic_guard_detect_initial_used_bytes' dist/vps.sh
+grep -q 'traffic_guard_write_state_baseline' dist/vps.sh
+grep -q '本次重新配置默认按当前网卡累计估算' dist/vps.sh
 grep -q 'traffic_guard_gb_to_bytes_zero_ok' dist/vps.sh
 grep -q 'traffic_guard_cycle_date_for_month' dist/vps.sh
 grep -q 'cycle_date_for_month' dist/vps.sh

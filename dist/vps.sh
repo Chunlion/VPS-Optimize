@@ -7631,7 +7631,7 @@ func_clean_kernel() {
 # ---------------------------------------------------------
 service_status_compact() {
     local svc="$1"
-    if systemctl list-unit-files "${svc}.service" --no-legend >/dev/null 2>&1 || systemctl status "$svc" >/dev/null 2>&1; then
+    if service_unit_exists "$svc"; then
         if systemctl is-active --quiet "$svc"; then
             printf '%b' "${GREEN}运行中${PLAIN}"
         else
@@ -7639,6 +7639,63 @@ service_status_compact() {
         fi
     else
         printf '%b' "${BLUE}未安装${PLAIN}"
+    fi
+}
+
+service_unit_exists() {
+    local svc="$1"
+    local units
+    units=$(systemctl list-unit-files "${svc}.service" --no-legend 2>/dev/null || true)
+    [[ -n "$units" ]] && return 0
+    systemctl status "$svc" >/dev/null 2>&1
+}
+
+xui_panel_installed_by_files() {
+    command -v 3x-ui >/dev/null 2>&1 && return 0
+    command -v x-ui >/dev/null 2>&1 && return 0
+    [[ -x /usr/local/x-ui/x-ui ]] && return 0
+    [[ -f /etc/x-ui/x-ui.db || -f /usr/local/x-ui/x-ui.db || -f /usr/local/x-ui/bin/x-ui.db ]] && return 0
+    return 1
+}
+
+xui_panel_service_name() {
+    local svc
+    for svc in 3x-ui x-ui x-panel; do
+        if service_unit_exists "$svc"; then
+            printf '%s' "$svc"
+            return 0
+        fi
+    done
+    return 1
+}
+
+xui_panel_status_compact() {
+    local svc
+    if svc=$(xui_panel_service_name); then
+        if systemctl is-active --quiet "$svc"; then
+            printf '%b' "${GREEN}运行中${PLAIN}"
+        else
+            printf '%b' "${YELLOW}未运行${PLAIN}"
+        fi
+    elif xui_panel_installed_by_files; then
+        printf '%b' "${YELLOW}已安装/未运行${PLAIN}"
+    else
+        printf '%b' "${BLUE}未安装${PLAIN}"
+    fi
+}
+
+xui_panel_state_for_issue() {
+    local svc
+    if svc=$(xui_panel_service_name); then
+        if systemctl is-active --quiet "$svc"; then
+            echo "运行中 (${svc}.service)"
+        else
+            echo "已安装/未运行 (${svc}.service)"
+        fi
+    elif xui_panel_installed_by_files; then
+        echo "已安装/未检测到 systemd 服务"
+    else
+        echo "未检测到"
     fi
 }
 
@@ -7661,7 +7718,7 @@ docker_public_binding_count() {
 print_project_runtime_overview() {
     echo -e "${CYAN}🧩 VPS-Optimize 场景概览${PLAIN}"
     echo -e "脚本版本 : ${GREEN}${SCRIPT_VERSION}${PLAIN}"
-    echo -e "关键服务 : nginx[$(service_status_compact nginx)] caddy[$(service_status_compact caddy)] docker[$(service_status_compact docker)] x-ui[$(service_status_compact x-ui)] 3x-ui[$(service_status_compact 3x-ui)]"
+    echo -e "关键服务 : nginx[$(service_status_compact nginx)] caddy[$(service_status_compact caddy)] docker[$(service_status_compact docker)] 3x-ui面板[$(xui_panel_status_compact)] Xray内核[$(service_status_compact xray)]"
 
     if [[ -f /etc/vps-optimize/sni-stack.env ]]; then
         if load_sni_stack_env >/dev/null 2>&1; then
@@ -9706,7 +9763,7 @@ func_preflight_check() {
 # ---------------------------------------------------------
 service_state_for_issue() {
     local svc="$1"
-    if systemctl list-unit-files "${svc}.service" >/dev/null 2>&1 || systemctl status "$svc" >/dev/null 2>&1; then
+    if service_unit_exists "$svc"; then
         if systemctl is-active --quiet "$svc"; then
             echo "运行中"
         else
@@ -9719,7 +9776,7 @@ service_state_for_issue() {
 
 recent_journal_for_issue() {
     local svc="$1"
-    if systemctl list-unit-files "${svc}.service" >/dev/null 2>&1 || systemctl status "$svc" >/dev/null 2>&1; then
+    if service_unit_exists "$svc"; then
         journalctl -u "$svc" -n 8 --no-pager 2>/dev/null | redact_sensitive_output
     else
         echo "未检测到 ${svc} 服务"
@@ -9763,10 +9820,10 @@ generate_issue_diagnostics() {
     echo "当前时间: ${now}"
     echo ""
     echo "关键服务状态:"
-    for svc in nginx caddy docker x-ui xray sing-box; do
+    for svc in nginx caddy docker xray sing-box; do
         echo "- ${svc}: $(service_state_for_issue "$svc")"
     done
-    echo "- 3x-ui: $(service_state_for_issue "3x-ui")"
+    echo "- 3x-ui 面板: $(xui_panel_state_for_issue)"
     echo ""
     echo "监听端口摘要:"
     ss -tulnp 2>/dev/null | sed -E 's/users:\(\("[^"]+",pid=[0-9]+,fd=[0-9]+\)\)/users:(process-redacted)/g' | head -n 30 || echo "未检测到 ss 输出"
@@ -10231,17 +10288,41 @@ traffic_guard_existing_state_usage() {
 traffic_guard_detect_initial_used_bytes() {
     local iface="$1"
     local mode="$2"
-    local cycle_day="${3:-}"
-    local existing current_stats current_rx current_tx
-    existing=$(traffic_guard_existing_state_usage "$iface" "$mode" "$cycle_day" 2>/dev/null || true)
-    if [[ "$existing" =~ ^[0-9]+$ ]]; then
-        printf '%s' "$existing"
-        return 0
-    fi
+    local current_stats current_rx current_tx
     mapfile -t current_stats < <(traffic_guard_read_stats "$iface")
     current_rx="${current_stats[0]:-0}"
     current_tx="${current_stats[1]:-0}"
     traffic_guard_mode_usage_bytes "$mode" "$current_rx" "$current_tx"
+}
+
+traffic_guard_write_state_baseline() {
+    local iface="$1"
+    local cycle_day="$2"
+    local initial_used_bytes="${3:-0}"
+    local current_stats current_rx current_tx cycle_key state_file
+
+    [[ "$initial_used_bytes" =~ ^[0-9]+$ ]] || initial_used_bytes=0
+    traffic_guard_valid_iface "$iface" || return 1
+    mapfile -t current_stats < <(traffic_guard_read_stats "$iface")
+    current_rx="${current_stats[0]:-0}"
+    current_tx="${current_stats[1]:-0}"
+    cycle_key=$(traffic_guard_current_cycle_key "$cycle_day")
+    mkdir -p "$TRAFFIC_GUARD_STATE_DIR" || return 1
+    chmod 700 "$TRAFFIC_GUARD_STATE_DIR" 2>/dev/null || true
+    state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    {
+        echo "CYCLE_KEY='${cycle_key}'"
+        echo "BASE_RX='${current_rx}'"
+        echo "BASE_TX='${current_tx}'"
+        echo "OFFSET_BYTES='${initial_used_bytes}'"
+        echo "WARN_SENT='0'"
+        echo "TRIPPED='0'"
+        echo "LAST_RX='${current_rx}'"
+        echo "LAST_TX='${current_tx}'"
+        echo "LAST_USAGE='${initial_used_bytes}'"
+        echo "LAST_CHECKED_AT='$(date -Is 2>/dev/null || date)'"
+    } > "$state_file"
+    chmod 600 "$state_file" 2>/dev/null || true
 }
 
 install_traffic_guard_checker() {
@@ -10580,7 +10661,7 @@ configure_traffic_guard() {
 
     local default_iface iface limit_gb limit_bytes initial_used_gb initial_used_bytes
     local cycle_day cycle_default_day warn_percent action_choice action mode_choice mode interval
-    local current_stats current_rx current_tx detected_used_bytes detected_used_gb
+    local current_stats current_rx current_tx detected_used_bytes detected_used_gb existing_used_bytes
     default_iface=$(traffic_guard_detect_iface)
     iface=$(ask_with_default "监控网卡（自动推荐活跃公网网卡）" "${default_iface:-eth0}")
     if ! traffic_guard_valid_iface "$iface"; then
@@ -10628,7 +10709,12 @@ configure_traffic_guard() {
 
     detected_used_bytes=$(traffic_guard_detect_initial_used_bytes "$iface" "$mode" "$cycle_day")
     detected_used_gb=$(traffic_guard_bytes_to_gb "$detected_used_bytes")
-    echo -e "按当前网卡和计费模式估算已用：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}（默认可直接回车）"
+    existing_used_bytes=$(traffic_guard_existing_state_usage "$iface" "$mode" "$cycle_day" 2>/dev/null || true)
+    if [[ "$existing_used_bytes" =~ ^[0-9]+$ && "$existing_used_bytes" != "$detected_used_bytes" ]]; then
+        echo -e "检测到已有保护状态已用：${YELLOW}$(traffic_guard_human_bytes "$existing_used_bytes")${PLAIN}"
+        echo -e "${YELLOW}本次重新配置默认按当前网卡累计估算，启用后会重置基线，避免旧状态误导。${PLAIN}"
+    fi
+    echo -e "按当前网卡自开机累计和计费模式估算已用：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}（默认可直接回车）"
     echo -e "${YELLOW}如果云厂商后台显示不同，请手动覆盖这里的 GB 数值。${PLAIN}"
     while true; do
         initial_used_gb=$(ask_with_default "本周期已用流量 GB" "$detected_used_gb")
@@ -10685,6 +10771,11 @@ configure_traffic_guard() {
         pause_return
         return 1
     }
+    traffic_guard_write_state_baseline "$iface" "$cycle_day" "$initial_used_bytes" || {
+        echo -e "${RED}❌ 写入流量保护基线失败。${PLAIN}"
+        pause_return
+        return 1
+    }
     install_traffic_guard_units "$interval" || {
         echo -e "${RED}❌ 启用 systemd timer 失败，请检查 systemd 状态。${PLAIN}"
         pause_return
@@ -10699,7 +10790,7 @@ configure_traffic_guard() {
 }
 
 reset_traffic_guard_baseline() {
-    local iface mode cycle_day initial_used_gb initial_used_bytes current_stats current_rx current_tx cycle_key state_file
+    local iface mode cycle_day initial_used_gb initial_used_bytes
     local detected_used_bytes detected_used_gb
     load_traffic_guard_config || {
         echo -e "${YELLOW}尚未配置流量达量关机保护。${PLAIN}"
@@ -10728,26 +10819,11 @@ reset_traffic_guard_baseline() {
         "重新进入本菜单再次重置基线，或参考云厂商后台手动修正已用流量。" \
         "请只在账单周期开始、刚配置完成或确认云厂商统计后执行。" || return 1
 
-    mapfile -t current_stats < <(traffic_guard_read_stats "$iface")
-    current_rx="${current_stats[0]:-0}"
-    current_tx="${current_stats[1]:-0}"
-    cycle_key=$(traffic_guard_current_cycle_key "$cycle_day")
-    mkdir -p "$TRAFFIC_GUARD_STATE_DIR"
-    chmod 700 "$TRAFFIC_GUARD_STATE_DIR" 2>/dev/null || true
-    state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
-    {
-        echo "CYCLE_KEY='${cycle_key}'"
-        echo "BASE_RX='${current_rx}'"
-        echo "BASE_TX='${current_tx}'"
-        echo "OFFSET_BYTES='${initial_used_bytes}'"
-        echo "WARN_SENT='0'"
-        echo "TRIPPED='0'"
-        echo "LAST_RX='${current_rx}'"
-        echo "LAST_TX='${current_tx}'"
-        echo "LAST_USAGE='${initial_used_bytes}'"
-        echo "LAST_CHECKED_AT='$(date -Is 2>/dev/null || date)'"
-    } > "$state_file"
-    chmod 600 "$state_file" 2>/dev/null || true
+    traffic_guard_write_state_baseline "$iface" "$cycle_day" "$initial_used_bytes" || {
+        echo -e "${RED}❌ 写入流量保护基线失败。${PLAIN}"
+        pause_return
+        return 1
+    }
     echo -e "${GREEN}✅ 已重置 ${iface} 的流量统计基线。${PLAIN}"
     echo -e "当前模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}；本周期已用：$(traffic_guard_human_bytes "$initial_used_bytes")"
     pause_return
