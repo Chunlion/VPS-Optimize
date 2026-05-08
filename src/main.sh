@@ -946,7 +946,7 @@ func_env_install() {
         echo -e "${BOLD}📦 基础组件与反代分流中心${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：安装基础组件、常用服务、普通 Caddy 反代，以及进入 443 单入口相关向导。${PLAIN}"
-        echo -e "${YELLOW}提示：如果已启用 443 单入口，后续新增网站请走本菜单 [20] 或主菜单 [19] -> [2]。${PLAIN}"
+        echo -e "${YELLOW}提示：如果已启用 443 单入口，后续新增网站请走本菜单 [20] 或主菜单 [18] -> [2]。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 基础运行环境${PLAIN}"
         echo -e "${GREEN}  1. Docker 引擎        ${YELLOW}  2. Python 环境        ${GREEN}  3. iperf3 测速工具${PLAIN}"
@@ -1236,7 +1236,7 @@ EOF
         echo -e "${CYAN}▶ 正在为 ${domain} 申请 DNS 证书...${PLAIN}"
         if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
             echo -e "${RED}❌ 证书申请失败：${domain}${PLAIN}"
-            echo -e "${YELLOW}   提示：可进入主菜单 [19] -> [6] -> [13] 一键自动修复后再重试。${PLAIN}"
+            echo -e "${YELLOW}   提示：可进入主菜单 [18] -> [6] -> [13] 一键自动修复后再重试。${PLAIN}"
             ((fail_count++))
             continue
         fi
@@ -1580,7 +1580,7 @@ caddy_format_configs() {
 load_sni_stack_env() {
     local env_file="/etc/vps-optimize/sni-stack.env"
     if [[ ! -f "$env_file" ]]; then
-        echo -e "${RED}❌ 未找到 ${env_file}，请先运行主菜单 [19] -> [1] 首次配置 443 单入口。${PLAIN}"
+        echo -e "${RED}❌ 未找到 ${env_file}，请先运行主菜单 [18] -> [1] 首次配置 443 单入口。${PLAIN}"
         return 1
     fi
     # shellcheck disable=SC1090
@@ -1978,7 +1978,7 @@ save_and_offer_reapply_sni_stack() {
             return 1
         fi
     else
-        echo -e "${YELLOW}稍后可执行 [19] -> [4] 重新应用上次配置。${PLAIN}"
+        echo -e "${YELLOW}稍后可执行 [18] -> [4] 重新应用上次配置。${PLAIN}"
         [[ -n "$env_backup" ]] && echo -e "${CYAN}参数修改前备份已保留：${env_backup}${PLAIN}"
     fi
 }
@@ -2138,12 +2138,12 @@ edit_sni_stack_runtime_profile() {
         echo -e "${BOLD}🧭 修改 443 分流参数${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：后续修改面板端口/路径、订阅端口/路径、REALITY SNI、入口端口时使用。${PLAIN}"
-        echo -e "${YELLOW}新增网站请走 [19] -> [2]，不用重跑首次配置。${PLAIN}"
+        echo -e "${YELLOW}新增网站请走 [18] -> [2]，不用重跑首次配置。${PLAIN}"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
             print_sni_stack_current_summary
         else
-            echo -e "${RED}未找到 443 配置，请先运行 [19] -> [1]。${PLAIN}"
+            echo -e "${RED}未找到 443 配置，请先运行 [18] -> [1]。${PLAIN}"
             return 1
         fi
         echo -e "------------------------------------------------"
@@ -2953,7 +2953,7 @@ list_sni_stack_sites() {
     panel_ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
     [[ -n "$panel_ranges" ]] && echo -e "${YELLOW}面板域名 IP 白名单：${panel_ranges}${PLAIN}"
     echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
-    [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#TCP_ROUTE_SNIS[@]} 个 TCP/SNI 入站，请在 [19] -> [9] 查看。${PLAIN}"
+    [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#TCP_ROUTE_SNIS[@]} 个 TCP/SNI 入站，请在 [18] -> [9] 查看。${PLAIN}"
     echo -e "------------------------------------------------"
     if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
         echo -e "${YELLOW}当前没有额外的网站/反代域名。${PLAIN}"
@@ -3536,12 +3536,12 @@ show_main_help() {
     echo "1/2 适合新机器先体检和初始化。"
     echo "4   管理 3x-ui、S-UI、Sing-box、Xray 和订阅工具。"
     echo "5   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
-    echo "8   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
-    echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
-    echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
-    echo "16  备份与回滚，高风险操作前建议先跑。"
-    echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
-    echo "10 -> 7  流量达量关机保护，按账单周期防刷流量和超额账单。"
+    echo "7   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
+    echo "9   网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
+    echo "14  健康总览和反馈诊断信息，用于排错或提交 Issue。"
+    echo "15  备份与回滚，高风险操作前建议先跑。"
+    echo "18  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
+    echo "9 -> 7  流量达量关机保护，按账单周期防刷流量和超额账单。"
     echo "? 查看帮助，0/q 退出。"
 }
 
@@ -4134,7 +4134,7 @@ func_caddy_cf_maintenance_menu() {
                 fi
 
                 if [[ ! -x "$acme_bin" ]]; then
-                    echo -e "${RED}❌ 未检测到 acme.sh，请先运行主菜单 [19] -> [1] 首次配置 443 单入口。${PLAIN}"
+                    echo -e "${RED}❌ 未检测到 acme.sh，请先运行主菜单 [18] -> [1] 首次配置 443 单入口。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -4464,7 +4464,7 @@ func_caddy_manage_ip_whitelist() {
     echo -e "${BOLD}🔐 普通 Caddy 域名 IP 白名单${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}适用于未启用 443 单入口、由 Caddy 直接对外服务的域名。${PLAIN}"
-    echo -e "${YELLOW}如果该域名已接入 443 单入口，请用 [19] -> [8]，不要在 Caddy 层限制。${PLAIN}"
+    echo -e "${YELLOW}如果该域名已接入 443 单入口，请用 [18] -> [8]，不要在 Caddy 层限制。${PLAIN}"
     echo -e "------------------------------------------------"
 
     if ! command -v caddy >/dev/null 2>&1 || [[ ! -f /etc/caddy/Caddyfile ]]; then
@@ -4496,7 +4496,7 @@ func_caddy_manage_ip_whitelist() {
         return
     fi
     if [[ "$first_site_line" =~ ^https://[^[:space:]]+:[0-9]+[[:space:]]*\{ ]]; then
-        echo -e "${RED}❌ 这个配置看起来属于 443 单入口本地 Caddy TLS 站点。请改用 [19] -> [8] 管理白名单。${PLAIN}"
+        echo -e "${RED}❌ 这个配置看起来属于 443 单入口本地 Caddy TLS 站点。请改用 [18] -> [8] 管理白名单。${PLAIN}"
         read -n 1 -s -r -p "按任意键继续..."
         return
     fi
@@ -4739,6 +4739,13 @@ ssh_service_restart() {
     systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
 }
 
+ssh_prepare_runtime_dir() {
+    if [[ ! -d /run/sshd ]]; then
+        mkdir -p /run/sshd 2>/dev/null || return 1
+    fi
+    chmod 755 /run/sshd 2>/dev/null || true
+}
+
 ssh_socket_unit_exists() {
     local unit="$1"
     local active_state enabled_state
@@ -4940,11 +4947,15 @@ ssh_rollback_port_change() {
 
 ssh_effective_setting() {
     local key="$1"
-    local sshd_bin
+    local sshd_bin value
     sshd_bin=$(command -v sshd 2>/dev/null || true)
     if [[ -n "$sshd_bin" ]]; then
-        "$sshd_bin" -T 2>/dev/null | awk -v k="$(echo "$key" | tr '[:upper:]' '[:lower:]')" '$1 == k {print $2; exit}'
+        ssh_prepare_runtime_dir >/dev/null 2>&1 || true
+        value=$("$sshd_bin" -T 2>/dev/null | awk -v k="$(echo "$key" | tr '[:upper:]' '[:lower:]')" '$1 == k {print $2; exit}')
+        [[ -n "$value" ]] || return 1
+        printf '%s' "$value"
     fi
+    return 1
 }
 
 ssh_public_key_is_valid() {
@@ -5025,6 +5036,10 @@ ssh_apply_auth_mode() {
         echo -e "${RED}❌ 未找到 sshd 或 /etc/ssh/sshd_config，已取消。${PLAIN}"
         return 1
     }
+    if ! ssh_prepare_runtime_dir; then
+        echo -e "${RED}❌ 无法创建 /run/sshd，sshd 无法完成语法检查。请确认当前为 root 权限。${PLAIN}"
+        return 1
+    fi
     case "$mode" in
         key_only) label="仅密钥登录（禁用密码）" ;;
         key_preferred) label="密钥优先（保留密码）" ;;
@@ -5220,6 +5235,7 @@ func_security() {
     sshd_bin=$(command -v sshd 2>/dev/null || true)
     current_p=$(ss -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | sort -u | head -n1)
     if [[ -z "$current_p" && -n "$sshd_bin" ]]; then
+        ssh_prepare_runtime_dir >/dev/null 2>&1 || true
         current_p=$("$sshd_bin" -T 2>/dev/null | grep -i "^port " | awk '{print $2}' | head -n1)
     fi
     current_p=${current_p:-22}
@@ -5237,6 +5253,11 @@ func_security() {
         fi
         if ! command -v systemctl >/dev/null 2>&1; then
             echo -e "${RED}❌ 未检测到 systemctl，无法安全重启 SSH 服务，已取消。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        fi
+        if ! ssh_prepare_runtime_dir; then
+            echo -e "${RED}❌ 无法创建 /run/sshd，sshd 无法完成语法检查。请确认当前为 root 权限。${PLAIN}"
             read -n 1 -s -r -p "按任意键返回..."
             return
         fi
@@ -5533,7 +5554,7 @@ func_docker_project_status() {
     echo -e "${BOLD}🐳 443 / 订阅工具相关容器状态${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}这里只看本项目场景相关容器：SublinkPro、妙妙屋、Sub-Store、Dockge、Komari。${PLAIN}"
-    echo -e "${YELLOW}3x-ui、Caddy、Nginx 通常是 systemd 服务，状态请看 [15] 或 [19] 体检。${PLAIN}"
+    echo -e "${YELLOW}3x-ui、Caddy、Nginx 通常是 systemd 服务，状态请看 [14] 或 [18] 体检。${PLAIN}"
     echo -e "------------------------------------------------"
     print_subscription_compose_status
     echo -e "------------------------------------------------"
@@ -5566,7 +5587,7 @@ func_docker_443_exposure_audit() {
 
     if $found_public; then
         echo -e "------------------------------------------------"
-        echo -e "${YELLOW}建议：订阅工具、Dockge、Komari 用 127.0.0.1 绑定，公网访问走 [19] -> [2] 添加 443 反代域名。${PLAIN}"
+        echo -e "${YELLOW}建议：订阅工具、Dockge、Komari 用 127.0.0.1 绑定，公网访问走 [18] -> [2] 添加 443 反代域名。${PLAIN}"
         echo -e "${YELLOW}如确实需要公网直连，请确认云安全组、系统防火墙和访问密码都已收紧。${PLAIN}"
     else
         echo -e "${GREEN}✅ 未发现 Docker 容器通过 0.0.0.0 / :: 直接暴露端口。${PLAIN}"
@@ -6228,7 +6249,7 @@ func_install_kernel() {
 
     echo -e "------------------------------------------------"
     echo -e "${YELLOW}⚠️ 核心生效指引：${PLAIN}"
-    echo -e "1. 新内核引导已配置完毕，请先选择主菜单的 ${RED}[18] 重启服务器${PLAIN}。"
+    echo -e "1. 新内核引导已配置完毕，请先选择主菜单的 ${RED}[17] 重启服务器${PLAIN}。"
     echo -e "2. 重启后请运行 ${GREEN}uname -r${PLAIN} 确认实际进入的新内核。"
     echo -e "3. 确认稳定后，再进入本菜单选择 ${GREEN}[5] 清理旧内核${PLAIN}。"
 
@@ -6399,10 +6420,10 @@ print_project_runtime_overview() {
             echo -e "订阅路径 : 普通 ${SUB_URI_PATH} / Clash-Mihomo ${CLASH_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
             echo -e "扩展分流 : 网站/反代 ${#SITE_DOMAINS[@]} 个，TCP/SNI 入站 ${#TCP_ROUTE_SNIS[@]} 个"
         else
-            echo -e "443 入口 : ${YELLOW}检测到配置文件，但读取失败，请运行 [19] -> [3] 体检。${PLAIN}"
+            echo -e "443 入口 : ${YELLOW}检测到配置文件，但读取失败，请运行 [18] -> [3] 体检。${PLAIN}"
         fi
     else
-        echo -e "443 入口 : ${BLUE}尚未配置；需要面板/订阅/REALITY 共用 443 时进入 [19]。${PLAIN}"
+        echo -e "443 入口 : ${BLUE}尚未配置；需要面板/订阅/REALITY 共用 443 时进入 [18]。${PLAIN}"
     fi
 
     if command -v docker >/dev/null 2>&1; then
@@ -6549,7 +6570,7 @@ func_443_network_test() {
     echo -e "${CYAN}================================================${PLAIN}"
 
     if [[ ! -f /etc/vps-optimize/sni-stack.env ]]; then
-        echo -e "${YELLOW}未检测到 443 单入口配置。请先进入 [19] -> [1] 完成首次配置。${PLAIN}"
+        echo -e "${YELLOW}未检测到 443 单入口配置。请先进入 [18] -> [1] 完成首次配置。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -6965,7 +6986,7 @@ func_sublinkpro() {
 
     echo -e "${YELLOW}💡 SublinkPro 将被安全部署在: ${CYAN}$install_dir${PLAIN}"
     echo -e "${YELLOW}💡 SublinkPro 监听地址将使用: ${CYAN}${sublink_bind_addr}:${sublink_port}${PLAIN}"
-    echo -e "${YELLOW}💡 需要公网 HTTPS 访问时，建议部署后走 [19] -> [2] 添加 443 单入口反代域名。${PLAIN}"
+    echo -e "${YELLOW}💡 需要公网 HTTPS 访问时，建议部署后走 [18] -> [2] 添加 443 单入口反代域名。${PLAIN}"
     echo -e "${YELLOW}账号密码说明：当前安装流程不提供自定义后台账号密码。${PLAIN}"
     echo -e "${YELLOW}默认后台账号：${CYAN}admin${PLAIN} / 默认后台密码：${CYAN}123456${PLAIN}"
     echo -e "${YELLOW}部署完成后请尽快登录后台修改默认密码。${PLAIN}"
@@ -7005,7 +7026,7 @@ EOF
         echo -e "👤 ${BOLD}默认后台账号:${PLAIN} admin"
         echo -e "🔑 ${BOLD}默认后台密码:${PLAIN} 123456"
         echo -e "${YELLOW}⚠️ 当前安装流程未提供自定义账号密码，请登录后尽快修改默认密码。${PLAIN}"
-        echo -e "${YELLOW}公网访问建议：主菜单 [19] -> [2] 为该本地端口添加 443 反代域名。${PLAIN}"
+        echo -e "${YELLOW}公网访问建议：主菜单 [18] -> [2] 为该本地端口添加 443 反代域名。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${YELLOW}⚠️ 核心防丢提示：${PLAIN}"
         echo -e "系统产生的数据库、模板和日志都已持久化映射在 ${CYAN}$install_dir${PLAIN} 下。"
@@ -7050,7 +7071,7 @@ func_miaomiaowu() {
     echo -e "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}"
     echo -e "${YELLOW}监听地址：${CYAN}${mmw_bind_addr}:${mmw_port}${PLAIN}"
     echo -e "${YELLOW}数据目录：${CYAN}${install_dir}/data、subscribes、rule_templates${PLAIN}"
-    echo -e "${YELLOW}公网 HTTPS 访问建议走 [19] -> [2]，不要直接开放容器端口。${PLAIN}"
+    echo -e "${YELLOW}公网 HTTPS 访问建议走 [18] -> [2]，不要直接开放容器端口。${PLAIN}"
     echo -e "${YELLOW}账号密码说明：当前安装流程不预设账号密码。${PLAIN}"
     echo -e "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}"
     echo -e "------------------------------------------------"
@@ -7100,7 +7121,7 @@ EOF
         echo -e "本地访问地址：${BOLD}http://${access_host}:${mmw_port}${PLAIN}"
         echo -e "账号密码：${YELLOW}无默认账号密码，首次打开页面创建管理员账号。${PLAIN}"
         echo -e "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}"
-        echo -e "${YELLOW}公网访问建议：主菜单 [19] -> [2] 为该本地端口添加 443 反代域名。${PLAIN}"
+        echo -e "${YELLOW}公网访问建议：主菜单 [18] -> [2] 为该本地端口添加 443 反代域名。${PLAIN}"
         echo -e "${YELLOW}请定期备份 ${install_dir}/data、subscribes、rule_templates。${PLAIN}"
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
@@ -7332,7 +7353,7 @@ func_komari() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}安装 Komari 探针监控面板 (Docker Compose)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}Komari 用于服务器探针监控。默认只监听本地地址；公网 HTTPS 可走普通 Caddy 反代，已启用 443 单入口时走 [19] -> [2]。${PLAIN}"
+    echo -e "${YELLOW}Komari 用于服务器探针监控。默认只监听本地地址；公网 HTTPS 可走普通 Caddy 反代，已启用 443 单入口时走 [18] -> [2]。${PLAIN}"
     echo -e "${YELLOW}如果探针客户端需要直连端口，可把监听地址改为 0.0.0.0，并确认云安全组已放行。${PLAIN}"
     echo -e "------------------------------------------------"
 
@@ -7440,7 +7461,7 @@ EOF
         else
             echo -e "${YELLOW}默认管理员账号请查看日志：${CYAN}$DOCKER_COMPOSE_CMD logs komari${PLAIN}"
         fi
-        echo -e "${YELLOW}如需公网 HTTPS 访问：未启用 443 单入口可用 [3] -> [13] 普通 Caddy 反代；已启用 443 单入口请用 [19] -> [2] 添加反代域名。${PLAIN}"
+        echo -e "${YELLOW}如需公网 HTTPS 访问：未启用 443 单入口可用 [3] -> [13] 普通 Caddy 反代；已启用 443 单入口请用 [18] -> [2] 添加反代域名。${PLAIN}"
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
     fi
@@ -9768,7 +9789,7 @@ func_panel_deploy_menu() {
         echo -e "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：管理 3x-ui、S-UI、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
-        echo -e "${YELLOW}提示：面板或订阅工具对外访问，可用普通 Caddy 反代；已启用 443 单入口时用 [19] 统一管理。${PLAIN}"
+        echo -e "${YELLOW}提示：面板或订阅工具对外访问，可用普通 Caddy 反代；已启用 443 单入口时用 [18] 统一管理。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 管理 3x-ui 面板${PLAIN}       ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
         echo -e "${GREEN}  2. 管理 S-UI 面板${PLAIN}        ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
@@ -9879,21 +9900,20 @@ normalize_main_choice() {
         env|docker|caddy|组件) echo "3" ;;
         panel|node|nodes|面板|节点) echo "4" ;;
         ssh) echo "5" ;;
-        key|pubkey|公钥) echo "6" ;;
-        fail2ban|f2b) echo "7" ;;
-        fw|firewall|防火墙) echo "8" ;;
-        tweak|system|系统) echo "9" ;;
-        net|kernel|bbr|网络|内核) echo "10" ;;
-        docker-safe|docker安全) echo "11" ;;
-        test|speed|测速) echo "12" ;;
-        port|端口) echo "13" ;;
-        info|hardware|探针) echo "14" ;;
-        h|health|健康) echo "15" ;;
-        b|backup|bak|备份) echo "16" ;;
-        u|upd|update|更新) echo "17" ;;
-        reboot|重启) echo "18" ;;
-        sni|443|单入口) echo "19" ;;
-        traffic|quota|bill|流量|达量|账单) echo "10" ;;
+        fail2ban|f2b) echo "6" ;;
+        fw|firewall|防火墙) echo "7" ;;
+        tweak|system|系统) echo "8" ;;
+        net|kernel|bbr|网络|内核) echo "9" ;;
+        docker-safe|docker安全) echo "10" ;;
+        test|speed|测速) echo "11" ;;
+        port|端口) echo "12" ;;
+        info|hardware|探针) echo "13" ;;
+        h|health|健康) echo "14" ;;
+        b|backup|bak|备份) echo "15" ;;
+        u|upd|update|更新) echo "16" ;;
+        reboot|重启) echo "17" ;;
+        sni|443|单入口) echo "18" ;;
+        traffic|quota|bill|流量|达量|账单) echo "9" ;;
         *) echo "$choice" ;;
     esac
 }
@@ -9952,7 +9972,7 @@ main_menu() {
         echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${YELLOW}快捷输入：443 直达单入口，traffic 到网络菜单，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
-        echo -e " ${YELLOW}高风险操作必须输入大写 YES；不确定时先做 [16] 备份。${PLAIN}"
+        echo -e " ${YELLOW}高风险操作必须输入大写 YES；不确定时先做 [15] 备份。${PLAIN}"
         print_auto_update_notice
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${BOLD}${BLUE}▶ 模式入口${PLAIN}"
@@ -9968,26 +9988,25 @@ main_menu() {
 
         echo -e " ${BOLD}${BLUE}▶ ② 安全与访问控制${PLAIN}"
         echo -e "  ${GREEN}5.${PLAIN} SSH 安全中心          ${YELLOW}(端口/公钥/密钥登录模式)${PLAIN}"
-        echo -e "  ${GREEN}6.${PLAIN} 添加 SSH 公钥         ${YELLOW}(免密登录)${PLAIN}"
-        echo -e "  ${GREEN}7.${PLAIN} Fail2ban 防爆破       ${YELLOW}(自动封禁 SSH 爆破 IP)${PLAIN}"
-        echo -e "  ${GREEN}8.${PLAIN} 防火墙规则管理        ${YELLOW}(放行/删除/查看/关闭)${PLAIN}"
-        echo -e "  ${GREEN}9.${PLAIN} 系统开关与清理        ${YELLOW}(IPv6/IPv4优先/Ping/主机名/清理)${PLAIN}"
+        echo -e "  ${GREEN}6.${PLAIN} Fail2ban 防爆破       ${YELLOW}(自动封禁 SSH 爆破 IP)${PLAIN}"
+        echo -e "  ${GREEN}7.${PLAIN} 防火墙规则管理        ${YELLOW}(放行/删除/查看/关闭)${PLAIN}"
+        echo -e "  ${GREEN}8.${PLAIN} 系统开关与清理        ${YELLOW}(IPv6/IPv4优先/Ping/主机名/清理)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ③ 网络性能与容器${PLAIN}"
-        echo -e " ${GREEN}10.${PLAIN} 网络与内核优化        ${YELLOW}(BBR/TCP/ZRAM/DNS/轻量内核)${PLAIN}"
-        echo -e " ${GREEN}11.${PLAIN} Docker 安全管理       ${YELLOW}(本地防穿透/恢复访问)${PLAIN}"
+        echo -e "  ${GREEN}9.${PLAIN} 网络与内核优化        ${YELLOW}(BBR/TCP/ZRAM/DNS/轻量内核)${PLAIN}"
+        echo -e " ${GREEN}10.${PLAIN} Docker 安全管理       ${YELLOW}(本地防穿透/恢复访问)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ④ 诊断、备份与维护${PLAIN}"
-        echo -e " ${GREEN}12.${PLAIN} 测速与质量检测        ${YELLOW}(YABS/流媒体/回程/IP质量)${PLAIN}"
-        echo -e " ${GREEN}13.${PLAIN} 端口排查与释放        ${YELLOW}(查看占用并强杀进程)${PLAIN}"
-        echo -e " ${GREEN}14.${PLAIN} 系统硬件探针          ${YELLOW}(CPU/内存/磁盘/网络实时信息)${PLAIN}"
-        echo -e " ${GREEN}15.${PLAIN} 服务健康总览          ${YELLOW}(服务状态/证书摘要/端口概览)${PLAIN}"
-        echo -e " ${GREEN}16.${PLAIN} 配置备份与回滚        ${YELLOW}(备份/列表/恢复/清理)${PLAIN}"
-        echo -e " ${BOLD}${YELLOW}17.${PLAIN} 更新脚本              ${CYAN}(快捷词：u / update / upd)${PLAIN}"
-        echo -e " ${RED}18.${PLAIN} 重启服务器"
+        echo -e " ${GREEN}11.${PLAIN} 测速与质量检测        ${YELLOW}(YABS/流媒体/回程/IP质量)${PLAIN}"
+        echo -e " ${GREEN}12.${PLAIN} 端口排查与释放        ${YELLOW}(查看占用并强杀进程)${PLAIN}"
+        echo -e " ${GREEN}13.${PLAIN} 系统硬件探针          ${YELLOW}(CPU/内存/磁盘/网络实时信息)${PLAIN}"
+        echo -e " ${GREEN}14.${PLAIN} 服务健康总览          ${YELLOW}(服务状态/证书摘要/端口概览)${PLAIN}"
+        echo -e " ${GREEN}15.${PLAIN} 配置备份与回滚        ${YELLOW}(备份/列表/恢复/清理)${PLAIN}"
+        echo -e " ${BOLD}${YELLOW}16.${PLAIN} 更新脚本              ${CYAN}(快捷词：u / update / upd)${PLAIN}"
+        echo -e " ${RED}17.${PLAIN} 重启服务器"
         echo -e ""
         echo -e " ${BOLD}${BLUE}▶ ⑤ 高频直达${PLAIN}"
-        echo -e " ${GREEN}19.${PLAIN} 443 单入口管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
+        echo -e " ${GREEN}18.${PLAIN} 443 单入口管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${RED} 0.${PLAIN} 退出面板"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -10004,20 +10023,19 @@ main_menu() {
             3) func_env_install ;;
             4) func_panel_deploy_menu ;;
             5) func_ssh_security_menu ;;
-            6) func_add_ssh_key ;;
-            7) func_fail2ban ;;
-            8) func_firewall_manage ;;
-            9) func_system_tweaks ;;
-            10) func_net_kernel_menu ;;
-            11) func_docker_manage ;;
-            12) func_test_scripts ;;
-            13) func_port_kill ;;
-            14) func_system_info ;;
-            15) func_health_dashboard ;;
-            16) func_backup_center ;;
-            17) func_update_script ;;
-            18) func_reboot_server ;;
-            19) func_sni_stack_quick_menu ;;
+            6) func_fail2ban ;;
+            7) func_firewall_manage ;;
+            8) func_system_tweaks ;;
+            9) func_net_kernel_menu ;;
+            10) func_docker_manage ;;
+            11) func_test_scripts ;;
+            12) func_port_kill ;;
+            13) func_system_info ;;
+            14) func_health_dashboard ;;
+            15) func_backup_center ;;
+            16) func_update_script ;;
+            17) func_reboot_server ;;
+            18) func_sni_stack_quick_menu ;;
             0) exit 0 ;;
             *) 
                 echo -e "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}"
