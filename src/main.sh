@@ -3341,6 +3341,7 @@ show_main_help() {
     echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
     echo "16  备份与回滚，高风险操作前建议先跑。"
     echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
+    echo "20  流量达量关机保护，按账单周期防刷流量和超额账单。"
     echo "? 查看帮助，0/q 退出。"
 }
 
@@ -3374,6 +3375,7 @@ show_sni_help() {
     echo "7 修改参数：调整面板、订阅、REALITY 和入口监听。"
     echo "8 域名 IP 白名单：只对指定域名限制源 IP，不影响其他 SNI。"
     echo "9 TCP/SNI 入站：把 3x-ui 已配置的本地 TCP 入站接入公网 443，不开放新端口。"
+    echo "10 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
     echo "普通 Caddy 未接入 443 单入口时，用 [3] -> [21] 管理域名 IP 白名单。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
@@ -3395,12 +3397,14 @@ show_net_kernel_help() {
     echo "4 安装/切换内核：高风险，必须确认快照和救援控制台可用。"
     echo "5 清理旧内核：不要删除当前内核和云厂商定制内核。"
     echo "6 DNS 更改优化：国内/国外默认 DNS，也支持自定义 IPv4 和 IPv6。"
+    echo "7 流量达量关机保护：按网卡流量和账单周期自动关机，防止超额账单。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
 show_health_help() {
     echo -e "${CYAN}VPS-Optimize > 诊断/健康检查 > 帮助${PLAIN}"
     echo "健康总览会检查关键服务、监听端口和证书摘要。"
+    echo "系统硬件探针会附带 443、Caddy、3x-ui、订阅工具和 Docker 场景概览。"
     echo "生成反馈诊断信息用于提交 GitHub Issue，会尽量避免输出 Token、私钥和敏感密钥。"
 }
 
@@ -4835,6 +4839,108 @@ func_add_ssh_key() {
 # ---------------------------------------------------------
 # 5. Docker 深度管理 (重构版：非破坏性修改与防宕机回滚)
 # ---------------------------------------------------------
+docker_port_line_is_public() {
+    local line="$1"
+    case "$line" in
+        *"0.0.0.0:"*|*":::"*|*"[::]:"*|*"[0:0:0:0:0:0:0:0]:"*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+print_managed_container_status() {
+    local title="$1"
+    local container="$2"
+    local dir="$3"
+    local state health ports compose_file
+
+    if docker inspect "$container" >/dev/null 2>&1; then
+        state=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null || echo "unknown")
+        health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container" 2>/dev/null || true)
+        ports=$(docker port "$container" 2>/dev/null | tr '\n' '; ')
+        [[ -z "$ports" ]] && ports="未暴露 Docker 端口或使用 host 网络"
+        [[ -z "$health" ]] && health="无 healthcheck"
+        echo -e "${GREEN}${title}${PLAIN}: ${state} / ${health}"
+        echo -e "  端口: ${ports}"
+    else
+        echo -e "${YELLOW}${title}${PLAIN}: 未检测到容器 ${container}"
+    fi
+
+    compose_file=$(find_compose_file "$dir" 2>/dev/null || true)
+    if [[ -n "$compose_file" ]]; then
+        echo -e "  Compose: ${CYAN}${compose_file}${PLAIN}"
+    else
+        echo -e "  Compose: ${BLUE}未检测到 ${dir} 部署目录${PLAIN}"
+    fi
+}
+
+print_subscription_compose_status() {
+    if ! command -v docker >/dev/null 2>&1; then
+        echo -e "${YELLOW}未安装 Docker，跳过订阅工具容器状态。${PLAIN}"
+        return 0
+    fi
+    print_managed_container_status "SublinkPro" "sublinkpro" "/opt/sublinkpro"
+    print_managed_container_status "妙妙屋订阅管理" "miaomiaowu" "/opt/miaomiaowu"
+    print_managed_container_status "Sub-Store" "sub-store" "/opt/sub-store"
+    print_managed_container_status "Dockge" "dockge" "/opt/dockge"
+    print_managed_container_status "Komari" "komari" "/opt/komari"
+}
+
+func_docker_project_status() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "Docker 安全管理 > 项目容器状态"
+    echo -e "${BOLD}🐳 443 / 订阅工具相关容器状态${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}这里只看本项目场景相关容器：SublinkPro、妙妙屋、Sub-Store、Dockge、Komari。${PLAIN}"
+    echo -e "${YELLOW}3x-ui、Caddy、Nginx 通常是 systemd 服务，状态请看 [15] 或 [19] 体检。${PLAIN}"
+    echo -e "------------------------------------------------"
+    print_subscription_compose_status
+    echo -e "------------------------------------------------"
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
+func_docker_443_exposure_audit() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "Docker 安全管理 > 443 暴露审计"
+    echo -e "${BOLD}🔎 Docker 端口暴露审计${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}目标：启用 443 单入口后，订阅工具和管理面板应尽量只绑定 127.0.0.1，再由 Caddy/Nginx 对外。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local found_public=false
+    local line name ports
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        ports=$(docker port "$name" 2>/dev/null || true)
+        [[ -z "$ports" ]] && continue
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            if docker_port_line_is_public "$line"; then
+                found_public=true
+                echo -e "${YELLOW}⚠️ ${name}: ${line}${PLAIN}"
+            fi
+        done <<< "$ports"
+    done < <(docker ps --format '{{.Names}}' 2>/dev/null)
+
+    if $found_public; then
+        echo -e "------------------------------------------------"
+        echo -e "${YELLOW}建议：订阅工具、Dockge、Komari 用 127.0.0.1 绑定，公网访问走 [19] -> [2] 添加 443 反代域名。${PLAIN}"
+        echo -e "${YELLOW}如确实需要公网直连，请确认云安全组、系统防火墙和访问密码都已收紧。${PLAIN}"
+    else
+        echo -e "${GREEN}✅ 未发现 Docker 容器通过 0.0.0.0 / :: 直接暴露端口。${PLAIN}"
+    fi
+
+    echo -e "------------------------------------------------"
+    print_subscription_compose_status
+    echo -e "------------------------------------------------"
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
 func_docker_manage() {
     if ! command -v docker >/dev/null 2>&1; then 
         clear
@@ -4858,6 +4964,9 @@ func_docker_manage() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${GREEN}  1. 开启 Docker 本地防穿透${PLAIN} ${YELLOW}(限制映射端口仅 127.0.0.1 访问)${PLAIN}"
         echo -e "${GREEN}  2. 解除 Docker 本地防穿透${PLAIN} ${YELLOW}(恢复全网可访，不破坏原配置)${PLAIN}"
+        echo -e "${GREEN}  3. 查看 443 / 订阅工具容器状态${PLAIN}"
+        echo -e "${GREEN}  4. Docker 端口暴露审计${PLAIN} ${YELLOW}(检查是否绕过 443 单入口)${PLAIN}"
+        echo -e "${BOLD}${YELLOW}  5. UPD 更新订阅工具容器${PLAIN} ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         
@@ -4965,6 +5074,9 @@ EOF
                 fi
                 sleep 2
                 ;;
+            3) func_docker_project_status ;;
+            4) func_docker_443_exposure_audit ;;
+            5) func_update_subscription_tools ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}"; sleep 1 ;;
         esac
@@ -5552,6 +5664,76 @@ func_clean_kernel() {
 # ---------------------------------------------------------
 # 11. 极速硬件探针
 # ---------------------------------------------------------
+service_status_compact() {
+    local svc="$1"
+    if systemctl list-unit-files "${svc}.service" --no-legend >/dev/null 2>&1 || systemctl status "$svc" >/dev/null 2>&1; then
+        if systemctl is-active --quiet "$svc"; then
+            printf '%b' "${GREEN}运行中${PLAIN}"
+        else
+            printf '%b' "${YELLOW}未运行${PLAIN}"
+        fi
+    else
+        printf '%b' "${BLUE}未安装${PLAIN}"
+    fi
+}
+
+docker_public_binding_count() {
+    local count=0
+    local name line ports
+    command -v docker >/dev/null 2>&1 || { echo "0"; return 0; }
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        ports=$(docker port "$name" 2>/dev/null || true)
+        [[ -z "$ports" ]] && continue
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            docker_port_line_is_public "$line" && count=$((count + 1))
+        done <<< "$ports"
+    done < <(docker ps --format '{{.Names}}' 2>/dev/null)
+    echo "$count"
+}
+
+print_project_runtime_overview() {
+    echo -e "${CYAN}🧩 VPS-Optimize 场景概览${PLAIN}"
+    echo -e "脚本版本 : ${GREEN}${SCRIPT_VERSION}${PLAIN}"
+    echo -e "关键服务 : nginx[$(service_status_compact nginx)] caddy[$(service_status_compact caddy)] docker[$(service_status_compact docker)] x-ui[$(service_status_compact x-ui)] 3x-ui[$(service_status_compact 3x-ui)]"
+
+    if [[ -f /etc/vps-optimize/sni-stack.env ]]; then
+        if load_sni_stack_env >/dev/null 2>&1; then
+            echo -e "443 入口 : ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Caddy ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} / REALITY ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
+            echo -e "3x-ui   : 面板 https://${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+            echo -e "订阅路径 : 普通 ${SUB_URI_PATH} / Clash-Mihomo ${CLASH_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
+            echo -e "扩展分流 : 网站/反代 ${#SITE_DOMAINS[@]} 个，TCP/SNI 入站 ${#TCP_ROUTE_SNIS[@]} 个"
+        else
+            echo -e "443 入口 : ${YELLOW}检测到配置文件，但读取失败，请运行 [19] -> [3] 体检。${PLAIN}"
+        fi
+    else
+        echo -e "443 入口 : ${BLUE}尚未配置；需要面板/订阅/REALITY 共用 443 时进入 [19]。${PLAIN}"
+    fi
+
+    if command -v docker >/dev/null 2>&1; then
+        local running_containers public_binds
+        running_containers=$(docker ps -q 2>/dev/null | wc -l | tr -d '[:space:]')
+        public_binds=$(docker_public_binding_count)
+        echo -e "Docker   : 运行容器 ${running_containers:-0} 个，公网映射 ${public_binds:-0} 条"
+    fi
+
+    if [[ -r "$TRAFFIC_GUARD_CONFIG" ]]; then
+        local guard_usage guard_limit guard_timer guard_pct
+        # shellcheck disable=SC1090
+        . "$TRAFFIC_GUARD_CONFIG"
+        guard_usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
+        guard_limit="${LIMIT_BYTES:-0}"
+        guard_timer=$(systemctl is-active vps-traffic-guard.timer 2>/dev/null || echo "inactive")
+        if [[ "$guard_limit" =~ ^[0-9]+$ && "$guard_limit" -gt 0 ]]; then
+            guard_pct=$(awk -v u="$guard_usage" -v l="$guard_limit" 'BEGIN { printf "%.2f", (u/l)*100 }')
+            echo -e "流量保护 : timer ${guard_timer}，$(traffic_guard_mode_label "${MODE:-tx}") 已用 $(traffic_guard_human_bytes "$guard_usage") / $(traffic_guard_human_bytes "$guard_limit") (${guard_pct}%)"
+        else
+            echo -e "流量保护 : timer ${guard_timer}，配置需检查"
+        fi
+    fi
+}
+
 func_system_info() {
     clear
     local os_name
@@ -5574,6 +5756,8 @@ func_system_info() {
     echo -e "${YELLOW}IPv4 地址:${PLAIN} $(curl -s4 --max-time 3 icanhazip.com || echo "无公网IPv4")"
     echo -e "${YELLOW}IPv6 地址:${PLAIN} $(curl -s6 --max-time 3 icanhazip.com || echo "无公网IPv6")"
     echo -e "${YELLOW}运行时间 :${PLAIN} $(uptime -p | sed 's/up //')"
+    echo -e "------------------------------------------------"
+    print_project_runtime_overview
     echo -e "${CYAN}================================================${PLAIN}"
     
     read -n 1 -s -r -p "按任意键返回主菜单..."
@@ -5582,6 +5766,128 @@ func_system_info() {
 # ---------------------------------------------------------
 # 12. 综合测试合集
 # ---------------------------------------------------------
+probe_host_for_listen_addr() {
+    local addr="$1"
+    case "$addr" in
+        ""|"0.0.0.0"|"::"|"[::]") echo "127.0.0.1" ;;
+        *:*) echo "localhost" ;;
+        *) echo "$addr" ;;
+    esac
+}
+
+tcp_probe_host() {
+    local label="$1"
+    local host="$2"
+    local port="$3"
+    if ! command -v timeout >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ ${label}: 缺少 timeout，跳过 TCP 探测。${PLAIN}"
+        return 1
+    fi
+    if timeout 5 bash -c 'cat < /dev/null > /dev/tcp/$1/$2' _ "$host" "$port" 2>/dev/null; then
+        echo -e "${GREEN}✅ ${label}: ${host}:${port} 可连接${PLAIN}"
+        return 0
+    fi
+    echo -e "${RED}❌ ${label}: ${host}:${port} 连接失败${PLAIN}"
+    return 1
+}
+
+https_url_for_port() {
+    local host="$1"
+    local port="$2"
+    local path="$3"
+    if [[ "$port" == "443" ]]; then
+        printf 'https://%s%s' "$host" "$path"
+    else
+        printf 'https://%s:%s%s' "$host" "$port" "$path"
+    fi
+}
+
+curl_sni_path_probe() {
+    local label="$1"
+    local domain="$2"
+    local port="$3"
+    local path="$4"
+    local url code
+    if ! command -v curl >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ ${label}: 缺少 curl，跳过 HTTPS 路径探测。${PLAIN}"
+        return 1
+    fi
+    url=$(https_url_for_port "$domain" "$port" "$path")
+    code=$(curl -k -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 12 --resolve "${domain}:${port}:127.0.0.1" "$url" 2>/dev/null || echo "000")
+    case "$code" in
+        000)
+            echo -e "${RED}❌ ${label}: ${url} 无响应${PLAIN}"
+            return 1
+            ;;
+        404)
+            echo -e "${YELLOW}⚠️ ${label}: ${url} HTTP ${code}，443/SNI 已到达，但路径或后端可能不匹配。${PLAIN}"
+            return 0
+            ;;
+        *)
+            echo -e "${GREEN}✅ ${label}: ${url} HTTP ${code}${PLAIN}"
+            return 0
+            ;;
+    esac
+}
+
+tls_sni_probe_local() {
+    local label="$1"
+    local sni="$2"
+    local port="$3"
+    if ! command -v openssl >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ ${label}: 缺少 openssl/timeout，跳过 TLS SNI 探测。${PLAIN}"
+        return 1
+    fi
+    if timeout 10 openssl s_client -connect "127.0.0.1:${port}" -servername "$sni" </dev/null 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
+        echo -e "${GREEN}✅ ${label}: Nginx 入口能按 ${sni} 命中 TLS 证书链${PLAIN}"
+        return 0
+    fi
+    echo -e "${YELLOW}⚠️ ${label}: 未拿到证书链，请检查 Nginx stream、Caddy 证书或 SNI。${PLAIN}"
+    return 1
+}
+
+func_443_network_test() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "测速与质量检测 > 443 单入口测试"
+    echo -e "${BOLD}🧪 443 单入口网络访问测试${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    if [[ ! -f /etc/vps-optimize/sni-stack.env ]]; then
+        echo -e "${YELLOW}未检测到 443 单入口配置。请先进入 [19] -> [1] 完成首次配置。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+    load_sni_stack_env || { read -n 1 -s -r -p "按任意键返回..."; return; }
+
+    echo -e "面板入口：https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
+    echo -e "订阅入口：https://${PANEL_DOMAIN}${SUB_URI_PATH}"
+    echo -e "Clash/Mihomo：https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
+    echo -e "REALITY SNI：${REALITY_SNI}:${NGINX_LISTEN_PORT} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
+    echo -e "------------------------------------------------"
+
+    check_domain_dns_sanity "$PANEL_DOMAIN" "面板域名" "warn" || true
+    [[ "$PANEL_DOMAIN" != "$REALITY_SNI" ]] && check_domain_dns_sanity "$REALITY_SNI" "REALITY SNI" "warn" || true
+
+    echo -e "------------------------------------------------"
+    tcp_probe_host "公网入口 TCP" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" || true
+    tcp_probe_host "本机 Nginx 入口" "127.0.0.1" "$NGINX_LISTEN_PORT" || true
+    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || true
+    tcp_probe_host "3x-ui 面板后端" "$(probe_host_for_listen_addr "$PANEL_LISTEN_ADDR")" "$PANEL_LISTEN_PORT" || true
+    tcp_probe_host "3x-ui 订阅后端" "$(probe_host_for_listen_addr "$SUB_LISTEN_ADDR")" "$SUB_LISTEN_PORT" || true
+    tcp_probe_host "REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || true
+
+    echo -e "------------------------------------------------"
+    tls_sni_probe_local "面板 SNI TLS" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" || true
+    curl_sni_path_probe "面板路径" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" "$PANEL_WEB_PATH" || true
+    curl_sni_path_probe "普通订阅路径" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" "$SUB_URI_PATH" || true
+    curl_sni_path_probe "Clash/Mihomo 路径" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" "$CLASH_URI_PATH" || true
+
+    echo -e "------------------------------------------------"
+    echo -e "${YELLOW}说明：HTTP 401/403/302 通常表示链路已到达后端；404 多数是路径或 3x-ui 订阅设置不一致。${PLAIN}"
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
 func_test_scripts() {
     while true; do
         clear
@@ -5592,6 +5898,7 @@ func_test_scripts() {
         echo -e "${GREEN}  3. SuperBench 综合测速    ${YELLOW}  4. bench.sh 基础测试${PLAIN}"
         echo -e "${GREEN}  5. 流媒体解锁检测         ${YELLOW}  6. 三网回程路由测试${PLAIN}"
         echo -e "${GREEN}  7. IP 质量 / 欺诈度检测   ${YELLOW}  8. NodeSeek 综合测试${PLAIN}"
+        echo -e "${GREEN}  9. 443 单入口链路测试      ${YELLOW}(面板/订阅/Caddy/REALITY 本地链路)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -5608,6 +5915,7 @@ func_test_scripts() {
             6) ran_test=true; run_remote_script "运行三网回程路由测试" "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh" ;;
             7) ran_test=true; run_remote_script "运行 IP 质量 / 欺诈度检测" "https://IP.Check.Place" ;;
             8) ran_test=true; run_remote_script "运行 NodeSeek 综合测试" "https://run.NodeQuality.com" ;;
+            9) func_443_network_test; continue ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1; continue ;;
         esac
@@ -5946,7 +6254,11 @@ func_sublinkpro() {
 
     # 3. 部署目录初始化
     local install_dir="/opt/sublinkpro"
+    local sublink_bind_addr="127.0.0.1"
     local sublink_port="8000"
+    sublink_bind_addr=$(ask_with_default "请输入 SublinkPro 监听地址" "$sublink_bind_addr")
+    is_valid_listen_addr "$sublink_bind_addr" || { echo -e "${RED}❌ 监听地址无效。${PLAIN}"; read -n 1 -s -r -p "按任意键返回..."; return; }
+
     while true; do
         sublink_port=$(ask_with_default "请输入 SublinkPro 对外访问端口" "$sublink_port")
         if is_valid_port "$sublink_port"; then
@@ -5954,9 +6266,11 @@ func_sublinkpro() {
         fi
         echo -e "${RED}❌ 端口无效，请输入 1-65535 之间的数字。${PLAIN}"
     done
+    warn_if_public_bind "SublinkPro" "$sublink_bind_addr" "$sublink_port" || return 1
 
     echo -e "${YELLOW}💡 SublinkPro 将被安全部署在: ${CYAN}$install_dir${PLAIN}"
-    echo -e "${YELLOW}💡 SublinkPro 对外访问端口将使用: ${CYAN}$sublink_port${PLAIN}"
+    echo -e "${YELLOW}💡 SublinkPro 监听地址将使用: ${CYAN}${sublink_bind_addr}:${sublink_port}${PLAIN}"
+    echo -e "${YELLOW}💡 需要公网 HTTPS 访问时，建议部署后走 [19] -> [2] 添加 443 单入口反代域名。${PLAIN}"
     echo -e "${YELLOW}账号密码说明：当前安装流程不提供自定义后台账号密码。${PLAIN}"
     echo -e "${YELLOW}默认后台账号：${CYAN}admin${PLAIN} / 默认后台密码：${CYAN}123456${PLAIN}"
     echo -e "${YELLOW}部署完成后请尽快登录后台修改默认密码。${PLAIN}"
@@ -5974,7 +6288,7 @@ services:
     image: zerodeng/sublink-pro
     container_name: sublinkpro
     ports:
-      - "${sublink_port}:8000"
+      - "${sublink_bind_addr}:${sublink_port}:8000"
     volumes:
       - "./db:/app/db"
       - "./template:/app/template"
@@ -5985,16 +6299,18 @@ EOF
         echo -e "${CYAN}▶ 正在拉取镜像并启动 SublinkPro 容器...${PLAIN}"
         $compose_cmd up -d
         
-        local ip
-        ip=$(curl -s4 --max-time 3 icanhazip.com 2>/dev/null || echo "您的服务器IP")
+        local access_host
+        access_host="$sublink_bind_addr"
+        [[ "$sublink_bind_addr" == "0.0.0.0" || "$sublink_bind_addr" == "::" ]] && access_host=$(curl -s4 --max-time 3 icanhazip.com 2>/dev/null || echo "您的服务器IP")
         
         echo -e "------------------------------------------------"
         echo -e "${GREEN}🎉 SublinkPro 部署并启动成功！${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "🌐 ${BOLD}面板访问地址:${PLAIN} http://$ip:${sublink_port}"
+        echo -e "🌐 ${BOLD}本地访问地址:${PLAIN} http://${access_host}:${sublink_port}"
         echo -e "👤 ${BOLD}默认后台账号:${PLAIN} admin"
         echo -e "🔑 ${BOLD}默认后台密码:${PLAIN} 123456"
         echo -e "${YELLOW}⚠️ 当前安装流程未提供自定义账号密码，请登录后尽快修改默认密码。${PLAIN}"
+        echo -e "${YELLOW}公网访问建议：主菜单 [19] -> [2] 为该本地端口添加 443 反代域名。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${YELLOW}⚠️ 核心防丢提示：${PLAIN}"
         echo -e "系统产生的数据库、模板和日志都已持久化映射在 ${CYAN}$install_dir${PLAIN} 下。"
@@ -6015,8 +6331,12 @@ func_miaomiaowu() {
     ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
 
     local install_dir="/opt/miaomiaowu"
+    local mmw_bind_addr="127.0.0.1"
     local mmw_port="8080"
     local jwt_secret
+
+    mmw_bind_addr=$(ask_with_default "妙妙屋监听地址" "$mmw_bind_addr")
+    is_valid_listen_addr "$mmw_bind_addr" || { echo -e "${RED}❌ 监听地址无效。${PLAIN}"; read -n 1 -s -r -p "按任意键返回..."; return; }
 
     while true; do
         mmw_port=$(ask_with_default "请输入 妙妙屋 对外访问端口" "$mmw_port")
@@ -6025,6 +6345,7 @@ func_miaomiaowu() {
         fi
         echo -e "${RED}❌ 端口无效，请输入 1-65535 之间的数字。${PLAIN}"
     done
+    warn_if_public_bind "妙妙屋订阅管理" "$mmw_bind_addr" "$mmw_port" || return 1
 
     jwt_secret=$(ask_with_default "JWT_SECRET（回车自动生成随机密钥）" "")
     if [[ -z "$jwt_secret" ]]; then
@@ -6032,8 +6353,9 @@ func_miaomiaowu() {
     fi
 
     echo -e "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}"
-    echo -e "${YELLOW}访问端口：${CYAN}${mmw_port}${PLAIN}"
+    echo -e "${YELLOW}监听地址：${CYAN}${mmw_bind_addr}:${mmw_port}${PLAIN}"
     echo -e "${YELLOW}数据目录：${CYAN}${install_dir}/data、subscribes、rule_templates${PLAIN}"
+    echo -e "${YELLOW}公网 HTTPS 访问建议走 [19] -> [2]，不要直接开放容器端口。${PLAIN}"
     echo -e "${YELLOW}账号密码说明：当前安装流程不预设账号密码。${PLAIN}"
     echo -e "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}"
     echo -e "------------------------------------------------"
@@ -6059,7 +6381,7 @@ services:
       LOG_LEVEL: info
       JWT_SECRET: "${jwt_secret}"
     ports:
-      - "${mmw_port}:${mmw_port}"
+      - "${mmw_bind_addr}:${mmw_port}:${mmw_port}"
     volumes:
       - ./data:/app/data
       - ./subscribes:/app/subscribes
@@ -6075,13 +6397,15 @@ EOF
         echo -e "${CYAN}▶ 正在拉取镜像并启动 妙妙屋 容器...${PLAIN}"
         $DOCKER_COMPOSE_CMD up -d
 
-        local ip
-        ip=$(curl -s4 --max-time 3 icanhazip.com 2>/dev/null || echo "您的服务器IP")
+        local access_host
+        access_host="$mmw_bind_addr"
+        [[ "$mmw_bind_addr" == "0.0.0.0" || "$mmw_bind_addr" == "::" ]] && access_host=$(curl -s4 --max-time 3 icanhazip.com 2>/dev/null || echo "您的服务器IP")
         echo -e "------------------------------------------------"
         echo -e "${GREEN}✅ 妙妙屋订阅管理部署完成！${PLAIN}"
-        echo -e "访问地址：${BOLD}http://${ip}:${mmw_port}${PLAIN}"
+        echo -e "本地访问地址：${BOLD}http://${access_host}:${mmw_port}${PLAIN}"
         echo -e "账号密码：${YELLOW}无默认账号密码，首次打开页面创建管理员账号。${PLAIN}"
         echo -e "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}"
+        echo -e "${YELLOW}公网访问建议：主菜单 [19] -> [2] 为该本地端口添加 443 反代域名。${PLAIN}"
         echo -e "${YELLOW}请定期备份 ${install_dir}/data、subscribes、rule_templates。${PLAIN}"
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
@@ -7013,6 +7337,110 @@ func_reboot_server() {
 # ---------------------------------------------------------
 # 19. 脚本热更新
 # ---------------------------------------------------------
+fetch_latest_script_version() {
+    local line version
+    if command -v curl >/dev/null 2>&1; then
+        line=$(curl -fsSL --connect-timeout 4 --max-time 10 "$UPDATE_URL" 2>/dev/null | grep -m1 '^SCRIPT_VERSION=' || true)
+    elif command -v wget >/dev/null 2>&1; then
+        line=$(wget -q --timeout=10 --tries=1 -O - "$UPDATE_URL" 2>/dev/null | grep -m1 '^SCRIPT_VERSION=' || true)
+    else
+        return 1
+    fi
+    [[ -n "$line" ]] || return 1
+    version="${line#SCRIPT_VERSION=}"
+    version="${version%\"}"
+    version="${version#\"}"
+    [[ -n "$version" ]] || return 1
+    printf '%s\n' "$version"
+}
+
+version_is_newer() {
+    local latest="${1#v}"
+    local current="${2#v}"
+    local l1=0 l2=0 l3=0 c1=0 c2=0 c3=0
+    IFS='.' read -r l1 l2 l3 <<< "$latest"
+    IFS='.' read -r c1 c2 c3 <<< "$current"
+    l1=${l1:-0}; l2=${l2:-0}; l3=${l3:-0}
+    c1=${c1:-0}; c2=${c2:-0}; c3=${c3:-0}
+    [[ "$l1$l2$l3$c1$c2$c3" =~ ^[0-9]+$ ]] || return 1
+    (( 10#$l1 > 10#$c1 )) && return 0
+    (( 10#$l1 < 10#$c1 )) && return 1
+    (( 10#$l2 > 10#$c2 )) && return 0
+    (( 10#$l2 < 10#$c2 )) && return 1
+    (( 10#$l3 > 10#$c3 ))
+}
+
+script_update_cache_is_fresh() {
+    local now mtime
+    [[ -f "$SCRIPT_UPDATE_CACHE" ]] || return 1
+    now=$(date +%s 2>/dev/null || echo 0)
+    mtime=$(stat -c %Y "$SCRIPT_UPDATE_CACHE" 2>/dev/null || echo 0)
+    [[ "$now" =~ ^[0-9]+$ && "$mtime" =~ ^[0-9]+$ ]] || return 1
+    (( now > mtime && now - mtime < 43200 ))
+}
+
+read_script_update_cache_field() {
+    local key="$1"
+    grep -m1 "^${key}=" "$SCRIPT_UPDATE_CACHE" 2>/dev/null | cut -d= -f2-
+}
+
+write_script_update_cache() {
+    local status="$1"
+    local latest="$2"
+    local message="$3"
+    local cache_dir
+    cache_dir=$(dirname "$SCRIPT_UPDATE_CACHE")
+    mkdir -p "$cache_dir" 2>/dev/null || return 0
+    {
+        echo "status=${status}"
+        echo "latest=${latest}"
+        echo "message=${message}"
+        echo "checked_at=$(date -Is 2>/dev/null || date)"
+    } > "$SCRIPT_UPDATE_CACHE" 2>/dev/null || true
+}
+
+check_script_update_status() {
+    local mode="${1:-auto}"
+    local status latest message
+    if [[ "$mode" != "force" ]] && script_update_cache_is_fresh; then
+        status=$(read_script_update_cache_field status)
+        latest=$(read_script_update_cache_field latest)
+        printf '%s|%s\n' "${status:-unknown}" "${latest:-unknown}"
+        return 0
+    fi
+
+    if latest=$(fetch_latest_script_version); then
+        if version_is_newer "$latest" "$SCRIPT_VERSION"; then
+            status="available"
+            message="发现新版本 ${latest}"
+        else
+            status="current"
+            message="当前已是最新版本"
+        fi
+        write_script_update_cache "$status" "$latest" "$message"
+        printf '%s|%s\n' "$status" "$latest"
+        return 0
+    fi
+
+    write_script_update_cache "error" "unknown" "无法检查更新"
+    printf 'error|unknown\n'
+}
+
+print_auto_update_notice() {
+    local result status latest
+    result=$(check_script_update_status "auto" 2>/dev/null || true)
+    status="${result%%|*}"
+    latest="${result#*|}"
+    case "$status" in
+        available)
+            echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可无缝更新发布版。"
+            ;;
+        current)
+            echo -e " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，未发现更高的发布版。"
+            ;;
+    esac
+}
+
 func_update_script() {
     clear
     local tmp_file
@@ -7466,6 +7894,8 @@ func_health_dashboard() {
     echo -e "防火墙服务状态      : [ $fw_state ]"
     echo -e "失败 systemd 单元数 : ${YELLOW}${failed_units}${PLAIN}"
     echo -e "------------------------------------------------"
+    print_project_runtime_overview
+    echo -e "------------------------------------------------"
 
     echo -e "${CYAN}🔌 当前监听端口 Top 12${PLAIN}"
     ss -tuln 2>/dev/null | grep -E 'LISTEN|UNCONN' | awk '{print $5}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | sort -nu | head -n 12 | tr '\n' ' '
@@ -7648,7 +8078,584 @@ func_dns_optimize() {
 }
 
 # ---------------------------------------------------------
-# 23. 网络加速与内核优化菜单 (二级直达)
+# 23. 流量达量关机保护
+# ---------------------------------------------------------
+traffic_guard_human_bytes() {
+    local bytes="${1:-0}"
+    awk -v b="$bytes" 'BEGIN {
+        split("B KB MB GB TB PB", u, " ");
+        i=1;
+        while (b >= 1024 && i < 6) { b=b/1024; i++ }
+        if (i == 1) printf "%.0f%s", b, u[i]; else printf "%.2f%s", b, u[i]
+    }'
+}
+
+traffic_guard_gb_to_bytes() {
+    local gb="$1"
+    gb="${gb//，/.}"
+    gb="${gb//,/}"
+    awk -v gb="$gb" 'BEGIN {
+        if (gb !~ /^[0-9]+([.][0-9]+)?$/ || gb <= 0) exit 1;
+        printf "%.0f", gb * 1024 * 1024 * 1024
+    }'
+}
+
+traffic_guard_detect_iface() {
+    local iface
+    iface=$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="dev") {print $(i+1); exit}}')
+    [[ -z "$iface" ]] && iface=$(ip -o -4 route show default 2>/dev/null | awk '{print $5; exit}')
+    [[ -z "$iface" ]] && iface=$(ls /sys/class/net 2>/dev/null | grep -Ev '^(lo|docker|br-|veth|tailscale|wg)' | head -n1)
+    printf '%s' "$iface"
+}
+
+traffic_guard_valid_iface() {
+    local iface="$1"
+    [[ -n "$iface" && "$iface" != *"/"* && "$iface" != *".."* ]] || return 1
+    [[ -r "/sys/class/net/${iface}/statistics/rx_bytes" && -r "/sys/class/net/${iface}/statistics/tx_bytes" ]]
+}
+
+traffic_guard_mode_label() {
+    case "$1" in
+        tx) echo "出站 TX 计费" ;;
+        rx) echo "入站 RX 计费" ;;
+        total) echo "出入总量 RX+TX" ;;
+        max) echo "任一方向达量" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+traffic_guard_current_cycle_key() {
+    local cycle_day="${1:-1}"
+    local current_day
+    cycle_day=${cycle_day:-1}
+    [[ "$cycle_day" =~ ^[0-9]+$ ]] || cycle_day=1
+    cycle_day=$((10#$cycle_day))
+    (( cycle_day >= 1 && cycle_day <= 28 )) || cycle_day=1
+    current_day=$(date +%d)
+    if (( 10#$current_day >= 10#$cycle_day )); then
+        printf '%s-%02d' "$(date +%Y-%m)" "$cycle_day"
+    else
+        printf '%s-%02d' "$(date -d "$(date +%Y-%m-01) -1 month" +%Y-%m)" "$cycle_day"
+    fi
+}
+
+traffic_guard_read_stats() {
+    local iface="$1"
+    cat "/sys/class/net/${iface}/statistics/rx_bytes" "/sys/class/net/${iface}/statistics/tx_bytes" 2>/dev/null
+}
+
+install_traffic_guard_checker() {
+    mkdir -p "$(dirname "$TRAFFIC_GUARD_CHECKER")" "$TRAFFIC_GUARD_STATE_DIR" "$(dirname "$TRAFFIC_GUARD_CONFIG")" || return 1
+    cat > "$TRAFFIC_GUARD_CHECKER" <<'GUARD_SCRIPT'
+#!/usr/bin/env bash
+set -u
+
+CONFIG="/etc/vps-optimize/traffic-guard.conf"
+STATE_DIR="/var/lib/vps-optimize/traffic-guard"
+STATE_FILE="${STATE_DIR}/state"
+LOG_FILE="/var/log/vps-traffic-guard.log"
+
+log_msg() {
+    local msg="$1"
+    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    printf '%s %s\n' "$(date -Is 2>/dev/null || date)" "$msg" >> "$LOG_FILE" 2>/dev/null || true
+    logger -t vps-traffic-guard "$msg" 2>/dev/null || true
+}
+
+current_cycle_key() {
+    local cycle_day="${1:-1}"
+    local current_day
+    cycle_day=${cycle_day:-1}
+    [[ "$cycle_day" =~ ^[0-9]+$ ]] || cycle_day=1
+    cycle_day=$((10#$cycle_day))
+    (( cycle_day >= 1 && cycle_day <= 28 )) || cycle_day=1
+    current_day=$(date +%d)
+    if (( 10#$current_day >= 10#$cycle_day )); then
+        printf '%s-%02d' "$(date +%Y-%m)" "$cycle_day"
+    else
+        printf '%s-%02d' "$(date -d "$(date +%Y-%m-01) -1 month" +%Y-%m)" "$cycle_day"
+    fi
+}
+
+save_state() {
+    mkdir -p "$STATE_DIR" || exit 1
+    chmod 700 "$STATE_DIR" 2>/dev/null || true
+    {
+        echo "CYCLE_KEY='${CYCLE_KEY:-}'"
+        echo "BASE_RX='${BASE_RX:-0}'"
+        echo "BASE_TX='${BASE_TX:-0}'"
+        echo "OFFSET_BYTES='${OFFSET_BYTES:-0}'"
+        echo "WARN_SENT='${WARN_SENT:-0}'"
+        echo "TRIPPED='${TRIPPED:-0}'"
+        echo "LAST_RX='${CURRENT_RX:-0}'"
+        echo "LAST_TX='${CURRENT_TX:-0}'"
+        echo "LAST_USAGE='${USAGE_BYTES:-0}'"
+        echo "LAST_CHECKED_AT='$(date -Is 2>/dev/null || date)'"
+    } > "$STATE_FILE"
+    chmod 600 "$STATE_FILE" 2>/dev/null || true
+}
+
+[[ -r "$CONFIG" ]] || exit 0
+# shellcheck disable=SC1090
+. "$CONFIG"
+
+[[ "${ENABLED:-0}" == "1" ]] || exit 0
+IFACE="${IFACE:-}"
+MODE="${MODE:-tx}"
+LIMIT_BYTES="${LIMIT_BYTES:-0}"
+CYCLE_DAY="${CYCLE_DAY:-1}"
+WARN_PERCENT="${WARN_PERCENT:-90}"
+ACTION="${ACTION:-poweroff}"
+INITIAL_USED_BYTES="${INITIAL_USED_BYTES:-0}"
+
+[[ -n "$IFACE" && -r "/sys/class/net/${IFACE}/statistics/rx_bytes" && -r "/sys/class/net/${IFACE}/statistics/tx_bytes" ]] || {
+    log_msg "interface ${IFACE:-empty} is not readable, skip"
+    exit 0
+}
+[[ "$LIMIT_BYTES" =~ ^[0-9]+$ && "$LIMIT_BYTES" -gt 0 ]] || exit 0
+[[ "$WARN_PERCENT" =~ ^[0-9]+$ ]] || WARN_PERCENT=90
+(( WARN_PERCENT >= 1 && WARN_PERCENT <= 99 )) || WARN_PERCENT=90
+
+CURRENT_RX=$(cat "/sys/class/net/${IFACE}/statistics/rx_bytes" 2>/dev/null || echo 0)
+CURRENT_TX=$(cat "/sys/class/net/${IFACE}/statistics/tx_bytes" 2>/dev/null || echo 0)
+CYCLE_NOW=$(current_cycle_key "$CYCLE_DAY")
+
+STATE_EXISTS=0
+if [[ -r "$STATE_FILE" ]]; then
+    STATE_EXISTS=1
+    # shellcheck disable=SC1090
+    . "$STATE_FILE"
+fi
+
+if [[ "${CYCLE_KEY:-}" != "$CYCLE_NOW" ]]; then
+    CYCLE_KEY="$CYCLE_NOW"
+    BASE_RX="$CURRENT_RX"
+    BASE_TX="$CURRENT_TX"
+    if [[ "$STATE_EXISTS" -eq 0 ]]; then
+        OFFSET_BYTES="${INITIAL_USED_BYTES:-0}"
+    else
+        OFFSET_BYTES=0
+    fi
+    WARN_SENT=0
+    TRIPPED=0
+    USAGE_BYTES="$OFFSET_BYTES"
+    save_state
+    log_msg "new cycle ${CYCLE_KEY}, baseline reset on ${IFACE}, initial used ${OFFSET_BYTES} bytes"
+    exit 0
+fi
+
+BASE_RX="${BASE_RX:-$CURRENT_RX}"
+BASE_TX="${BASE_TX:-$CURRENT_TX}"
+OFFSET_BYTES="${OFFSET_BYTES:-0}"
+WARN_SENT="${WARN_SENT:-0}"
+TRIPPED="${TRIPPED:-0}"
+
+if (( CURRENT_RX < BASE_RX || CURRENT_TX < BASE_TX )); then
+    BASE_RX="$CURRENT_RX"
+    BASE_TX="$CURRENT_TX"
+    OFFSET_BYTES=0
+    WARN_SENT=0
+    TRIPPED=0
+    USAGE_BYTES=0
+    save_state
+    log_msg "counter reset detected on ${IFACE}, baseline reset"
+    exit 0
+fi
+
+DELTA_RX=$(( CURRENT_RX - BASE_RX ))
+DELTA_TX=$(( CURRENT_TX - BASE_TX ))
+case "$MODE" in
+    rx) USAGE_BYTES="$DELTA_RX" ;;
+    total) USAGE_BYTES=$(( DELTA_RX + DELTA_TX )) ;;
+    max)
+        if (( DELTA_RX > DELTA_TX )); then USAGE_BYTES="$DELTA_RX"; else USAGE_BYTES="$DELTA_TX"; fi
+        ;;
+    tx|*) USAGE_BYTES="$DELTA_TX" ;;
+esac
+USAGE_BYTES=$(( USAGE_BYTES + OFFSET_BYTES ))
+
+if [[ "$TRIPPED" != "1" ]] && (( USAGE_BYTES * 100 >= LIMIT_BYTES * WARN_PERCENT )) && (( USAGE_BYTES < LIMIT_BYTES )) && [[ "$WARN_SENT" != "1" ]]; then
+    WARN_SENT=1
+    save_state
+    log_msg "warning ${USAGE_BYTES}/${LIMIT_BYTES} bytes (${WARN_PERCENT}%) on ${IFACE}, mode=${MODE}"
+    exit 0
+fi
+
+if (( USAGE_BYTES >= LIMIT_BYTES )); then
+    TRIPPED=1
+    save_state
+    log_msg "quota reached ${USAGE_BYTES}/${LIMIT_BYTES} bytes on ${IFACE}, mode=${MODE}, action=${ACTION}"
+    case "$ACTION" in
+        log)
+            exit 0
+            ;;
+        poweroff|*)
+            sync
+            systemctl poweroff >/dev/null 2>&1 || poweroff >/dev/null 2>&1 || shutdown -h now >/dev/null 2>&1
+            ;;
+    esac
+fi
+
+save_state
+GUARD_SCRIPT
+    chmod 700 "$TRAFFIC_GUARD_CHECKER" || return 1
+}
+
+install_traffic_guard_units() {
+    local interval="$1"
+    [[ "$interval" =~ ^[0-9]+$ ]] || interval=60
+    (( interval >= 30 )) || interval=30
+
+    cat > /etc/systemd/system/vps-traffic-guard.service <<EOF
+[Unit]
+Description=VPS-Optimize traffic quota guard
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=${TRAFFIC_GUARD_CHECKER}
+EOF
+
+    cat > /etc/systemd/system/vps-traffic-guard.timer <<EOF
+[Unit]
+Description=Run VPS-Optimize traffic quota guard periodically
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=${interval}s
+AccuracySec=10s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    systemctl daemon-reload >/dev/null 2>&1 || return 1
+    systemctl enable --now vps-traffic-guard.timer >/dev/null 2>&1 || return 1
+}
+
+write_traffic_guard_config() {
+    local iface="$1"
+    local mode="$2"
+    local limit_gb="$3"
+    local limit_bytes="$4"
+    local cycle_day="$5"
+    local warn_percent="$6"
+    local action="$7"
+    local initial_used_gb="$8"
+    local initial_used_bytes="$9"
+    local interval="${10}"
+
+    mkdir -p "$(dirname "$TRAFFIC_GUARD_CONFIG")" || return 1
+    cat > "$TRAFFIC_GUARD_CONFIG" <<EOF
+# VPS-Optimize traffic quota guard
+# Generated: $(date -Is 2>/dev/null || date)
+ENABLED=1
+IFACE='${iface}'
+MODE='${mode}'
+LIMIT_GB='${limit_gb}'
+LIMIT_BYTES='${limit_bytes}'
+CYCLE_DAY='${cycle_day}'
+WARN_PERCENT='${warn_percent}'
+ACTION='${action}'
+INITIAL_USED_GB='${initial_used_gb}'
+INITIAL_USED_BYTES='${initial_used_bytes}'
+CHECK_INTERVAL='${interval}'
+EOF
+    chmod 600 "$TRAFFIC_GUARD_CONFIG" 2>/dev/null || true
+}
+
+load_traffic_guard_config() {
+    [[ -r "$TRAFFIC_GUARD_CONFIG" ]] || return 1
+    # shellcheck disable=SC1090
+    . "$TRAFFIC_GUARD_CONFIG"
+}
+
+traffic_guard_usage_from_state() {
+    local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    [[ -r "$state_file" ]] || return 1
+    # shellcheck disable=SC1090
+    . "$state_file"
+    printf '%s' "${LAST_USAGE:-0}"
+}
+
+show_traffic_guard_status() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "网络/内核优化 > 流量达量关机保护"
+    echo -e "${BOLD}🧯 流量达量关机保护状态${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    if ! load_traffic_guard_config; then
+        echo -e "${YELLOW}当前未配置流量达量关机保护。${PLAIN}"
+        echo -e "${BLUE}建议先选择 [1] 配置，避免 VPS 被刷流量产生超额账单。${PLAIN}"
+        return 0
+    fi
+
+    local timer_state service_state usage limit pct cycle_key state_file
+    timer_state=$(systemctl is-active vps-traffic-guard.timer 2>/dev/null || echo "inactive")
+    service_state=$(systemctl is-enabled vps-traffic-guard.timer 2>/dev/null || echo "disabled")
+    usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
+    limit="${LIMIT_BYTES:-0}"
+    if [[ "$limit" =~ ^[0-9]+$ && "$limit" -gt 0 ]]; then
+        pct=$(awk -v u="$usage" -v l="$limit" 'BEGIN { printf "%.2f", (u/l)*100 }')
+    else
+        pct="0.00"
+    fi
+    cycle_key=$(traffic_guard_current_cycle_key "${CYCLE_DAY:-1}")
+
+    echo -e "开关状态 : ${GREEN}${ENABLED:-0}${PLAIN}  timer: ${timer_state}/${service_state}"
+    echo -e "监控网卡 : ${CYAN}${IFACE:-未知}${PLAIN}"
+    echo -e "计费模式 : ${CYAN}$(traffic_guard_mode_label "${MODE:-tx}")${PLAIN}"
+    echo -e "本周期   : ${CYAN}${cycle_key}${PLAIN} 起，每月 ${CYCLE_DAY:-1} 日重置基线"
+    echo -e "阈值     : ${YELLOW}${LIMIT_GB:-未知}GB${PLAIN} ($(traffic_guard_human_bytes "$limit"))"
+    echo -e "已用     : ${GREEN}$(traffic_guard_human_bytes "$usage")${PLAIN} / ${pct}%"
+    echo -e "预警线   : ${WARN_PERCENT:-90}%  动作: ${ACTION:-poweroff}"
+    echo -e "配置文件 : ${CYAN}${TRAFFIC_GUARD_CONFIG}${PLAIN}"
+    echo -e "日志文件 : ${CYAN}${TRAFFIC_GUARD_LOG}${PLAIN}"
+
+    state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    if [[ -r "$state_file" ]]; then
+        local last_checked
+        last_checked=$(grep -m1 '^LAST_CHECKED_AT=' "$state_file" | cut -d= -f2- | sed "s/^'//;s/'$//")
+        echo -e "最近检查 : ${CYAN}${last_checked}${PLAIN}"
+    else
+        echo -e "${YELLOW}尚未生成状态文件，timer 首次运行后会自动初始化基线。${PLAIN}"
+    fi
+}
+
+configure_traffic_guard() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "网络/内核优化 > 配置流量达量关机保护"
+    echo -e "${BOLD}🧯 配置流量达量关机保护${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}用途：定时读取网卡流量，达到阈值后自动关机，避免超额流量产生账单。${PLAIN}"
+    echo -e "${YELLOW}注意：脚本只能按本机网卡计数估算，云厂商后台统计可能有延迟或口径差异，请留安全余量。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local default_iface iface limit_gb limit_bytes initial_used_gb initial_used_bytes
+    local cycle_day warn_percent action_choice action mode_choice mode interval
+    default_iface=$(traffic_guard_detect_iface)
+    iface=$(ask_with_default "监控网卡" "${default_iface:-eth0}")
+    if ! traffic_guard_valid_iface "$iface"; then
+        echo -e "${RED}❌ 网卡 ${iface} 不存在或无法读取统计数据。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    while true; do
+        limit_gb=$(ask_with_default "本周期流量阈值 GB（建议填套餐的 80%-95%）" "900")
+        if limit_bytes=$(traffic_guard_gb_to_bytes "$limit_gb" 2>/dev/null); then
+            break
+        fi
+        echo -e "${RED}❌ 阈值无效，请输入大于 0 的数字，例如 900 或 0.5。${PLAIN}"
+    done
+
+    while true; do
+        initial_used_gb=$(ask_with_default "本周期已用流量 GB（不知道就填 0）" "0")
+        if [[ "$initial_used_gb" == "0" ]]; then
+            initial_used_bytes=0
+            break
+        elif initial_used_bytes=$(traffic_guard_gb_to_bytes "$initial_used_gb" 2>/dev/null); then
+            break
+        fi
+        echo -e "${RED}❌ 已用流量无效，请输入数字。${PLAIN}"
+    done
+
+    while true; do
+        cycle_day=$(ask_with_default "每月账单重置日 1-28" "1")
+        if [[ "$cycle_day" =~ ^[0-9]+$ ]] && (( 10#$cycle_day >= 1 && 10#$cycle_day <= 28 )); then
+            break
+        fi
+        echo -e "${RED}❌ 重置日只支持 1-28，避免月底天数差异。${PLAIN}"
+    done
+
+    echo -e "计费模式："
+    echo -e "  1. 出站 TX 计费 ${YELLOW}(推荐：多数云厂商按公网出站计费)${PLAIN}"
+    echo -e "  2. 出入总量 RX+TX"
+    echo -e "  3. 任一方向达量 ${YELLOW}(接近科技lion的保护思路)${PLAIN}"
+    echo -e "  4. 入站 RX 计费"
+    read_trimmed mode_choice "请选择计费模式 (默认 1): "
+    case "${mode_choice:-1}" in
+        2) mode="total" ;;
+        3) mode="max" ;;
+        4) mode="rx" ;;
+        *) mode="tx" ;;
+    esac
+
+    while true; do
+        warn_percent=$(ask_with_default "预警百分比 1-99" "90")
+        if [[ "$warn_percent" =~ ^[0-9]+$ ]] && (( 10#$warn_percent >= 1 && 10#$warn_percent <= 99 )); then
+            break
+        fi
+        echo -e "${RED}❌ 预警百分比无效。${PLAIN}"
+    done
+
+    interval=$(ask_with_default "检查间隔秒数（最低 30，默认 60）" "60")
+    if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( 10#$interval < 30 )); then
+        interval=60
+    fi
+
+    echo -e "触发动作："
+    echo -e "  1. 立即关机 ${YELLOW}(防止继续产生流量费用)${PLAIN}"
+    echo -e "  2. 只写日志 ${YELLOW}(测试配置，不关机)${PLAIN}"
+    read_trimmed action_choice "请选择触发动作 (默认 1): "
+    if [[ "${action_choice:-1}" == "2" ]]; then
+        action="log"
+    else
+        action="poweroff"
+    fi
+
+    echo -e "------------------------------------------------"
+    echo -e "网卡：${CYAN}${iface}${PLAIN}"
+    echo -e "阈值：${YELLOW}${limit_gb}GB${PLAIN}，本周期已用抵扣：${initial_used_gb}GB"
+    echo -e "模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}"
+    echo -e "周期：每月 ${cycle_day} 日重置；检查间隔：${interval}s；预警：${warn_percent}%"
+    echo -e "动作：${RED}${action}${PLAIN}"
+
+    if [[ "$action" == "poweroff" ]]; then
+        confirm_danger "启用流量达量自动关机" \
+            "安装 vps-traffic-guard systemd timer；达到阈值会执行 systemctl poweroff。" \
+            "从云厂商控制台手动开机；开机后进入本菜单调整阈值、重置基线或停用保护。" \
+            "建议阈值低于套餐上限，并确认云厂商后台流量口径。" || return 1
+    fi
+
+    write_traffic_guard_config "$iface" "$mode" "$limit_gb" "$limit_bytes" "$cycle_day" "$warn_percent" "$action" "$initial_used_gb" "$initial_used_bytes" "$interval" || {
+        echo -e "${RED}❌ 写入配置失败。${PLAIN}"
+        pause_return
+        return 1
+    }
+    install_traffic_guard_checker || {
+        echo -e "${RED}❌ 安装检查脚本失败。${PLAIN}"
+        pause_return
+        return 1
+    }
+    install_traffic_guard_units "$interval" || {
+        echo -e "${RED}❌ 启用 systemd timer 失败，请检查 systemd 状态。${PLAIN}"
+        pause_return
+        return 1
+    }
+
+    "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || true
+    echo -e "${GREEN}✅ 流量达量关机保护已启用。${PLAIN}"
+    echo -e "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}"
+    pause_return
+}
+
+reset_traffic_guard_baseline() {
+    local iface mode cycle_day initial_used_gb initial_used_bytes current_stats current_rx current_tx cycle_key state_file
+    load_traffic_guard_config || {
+        echo -e "${YELLOW}尚未配置流量达量关机保护。${PLAIN}"
+        pause_return
+        return 1
+    }
+    iface="${IFACE:-}"
+    mode="${MODE:-tx}"
+    cycle_day="${CYCLE_DAY:-1}"
+    traffic_guard_valid_iface "$iface" || {
+        echo -e "${RED}❌ 当前配置的网卡 ${iface} 不可读。${PLAIN}"
+        pause_return
+        return 1
+    }
+    initial_used_gb=$(ask_with_default "重置后本周期已用流量 GB" "0")
+    if [[ "$initial_used_gb" == "0" ]]; then
+        initial_used_bytes=0
+    else
+        initial_used_bytes=$(traffic_guard_gb_to_bytes "$initial_used_gb" 2>/dev/null) || {
+            echo -e "${RED}❌ 已用流量无效。${PLAIN}"
+            pause_return
+            return 1
+        }
+    fi
+    confirm_risk_action "重置流量保护基线" \
+        "本周期统计会从当前网卡计数重新开始，已用抵扣设置为 ${initial_used_gb}GB。" \
+        "重新进入本菜单再次重置基线，或参考云厂商后台手动修正已用流量。" \
+        "请只在账单周期开始、刚配置完成或确认云厂商统计后执行。" || return 1
+
+    mapfile -t current_stats < <(traffic_guard_read_stats "$iface")
+    current_rx="${current_stats[0]:-0}"
+    current_tx="${current_stats[1]:-0}"
+    cycle_key=$(traffic_guard_current_cycle_key "$cycle_day")
+    mkdir -p "$TRAFFIC_GUARD_STATE_DIR"
+    chmod 700 "$TRAFFIC_GUARD_STATE_DIR" 2>/dev/null || true
+    state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    {
+        echo "CYCLE_KEY='${cycle_key}'"
+        echo "BASE_RX='${current_rx}'"
+        echo "BASE_TX='${current_tx}'"
+        echo "OFFSET_BYTES='${initial_used_bytes}'"
+        echo "WARN_SENT='0'"
+        echo "TRIPPED='0'"
+        echo "LAST_RX='${current_rx}'"
+        echo "LAST_TX='${current_tx}'"
+        echo "LAST_USAGE='${initial_used_bytes}'"
+        echo "LAST_CHECKED_AT='$(date -Is 2>/dev/null || date)'"
+    } > "$state_file"
+    chmod 600 "$state_file" 2>/dev/null || true
+    echo -e "${GREEN}✅ 已重置 ${iface} 的流量统计基线。${PLAIN}"
+    echo -e "当前模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}；本周期已用：$(traffic_guard_human_bytes "$initial_used_bytes")"
+    pause_return
+}
+
+disable_traffic_guard() {
+    if ! systemctl list-unit-files vps-traffic-guard.timer >/dev/null 2>&1 && [[ ! -f "$TRAFFIC_GUARD_CONFIG" ]]; then
+        echo -e "${YELLOW}未检测到流量保护配置。${PLAIN}"
+        pause_return
+        return 0
+    fi
+    confirm_risk_action "停用流量达量关机保护" \
+        "vps-traffic-guard.timer 会停止，达到流量阈值后不再自动关机。" \
+        "重新进入本菜单选择 [1] 启用保护。" \
+        "停用后请自行监控云厂商流量，避免超额账单。" || return 1
+    systemctl disable --now vps-traffic-guard.timer >/dev/null 2>&1 || true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    if [[ -f "$TRAFFIC_GUARD_CONFIG" ]]; then
+        sed -i 's/^ENABLED=.*/ENABLED=0/' "$TRAFFIC_GUARD_CONFIG" 2>/dev/null || true
+    fi
+    echo -e "${GREEN}✅ 已停用流量达量关机保护，配置文件仍保留：${TRAFFIC_GUARD_CONFIG}${PLAIN}"
+    pause_return
+}
+
+func_traffic_guard_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "网络/内核优化 > 流量达量关机保护"
+        echo -e "${BOLD}🧯 流量达量关机保护${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}达到套餐安全阈值后自动关机，优先防止刷流量造成天价账单。${PLAIN}"
+        echo -e "${YELLOW}推荐阈值低于云厂商套餐上限，并按出站 TX 或总量模式保守配置。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 配置 / 启用保护${PLAIN}"
+        echo -e "${GREEN}  2. 查看状态与已用量${PLAIN}"
+        echo -e "${GREEN}  3. 重置本周期统计基线${PLAIN}"
+        echo -e "${YELLOW}  4. 停用保护${PLAIN}"
+        echo -e "${GREEN}  5. 查看最近日志${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local choice
+        read_trimmed choice "👉 请选择操作: "
+        case "$choice" in
+            1) configure_traffic_guard ;;
+            2) show_traffic_guard_status; pause_return ;;
+            3) reset_traffic_guard_baseline ;;
+            4) disable_traffic_guard ;;
+            5)
+                echo -e "${CYAN}--- ${TRAFFIC_GUARD_LOG} ---${PLAIN}"
+                tail -n 30 "$TRAFFIC_GUARD_LOG" 2>/dev/null || echo "暂无日志"
+                pause_return
+                ;;
+            0|q|Q) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------
+# 24. 网络加速与内核优化菜单 (二级直达)
 # ---------------------------------------------------------
 func_net_kernel_menu() {
     while true; do
@@ -7665,6 +8672,7 @@ func_net_kernel_menu() {
         echo -e "${GREEN}  4. 安装/切换优化内核${PLAIN}   ${YELLOW}(Cloud/KVM 稳定推荐 / XanMod 高级可选)${PLAIN}"
         echo -e "${GREEN}  5. 清理旧内核${PLAIN}           ${YELLOW}(释放磁盘空间，谨慎操作)${PLAIN}"
         echo -e "${GREEN}  6. DNS 更改优化${PLAIN}         ${YELLOW}(国内/国外/自定义，IPv4+IPv6)${PLAIN}"
+        echo -e "${GREEN}  7. 流量达量关机保护${PLAIN}     ${YELLOW}(防刷流量 / 防超额账单)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -7679,6 +8687,7 @@ func_net_kernel_menu() {
             4) confirm_risk_action "安装/切换优化内核" "内核包、引导配置和 GRUB 菜单" "从云厂商控制台选择旧内核启动，或使用救援模式恢复" "确认已创建快照，且当前 VPS 不是 OpenVZ 老系统。" && func_install_kernel ;;
             5) func_clean_kernel ;;
             6) func_dns_optimize ;;
+            7) func_traffic_guard_menu ;;
             "?"|help) show_net_kernel_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
@@ -7768,6 +8777,7 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}  7. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
         echo -e "${CYAN}  8. 管理域名 IP 白名单${PLAIN}        ${YELLOW}(只限制选中的域名)${PLAIN}"
         echo -e "${CYAN}  9. 管理 TCP/SNI 本地入站${PLAIN}     ${YELLOW}(3x-ui 新入站走公网 443)${PLAIN}"
+        echo -e "${CYAN} 10. 443 网络访问测试${PLAIN}          ${YELLOW}(面板/订阅/Caddy/REALITY 链路)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -7785,6 +8795,7 @@ func_sni_stack_quick_menu() {
             7) edit_sni_stack_runtime_profile; continue ;;
             8) manage_sni_stack_ip_whitelist; continue ;;
             9) manage_sni_stack_tcp_routes; continue ;;
+            10) func_443_network_test; continue ;;
             "?"|help) show_sni_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
@@ -7820,6 +8831,7 @@ normalize_main_choice() {
         u|upd|update|更新) echo "17" ;;
         reboot|重启) echo "18" ;;
         sni|443|单入口) echo "19" ;;
+        traffic|quota|bill|流量|达量|账单) echo "20" ;;
         *) echo "$choice" ;;
     esac
 }
@@ -7877,8 +8889,9 @@ main_menu() {
         print_breadcrumb "主菜单"
         echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e " ${YELLOW}快捷输入：443 直达单入口，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
+        echo -e " ${YELLOW}快捷输入：443 直达单入口，traffic 管流量保护，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
         echo -e " ${YELLOW}高风险操作必须输入大写 YES；不确定时先做 [16] 备份。${PLAIN}"
+        print_auto_update_notice
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${BOLD}${BLUE}▶ 模式入口${PLAIN}"
         echo -e "  ${GREEN}n.${PLAIN} 新手向导              ${YELLOW}(只显示核心路径)${PLAIN}"
@@ -7901,6 +8914,7 @@ main_menu() {
         echo -e " ${BOLD}${BLUE}▶ ③ 网络性能与容器${PLAIN}"
         echo -e " ${GREEN}10.${PLAIN} 网络与内核优化        ${YELLOW}(BBR/TCP/ZRAM/DNS/轻量内核)${PLAIN}"
         echo -e " ${GREEN}11.${PLAIN} Docker 安全管理       ${YELLOW}(本地防穿透/恢复访问)${PLAIN}"
+        echo -e " ${GREEN}20.${PLAIN} 流量达量关机保护      ${YELLOW}(防刷流量 / 防超额账单)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ④ 诊断、备份与维护${PLAIN}"
         echo -e " ${GREEN}12.${PLAIN} 测速与质量检测        ${YELLOW}(YABS/流媒体/回程/IP质量)${PLAIN}"
@@ -7943,6 +8957,7 @@ main_menu() {
             17) func_update_script ;;
             18) func_reboot_server ;;
             19) func_sni_stack_quick_menu ;;
+            20) func_traffic_guard_menu ;;
             0) exit 0 ;;
             *) 
                 echo -e "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}"

@@ -9,8 +9,13 @@ CYAN='\033[1;36m'
 PLAIN='\033[0m'
 BOLD='\033[1m'
 
-SCRIPT_VERSION="v1.7"
+SCRIPT_VERSION="v1.8"
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
+SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
+TRAFFIC_GUARD_CONFIG="/etc/vps-optimize/traffic-guard.conf"
+TRAFFIC_GUARD_CHECKER="/usr/local/bin/vps-traffic-guard-check"
+TRAFFIC_GUARD_STATE_DIR="/var/lib/vps-optimize/traffic-guard"
+TRAFFIC_GUARD_LOG="/var/log/vps-traffic-guard.log"
 DNS_OPTIMIZE_BACKUP_DIR="/etc/vps-optimize/backups/dns"
 DNS_OPTIMIZE_RESOLVED_DROPIN="/etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf"
 

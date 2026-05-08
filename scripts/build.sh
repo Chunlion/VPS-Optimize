@@ -4,6 +4,15 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 out_dir="$repo_root/dist"
 out_file="$out_dir/vps.sh"
+modules=(
+    common.sh   # constants, platform/package helpers, remote script execution
+    ui.sh       # display helpers and high-risk confirmations
+    input.sh    # input normalization and array splitting
+    validate.sh # validation and normalization helpers
+    rollback.sh # quarantine and restore helpers
+    backup.sh   # backup center and backup helper functions
+    main.sh     # feature implementation and menu wiring
+)
 
 mkdir -p "$out_dir"
 
@@ -18,14 +27,11 @@ mkdir -p "$out_dir"
     printf '%s\n' '# ========================================================='
     printf '%s\n' ''
 
-    for module in \
-        common.sh \
-        ui.sh \
-        input.sh \
-        validate.sh \
-        rollback.sh \
-        backup.sh \
-        main.sh; do
+    for module in "${modules[@]}"; do
+        [[ -f "$repo_root/src/$module" ]] || {
+            printf 'Missing module: %s\n' "$module" >&2
+            exit 1
+        }
         printf '%s\n' '# ---------------------------------------------------------'
         printf '# Module: %s\n' "$module"
         printf '%s\n' '# ---------------------------------------------------------'

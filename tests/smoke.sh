@@ -18,6 +18,8 @@ bash -n src/backup.sh
 bash -n src/main.sh
 bash -n dog.sh
 bash -n xui-custom-manager.sh
+grep -q 'modules=(' scripts/build.sh
+grep -q 'main.sh     # feature implementation and menu wiring' scripts/build.sh
 
 dangerous_patterns='rm -rf|rm -r[[:space:]]|wget .*[&][&]|curl .*\|[[:space:]]*gpg|\|[[:space:]]*bash|bash[[:space:]]*<'
 if grep -En "$dangerous_patterns" dist/vps.sh dog.sh; then
@@ -91,13 +93,27 @@ fi
 grep -q 'func_sni_stack_quick_menu' dist/vps.sh
 grep -q 'manage_sni_stack_tcp_routes' dist/vps.sh
 grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh
+grep -q 'func_443_network_test' dist/vps.sh
+grep -q 'func_docker_443_exposure_audit' dist/vps.sh
+grep -q 'func_docker_project_status' dist/vps.sh
+grep -q 'print_project_runtime_overview' dist/vps.sh
+grep -q 'print_auto_update_notice' dist/vps.sh
+grep -q 'func_traffic_guard_menu' dist/vps.sh
+grep -q 'install_traffic_guard_checker' dist/vps.sh
+grep -q 'vps-traffic-guard.timer' dist/vps.sh
+grep -q 'TRAFFIC_GUARD_CONFIG=' dist/vps.sh
+grep -q 'traffic|quota|bill|流量|达量|账单' dist/vps.sh
+awk "/<<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" dist/vps.sh | bash -n
 grep -q 'func_health_dashboard' dist/vps.sh
 grep -q 'func_backup_center' dist/vps.sh
-grep -q 'SCRIPT_VERSION=' dist/vps.sh
+grep -q 'SCRIPT_VERSION="v1.8"' dist/vps.sh
+grep -q 'SCRIPT_UPDATE_CACHE=' dist/vps.sh
 grep -q 'Compatibility marker: VPS 全能控制面板' dist/vps.sh
 grep -q 'UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"' dist/vps.sh
 grep -q '正在尝试自动补齐下载工具' dist/vps.sh
 grep -q 'wget -q --timeout=15 --tries=3' dist/vps.sh
+grep -q '"${sublink_bind_addr}:${sublink_port}:8000"' dist/vps.sh
+grep -q '"${mmw_bind_addr}:${mmw_port}:${mmw_port}"' dist/vps.sh
 grep -q 'confirm_risk_action' dist/vps.sh
 grep -q 'func_beginner_menu' dist/vps.sh
 grep -q 'generate_issue_diagnostics' dist/vps.sh
