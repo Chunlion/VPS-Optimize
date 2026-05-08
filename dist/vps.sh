@@ -1697,6 +1697,203 @@ func_change_hostname() {
     echo -e "${YELLOW}如部分服务仍显示旧名称，重启对应服务或下次重启系统后会完全生效。${PLAIN}"
 }
 
+hosts_managed_marker() {
+    printf '%s' '# VPS-Optimize local-hosts'
+}
+
+hosts_is_valid_ip() {
+    local ip="$1"
+    [[ "$ip" != */* ]] || return 1
+    dns_is_valid_ipv4 "$ip" || dns_is_valid_ipv6 "$ip"
+}
+
+hosts_normalize_names() {
+    local raw="$1"
+    local -n out_array=$2
+    local item normalized seen=" "
+    raw="${raw//，/,}"
+    raw="${raw//;/,}"
+    raw="${raw//,/ }"
+    out_array=()
+    for item in $raw; do
+        normalized=$(echo "$(trim_input "$item")" | tr '[:upper:]' '[:lower:]')
+        [[ -z "$normalized" ]] && continue
+        if ! is_valid_hostname "$normalized"; then
+            echo -e "${RED}❌ 主机名/域名格式无效：${normalized}${PLAIN}"
+            return 1
+        fi
+        case "$normalized" in
+            localhost|localhost.localdomain|ip6-localhost|ip6-loopback)
+                echo -e "${RED}❌ 为避免破坏系统解析，不能管理保留名称：${normalized}${PLAIN}"
+                return 1
+                ;;
+        esac
+        if [[ "$seen" != *" ${normalized} "* ]]; then
+            out_array+=("$normalized")
+            seen+=" ${normalized} "
+        fi
+    done
+    [[ ${#out_array[@]} -gt 0 ]]
+}
+
+hosts_backup_current() {
+    local backup_dir="/etc/vps-optimize/backups/hosts"
+    local backup_file
+    mkdir -p "$backup_dir" || return 1
+    backup_file="${backup_dir}/hosts.$(date +%Y%m%d_%H%M%S).bak"
+    if [[ -f /etc/hosts ]]; then
+        cp -p /etc/hosts "$backup_file" || return 1
+    else
+        : > "$backup_file" || return 1
+    fi
+    printf '%s' "$backup_file"
+}
+
+hosts_remove_names_to_tmp() {
+    local names_csv="$1"
+    local tmp_file="$2"
+    local hosts_file="/etc/hosts"
+    [[ -f "$hosts_file" ]] || : > "$hosts_file"
+    awk -v names_csv="$names_csv" '
+        BEGIN {
+            split(names_csv, names, ",")
+            for (i in names) target[names[i]] = 1
+        }
+        /^[[:space:]]*#/ || NF == 0 { print; next }
+        {
+            keep = 0
+            line = $1
+            for (i = 2; i <= NF; i++) {
+                if ($i == "#") break
+                if (!($i in target)) {
+                    line = line "\t" $i
+                    keep = 1
+                }
+            }
+            if (keep) print line
+        }
+    ' "$hosts_file" > "$tmp_file"
+}
+
+hosts_add_or_update_entry() {
+    local ip names_input names_csv names_joined backup_file tmp_file
+    local -a names=()
+    read_trimmed ip "请输入解析 IP（IPv4/IPv6）: "
+    if ! hosts_is_valid_ip "$ip"; then
+        echo -e "${RED}❌ IP 格式无效。${PLAIN}"
+        return 1
+    fi
+    read_trimmed names_input "请输入要绑定的域名/主机名（多个用空格或逗号分隔）: "
+    if ! hosts_normalize_names "$names_input" names; then
+        return 1
+    fi
+    names_csv=$(IFS=','; printf '%s' "${names[*]}")
+    names_joined=$(IFS=' '; printf '%s' "${names[*]}")
+    confirm_risk_action "写入本机 hosts 解析" \
+        "/etc/hosts 本机解析表" \
+        "从 /etc/vps-optimize/backups/hosts 恢复最近备份，或在本菜单删除对应条目" \
+        "本功能只影响当前 VPS 本机解析，不会修改公网 DNS。" || return 1
+
+    backup_file=$(hosts_backup_current) || {
+        echo -e "${RED}❌ /etc/hosts 备份失败，已取消。${PLAIN}"
+        return 1
+    }
+    tmp_file=$(mktemp /tmp/vps-hosts.XXXXXX) || return 1
+    if hosts_remove_names_to_tmp "$names_csv" "$tmp_file"; then
+        printf '%s\t%s\t%s\n' "$ip" "$names_joined" "$(hosts_managed_marker)" >> "$tmp_file"
+        cp "$tmp_file" /etc/hosts
+        echo -e "${GREEN}✅ 已写入本机 hosts：${ip} -> ${names_joined}${PLAIN}"
+        echo -e "${CYAN}备份已保留：${backup_file}${PLAIN}"
+    else
+        echo -e "${RED}❌ 生成 hosts 临时文件失败，已取消。${PLAIN}"
+        rm -f "$tmp_file"
+        return 1
+    fi
+    rm -f "$tmp_file"
+}
+
+hosts_remove_entry() {
+    local names_input names_csv names_joined backup_file tmp_file
+    local -a names=()
+    read_trimmed names_input "请输入要删除解析的域名/主机名（多个用空格或逗号分隔）: "
+    if ! hosts_normalize_names "$names_input" names; then
+        return 1
+    fi
+    names_csv=$(IFS=','; printf '%s' "${names[*]}")
+    names_joined=$(IFS=' '; printf '%s' "${names[*]}")
+    confirm_risk_action "删除本机 hosts 解析" \
+        "/etc/hosts 中与 ${names_joined} 匹配的解析项" \
+        "从 /etc/vps-optimize/backups/hosts 恢复最近备份" \
+        "只删除匹配主机名，保留同一行其他别名。" || return 1
+
+    backup_file=$(hosts_backup_current) || {
+        echo -e "${RED}❌ /etc/hosts 备份失败，已取消。${PLAIN}"
+        return 1
+    }
+    tmp_file=$(mktemp /tmp/vps-hosts.XXXXXX) || return 1
+    if hosts_remove_names_to_tmp "$names_csv" "$tmp_file"; then
+        cp "$tmp_file" /etc/hosts
+        echo -e "${GREEN}✅ 已删除匹配的本机 hosts 解析：${names_joined}${PLAIN}"
+        echo -e "${CYAN}备份已保留：${backup_file}${PLAIN}"
+    else
+        echo -e "${RED}❌ 生成 hosts 临时文件失败，已取消。${PLAIN}"
+        rm -f "$tmp_file"
+        return 1
+    fi
+    rm -f "$tmp_file"
+}
+
+hosts_restore_latest_backup() {
+    local latest
+    latest=$(find /etc/vps-optimize/backups/hosts -maxdepth 1 -type f -name 'hosts.*.bak' 2>/dev/null | sort -r | head -n1)
+    if [[ -z "$latest" ]]; then
+        echo -e "${YELLOW}未找到 hosts 备份。${PLAIN}"
+        return 1
+    fi
+    confirm_risk_action "恢复最近 hosts 备份" \
+        "/etc/hosts 将恢复为 ${latest}" \
+        "重新进入本菜单添加/删除解析，或手动恢复更新前备份" \
+        "恢复会覆盖当前本机 hosts 解析。" || return 1
+    cp -p "$latest" /etc/hosts || {
+        echo -e "${RED}❌ 恢复失败。${PLAIN}"
+        return 1
+    }
+    echo -e "${GREEN}✅ 已恢复：${latest}${PLAIN}"
+}
+
+func_hosts_manage() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "系统开关与清理 > 本机 hosts 解析"
+        echo -e "${BOLD}🧭 本机 hosts 解析管理${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}用途：修改当前 VPS 的 /etc/hosts，本地指定域名解析到某个 IP。不会影响公网 DNS。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 查看当前 hosts${PLAIN}"
+        echo -e "${GREEN}  2. 添加 / 更新本机解析${PLAIN}"
+        echo -e "${YELLOW}  3. 删除本机解析${PLAIN}"
+        echo -e "${CYAN}  4. 恢复最近一次 hosts 备份${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        local choice
+        read_trimmed choice "👉 请选择操作: "
+        case "$choice" in
+            1)
+                echo -e "${CYAN}--- /etc/hosts ---${PLAIN}"
+                sed -n '1,120p' /etc/hosts 2>/dev/null || echo "未检测到 /etc/hosts"
+                pause_return
+                ;;
+            2) hosts_add_or_update_entry; pause_return ;;
+            3) hosts_remove_entry; pause_return ;;
+            4) hosts_restore_latest_backup; pause_return ;;
+            0|q|Q) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
 # ---------------------------------------------------------
 # 2. 系统高级开关 (已修复显示丢失问题)
 # ---------------------------------------------------------
@@ -1746,6 +1943,7 @@ func_system_tweaks() {
         echo -e "${GREEN}  4. 自动安全更新开关${PLAIN}       当前: [ $str_update ]"
         echo -e "${GREEN}  5. 清理系统垃圾${PLAIN}           (日志/缓存/无用包)"
         echo -e "${GREEN}  6. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]"
+        echo -e "${GREEN}  7. 本机 hosts 解析管理${PLAIN}    (/etc/hosts 本机域名解析)"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -1820,6 +2018,7 @@ func_system_tweaks() {
                 echo -e "${GREEN}✅ 清理完成！${PLAIN}"
                 sleep 1 ;;
             6) func_change_hostname; sleep 1 ;;
+            7) func_hosts_manage ;;
             0) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
@@ -4664,6 +4863,7 @@ show_main_help() {
     echo -e "${CYAN}VPS-Optimize > 主菜单 > 帮助${PLAIN}"
     echo "1/2 适合新机器先体检和初始化。"
     echo "4   管理 3x-ui、S-UI、Sing-box、Xray 和订阅工具。"
+    echo "5   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
     echo "8   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
     echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
     echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
@@ -4726,6 +4926,7 @@ show_net_kernel_help() {
     echo "5 清理旧内核：不要删除当前内核和云厂商定制内核。"
     echo "6 DNS 更改优化：国内/国外默认 DNS，也支持自定义 IPv4 和 IPv6。"
     echo "7 流量达量关机保护：按网卡流量和账单周期自动关机，防止超额账单。"
+    echo "8 网卡管理工具：查看网卡、路由、DNS，临时调整 MTU 或刷新 DHCP。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -5862,6 +6063,478 @@ EOF
 # ---------------------------------------------------------
 # 4. SSH 安全加固 (终极完美版：防截断、防覆盖、防 Socket 冲突)
 # ---------------------------------------------------------
+ssh_service_restart() {
+    systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
+}
+
+ssh_socket_unit_exists() {
+    local unit="$1"
+    local active_state enabled_state
+    active_state=$(systemctl is-active "$unit" 2>/dev/null || true)
+    enabled_state=$(systemctl is-enabled "$unit" 2>/dev/null || true)
+    [[ "$active_state" == "active" ]] && return 0
+    [[ "$enabled_state" == "enabled" || "$enabled_state" == "enabled-runtime" ]]
+}
+
+ssh_socket_units_for_host() {
+    local unit
+    for unit in ssh.socket sshd.socket; do
+        if ssh_socket_unit_exists "$unit"; then
+            echo "$unit"
+        fi
+    done
+}
+
+ssh_write_socket_port_dropins() {
+    local port="$1"
+    local unit dir found=false
+    while IFS= read -r unit; do
+        [[ -z "$unit" ]] && continue
+        found=true
+        dir="/etc/systemd/system/${unit}.d"
+        mkdir -p "$dir" || return 1
+        cat > "${dir}/10-vps-optimize-port.conf" <<EOF
+[Socket]
+ListenStream=
+ListenStream=${port}
+EOF
+    done < <(ssh_socket_units_for_host)
+    $found
+}
+
+ssh_restart_socket_units() {
+    local unit found=false ok=true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    while IFS= read -r unit; do
+        [[ -z "$unit" ]] && continue
+        found=true
+        systemctl restart "$unit" >/dev/null 2>&1 || ok=false
+    done < <(ssh_socket_units_for_host)
+    $found && $ok
+}
+
+ssh_restart_runtime() {
+    local restarted=false
+    if ssh_restart_socket_units; then
+        restarted=true
+    fi
+    if ssh_service_restart; then
+        restarted=true
+    fi
+    $restarted
+}
+
+ssh_write_sshd_port_dropin() {
+    local port="$1"
+    mkdir -p /etc/ssh/sshd_config.d 2>/dev/null || return 1
+    cat > /etc/ssh/sshd_config.d/00-vps-optimize-port.conf <<EOF
+# VPS-Optimize SSH port mirror
+Port ${port}
+EOF
+}
+
+ssh_write_auth_dropin() {
+    local mode="$1"
+    local interactive_key="$2"
+    case "$mode" in
+        key_only|key_preferred|password) ;;
+        *) return 1 ;;
+    esac
+    mkdir -p /etc/ssh/sshd_config.d 2>/dev/null || return 1
+    {
+        echo "# VPS-Optimize SSH auth mode mirror"
+        echo "PubkeyAuthentication yes"
+        case "$mode" in
+            key_only)
+                echo "PasswordAuthentication no"
+                echo "${interactive_key} no"
+                ;;
+            key_preferred|password)
+                echo "PasswordAuthentication yes"
+                echo "${interactive_key} yes"
+                ;;
+        esac
+    } > /etc/ssh/sshd_config.d/00-vps-optimize-auth.conf
+}
+
+ssh_restore_auth_dropin() {
+    local dropin="$1"
+    local backup="$2"
+    if [[ -n "$backup" && -f "$backup" ]]; then
+        cp -p "$backup" "$dropin" 2>/dev/null || true
+    else
+        mkdir -p "$(dirname "$dropin")" 2>/dev/null || return 0
+        cat > "$dropin" <<EOF
+# VPS-Optimize SSH auth mode mirror disabled after rollback
+EOF
+    fi
+}
+
+ssh_reconcile_cloud_auth_dropins() {
+    local mode="$1"
+    local state_file="$2"
+    local timestamp="$3"
+    local dir="/etc/ssh/sshd_config.d"
+    local conf tmp backup current_auth_dropin
+
+    : > "$state_file" || return 1
+    [[ -d "$dir" ]] || return 0
+    current_auth_dropin="/etc/ssh/sshd_config.d/00-vps-optimize-auth.conf"
+
+    for conf in "$dir"/*.conf; do
+        [[ -f "$conf" ]] || continue
+        [[ "$conf" == "$current_auth_dropin" ]] && continue
+        tmp=$(mktemp /tmp/vps-sshd-dropin.XXXXXX) || return 1
+        if ! awk -v mode="$mode" '
+            function desired_for(key, lkey) {
+                lkey = tolower(key)
+                if (lkey == "pubkeyauthentication") return "yes"
+                if (lkey == "passwordauthentication") return mode == "key_only" ? "no" : "yes"
+                if (lkey == "kbdinteractiveauthentication") return mode == "key_only" ? "no" : "yes"
+                if (lkey == "challengeresponseauthentication") return mode == "key_only" ? "no" : "yes"
+                return ""
+            }
+            /^[[:space:]]*#/ || /^[[:space:]]*$/ { print; next }
+            /^[[:space:]]*Match[[:space:]]+/ { in_match = 1; print; next }
+            in_match { print; next }
+            {
+                desired = desired_for($1)
+                if (desired != "") {
+                    if (tolower($2) == desired) {
+                        print
+                    } else {
+                        print $1 " " desired " # VPS-Optimize reconciled cloud image setting"
+                    }
+                    next
+                }
+                print
+            }
+        ' "$conf" > "$tmp"; then
+            rm -f "$tmp"
+            return 1
+        fi
+        if ! cmp -s "$conf" "$tmp"; then
+            backup="${conf}.bak_auth_${timestamp}"
+            if ! cp -p "$conf" "$backup"; then
+                rm -f "$tmp"
+                return 1
+            fi
+            if ! cp "$tmp" "$conf"; then
+                cp -p "$backup" "$conf" 2>/dev/null || true
+                rm -f "$tmp"
+                return 1
+            fi
+            printf '%s\t%s\n' "$conf" "$backup" >> "$state_file"
+        fi
+        rm -f "$tmp"
+    done
+}
+
+ssh_restore_cloud_auth_dropins() {
+    local state_file="$1"
+    local conf backup
+    [[ -f "$state_file" ]] || return 0
+    while IFS=$'\t' read -r conf backup; do
+        [[ -n "$conf" && -n "$backup" && -f "$backup" ]] || continue
+        cp -p "$backup" "$conf" 2>/dev/null || true
+    done < "$state_file"
+}
+
+ssh_assert_auth_mode_effective() {
+    local mode="$1"
+    local expected effective
+    expected="yes"
+    [[ "$mode" == "key_only" ]] && expected="no"
+    effective=$(ssh_effective_setting PasswordAuthentication)
+    [[ -z "$effective" ]] && return 0
+    if [[ "$effective" != "$expected" ]]; then
+        echo -e "${RED}❌ SSH 最终生效值仍为 PasswordAuthentication ${effective}，可能有更早的云镜像子配置覆盖。${PLAIN}"
+        return 1
+    fi
+}
+
+ssh_rollback_port_change() {
+    local backup_file="$1"
+    local current_port="$2"
+    local socket_managed="${3:-false}"
+    cp -p "$backup_file" /etc/ssh/sshd_config 2>/dev/null || true
+    ssh_write_sshd_port_dropin "$current_port" >/dev/null 2>&1 || true
+    if $socket_managed; then
+        ssh_write_socket_port_dropins "$current_port" >/dev/null 2>&1 || true
+        ssh_restart_socket_units >/dev/null 2>&1 || true
+    fi
+    ssh_service_restart >/dev/null 2>&1 || true
+}
+
+ssh_effective_setting() {
+    local key="$1"
+    local sshd_bin
+    sshd_bin=$(command -v sshd 2>/dev/null || true)
+    if [[ -n "$sshd_bin" ]]; then
+        "$sshd_bin" -T 2>/dev/null | awk -v k="$(echo "$key" | tr '[:upper:]' '[:lower:]')" '$1 == k {print $2; exit}'
+    fi
+}
+
+ssh_public_key_is_valid() {
+    local key="$1"
+    [[ "$key" =~ ^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh.com|sk-ecdsa-sha2-nistp256@openssh.com)[[:space:]][A-Za-z0-9+/=]+([[:space:]].*)?$ ]]
+}
+
+ssh_user_home() {
+    local user="$1"
+    getent passwd "$user" 2>/dev/null | awk -F: '{print $6; exit}'
+}
+
+ssh_authorized_keys_path() {
+    local user="$1"
+    local home_dir
+    home_dir=$(ssh_user_home "$user")
+    [[ -n "$home_dir" ]] || return 1
+    printf '%s/.ssh/authorized_keys' "$home_dir"
+}
+
+ssh_authorized_key_count() {
+    local user="$1"
+    local key_file
+    key_file=$(ssh_authorized_keys_path "$user" 2>/dev/null) || { echo 0; return 0; }
+    [[ -r "$key_file" ]] || { echo 0; return 0; }
+    grep -E '^(ssh-rsa|ssh-ed25519|ecdsa-sha2-|sk-)' "$key_file" 2>/dev/null | wc -l | awk '{print $1}'
+}
+
+ssh_choose_user() {
+    local default_user user
+    default_user="${SUDO_USER:-root}"
+    [[ "$default_user" == "root" || -n "$(getent passwd "$default_user" 2>/dev/null)" ]] || default_user="root"
+    user=$(ask_with_default "目标 Linux 用户" "$default_user")
+    if ! getent passwd "$user" >/dev/null 2>&1; then
+        echo -e "${RED}❌ 用户 ${user} 不存在。${PLAIN}" >&2
+        return 1
+    fi
+    printf '%s' "$user"
+}
+
+ssh_add_public_key_for_user() {
+    local user="$1"
+    local ssh_key key_file ssh_dir home_dir
+    home_dir=$(ssh_user_home "$user")
+    [[ -n "$home_dir" ]] || return 1
+    key_file="${home_dir}/.ssh/authorized_keys"
+    ssh_dir="${home_dir}/.ssh"
+    echo -e "👇 ${CYAN}请粘贴 ${user} 的 SSH 公钥，粘贴后按回车：${PLAIN}"
+    read -r ssh_key
+    if [[ -z "$ssh_key" ]]; then
+        echo -e "${RED}❌ 输入为空，已取消。${PLAIN}"
+        return 1
+    fi
+    if ! ssh_public_key_is_valid "$ssh_key"; then
+        echo -e "${RED}❌ 公钥格式无效。支持 ssh-rsa、ssh-ed25519、ecdsa、FIDO2 sk-*。${PLAIN}"
+        return 1
+    fi
+    mkdir -p "$ssh_dir" || return 1
+    touch "$key_file" || return 1
+    chmod 700 "$ssh_dir"
+    chmod 600 "$key_file"
+    if [[ "$user" != "root" ]]; then
+        chown -R "$user:$user" "$ssh_dir" 2>/dev/null || true
+    fi
+    if grep -q -F -x "$ssh_key" "$key_file"; then
+        echo -e "${YELLOW}⚠️ 该公钥已存在，无需重复添加。${PLAIN}"
+        return 0
+    fi
+    printf '%s\n' "$ssh_key" >> "$key_file"
+    echo -e "${GREEN}✅ 已为 ${user} 添加 SSH 公钥。${PLAIN}"
+}
+
+ssh_apply_auth_mode() {
+    local mode="$1"
+    local label backup_file tmp_file sshd_bin interactive_key auth_dropin auth_dropin_backup auth_reconcile_state timestamp reconciled_count
+    sshd_bin=$(command -v sshd 2>/dev/null || true)
+    [[ -n "$sshd_bin" && -f /etc/ssh/sshd_config ]] || {
+        echo -e "${RED}❌ 未找到 sshd 或 /etc/ssh/sshd_config，已取消。${PLAIN}"
+        return 1
+    }
+    case "$mode" in
+        key_only) label="仅密钥登录（禁用密码）" ;;
+        key_preferred) label="密钥优先（保留密码）" ;;
+        password) label="恢复密码登录" ;;
+        *) return 1 ;;
+    esac
+    confirm_risk_action "切换 SSH 登录模式：${label}" \
+        "/etc/ssh/sshd_config 与 /etc/ssh/sshd_config.d 登录认证配置" \
+        "使用本菜单恢复密码登录，或从自动备份恢复 /etc/ssh/sshd_config 与对应子配置备份" \
+        "会同步处理 50-cloud-init.conf 等云镜像子配置；切到仅密钥登录前，必须先确认新 SSH 窗口能用私钥登录。" || return 1
+
+    timestamp=$(date +%s)
+    interactive_key="KbdInteractiveAuthentication"
+    if ! "$sshd_bin" -T 2>/dev/null | grep -qi '^kbdinteractiveauthentication '; then
+        interactive_key="ChallengeResponseAuthentication"
+    fi
+    auth_dropin="/etc/ssh/sshd_config.d/00-vps-optimize-auth.conf"
+    auth_dropin_backup=""
+    auth_reconcile_state=$(mktemp /tmp/vps-sshd-reconcile.XXXXXX) || return 1
+    backup_file="/etc/ssh/sshd_config.bak_auth_${timestamp}"
+    cp -p /etc/ssh/sshd_config "$backup_file" || {
+        echo -e "${RED}❌ SSH 配置备份失败，已取消。${PLAIN}"
+        rm -f "$auth_reconcile_state"
+        return 1
+    }
+    if [[ -f "$auth_dropin" ]]; then
+        auth_dropin_backup="${auth_dropin}.bak_auth_${timestamp}"
+        cp -p "$auth_dropin" "$auth_dropin_backup" || {
+            echo -e "${RED}❌ SSH drop-in 配置备份失败，已取消。${PLAIN}"
+            rm -f "$auth_reconcile_state"
+            return 1
+        }
+    fi
+    tmp_file=$(mktemp /tmp/vps-sshd.XXXXXX) || { rm -f "$auth_reconcile_state"; return 1; }
+    awk '
+        /^# VPS-Optimize SSH auth mode begin$/ {skip=1; next}
+        /^# VPS-Optimize SSH auth mode end$/ {skip=0; next}
+        skip != 1 {print}
+    ' /etc/ssh/sshd_config > "$tmp_file" || {
+        rm -f "$tmp_file"
+        rm -f "$auth_reconcile_state"
+        return 1
+    }
+    {
+        echo "# VPS-Optimize SSH auth mode begin"
+        echo "PubkeyAuthentication yes"
+        case "$mode" in
+            key_only)
+                echo "PasswordAuthentication no"
+                echo "${interactive_key} no"
+                ;;
+            key_preferred|password)
+                echo "PasswordAuthentication yes"
+                echo "${interactive_key} yes"
+                ;;
+        esac
+        echo "# VPS-Optimize SSH auth mode end"
+        cat "$tmp_file"
+    } > /etc/ssh/sshd_config
+    rm -f "$tmp_file"
+
+    if ! ssh_write_auth_dropin "$mode" "$interactive_key"; then
+        echo -e "${RED}❌ 写入 SSH drop-in 登录配置失败，正在回滚。${PLAIN}"
+        cp -p "$backup_file" /etc/ssh/sshd_config
+        ssh_restore_auth_dropin "$auth_dropin" "$auth_dropin_backup"
+        rm -f "$auth_reconcile_state"
+        return 1
+    fi
+
+    if ! ssh_reconcile_cloud_auth_dropins "$mode" "$auth_reconcile_state" "$timestamp"; then
+        echo -e "${RED}❌ 处理云镜像 SSH 子配置失败，正在回滚。${PLAIN}"
+        cp -p "$backup_file" /etc/ssh/sshd_config
+        ssh_restore_auth_dropin "$auth_dropin" "$auth_dropin_backup"
+        ssh_restore_cloud_auth_dropins "$auth_reconcile_state"
+        rm -f "$auth_reconcile_state"
+        return 1
+    fi
+
+    if ! "$sshd_bin" -t; then
+        echo -e "${RED}❌ SSH 配置语法检查失败，正在回滚。${PLAIN}"
+        cp -p "$backup_file" /etc/ssh/sshd_config
+        ssh_restore_auth_dropin "$auth_dropin" "$auth_dropin_backup"
+        ssh_restore_cloud_auth_dropins "$auth_reconcile_state"
+        rm -f "$auth_reconcile_state"
+        return 1
+    fi
+    if ! ssh_assert_auth_mode_effective "$mode"; then
+        echo -e "${RED}❌ SSH 登录模式未真正生效，正在回滚。${PLAIN}"
+        cp -p "$backup_file" /etc/ssh/sshd_config
+        ssh_restore_auth_dropin "$auth_dropin" "$auth_dropin_backup"
+        ssh_restore_cloud_auth_dropins "$auth_reconcile_state"
+        rm -f "$auth_reconcile_state"
+        return 1
+    fi
+    if ! ssh_restart_runtime; then
+        echo -e "${RED}❌ SSH 服务重启失败，正在回滚。${PLAIN}"
+        cp -p "$backup_file" /etc/ssh/sshd_config
+        ssh_restore_auth_dropin "$auth_dropin" "$auth_dropin_backup"
+        ssh_restore_cloud_auth_dropins "$auth_reconcile_state"
+        ssh_restart_runtime >/dev/null 2>&1 || true
+        rm -f "$auth_reconcile_state"
+        return 1
+    fi
+    echo -e "${GREEN}✅ SSH 登录模式已切换为：${label}${PLAIN}"
+    echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
+    reconciled_count=$(wc -l < "$auth_reconcile_state" 2>/dev/null | awk '{print $1}')
+    if [[ "$reconciled_count" =~ ^[0-9]+$ && "$reconciled_count" -gt 0 ]]; then
+        echo -e "${CYAN}已同步 ${reconciled_count} 个云镜像 SSH 子配置，例如 50-cloud-init.conf。${PLAIN}"
+    fi
+    rm -f "$auth_reconcile_state"
+}
+
+func_ssh_login_mode_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "SSH 安全中心 > 用户密钥登录模式"
+        echo -e "${BOLD}🔐 用户密钥登录模式${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "PubkeyAuthentication      : ${CYAN}$(ssh_effective_setting PubkeyAuthentication || echo 未知)${PLAIN}"
+        echo -e "PasswordAuthentication    : ${CYAN}$(ssh_effective_setting PasswordAuthentication || echo 未知)${PLAIN}"
+        echo -e "KbdInteractiveAuthentication: ${CYAN}$(ssh_effective_setting KbdInteractiveAuthentication || echo 未知)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 为用户添加 SSH 公钥${PLAIN}"
+        echo -e "${GREEN}  2. 密钥优先，保留密码登录${PLAIN}"
+        echo -e "${RED}  3. 仅密钥登录，禁用密码登录${PLAIN}"
+        echo -e "${YELLOW}  4. 恢复密码登录${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        local choice user key_count
+        read_trimmed choice "👉 请选择操作: "
+        case "$choice" in
+            1)
+                user=$(ssh_choose_user) || { pause_return; continue; }
+                ssh_add_public_key_for_user "$user"
+                pause_return
+                ;;
+            2) ssh_apply_auth_mode key_preferred; pause_return ;;
+            3)
+                user=$(ssh_choose_user) || { pause_return; continue; }
+                key_count=$(ssh_authorized_key_count "$user")
+                if [[ "$key_count" -eq 0 ]]; then
+                    echo -e "${RED}❌ 用户 ${user} 还没有 authorized_keys，不能切到仅密钥登录。${PLAIN}"
+                    echo -e "${YELLOW}请先用本菜单 [1] 添加公钥，并用新 SSH 窗口测试成功。${PLAIN}"
+                    pause_return
+                    continue
+                fi
+                echo -e "${YELLOW}检测到 ${user} 已有 ${key_count} 条公钥。切换后密码登录会被禁用。${PLAIN}"
+                ssh_apply_auth_mode key_only
+                pause_return
+                ;;
+            4) ssh_apply_auth_mode password; pause_return ;;
+            0|q|Q) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
+func_ssh_security_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "SSH 安全中心"
+        echo -e "${BOLD}🛡️ SSH 安全中心${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${GREEN}  1. 修改 SSH 端口${PLAIN}             ${YELLOW}(防失联校验和回滚)${PLAIN}"
+        echo -e "${GREEN}  2. 用户密钥登录模式${PLAIN}         ${YELLOW}(添加公钥 / 禁用或恢复密码登录)${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        local choice
+        read_trimmed choice "👉 请选择操作: "
+        case "$choice" in
+            1) func_security ;;
+            2) func_ssh_login_mode_menu ;;
+            0|q|Q) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
 func_security() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -5902,7 +6575,7 @@ func_security() {
             return
         fi
 
-        echo -e "${YELLOW}即将修改：/etc/ssh/sshd_config、SSH systemd 服务、系统防火墙放行规则。${PLAIN}"
+        echo -e "${YELLOW}即将修改：/etc/ssh/sshd_config、/etc/ssh/sshd_config.d、SSH systemd socket/服务、系统防火墙放行规则。${PLAIN}"
         echo -e "${YELLOW}请先确认云厂商安全组已经放行 ${final_p}/tcp，并保留当前 SSH 会话。${PLAIN}"
         confirm_danger "修改 SSH 端口为 ${final_p}" "新端口未放行会导致后续无法重新连接 SSH。" "脚本会先备份 sshd_config，校验语法失败或服务重启失败时自动回滚。" || {
             echo -e "${BLUE}已取消 SSH 端口修改。${PLAIN}"
@@ -5923,7 +6596,13 @@ func_security() {
         # - 然后在文件绝对第一行 (1i) 插入新端口，秒杀所有 include 配置覆盖！
         if ! sed -i '/^[[:space:]]*#\?Port /d' /etc/ssh/sshd_config || ! sed -i "1i Port $final_p" /etc/ssh/sshd_config; then
             echo -e "${RED}❌ 写入 SSH 配置失败，正在恢复备份。${PLAIN}"
-            mv "$backup_file" /etc/ssh/sshd_config
+            ssh_rollback_port_change "$backup_file" "$current_p" false
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        fi
+        if ! ssh_write_sshd_port_dropin "$final_p"; then
+            echo -e "${RED}❌ 写入 SSH drop-in 端口配置失败，正在恢复备份。${PLAIN}"
+            ssh_rollback_port_change "$backup_file" "$current_p" false
             read -n 1 -s -r -p "按任意键返回..."
             return
         fi
@@ -5935,7 +6614,7 @@ func_security() {
                 semanage port -a -t ssh_port_t -p tcp "$final_p" 2>/dev/null || semanage port -m -t ssh_port_t -p tcp "$final_p" 2>/dev/null
             else
                 echo -e "${RED}❌ 致命错误：缺少 semanage 工具！已触发安全回滚。${PLAIN}"
-                mv "$backup_file" /etc/ssh/sshd_config
+                ssh_rollback_port_change "$backup_file" "$current_p" false
                 read -n 1 -s -r -p "按任意键返回..."
                 return
             fi
@@ -5944,7 +6623,7 @@ func_security() {
         # 4. 防失联核心：验证新配置语法
         if ! "$sshd_bin" -t; then
             echo -e "${RED}❌ 致命错误：SSH 配置存在语法异常！正在全盘恢复...${PLAIN}"
-            mv "$backup_file" /etc/ssh/sshd_config
+            ssh_rollback_port_change "$backup_file" "$current_p" false
             read -n 1 -s -r -p "按任意键返回..."
             return
         fi
@@ -5959,27 +6638,32 @@ func_security() {
             iptables -I INPUT -p tcp --dport "$final_p" -j ACCEPT 2>/dev/null || true
         fi
         
-        # 6. Ubuntu 的 Socket 端口接管 (防宕机冲突)
-        local use_socket=false
-        if systemctl is-active --quiet ssh.socket; then
-            use_socket=true
-            echo -e "${YELLOW}检测到 Ubuntu ssh.socket，正在覆写底层监听端口...${PLAIN}"
-            mkdir -p /etc/systemd/system/ssh.socket.d
-            cat <<EOF > /etc/systemd/system/ssh.socket.d/port.conf
-[Socket]
-ListenStream=
-ListenStream=$final_p
-EOF
-            systemctl daemon-reload >/dev/null 2>&1
+        # 6. systemd Socket 端口接管：兼容 Ubuntu/Debian 云镜像的 ssh.socket 与 sshd.socket
+        local socket_managed=false socket_units
+        socket_units=$(ssh_socket_units_for_host | tr '\n' ' ')
+        if [[ -n "$socket_units" ]]; then
+            echo -e "${YELLOW}检测到 SSH socket (${socket_units})，正在同步底层监听端口...${PLAIN}"
+            if ssh_write_socket_port_dropins "$final_p"; then
+                socket_managed=true
+                systemctl daemon-reload >/dev/null 2>&1 || true
+            else
+                echo -e "${RED}❌ 写入 SSH socket drop-in 失败，正在回滚。${PLAIN}"
+                ssh_rollback_port_change "$backup_file" "$current_p" false
+                read -n 1 -s -r -p "按任意键返回..."
+                return
+            fi
         fi
         
         # 7. 严格隔离的服务重启逻辑
         echo -e "${CYAN}▶ 正在重启底层 SSH 引擎...${PLAIN}"
         local restart_ok=false
-        if $use_socket; then
-            systemctl restart ssh.socket >/dev/null 2>&1 && restart_ok=true
+        if $socket_managed; then
+            if ssh_restart_socket_units; then
+                restart_ok=true
+                ssh_service_restart >/dev/null 2>&1 || true
+            fi
         else
-            (systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null) && restart_ok=true
+            ssh_service_restart && restart_ok=true
         fi
         
         if $restart_ok; then
@@ -5987,8 +6671,7 @@ EOF
             echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
         else
             echo -e "${RED}❌ 致命错误：重启 SSH 服务失败！正在回滚至原端口...${PLAIN}"
-            mv "$backup_file" /etc/ssh/sshd_config
-            $use_socket && systemctl restart ssh.socket >/dev/null 2>&1 || (systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null)
+            ssh_rollback_port_change "$backup_file" "$current_p" "$socket_managed"
             read -n 1 -s -r -p "按任意键返回..."
             return
         fi
@@ -6104,63 +6787,17 @@ func_add_ssh_key() {
     echo -e "${BOLD}🔑 添加 SSH 公钥登录 (免密安全认证)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}使用 SSH 密钥登录不仅免去输密码的烦恼，更能彻底免疫密码爆破！${PLAIN}"
-    echo -e "请准备好您的公钥 (通常以 ssh-rsa, ssh-ed25519 或 ecdsa 开头)。"
+    echo -e "请准备好您的公钥 (通常以 ssh-rsa, ssh-ed25519、ecdsa 或 sk-* 开头)。"
     echo -e "------------------------------------------------"
-    
-    # 确保根目录的 .ssh 文件夹和权限正确 (极为重要，权限错了一律无法登录)
-    mkdir -p ~/.ssh
-    chmod 700 ~/.ssh
-    touch ~/.ssh/authorized_keys
-    chmod 600 ~/.ssh/authorized_keys
-    
-    echo -e "👇 ${CYAN}请在下方右键粘贴您的 SSH 公钥内容，粘贴后按回车键：${PLAIN}"
-    read -r ssh_key
-    
-    if [[ -z "$ssh_key" ]]; then
-        echo -e "${RED}❌ 输入为空，已取消操作。${PLAIN}"
-    elif [[ "$ssh_key" == ssh-* || "$ssh_key" == ecdsa-* ]]; then
-        # 检查是否已经存在相同公钥 (采用绝对精确全行匹配)
-        if grep -q -F -x "$ssh_key" ~/.ssh/authorized_keys; then
-            echo -e "${YELLOW}⚠️ 该公钥已存在于 ~/.ssh/authorized_keys 中，无需重复添加。${PLAIN}"
-        else
-            local backup_file sshd_bin restart_ok=false
-            sshd_bin=$(command -v sshd 2>/dev/null || true)
-            backup_file="/etc/ssh/sshd_config.bak_pubkey_$(date +%s)"
-            if [[ -f /etc/ssh/sshd_config ]]; then
-                cp -p /etc/ssh/sshd_config "$backup_file" || {
-                    echo -e "${RED}❌ SSH 配置备份失败，已取消添加公钥。${PLAIN}"
-                    read -n 1 -s -r -p "按任意键继续..."
-                    return
-                }
-            fi
-            echo "$ssh_key" >> ~/.ssh/authorized_keys
-            
-            # 自动修改 sshd_config 确保开启了公钥登录选项
-            if [[ -f /etc/ssh/sshd_config ]]; then
-                sed -i 's/^#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-                sed -i 's/^PubkeyAuthentication no/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-                if [[ -n "$sshd_bin" ]] && ! "$sshd_bin" -t; then
-                    echo -e "${RED}❌ SSH 配置语法检查失败，正在回滚。${PLAIN}"
-                    mv "$backup_file" /etc/ssh/sshd_config
-                    read -n 1 -s -r -p "按任意键继续..."
-                    return
-                fi
-                if systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null; then
-                    restart_ok=true
-                fi
-                if ! $restart_ok; then
-                    echo -e "${YELLOW}⚠️ 公钥已写入，但 SSH 服务重启失败；原配置备份保留在 ${backup_file}${PLAIN}"
-                    read -n 1 -s -r -p "按任意键继续..."
-                    return
-                fi
-            fi
-            
-            echo -e "${GREEN}✅ 公钥添加成功！现在您可以尝试使用对应的私钥免密登录本服务器了。${PLAIN}"
-            [[ -f "$backup_file" ]] && echo -e "${CYAN}SSH 配置备份已保留：${backup_file}${PLAIN}"
-            echo -e "${YELLOW}💡 进阶建议：当您确认公钥登录 100% 成功后，可以手动编辑 /etc/ssh/sshd_config 将 PasswordAuthentication 改为 no，彻底关闭密码登录。${PLAIN}"
+    local user enable_mode
+    user=$(ssh_choose_user) || { read -n 1 -s -r -p "按任意键继续..."; return; }
+    if ssh_add_public_key_for_user "$user"; then
+        echo -e "${GREEN}✅ 公钥添加完成。请立刻新开一个 SSH 窗口测试私钥登录。${PLAIN}"
+        read_trimmed enable_mode "是否同时写入“密钥优先，保留密码登录”模式？(y/N): "
+        if [[ "$enable_mode" =~ ^[Yy]$ ]]; then
+            ssh_apply_auth_mode key_preferred || true
         fi
-    else
-        echo -e "${RED}❌ 格式错误：看起来不像有效的 SSH 公钥。操作已取消。${PLAIN}"
+        echo -e "${YELLOW}确认私钥登录 100% 成功后，可进入 [5 SSH 安全中心] -> [2 用户密钥登录模式] 禁用密码登录。${PLAIN}"
     fi
     read -n 1 -s -r -p "按任意键继续..."
 }
@@ -9624,6 +10261,15 @@ log_msg() {
     logger -t vps-traffic-guard "$msg" 2>/dev/null || true
 }
 
+guard_exit() {
+    local rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+        log_msg "checker exited unexpectedly rc=${rc}; keep timer healthy and retry next run"
+        exit 0
+    fi
+}
+trap guard_exit EXIT
+
 normalize_cycle_day() {
     local cycle_day="${1:-1}"
     [[ "$cycle_day" =~ ^[0-9]+$ ]] || cycle_day=1
@@ -9776,14 +10422,19 @@ if (( USAGE_BYTES >= LIMIT_BYTES )); then
             ;;
         poweroff|*)
             sync
-            systemctl poweroff >/dev/null 2>&1 || poweroff >/dev/null 2>&1 || shutdown -h now >/dev/null 2>&1
+            systemctl poweroff >/dev/null 2>&1 || poweroff >/dev/null 2>&1 || shutdown -h now >/dev/null 2>&1 || log_msg "poweroff command failed; will retry on next timer run"
             ;;
     esac
 fi
 
 save_state
+exit 0
 GUARD_SCRIPT
     chmod 700 "$TRAFFIC_GUARD_CHECKER" || return 1
+}
+
+reset_traffic_guard_failed_state() {
+    systemctl reset-failed vps-traffic-guard.service vps-traffic-guard.timer >/dev/null 2>&1 || true
 }
 
 install_traffic_guard_units() {
@@ -9816,7 +10467,9 @@ WantedBy=timers.target
 EOF
 
     systemctl daemon-reload >/dev/null 2>&1 || return 1
+    reset_traffic_guard_failed_state
     systemctl enable --now vps-traffic-guard.timer >/dev/null 2>&1 || return 1
+    reset_traffic_guard_failed_state
 }
 
 write_traffic_guard_config() {
@@ -10039,6 +10692,7 @@ configure_traffic_guard() {
     }
 
     "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || true
+    reset_traffic_guard_failed_state
     echo -e "${GREEN}✅ 流量达量关机保护已启用。${PLAIN}"
     echo -e "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}"
     pause_return
@@ -10111,6 +10765,7 @@ disable_traffic_guard() {
         "停用后请自行监控云厂商流量，避免超额账单。" || return 1
     systemctl disable --now vps-traffic-guard.timer >/dev/null 2>&1 || true
     systemctl daemon-reload >/dev/null 2>&1 || true
+    reset_traffic_guard_failed_state
     if [[ -f "$TRAFFIC_GUARD_CONFIG" ]]; then
         sed -i 's/^ENABLED=.*/ENABLED=0/' "$TRAFFIC_GUARD_CONFIG" 2>/dev/null || true
     fi
@@ -10155,6 +10810,161 @@ func_traffic_guard_menu() {
     done
 }
 
+network_iface_exists() {
+    local iface="$1"
+    [[ -n "$iface" && "$iface" != *"/"* && "$iface" != *".."* && -d "/sys/class/net/${iface}" ]]
+}
+
+network_default_ifaces() {
+    {
+        ip -o route show default 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="dev") print $(i+1)}'
+        ip -o -6 route show default 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="dev") print $(i+1)}'
+    } | sort -u
+}
+
+network_iface_is_default_route() {
+    local iface="$1"
+    network_default_ifaces | grep -Fxq "$iface"
+}
+
+network_choose_iface() {
+    local default_iface iface
+    default_iface=$(traffic_guard_detect_iface)
+    iface=$(ask_with_default "网卡名称" "${default_iface:-eth0}")
+    if ! network_iface_exists "$iface"; then
+        echo -e "${RED}❌ 网卡 ${iface} 不存在。${PLAIN}" >&2
+        return 1
+    fi
+    printf '%s' "$iface"
+}
+
+network_show_overview() {
+    echo -e "${CYAN}--- 网卡地址 ---${PLAIN}"
+    ip -br addr 2>/dev/null || ip addr
+    echo ""
+    echo -e "${CYAN}--- 默认路由 ---${PLAIN}"
+    ip route show default 2>/dev/null || true
+    ip -6 route show default 2>/dev/null || true
+    echo ""
+    echo -e "${CYAN}--- DNS ---${PLAIN}"
+    if command -v resolvectl >/dev/null 2>&1; then
+        resolvectl dns 2>/dev/null || cat /etc/resolv.conf 2>/dev/null
+    else
+        cat /etc/resolv.conf 2>/dev/null || true
+    fi
+}
+
+network_show_iface_detail() {
+    local iface
+    iface=$(network_choose_iface) || return 1
+    echo -e "${CYAN}--- ${iface} 链路详情 ---${PLAIN}"
+    ip -d link show dev "$iface" 2>/dev/null || ip link show dev "$iface"
+    echo ""
+    echo -e "${CYAN}--- ${iface} 流量统计 ---${PLAIN}"
+    ip -s link show dev "$iface" 2>/dev/null || true
+    if command -v ethtool >/dev/null 2>&1; then
+        echo ""
+        echo -e "${CYAN}--- ${iface} 驱动/速率 ---${PLAIN}"
+        ethtool "$iface" 2>/dev/null | sed -n '1,40p' || true
+    fi
+}
+
+network_set_iface_state() {
+    local state="$1"
+    local iface
+    iface=$(network_choose_iface) || return 1
+    if [[ "$state" == "down" ]]; then
+        local default_hint=""
+        if network_iface_is_default_route "$iface"; then
+            default_hint="当前网卡承载默认路由，关闭后 SSH 大概率会断开。"
+        else
+            default_hint="关闭网卡会影响该网卡上的所有连接。"
+        fi
+        confirm_danger "关闭网卡 ${iface}" \
+            "网卡 ${iface} 链路状态" \
+            "通过云厂商控制台或本菜单重新启用网卡" \
+            "${default_hint}" || return 1
+    fi
+    ip link set dev "$iface" "$state" || {
+        echo -e "${RED}❌ 设置 ${iface} ${state} 失败。${PLAIN}"
+        return 1
+    }
+    echo -e "${GREEN}✅ 已设置 ${iface}: ${state}${PLAIN}"
+}
+
+network_set_iface_mtu() {
+    local iface mtu
+    iface=$(network_choose_iface) || return 1
+    read_trimmed mtu "请输入临时 MTU（576-9000，重启后可能恢复）: "
+    if ! [[ "$mtu" =~ ^[0-9]+$ ]] || (( 10#$mtu < 576 || 10#$mtu > 9000 )); then
+        echo -e "${RED}❌ MTU 无效。${PLAIN}"
+        return 1
+    fi
+    confirm_risk_action "设置 ${iface} MTU 为 ${mtu}" \
+        "网卡 ${iface} 的运行时 MTU" \
+        "重新设置原 MTU，或重启网络/系统恢复云厂商默认值" \
+        "错误 MTU 可能导致部分网站或隧道访问异常。" || return 1
+    ip link set dev "$iface" mtu "$mtu" || {
+        echo -e "${RED}❌ 设置 MTU 失败。${PLAIN}"
+        return 1
+    }
+    echo -e "${GREEN}✅ ${iface} MTU 已临时设置为 ${mtu}${PLAIN}"
+}
+
+network_renew_dhcp() {
+    local iface
+    iface=$(network_choose_iface) || return 1
+    confirm_danger "刷新 ${iface} DHCP 租约" \
+        "网卡 ${iface} 的地址租约/网络连接" \
+        "通过云厂商控制台重连，或重启系统恢复网络" \
+        "如果这是当前 SSH 使用的公网网卡，刷新租约可能短暂断开连接。" || return 1
+    if command -v dhclient >/dev/null 2>&1; then
+        dhclient -r "$iface" >/dev/null 2>&1 || true
+        dhclient "$iface" || return 1
+    elif command -v networkctl >/dev/null 2>&1; then
+        networkctl renew "$iface" || return 1
+    elif command -v nmcli >/dev/null 2>&1; then
+        nmcli device reapply "$iface" || nmcli device connect "$iface" || return 1
+    else
+        echo -e "${YELLOW}⚠️ 未检测到 dhclient/networkctl/nmcli，无法自动刷新 DHCP。${PLAIN}"
+        return 1
+    fi
+    echo -e "${GREEN}✅ 已尝试刷新 ${iface} 的 DHCP/网络连接。${PLAIN}"
+}
+
+func_network_interface_manage() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "网络/内核优化 > 网卡管理工具"
+        echo -e "${BOLD}🧰 网卡管理工具${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}用途：查看网卡、路由、DNS 和链路状态；危险操作会要求确认。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 查看网卡 / 路由 / DNS 概览${PLAIN}"
+        echo -e "${GREEN}  2. 查看指定网卡详情与流量统计${PLAIN}"
+        echo -e "${GREEN}  3. 启用指定网卡${PLAIN}"
+        echo -e "${RED}  4. 关闭指定网卡${PLAIN}"
+        echo -e "${YELLOW}  5. 临时设置网卡 MTU${PLAIN}"
+        echo -e "${YELLOW}  6. 刷新 DHCP/网络连接${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        local choice
+        read_trimmed choice "👉 请选择操作: "
+        case "$choice" in
+            1) network_show_overview; pause_return ;;
+            2) network_show_iface_detail; pause_return ;;
+            3) network_set_iface_state up; pause_return ;;
+            4) network_set_iface_state down; pause_return ;;
+            5) network_set_iface_mtu; pause_return ;;
+            6) network_renew_dhcp; pause_return ;;
+            0|q|Q) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
 # ---------------------------------------------------------
 # 24. 网络加速与内核优化菜单 (二级直达)
 # ---------------------------------------------------------
@@ -10174,6 +10984,7 @@ func_net_kernel_menu() {
         echo -e "${GREEN}  5. 清理旧内核${PLAIN}           ${YELLOW}(释放磁盘空间，谨慎操作)${PLAIN}"
         echo -e "${GREEN}  6. DNS 更改优化${PLAIN}         ${YELLOW}(国内/国外/自定义，IPv4+IPv6)${PLAIN}"
         echo -e "${GREEN}  7. 流量达量关机保护${PLAIN}     ${YELLOW}(防刷流量 / 防超额账单)${PLAIN}"
+        echo -e "${GREEN}  8. 网卡管理工具${PLAIN}         ${YELLOW}(网卡/路由/DNS/MTU/DHCP)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -10189,6 +11000,7 @@ func_net_kernel_menu() {
             5) func_clean_kernel ;;
             6) func_dns_optimize ;;
             7) func_traffic_guard_menu ;;
+            8) func_network_interface_manage ;;
             "?"|help) show_net_kernel_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
@@ -10406,7 +11218,7 @@ main_menu() {
         echo -e "  ${GREEN}4.${PLAIN} 面板、节点与订阅工具  ${YELLOW}(3x-ui/Sing-box/订阅管理/Dockge)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ② 安全与访问控制${PLAIN}"
-        echo -e "  ${GREEN}5.${PLAIN} SSH 安全加固          ${YELLOW}(改端口/防失联/安全登录)${PLAIN}"
+        echo -e "  ${GREEN}5.${PLAIN} SSH 安全中心          ${YELLOW}(端口/公钥/密钥登录模式)${PLAIN}"
         echo -e "  ${GREEN}6.${PLAIN} 添加 SSH 公钥         ${YELLOW}(免密登录)${PLAIN}"
         echo -e "  ${GREEN}7.${PLAIN} Fail2ban 防爆破       ${YELLOW}(自动封禁 SSH 爆破 IP)${PLAIN}"
         echo -e "  ${GREEN}8.${PLAIN} 防火墙规则管理        ${YELLOW}(放行/删除/查看/关闭)${PLAIN}"
@@ -10442,7 +11254,7 @@ main_menu() {
             2) func_base_init ;;
             3) func_env_install ;;
             4) func_panel_deploy_menu ;;
-            5) func_security ;;
+            5) func_ssh_security_menu ;;
             6) func_add_ssh_key ;;
             7) func_fail2ban ;;
             8) func_firewall_manage ;;

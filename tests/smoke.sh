@@ -107,6 +107,11 @@ grep -q 'traffic_guard_gb_to_bytes_zero_ok' dist/vps.sh
 grep -q 'traffic_guard_cycle_date_for_month' dist/vps.sh
 grep -q 'cycle_date_for_month' dist/vps.sh
 grep -q '每月套餐/账单重置日 1-31' dist/vps.sh
+grep -q 'guard_exit()' dist/vps.sh
+grep -q 'checker exited unexpectedly rc=' dist/vps.sh
+grep -q 'reset_traffic_guard_failed_state' dist/vps.sh
+grep -q 'systemctl reset-failed vps-traffic-guard.service vps-traffic-guard.timer' dist/vps.sh
+grep -q 'poweroff command failed; will retry on next timer run' dist/vps.sh
 if grep -q '重置日只支持 1-28' dist/vps.sh; then
     echo "Traffic guard reset day must support 1-31." >&2
     exit 1
@@ -125,6 +130,26 @@ fi
 awk "/<<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" dist/vps.sh | bash -n
 grep -q 'func_health_dashboard' dist/vps.sh
 grep -q 'func_backup_center' dist/vps.sh
+grep -q 'func_hosts_manage' dist/vps.sh
+grep -q 'hosts_add_or_update_entry' dist/vps.sh
+grep -q 'func_ssh_security_menu' dist/vps.sh
+grep -q 'func_ssh_login_mode_menu' dist/vps.sh
+grep -q 'ssh_apply_auth_mode' dist/vps.sh
+grep -q 'ssh_write_sshd_port_dropin' dist/vps.sh
+grep -q 'ssh_write_auth_dropin' dist/vps.sh
+grep -q 'ssh_reconcile_cloud_auth_dropins' dist/vps.sh
+grep -q 'ssh_assert_auth_mode_effective' dist/vps.sh
+grep -q 'ssh_restart_runtime' dist/vps.sh
+grep -q 'sshd_config.d/00-vps-optimize-port.conf' dist/vps.sh
+grep -q 'sshd_config.d/00-vps-optimize-auth.conf' dist/vps.sh
+grep -q 'VPS-Optimize reconciled cloud image setting' dist/vps.sh
+grep -q '50-cloud-init.conf' dist/vps.sh
+grep -q 'for unit in ssh.socket sshd.socket' dist/vps.sh
+grep -q 'func_network_interface_manage' dist/vps.sh
+grep -q 'network_set_iface_mtu' dist/vps.sh
+grep -q '5) func_ssh_security_menu' dist/vps.sh
+grep -q '7) func_hosts_manage' dist/vps.sh
+grep -q '8) func_network_interface_manage' dist/vps.sh
 grep -q 'SCRIPT_VERSION="v1.8"' dist/vps.sh
 grep -q 'SCRIPT_UPDATE_CACHE=' dist/vps.sh
 grep -q 'Compatibility marker: VPS 全能控制面板' dist/vps.sh
