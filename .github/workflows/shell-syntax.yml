@@ -21,13 +21,17 @@ jobs:
 
       - name: Check Bash syntax
         run: |
+          bash -n scripts/build.sh
+          bash scripts/build.sh
           bash -n vps.sh
+          bash -n dist/vps.sh
+          bash -n src/common.sh src/ui.sh src/input.sh src/validate.sh src/rollback.sh src/backup.sh src/main.sh
           bash -n dog.sh
           bash -n xui-custom-manager.sh
 
       - name: Run ShellCheck error checks
         run: |
-          shellcheck -S error vps.sh dog.sh xui-custom-manager.sh
+          shellcheck -S error vps.sh src/*.sh dist/vps.sh dog.sh xui-custom-manager.sh
 
       - name: Run smoke tests
         run: |

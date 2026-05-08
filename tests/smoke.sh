@@ -4,28 +4,68 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+bash scripts/build.sh >/dev/null
+
+bash -n scripts/build.sh
 bash -n vps.sh
+bash -n dist/vps.sh
+bash -n src/common.sh
+bash -n src/ui.sh
+bash -n src/input.sh
+bash -n src/validate.sh
+bash -n src/rollback.sh
+bash -n src/backup.sh
+bash -n src/main.sh
 bash -n dog.sh
 bash -n xui-custom-manager.sh
 
 dangerous_patterns='rm -rf|rm -r[[:space:]]|wget .*[&][&]|curl .*\|[[:space:]]*gpg|\|[[:space:]]*bash|bash[[:space:]]*<'
-if grep -En "$dangerous_patterns" vps.sh dog.sh; then
+if grep -En "$dangerous_patterns" dist/vps.sh dog.sh; then
     echo "Dangerous shell patterns found." >&2
     exit 1
 fi
 
-source <(sed -n '1,/^# --- 权限检查 ---/p' vps.sh | sed '$d')
+source src/common.sh
+source src/ui.sh
+source src/input.sh
+source src/validate.sh
+source src/rollback.sh
+source src/backup.sh
+
 [[ "$(trim_input "  q  ")" == "q" ]]
 [[ "$(normalize_domain_input " HTTPS://Panel.Example.COM:443/path ")" == "panel.example.com" ]]
-source <(sed -n '/^APT_UPDATED=0/,/^install_pkg()/p' vps.sh | sed '$d')
 APT_UPDATED=1
 apt_update_once
 [[ "$APT_UPDATED" == "1" ]]
-source <(sed -n '/^format_hostport()/,/^sni_stack_backup_dir()/p' vps.sh | sed '$d')
 [[ "$(nginx_stream_listen_directives "127.0.0.1" "443")" == "    listen 127.0.0.1:443;" ]]
 [[ "$(nginx_stream_listen_directives "0.0.0.0" "443" | grep -c '^    listen ')" == "2" ]]
 [[ "$(nginx_stream_listen_directives "::1" "443")" == "    listen [::1]:443;" ]]
 [[ "$(xui_cert_setting_key_sql_list)" == *"subcertfile"* ]]
+
+remote_tmp_dir=$(mktemp -d /tmp/vps-remote-smoke.XXXXXX)
+remote_script="$remote_tmp_dir/remote.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'echo remote-run-ok' > "$remote_script"
+remote_output=$(run_remote_script "smoke remote script" "file://$remote_script")
+[[ "$remote_output" == *"remote-run-ok"* ]]
+rm -f "$remote_script"
+rmdir "$remote_tmp_dir"
+
+legacy_tmp_dir=$(mktemp -d /tmp/vps-legacy-smoke.XXXXXX)
+legacy_entry="$legacy_tmp_dir/vps.sh"
+legacy_release="$legacy_tmp_dir/release.sh"
+cp vps.sh "$legacy_entry"
+printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'func_sni_stack_quick_menu() { :; }' \
+    'main_menu() { :; }' \
+    'echo legacy-fallback-ok' > "$legacy_release"
+sed -i "s#^RELEASE_URL=.*#RELEASE_URL=\"file://$legacy_release\"#" "$legacy_entry"
+legacy_output=$(bash "$legacy_entry" 2>&1)
+[[ "$legacy_output" == *"legacy-fallback-ok"* ]]
+grep -q 'legacy-fallback-ok' "$legacy_entry"
+rm -f "$legacy_entry"
+rm -f "$legacy_release"
+rmdir "$legacy_tmp_dir"
 
 source <(sed -n '1,/^show_port_list()/p' dog.sh | sed '$d')
 [[ "$(normalize_main_choice " add ")" == "1" ]]
@@ -36,15 +76,31 @@ source <(sed -n '1,/^show_port_list()/p' dog.sh | sed '$d')
 declare -f sanitize_nftables_config >/dev/null
 declare -f update_telegram_config >/dev/null
 
-grep -q 'func_sni_stack_quick_menu' vps.sh
-grep -q 'manage_sni_stack_tcp_routes' vps.sh
-grep -q 'TCP_ROUTE_SNIS_CSV' vps.sh
-grep -q 'func_health_dashboard' vps.sh
-grep -q 'func_backup_center' vps.sh
-grep -q 'SCRIPT_VERSION=' vps.sh
-grep -q 'confirm_risk_action' vps.sh
-grep -q 'func_beginner_menu' vps.sh
-grep -q 'generate_issue_diagnostics' vps.sh
+grep -q 'MODULES=(' vps.sh
+grep -q 'src/${module}.sh' vps.sh
+grep -q 'VPS 全能控制面板' vps.sh
+grep -q 'RELEASE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"' vps.sh
+if grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' dist/vps.sh; then
+    echo "Release script must not source src modules at runtime." >&2
+    exit 1
+fi
+if grep -Eq '确认下载并执行该远程脚本|如仍要执行，请输入 YES' dist/vps.sh; then
+    echo "Remote script runner must not prompt for an extra execution confirmation." >&2
+    exit 1
+fi
+grep -q 'func_sni_stack_quick_menu' dist/vps.sh
+grep -q 'manage_sni_stack_tcp_routes' dist/vps.sh
+grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh
+grep -q 'func_health_dashboard' dist/vps.sh
+grep -q 'func_backup_center' dist/vps.sh
+grep -q 'SCRIPT_VERSION=' dist/vps.sh
+grep -q 'Compatibility marker: VPS 全能控制面板' dist/vps.sh
+grep -q 'UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"' dist/vps.sh
+grep -q '正在尝试自动补齐下载工具' dist/vps.sh
+grep -q 'wget -q --timeout=15 --tries=3' dist/vps.sh
+grep -q 'confirm_risk_action' dist/vps.sh
+grep -q 'func_beginner_menu' dist/vps.sh
+grep -q 'generate_issue_diagnostics' dist/vps.sh
 grep -q 'install_update_script' dog.sh
 
 echo "Smoke tests passed."

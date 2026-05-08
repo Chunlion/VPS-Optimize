@@ -50,8 +50,11 @@
 在服务器上使用 `root` 运行：
 
 ```bash
-wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh && chmod +x vps.sh && ./vps.sh
+wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
+
+`dist/vps.sh` 是由 `scripts/build.sh` 从 `src/*.sh` 生成的单文件发布版；仓库根目录的 `vps.sh` 是源码入口，用于本地开发和调试。
+发布版已经内置全部模块，运行各项功能时不会再按模块拉取脚本；源码入口只适合完整克隆仓库后运行。
 
 首次运行后会注册全局快捷命令，以后直接输入：
 
@@ -285,7 +288,7 @@ Komari 默认部署到 `/opt/komari`，数据保存在 `/opt/komari/data`。安�
 <a id="standalone-tools"></a>
 ## 🧩 独立工具
 
-仓库里除了主脚本 `vps.sh`，还包含两个可以单独运行的维护工具。
+仓库里除了源码入口 `vps.sh` 和发布版 `dist/vps.sh`，还包含两个可以单独运行的维护工具。
 
 ### 3x-ui 外置增强管理
 
@@ -380,7 +383,7 @@ dog
 手动更新：
 
 ```bash
-wget -qO /usr/local/bin/cy https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh
+wget -qO /usr/local/bin/cy https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh
 chmod +x /usr/local/bin/cy
 cy
 ```
@@ -454,7 +457,7 @@ https://panel.example.com:40000/
 
 ```bash
 getent ahosts raw.githubusercontent.com
-curl -I https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/vps.sh
+curl -I https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh
 ```
 
 如果你的环境访问 GitHub 不稳定，可以先解决 DNS、IPv4/IPv6 优先级或代理出口问题。
