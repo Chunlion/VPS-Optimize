@@ -4160,6 +4160,15 @@ go_install_vpso_mux_latest() {
         return 0
     fi
 
+    if ! go version 2>/dev/null | grep -Eq 'go1\.(2[3-9]|[3-9][0-9])'; then
+        echo -e "${YELLOW}⚠️ 当前 Go 版本低于 1.23，正在安装临时 go1.23.0 工具链重试...${PLAIN}"
+        if GOBIN=/usr/local/bin go install golang.org/dl/go1.23.0@latest && /usr/local/bin/go1.23.0 download; then
+            if GOBIN=/usr/local/bin /usr/local/bin/go1.23.0 install github.com/Chunlion/VPS-Optimize/cmd/vpso-mux@latest; then
+                return 0
+            fi
+        fi
+    fi
+
     local module_version tmp_dir
     echo -e "${YELLOW}⚠️ 直接 go install 失败，正在使用 Go 1.22 兼容依赖重试...${PLAIN}"
     module_version=$(go list -m -f '{{.Version}}' github.com/Chunlion/VPS-Optimize@latest 2>/dev/null) || return 1
@@ -4175,8 +4184,9 @@ replace golang.org/x/sys => golang.org/x/sys v0.30.0
 EOF
     (
         cd "$tmp_dir" || exit 1
-        go mod download || exit 1
-        GOBIN=/usr/local/bin go install github.com/Chunlion/VPS-Optimize/cmd/vpso-mux
+        go mod download github.com/Chunlion/VPS-Optimize || exit 1
+        go get "github.com/Chunlion/VPS-Optimize/cmd/vpso-mux@${module_version}" || exit 1
+        go build -o /usr/local/bin/vpso-mux github.com/Chunlion/VPS-Optimize/cmd/vpso-mux
     )
 }
 
