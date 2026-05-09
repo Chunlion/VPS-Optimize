@@ -307,7 +307,7 @@ func spliceCopy(dst, src *net.TCPConn, pipeSize int) (int64, error) {
 		}
 		remaining := n
 		for remaining > 0 {
-			written, err := unix.Splice(pipeFD[0], nil, dstFD, nil, remaining, unix.SPLICE_F_MOVE)
+			written, err := unix.Splice(pipeFD[0], nil, dstFD, nil, int(remaining), unix.SPLICE_F_MOVE)
 			if err != nil {
 				if errors.Is(err, unix.EINTR) || errors.Is(err, unix.EAGAIN) {
 					continue

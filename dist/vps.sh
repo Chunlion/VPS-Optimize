@@ -4154,6 +4154,28 @@ generate_tcp_peek_config() {
     echo -e "${YELLOW}下一步建议先校验配置，再使用 TCP Peek + Splice 测试入口监听 8444。${PLAIN}"
 }
 
+go_install_vpso_mux_latest() {
+    echo -e "${CYAN}▶ 正在通过 go install 安装 vpso-mux...${PLAIN}"
+    if GOTOOLCHAIN=auto GOBIN=/usr/local/bin go install github.com/Chunlion/VPS-Optimize/cmd/vpso-mux@latest; then
+        return 0
+    fi
+
+    local module_version tmp_dir
+    echo -e "${YELLOW}⚠️ 直接 go install 失败，正在使用 Go 1.22 兼容依赖重试...${PLAIN}"
+    module_version=$(go list -m -f '{{.Version}}' github.com/Chunlion/VPS-Optimize@latest 2>/dev/null) || return 1
+    tmp_dir=$(mktemp -d /tmp/vpso-mux-build.XXXXXX) || return 1
+    cat <<EOF > "${tmp_dir}/go.mod"
+module vpso-mux-build
+
+go 1.22
+
+require github.com/Chunlion/VPS-Optimize ${module_version}
+
+replace golang.org/x/sys => golang.org/x/sys v0.30.0
+EOF
+    (cd "$tmp_dir" && GOBIN=/usr/local/bin go install github.com/Chunlion/VPS-Optimize/cmd/vpso-mux)
+}
+
 install_vpso_mux_binary() {
     if [[ -x /usr/local/bin/vpso-mux ]]; then
         return 0
@@ -4181,8 +4203,7 @@ install_vpso_mux_binary() {
         return 0
     fi
 
-    echo -e "${CYAN}▶ 正在通过 go install 安装 vpso-mux...${PLAIN}"
-    GOBIN=/usr/local/bin go install github.com/Chunlion/VPS-Optimize/cmd/vpso-mux@latest || return 1
+    go_install_vpso_mux_latest || return 1
     chmod 755 /usr/local/bin/vpso-mux 2>/dev/null || true
     [[ -x /usr/local/bin/vpso-mux ]] || { echo -e "${RED}❌ vpso-mux 安装后仍不可执行：/usr/local/bin/vpso-mux${PLAIN}"; return 1; }
     return 0
