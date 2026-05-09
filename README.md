@@ -74,7 +74,7 @@ cy
 | 文档 | 适合情况 |
 |---|---|
 | [INSTALL.md](INSTALL.md) | 第一次安装，不知道该走哪条路线 |
-| [docs/443-tcp-peek-engine.md](docs/443-tcp-peek-engine.md) | 了解 TCP Peek + Splice 分流引擎 |
+| [docs/443-tcp-peek-engine.md](docs/443-tcp-peek-engine.md) | 了解 443 单入口技术实现 |
 | [docs/existing-server-migration.md](docs/existing-server-migration.md) | 已有 3x-ui、Caddy/Nginx、网站或订阅工具，需要迁移 |
 | [docs/recovery-runbook.md](docs/recovery-runbook.md) | SSH 失联、防火墙误封、443 改坏、服务起不来 |
 | [docs/compatibility.md](docs/compatibility.md) | 系统、虚拟化、IPv6、Docker 兼容性不确定 |
@@ -437,18 +437,23 @@ dog
 更新主脚本：
 
 ```text
-16. 更新脚本  快捷词：u / update / upd
+17. 更新脚本  快捷词：u / update / upd
 ```
 
-主菜单会缓存式自动检查发布版更新；发现新版本时会在顶部提示，输入 `u` 即可热更新到 `dist/vps.sh`。自动检查只读远程版本号，不会自动覆盖脚本。
+推荐通过 `cy -> [17 更新脚本]` 更新主脚本。主菜单会缓存式自动检查发布版更新；发现新版本时会在顶部提示，输入 `u` 即可热更新到 `dist/vps.sh`。自动检查只读远程版本号，不会自动覆盖脚本。更新逻辑会先执行 `bash -n`，再下载 `dist/vps.sh.sha256` 并执行 `sha256sum -c` 校验；校验失败不会覆盖 `/usr/local/bin/cy`。
 
 手动更新：
 
 ```bash
-wget -qO /usr/local/bin/cy https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh
-chmod +x /usr/local/bin/cy
+tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh)
+wget -qO "$tmp_file" https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh
+bash -n "$tmp_file"
+install -m 755 "$tmp_file" /usr/local/bin/cy
+rm -f "$tmp_file"
 cy
 ```
+
+手动覆盖前至少执行 `bash -n "$tmp_file"`；如需对齐内置更新流程，也可以同时下载 `dist/vps.sh.sha256` 后用 `sha256sum -c` 校验。
 
 只卸载快捷命令：
 

@@ -1,131 +1,119 @@
-# TCP Peek + Splice 分流引擎
+# 443 单入口技术实现
 
-TCP Peek + Splice 模式：基于 MSG_PEEK 读取 TLS ClientHello 中的 SNI，不消费首包，并根据 SNI 将连接分流到 Caddy 或 Xray 本地后端；转发时优先使用 splice 零拷贝，失败时自动回退普通 copy。实际运行的分流器程序为 vpso-mux。
+本文说明 VPS-Optimize 的三种 443 单入口实现方式：Nginx Stream 默认稳定实现、TCP Peek + Splice / vpso-mux 进阶实现、Xray Fallback 特殊实现。
 
-`tcp_peek` 只是脚本内部兼容名称，`ENTRY_MODE=tcp-peek` 继续有效。面向用户的正式名称是 TCP Peek + Splice 模式，实际运行的二进制保持为 `vpso-mux`。
+示例中的 `panel.example.com`、`site.example.com`、`node.example.com`、`SERVER_IP`、`8443`、`8444`、`1443` 都是示例值，仅用于说明链路关系。实际部署时请替换成你的真实域名、服务器 IP 和脚本当前保存的端口。
 
-```text
-公网 TCP 443
-  -> vpso-mux
-  -> recv(MSG_PEEK) 偷看 TLS ClientHello SNI
-  -> 按 SNI / whitelist 选择后端
-  -> splice 零拷贝双向转发
-  -> splice 不可用时回退到普通 copy 转发
-```
+## 共同配置边界
 
-它不终止 TLS，不解密 TLS，不修改首包，不管理证书，不替换 Caddy，也不是让 Xray/REALITY 直接占用 443。
+三种入口模式共用同一套公开配置：
 
-## 示例说明
+- Web 域名、Caddy 后端映射、证书和 Web 白名单共用。
+- 证书仍使用现有 `acme.sh + Cloudflare DNS API` 流程，不引入 Caddy DNS 模块，不使用 `xcaddy`。
+- Web 白名单只保护 Caddy/Web 域名，不用于限制 Xray 节点流量。
+- 只有一个服务可以监听公网 `443`：`nginx`、`xray` 或 `vpso-mux`。
+- 如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，按 `nginx-stream` 兼容处理。
 
-本文中的 `SERVER_IP`、`panel.example.com`、`site.example.com`、`8444`、`8443`、`1443` 都是示例值，用来说明测试方式和链路关系。实际部署时请替换成你自己的服务器 IP、域名和脚本当前保存的端口。
-
-TCP Peek + Splice 模式复用 443 单入口的公共 Web 域名、Caddy 后端、证书和 Web 白名单配置；Xray 入站分流规则也复用 `/etc/vps-optimize/xray-sni-routes.conf`，不维护另一份节点规则。证书策略仍是 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。
-
-## 为什么新增 TCP Peek + Splice 模式
-
-现有稳定方案是 Nginx Stream 模式：公网只开放 443，由 Nginx stream `ssl_preread` 按 SNI 分流到 Caddy、REALITY、面板、订阅和网站。这套方案继续是默认稳定模式。
-
-TCP Peek + Splice 模式提供一个可回滚的替代入口，便于进阶用户在不引入完整 Nginx stream 入口的情况下做四层 SNI 分流，并观察 `vpso-mux` 分流器的转发链路行为。
-
-## 和 Nginx Stream 的区别
-
-| 项目 | Nginx Stream 模式 | TCP Peek + Splice 模式 |
-| --- | --- | --- |
-| 状态 | 默认稳定模式 | 进阶可选模式 |
-| 入口进程 | Nginx stream | vpso-mux 分流器 |
-| SNI 获取 | `ssl_preread` | `recv(MSG_PEEK)` 解析 ClientHello |
-| TLS 终止 | 不终止 | 不终止 |
-| 证书 | 仍由 Caddy 处理网站/面板证书 | 仍由 Caddy 处理网站/面板证书 |
-| 默认未知 SNI | Xray/REALITY 后端 | Xray/REALITY 后端 |
-| 转发 | Nginx proxy | splice，失败回退 copy |
-
-## 架构图
-
-```text
-                 +-----------------------+
-client:443 ----> | vpso-mux 分流器       |
-                 | MSG_PEEK ClientHello  |
-                 +----------+------------+
-                            |
-          +-----------------+------------------+
-          |                                    |
-  SNI = panel/site/sub                 unknown SNI / REALITY SNI
-          |                                    |
-          v                                    v
-  127.0.0.1:8443 Caddy                 127.0.0.1:1443 Xray/REALITY
-          |
-          +--> panel backend / subscription backend / website backend
-```
-
-## 数据流说明
-
-`vpso-mux` accept TCP 连接后，会设置首包 peek 超时，先用 `MSG_PEEK` 读取最多 4KB，必要时扩展到 16KB。`MSG_PEEK` 只偷看 socket 缓冲区，不消费数据，所以后端收到的 TLS ClientHello 与客户端发来的原始数据一致。
-
-解析成功后，`vpso-mux` 按 route 选择后端；解析失败、非 TLS、无 SNI 或未知 SNI 默认走 `default_backend`。默认配置会把 `default_backend` 指向 Xray/REALITY 本地后端。
-
-## splice 转发
-
-Linux `splice` 不能直接 socket 到 socket。`vpso-mux` 使用：
-
-```text
-client socket -> pipe -> backend socket
-backend socket -> pipe -> client socket
-```
-
-每个方向独立转发，并在 `splice` 不可用、失败或被配置关闭时回退到普通 read/write copy。日志里的 `transfer_mode` 会记录 `splice` 或 `copy`。
-
-## 为什么仍保留 nginx_stream
-
-Nginx Stream 模式是默认稳定模式，已经覆盖证书、Caddy、REALITY、面板、订阅、网站、白名单和回滚流程。TCP Peek + Splice 模式不会默认接管 443，也不会删除现有 Nginx Stream 逻辑。
-
-## 如何先用 8444 测试
-
-菜单路径：
+常用菜单路径：
 
 ```text
 主菜单 [19 443 单入口管理中心]
+  -> [2] 首次配置 / 安装 443 单入口
+  -> [3] 切换到 Nginx Stream 模式
+  -> [4] 切换到 Xray Fallback 模式
   -> [5] 切换到 TCP Peek + Splice 模式
+  -> [7] 回滚上一次入口模式切换
   -> [16] 查看 TCP Peek + Splice 状态
 ```
 
-如需先用测试端口验证，可使用脚本中的 TCP Peek + Splice 测试入口让 `vpso-mux` 只监听 `8444`。测试端口阶段不会改公网 443，Nginx Stream 模式仍继续负责线上入口。
+## Nginx Stream 默认稳定实现
 
-常用测试命令：
+Nginx Stream 是默认稳定模式。公网 `443` 由 Nginx stream 监听，使用 `ssl_preread` 读取 TLS ClientHello 里的 SNI，但不终止 TLS、不解密流量。
 
-```bash
-openssl s_client -connect SERVER_IP:8444 -servername panel.example.com
-openssl s_client -connect SERVER_IP:8444 -servername site.example.com
-openssl s_client -connect SERVER_IP:8444 -servername random.example.com
-curl -vk --resolve site.example.com:8444:SERVER_IP https://site.example.com:8444/
+```text
+公网 443
+  -> Nginx stream ssl_preread
+  -> panel/site/sub SNI  -> Caddy 本地 TLS
+  -> Xray/REALITY SNI   -> Xray/3x-ui 本地入站
+  -> unknown SNI        -> 默认 Xray/REALITY 后端
 ```
 
-把示例域名替换成脚本生成配置里的真实域名。
+这个实现覆盖面最完整，适合作为长期默认入口。它负责稳定接入 Caddy、REALITY、面板、订阅、网站、Web 白名单和回滚流程。
 
-## 如何切换 443
+## TCP Peek + Splice / vpso-mux 进阶实现
 
-确认 8444 测试正常后再进入：
+TCP Peek + Splice / vpso-mux 是进阶模式、可回滚，默认不接管 `443`。只有用户在 `主菜单 [19 443 单入口管理中心] -> [5] 切换到 TCP Peek + Splice 模式` 后，公网 `443` 才会从 Nginx Stream 切到 `vpso-mux`。
+
+`vpso-mux` 使用 `MSG_PEEK` 查看 TLS ClientHello 中的 SNI，不消费首包；后端收到的 ClientHello 仍与客户端原始数据一致。转发优先使用 splice，失败或不可用时回退普通 copy。
+
+```text
+公网 443
+  -> vpso-mux
+  -> recv(MSG_PEEK) 查看 TLS ClientHello SNI
+  -> 按 SNI / whitelist 选择后端
+  -> splice 双向转发，失败时回退 copy
+```
+
+与 Nginx Stream 的核心差异：
+
+| 项目 | Nginx Stream | TCP Peek + Splice / vpso-mux |
+| --- | --- | --- |
+| 定位 | 默认稳定模式 | 进阶可选模式 |
+| 入口进程 | `nginx` | `vpso-mux` |
+| SNI 获取 | `ssl_preread` | `MSG_PEEK` 解析 ClientHello |
+| TLS 处理 | 不终止 TLS | 不终止 TLS |
+| 证书 | Caddy 处理 Web/面板证书 | Caddy 处理 Web/面板证书 |
+| 未知 SNI | 默认 Xray/REALITY 后端 | 默认 Xray/REALITY 后端 |
+| 转发 | Nginx stream proxy | splice，失败回退 copy |
+
+查看状态和日志：
+
+```text
+主菜单 [19 443 单入口管理中心]
+  -> [16] 查看 TCP Peek + Splice 状态
+```
+
+常用诊断命令：
+
+```bash
+systemctl status vpso-mux --no-pager
+journalctl -u vpso-mux -n 120 --no-pager
+/usr/local/bin/vpso-mux -config /etc/vps-optimize/vpso-mux.yaml -check
+```
+
+如果 `transfer_mode` 显示为 `copy`，表示 splice 未使用或已回退。可以在 `/etc/vps-optimize/vpso-mux.yaml` 中关闭 splice：
+
+```yaml
+splice:
+  enabled: false
+  fallback_to_copy: true
+```
+
+## Xray Fallback 特殊实现
+
+Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监听，普通 HTTPS fallback 到 Caddy。本脚本不会创建、删除或修改 3x-ui/Xray 入站内部配置。
+
+```text
+公网 443
+  -> Xray/3x-ui 主入站
+  -> Xray 节点流量由该主入站处理
+  -> 普通 HTTPS fallback 到 Caddy 本地后端
+```
+
+在 xray-fallback 模式下，`Xray 入站管理` 菜单不可用于多本地入站 SNI 分流。原因是公网 `443` 已由 Xray 主入站接管，脚本当前不支持在该模式下继续把多个 SNI 分流到多个本地 Xray 入站。如需多个本地 Xray 入站分流，请使用 Nginx Stream 模式或 TCP Peek + Splice / vpso-mux 模式。
+
+## 切换与回滚
+
+切换到 TCP Peek + Splice：
 
 ```text
 主菜单 [19 443 单入口管理中心]
   -> [5] 切换到 TCP Peek + Splice 模式
 ```
 
-切换会执行事务式流程：
+切换流程会生成并校验 `vpso-mux.yaml`、创建备份、隔离当前 VPS-Optimize 管理的 Nginx stream 443 配置、启动 `vpso-mux` 接管公网 `443`，并检查 Caddy 和 Xray 本地后端可达。失败时会尝试自动回滚。
 
-1. 生成临时 `vpso-mux.yaml`。
-2. 校验配置。
-3. 创建完整备份。
-4. 替换正式 mux 配置。
-5. 隔离当前 VPS-Optimize 管理的 Nginx stream 443 配置。
-6. 重启 Nginx。
-7. 启动 `vpso-mux` 接管公网 443。
-8. 检查 `ss -lntup` 中 443 是否由 `vpso-mux` 监听。
-9. 检查 Caddy 和 Xray 本地后端可达。
-10. 失败自动回滚。
-
-## 如何回滚
-
-菜单路径：
+回滚上一轮入口模式切换：
 
 ```text
 主菜单 [19 443 单入口管理中心]
@@ -134,90 +122,28 @@ curl -vk --resolve site.example.com:8444:SERVER_IP https://site.example.com:8444
 
 回滚会停止并禁用 `vpso-mux`，读取 `sni-stack.env` 重新生成 Nginx Stream 和 Caddy 配置，恢复到上一次入口模式，并运行链路体检。
 
-## 白名单如何生效
-
-白名单是按 route 生效，不是全局锁死 443：
-
-- 面板域名配置 whitelist 时，只有命中的 IPv4、IPv6、CIDR 可以访问该 route。
-- 未配置 whitelist 的网站域名保持公开。
-- `default_backend` 不默认套用面板白名单。
-- unknown SNI 默认仍走 Xray/REALITY。
-- 单 IP 会被程序按 `/32` 或 `/128` 处理。
-
-如果面板或订阅 route 没有 whitelist，配置校验会给出高亮警告。
-
 ## 常见故障
 
-### 443 被占用
-
-运行：
+检查公网 443 当前监听方：
 
 ```bash
 ss -lntup | grep ':443'
 ```
 
-切换到 TCP Peek + Splice 模式后应看到 `vpso-mux`。如果仍是 Nginx、Caddy 或 Xray，说明入口关系没有切干净，建议立即回滚。
+切换到 TCP Peek + Splice 后应看到 `vpso-mux`。如果仍是 Nginx、Caddy 或 Xray，说明入口关系没有切换干净，建议立即回滚。
 
-### SNI 解析失败
-
-非 TLS、无 SNI、ClientHello 不完整或客户端协议不带 SNI 时会走 `default_backend`。这不是 TLS 终止失败，因为 `vpso-mux` 不解密、不终止 TLS。
-
-### 面板白名单失效
-
-检查 `/etc/vps-optimize/vpso-mux.yaml` 中 panel route 是否有 `whitelist`，再看日志里的 `allowed` / `blocked` 字段。不要把白名单写成全局规则。
-
-### Caddy 后端不可达
-
-确认 Caddy 只监听本地 TLS 端口：
+检查 Caddy 本地 TLS 后端：
 
 ```bash
 ss -lntup | grep ':8443'
 systemctl status caddy --no-pager
 ```
 
-### Xray 后端不可达
-
-确认 Xray/REALITY 本地入站监听：
+检查 Xray/REALITY 本地入站：
 
 ```bash
 ss -lntup | grep ':1443'
 systemctl status xray --no-pager
 ```
 
-### splice 失败回退
-
-查看日志：
-
-```bash
-journalctl -u vpso-mux -n 80 --no-pager
-```
-
-如果 `transfer_mode` 是 `copy`，说明 splice 未使用或已回退。可以在 `vpso-mux.yaml` 中设置：
-
-```yaml
-splice:
-  enabled: false
-  fallback_to_copy: true
-```
-
-### IPv6 监听失败
-
-如果 VPS 没有 IPv6 或系统禁用了 IPv6，`[::]:443` 可能监听失败。可以只保留：
-
-```yaml
-listen:
-  tcp:
-    - "0.0.0.0:443"
-```
-
-### systemd 启动失败
-
-检查：
-
-```bash
-systemctl status vpso-mux --no-pager
-journalctl -u vpso-mux -n 120 --no-pager
-/usr/local/bin/vpso-mux -config /etc/vps-optimize/vpso-mux.yaml -check
-```
-
-若 `/usr/local/bin/vpso-mux` 不存在，需要先安装发布版二进制，或在源码目录安装 Go 后构建。
+非 TLS、无 SNI、ClientHello 不完整或客户端协议不带 SNI 时会走默认后端。这不是 TLS 终止失败，因为 Nginx Stream 和 `vpso-mux` 都不解密、不终止 TLS。

@@ -23,6 +23,7 @@ BOLD='\033[1m'
 
 SCRIPT_VERSION="v1.9"
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
+UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
 TRAFFIC_GUARD_CONFIG="/etc/vps-optimize/traffic-guard.conf"
 TRAFFIC_GUARD_CHECKER="/usr/local/bin/vps-traffic-guard-check"
@@ -225,6 +226,34 @@ download_remote_script() {
         return 1
     fi
     [[ -s "$output_file" ]]
+}
+
+verify_file_sha256() {
+    local file="$1"
+    local checksum_file="$2"
+    local expected check_file
+
+    expected=$(awk 'NR == 1 {print $1}' "$checksum_file" 2>/dev/null | tr 'A-F' 'a-f')
+    if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+        echo -e "${RED}❌ sha256 校验文件格式无效：${checksum_file}${PLAIN}"
+        return 1
+    fi
+
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        echo -e "${RED}❌ 当前系统缺少 sha256sum，无法校验更新包。${PLAIN}"
+        return 1
+    fi
+
+    check_file=$(mktemp /tmp/cy_update_check.XXXXXX.sha256) || return 1
+    printf '%s  %s\n' "$expected" "$file" > "$check_file"
+    if ! sha256sum -c "$check_file" >/dev/null 2>&1; then
+        rm -f "$check_file"
+        echo -e "${RED}❌ sha256 校验失败，已拒绝覆盖 /usr/local/bin/cy。${PLAIN}"
+        return 1
+    fi
+    rm -f "$check_file"
+
+    echo -e "${GREEN}✅ sha256 校验通过。${PLAIN}"
 }
 
 run_remote_script() {
@@ -1356,6 +1385,55 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+configure_system_timezone_for_init() {
+    local current_tz choice custom_tz target_tz
+
+    if ! command -v timedatectl >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ 未检测到 timedatectl，已保持当前系统时区。${PLAIN}"
+        return 0
+    fi
+
+    current_tz=$(timedatectl show -p Timezone --value 2>/dev/null || true)
+    [[ -z "$current_tz" ]] && current_tz="未设置/未知"
+
+    echo -e "${CYAN}当前系统时区：${current_tz}${PLAIN}"
+    echo -e "${GREEN}  1. 保持当前时区${PLAIN} ${YELLOW}(默认)${PLAIN}"
+    echo -e "${GREEN}  2. Asia/Shanghai${PLAIN}"
+    echo -e "${GREEN}  3. Asia/Tokyo${PLAIN}"
+    echo -e "${GREEN}  4. UTC${PLAIN}"
+    echo -e "${GREEN}  5. 自定义时区${PLAIN}"
+    read_trimmed choice "请选择基础初始化时区处理方式（默认 1）: "
+
+    case "${choice:-1}" in
+        1)
+            echo -e "${BLUE}已保持当前时区：${current_tz}${PLAIN}"
+            return 0
+            ;;
+        2) target_tz="Asia/Shanghai" ;;
+        3) target_tz="Asia/Tokyo" ;;
+        4) target_tz="UTC" ;;
+        5)
+            read_trimmed custom_tz "请输入 IANA 时区名称（例如 Europe/London）: "
+            target_tz="$custom_tz"
+            ;;
+        *)
+            echo -e "${YELLOW}⚠️ 未选择有效选项，已保持当前时区：${current_tz}${PLAIN}"
+            return 0
+            ;;
+    esac
+
+    if [[ -z "$target_tz" ]]; then
+        echo -e "${YELLOW}⚠️ 自定义时区为空，已保持当前时区：${current_tz}${PLAIN}"
+        return 0
+    fi
+
+    if timedatectl set-timezone "$target_tz" >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ 系统时区已设置为：${target_tz}${PLAIN}"
+    else
+        echo -e "${YELLOW}⚠️ 时区设置失败，已保持当前时区：${current_tz}${PLAIN}"
+    fi
+}
+
 func_base_init() {
     clear
     echo -e "${CYAN}👉 正在更新系统软件包、安装基础工具、限制日志并开启基础 BBR...${PLAIN}"
@@ -1382,8 +1460,8 @@ RuntimeMaxUse=100M
 EOF
     systemctl restart systemd-journald > /dev/null 2>&1
     
-    # 设置时区为上海
-    timedatectl set-timezone Asia/Shanghai > /dev/null 2>&1
+    # 时区默认保持当前设置，必要时由用户选择
+    configure_system_timezone_for_init
     
     # 强制激活基础 BBR
     modprobe tcp_bbr >/dev/null 2>&1 # 先主动唤醒/加载 BBR 内核模块
@@ -11463,25 +11541,34 @@ print_auto_update_notice() {
 
 func_update_script() {
     clear
-    local tmp_file
+    local tmp_file sha_file
     tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh) || {
         echo -e "${RED}❌ 临时文件创建失败，更新已取消。${PLAIN}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return 1
+    }
+    sha_file=$(mktemp /tmp/cy_update.XXXXXX.sha256) || {
+        rm -f "$tmp_file"
+        echo -e "${RED}❌ 临时校验文件创建失败，更新已取消。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return 1
     }
     echo -e "${CYAN}👉 正在从 GitHub 源地址拉取最新版本...${PLAIN}"
     if download_remote_script "$UPDATE_URL" "$tmp_file" \
         && bash -n "$tmp_file" \
+        && download_remote_script "$UPDATE_SHA256_URL" "$sha_file" \
+        && verify_file_sha256 "$tmp_file" "$sha_file" \
         && grep -q "func_sni_stack_quick_menu" "$tmp_file" 2>/dev/null \
         && grep -q "main_menu" "$tmp_file" 2>/dev/null \
         && ! grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' "$tmp_file" 2>/dev/null; then
         mv "$tmp_file" /usr/local/bin/cy
         chmod +x /usr/local/bin/cy
+        rm -f "$sha_file"
         echo -e "${GREEN}✅ 更新下载并覆盖完成！正在重启面板...${PLAIN}"
         sleep 1
         exec bash /usr/local/bin/cy
     else
-        rm -f "$tmp_file"
+        rm -f "$tmp_file" "$sha_file"
         echo -e "${RED}❌ 更新失败！请检查您的网络连通性或 GitHub 地址是否正确。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
     fi
@@ -13291,7 +13378,7 @@ main_menu() {
         print_breadcrumb "主菜单"
         echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e " ${YELLOW}快捷输入：443 直达单入口，caddy 进普通反代，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
+        echo -e " ${YELLOW}快捷输入：443 直达单入口，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
         echo -e " ${YELLOW}高风险操作必须输入大写 YES；不确定时先做 [16] 备份。${PLAIN}"
         print_auto_update_notice
         echo -e "${CYAN}================================================${PLAIN}"

@@ -42,4 +42,12 @@ mkdir -p "$out_dir"
 
 chmod +x "$out_file"
 bash -n "$out_file"
+if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$out_dir" && sha256sum "$(basename "$out_file")" > "$(basename "$out_file").sha256")
+elif command -v shasum >/dev/null 2>&1; then
+    (cd "$out_dir" && shasum -a 256 "$(basename "$out_file")" > "$(basename "$out_file").sha256")
+else
+    printf 'Missing sha256sum/shasum; cannot write %s.sha256\n' "$out_file" >&2
+    exit 1
+fi
 printf 'Built %s\n' "$out_file"

@@ -11,6 +11,7 @@ BOLD='\033[1m'
 
 SCRIPT_VERSION="v1.9"
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
+UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
 TRAFFIC_GUARD_CONFIG="/etc/vps-optimize/traffic-guard.conf"
 TRAFFIC_GUARD_CHECKER="/usr/local/bin/vps-traffic-guard-check"
@@ -213,6 +214,34 @@ download_remote_script() {
         return 1
     fi
     [[ -s "$output_file" ]]
+}
+
+verify_file_sha256() {
+    local file="$1"
+    local checksum_file="$2"
+    local expected check_file
+
+    expected=$(awk 'NR == 1 {print $1}' "$checksum_file" 2>/dev/null | tr 'A-F' 'a-f')
+    if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+        echo -e "${RED}❌ sha256 校验文件格式无效：${checksum_file}${PLAIN}"
+        return 1
+    fi
+
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        echo -e "${RED}❌ 当前系统缺少 sha256sum，无法校验更新包。${PLAIN}"
+        return 1
+    fi
+
+    check_file=$(mktemp /tmp/cy_update_check.XXXXXX.sha256) || return 1
+    printf '%s  %s\n' "$expected" "$file" > "$check_file"
+    if ! sha256sum -c "$check_file" >/dev/null 2>&1; then
+        rm -f "$check_file"
+        echo -e "${RED}❌ sha256 校验失败，已拒绝覆盖 /usr/local/bin/cy。${PLAIN}"
+        return 1
+    fi
+    rm -f "$check_file"
+
+    echo -e "${GREEN}✅ sha256 校验通过。${PLAIN}"
 }
 
 run_remote_script() {
