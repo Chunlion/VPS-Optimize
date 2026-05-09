@@ -3031,7 +3031,7 @@ detect_443_listener() {
 
 detect_current_entry_status() {
     local env_file="/etc/vps-optimize/sni-stack.env"
-    local listener_info expected_listener
+    local listener_info expected_listener xui_svc xui_status
 
     ENTRY_STATUS_MODE=$(get_entry_mode)
     ENTRY_STATUS_CADDY_ADDR="not-configured"
@@ -3052,7 +3052,11 @@ detect_current_entry_status() {
     ENTRY_STATUS_LISTENER="${listener_info%%|*}"
     ENTRY_STATUS_LISTENER_PROCESS="${listener_info#*|}"
     ENTRY_STATUS_NGINX_SERVICE=$(service_status_compact nginx)
-    ENTRY_STATUS_XRAY_SERVICE="xray: $(service_status_compact xray) / x-ui: $(service_status_compact x-ui) / 3x-ui: $(service_status_compact 3x-ui)"
+    xui_status=$(xui_panel_status_compact)
+    if xui_svc=$(xui_panel_service_name 2>/dev/null); then
+        xui_status="${xui_status} (systemd: ${xui_svc})"
+    fi
+    ENTRY_STATUS_XRAY_SERVICE="独立 xray: $(service_status_compact xray) / 3x-ui/x-ui 面板: ${xui_status}"
     ENTRY_STATUS_TCPPEEK_SERVICE=$(service_status_compact vpso-mux)
     ENTRY_STATUS_CADDY_LISTEN_LINE="not-configured"
     ENTRY_STATUS_XRAY_LISTEN_LINE="not-configured"
@@ -3094,7 +3098,7 @@ show_current_entry_status() {
     fi
     echo -e "tcppeek 服务状态: ${ENTRY_STATUS_TCPPEEK_SERVICE}"
     echo -e "nginx 服务状态: ${ENTRY_STATUS_NGINX_SERVICE}"
-    echo -e "xray 服务状态: ${ENTRY_STATUS_XRAY_SERVICE}"
+    echo -e "Xray/3x-ui 服务状态: ${ENTRY_STATUS_XRAY_SERVICE}"
     if [[ "$ENTRY_STATUS_CONSISTENT" == "yes" ]]; then
         echo -e "配置模式与实际监听: ${GREEN}一致${PLAIN}"
     else
@@ -4635,7 +4639,7 @@ sni_stack_health_check_enhanced() {
         echo -e "${YELLOW}配置模式与实际监听不一致，建议重新应用当前入口模式。${PLAIN}"
     fi
     echo -e "nginx 状态：${ENTRY_STATUS_NGINX_SERVICE}"
-    echo -e "xray 状态：${ENTRY_STATUS_XRAY_SERVICE}"
+    echo -e "Xray/3x-ui 状态：${ENTRY_STATUS_XRAY_SERVICE}"
     echo -e "tcppeek 状态：${ENTRY_STATUS_TCPPEEK_SERVICE}"
     echo -e "caddy 状态：$(service_status_compact caddy)"
     if [[ -f "$mux_config" ]]; then
@@ -8100,6 +8104,7 @@ ssh_effective_setting() {
         value=$("$sshd_bin" -T 2>/dev/null | awk -v k="$(echo "$key" | tr '[:upper:]' '[:lower:]')" '$1 == k {print $2; exit}')
         [[ -n "$value" ]] || return 1
         printf '%s' "$value"
+        return 0
     fi
     return 1
 }
@@ -11267,6 +11272,13 @@ check_script_update_status() {
     if [[ "$mode" != "force" ]] && script_update_cache_is_fresh; then
         status=$(read_script_update_cache_field status)
         latest=$(read_script_update_cache_field latest)
+        if [[ -n "$latest" && "$latest" != "unknown" ]]; then
+            if version_is_newer "$latest" "$SCRIPT_VERSION"; then
+                status="available"
+            else
+                status="current"
+            fi
+        fi
         printf '%s|%s\n' "${status:-unknown}" "${latest:-unknown}"
         return 0
     fi
