@@ -175,7 +175,7 @@ if grep -q '19) func_sni_stack_quick_menu' dist/vps.sh; then
 fi
 grep -q '7) func_hosts_manage' dist/vps.sh
 grep -q '8) func_network_interface_manage' dist/vps.sh
-grep -q 'SCRIPT_VERSION="v1.8"' dist/vps.sh
+grep -q 'SCRIPT_VERSION="v1.9"' dist/vps.sh
 grep -q 'SCRIPT_UPDATE_CACHE=' dist/vps.sh
 grep -q 'Compatibility marker: VPS 全能控制面板' dist/vps.sh
 grep -q 'UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"' dist/vps.sh
