@@ -11943,7 +11943,7 @@ main_menu() {
         print_breadcrumb "主菜单"
         echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e " ${YELLOW}快捷输入：443 直达单入口，caddy 进普通反代，traffic 到网络菜单，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
+        echo -e " ${YELLOW}快捷输入：443 直达单入口，caddy 进普通反代，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
         echo -e " ${YELLOW}高风险操作必须输入大写 YES；不确定时先做 [16] 备份。${PLAIN}"
         print_auto_update_notice
         echo -e "${CYAN}================================================${PLAIN}"
