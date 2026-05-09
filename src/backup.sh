@@ -7,7 +7,7 @@ sni_stack_backup_dir() {
 
 create_sni_stack_backup() {
     local backup_dir
-    backup_dir=$(sni_stack_backup_dir)
+    backup_dir="${1:-$(sni_stack_backup_dir)}"
     mkdir -p "$backup_dir/nginx_stream.d" "$backup_dir/caddy_conf.d" "$backup_dir/vps-optimize" "$backup_dir/systemd" "$backup_dir/usr-local-bin" "$backup_dir/x-ui"
     [[ -f /etc/nginx/nginx.conf ]] && cp -a /etc/nginx/nginx.conf "$backup_dir/nginx.conf" 2>/dev/null || true
     [[ -d /etc/nginx/stream.d ]] && cp -a /etc/nginx/stream.d/vps_sni_*.conf "$backup_dir/nginx_stream.d/" 2>/dev/null || true

@@ -119,6 +119,11 @@ grep -q 'require_vpso_mux_binary_for_cutover' dist/vps.sh
 grep -q 'preflight_tcppeek_before_cutover' dist/vps.sh
 grep -q 'guard_current_ssh_not_on_entry_port' dist/vps.sh
 grep -q 'TCP Peek 8444 预检' dist/vps.sh
+grep -q 'preview_entry_mode_cutover' dist/vps.sh
+grep -q '443 单入口切换变更预览' dist/vps.sh
+grep -q 'vpso_mux_status_json_path' dist/vps.sh
+grep -q '/var/lib/vps-optimize/vpso-mux/status.json' dist/vps.sh
+grep -q 'show_vpso_mux_runtime_status' dist/vps.sh
 grep -q 'print_vpso_mux_failure_context' dist/vps.sh
 grep -q 'print_nginx_stream_failure_context' dist/vps.sh
 grep -q 'assert_nginx_stream_config_loaded' dist/vps.sh
@@ -136,7 +141,7 @@ grep -q 'is_loopback_probe_host "$host"' dist/vps.sh
 grep -q 'Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1' dist/vps.sh
 grep -q 'nginx -T .*grep -Fq "$conf_file"' dist/vps.sh
 grep -q 'apply_nginx_stream_mode "$backup_dir"' dist/vps.sh
-grep -q 'local current_mode backup_dir assume_yes' dist/vps.sh
+grep -q 'local current_mode backup_dir planned_backup_dir assume_yes' dist/vps.sh
 grep -q 'if \[\[ "$assume_yes" != "--yes" \]\]; then' dist/vps.sh
 grep -q 'if ! restart_service_if_available nginx; then' dist/vps.sh
 grep -q 'stop_vpso_mux_service_if_public_443 || return 1' dist/vps.sh

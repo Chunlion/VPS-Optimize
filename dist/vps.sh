@@ -1011,7 +1011,7 @@ sni_stack_backup_dir() {
 
 create_sni_stack_backup() {
     local backup_dir
-    backup_dir=$(sni_stack_backup_dir)
+    backup_dir="${1:-$(sni_stack_backup_dir)}"
     mkdir -p "$backup_dir/nginx_stream.d" "$backup_dir/caddy_conf.d" "$backup_dir/vps-optimize" "$backup_dir/systemd" "$backup_dir/usr-local-bin" "$backup_dir/x-ui"
     [[ -f /etc/nginx/nginx.conf ]] && cp -a /etc/nginx/nginx.conf "$backup_dir/nginx.conf" 2>/dev/null || true
     [[ -d /etc/nginx/stream.d ]] && cp -a /etc/nginx/stream.d/vps_sni_*.conf "$backup_dir/nginx_stream.d/" 2>/dev/null || true
@@ -3915,6 +3915,10 @@ vpso_mux_service_name() {
     echo "vpso-mux.service"
 }
 
+vpso_mux_status_json_path() {
+    echo "/var/lib/vps-optimize/vpso-mux/status.json"
+}
+
 single_443_engine_state_path() {
     echo "/etc/vps-optimize/443-engine.conf"
 }
@@ -4049,6 +4053,95 @@ show_tcp_peek_splice_info() {
     echo -e "  3. 使用 TCP Peek + Splice 测试入口监听 8444"
     echo -e "  4. 确认后再事务式切换公网 443"
     echo -e "  5. 异常时从菜单回滚到 Nginx Stream 模式"
+}
+
+print_vpso_mux_systemd_fallback_status() {
+    local listen_port="${1:-${NGINX_LISTEN_PORT:-443}}"
+    local public_lines preflight_lines
+    echo -e "${YELLOW}status.json 不存在或解析失败，已降级为 systemd / 监听状态检查。${PLAIN}"
+    echo -e "vpso-mux：$(service_status_compact vpso-mux)"
+    echo -e "vpso-mux-preflight：$(service_status_compact vpso-mux-preflight)"
+    echo -e "公网 ${listen_port} 监听："
+    public_lines=$(ss -lntp 2>/dev/null | awk -v p=":${listen_port}" '$4 ~ p"$" {print}' || true)
+    echo "${public_lines:-未监听或当前用户无权限查看进程}"
+    echo -e "8444 预检监听："
+    preflight_lines=$(ss -lntp 2>/dev/null | awk '$4 ~ ":8444$" {print}' || true)
+    echo "${preflight_lines:-未监听或当前用户无权限查看进程}"
+}
+
+print_vpso_mux_status_json() {
+    local status_file py_bin
+    status_file=$(vpso_mux_status_json_path)
+    [[ -s "$status_file" ]] || return 1
+
+    if command -v python3 >/dev/null 2>&1; then
+        py_bin="python3"
+    elif command -v python >/dev/null 2>&1; then
+        py_bin="python"
+    else
+        return 1
+    fi
+
+    "$py_bin" - "$status_file" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+
+def value(name, default=0):
+    return data.get(name, default)
+
+print(f"status.json：{path}")
+print(f"启动时间：{value('start_time', 'unknown')}")
+print(f"更新时间：{value('updated_at', 'unknown')}")
+listen = data.get("listen_addresses") or []
+print("监听地址：" + (", ".join(listen) if listen else "unknown"))
+print(f"连接总数：{value('total_connections')}")
+print(f"splice 成功次数：{value('splice_success')}")
+print(f"copy fallback 次数：{value('copy_fallback')}")
+print(f"白名单拦截次数：{value('whitelist_blocked')}")
+print(f"no_sni 次数：{value('no_sni')}")
+
+route_hits = data.get("route_hits") or {}
+print("按 route 命中次数：")
+if route_hits:
+    for name, count in sorted(route_hits.items(), key=lambda item: (-int(item[1]), item[0])):
+        print(f"  - {name}: {count}")
+else:
+    print("  - 暂无")
+
+recent_errors = data.get("recent_errors") or []
+print("最近错误：")
+if recent_errors:
+    for item in recent_errors[-10:]:
+        at = item.get("time", "unknown")
+        msg = item.get("message", "")
+        route = item.get("route_name", "")
+        sni = item.get("sni", "")
+        suffix = ""
+        if route:
+            suffix += f" route={route}"
+        if sni:
+            suffix += f" sni={sni}"
+        print(f"  - {at} {msg}{suffix}")
+else:
+    print("  - 暂无")
+PY
+}
+
+show_vpso_mux_runtime_status() {
+    local status_file
+    status_file=$(vpso_mux_status_json_path)
+    echo -e "${BOLD}TCP Peek + Splice 运行统计${PLAIN}"
+    if ! print_vpso_mux_status_json; then
+        print_vpso_mux_systemd_fallback_status "${NGINX_LISTEN_PORT:-443}"
+    fi
+    echo -e "------------------------------------------------"
+    echo -e "配置文件：$(vpso_mux_config_path)"
+    echo -e "systemd：/etc/systemd/system/$(vpso_mux_service_name)"
+    echo -e "状态文件：${status_file}"
 }
 
 append_vpso_mux_route_yaml() {
@@ -4270,7 +4363,8 @@ install_vpso_mux_binary() {
 }
 
 write_vpso_mux_systemd_service() {
-    cat <<'EOF' > /etc/systemd/system/vpso-mux.service
+    local service_file="${1:-/etc/systemd/system/vpso-mux.service}"
+    cat <<'EOF' > "$service_file"
 [Unit]
 Description=VPS-Optimize TCP Peek + Splice vpso-mux router
 After=network-online.target
@@ -4291,8 +4385,10 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 EOF
-    chmod 644 /etc/systemd/system/vpso-mux.service
-    systemctl daemon-reload >/dev/null 2>&1 || true
+    chmod 644 "$service_file"
+    if [[ "$service_file" == "/etc/systemd/system/vpso-mux.service" ]]; then
+        systemctl daemon-reload >/dev/null 2>&1 || true
+    fi
 }
 
 run_vpso_mux_config_check() {
@@ -4417,12 +4513,18 @@ tcp_peek_dry_run_config() {
 start_tcp_peek_test_port() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}TCP Peek + Splice 测试入口${PLAIN}"
+    echo -e "${BOLD}TCP Peek + Splice 状态 / 测试入口${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    load_sni_stack_env || return 1
-    if [[ "$(single_443_current_engine)" == "tcp_peek" ]]; then
-        echo -e "${RED}❌ 当前入口已经是 TCP Peek + Splice 模式。为避免误停公网 443，本入口不覆盖运行中的 443 配置。${PLAIN}"
+    if ! load_sni_stack_env; then
+        NGINX_LISTEN_PORT="${NGINX_LISTEN_PORT:-443}"
+        show_vpso_mux_runtime_status
         return 1
+    fi
+    show_vpso_mux_runtime_status
+    echo -e "------------------------------------------------"
+    if [[ "$(single_443_current_engine)" == "tcp_peek" ]]; then
+        echo -e "${YELLOW}当前入口已经是 TCP Peek + Splice 模式。为避免误停公网 443，本入口不覆盖运行中的 443 配置。${PLAIN}"
+        return 0
     fi
     echo -e "${YELLOW}vpso-mux 预检服务只监听 8444，当前公网 443 入口不会被停止或替换。${PLAIN}"
     confirm_risk_action "安装/构建 vpso-mux 并启动 8444 预检" \
@@ -4517,6 +4619,155 @@ entry_mode_engine_name() {
         "xray-fallback") echo "xray_fallback" ;;
         "tcp-peek") echo "tcp_peek" ;;
     esac
+}
+
+print_entry_mode_cutover_paths() {
+    local target_mode="$1"
+    echo -e "${BOLD}将涉及的配置路径${PLAIN}"
+    echo -e "Nginx：/etc/nginx/nginx.conf"
+    echo -e "Nginx：/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
+    echo -e "Nginx：/etc/nginx/conf.d/00-vps-default-drop.conf"
+    echo -e "Caddy：/etc/caddy/Caddyfile"
+    echo -e "Caddy：/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy"
+    local site_domain
+    for site_domain in "${SITE_DOMAINS[@]}"; do
+        [[ -n "$site_domain" ]] && echo -e "Caddy：/etc/caddy/conf.d/${site_domain}.caddy"
+    done
+    echo -e "systemd：/etc/systemd/system/vpso-mux.service"
+    echo -e "vpso-mux：$(vpso_mux_config_path)"
+    echo -e "状态：$(single_443_engine_state_path)"
+    echo -e "共享参数：/etc/vps-optimize/sni-stack.env"
+    if [[ "$target_mode" == "tcp-peek" ]]; then
+        echo -e "vpso-mux 状态：$(vpso_mux_status_json_path)"
+    fi
+}
+
+print_preview_file_diff() {
+    local actual_path="$1"
+    local planned_path="$2"
+    local title="$3"
+
+    echo -e "${CYAN}--- ${title}${PLAIN}"
+    if ! command -v diff >/dev/null 2>&1; then
+        echo -e "${YELLOW}未检测到 diff 命令，无法显示文本差异。${PLAIN}"
+        return 0
+    fi
+
+    if [[ -f "$actual_path" && -f "$planned_path" ]]; then
+        diff -u --label "${actual_path} (当前)" --label "${actual_path} (预计)" "$actual_path" "$planned_path" || true
+    elif [[ -f "$actual_path" && ! -f "$planned_path" ]]; then
+        diff -u --label "${actual_path} (当前)" --label "${actual_path} (预计停用)" "$actual_path" /dev/null || true
+    elif [[ ! -f "$actual_path" && -f "$planned_path" ]]; then
+        diff -u --label "${actual_path} (当前不存在)" --label "${actual_path} (预计新增)" /dev/null "$planned_path" || true
+    else
+        echo "当前和预计都没有该文件。"
+    fi
+    echo ""
+}
+
+write_entry_preview_caddyfile() {
+    local output_file="$1"
+    cat <<'EOF' > "$output_file"
+{
+    auto_https off
+}
+
+import conf.d/*
+EOF
+}
+
+show_entry_mode_cutover_diff() {
+    local target_mode="$1"
+    local tmp_dir target_root target_caddy_dir target_nginx target_mux target_service target_caddyfile
+    target_mode=$(normalize_entry_mode_name "$target_mode") || return 1
+    tmp_dir=$(mktemp -d /tmp/vpso-entry-preview.XXXXXX) || return 1
+    chmod 700 "$tmp_dir" 2>/dev/null || true
+    target_root="${tmp_dir}/target"
+    target_caddy_dir="${target_root}/etc/caddy/conf.d"
+    mkdir -p "$target_caddy_dir" "${target_root}/etc/nginx/stream.d" "${target_root}/etc/vps-optimize" "${target_root}/etc/systemd/system"
+
+    target_caddyfile="${target_root}/etc/caddy/Caddyfile"
+    target_nginx="${target_root}/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
+    target_mux="${target_root}/etc/vps-optimize/vpso-mux.yaml"
+    target_service="${target_root}/etc/systemd/system/vpso-mux.service"
+
+    write_entry_preview_caddyfile "$target_caddyfile"
+    write_caddy_panel_config "${target_caddy_dir}/${PANEL_DOMAIN}.caddy"
+    write_caddy_site_config "$target_caddy_dir"
+
+    if [[ "$target_mode" == "nginx-stream" ]]; then
+        write_nginx_sni_stream_config "$target_nginx" "no"
+    fi
+    if [[ "$target_mode" == "tcp-peek" ]]; then
+        write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$target_mux"
+        write_vpso_mux_systemd_service "$target_service"
+    else
+        [[ -f "$(vpso_mux_config_path)" ]] && cp -a "$(vpso_mux_config_path)" "$target_mux" 2>/dev/null || true
+        [[ -f /etc/systemd/system/vpso-mux.service ]] && cp -a /etc/systemd/system/vpso-mux.service "$target_service" 2>/dev/null || true
+    fi
+
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}443 单入口切换 diff 预览${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_preview_file_diff "/etc/caddy/Caddyfile" "$target_caddyfile" "Caddyfile"
+    print_preview_file_diff "/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy" "${target_caddy_dir}/${PANEL_DOMAIN}.caddy" "Caddy 面板域名"
+    local site_domain
+    for site_domain in "${SITE_DOMAINS[@]}"; do
+        [[ -n "$site_domain" ]] || continue
+        print_preview_file_diff "/etc/caddy/conf.d/${site_domain}.caddy" "${target_caddy_dir}/${site_domain}.caddy" "Caddy 网站/反代 ${site_domain}"
+    done
+    print_preview_file_diff "/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf" "$target_nginx" "Nginx Stream 入口"
+    print_preview_file_diff "$(vpso_mux_config_path)" "$target_mux" "vpso-mux 分流配置"
+    print_preview_file_diff "/etc/systemd/system/vpso-mux.service" "$target_service" "vpso-mux systemd"
+    echo -e "${YELLOW}diff 预览只在临时目录生成目标文件，不会写入 /etc。临时目录：${tmp_dir}${PLAIN}"
+}
+
+preview_entry_mode_cutover() {
+    local current_mode="$1"
+    local target_mode="$2"
+    local backup_dir="$3"
+    local listener_info current_listener current_display expected_listener expected_display choice
+
+    current_mode=$(normalize_entry_mode_name "$current_mode" 2>/dev/null || echo "$current_mode")
+    target_mode=$(normalize_entry_mode_name "$target_mode") || return 1
+    listener_info=$(detect_443_listener "$NGINX_LISTEN_PORT")
+    current_listener="${listener_info%%|*}"
+    current_display=$(entry_listener_display_name "$current_listener")
+    expected_listener=$(entry_mode_expected_listener "$target_mode") || return 1
+    expected_display=$(entry_listener_display_name "$expected_listener")
+
+    while true; do
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}443 单入口切换变更预览${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "当前 ENTRY_MODE：${current_mode}"
+        echo -e "目标 ENTRY_MODE：${target_mode}"
+        echo -e "当前 443 监听者：${current_display} (${listener_info#*|})"
+        echo -e "切换后预计监听者：${expected_display}"
+        echo -e "回滚点位置：${backup_dir}"
+        echo -e "------------------------------------------------"
+        print_entry_mode_cutover_paths "$target_mode"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 查看 diff${PLAIN}"
+        echo -e "${GREEN}  2. 继续切换${PLAIN}"
+        echo -e "${RED}  0. 取消，不修改任何配置${PLAIN}"
+        read_trimmed choice "请选择操作（默认 0 取消）: "
+        case "${choice:-0}" in
+            1|d|D|diff)
+                show_entry_mode_cutover_diff "$target_mode"
+                ;;
+            2|y|Y|yes|YES)
+                return 0
+                ;;
+            0|n|N|no|NO|q|Q)
+                echo -e "${BLUE}已取消 443 入口切换，未修改任何配置。${PLAIN}"
+                return 1
+                ;;
+            *)
+                echo -e "${RED}❌ 无效选择。${PLAIN}"
+                ;;
+        esac
+    done
 }
 
 entry_mode_expected_listener() {
@@ -4727,8 +4978,8 @@ check_entry_mode_dependencies() {
 }
 
 backup_entry_mode_config() {
-    local backup_dir service_path svc listener_info
-    create_sni_stack_backup >/dev/null
+    local backup_dir="${1:-}" service_path svc listener_info
+    create_sni_stack_backup "$backup_dir" >/dev/null
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
     [[ -n "$backup_dir" && -d "$backup_dir" ]] || { echo -e "${RED}❌ 入口模式切换备份失败。${PLAIN}"; return 1; }
 
@@ -4955,7 +5206,7 @@ prepare_initial_entry_mode_dependencies() {
 
 switch_entry_mode() {
     local target_mode="$1"
-    local current_mode backup_dir yn
+    local current_mode backup_dir planned_backup_dir yn
     load_sni_stack_env || return 1
     target_mode=$(normalize_entry_mode_name "$target_mode") || { echo -e "${RED}❌ 目标入口模式无效：${target_mode}${PLAIN}"; return 1; }
     current_mode=$(get_entry_mode)
@@ -4967,16 +5218,14 @@ switch_entry_mode() {
     fi
 
     echo -e "${CYAN}准备切换 443 入口模式：${current_mode} -> ${target_mode}${PLAIN}"
-    guard_current_ssh_not_on_entry_port "切换 443 入口模式" || return 1
-    confirm_risk_action "切换 443 入口模式 ${current_mode} -> ${target_mode}" \
-        "公网 ${NGINX_LISTEN_PORT} 的唯一入口监听者，以及 nginx/xray/vpso-mux 相关服务状态" \
-        "菜单 [19] -> [7] 回滚到上一次入口模式备份；必要时用云厂商 VNC/Serial Console 登录恢复" \
-        "请确认当前 SSH 不依赖公网 ${NGINX_LISTEN_PORT}，且已能从云厂商控制台接入服务器。" || return 1
     check_entry_mode_dependencies "$target_mode" || return 1
-    backup_dir=$(backup_entry_mode_config) || return 1
     if [[ "$target_mode" == "xray-fallback" ]]; then
         select_xray_fallback_main_route_for_switch || return 1
     fi
+    planned_backup_dir=$(sni_stack_backup_dir)
+    preview_entry_mode_cutover "$current_mode" "$target_mode" "$planned_backup_dir" || return 1
+    guard_current_ssh_not_on_entry_port "切换 443 入口模式" || return 1
+    backup_dir=$(backup_entry_mode_config "$planned_backup_dir") || return 1
     if ! preflight_entry_mode_before_cutover "$target_mode"; then
         echo -e "${RED}❌ 入口模式 ${target_mode} 预检失败，公网 443 未切换。${PLAIN}"
         return 1
@@ -5002,7 +5251,7 @@ switch_entry_mode() {
 }
 
 reapply_current_entry_mode() {
-    local current_mode backup_dir assume_yes
+    local current_mode backup_dir planned_backup_dir assume_yes
     assume_yes="${1:-}"
     load_sni_stack_env || return 1
     current_mode=$(get_entry_mode)
@@ -5010,13 +5259,12 @@ reapply_current_entry_mode() {
     echo -e "${CYAN}正在重新应用当前 443 入口模式：${current_mode}${PLAIN}"
     guard_current_ssh_not_on_entry_port "重新应用 443 入口模式" || return 1
     if [[ "$assume_yes" != "--yes" ]]; then
-        confirm_risk_action "重新应用 443 入口模式 ${current_mode}" \
-            "公网 ${NGINX_LISTEN_PORT} 的入口监听配置和相关 systemd 服务" \
-            "菜单 [19] -> [7] 回滚到上一次入口模式备份" \
-            "请确认当前 SSH 不依赖公网 ${NGINX_LISTEN_PORT}，并已准备好云厂商控制台。" || return 1
+        planned_backup_dir=$(sni_stack_backup_dir)
+        preview_entry_mode_cutover "$current_mode" "$current_mode" "$planned_backup_dir" || return 1
     fi
     check_entry_mode_dependencies "$current_mode" || return 1
-    backup_dir=$(backup_entry_mode_config) || return 1
+    planned_backup_dir="${planned_backup_dir:-$(sni_stack_backup_dir)}"
+    backup_dir=$(backup_entry_mode_config "$planned_backup_dir") || return 1
     if [[ "$current_mode" == "xray-fallback" ]]; then
         select_xray_fallback_main_route_for_switch || return 1
     fi
@@ -5859,7 +6107,8 @@ EOF
 }
 
 write_nginx_sni_stream_config() {
-    local conf_file="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
+    local conf_file="${1:-/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf}"
+    local validate="${2:-yes}"
     local listen_directives
     local caddy_backend
     local xray_backend
@@ -6005,7 +6254,9 @@ ${listen_directives}
     proxy_timeout 24h;
 }
 EOF
-    nginx -t
+    if [[ "$validate" == "yes" ]]; then
+        nginx -t
+    fi
 }
 
 ensure_caddy_local_base_config() {
@@ -6022,6 +6273,7 @@ EOF
 }
 
 write_caddy_panel_config() {
+    local output_file="${1:-/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy}"
     local panel_backend
     local sub_backend
     local sub_match_paths
@@ -6030,7 +6282,7 @@ write_caddy_panel_config() {
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
     CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
     sub_match_paths=$(caddy_path_match_tokens "$SUB_URI_PATH" "$CLASH_URI_PATH")
-    cat <<EOF > "/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy"
+    cat <<EOF > "$output_file"
 https://${PANEL_DOMAIN}:${CADDY_LISTEN_PORT} {
     bind ${CADDY_LISTEN_ADDR}
     tls /etc/caddy/certs/${PANEL_DOMAIN}.crt /etc/caddy/certs/${PANEL_DOMAIN}.key
@@ -6064,12 +6316,13 @@ EOF
 
 write_caddy_site_config() {
     [[ ${#SITE_DOMAINS[@]} -eq 0 ]] && return 0
+    local output_dir="${1:-/etc/caddy/conf.d}"
     local i site_domain site_backend
     for i in "${!SITE_DOMAINS[@]}"; do
         site_domain="${SITE_DOMAINS[$i]}"
         [[ -z "$site_domain" ]] && continue
         site_backend=$(format_hostport "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}")
-        cat <<EOF > "/etc/caddy/conf.d/${site_domain}.caddy"
+        cat <<EOF > "${output_dir}/${site_domain}.caddy"
 https://${site_domain}:${CADDY_LISTEN_PORT} {
     bind ${CADDY_LISTEN_ADDR}
     tls /etc/caddy/certs/${site_domain}.crt /etc/caddy/certs/${site_domain}.key
@@ -7266,7 +7519,7 @@ show_sni_help() {
     echo "11 链路体检：排查 ENTRY_MODE、监听、证书、Web 和 Xray 分流。"
     echo "12 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
     echo "13/14/15 维护项：证书、共享参数和订阅 External Proxy 提示。"
-    echo "16 TCP Peek 8444 预检 / 安装测试：只监听 8444，不改公网 443。"
+    echo "16 查看 TCP Peek + Splice 状态 / 8444 预检：展示 status.json 统计；预检只监听 8444，不改公网 443。"
     echo "17 TCP Peek 分流规则校验：只检查配置，不重启入口。"
     echo "18 查看 TCP Peek + Splice 日志：查看 vpso-mux 分流器日志。"
     echo "普通 Caddy 未接入 443 单入口时，用主菜单 [4 普通 Caddy 反代] -> [4] 管理域名 IP 白名单。"
@@ -13639,7 +13892,7 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN} 13. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
         echo -e "${CYAN} 14. 修改 443 共享参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
         echo -e "${CYAN} 15. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}"
-        echo -e "${CYAN} 16. TCP Peek 8444 预检 / 安装测试${PLAIN} ${YELLOW}(不改公网 443)${PLAIN}"
+        echo -e "${CYAN} 16. 查看 TCP Peek + Splice 状态 / 8444 预检${PLAIN} ${YELLOW}(不改公网 443)${PLAIN}"
         echo -e "${CYAN} 17. TCP Peek 分流规则校验${PLAIN} ${YELLOW}(只检查配置，不重启入口)${PLAIN}"
         echo -e "${CYAN} 18. 查看 TCP Peek + Splice 日志${PLAIN} ${YELLOW}(vpso-mux 分流器日志)${PLAIN}"
         echo -e "------------------------------------------------"

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -25,7 +27,34 @@ import (
 const (
 	initialPeekSize = 4096
 	maxPeekSize     = 16 * 1024
+	statusJSONPath  = "/var/lib/vps-optimize/vpso-mux/status.json"
 )
+
+type runtimeStatus struct {
+	StartTime        string            `json:"start_time"`
+	ListenAddresses  []string          `json:"listen_addresses"`
+	TotalConnections uint64            `json:"total_connections"`
+	RouteHits        map[string]uint64 `json:"route_hits"`
+	SpliceSuccess    uint64            `json:"splice_success"`
+	CopyFallback     uint64            `json:"copy_fallback"`
+	WhitelistBlocked uint64            `json:"whitelist_blocked"`
+	NoSNI            uint64            `json:"no_sni"`
+	RecentErrors     []statusError     `json:"recent_errors,omitempty"`
+	UpdatedAt        string            `json:"updated_at"`
+}
+
+type statusError struct {
+	Time      string `json:"time"`
+	Message   string `json:"message"`
+	SNI       string `json:"sni,omitempty"`
+	RouteName string `json:"route_name,omitempty"`
+}
+
+type statusTracker struct {
+	mu   sync.Mutex
+	path string
+	data runtimeStatus
+}
 
 func main() {
 	configPath := flag.String("config", "/etc/vps-optimize/vpso-mux.yaml", "path to vpso-mux yaml config")
@@ -59,6 +88,7 @@ func run(cfg *mux.Config) error {
 		return err
 	}
 	logger := mux.NewLogger()
+	status := newStatusTracker(cfg.Listen.TCP)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -74,6 +104,7 @@ func run(cfg *mux.Config) error {
 		listeners = append(listeners, ln)
 		logger.Emit("info", mux.LogEvent{Message: "listening", Backend: addr})
 	}
+	status.Write()
 
 	var wg sync.WaitGroup
 	for _, ln := range listeners {
@@ -81,7 +112,7 @@ func run(cfg *mux.Config) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			acceptLoop(ctx, ln, cfg, durations, logger, &wg)
+			acceptLoop(ctx, ln, cfg, durations, logger, status, &wg)
 		}()
 	}
 
@@ -102,7 +133,120 @@ func run(cfg *mux.Config) error {
 	return nil
 }
 
-func acceptLoop(ctx context.Context, ln net.Listener, cfg *mux.Config, d mux.Durations, logger *mux.Logger, wg *sync.WaitGroup) {
+func newStatusTracker(listen []string) *statusTracker {
+	listenCopy := append([]string(nil), listen...)
+	now := time.Now().Format(time.RFC3339)
+	return &statusTracker{
+		path: statusJSONPath,
+		data: runtimeStatus{
+			StartTime:       now,
+			ListenAddresses: listenCopy,
+			RouteHits:       map[string]uint64{},
+			UpdatedAt:       now,
+		},
+	}
+}
+
+func (s *statusTracker) Write() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.writeLocked()
+}
+
+func (s *statusTracker) RecordConnection(match mux.Match, sni, transferMode string, countCopyFallback bool, err error) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.data.TotalConnections++
+	routeName := match.RouteName
+	if routeName == "" {
+		routeName = "unknown"
+	}
+	s.data.RouteHits[routeName]++
+	if sni == "" {
+		s.data.NoSNI++
+	}
+	if !match.Allowed || match.Blocked {
+		s.data.WhitelistBlocked++
+	}
+	switch transferMode {
+	case "splice":
+		s.data.SpliceSuccess++
+	case "copy":
+		if countCopyFallback {
+			s.data.CopyFallback++
+		}
+	}
+	if err != nil {
+		s.addErrorLocked(err.Error(), sni, routeName)
+	}
+	s.writeLocked()
+}
+
+func (s *statusTracker) RecordError(message string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.addErrorLocked(message, "", "")
+	s.writeLocked()
+}
+
+func (s *statusTracker) addErrorLocked(message, sni, routeName string) {
+	if message == "" {
+		return
+	}
+	s.data.RecentErrors = append(s.data.RecentErrors, statusError{
+		Time:      time.Now().Format(time.RFC3339),
+		Message:   message,
+		SNI:       sni,
+		RouteName: routeName,
+	})
+	if len(s.data.RecentErrors) > 10 {
+		s.data.RecentErrors = s.data.RecentErrors[len(s.data.RecentErrors)-10:]
+	}
+}
+
+func (s *statusTracker) writeLocked() {
+	if s == nil || s.path == "" {
+		return
+	}
+	s.data.UpdatedAt = time.Now().Format(time.RFC3339)
+	payload, err := json.MarshalIndent(s.data, "", "  ")
+	if err != nil {
+		return
+	}
+	dir := filepath.Dir(s.path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(dir, "status.*.tmp")
+	if err != nil {
+		return
+	}
+	tmpName := tmp.Name()
+	if _, err = tmp.Write(payload); err == nil {
+		_, err = tmp.Write([]byte("\n"))
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Chmod(tmpName, 0644)
+	}
+	if err == nil {
+		err = os.Rename(tmpName, s.path)
+	}
+	if err != nil {
+		_ = os.Remove(tmpName)
+	}
+}
+
+func acceptLoop(ctx context.Context, ln net.Listener, cfg *mux.Config, d mux.Durations, logger *mux.Logger, status *statusTracker, wg *sync.WaitGroup) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -111,6 +255,7 @@ func acceptLoop(ctx context.Context, ln net.Listener, cfg *mux.Config, d mux.Dur
 				return
 			default:
 				logger.Emit("error", mux.LogEvent{Message: "accept failed", Error: err.Error()})
+				status.RecordError("accept failed: " + err.Error())
 				continue
 			}
 		}
@@ -122,12 +267,12 @@ func acceptLoop(ctx context.Context, ln net.Listener, cfg *mux.Config, d mux.Dur
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			handleConn(tcpConn, cfg, d, logger)
+			handleConn(tcpConn, cfg, d, logger, status)
 		}()
 	}
 }
 
-func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *mux.Logger) {
+func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *mux.Logger, status *statusTracker) {
 	defer client.Close()
 	clientIP := remoteIP(client.RemoteAddr())
 	clientAddr := netip.Addr{}
@@ -162,6 +307,7 @@ func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *m
 	if !match.Allowed && match.Backend == "" {
 		event.Error = "blocked by route whitelist"
 		logger.Emit("info", event)
+		status.RecordConnection(match, sni, "", false, nil)
 		return
 	}
 	if peekErr != nil && !errors.Is(peekErr, mux.ErrInvalidClientHello) && !errors.Is(peekErr, mux.ErrNoSNI) {
@@ -172,6 +318,7 @@ func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *m
 	if err != nil {
 		event.Error = err.Error()
 		logger.Emit("error", event)
+		status.RecordConnection(match, sni, "", false, err)
 		return
 	}
 	defer backend.Close()
@@ -184,12 +331,18 @@ func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *m
 		SpliceCopy:     spliceCopy,
 	})
 	event.TransferMode = mode
+	var statusErr error
+	if event.Error != "" {
+		statusErr = errors.New(event.Error)
+	}
 	if err != nil && !errors.Is(err, io.EOF) && !strings.Contains(err.Error(), "use of closed network connection") {
 		event.Error = err.Error()
 		logger.Emit("error", event)
+		status.RecordConnection(match, sni, mode, cfg.Splice.Enabled && cfg.Splice.FallbackToCopy, err)
 		return
 	}
 	logger.Emit("info", event)
+	status.RecordConnection(match, sni, mode, cfg.Splice.Enabled && cfg.Splice.FallbackToCopy, statusErr)
 }
 
 func remoteIP(addr net.Addr) string {

@@ -21,7 +21,7 @@
 | 安全加固 | SSH 加固、公钥登录、Fail2ban、防火墙规则管理 |
 | 面板与订阅 | 3x-ui、S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari |
 | 网络与诊断 | 内核优化、测速、443 链路测试、流量达量关机、端口排查、服务健康总览 |
-| 443 单入口 | 公网只开放 `443`，按 SNI 分流到面板、订阅、网站和 REALITY，并支持按域名设置 IP 白名单 |
+| 443 单入口 | Web / 节点入口统一走公网 `443`，按 SNI 分流到面板、订阅、网站和 REALITY，并支持按域名设置 IP 白名单 |
 | 备份回滚 | 重要配置备份、列表查看、恢复和隔离归档 |
 
 ## 📚 目录
@@ -275,7 +275,7 @@ Xray 入站管理只记录 `SNI -> 本地地址:端口`，不是 3x-ui 入站编
 
 3x-ui 具体怎么填请看 [443 单入口分流详细教程](docs/443-single-entry.md) 里的“三种入口模式配置速查”。简要原则：Nginx Stream 和 TCP Peek 模式下，3x-ui 面板、订阅和 Xray 入站都应监听本机端口；Xray Fallback 模式下，只有一个 Xray 主入站监听公网 `443`，并由它 fallback 到 Caddy 本地端口。切回 Nginx Stream 或 TCP Peek 前，必须先把这个 Xray 主入站从公网 `443` 移走。
 
-TCP Peek + Splice 切换前必须先跑 `主菜单 [19] -> [16] TCP Peek 8444 预检 / 安装测试`。正式 `[5]` 切换不会在公网 `443` 切换路径里自动下载 Go 工具链或远端编译 `vpso-mux`；如果当前 SSH 正连在入口端口，例如 `443`，脚本会拒绝切换，避免把当前管理连接踢掉。
+TCP Peek + Splice 切换前必须先跑 `主菜单 [19] -> [16] 查看 TCP Peek + Splice 状态 / 8444 预检`。正式 `[5]` 切换不会在公网 `443` 切换路径里自动下载 Go 工具链或远端编译 `vpso-mux`；如果当前 SSH 正连在入口端口，例如 `443`，脚本会拒绝切换，避免把当前管理连接踢掉。
 
 普通 TLS 节点和 REALITY 节点不要混在一起判断：普通 TLS 更关注本机证书、Caddy fallback、Host/SNI 是否匹配；REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定。不要求 REALITY `serverName` 加入 Caddy，也不要求本机证书覆盖 REALITY `serverName`。
 
