@@ -18,6 +18,35 @@ REALITY SNI     -> Xray / 3x-ui REALITY -> 127.0.0.1:1443
 
 这样做的好处是：公网只暴露一个 `443`，Web 证书由 Caddy 统一处理，3x-ui 和订阅服务只做本机 HTTP 后端，避免重复 HTTPS、端口冲突、重定向循环和证书路径混乱。
 
+## 示例说明
+
+本文中出现的域名、路径和端口都只是示例，方便理解架构，不是必须照抄的固定值。
+
+例如：
+
+- `panel.example.com` = 示例面板域名
+- `node.example.com` = 示例节点域名
+- `site.example.com` = 示例网站域名
+- `40000` = 示例 3x-ui 面板端口
+- `2096` = 示例订阅端口
+- `8443` = 示例 Caddy 本地 HTTPS 端口
+- `1443` = 示例 Xray/REALITY 本地端口
+
+实际部署时，请替换成你自己的域名、路径和端口。如果你已经在脚本里填写过端口，以脚本保存的配置为准，不要盲目照抄文档示例。
+
+| 项目 | 文档示例 | 你的实际值 |
+|---|---|---|
+| 面板域名 | panel.example.com | 请改成你自己的 |
+| 节点域名 | node.example.com | 请改成你自己的 |
+| 网站域名 | site.example.com | 请改成你自己的 |
+| 3x-ui 面板端口 | 40000 | 以你面板实际端口为准 |
+| 订阅端口 | 2096 | 以你订阅服务实际端口为准 |
+| Caddy 本地端口 | 8443 | 以脚本当前配置为准 |
+| Xray/REALITY 本地端口 | 1443 | 以脚本当前配置为准 |
+| 面板路径 | /panel/ | 以你面板设置为准 |
+| 普通订阅路径 | /sub/ | 以你订阅设置为准 |
+| Clash/Mihomo 路径 | /clash/ | 以你订阅设置为准 |
+
 ## 快速结论
 
 最终你应该这样访问：
@@ -54,6 +83,28 @@ https://panel.example.com:1443/
 1. 公网 `443` 只给 Nginx stream。
 2. Caddy 负责浏览器 HTTPS，3x-ui 面板和订阅不要自己开 HTTPS。
 3. REALITY 的 `dest` / `Target` 和 `serverNames` / `SNI` 写外部真实 HTTPS 站点，不要写自己的面板域名。
+
+## Xray 入站管理边界
+
+`Xray 入站管理` 只记录 `SNI -> 本地地址:端口` 分流记录，它不是 3x-ui 入站编辑器。用户需要先在 3x-ui 中创建并启用本地入站，然后再把对应的 SNI、本地监听地址和端口写入脚本。
+
+Nginx Stream 和 TCP Peek 模式支持根据同一份 Xray 入站分流规则，把多个 SNI 转发到多个本地 Xray 入站。Web 域名仍然转发到 Caddy，Xray 入站不受 Web 白名单影响。
+
+Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 `443` 默认由一个 Xray 主入站接管。脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。如需多个本地 Xray 入站分流，请使用 Nginx Stream 或 TCP Peek 模式。
+
+切换到 xray-fallback 后，脚本会保留 `/etc/vps-optimize/xray-sni-routes.conf` 中已有的规则，不会删除。被选中的规则作为 xray-fallback 主入站使用；其他规则会标记为“已保留，但当前 xray-fallback 模式下不生效”。以后切回 Nginx Stream 或 TCP Peek 模式时，这些规则可以重新用于按 SNI 分流。
+
+xray-fallback 模式下，`Xray 入站管理` 菜单允许查看规则和当前主入站，但不允许新增、删除或同步规则。本脚本不会自动修改 3x-ui/Xray 入站内部配置。
+
+## 普通 TLS 与 REALITY 的区别
+
+普通 TLS 节点更关注本机证书、Caddy fallback、Host/SNI 是否匹配。例如 VLESS + TLS、Trojan + TLS、VMess + WS + TLS、VLESS + gRPC + TLS 这类节点，排查时应确认节点域名是否由用户控制、本机证书是否覆盖该 SNI、Caddy 是否有匹配 fallback，以及浏览器访问是否返回 200/301/302。
+
+REALITY 节点不同。REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定、`serverName` 和 `dest` 是否逻辑一致。不要要求 REALITY `serverName` 加入 Caddy，也不要要求本机证书覆盖 REALITY `serverName`。
+
+## 证书策略
+
+443 单入口继续使用 `acme.sh + Cloudflare DNS API` 签发和安装 Web 域名证书。不使用 Caddy DNS 模块，不需要 `xcaddy`，也不让 Caddy 负责 DNS-01 证书申请。
 
 ## 域名 IP 白名单
 
@@ -261,9 +312,9 @@ node.example.com:443
 主菜单 [18 443 单入口管理中心] -> [1 首次配置 443 单入口]
 ```
 
-推荐填写：
+示例填写：
 
-| 项目 | 推荐值 |
+| 项目 | 示例值 |
 | --- | --- |
 | 面板域名 | `panel.example.com` |
 | 网站/反代域名 | 首次可以留空 |
@@ -374,7 +425,7 @@ https://dockge.example.com/
 
 遇到面板打不开、订阅 404、证书失败、端口被占用或 REALITY 连接失败，统一看：[443 单入口排错手册](443-single-entry-troubleshooting.md)。
 
-## 最终正确示例
+## 一组完整示例，仅供参考
 
 ```text
 面板：https://panel.example.com/panel/

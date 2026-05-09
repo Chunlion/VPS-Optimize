@@ -853,6 +853,7 @@ restore_sni_stack_backup_files() {
     [[ -f "$backup_dir/nginx.conf" ]] && cp -a "$backup_dir/nginx.conf" /etc/nginx/nginx.conf
     [[ -f "$backup_dir/Caddyfile" ]] && cp -a "$backup_dir/Caddyfile" /etc/caddy/Caddyfile
     [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]] && cp -a "$backup_dir/vps-optimize/sni-stack.env" /etc/vps-optimize/sni-stack.env
+    [[ -f "$backup_dir/vps-optimize/xray-sni-routes.conf" ]] && cp -a "$backup_dir/vps-optimize/xray-sni-routes.conf" /etc/vps-optimize/xray-sni-routes.conf
     [[ -f "$backup_dir/vps-optimize/443-engine.conf" ]] && cp -a "$backup_dir/vps-optimize/443-engine.conf" /etc/vps-optimize/443-engine.conf
     [[ -f "$backup_dir/vps-optimize/vpso-mux.yaml" ]] && cp -a "$backup_dir/vps-optimize/vpso-mux.yaml" /etc/vps-optimize/vpso-mux.yaml
     [[ -f "$backup_dir/systemd/vpso-mux.service" ]] && cp -a "$backup_dir/systemd/vpso-mux.service" /etc/systemd/system/vpso-mux.service
@@ -988,6 +989,7 @@ create_sni_stack_backup() {
     [[ -f /etc/caddy/Caddyfile ]] && cp -a /etc/caddy/Caddyfile "$backup_dir/Caddyfile" 2>/dev/null || true
     [[ -d /etc/caddy/conf.d ]] && cp -a /etc/caddy/conf.d/*.caddy "$backup_dir/caddy_conf.d/" 2>/dev/null || true
     [[ -f /etc/vps-optimize/sni-stack.env ]] && cp -a /etc/vps-optimize/sni-stack.env "$backup_dir/vps-optimize/sni-stack.env" 2>/dev/null || true
+    [[ -f /etc/vps-optimize/xray-sni-routes.conf ]] && cp -a /etc/vps-optimize/xray-sni-routes.conf "$backup_dir/vps-optimize/xray-sni-routes.conf" 2>/dev/null || true
     [[ -f /etc/vps-optimize/443-engine.conf ]] && cp -a /etc/vps-optimize/443-engine.conf "$backup_dir/vps-optimize/443-engine.conf" 2>/dev/null || true
     [[ -f /etc/vps-optimize/vpso-mux.yaml ]] && cp -a /etc/vps-optimize/vpso-mux.yaml "$backup_dir/vps-optimize/vpso-mux.yaml" 2>/dev/null || true
     [[ -f /etc/systemd/system/vpso-mux.service ]] && cp -a /etc/systemd/system/vpso-mux.service "$backup_dir/systemd/vpso-mux.service" 2>/dev/null || true
@@ -2897,6 +2899,12 @@ print_sni_stack_preview() {
             echo -e "TCP/SNI 入站：${TCP_ROUTE_SNIS[$tcp_i]} -> ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]}"
         done
     fi
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local xray_route_i
+        for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+            echo -e "Xray 入站分流：${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}"
+        done
+    fi
     if [[ ${#SNI_IP_WHITELIST_DOMAINS[@]} -gt 0 ]]; then
         echo -e "${YELLOW}域名 IP 白名单：${PLAIN}"
         local wl_i
@@ -3044,7 +3052,7 @@ detect_current_entry_status() {
     ENTRY_STATUS_LISTENER="${listener_info%%|*}"
     ENTRY_STATUS_LISTENER_PROCESS="${listener_info#*|}"
     ENTRY_STATUS_NGINX_SERVICE=$(service_status_compact nginx)
-    ENTRY_STATUS_XRAY_SERVICE=$(service_status_compact xray)
+    ENTRY_STATUS_XRAY_SERVICE="xray: $(service_status_compact xray) / x-ui: $(service_status_compact x-ui) / 3x-ui: $(service_status_compact 3x-ui)"
     ENTRY_STATUS_TCPPEEK_SERVICE=$(service_status_compact vpso-mux)
     ENTRY_STATUS_CADDY_LISTEN_LINE="not-configured"
     ENTRY_STATUS_XRAY_LISTEN_LINE="not-configured"
@@ -3072,20 +3080,25 @@ detect_current_entry_status() {
 
 show_current_entry_status() {
     detect_current_entry_status
-    echo -e "${BOLD}Current 443 entry status${PLAIN}"
-    echo -e "ENTRY_MODE: ${ENTRY_STATUS_MODE}"
-    echo -e "Public 443 listener: ${ENTRY_STATUS_LISTENER_PROCESS}"
-    echo -e "Caddy local listen: ${ENTRY_STATUS_CADDY_ADDR}:${ENTRY_STATUS_CADDY_PORT}"
+    echo -e "${BOLD}当前 443 入口状态${PLAIN}"
+    echo -e "配置模式 ENTRY_MODE: ${ENTRY_STATUS_MODE}"
+    echo -e "实际公网 443 监听进程: ${ENTRY_STATUS_LISTENER_PROCESS}"
+    echo -e "Caddy 本地监听端口: ${ENTRY_STATUS_CADDY_ADDR}:${ENTRY_STATUS_CADDY_PORT}"
     echo -e "  ${ENTRY_STATUS_CADDY_LISTEN_LINE}"
-    echo -e "Xray local listen: ${ENTRY_STATUS_XRAY_ADDR}:${ENTRY_STATUS_XRAY_PORT}"
+    echo -e "Xray 本地监听端口: ${ENTRY_STATUS_XRAY_ADDR}:${ENTRY_STATUS_XRAY_PORT}"
     echo -e "  ${ENTRY_STATUS_XRAY_LISTEN_LINE}"
-    echo -e "tcppeek service: ${ENTRY_STATUS_TCPPEEK_SERVICE}"
-    echo -e "nginx service: ${ENTRY_STATUS_NGINX_SERVICE}"
-    echo -e "xray service: ${ENTRY_STATUS_XRAY_SERVICE}"
-    if [[ "$ENTRY_STATUS_CONSISTENT" == "yes" ]]; then
-        echo -e "Mode/listener consistency: ${GREEN}consistent${PLAIN}"
+    if [[ "$ENTRY_STATUS_LISTENER" == "xray" ]]; then
+        echo -e "Xray 公网监听端口: ${GREEN}公网 443 当前由 Xray 监听${PLAIN}"
     else
-        echo -e "Mode/listener consistency: ${YELLOW}inconsistent${PLAIN}"
+        echo -e "Xray 公网监听端口: 未检测到 Xray 监听公网 443"
+    fi
+    echo -e "tcppeek 服务状态: ${ENTRY_STATUS_TCPPEEK_SERVICE}"
+    echo -e "nginx 服务状态: ${ENTRY_STATUS_NGINX_SERVICE}"
+    echo -e "xray 服务状态: ${ENTRY_STATUS_XRAY_SERVICE}"
+    if [[ "$ENTRY_STATUS_CONSISTENT" == "yes" ]]; then
+        echo -e "配置模式与实际监听: ${GREEN}一致${PLAIN}"
+    else
+        echo -e "配置模式与实际监听: ${YELLOW}不一致${PLAIN}"
         echo -e "${YELLOW}配置模式与实际监听不一致，建议重新应用当前入口模式。${PLAIN}"
     fi
 }
@@ -3104,6 +3117,7 @@ load_sni_stack_env() {
     CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
     normalize_site_stack_arrays
     normalize_tcp_route_arrays
+    load_xray_sni_route_arrays
     normalize_sni_ip_whitelist_arrays
 }
 
@@ -3130,6 +3144,12 @@ print_sni_stack_current_summary() {
             echo -e "TCP/SNI：   ${TCP_ROUTE_SNIS[$tcp_i]} -> ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]}"
         done
     fi
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local xray_route_i
+        for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+            echo -e "Xray 入站：  ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}"
+        done
+    fi
     echo -e "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Caddy ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
     echo -e "配置文件：  Nginx ${nginx_conf}"
     echo -e "           Caddy ${caddy_conf}"
@@ -3145,6 +3165,12 @@ print_sni_stack_current_summary() {
         local tcp_i
         for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
             echo -e "TCP/SNI 后端 ${TCP_ROUTE_SNIS[$tcp_i]}：$(get_listen_line_by_port "${TCP_ROUTE_PORTS[$tcp_i]}")"
+        done
+    fi
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local xray_route_i
+        for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+            echo -e "Xray 入站后端 ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}：$(get_listen_line_by_port "${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}")"
         done
     fi
 }
@@ -3214,6 +3240,216 @@ normalize_tcp_route_arrays() {
     TCP_ROUTE_PORTS=("${clean_ports[@]}")
 }
 
+xray_sni_routes_path() {
+    echo "/etc/vps-optimize/xray-sni-routes.conf"
+}
+
+load_xray_sni_route_arrays() {
+    local route_file line sni addr port
+    route_file=$(xray_sni_routes_path)
+    XRAY_SNI_ROUTE_SNIS=()
+    XRAY_SNI_ROUTE_ADDRS=()
+    XRAY_SNI_ROUTE_PORTS=()
+
+    [[ -f "$route_file" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%#*}"
+        [[ -n "$(trim_input "$line")" ]] || continue
+        IFS='|' read -r sni addr port _ <<< "$line"
+        sni=$(normalize_domain_input "$sni")
+        addr=$(normalize_loopback_addr "${addr:-127.0.0.1}")
+        port="$(trim_input "${port:-}")"
+        if is_valid_domain "$sni" && is_loopback_listen_addr "$addr" && is_valid_port "$port"; then
+            XRAY_SNI_ROUTE_SNIS+=("$sni")
+            XRAY_SNI_ROUTE_ADDRS+=("$addr")
+            XRAY_SNI_ROUTE_PORTS+=("$port")
+        fi
+    done < "$route_file"
+}
+
+save_xray_sni_route_arrays() {
+    local route_file i
+    route_file=$(xray_sni_routes_path)
+    mkdir -p "$(dirname "$route_file")"
+    : > "$route_file"
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        [[ -n "${XRAY_SNI_ROUTE_SNIS[$i]:-}" ]] || continue
+        printf '%s|%s|%s\n' "${XRAY_SNI_ROUTE_SNIS[$i]}" "${XRAY_SNI_ROUTE_ADDRS[$i]}" "${XRAY_SNI_ROUTE_PORTS[$i]}" >> "$route_file"
+    done
+    chmod 600 "$route_file" 2>/dev/null || true
+}
+
+xray_sni_route_index() {
+    local sni="$1"
+    local i
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        [[ "$sni" == "${XRAY_SNI_ROUTE_SNIS[$i]}" ]] && { echo "$i"; return 0; }
+    done
+    return 1
+}
+
+xray_fallback_main_route_index() {
+    local i
+    if [[ -n "${XRAY_FALLBACK_MAIN_SNI:-}" ]]; then
+        for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+            [[ "$XRAY_FALLBACK_MAIN_SNI" == "${XRAY_SNI_ROUTE_SNIS[$i]}" ]] && { echo "$i"; return 0; }
+        done
+    fi
+    if [[ -n "${XRAY_FALLBACK_MAIN_ADDR:-}" && -n "${XRAY_FALLBACK_MAIN_PORT:-}" ]]; then
+        for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+            if [[ "$XRAY_FALLBACK_MAIN_ADDR" == "${XRAY_SNI_ROUTE_ADDRS[$i]}" && "$XRAY_FALLBACK_MAIN_PORT" == "${XRAY_SNI_ROUTE_PORTS[$i]}" ]]; then
+                echo "$i"
+                return 0
+            fi
+        done
+    fi
+    if [[ "$(get_entry_mode)" == "xray-fallback" && -n "${XRAY_LISTEN_ADDR:-}" && -n "${XRAY_LISTEN_PORT:-}" ]]; then
+        for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+            if [[ "$XRAY_LISTEN_ADDR" == "${XRAY_SNI_ROUTE_ADDRS[$i]}" && "$XRAY_LISTEN_PORT" == "${XRAY_SNI_ROUTE_PORTS[$i]}" ]]; then
+                echo "$i"
+                return 0
+            fi
+        done
+    fi
+    return 1
+}
+
+set_xray_fallback_main_route_from_index() {
+    local idx="$1"
+    [[ "$idx" =~ ^[0-9]+$ ]] || return 1
+    (( idx >= 0 && idx < ${#XRAY_SNI_ROUTE_SNIS[@]} )) || return 1
+    XRAY_FALLBACK_MAIN_SNI="${XRAY_SNI_ROUTE_SNIS[$idx]}"
+    XRAY_FALLBACK_MAIN_ADDR="${XRAY_SNI_ROUTE_ADDRS[$idx]}"
+    XRAY_FALLBACK_MAIN_PORT="${XRAY_SNI_ROUTE_PORTS[$idx]}"
+}
+
+print_xray_fallback_mode_explanation() {
+    echo -e "${YELLOW}Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 443 默认由一个 Xray 主入站接管。脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。${PLAIN}"
+    echo -e "${YELLOW}该模式只负责 Xray 主入站监听公网 443，并 fallback 普通 HTTPS 到 Caddy。${PLAIN}"
+    echo -e "${YELLOW}如需多个本地 Xray 入站通过 443 按 SNI 分流，请使用 Nginx Stream 或 TCP Peek 模式。${PLAIN}"
+    echo -e "${YELLOW}如果 Web 域名开启 CDN/WAF/源站保护/Cloudflare 回源限制/Caddy 白名单，403 或拒绝访问通常是 Web/CDN/白名单/SNI 策略阻断，不一定是证书或 Caddy 故障。${PLAIN}"
+}
+
+print_xray_fallback_main_route_summary() {
+    local idx
+    idx=$(xray_fallback_main_route_index 2>/dev/null || true)
+    if [[ -n "$idx" ]]; then
+        echo -e "${GREEN}当前 xray-fallback 主入站：${XRAY_SNI_ROUTE_SNIS[$idx]} -> ${XRAY_SNI_ROUTE_ADDRS[$idx]}:${XRAY_SNI_ROUTE_PORTS[$idx]}${PLAIN}"
+    elif [[ -n "${XRAY_FALLBACK_MAIN_SNI:-}" ]]; then
+        echo -e "${YELLOW}当前 xray-fallback 主入站记录：${XRAY_FALLBACK_MAIN_SNI} -> ${XRAY_FALLBACK_MAIN_ADDR:-?}:${XRAY_FALLBACK_MAIN_PORT:-?}，但未匹配到现有规则。${PLAIN}"
+    elif [[ "$(get_entry_mode)" == "xray-fallback" ]]; then
+        echo -e "${YELLOW}当前未记录 xray-fallback 主入站；请确认 Xray 主入站已按当前模式监听公网 443。${PLAIN}"
+    fi
+}
+
+select_xray_fallback_main_route_for_switch() {
+    load_sni_stack_env || return 1
+    local count choice idx
+    count=${#XRAY_SNI_ROUTE_SNIS[@]}
+
+    if [[ "$count" -eq 0 ]]; then
+        echo -e "${YELLOW}未找到 $(xray_sni_routes_path) 中的 Xray 入站分流规则。${PLAIN}"
+        echo -e "${YELLOW}切换到 xray-fallback 时，将由用户已配置的 Xray 主入站接管公网 443；脚本不会修改 3x-ui/Xray 入站内部配置。${PLAIN}"
+        confirm_risk_action "继续切换到 xray-fallback" \
+            "公网 443 将由 Xray 主入站接管，普通 HTTPS fallback 到 Caddy" \
+            "取消切换，先在 Xray 入站管理中记录一个主入站候选" \
+            "确认你已经在 3x-ui/Xray 中准备好将作为主入站的配置。" || return 1
+        XRAY_FALLBACK_MAIN_SNI=""
+        XRAY_FALLBACK_MAIN_ADDR=""
+        XRAY_FALLBACK_MAIN_PORT=""
+        return 0
+    fi
+
+    print_xray_fallback_mode_explanation
+    echo -e "------------------------------------------------"
+    if [[ "$count" -eq 1 ]]; then
+        echo -e "${CYAN}检测到 1 条 Xray 入站分流规则，可作为 xray-fallback 主入站候选：${PLAIN}"
+        echo -e "1. ${XRAY_SNI_ROUTE_SNIS[0]} -> ${XRAY_SNI_ROUTE_ADDRS[0]}:${XRAY_SNI_ROUTE_PORTS[0]}"
+        confirm_risk_action "使用该规则作为 xray-fallback 主入站候选" \
+            "该规则会被记录为 xray-fallback 主入站；其他模式下仍按 xray-sni-routes.conf 正常分流" \
+            "取消切换，先确认 3x-ui/Xray 主入站配置" \
+            "确认该本地入站就是你希望在 xray-fallback 模式下接管公网 443 的主入站。" || return 1
+        set_xray_fallback_main_route_from_index 0
+        return 0
+    fi
+
+    echo -e "${CYAN}检测到多条 Xray 入站分流规则，请选择其中一条作为 xray-fallback 主入站：${PLAIN}"
+    for idx in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        echo -e "${GREEN}$((idx + 1)).${PLAIN} ${XRAY_SNI_ROUTE_SNIS[$idx]} -> ${XRAY_SNI_ROUTE_ADDRS[$idx]}:${XRAY_SNI_ROUTE_PORTS[$idx]}"
+    done
+    echo -e "${RED}0. 取消切换${PLAIN}"
+    read_trimmed choice "请选择 xray-fallback 主入站候选: "
+    if [[ -z "$choice" || "$choice" == "0" ]]; then
+        echo -e "${BLUE}已取消切换到 xray-fallback。${PLAIN}"
+        return 1
+    fi
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > count )); then
+        echo -e "${RED}❌ 序号无效，已取消切换。${PLAIN}"
+        return 1
+    fi
+    set_xray_fallback_main_route_from_index "$((choice - 1))" || return 1
+    echo -e "${GREEN}✅ 已选择 xray-fallback 主入站候选：${XRAY_FALLBACK_MAIN_SNI} -> ${XRAY_FALLBACK_MAIN_ADDR}:${XRAY_FALLBACK_MAIN_PORT}${PLAIN}"
+}
+
+xray_sni_route_port_conflict() {
+    local addr="$1"
+    local port="$2"
+    local skip_idx="${3:-}"
+    local i
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        [[ -n "$skip_idx" && "$i" == "$skip_idx" ]] && continue
+        if [[ "$addr" == "${XRAY_SNI_ROUTE_ADDRS[$i]}" && "$port" == "${XRAY_SNI_ROUTE_PORTS[$i]}" ]]; then
+            echo "${XRAY_SNI_ROUTE_SNIS[$i]}"
+            return 0
+        fi
+    done
+    for i in "${!TCP_ROUTE_SNIS[@]}"; do
+        if [[ "$addr" == "${TCP_ROUTE_ADDRS[$i]}" && "$port" == "${TCP_ROUTE_PORTS[$i]}" ]]; then
+            echo "旧 TCP/SNI:${TCP_ROUTE_SNIS[$i]}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+xray_route_listen_line_by_addr_port() {
+    local addr="$1"
+    local port="$2"
+    local host_regex
+    case "$addr" in
+        "127.0.0.1") host_regex='(127\.0\.0\.1|0\.0\.0\.0|\*)' ;;
+        "::1") host_regex='(\[::1\]|\[::\]|\*)' ;;
+        "localhost") host_regex='(127\.0\.0\.1|0\.0\.0\.0|\[::1\]|\[::\]|\*)' ;;
+        *) host_regex=$(printf '%s' "$addr" | sed 's/[.[\*^$()+?{}|\\]/\\&/g') ;;
+    esac
+    ss -lntp 2>/dev/null | grep -E "${host_regex}:${port}[[:space:]]" | head -n1 || true
+}
+
+print_xray_route_port_status() {
+    local sni="$1"
+    local addr="$2"
+    local port="$3"
+    local line conflict
+
+    echo -e "${CYAN}${sni}${PLAIN} -> ${addr}:${port}"
+    if [[ "${CADDY_LISTEN_PORT:-}" == "$port" ]]; then
+        echo -e "${RED}  ❌ 与 Caddy 本地端口 ${CADDY_LISTEN_PORT} 冲突，请换一个本地入站端口。${PLAIN}"
+    fi
+
+    conflict=$(xray_sni_route_port_conflict "$addr" "$port" "$(xray_sni_route_index "$sni" 2>/dev/null || true)" || true)
+    [[ -n "$conflict" ]] && echo -e "${YELLOW}  ⚠️ 与规则 ${conflict} 使用了相同的 ${addr}:${port}，请确认是否故意复用。${PLAIN}"
+
+    line=$(xray_route_listen_line_by_addr_port "$addr" "$port")
+    if [[ -n "$line" ]]; then
+        echo -e "${GREEN}  ✅ 端口已监听：${line}${PLAIN}"
+        if echo "$line" | grep -Eq '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):'"${port}"'[[:space:]]'; then
+            echo -e "${YELLOW}  ⚠️ 检测到可能监听在 0.0.0.0/[::]，存在公网暴露风险，建议改为 127.0.0.1。${PLAIN}"
+        fi
+    else
+        echo -e "${YELLOW}  ⚠️ 未检测到 ${addr}:${port} 监听，请先去 3x-ui 创建并启用对应入站。${PLAIN}"
+    fi
+}
+
 is_sni_stack_managed_domain() {
     local domain="$1"
     local site_domain
@@ -3224,11 +3460,20 @@ is_sni_stack_managed_domain() {
     for site_domain in "${TCP_ROUTE_SNIS[@]}"; do
         [[ "$domain" == "$site_domain" ]] && return 0
     done
+    for site_domain in "${XRAY_SNI_ROUTE_SNIS[@]}"; do
+        [[ "$domain" == "$site_domain" ]] && return 0
+    done
     return 1
 }
 
 is_sni_stack_web_domain() {
-    is_sni_stack_managed_domain "$1"
+    local domain="$1"
+    local site_domain
+    [[ "$domain" == "$PANEL_DOMAIN" ]] && return 0
+    for site_domain in "${SITE_DOMAINS[@]}"; do
+        [[ "$domain" == "$site_domain" ]] && return 0
+    done
+    return 1
 }
 
 nginx_var_suffix_for_domain() {
@@ -3378,6 +3623,12 @@ sni_stack_health_check() {
             check_listen "TCP/SNI 入站 ${TCP_ROUTE_SNIS[$tcp_i]}" "${TCP_ROUTE_PORTS[$tcp_i]}" "${TCP_ROUTE_ADDRS[$tcp_i]}"
         done
     fi
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local xray_route_i
+        for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+            check_listen "Xray 入站 ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}" "${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}" "${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}"
+        done
+    fi
 
     echo -e "------------------------------------------------"
     if check_xui_cert_settings_for_single_443; then
@@ -3408,6 +3659,18 @@ sni_stack_health_check() {
         for tcp_sni in "${TCP_ROUTE_SNIS[@]}"; do
             [[ -z "$tcp_sni" ]] && continue
             if check_domain_dns_sanity "$tcp_sni" "TCP/SNI 入站域名" "warn"; then
+                ((ok++))
+            else
+                echo -e "${YELLOW}⚠️ 如果客户端使用服务器 IP 连接并手动指定 SNI，可忽略该 DNS 警告。${PLAIN}"
+                ((warn++))
+            fi
+        done
+    fi
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local xray_route_sni
+        for xray_route_sni in "${XRAY_SNI_ROUTE_SNIS[@]}"; do
+            [[ -z "$xray_route_sni" ]] && continue
+            if check_domain_dns_sanity "$xray_route_sni" "Xray 入站域名" "warn"; then
                 ((ok++))
             else
                 echo -e "${YELLOW}⚠️ 如果客户端使用服务器 IP 连接并手动指定 SNI，可忽略该 DNS 警告。${PLAIN}"
@@ -3500,6 +3763,10 @@ sni_stack_route_summary_for_state() {
         domain="${TCP_ROUTE_SNIS[$i]}"
         [[ -n "$domain" ]] && summary+=",tcp:${domain}->$(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}")"
     done
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        domain="${XRAY_SNI_ROUTE_SNIS[$i]}"
+        [[ -n "$domain" ]] && summary+=",xray:${domain}->$(format_hostport "${XRAY_SNI_ROUTE_ADDRS[$i]}" "${XRAY_SNI_ROUTE_PORTS[$i]}")"
+    done
     printf '%s' "$summary"
 }
 
@@ -3546,12 +3813,14 @@ EOF
 show_single_443_engine_status() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🔎 当前 443 单入口引擎${PLAIN}"
+    echo -e "${BOLD}🔎 当前 443 入口状态 / 单入口引擎${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     local engine state_file mux_config
     engine=$(single_443_current_engine)
     state_file=$(single_443_engine_state_path)
     mux_config=$(vpso_mux_config_path)
+    show_current_entry_status
+    echo -e "------------------------------------------------"
     echo -e "当前 engine：${GREEN}${engine}${PLAIN}"
     echo -e "状态文件：${state_file}"
     echo -e "mux 配置：${mux_config}"
@@ -3665,6 +3934,14 @@ write_vpso_mux_config_from_sni_stack() {
         backend=$(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}")
         ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
         append_vpso_mux_route_yaml "$output_file" "$route_name" "$domain" "$backend" "$ranges"
+    done
+
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        domain="${XRAY_SNI_ROUTE_SNIS[$i]}"
+        [[ -n "$domain" ]] || continue
+        route_name=$(sni_stack_route_name "xray" "$domain")
+        backend=$(format_hostport "${XRAY_SNI_ROUTE_ADDRS[$i]}" "${XRAY_SNI_ROUTE_PORTS[$i]}")
+        append_vpso_mux_route_yaml "$output_file" "$route_name" "$domain" "$backend" ""
     done
 
     append_vpso_mux_route_yaml "$output_file" "reality" "$REALITY_SNI" "$xray_backend" ""
@@ -3867,6 +4144,348 @@ rollback_tcp_peek_to_nginx_stream() {
     sni_stack_health_check
 }
 
+normalize_entry_mode_name() {
+    local mode="$1"
+    case "$mode" in
+        "nginx_stream"|"nginx-stream") echo "nginx-stream" ;;
+        "xray_fallback"|"xray-fallback") echo "xray-fallback" ;;
+        "tcp_peek"|"tcp-peek") echo "tcp-peek" ;;
+        *) return 1 ;;
+    esac
+}
+
+entry_mode_engine_name() {
+    local mode="$1"
+    mode=$(normalize_entry_mode_name "$mode") || return 1
+    case "$mode" in
+        "nginx-stream") echo "nginx_stream" ;;
+        "xray-fallback") echo "xray_fallback" ;;
+        "tcp-peek") echo "tcp_peek" ;;
+    esac
+}
+
+entry_mode_expected_listener() {
+    local mode="$1"
+    mode=$(normalize_entry_mode_name "$mode") || return 1
+    case "$mode" in
+        "nginx-stream") echo "nginx" ;;
+        "xray-fallback") echo "xray" ;;
+        "tcp-peek") echo "tcppeek" ;;
+    esac
+}
+
+systemd_unit_exists() {
+    local unit="$1"
+    systemctl list-unit-files "$unit" >/dev/null 2>&1 || systemctl status "$unit" >/dev/null 2>&1
+}
+
+xray_entry_service_name() {
+    local svc
+    for svc in xray.service x-ui.service 3x-ui.service; do
+        if systemd_unit_exists "$svc"; then
+            echo "${svc%.service}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+restart_xray_entry_service() {
+    local svc
+    svc=$(xray_entry_service_name) || { echo -e "${RED}❌ 未检测到 xray/x-ui/3x-ui systemd 服务。${PLAIN}"; return 1; }
+    systemctl enable "$svc" >/dev/null 2>&1 || true
+    systemctl restart "$svc" || { echo -e "${RED}❌ ${svc} 重启失败。${PLAIN}"; return 1; }
+}
+
+stop_xray_entry_service_if_public_443() {
+    local listener svc
+    listener=$(detect_443_listener)
+    [[ "${listener%%|*}" == "xray" ]] || return 0
+    svc=$(xray_entry_service_name) || return 0
+    systemctl stop "$svc" >/dev/null 2>&1 || true
+}
+
+disable_nginx_stream_public_443() {
+    local nginx_conf="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
+    [[ -e "$nginx_conf" ]] && quarantine_path "$nginx_conf" "/etc/vps-optimize/quarantine/nginx-sni" >/dev/null 2>&1 || true
+    if command -v nginx >/dev/null 2>&1; then
+        nginx -t >/dev/null 2>&1 || return 1
+        restart_service_if_available nginx >/dev/null 2>&1 || true
+    fi
+}
+
+stop_public_443_entry_services_for_target() {
+    local target_mode="$1"
+    target_mode=$(normalize_entry_mode_name "$target_mode") || return 1
+
+    if [[ "$target_mode" != "nginx-stream" ]]; then
+        disable_nginx_stream_public_443 || return 1
+    fi
+    if [[ "$target_mode" != "tcp-peek" ]]; then
+        systemctl stop vpso-mux >/dev/null 2>&1 || true
+    fi
+    if [[ "$target_mode" != "xray-fallback" ]]; then
+        stop_xray_entry_service_if_public_443
+    fi
+}
+
+verify_public_443_listener_for_mode() {
+    local mode="$1"
+    local expected listener
+    mode=$(normalize_entry_mode_name "$mode") || return 1
+    expected=$(entry_mode_expected_listener "$mode") || return 1
+    listener=$(detect_443_listener)
+    if [[ "${listener%%|*}" == "$expected" ]]; then
+        return 0
+    fi
+    echo -e "${RED}❌ 公网 443 监听不符合 ${mode}：期望 ${expected}，实际 ${listener#*|}${PLAIN}"
+    return 1
+}
+
+check_entry_mode_dependencies() {
+    local mode="$1"
+    mode=$(normalize_entry_mode_name "$mode") || { echo -e "${RED}❌ 目标入口模式无效：${mode}${PLAIN}"; return 1; }
+
+    case "$mode" in
+        "nginx-stream")
+            command -v nginx >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Nginx，切换时会沿用现有 Nginx stream 安装逻辑。${PLAIN}"
+            command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            ;;
+        "tcp-peek")
+            [[ -x /usr/local/bin/vpso-mux ]] || { echo -e "${RED}❌ tcppeek/vpso-mux 不存在：缺少 /usr/local/bin/vpso-mux，拒绝切换。${PLAIN}"; return 1; }
+            command -v caddy >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 Caddy，tcp-peek 模式无法转发 Web 流量。${PLAIN}"; return 1; }
+            ;;
+        "xray-fallback")
+            xray_entry_service_name >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 xray/x-ui/3x-ui systemd 服务，拒绝切换。${PLAIN}"; return 1; }
+            command -v caddy >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 Caddy，xray-fallback 无法 fallback 普通 HTTPS 到 Caddy。${PLAIN}"; return 1; }
+            ;;
+    esac
+}
+
+backup_entry_mode_config() {
+    local backup_dir service_path svc listener_info
+    create_sni_stack_backup >/dev/null
+    backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
+    [[ -n "$backup_dir" && -d "$backup_dir" ]] || { echo -e "${RED}❌ 入口模式切换备份失败。${PLAIN}"; return 1; }
+
+    mkdir -p "$backup_dir/systemd" "$backup_dir/xray" "$backup_dir/vps-optimize"
+    for svc in nginx.service caddy.service xray.service x-ui.service 3x-ui.service vpso-mux.service; do
+        for service_path in "/etc/systemd/system/$svc" "/lib/systemd/system/$svc" "/usr/lib/systemd/system/$svc"; do
+            [[ -f "$service_path" ]] && cp -a "$service_path" "$backup_dir/systemd/${service_path//\//_}" 2>/dev/null || true
+        done
+    done
+    [[ -f /etc/xray/config.json ]] && cp -a /etc/xray/config.json "$backup_dir/xray/etc-xray-config.json" 2>/dev/null || true
+    [[ -f /usr/local/etc/xray/config.json ]] && cp -a /usr/local/etc/xray/config.json "$backup_dir/xray/usr-local-etc-xray-config.json" 2>/dev/null || true
+    [[ -f /etc/vps-optimize/xray-sni-routes.conf ]] && cp -a /etc/vps-optimize/xray-sni-routes.conf "$backup_dir/vps-optimize/xray-sni-routes.conf" 2>/dev/null || true
+    listener_info=$(detect_443_listener)
+    {
+        echo "created_at=$(date -Is 2>/dev/null || date)"
+        echo "entry_mode=$(get_entry_mode)"
+        echo "listener=${listener_info}"
+        echo "ss_443:"
+        ss -lntp 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' || echo "none"
+    } > "$backup_dir/vps-optimize/443-listener-state.txt"
+    echo "$backup_dir"
+}
+
+rollback_last_entry_mode() {
+    local backup_dir="${1:-}"
+    local manual=0
+    local old_mode=""
+    if [[ -z "$backup_dir" ]]; then
+        manual=1
+        backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
+    fi
+    if [[ -z "$backup_dir" || ! -d "$backup_dir" ]]; then
+        echo -e "${RED}❌ 未找到可回滚的入口模式备份。${PLAIN}"
+        return 1
+    fi
+    if [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]]; then
+        old_mode=$(
+            # shellcheck disable=SC1090
+            source "$backup_dir/vps-optimize/sni-stack.env" 2>/dev/null || true
+            printf '%s' "${ENTRY_MODE:-nginx-stream}"
+        )
+        old_mode=$(normalize_entry_mode_name "$old_mode" 2>/dev/null || echo "nginx-stream")
+    fi
+
+    if [[ "$manual" -eq 1 ]]; then
+        confirm_risk_action "回滚上一次 443 入口模式切换" \
+            "Nginx/Caddy/Xray/tcppeek 入口相关配置和服务状态" \
+            "再次切换入口模式，或用备份目录手动恢复" \
+            "将使用备份目录 ${backup_dir} 覆盖当前入口配置。" || return 1
+    fi
+
+    echo -e "${YELLOW}▶ 正在回滚上一次入口模式切换：${backup_dir}${PLAIN}"
+    restore_sni_stack_backup_files "$backup_dir" || { echo -e "${RED}❌ 回滚文件恢复失败。${PLAIN}"; return 1; }
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    load_sni_stack_env >/dev/null 2>&1 || true
+    old_mode=${old_mode:-$(get_entry_mode)}
+
+    case "$old_mode" in
+        "nginx-stream")
+            systemctl stop vpso-mux >/dev/null 2>&1 || true
+            restart_service_if_available caddy >/dev/null 2>&1 || true
+            restart_service_if_available nginx >/dev/null 2>&1 || true
+            ;;
+        "tcp-peek")
+            restart_service_if_available caddy >/dev/null 2>&1 || true
+            restart_service_if_available nginx >/dev/null 2>&1 || true
+            systemctl enable vpso-mux >/dev/null 2>&1 || true
+            systemctl restart vpso-mux >/dev/null 2>&1 || true
+            ;;
+        "xray-fallback")
+            systemctl stop vpso-mux >/dev/null 2>&1 || true
+            disable_nginx_stream_public_443 >/dev/null 2>&1 || true
+            restart_service_if_available caddy >/dev/null 2>&1 || true
+            restart_xray_entry_service >/dev/null 2>&1 || true
+            ;;
+    esac
+    set_entry_mode "$old_mode" >/dev/null 2>&1 || true
+    write_single_443_engine_state "$(entry_mode_engine_name "$old_mode" 2>/dev/null || echo nginx_stream)" "$backup_dir"
+    echo -e "${GREEN}✅ 已回滚到上一次入口模式：${old_mode}${PLAIN}"
+}
+
+apply_nginx_stream_mode() {
+    local backup_dir="${1:-}"
+    install_nginx_stream_stack || return 1
+    harden_nginx_public_errors
+    ensure_caddy_local_base_config || return 1
+    cleanup_old_nginx_sni_stream_configs
+    write_caddy_panel_config
+    write_caddy_site_config
+    caddy_format_configs
+    caddy validate --config /etc/caddy/Caddyfile || return 1
+    write_nginx_sni_stream_config || return 1
+    systemctl enable caddy >/dev/null 2>&1 || true
+    systemctl restart caddy || return 1
+    systemctl enable nginx >/dev/null 2>&1 || true
+    systemctl restart nginx || return 1
+    verify_public_443_listener_for_mode "nginx-stream" || return 1
+    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || return 1
+    write_single_443_engine_state "nginx_stream" "$backup_dir"
+}
+
+apply_tcppeek_mode() {
+    local backup_dir="${1:-}"
+    local tmp_config
+    [[ -x /usr/local/bin/vpso-mux ]] || { echo -e "${RED}❌ 缺少 /usr/local/bin/vpso-mux。${PLAIN}"; return 1; }
+    warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
+    warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
+    ensure_caddy_local_base_config || return 1
+    write_caddy_panel_config
+    write_caddy_site_config
+    caddy_format_configs
+    caddy validate --config /etc/caddy/Caddyfile || return 1
+    systemctl enable caddy >/dev/null 2>&1 || true
+    systemctl restart caddy || return 1
+    tmp_config="/etc/vps-optimize/vpso-mux.yaml.tmp.$$"
+    write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_config" || return 1
+    run_vpso_mux_config_check "$tmp_config" || { quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true; return 1; }
+    write_vpso_mux_systemd_service
+    mv "$tmp_config" "$(vpso_mux_config_path)" || return 1
+    systemctl enable vpso-mux >/dev/null 2>&1 || true
+    systemctl restart vpso-mux || return 1
+    verify_public_443_listener_for_mode "tcp-peek" || return 1
+    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || return 1
+    write_single_443_engine_state "tcp_peek" "$backup_dir"
+}
+
+apply_xray_fallback_mode() {
+    local backup_dir="${1:-}"
+    ensure_caddy_local_base_config || return 1
+    write_caddy_panel_config
+    write_caddy_site_config
+    caddy_format_configs
+    caddy validate --config /etc/caddy/Caddyfile || return 1
+    systemctl enable caddy >/dev/null 2>&1 || true
+    systemctl restart caddy || return 1
+    restart_xray_entry_service || return 1
+    verify_public_443_listener_for_mode "xray-fallback" || return 1
+    tcp_probe_host "Caddy fallback 后端" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    write_single_443_engine_state "xray_fallback" "$backup_dir"
+}
+
+apply_entry_mode_by_name() {
+    local target_mode="$1"
+    local backup_dir="${2:-}"
+    target_mode=$(normalize_entry_mode_name "$target_mode") || return 1
+    case "$target_mode" in
+        "nginx-stream") apply_nginx_stream_mode "$backup_dir" ;;
+        "xray-fallback") apply_xray_fallback_mode "$backup_dir" ;;
+        "tcp-peek") apply_tcppeek_mode "$backup_dir" ;;
+    esac
+}
+
+switch_entry_mode() {
+    local target_mode="$1"
+    local current_mode backup_dir yn
+    load_sni_stack_env || return 1
+    target_mode=$(normalize_entry_mode_name "$target_mode") || { echo -e "${RED}❌ 目标入口模式无效：${target_mode}${PLAIN}"; return 1; }
+    current_mode=$(get_entry_mode)
+
+    if [[ "$target_mode" == "$current_mode" ]]; then
+        read_trimmed yn "当前已经是 ${target_mode}，是否重新应用当前模式？(y/n，默认 n): "
+        [[ "$yn" =~ ^[Yy]$ ]] && reapply_current_entry_mode
+        return $?
+    fi
+
+    echo -e "${CYAN}准备切换 443 入口模式：${current_mode} -> ${target_mode}${PLAIN}"
+    check_entry_mode_dependencies "$target_mode" || return 1
+    backup_dir=$(backup_entry_mode_config) || return 1
+    if [[ "$target_mode" == "xray-fallback" ]]; then
+        select_xray_fallback_main_route_for_switch || return 1
+    fi
+
+    if ! stop_public_443_entry_services_for_target "$target_mode"; then
+        echo -e "${RED}❌ 停止当前公网 443 入口服务失败，正在回滚。${PLAIN}"
+        rollback_last_entry_mode "$backup_dir"
+        return 1
+    fi
+
+    if ! apply_entry_mode_by_name "$target_mode" "$backup_dir"; then
+        echo -e "${RED}❌ 入口模式 ${target_mode} 应用失败，正在自动回滚。${PLAIN}"
+        rollback_last_entry_mode "$backup_dir"
+        return 1
+    fi
+
+    ENTRY_MODE="$target_mode"
+    save_sni_stack_env
+    write_single_443_engine_state "$(entry_mode_engine_name "$target_mode")" "$backup_dir"
+    echo -e "${GREEN}✅ 443 入口模式已切换为：${target_mode}${PLAIN}"
+    show_current_entry_status
+}
+
+reapply_current_entry_mode() {
+    local current_mode backup_dir
+    load_sni_stack_env || return 1
+    current_mode=$(get_entry_mode)
+    current_mode=$(normalize_entry_mode_name "$current_mode") || { echo -e "${RED}❌ 当前 ENTRY_MODE 无效：${current_mode}${PLAIN}"; return 1; }
+    echo -e "${CYAN}正在重新应用当前 443 入口模式：${current_mode}${PLAIN}"
+    check_entry_mode_dependencies "$current_mode" || return 1
+    backup_dir=$(backup_entry_mode_config) || return 1
+    if [[ "$current_mode" == "xray-fallback" ]]; then
+        select_xray_fallback_main_route_for_switch || return 1
+    fi
+    if ! stop_public_443_entry_services_for_target "$current_mode"; then
+        echo -e "${RED}❌ 停止当前公网 443 入口服务失败，正在回滚。${PLAIN}"
+        rollback_last_entry_mode "$backup_dir"
+        return 1
+    fi
+    if ! apply_entry_mode_by_name "$current_mode" "$backup_dir"; then
+        echo -e "${RED}❌ 当前入口模式重新应用失败，正在自动回滚。${PLAIN}"
+        rollback_last_entry_mode "$backup_dir"
+        return 1
+    fi
+    ENTRY_MODE="$current_mode"
+    save_sni_stack_env
+    write_single_443_engine_state "$(entry_mode_engine_name "$current_mode")" "$backup_dir"
+    echo -e "${GREEN}✅ 当前入口模式已重新应用：${current_mode}${PLAIN}"
+    show_current_entry_status
+}
+
 view_vpso_mux_logs() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -3875,36 +4494,230 @@ view_vpso_mux_logs() {
     journalctl -u vpso-mux -n 120 --no-pager 2>/dev/null || echo "未读取到 vpso-mux 日志。"
 }
 
+entry_mode_supports_xray_sni_routes() {
+    local mode="$1"
+    mode=$(normalize_entry_mode_name "$mode" 2>/dev/null) || return 1
+    [[ "$mode" == "nginx-stream" || "$mode" == "tcp-peek" ]]
+}
+
+print_443_health_status_code_hints() {
+    echo -e "${BOLD}状态码提示${PLAIN}"
+    echo -e "  - 403/401：可能是 Web 白名单、CDN/WAF、源站保护、Host/SNI 策略或后端鉴权。"
+    echo -e "  - 502：可能是 Caddy 到后端端口不通。"
+    echo -e "  - 525/526：可能是 CDN 到源站 TLS 或证书校验失败。"
+    echo -e "  - 超时：可能是 443 监听、防火墙、安全组、入口服务异常。"
+}
+
+print_443_health_reality_notes() {
+    echo -e "${BOLD}REALITY 检查提示${PLAIN}"
+    echo -e "  - 不要要求 REALITY serverName/dest 加入 Caddy。"
+    echo -e "  - 不要要求本机证书覆盖 REALITY serverName。"
+    echo -e "  - REALITY 应检查外部目标站点是否真实可访问、TLS 特征是否稳定。"
+    echo -e "  - 普通 TLS 节点和 REALITY 节点的 SNI/serverName 检查逻辑必须区分。"
+}
+
+print_web_domain_http_status() {
+    local label="$1"
+    local domain="$2"
+    local path="${3:-/}"
+    local url code
+
+    [[ -n "$domain" ]] || return 0
+    path=$(normalize_path_prefix "$path")
+    url="https://${domain}${path}"
+
+    if ! command -v curl >/dev/null 2>&1; then
+        echo -e "${label}：${url} -> ${YELLOW}未检测，curl 未安装${PLAIN}"
+        return 0
+    fi
+
+    code=$(curl -k -L -o /dev/null -sS --connect-timeout 6 --max-time 12 -w '%{http_code}' "$url" 2>/dev/null) || code="timeout"
+    [[ -z "$code" || "$code" == "000" ]] && code="timeout"
+    echo -e "${label}：${url} -> ${code}"
+}
+
+print_domain_cert_file_status() {
+    local domain="$1"
+    local cert key root_cert root_key
+
+    [[ -n "$domain" ]] || return 0
+    cert="/etc/caddy/certs/${domain}.crt"
+    key="/etc/caddy/certs/${domain}.key"
+    root_cert="/root/cert/${domain}.crt"
+    root_key="/root/cert/${domain}.key"
+
+    echo -e "${CYAN}${domain}${PLAIN}"
+    [[ -s "$cert" ]] && echo -e "  ${GREEN}✅ 证书文件存在：${cert}${PLAIN}" || echo -e "  ${YELLOW}⚠️ 证书文件不存在或为空：${cert}${PLAIN}"
+    [[ -s "$key" ]] && echo -e "  ${GREEN}✅ 私钥文件存在：${key}${PLAIN}" || echo -e "  ${YELLOW}⚠️ 私钥文件不存在或为空：${key}${PLAIN}"
+
+    if [[ -L "$root_cert" && "$(readlink "$root_cert" 2>/dev/null)" == "$cert" && -e "$root_cert" ]]; then
+        echo -e "  ${GREEN}✅ /root/cert 证书软链接正常：${root_cert} -> ${cert}${PLAIN}"
+    else
+        echo -e "  ${YELLOW}⚠️ /root/cert 证书软链接异常或不存在：${root_cert}${PLAIN}"
+    fi
+
+    if [[ -L "$root_key" && "$(readlink "$root_key" 2>/dev/null)" == "$key" && -e "$root_key" ]]; then
+        echo -e "  ${GREEN}✅ /root/cert 私钥软链接正常：${root_key} -> ${key}${PLAIN}"
+    else
+        echo -e "  ${YELLOW}⚠️ /root/cert 私钥软链接异常或不存在：${root_key}${PLAIN}"
+    fi
+}
+
+print_xray_route_health_list() {
+    local mode="$1"
+    local i sni addr port line main_idx status
+
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}未配置 Xray 入站分流规则：$(xray_sni_routes_path)${PLAIN}"
+        return 0
+    fi
+
+    main_idx=$(xray_fallback_main_route_index 2>/dev/null || true)
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        sni="${XRAY_SNI_ROUTE_SNIS[$i]}"
+        addr="${XRAY_SNI_ROUTE_ADDRS[$i]}"
+        port="${XRAY_SNI_ROUTE_PORTS[$i]}"
+        [[ -n "$sni" ]] || continue
+
+        if [[ "$mode" == "xray-fallback" ]]; then
+            if [[ -n "$main_idx" && "$i" == "$main_idx" ]]; then
+                status="xray-fallback 主入站，当前模式生效"
+            else
+                status="已保留，当前 xray-fallback 模式下不生效"
+            fi
+        else
+            status="当前模式支持按 SNI 分流"
+        fi
+
+        echo -e "${CYAN}${sni}${PLAIN} -> ${addr}:${port}（${status}）"
+        if [[ "${CADDY_LISTEN_PORT:-}" == "$port" ]]; then
+            echo -e "${RED}  ❌ 与 Caddy 本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}"
+        fi
+        line=$(xray_route_listen_line_by_addr_port "$addr" "$port")
+        if [[ -n "$line" ]]; then
+            echo -e "${GREEN}  ✅ 端口已监听：${line}${PLAIN}"
+            if echo "$line" | grep -Eq '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):'"${port}"'[[:space:]]'; then
+                echo -e "${YELLOW}  ⚠️ 检测到可能监听在 0.0.0.0/[::]，存在公网暴露风险，建议改为 127.0.0.1。${PLAIN}"
+            fi
+        else
+            echo -e "${YELLOW}  ⚠️ 未检测到 ${addr}:${port} 监听，请先去 3x-ui 创建并启用对应入站。${PLAIN}"
+        fi
+    done
+}
+
 sni_stack_health_check_enhanced() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}🧪 443 链路体检增强${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    local engine caddy_backend xray_backend route_count ranges i domain
-    engine=$(single_443_current_engine)
+    detect_current_entry_status
+
+    local mode caddy_backend xray_backend panel_backend sub_backend site_backend route_count ranges i domain public_443_lines mux_config mux_service
+    mode="$ENTRY_STATUS_MODE"
     caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
-    route_count=$((2 + ${#SITE_DOMAINS[@]} + ${#TCP_ROUTE_SNIS[@]}))
-    echo -e "当前 engine：${GREEN}${engine}${PLAIN}"
-    echo -e "公网 443 监听进程："
-    ss -lntup 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' || echo "未监听或当前用户无权限查看进程"
-    echo -e "Nginx stream 是否启用：$(systemctl is-active nginx 2>/dev/null || echo unknown)"
-    echo -e "vpso-mux 是否运行：$(systemctl is-active vpso-mux 2>/dev/null || echo inactive)"
-    echo -e "Caddy 本地后端：${caddy_backend}"
+    panel_backend=$(format_hostport "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT")
+    sub_backend=$(format_hostport "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT")
+    mux_config=$(vpso_mux_config_path)
+    mux_service="/etc/systemd/system/$(vpso_mux_service_name)"
+    route_count=$((2 + ${#SITE_DOMAINS[@]} + ${#TCP_ROUTE_SNIS[@]} + ${#XRAY_SNI_ROUTE_SNIS[@]}))
+
+    echo -e "${BOLD}入口状态${PLAIN}"
+    echo -e "当前 ENTRY_MODE：${GREEN}${mode}${PLAIN}"
+    echo -e "实际公网 443 监听服务：${ENTRY_STATUS_LISTENER_PROCESS}"
+    public_443_lines=$(ss -lntp 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' || true)
+    echo -e "${public_443_lines:-未监听或当前用户无权限查看进程}"
+    if [[ "$ENTRY_STATUS_CONSISTENT" == "yes" ]]; then
+        echo -e "配置模式与实际监听：${GREEN}一致${PLAIN}"
+    else
+        echo -e "配置模式与实际监听：${YELLOW}不一致${PLAIN}"
+        echo -e "${YELLOW}配置模式与实际监听不一致，建议重新应用当前入口模式。${PLAIN}"
+    fi
+    echo -e "nginx 状态：${ENTRY_STATUS_NGINX_SERVICE}"
+    echo -e "xray 状态：${ENTRY_STATUS_XRAY_SERVICE}"
+    echo -e "tcppeek 状态：${ENTRY_STATUS_TCPPEEK_SERVICE}"
+    echo -e "caddy 状态：$(service_status_compact caddy)"
+    if [[ -f "$mux_config" ]]; then
+        echo -e "tcppeek/vpso-mux 配置状态：${GREEN}存在 ${mux_config}${PLAIN}"
+    else
+        echo -e "tcppeek/vpso-mux 配置状态：${YELLOW}未找到 ${mux_config}${PLAIN}"
+    fi
+    if [[ -f "$mux_service" ]]; then
+        echo -e "tcppeek/vpso-mux systemd：${GREEN}存在 ${mux_service}${PLAIN}"
+    else
+        echo -e "tcppeek/vpso-mux systemd：${YELLOW}未找到 ${mux_service}${PLAIN}"
+    fi
+
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}本地监听${PLAIN}"
+    echo -e "Caddy 本地监听端口：${caddy_backend}"
     get_listen_line_by_port "$CADDY_LISTEN_PORT" | grep -q "$CADDY_LISTEN_ADDR" && echo -e "${GREEN}✅ Caddy 期望监听 ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}${PLAIN}" || echo -e "${YELLOW}⚠️ Caddy 监听地址需确认：$(get_listen_line_by_port "$CADDY_LISTEN_PORT")${PLAIN}"
-    echo -e "Xray/REALITY 本地后端：${xray_backend}"
+    echo -e "Xray 本地监听端口：${xray_backend}"
     get_listen_line_by_port "$XRAY_LISTEN_PORT" | grep -q "$XRAY_LISTEN_ADDR" && echo -e "${GREEN}✅ Xray 期望监听 ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}" || echo -e "${YELLOW}⚠️ Xray 监听地址需确认：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")${PLAIN}"
+    if [[ "$ENTRY_STATUS_LISTENER" == "xray" ]]; then
+        echo -e "Xray 公网监听端口：${GREEN}公网 443 当前由 Xray 监听${PLAIN}"
+    else
+        echo -e "Xray 公网监听端口：未检测到 Xray 监听公网 443"
+    fi
+
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}Xray 入站分流规则${PLAIN}"
+    if entry_mode_supports_xray_sni_routes "$mode"; then
+        echo -e "当前入口模式是否支持 Xray 入站分流规则：${GREEN}支持${PLAIN}"
+    else
+        echo -e "当前入口模式是否支持 Xray 入站分流规则：${YELLOW}不支持/当前不生效${PLAIN}"
+    fi
+    if [[ "$mode" == "xray-fallback" ]]; then
+        echo -e "${YELLOW}当前为 Xray Fallback 模式，Xray 入站管理中的多 SNI 分流规则不生效。${PLAIN}"
+        echo -e "${YELLOW}如需多个本地 Xray 入站，请切换到 Nginx Stream 或 TCP Peek。${PLAIN}"
+        echo -e "${YELLOW}普通 HTTPS 流量会先进入 Xray，再 fallback 到 Caddy；403/拒绝访问通常优先排查 Web 白名单、CDN/WAF、源站保护、Cloudflare 回源限制或 Host/SNI 策略。${PLAIN}"
+        print_xray_fallback_main_route_summary
+    fi
+    print_xray_route_health_list "$mode"
+
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}Web 域名白名单状态${PLAIN}"
+    print_sni_ip_whitelist_summary
+    echo -e "Xray 节点白名单：不支持/不启用"
+
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}证书文件与 /root/cert 软链接${PLAIN}"
+    print_domain_cert_file_status "$PANEL_DOMAIN"
+    for i in "${!SITE_DOMAINS[@]}"; do
+        domain="${SITE_DOMAINS[$i]}"
+        [[ -n "$domain" ]] || continue
+        print_domain_cert_file_status "$domain"
+    done
+
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}Web 域名访问 HTTP 状态码${PLAIN}"
+    print_web_domain_http_status "面板路径" "$PANEL_DOMAIN" "$PANEL_WEB_PATH"
+    print_web_domain_http_status "普通订阅路径" "$PANEL_DOMAIN" "$SUB_URI_PATH"
+    print_web_domain_http_status "Clash/Mihomo 路径" "$PANEL_DOMAIN" "$CLASH_URI_PATH"
+    for i in "${!SITE_DOMAINS[@]}"; do
+        domain="${SITE_DOMAINS[$i]}"
+        [[ -n "$domain" ]] || continue
+        print_web_domain_http_status "网站域名" "$domain" "/"
+    done
+    print_443_health_status_code_hints
+
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}路由摘要${PLAIN}"
     echo -e "default_backend 当前指向：${xray_backend}"
     echo -e "routes 数量：${route_count}"
     echo -e "unknown SNI 策略：default_backend -> ${xray_backend}"
-    echo -e "------------------------------------------------"
     ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
+    echo -e "web panel: ${PANEL_DOMAIN}${PANEL_WEB_PATH} -> Caddy ${caddy_backend} -> 面板后端 ${panel_backend}"
+    echo -e "web subscription: ${PANEL_DOMAIN}${SUB_URI_PATH} -> Caddy ${caddy_backend} -> 订阅后端 ${sub_backend}"
+    echo -e "web clash/mihomo: ${PANEL_DOMAIN}${CLASH_URI_PATH} -> Caddy ${caddy_backend} -> 订阅后端 ${sub_backend}"
     echo -e "route panel: ${PANEL_DOMAIN} -> ${caddy_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
     for i in "${!SITE_DOMAINS[@]}"; do
         domain="${SITE_DOMAINS[$i]}"
         [[ -n "$domain" ]] || continue
         ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
+        site_backend=$(format_hostport "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}")
+        echo -e "web site: ${domain}/ -> Caddy ${caddy_backend} -> 网站后端 ${site_backend}"
         echo -e "route site: ${domain} -> ${caddy_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
     done
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
@@ -3913,7 +4726,14 @@ sni_stack_health_check_enhanced() {
         ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
         echo -e "route tcp: ${domain} -> $(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}") whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
     done
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        domain="${XRAY_SNI_ROUTE_SNIS[$i]}"
+        [[ -n "$domain" ]] || continue
+        echo -e "route xray: ${domain} -> $(format_hostport "${XRAY_SNI_ROUTE_ADDRS[$i]}" "${XRAY_SNI_ROUTE_PORTS[$i]}") whitelist=no"
+    done
     echo -e "route reality: ${REALITY_SNI} -> ${xray_backend} whitelist=no"
+    print_443_health_reality_notes
+
     echo -e "------------------------------------------------"
     echo -e "最近 20 行 vpso-mux 日志："
     journalctl -u vpso-mux -n 20 --no-pager 2>/dev/null || echo "未读取到 vpso-mux 日志。"
@@ -4036,7 +4856,7 @@ edit_sni_stack_reality_profile() {
     is_valid_domain "$REALITY_SNI" || { echo -e "${RED}❌ REALITY SNI 无效：${REALITY_SNI}${PLAIN}"; return 1; }
     [[ "$REALITY_SNI" == "$PANEL_DOMAIN" ]] && { echo -e "${RED}❌ REALITY SNI 不能写面板域名。${PLAIN}"; return 1; }
     local existing
-    for existing in "${SITE_DOMAINS[@]}" "${TCP_ROUTE_SNIS[@]}"; do
+    for existing in "${SITE_DOMAINS[@]}" "${TCP_ROUTE_SNIS[@]}" "${XRAY_SNI_ROUTE_SNIS[@]}"; do
         [[ "$REALITY_SNI" == "$existing" ]] && { echo -e "${RED}❌ REALITY SNI 不能和其他 443 分流域名相同：${existing}${PLAIN}"; return 1; }
     done
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
@@ -4106,6 +4926,9 @@ edit_sni_stack_panel_domain_profile() {
     done
     for existing in "${TCP_ROUTE_SNIS[@]}"; do
         [[ "$new_domain" == "$existing" ]] && { echo -e "${RED}❌ 面板域名不能和 TCP/SNI 入站域名相同。${PLAIN}"; return 1; }
+    done
+    for existing in "${XRAY_SNI_ROUTE_SNIS[@]}"; do
+        [[ "$new_domain" == "$existing" ]] && { echo -e "${RED}❌ 面板域名不能和 Xray 入站域名相同。${PLAIN}"; return 1; }
     done
     check_domain_dns_sanity "$new_domain" "新的面板域名" "prompt" || return 1
     confirm_risk_action "替换 443 面板域名为 ${new_domain}" \
@@ -4554,6 +5377,13 @@ EOF
             [[ -n "$tcp_sni" ]] && echo "    ${tcp_sni} vps_tcp_route_${tcp_i}_backend;" >> "$conf_file"
         done
     fi
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local xray_route_i xray_route_sni
+        for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+            xray_route_sni="${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}"
+            [[ -n "$xray_route_sni" ]] && echo "    ${xray_route_sni} vps_xray_route_${xray_route_i}_backend;" >> "$conf_file"
+        done
+    fi
     cat <<EOF >> "$conf_file"
     ${REALITY_SNI} xray_backend;
     default xray_backend;
@@ -4598,6 +5428,20 @@ EOF
             cat <<EOF >> "$conf_file"
 upstream vps_tcp_route_${tcp_i}_backend {
     server ${tcp_backend};
+}
+
+EOF
+        done
+    fi
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local xray_route_i xray_route_sni xray_route_backend
+        for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+            xray_route_sni="${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}"
+            [[ -n "$xray_route_sni" ]] || continue
+            xray_route_backend=$(format_hostport "${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}" "${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}")
+            cat <<EOF >> "$conf_file"
+upstream vps_xray_route_${xray_route_i}_backend {
+    server ${xray_route_backend};
 }
 
 EOF
@@ -4764,6 +5608,9 @@ CADDY_LISTEN_ADDR='${CADDY_LISTEN_ADDR}'
 CADDY_LISTEN_PORT='${CADDY_LISTEN_PORT}'
 XRAY_LISTEN_ADDR='${XRAY_LISTEN_ADDR}'
 XRAY_LISTEN_PORT='${XRAY_LISTEN_PORT}'
+XRAY_FALLBACK_MAIN_SNI='${XRAY_FALLBACK_MAIN_SNI:-}'
+XRAY_FALLBACK_MAIN_ADDR='${XRAY_FALLBACK_MAIN_ADDR:-}'
+XRAY_FALLBACK_MAIN_PORT='${XRAY_FALLBACK_MAIN_PORT:-}'
 PANEL_LISTEN_ADDR='${PANEL_LISTEN_ADDR}'
 PANEL_LISTEN_PORT='${PANEL_LISTEN_PORT}'
 PANEL_WEB_PATH='${PANEL_WEB_PATH}'
@@ -4792,7 +5639,7 @@ harden_single_443_firewall() {
     [[ "$yn" =~ ^[Yy]$ ]] || return 0
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}
-    remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}" "40000" "8443" "1443" "2096" "3000")
+    remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}" "${XRAY_SNI_ROUTE_PORTS[@]}" "40000" "8443" "1443" "2096" "3000")
     if command -v ufw >/dev/null 2>&1; then
         ufw allow "${ssh_port}/tcp" >/dev/null 2>&1 || true
         ufw allow "${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || true
@@ -4820,7 +5667,7 @@ print_sni_stack_result() {
     local check_ports=()
     local check_regex=""
     local p
-    check_ports=("$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}")
+    check_ports=("$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}" "${XRAY_SNI_ROUTE_PORTS[@]}")
     mapfile -t check_ports < <(printf '%s\n' "${check_ports[@]}" | grep -E '^[0-9]+$' | awk '!seen[$0]++')
     for p in "${check_ports[@]}"; do
         if [[ -z "$check_regex" ]]; then
@@ -4849,9 +5696,15 @@ print_sni_stack_result() {
             echo -e "  TCP/SNI 入站：  ${TCP_ROUTE_SNIS[$tcp_i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]}"
         done
     fi
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local xray_route_i
+        for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+            echo -e "  Xray 入站：     ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}:${NGINX_LISTEN_PORT} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}"
+        done
+    fi
     echo -e "  REALITY 端口：  ${NGINX_LISTEN_PORT}"
     echo -e ""
-    echo -e "${YELLOW}不要从公网访问这些内部端口：${CADDY_LISTEN_PORT}/${XRAY_LISTEN_PORT}/${PANEL_LISTEN_PORT}/${SUB_LISTEN_PORT}/${SITE_BACKEND_PORTS[*]} ${TCP_ROUTE_PORTS[*]}${PLAIN}"
+    echo -e "${YELLOW}不要从公网访问这些内部端口：${CADDY_LISTEN_PORT}/${XRAY_LISTEN_PORT}/${PANEL_LISTEN_PORT}/${SUB_LISTEN_PORT}/${SITE_BACKEND_PORTS[*]} ${TCP_ROUTE_PORTS[*]} ${XRAY_SNI_ROUTE_PORTS[*]}${PLAIN}"
     echo -e "${YELLOW}它们应该只给本机内部服务互相连接，不是浏览器入口。${PLAIN}"
     echo -e ""
     echo -e "${BOLD}二、3x-ui 面板设置建议${PLAIN}"
@@ -4906,6 +5759,12 @@ print_sni_stack_result() {
             echo -e "  ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]} -> ${TCP_ROUTE_SNIS[$tcp_i]} TCP/SNI 入站"
         done
     fi
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
+        local xray_route_i
+        for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+            echo -e "  ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} Xray 入站"
+        done
+    fi
     echo -e ""
     echo -e "${BOLD}六、检查命令${PLAIN}"
     if [[ -n "$check_regex" ]]; then
@@ -4956,7 +5815,8 @@ list_sni_stack_sites() {
     panel_ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
     [[ -n "$panel_ranges" ]] && echo -e "${YELLOW}面板域名 IP 白名单：${panel_ranges}${PLAIN}"
     echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
-    [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#TCP_ROUTE_SNIS[@]} 个 TCP/SNI 入站，请在 [18] -> [9] 查看。${PLAIN}"
+    [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#TCP_ROUTE_SNIS[@]} 个旧 TCP/SNI 入站。${PLAIN}"
+    [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#XRAY_SNI_ROUTE_SNIS[@]} 个 Xray 入站，请在 [18] -> [9] 查看。${PLAIN}"
     echo -e "------------------------------------------------"
     if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
         echo -e "${YELLOW}当前没有额外的网站/反代域名。${PLAIN}"
@@ -5023,6 +5883,12 @@ add_sni_stack_site() {
     for existing in "${TCP_ROUTE_SNIS[@]}"; do
         if [[ "$site_domain" == "$existing" ]]; then
             echo -e "${RED}❌ 该域名已经作为 TCP/SNI 入站使用。${PLAIN}"
+            return 1
+        fi
+    done
+    for existing in "${XRAY_SNI_ROUTE_SNIS[@]}"; do
+        if [[ "$site_domain" == "$existing" ]]; then
+            echo -e "${RED}❌ 该域名已经作为 Xray 入站使用。${PLAIN}"
             return 1
         fi
     done
@@ -5239,6 +6105,9 @@ add_sni_stack_tcp_route() {
     for existing in "${TCP_ROUTE_SNIS[@]}"; do
         [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该 TCP/SNI 入站已经存在。${PLAIN}"; return 1; }
     done
+    for existing in "${XRAY_SNI_ROUTE_SNIS[@]}"; do
+        [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已作为 Xray 入站使用。${PLAIN}"; return 1; }
+    done
 
     check_domain_dns_sanity "$route_sni" "TCP/SNI 入站域名" "warn" || echo -e "${YELLOW}⚠️ 如果客户端使用服务器 IP 连接并手动指定 SNI，可忽略该 DNS 警告。${PLAIN}"
     route_addr=$(ask_with_default "3x-ui 新入站本地监听地址（只允许本地）" "127.0.0.1")
@@ -5324,6 +6193,9 @@ edit_sni_stack_tcp_route() {
         [[ "$i" -eq "$idx" ]] && continue
         [[ "$new_sni" == "${TCP_ROUTE_SNIS[$i]}" ]] && { echo -e "${RED}❌ 该 TCP/SNI 入站已经存在。${PLAIN}"; return 1; }
     done
+    for existing in "${XRAY_SNI_ROUTE_SNIS[@]}"; do
+        [[ "$new_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已作为 Xray 入站使用。${PLAIN}"; return 1; }
+    done
     is_loopback_listen_addr "$new_addr" || { echo -e "${RED}❌ 为保证安全，TCP/SNI 入站后端只允许 127.0.0.1、localhost 或 ::1。${PLAIN}"; return 1; }
     is_valid_port "$new_port" || { echo -e "${RED}❌ 入站端口无效：${new_port}${PLAIN}"; return 1; }
     if [[ "$new_port" == "$NGINX_LISTEN_PORT" || "$new_port" == "$CADDY_LISTEN_PORT" || "$new_port" == "$PANEL_LISTEN_PORT" || "$new_port" == "$SUB_LISTEN_PORT" ]]; then
@@ -5397,6 +6269,282 @@ remove_sni_stack_tcp_route() {
     save_and_offer_reapply_sni_stack
 }
 
+xray_sni_routes_fallback_notice() {
+    echo -e "${YELLOW}当前为 Xray Fallback 模式。${PLAIN}"
+    print_xray_fallback_mode_explanation
+}
+
+list_xray_sni_routes() {
+    load_sni_stack_env || return 1
+    local mode fallback_idx
+    mode=$(get_entry_mode)
+    fallback_idx=$(xray_fallback_main_route_index 2>/dev/null || true)
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}Xray 入站分流规则${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "配置文件：$(xray_sni_routes_path)"
+    echo -e "规则格式：SNI|ADDR|PORT"
+    if [[ "$mode" == "xray-fallback" ]]; then
+        echo -e "------------------------------------------------"
+        xray_sni_routes_fallback_notice
+        print_xray_fallback_main_route_summary
+    fi
+    echo -e "------------------------------------------------"
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}当前没有 Xray 入站分流规则。${PLAIN}"
+        if [[ -n "${XRAY_LISTEN_PORT:-}" ]]; then
+            echo -e "${CYAN}旧默认 Xray/REALITY 后端仍是：${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}"
+            echo -e "${CYAN}如需多个本地 Xray 入站，可按 SNI 添加新的本地端口分流记录。${PLAIN}"
+        fi
+        return 0
+    fi
+
+    local i num
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        num=$((i + 1))
+        if [[ "$mode" == "xray-fallback" && -n "$fallback_idx" && "$i" == "$fallback_idx" ]]; then
+            echo -e "${GREEN}${num}.${PLAIN} ${XRAY_SNI_ROUTE_SNIS[$i]} -> ${XRAY_SNI_ROUTE_ADDRS[$i]}:${XRAY_SNI_ROUTE_PORTS[$i]} ${GREEN}[xray-fallback 主入站，当前模式生效]${PLAIN}"
+        elif [[ "$mode" == "xray-fallback" ]]; then
+            echo -e "${GREEN}${num}.${PLAIN} ${XRAY_SNI_ROUTE_SNIS[$i]} -> ${XRAY_SNI_ROUTE_ADDRS[$i]}:${XRAY_SNI_ROUTE_PORTS[$i]} ${YELLOW}[已保留，当前 xray-fallback 模式下不生效]${PLAIN}"
+        else
+            echo -e "${GREEN}${num}.${PLAIN} ${XRAY_SNI_ROUTE_SNIS[$i]} -> ${XRAY_SNI_ROUTE_ADDRS[$i]}:${XRAY_SNI_ROUTE_PORTS[$i]}"
+        fi
+    done
+}
+
+add_xray_sni_route() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}添加 Xray 入站分流规则${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    echo -e "${YELLOW}本菜单只记录 SNI -> 本地地址:端口，不会创建、删除或修改 3x-ui/Xray 入站。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local route_sni route_addr route_port existing idx
+    read_trimmed route_sni "SNI/域名: "
+    route_sni=$(normalize_domain_input "$route_sni")
+    if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
+        echo -e "${BLUE}已取消添加。${PLAIN}"
+        return 0
+    fi
+    is_valid_domain "$route_sni" || { echo -e "${RED}❌ SNI/域名格式无效。${PLAIN}"; return 1; }
+    if [[ "$route_sni" == "$PANEL_DOMAIN" || "$route_sni" == "$REALITY_SNI" ]]; then
+        echo -e "${RED}❌ Xray 入站域名不能和面板域名或 REALITY SNI 相同。${PLAIN}"
+        return 1
+    fi
+    for existing in "${SITE_DOMAINS[@]}"; do
+        [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已作为 Web/Caddy 域名使用，Xray 入站规则必须和 Web 域名分开。${PLAIN}"; return 1; }
+    done
+    for existing in "${TCP_ROUTE_SNIS[@]}"; do
+        [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已存在于旧 TCP/SNI 本地入站规则中。${PLAIN}"; return 1; }
+    done
+    for existing in "${XRAY_SNI_ROUTE_SNIS[@]}"; do
+        [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该 Xray 入站分流规则已经存在。${PLAIN}"; return 1; }
+    done
+
+    route_addr=$(ask_with_default "本地监听地址" "127.0.0.1")
+    route_addr=$(normalize_loopback_addr "$route_addr")
+    route_port=$(ask_with_default "本地监听端口" "${XRAY_LISTEN_PORT:-1443}")
+    is_loopback_listen_addr "$route_addr" || { echo -e "${RED}❌ 为避免公网暴露，本地监听地址只允许 127.0.0.1、localhost 或 ::1。${PLAIN}"; return 1; }
+    is_valid_port "$route_port" || { echo -e "${RED}❌ 本地监听端口无效：${route_port}${PLAIN}"; return 1; }
+    if [[ "$route_port" == "$CADDY_LISTEN_PORT" ]]; then
+        echo -e "${RED}❌ 该端口与 Caddy 本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}"
+        return 1
+    fi
+    if [[ "$route_port" == "$NGINX_LISTEN_PORT" || "$route_port" == "$PANEL_LISTEN_PORT" || "$route_port" == "$SUB_LISTEN_PORT" ]]; then
+        echo -e "${RED}❌ 入站端口不能复用公网入口、面板或订阅服务端口。${PLAIN}"
+        return 1
+    fi
+    existing=$(xray_sni_route_port_conflict "$route_addr" "$route_port" || true)
+    if [[ -n "$existing" ]]; then
+        echo -e "${RED}❌ ${route_addr}:${route_port} 已被规则 ${existing} 使用。${PLAIN}"
+        return 1
+    fi
+
+    print_xray_route_port_status "$route_sni" "$route_addr" "$route_port"
+    if [[ -z "$(xray_route_listen_line_by_addr_port "$route_addr" "$route_port")" ]]; then
+        echo -e "${RED}❌ 端口未监听，请先去 3x-ui 创建并启用对应入站。${PLAIN}"
+        return 1
+    fi
+
+    idx=${#XRAY_SNI_ROUTE_SNIS[@]}
+    XRAY_SNI_ROUTE_SNIS[$idx]="$route_sni"
+    XRAY_SNI_ROUTE_ADDRS[$idx]="$route_addr"
+    XRAY_SNI_ROUTE_PORTS[$idx]="$route_port"
+    save_xray_sni_route_arrays
+    echo -e "${GREEN}✅ 已保存 Xray 入站分流规则：${route_sni} -> ${route_addr}:${route_port}${PLAIN}"
+    echo -e "${YELLOW}提示：保存后需要执行“同步到当前入口模式”或重新应用当前入口模式，公网 443 才会使用新规则。${PLAIN}"
+}
+
+remove_xray_sni_route() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}删除 Xray 入站分流规则${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}当前没有可删除的 Xray 入站分流规则。${PLAIN}"
+        return 0
+    fi
+
+    local i num choice idx route_sni
+    local -a new_snis=() new_addrs=() new_ports=()
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        num=$((i + 1))
+        echo -e "${GREEN}${num}.${PLAIN} ${XRAY_SNI_ROUTE_SNIS[$i]} -> ${XRAY_SNI_ROUTE_ADDRS[$i]}:${XRAY_SNI_ROUTE_PORTS[$i]}"
+    done
+    echo -e "------------------------------------------------"
+    read_trimmed choice "请输入要删除的序号: "
+    if [[ -z "$choice" || "$choice" == "0" ]]; then
+        echo -e "${BLUE}已取消删除。${PLAIN}"
+        return 0
+    fi
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#XRAY_SNI_ROUTE_SNIS[@]} )); then
+        echo -e "${RED}❌ 序号无效。${PLAIN}"
+        return 1
+    fi
+
+    idx=$((choice - 1))
+    route_sni="${XRAY_SNI_ROUTE_SNIS[$idx]}"
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        [[ "$i" -eq "$idx" ]] && continue
+        new_snis+=("${XRAY_SNI_ROUTE_SNIS[$i]}")
+        new_addrs+=("${XRAY_SNI_ROUTE_ADDRS[$i]}")
+        new_ports+=("${XRAY_SNI_ROUTE_PORTS[$i]}")
+    done
+    XRAY_SNI_ROUTE_SNIS=("${new_snis[@]}")
+    XRAY_SNI_ROUTE_ADDRS=("${new_addrs[@]}")
+    XRAY_SNI_ROUTE_PORTS=("${new_ports[@]}")
+    save_xray_sni_route_arrays
+    echo -e "${GREEN}✅ 已删除 Xray 入站分流规则：${route_sni}${PLAIN}"
+    echo -e "${YELLOW}提示：删除后需要执行“同步到当前入口模式”或重新应用当前入口模式。${PLAIN}"
+}
+
+check_xray_sni_route_ports() {
+    load_sni_stack_env || return 1
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}检查 Xray 入站端口状态${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}当前没有 Xray 入站分流规则。${PLAIN}"
+        return 0
+    fi
+
+    local i
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        print_xray_route_port_status "${XRAY_SNI_ROUTE_SNIS[$i]}" "${XRAY_SNI_ROUTE_ADDRS[$i]}" "${XRAY_SNI_ROUTE_PORTS[$i]}"
+        echo -e "------------------------------------------------"
+    done
+}
+
+sync_xray_sni_routes_to_entry_mode() {
+    load_sni_stack_env || return 1
+    local mode
+    mode=$(get_entry_mode)
+    case "$mode" in
+        "nginx-stream")
+            echo -e "${CYAN}正在同步 Xray 入站分流规则到 Nginx Stream 配置...${PLAIN}"
+            reapply_sni_stack_from_env --yes
+            ;;
+        "tcp-peek")
+            local tmp_config target_config
+            echo -e "${CYAN}正在同步 Xray 入站分流规则到 tcppeek 配置...${PLAIN}"
+            target_config=$(vpso_mux_config_path)
+            tmp_config="${target_config}.tmp.$$"
+            write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_config" || return 1
+            if ! run_vpso_mux_config_check "$tmp_config"; then
+                quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true
+                return 1
+            fi
+            mv "$tmp_config" "$target_config" || { echo -e "${RED}❌ tcppeek 配置替换失败：${target_config}${PLAIN}"; return 1; }
+            if systemctl is-active --quiet vpso-mux 2>/dev/null; then
+                systemctl restart vpso-mux || { echo -e "${RED}❌ vpso-mux 重启失败，请查看日志。${PLAIN}"; return 1; }
+            else
+                echo -e "${YELLOW}vpso-mux 当前未运行，已仅生成并校验配置文件。${PLAIN}"
+            fi
+            echo -e "${GREEN}✅ 已同步到 tcppeek 配置：${target_config}${PLAIN}"
+            ;;
+        "xray-fallback")
+            xray_sni_routes_fallback_notice
+            return 1
+            ;;
+        *)
+            echo -e "${RED}❌ 当前 ENTRY_MODE 无效或未配置：${mode}${PLAIN}"
+            return 1
+            ;;
+    esac
+}
+
+manage_xray_inbound_routes() {
+    load_sni_stack_env || return 1
+    if [[ "$(get_entry_mode)" == "xray-fallback" ]]; then
+        while true; do
+            clear
+            echo -e "${CYAN}================================================${PLAIN}"
+            echo -e "${BOLD}Xray 入站管理${PLAIN}"
+            echo -e "${CYAN}================================================${PLAIN}"
+            xray_sni_routes_fallback_notice
+            print_xray_fallback_main_route_summary
+            echo -e "------------------------------------------------"
+            echo -e "${GREEN}  1. 查看入站分流规则${PLAIN}"
+            echo -e "${YELLOW}  2. 添加入站分流规则（当前模式不可用）${PLAIN}"
+            echo -e "${YELLOW}  3. 删除入站分流规则（当前模式不可用）${PLAIN}"
+            echo -e "${YELLOW}  4. 同步规则到当前入口模式（当前模式不可用）${PLAIN}"
+            echo -e "------------------------------------------------"
+            echo -e "${RED}  0. 返回${PLAIN}"
+            echo -e "${CYAN}================================================${PLAIN}"
+
+            local fallback_choice
+            read_trimmed fallback_choice "请选择操作: "
+            case "$fallback_choice" in
+                1) list_xray_sni_routes ;;
+                2|3|4)
+                    echo -e "${YELLOW}当前为 xray-fallback 模式，Xray 入站管理默认不可新增、删除或同步规则。${PLAIN}"
+                    echo -e "${YELLOW}如需多个本地 Xray 入站通过 443 按 SNI 分流，请切换到 nginx-stream 或 tcp-peek。${PLAIN}"
+                    ;;
+                0) break ;;
+                *) echo -e "${RED}❌ 无效选择。${PLAIN}" ;;
+            esac
+            echo ""
+            read -n 1 -s -r -p "按任意键继续..."
+        done
+        return 0
+    fi
+
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}Xray 入站管理${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}只管理 SNI -> 本地地址:端口 分流记录，不编辑 3x-ui/Xray 入站内部配置。${PLAIN}"
+        echo -e "配置文件：$(xray_sni_routes_path)"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 查看入站分流规则${PLAIN}"
+        echo -e "${GREEN}  2. 添加入站分流规则${PLAIN}"
+        echo -e "${GREEN}  3. 删除入站分流规则${PLAIN}"
+        echo -e "${GREEN}  4. 检查入站端口状态${PLAIN}"
+        echo -e "${GREEN}  5. 同步到当前入口模式${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local choice
+        read_trimmed choice "请选择操作: "
+        case "$choice" in
+            1) list_xray_sni_routes ;;
+            2) add_xray_sni_route ;;
+            3) remove_xray_sni_route ;;
+            4) check_xray_sni_route_ports ;;
+            5) sync_xray_sni_routes_to_entry_mode ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择。${PLAIN}" ;;
+        esac
+        echo ""
+        read -n 1 -s -r -p "按任意键继续..."
+    done
+}
+
 manage_sni_stack_tcp_routes() {
     while true; do
         clear
@@ -5442,7 +6590,7 @@ manage_sni_stack_ip_whitelist() {
         echo -e "${BOLD}🔐 443 域名 IP 白名单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         load_sni_stack_env || return 1
-        echo -e "${YELLOW}只限制你选择的域名；支持面板、网站/反代和 TCP/SNI 入站，REALITY SNI 与未知 SNI 仍按原分流规则工作。${PLAIN}"
+        echo -e "${YELLOW}只限制你选择的 Web 域名；支持面板、订阅、网站/反代，Xray 入站、REALITY SNI 与未知 SNI 不受 Web 白名单影响。${PLAIN}"
         echo -e "${YELLOW}443 单入口会在 Nginx stream 层按 SNI + 源 IP 拦截，避免影响同入口其他服务。${PLAIN}"
         echo -e "------------------------------------------------"
 
@@ -5454,12 +6602,6 @@ manage_sni_stack_ip_whitelist() {
             domains+=("$site_domain")
             labels+=("网站/反代")
         done
-        for site_domain in "${TCP_ROUTE_SNIS[@]}"; do
-            [[ -z "$site_domain" ]] && continue
-            domains+=("$site_domain")
-            labels+=("TCP/SNI 入站")
-        done
-
         for i in "${!domains[@]}"; do
             num=$((i + 1))
             current_ranges=$(sni_ip_whitelist_ranges_for_domain "${domains[$i]}")
@@ -11856,7 +12998,7 @@ func_sni_stack_quick_menu() {
         echo -e "${BOLD}${BLUE}▶ 新手常用${PLAIN}"
         echo -e "${GREEN}  1. 首次配置 443 单入口${PLAIN}       ${YELLOW}(第一次部署时使用)${PLAIN}"
         echo -e "${GREEN}  2. 管理网站/反代域名${PLAIN}         ${YELLOW}(新增/删除/查看网站，最常用)${PLAIN}"
-        echo -e "${GREEN}  3. 443 单入口链路体检${PLAIN}        ${YELLOW}(检查 Nginx/Caddy/REALITY/面板/安全项)${PLAIN}"
+        echo -e "${GREEN}  3. 443 单入口链路体检${PLAIN}        ${YELLOW}(检查 ENTRY_MODE/监听/证书/Web/Xray 分流)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 配置维护${PLAIN}"
         echo -e "${CYAN}  4. 重新应用上次配置${PLAIN}           ${YELLOW}(读取 sni-stack.env 重新生成配置)${PLAIN}"
@@ -11864,11 +13006,11 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}  6. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
         echo -e "${CYAN}  7. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
         echo -e "${CYAN}  8. 管理域名 IP 白名单${PLAIN}        ${YELLOW}(只限制选中的域名)${PLAIN}"
-        echo -e "${CYAN}  9. 管理 TCP/SNI 本地入站${PLAIN}     ${YELLOW}(3x-ui 新入站走公网 443)${PLAIN}"
+        echo -e "${CYAN}  9. Xray 入站管理${PLAIN}             ${YELLOW}(SNI -> 本地地址:端口 分流记录)${PLAIN}"
         echo -e "${CYAN} 10. 443 网络访问测试${PLAIN}          ${YELLOW}(面板/订阅/Caddy/REALITY 链路)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ Experimental 443 引擎${PLAIN}"
-        echo -e "${GREEN} 11. 查看当前 443 引擎${PLAIN}"
+        echo -e "${GREEN} 11. 查看当前入口状态 / 443 引擎${PLAIN}"
         echo -e "${GREEN} 12. Nginx Stream 稳定模式${PLAIN}     ${YELLOW}(默认稳定模式，可回滚)${PLAIN}"
         echo -e "${YELLOW} 13. TCP Peek + Splice 实验模式${PLAIN} ${YELLOW}(适合进阶用户，先读说明)${PLAIN}"
         echo -e "${CYAN} 14. 生成 tcp_peek 配置${PLAIN}        ${YELLOW}(阶段 A，不改服务端口)${PLAIN}"
@@ -11878,6 +13020,12 @@ func_sni_stack_quick_menu() {
         echo -e "${GREEN} 18. 从 tcp_peek 回滚到 nginx_stream${PLAIN}"
         echo -e "${CYAN} 19. 查看 vpso-mux 日志${PLAIN}"
         echo -e "${CYAN} 20. 443 链路体检增强${PLAIN}"
+        echo -e "${BOLD}${BLUE}▶ 统一入口模式切换${PLAIN}"
+        echo -e "${GREEN} 21. 切换到 Nginx Stream 模式${PLAIN}"
+        echo -e "${GREEN} 22. 切换到 Xray Fallback 模式${PLAIN}"
+        echo -e "${GREEN} 23. 切换到 TCP Peek 模式${PLAIN}"
+        echo -e "${CYAN} 24. 重新应用当前入口模式${PLAIN}"
+        echo -e "${YELLOW} 25. 回滚上一次入口模式切换${PLAIN}"
         echo -e "${YELLOW}提示：Nginx Stream 是默认稳定模式；TCP Peek + Splice 是实验模式，首次建议先监听 8444 测试。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
@@ -11889,13 +13037,13 @@ func_sni_stack_quick_menu() {
         case "$sni_choice" in
             1) func_caddy_cf_reality_wizard ;;
             2) manage_sni_stack_sites; continue ;;
-            3) sni_stack_health_check ;;
+            3) sni_stack_health_check_enhanced ;;
             4) reapply_sni_stack_from_env ;;
             5) check_sni_stack_subscription_hint ;;
             6) func_caddy_cf_maintenance_menu; continue ;;
             7) edit_sni_stack_runtime_profile; continue ;;
             8) manage_sni_stack_ip_whitelist; continue ;;
-            9) manage_sni_stack_tcp_routes; continue ;;
+            9) manage_xray_inbound_routes; continue ;;
             10) func_443_network_test; continue ;;
             11) show_single_443_engine_status ;;
             12) rollback_tcp_peek_to_nginx_stream ;;
@@ -11907,6 +13055,11 @@ func_sni_stack_quick_menu() {
             18) rollback_tcp_peek_to_nginx_stream ;;
             19) view_vpso_mux_logs ;;
             20) sni_stack_health_check_enhanced ;;
+            21) switch_entry_mode "nginx-stream" ;;
+            22) switch_entry_mode "xray-fallback" ;;
+            23) switch_entry_mode "tcp-peek" ;;
+            24) reapply_current_entry_mode ;;
+            25) rollback_last_entry_mode ;;
             "?"|help) show_sni_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;

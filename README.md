@@ -217,6 +217,35 @@ cy
 
 443 单入口用于解决多个服务争抢公网 `443` 的问题。
 
+### 示例说明
+
+本文中出现的域名、路径和端口都只是示例，方便理解架构，不是必须照抄的固定值。
+
+例如：
+
+- `panel.example.com` = 示例面板域名
+- `node.example.com` = 示例节点域名
+- `site.example.com` = 示例网站域名
+- `40000` = 示例 3x-ui 面板端口
+- `2096` = 示例订阅端口
+- `8443` = 示例 Caddy 本地 HTTPS 端口
+- `1443` = 示例 Xray/REALITY 本地端口
+
+实际部署时，请替换成你自己的域名、路径和端口。如果你已经在脚本里填写过端口，以脚本保存的配置为准，不要盲目照抄文档示例。
+
+| 项目 | 文档示例 | 你的实际值 |
+|---|---|---|
+| 面板域名 | panel.example.com | 请改成你自己的 |
+| 节点域名 | node.example.com | 请改成你自己的 |
+| 网站域名 | site.example.com | 请改成你自己的 |
+| 3x-ui 面板端口 | 40000 | 以你面板实际端口为准 |
+| 订阅端口 | 2096 | 以你订阅服务实际端口为准 |
+| Caddy 本地端口 | 8443 | 以脚本当前配置为准 |
+| Xray/REALITY 本地端口 | 1443 | 以脚本当前配置为准 |
+| 面板路径 | /panel/ | 以你面板设置为准 |
+| 普通订阅路径 | /sub/ | 以你订阅设置为准 |
+| Clash/Mihomo 路径 | /clash/ | 以你订阅设置为准 |
+
 典型结构：
 
 ```text
@@ -237,6 +266,12 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 - 3x-ui 面板默认监听 `127.0.0.1:40000`。
 - 3x-ui 面板 SSL/HTTPS 应关闭，证书路径和私钥路径留空。
 - REALITY 的 `dest` / `Target` 和 `serverNames` / `SNI` 必须写外部真实 HTTPS 站点，不要写面板域名。
+
+Xray 入站管理只记录 `SNI -> 本地地址:端口`，不是 3x-ui 入站编辑器。用户需要先在 3x-ui 中创建并启用本地入站，再把 SNI 分流记录写入脚本。Nginx Stream 和 TCP Peek 模式支持多个 Xray 本地入站分流。Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 `443` 默认由一个 Xray 主入站接管。脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。如需多个本地 Xray 入站分流，请使用 Nginx Stream 或 TCP Peek 模式。
+
+普通 TLS 节点和 REALITY 节点不要混在一起判断：普通 TLS 更关注本机证书、Caddy fallback、Host/SNI 是否匹配；REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定。不要求 REALITY `serverName` 加入 Caddy，也不要求本机证书覆盖 REALITY `serverName`。
+
+证书策略保持简单固定：继续使用 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。
 
 如果机器上已经有普通 Caddy 反代，启用 443 单入口前请先备份并记录旧站点的域名、后端地址和端口。脚本会隔离可能抢占公网 `443` 的旧 Caddy 配置，但不会自动把旧反代规则迁移成新的 443 单入口站点；启用后需要通过 `主菜单 [18 443 单入口管理中心] -> [2 管理网站/反代域名]` 手动补录旧网站。
 

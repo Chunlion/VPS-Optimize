@@ -14,6 +14,12 @@ docs/443-single-entry.md
 docs/443-single-entry-troubleshooting.md
 ```
 
+## 示例说明
+
+本文中的域名、路径和端口都是示例，不是必须照抄的固定值。`panel.example.com` 是示例面板域名，`node.example.com` 是示例节点域名，`site.example.com` 是示例网站域名，`40000` 是示例 3x-ui 面板端口，`2096` 是示例订阅端口，`8443` 是示例 Caddy 本地端口，`1443` 是示例 Xray/REALITY 本地端口。
+
+实际部署时请替换成你自己的域名、路径和端口；如果脚本已经保存过配置，以脚本当前显示为准，不要盲目照抄教程里的示例。
+
 ## 适合谁
 
 | 情况 | 是否适合 |
@@ -85,6 +91,10 @@ site.example.com -> Caddy -> 本地网站后端
 | 3x-ui 面板关闭自带 HTTPS | 面板作为本地 HTTP 后端 |
 | REALITY 使用外部真实 SNI | 不要把 `dest` 写成自己的面板域名 |
 | 成功后再收紧防火墙 | 先跑通，再只保留必要端口 |
+
+`Xray 入站管理` 只记录 `SNI -> 本地地址:端口`，不是 3x-ui 入站编辑器；需要先在 3x-ui 中创建并启用本地入站。Nginx Stream 和 TCP Peek 模式支持多个本地 Xray 入站按 SNI 分流；Xray 本身可以有多个入站，但 xray-fallback 模式下公网 `443` 默认由一个 Xray 主入站接管，脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。
+
+普通 TLS 和 REALITY 要分开判断：普通 TLS 更关注本机证书、Caddy fallback、Host/SNI 是否匹配；REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定，不要求 REALITY `serverName` 加入 Caddy，也不要求本机证书覆盖 REALITY `serverName`。证书策略仍然使用 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。
 
 ## 操作步骤
 
@@ -159,9 +169,9 @@ ss -lntp | grep ':443' || echo "443 未监听"
 
 ### 4. 设置面板监听
 
-推荐最终值：
+一组示例值：
 
-| 项目 | 推荐值 |
+| 项目 | 示例值 |
 |---|---|
 | 面板监听地址 | `127.0.0.1` |
 | 面板端口 | `40000` |
@@ -178,9 +188,9 @@ curl -I http://127.0.0.1:40000/panel/
 
 ### 5. 设置订阅服务
 
-在 3x-ui 订阅设置中推荐：
+在 3x-ui 订阅设置中示例：
 
-| 项目 | 推荐值 |
+| 项目 | 示例值 |
 |---|---|
 | 订阅监听地址 | `127.0.0.1` |
 | 订阅端口 | `2096` |
@@ -208,9 +218,9 @@ curl -I http://127.0.0.1:2096/sub/
 
 ### 6. 新建 REALITY 入站
 
-在 3x-ui 新增 VLESS REALITY 入站，推荐：
+在 3x-ui 新增 VLESS REALITY 入站，示例：
 
-| 项目 | 推荐值 |
+| 项目 | 示例值 |
 |---|---|
 | 协议 | VLESS |
 | 传输 | TCP / RAW |
@@ -247,9 +257,9 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 主菜单 [18 443 单入口管理中心] -> [1 首次配置 443 单入口]
 ```
 
-建议填写：
+示例填写：
 
-| 项目 | 推荐值 |
+| 项目 | 示例值 |
 |---|---|
 | 面板域名 | `panel.example.com` |
 | REALITY 伪装 SNI | `www.microsoft.com` |

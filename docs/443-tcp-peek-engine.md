@@ -13,6 +13,12 @@
 
 它不终止 TLS，不解密 TLS，不修改首包，不管理证书，不替换 Caddy，也不是让 Xray/REALITY 直接占用 443。
 
+## 示例说明
+
+本文中的 `SERVER_IP`、`panel.example.com`、`site.example.com`、`8444`、`8443`、`1443` 都是示例值，用来说明测试方式和链路关系。实际部署时请替换成你自己的服务器 IP、域名和脚本当前保存的端口。
+
+TCP Peek 复用 443 单入口的公共 Web 域名、Caddy 后端、证书和 Web 白名单配置；Xray 入站分流规则也复用 `/etc/vps-optimize/xray-sni-routes.conf`，不维护另一份节点规则。证书策略仍是 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。
+
 ## 为什么新增 tcp_peek
 
 现有稳定方案是 `nginx_stream`：公网只开放 443，由 Nginx stream `ssl_preread` 按 SNI 分流到 Caddy、REALITY、面板、订阅和网站。这套方案继续是默认稳定模式。
