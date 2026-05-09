@@ -157,6 +157,28 @@ systemctl status caddy --no-pager
 主菜单 [19 443 单入口管理中心] -> [6 重新应用当前入口模式]
 ```
 
+## Nginx 运行中但 443 未监听
+
+### 现象
+
+`当前 443 入口状态` 显示 `配置模式：nginx-stream`，`nginx：运行中`，但 `公网 443：未监听`。
+
+### 常见原因
+
+- `/etc/nginx/stream.d/vps_sni_443.conf` 被切换或回滚流程隔离后没有重新生成。
+- `/etc/nginx/nginx.conf` 没有实际加载 `stream { include /etc/nginx/stream.d/*.conf; }`。
+- Nginx stream 动态模块安装了，但主配置没有加载模块目录。
+
+### 解决方法
+
+先运行：
+
+```text
+主菜单 [19 443 单入口管理中心] -> [6 重新应用当前入口模式]
+```
+
+重新应用会强制生成 Nginx Stream 配置，并检查 `nginx -T` 是否实际加载 `/etc/nginx/stream.d/vps_sni_443.conf`。如果仍失败，脚本会打印 Nginx 状态、最近日志、stream include 和端口监听线索。
+
 ## 404
 
 ### 现象

@@ -100,15 +100,34 @@ grep -q 'switch_public_443_to_tcp_peek' dist/vps.sh
 grep -q 'rollback_tcp_peek_to_nginx_stream' dist/vps.sh
 grep -q 'sni_stack_health_check_enhanced' dist/vps.sh
 grep -q 'vpso-mux.service' dist/vps.sh
+grep -q 'vpso-mux-preflight.service' dist/vps.sh
 grep -q 'go_install_vpso_mux_latest' dist/vps.sh
-grep -q 'go1.23.0 download' dist/vps.sh
+grep -q 'GOTOOLCHAIN=local' dist/vps.sh
+grep -q '拒绝在生产机上自动下载临时 Go 工具链' dist/vps.sh
+if grep -q 'go1.23.0 download' dist/vps.sh; then
+    echo "TCP Peek cutover must not download a temporary Go toolchain." >&2
+    exit 1
+fi
 grep -q 'replace golang.org/x/sys => golang.org/x/sys v0.30.0' dist/vps.sh
 grep -q 'go mod download github.com/Chunlion/VPS-Optimize' dist/vps.sh
 grep -q 'VPS-Optimize-src' dist/vps.sh
 grep -q '检测到远程 vpso-mux 旧源码' dist/vps.sh
 grep -q 'int(remaining)' dist/vps.sh
 grep -q 'replace github.com/Chunlion/VPS-Optimize => ./VPS-Optimize-src' dist/vps.sh
-grep -q 'go build -o /usr/local/bin/vpso-mux' dist/vps.sh
+grep -q 'go build -p 1 -o /usr/local/bin/vpso-mux' dist/vps.sh
+grep -q 'require_vpso_mux_binary_for_cutover' dist/vps.sh
+grep -q 'preflight_tcppeek_before_cutover' dist/vps.sh
+grep -q 'guard_current_ssh_not_on_entry_port' dist/vps.sh
+grep -q 'TCP Peek 8444 预检' dist/vps.sh
+grep -q 'print_vpso_mux_failure_context' dist/vps.sh
+grep -q 'print_nginx_stream_failure_context' dist/vps.sh
+grep -q 'assert_nginx_stream_config_loaded' dist/vps.sh
+grep -q 'nginx -T .*grep -Fq "$conf_file"' dist/vps.sh
+grep -q 'apply_nginx_stream_mode "$backup_dir"' dist/vps.sh
+if awk '/if \[\[ "\$NGINX_LISTEN_ADDR" == "0\.0\.0\.0" \]\]/{flag=1; next} /elif \[\[ "\$NGINX_LISTEN_ADDR" == "::" \]\]/{flag=0} flag {print}' dist/vps.sh | grep -q '\[::\]:\${listen_port}'; then
+    echo "vpso-mux must not emit both 0.0.0.0 and [::] listeners for one public port." >&2
+    exit 1
+fi
 grep -q 'golang.org/x/sys v0.30.0' go.mod
 if grep -q 'golang.org/x/sys v0.31.0' go.mod; then
     echo "vpso-mux must stay installable with Go 1.22 from common distro packages." >&2

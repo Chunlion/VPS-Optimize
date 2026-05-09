@@ -23,7 +23,9 @@
   -> [4] 切换到 Xray Fallback 模式
   -> [5] 切换到 TCP Peek + Splice 模式
   -> [7] 回滚上一次入口模式切换
-  -> [16] 查看 TCP Peek + Splice 状态
+  -> [16] TCP Peek 8444 预检 / 安装测试
+  -> [17] TCP Peek 分流规则校验
+  -> [18] 查看 TCP Peek + Splice 日志
 ```
 
 3x-ui 面板、订阅和 Xray 入站的具体填写方式见 [443 单入口分流教程](443-single-entry.md) 的“3x-ui 三种入口模式配置速查”。这里先给结论：
@@ -50,9 +52,11 @@ Nginx Stream 是默认稳定模式。公网 `443` 由 Nginx stream 监听，使�
 
 ## TCP Peek + Splice / vpso-mux 进阶实现
 
-TCP Peek + Splice / vpso-mux 是进阶模式、可回滚，默认不接管 `443`。只有用户在 `主菜单 [19 443 单入口管理中心] -> [5] 切换到 TCP Peek + Splice 模式` 后，公网 `443` 才会从 Nginx Stream 切到 `vpso-mux`。
+TCP Peek + Splice / vpso-mux 是进阶模式、可回滚，默认不接管 `443`。第一次使用时先运行 `主菜单 [19 443 单入口管理中心] -> [16] TCP Peek 8444 预检 / 安装测试`，确认 `vpso-mux` 能在 `8444` 启动并转发。只有用户随后执行 `[5] 切换到 TCP Peek + Splice 模式`，公网 `443` 才会从 Nginx Stream 切到 `vpso-mux`。
 
 `vpso-mux` 使用 `MSG_PEEK` 查看 TLS ClientHello 中的 SNI，不消费首包；后端收到的 ClientHello 仍与客户端原始数据一致。转发优先使用 splice，失败或不可用时回退普通 copy。
+
+TCP Peek 生成的 `vpso-mux.yaml` 会按脚本保存的公网监听地址只写一个监听项。默认 `0.0.0.0:443` 只监听 IPv4；如果你明确需要 IPv6 入口，请把公网监听地址设置为 `::` 后重新生成配置，避免同一端口同时写 `0.0.0.0` 和 `[::]` 导致双栈绑定冲突。
 
 ```text
 公网 443
@@ -78,7 +82,7 @@ TCP Peek + Splice / vpso-mux 是进阶模式、可回滚，默认不接管 `443`
 
 ```text
 主菜单 [19 443 单入口管理中心]
-  -> [16] 查看 TCP Peek + Splice 状态
+  -> [18] 查看 TCP Peek + Splice 日志
 ```
 
 常用诊断命令：
@@ -116,10 +120,16 @@ Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监�
 
 ```text
 主菜单 [19 443 单入口管理中心]
+  -> [16] TCP Peek 8444 预检 / 安装测试
+  -> [17] TCP Peek 分流规则校验
   -> [5] 切换到 TCP Peek + Splice 模式
 ```
 
-切换流程会生成并校验 `vpso-mux.yaml`、创建备份、隔离当前 VPS-Optimize 管理的 Nginx stream 443 配置、启动 `vpso-mux` 接管公网 `443`，并检查 Caddy 和 Xray 本地后端可达。失败时会尝试自动回滚。
+切换流程不会在公网 `443` 切换路径里自动下载 Go 工具链或远端编译 `vpso-mux`。如果 `/usr/local/bin/vpso-mux` 不存在，脚本会拒绝切换，要求先走 `[16]` 的 `8444` 预检。正式切换前脚本会再次启动独立 `vpso-mux-preflight.service` 监听 `8444`，确认 Caddy 和 Xray 本地后端可达；预检失败时公网 `443` 不会被替换。
+
+正式切换会生成并校验 `vpso-mux.yaml`、创建备份、隔离当前 VPS-Optimize 管理的 Nginx stream 443 配置、启动 `vpso-mux` 接管公网 `443`，并检查 Caddy 和 Xray 本地后端可达。失败时会尝试自动回滚。
+
+如果当前 SSH 会话连接在入口端口，例如 `443`，脚本会拒绝切换，避免直接断开当前管理连接。请改用云厂商 VNC/Serial Console，或先用非入口端口 SSH 登录。
 
 回滚上一轮入口模式切换：
 
