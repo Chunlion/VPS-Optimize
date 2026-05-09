@@ -104,6 +104,10 @@ grep -q 'go_install_vpso_mux_latest' dist/vps.sh
 grep -q 'go1.23.0 download' dist/vps.sh
 grep -q 'replace golang.org/x/sys => golang.org/x/sys v0.30.0' dist/vps.sh
 grep -q 'go mod download github.com/Chunlion/VPS-Optimize' dist/vps.sh
+grep -q 'VPS-Optimize-src' dist/vps.sh
+grep -q '检测到远程 vpso-mux 旧源码' dist/vps.sh
+grep -q 'int(remaining)' dist/vps.sh
+grep -q 'replace github.com/Chunlion/VPS-Optimize => ./VPS-Optimize-src' dist/vps.sh
 grep -q 'go build -o /usr/local/bin/vpso-mux' dist/vps.sh
 grep -q 'golang.org/x/sys v0.30.0' go.mod
 if grep -q 'golang.org/x/sys v0.31.0' go.mod; then

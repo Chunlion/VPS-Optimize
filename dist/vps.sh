@@ -4183,8 +4183,22 @@ require github.com/Chunlion/VPS-Optimize ${module_version}
 replace golang.org/x/sys => golang.org/x/sys v0.30.0
 EOF
     (
+        local mod_dir patched_dir patch_file
         cd "$tmp_dir" || exit 1
         go mod download github.com/Chunlion/VPS-Optimize || exit 1
+        mod_dir=$(go list -m -f '{{.Dir}}' github.com/Chunlion/VPS-Optimize) || exit 1
+        patched_dir="${tmp_dir}/VPS-Optimize-src"
+        cp -a "$mod_dir" "$patched_dir" || exit 1
+        chmod -R u+w "$patched_dir" 2>/dev/null || true
+        patch_file="${patched_dir}/cmd/vpso-mux/main.go"
+        if grep -q 'unix\.Splice(pipeFD\[0\], nil, dstFD, nil, remaining,' "$patch_file" 2>/dev/null; then
+            echo -e "${YELLOW}⚠️ 检测到远程 vpso-mux 旧源码，正在应用 Go 兼容修补...${PLAIN}"
+            sed -i 's/unix\.Splice(pipeFD\[0\], nil, dstFD, nil, remaining,/unix.Splice(pipeFD[0], nil, dstFD, nil, int(remaining),/' "$patch_file" || exit 1
+        fi
+        cat <<EOF >> "${tmp_dir}/go.mod"
+
+replace github.com/Chunlion/VPS-Optimize => ./VPS-Optimize-src
+EOF
         go get "github.com/Chunlion/VPS-Optimize/cmd/vpso-mux@${module_version}" || exit 1
         go build -o /usr/local/bin/vpso-mux github.com/Chunlion/VPS-Optimize/cmd/vpso-mux
     )
