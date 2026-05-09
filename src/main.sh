@@ -938,15 +938,138 @@ generate_caddy_cf_manifest() {
 # ---------------------------------------------------------
 # 3. 常用环境及软件 (重构版：防覆盖、严格容错、剔除静默失败)
 # ---------------------------------------------------------
+func_caddy_add_reverse_proxy() {
+    echo -e "${CYAN}▶ 正在检查并安装 Caddy...${PLAIN}"
+    if ! install_caddy_if_needed; then
+        echo -e "${RED}❌ Caddy 安装失败，请检查软件源、网络或系统版本。${PLAIN}"
+        return 1
+    fi
+    if ! ensure_caddy_module_layout; then
+        echo -e "${RED}❌ Caddy 配置目录初始化失败，请检查 /etc/caddy 权限。${PLAIN}"
+        return 1
+    fi
+
+    local domain port is_https
+    read_trimmed domain "请输入解析后的域名 (如 panel.site.com): "
+    read_trimmed port "请输入面板本地映射端口 (如 40000): "
+    domain=$(normalize_domain_input "$domain")
+
+    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
+        echo -e "${RED}❌ 域名或端口格式错误！域名不要带 http(s)://、路径或端口，端口必须是 1-65535。${PLAIN}"
+        return 1
+    fi
+
+    local domain_conf="/etc/caddy/conf.d/${domain}.caddy"
+    if grep -q "^[[:space:]]*$domain" /etc/caddy/Caddyfile 2>/dev/null || [[ -e "$domain_conf" ]]; then
+        echo -e "${RED}❌ 错误：已存在该域名的配置块！请先清理或更换域名后再添加。${PLAIN}"
+        return 1
+    fi
+
+    read_trimmed is_https "❓ 后端面板是否开启了自带的 SSL 证书？(y/n): "
+
+    local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
+    local -a ip_whitelist_array=()
+    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
+    if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
+        current_client_ip=$(detect_ssh_client_ip)
+        [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}"
+        read_trimmed ip_whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
+        if ! normalize_ip_whitelist_input "$ip_whitelist_input" ip_whitelist_array; then
+            echo -e "${RED}❌ 白名单为空或格式错误，已取消本次反代配置。${PLAIN}"
+            return 1
+        fi
+        append_vps_public_ips_to_whitelist ip_whitelist_array
+        ip_whitelist_ranges=$(join_array_by_space "${ip_whitelist_array[@]}")
+    else
+        ip_whitelist_ranges=""
+    fi
+
+    local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
+    [[ -f /etc/caddy/Caddyfile ]] && cp -p /etc/caddy/Caddyfile "$backup_file"
+
+    if [[ "$is_https" =~ ^[Yy]$ ]]; then
+        cat <<EOF > "$domain_conf"
+$domain {
+$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://127.0.0.1:$port {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+}
+EOF
+    else
+        cat <<EOF > "$domain_conf"
+$domain {
+$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy localhost:$port
+}
+EOF
+    fi
+
+    echo -e "${CYAN}▶ 正在校验 Caddy 配置文件...${PLAIN}"
+    if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+        if systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
+            [[ -n "$ip_whitelist_ranges" ]] && echo -e "${GREEN}✅ 已为 ${domain} 启用 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
+            echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
+        else
+            echo -e "${RED}❌ Caddy 配置校验通过，但服务重载失败，正在回滚...${PLAIN}"
+            [[ -f "$backup_file" ]] && mv "$backup_file" /etc/caddy/Caddyfile
+            quarantine_path "$domain_conf" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
+            systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true
+            return 1
+        fi
+    else
+        echo -e "${RED}❌ 致命错误：生成的配置存在语法异常！正在自动回滚...${PLAIN}"
+        [[ -f "$backup_file" ]] && mv "$backup_file" /etc/caddy/Caddyfile
+        quarantine_path "$domain_conf" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
+        return 1
+    fi
+}
+
+func_caddy_reverse_proxy_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "普通 Caddy 反代"
+        echo -e "${BOLD}🌐 普通 Caddy 反代${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}用途：管理未接入 443 单入口的普通 Caddy 域名反代。443 单入口请只走主菜单 [19]。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 添加普通 Caddy 反代${PLAIN}"
+        echo -e "${CYAN}  2. 查看 Caddy 证书路径${PLAIN}"
+        echo -e "${CYAN}  3. Caddy 跳过后端证书校验${PLAIN} ${YELLOW}(后端自签 HTTPS 时使用)${PLAIN}"
+        echo -e "${CYAN}  4. 普通 Caddy 域名 IP 白名单${PLAIN}"
+        echo -e "${RED}  5. 清空 Caddy 配置${PLAIN}"
+        echo -e "${RED}  6. 删除底层 ACME 证书${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local caddy_choice
+        read_trimmed caddy_choice "👉 请选择操作: "
+        case "$caddy_choice" in
+            1) func_caddy_add_reverse_proxy ;;
+            2) func_view_caddy_cert ;;
+            3) func_caddy_add_insecure ;;
+            4) func_caddy_manage_ip_whitelist ;;
+            5) func_caddy_clear_config ;;
+            6) func_caddy_delete_cert ;;
+            0|q|Q) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+        echo ""
+        pause_return "按任意键继续..."
+    done
+}
+
 func_env_install() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "基础组件与反代分流中心"
-        echo -e "${BOLD}📦 基础组件与反代分流中心${PLAIN}"
+        print_breadcrumb "基础组件与常用服务"
+        echo -e "${BOLD}📦 基础组件与常用服务${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：安装基础组件、常用服务、普通 Caddy 反代，以及进入 443 单入口相关向导。${PLAIN}"
-        echo -e "${YELLOW}提示：如果已启用 443 单入口，后续新增网站请走本菜单 [20] 或主菜单 [18] -> [2]。${PLAIN}"
+        echo -e "${YELLOW}用途：安装基础组件、转发隧道和常用服务。普通 Caddy 反代走主菜单 [4]，443 单入口只走主菜单 [19]。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 基础运行环境${PLAIN}"
         echo -e "${GREEN}  1. Docker 引擎        ${YELLOW}  2. Python 环境        ${GREEN}  3. iperf3 测速工具${PLAIN}"
@@ -954,20 +1077,6 @@ func_env_install() {
         echo -e "${GREEN}  4. Realm 端口转发     ${YELLOW}  5. Gost 隧道          ${GREEN}  6. 极光面板${PLAIN}"
         echo -e "${GREEN}  7. 哪吒监控           ${YELLOW}  8. WARP 解锁/网络     ${GREEN}  9. Aria2 下载${PLAIN}"
         echo -e "${GREEN} 10. 宝塔面板           ${YELLOW} 11. PVE 虚拟化工具     ${GREEN} 12. Argox 节点${PLAIN}"
-        echo -e "------------------------------------------------"
-        echo -e "${BOLD}${BLUE}▶ Caddy 普通反代${PLAIN}"
-        echo -e "${CYAN} 13. 普通 Caddy 反代${PLAIN}          ${YELLOW}(适合普通网站/面板反代，不是 443 单入口)${PLAIN}"
-        echo -e "${CYAN} 14. 查看 Caddy 证书路径${PLAIN}       ${YELLOW}(查看证书和私钥位置)${PLAIN}"
-        echo -e "${CYAN} 15. Caddy 跳过后端证书校验${PLAIN}   ${YELLOW}(后端自签 HTTPS 时使用)${PLAIN}"
-        echo -e "${CYAN} 16. 清空 Caddy 配置${PLAIN}           ${YELLOW}(危险操作，清理反代配置)${PLAIN}"
-        echo -e "${RED} 17. 删除底层 ACME 证书${PLAIN}        ${YELLOW}(危险操作，清理签发记录)${PLAIN}"
-        echo -e "${CYAN} 21. 普通 Caddy 域名 IP 白名单${PLAIN} ${YELLOW}(未启用 443 单入口时使用)${PLAIN}"
-        echo -e "------------------------------------------------"
-        echo -e "${BOLD}${BLUE}▶ 443 单入口分流${PLAIN} ${YELLOW}(推荐：Nginx Stream + Caddy + REALITY)${PLAIN}"
-        echo -e "${GREEN} 18. 首次配置 443 单入口${PLAIN}       ${YELLOW}(面板/订阅/REALITY/网站共用公网 443)${PLAIN}"
-        echo -e "${GREEN} 19. 443 证书与维护中心${PLAIN}        ${YELLOW}(体检/重签/修复/回滚/订阅提示)${PLAIN}"
-        echo -e "${GREEN} 20. 管理 443 网站/反代${PLAIN}        ${YELLOW}(后续新增/删除网站，不重跑完整向导)${PLAIN}"
-        echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -996,102 +1105,7 @@ func_env_install() {
             10) run_remote_script "安装宝塔面板" "http://v7.hostcli.com/install/install-ubuntu_6.0.sh" ;;
             11) run_remote_script "安装 PVE 虚拟化工具" "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh" ;;
             12) run_remote_script "安装 Argox 节点" "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh" ;;
-            13)
-                echo -e "${CYAN}▶ 正在检查并安装 Caddy...${PLAIN}"
-                if ! install_caddy_if_needed; then
-                    echo -e "${RED}❌ Caddy 安装失败，请检查软件源、网络或系统版本。${PLAIN}"
-                    pause_return "按任意键继续..."
-                    continue
-                fi
-                if ! ensure_caddy_module_layout; then
-                    echo -e "${RED}❌ Caddy 配置目录初始化失败，请检查 /etc/caddy 权限。${PLAIN}"
-                    pause_return "按任意键继续..."
-                    continue
-                fi
-                
-                local domain port is_https
-                read_trimmed domain "请输入解析后的域名 (如 panel.site.com): "
-                read_trimmed port "请输入面板本地映射端口 (如 40000): "
-                domain=$(normalize_domain_input "$domain")
-                
-                # 增加了端口只能是纯数字的防呆校验
-                if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
-                    echo -e "${RED}❌ 域名或端口格式错误！域名不要带 http(s)://、路径或端口，端口必须是 1-65535。${PLAIN}"
-                else
-                    # 严谨的冲突判定，同时检查 Caddyfile 和 conf.d 目录
-                    local domain_conf="/etc/caddy/conf.d/${domain}.caddy"
-                    if grep -q "^[[:space:]]*$domain" /etc/caddy/Caddyfile 2>/dev/null || [[ -e "$domain_conf" ]]; then
-                        echo -e "${RED}❌ 错误：已存在该域名的配置块！请先清理或更换域名后再添加。${PLAIN}"
-                    else
-                        read_trimmed is_https "❓ 后端面板是否开启了自带的 SSL 证书？(y/n): "
-
-                        local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
-                        local -a ip_whitelist_array=()
-                        read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
-                        if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
-                            current_client_ip=$(detect_ssh_client_ip)
-                            [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}"
-                            read_trimmed ip_whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
-                            if ! normalize_ip_whitelist_input "$ip_whitelist_input" ip_whitelist_array; then
-                                echo -e "${RED}❌ 白名单为空或格式错误，已取消本次反代配置。${PLAIN}"
-                                continue
-                            fi
-                            append_vps_public_ips_to_whitelist ip_whitelist_array
-                            ip_whitelist_ranges=$(join_array_by_space "${ip_whitelist_array[@]}")
-                        else
-                            ip_whitelist_ranges=""
-                        fi
-                        
-                        local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
-                        [[ -f /etc/caddy/Caddyfile ]] && cp -p /etc/caddy/Caddyfile "$backup_file"
-                        
-                        if [[ "$is_https" =~ ^[Yy]$ ]]; then
-                            cat <<EOF > "$domain_conf"
-$domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://127.0.0.1:$port {
-        transport http {
-            tls_insecure_skip_verify
-        }
-    }
-}
-EOF
-                        else
-                            cat <<EOF > "$domain_conf"
-$domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy localhost:$port
-}
-EOF
-                        fi
-                        
-                        echo -e "${CYAN}▶ 正在校验 Caddy 配置文件...${PLAIN}"
-                        if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
-                            if systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1; then
-                                echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
-                                [[ -n "$ip_whitelist_ranges" ]] && echo -e "${GREEN}✅ 已为 ${domain} 启用 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
-                                echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
-                            else
-                                echo -e "${RED}❌ Caddy 配置校验通过，但服务重载失败，正在回滚...${PLAIN}"
-                                [[ -f "$backup_file" ]] && mv "$backup_file" /etc/caddy/Caddyfile
-                                quarantine_path "$domain_conf" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
-                                systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true
-                            fi
-                        else
-                            echo -e "${RED}❌ 致命错误：生成的配置存在语法异常！正在自动回滚...${PLAIN}"
-                            [[ -f "$backup_file" ]] && mv "$backup_file" /etc/caddy/Caddyfile
-                            quarantine_path "$domain_conf" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
-                        fi
-                    fi
-                fi
-                ;;
-            14) func_view_caddy_cert ;;
-            15) func_caddy_add_insecure ;;
-            16) func_caddy_clear_config ;;
-            17) func_caddy_delete_cert ;;
-            21) func_caddy_manage_ip_whitelist ;;
-            18) func_caddy_cf_reality_wizard ;;
-            19) func_caddy_cf_maintenance_menu ;;
-            20) manage_sni_stack_sites ;;
-            "?"|help) echo "基础组件菜单用于安装 Docker、Caddy、WARP、普通反代，并提供 443 单入口向导入口。"; pause_return ;;
+            "?"|help) echo "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。普通 Caddy 反代走主菜单 [4]；443 单入口走主菜单 [19]。"; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
         esac
@@ -1101,7 +1115,7 @@ EOF
 }
 
 # ---------------------------------------------------------
-# 旧版 Reality+CF 向导已禁用，菜单 [18] 使用下方新的 SNI stack 向导。
+# 旧版 Reality+CF 向导已禁用，菜单 [19] 使用下方新的 SNI stack 向导。
 # ---------------------------------------------------------
 func_caddy_cf_reality_wizard_legacy_disabled() {
     clear
@@ -1236,7 +1250,7 @@ EOF
         echo -e "${CYAN}▶ 正在为 ${domain} 申请 DNS 证书...${PLAIN}"
         if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
             echo -e "${RED}❌ 证书申请失败：${domain}${PLAIN}"
-            echo -e "${YELLOW}   提示：可进入主菜单 [18] -> [6] -> [13] 一键自动修复后再重试。${PLAIN}"
+            echo -e "${YELLOW}   提示：可进入主菜单 [19] -> [13] 一键自动修复后再重试。${PLAIN}"
             ((fail_count++))
             continue
         fi
@@ -1488,7 +1502,7 @@ check_xui_cert_settings_for_single_443() {
     fi
 
     if [[ "$found" -eq 1 ]]; then
-        echo -e "${YELLOW}建议：进入 [4] -> [11] 面板救砖 / SSL 清理，或在 3x-ui 面板里清空证书路径并重启。${PLAIN}"
+        echo -e "${YELLOW}建议：进入 [5] -> [11] 面板救砖 / SSL 清理，或在 3x-ui 面板里清空证书路径并重启。${PLAIN}"
         return 1
     fi
 
@@ -1534,9 +1548,9 @@ print_sni_stack_preview() {
     entry_mode="${ENTRY_MODE:-nginx-stream}"
     entry_mode=$(normalize_entry_mode_name "$entry_mode" 2>/dev/null || echo "nginx-stream")
     case "$entry_mode" in
-        "nginx-stream") entry_label="Nginx Stream" ;;
-        "xray-fallback") entry_label="Xray Fallback" ;;
-        "tcp-peek") entry_label="TCP Peek / vpso-mux" ;;
+        "nginx-stream") entry_label="Nginx Stream 模式" ;;
+        "xray-fallback") entry_label="Xray Fallback 模式" ;;
+        "tcp-peek") entry_label="TCP Peek + Splice 模式 / vpso-mux 分流器" ;;
         *) entry_label="$entry_mode" ;;
     esac
 
@@ -1657,6 +1671,73 @@ set_entry_mode() {
     chmod 600 "$env_file" 2>/dev/null || true
 }
 
+listen_process_from_ss_line() {
+    local line="$1"
+    local proc
+    proc=$(printf '%s\n' "$line" | awk -F'"' '/users:/ {print $2; exit}')
+    printf '%s' "${proc:-unknown}"
+}
+
+normalize_entry_listener_process() {
+    local proc="$1"
+    case "$proc" in
+        nginx*) echo "nginx" ;;
+        xray*|x-ui*|3x-ui*) echo "xray" ;;
+        vpso-mux*|tcppeek*|tcp-peek*) echo "tcppeek" ;;
+        caddy*) echo "caddy" ;;
+        unknown|"") echo "unknown" ;;
+        *) echo "unknown:${proc}" ;;
+    esac
+}
+
+entry_listener_display_name() {
+    local listener="$1"
+    case "$listener" in
+        nginx) echo "Nginx Stream (nginx)" ;;
+        xray) echo "Xray Fallback (xray/3x-ui/x-ui)" ;;
+        tcppeek) echo "TCP Peek + Splice 模式 (vpso-mux 分流器)" ;;
+        caddy) echo "Caddy（不应直接接管 443 单入口）" ;;
+        none) echo "未监听" ;;
+        multiple) echo "多个进程监听/匹配" ;;
+        unknown) echo "已监听，但进程不可见" ;;
+        unknown:*) echo "未知进程 ${listener#unknown:}" ;;
+        *) echo "$listener" ;;
+    esac
+}
+
+entry_mode_expected_listener() {
+    local mode="$1"
+    case "$mode" in
+        "nginx-stream") echo "nginx" ;;
+        "xray-fallback") echo "xray" ;;
+        "tcp-peek") echo "tcppeek" ;;
+        *) echo "" ;;
+    esac
+}
+
+listen_line_status() {
+    local addr="$1"
+    local port="$2"
+    local line="$3"
+    local proc
+
+    if [[ "$addr" == "not-configured" || "$port" == "not-configured" ]]; then
+        echo "未配置"
+        return 0
+    fi
+    if [[ -z "$line" || "$line" == "未监听" || "$line" == "not-configured" ]]; then
+        echo "未监听"
+        return 0
+    fi
+
+    proc=$(listen_process_from_ss_line "$line")
+    if [[ "$proc" == "unknown" ]]; then
+        echo "已监听（进程不可见）"
+    else
+        echo "已监听（${proc}）"
+    fi
+}
+
 detect_443_listener() {
     local lines line proc normalized seen procs
     lines=$(ss -lntp 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' || true)
@@ -1670,15 +1751,8 @@ detect_443_listener() {
     procs=""
     while IFS= read -r line; do
         [[ -n "$line" ]] || continue
-        proc=$(echo "$line" | sed -n 's/.*users:((("\([^"]*\)".*/\1/p' | head -n1)
-        proc="${proc:-unknown}"
-        case "$proc" in
-            nginx*) normalized="nginx" ;;
-            xray*) normalized="xray" ;;
-            vpso-mux*|tcppeek*|tcp-peek*) normalized="tcppeek" ;;
-            caddy*) normalized="caddy" ;;
-            *) normalized="unknown:${proc}" ;;
-        esac
+        proc=$(listen_process_from_ss_line "$line")
+        normalized=$(normalize_entry_listener_process "$proc")
         if [[ "$seen" != *" ${normalized} "* ]]; then
             seen+="${normalized} "
             if [[ -z "$procs" ]]; then
@@ -1718,12 +1792,13 @@ detect_current_entry_status() {
     listener_info=$(detect_443_listener)
     ENTRY_STATUS_LISTENER="${listener_info%%|*}"
     ENTRY_STATUS_LISTENER_PROCESS="${listener_info#*|}"
+    ENTRY_STATUS_LISTENER_DISPLAY=$(entry_listener_display_name "$ENTRY_STATUS_LISTENER")
     ENTRY_STATUS_NGINX_SERVICE=$(service_status_compact nginx)
     xui_status=$(xui_panel_status_compact)
     if xui_svc=$(xui_panel_service_name 2>/dev/null); then
-        xui_status="${xui_status} (systemd: ${xui_svc})"
+        xui_status="${xui_svc}.service ${xui_status}"
     fi
-    ENTRY_STATUS_XRAY_SERVICE="独立 xray: $(service_status_compact xray) / 3x-ui/x-ui 面板: ${xui_status}"
+    ENTRY_STATUS_XRAY_SERVICE="面板托管 Xray: ${xui_status} / 独立 xray.service: $(service_status_compact xray)"
     ENTRY_STATUS_TCPPEEK_SERVICE=$(service_status_compact vpso-mux)
     ENTRY_STATUS_CADDY_LISTEN_LINE="not-configured"
     ENTRY_STATUS_XRAY_LISTEN_LINE="not-configured"
@@ -1735,12 +1810,7 @@ detect_current_entry_status() {
         ENTRY_STATUS_XRAY_LISTEN_LINE=$(get_listen_line_by_port "$ENTRY_STATUS_XRAY_PORT")
     fi
 
-    case "$ENTRY_STATUS_MODE" in
-        "nginx-stream") expected_listener="nginx" ;;
-        "xray-fallback") expected_listener="xray" ;;
-        "tcp-peek") expected_listener="tcppeek" ;;
-        *) expected_listener="" ;;
-    esac
+    expected_listener=$(entry_mode_expected_listener "$ENTRY_STATUS_MODE")
 
     if [[ -n "$expected_listener" && "$ENTRY_STATUS_LISTENER" == "$expected_listener" ]]; then
         ENTRY_STATUS_CONSISTENT="yes"
@@ -1752,32 +1822,43 @@ detect_current_entry_status() {
 show_current_entry_status() {
     detect_current_entry_status
     echo -e "${BOLD}当前 443 入口状态${PLAIN}"
-    echo -e "配置模式 ENTRY_MODE: ${ENTRY_STATUS_MODE}"
-    echo -e "实际公网 443 监听进程: ${ENTRY_STATUS_LISTENER_PROCESS}"
-    echo -e "Caddy 本地监听端口: ${ENTRY_STATUS_CADDY_ADDR}:${ENTRY_STATUS_CADDY_PORT}"
-    echo -e "  ${ENTRY_STATUS_CADDY_LISTEN_LINE}"
-    echo -e "Xray 本地监听端口: ${ENTRY_STATUS_XRAY_ADDR}:${ENTRY_STATUS_XRAY_PORT}"
-    echo -e "  ${ENTRY_STATUS_XRAY_LISTEN_LINE}"
+    echo -e "配置模式：${CYAN}${ENTRY_STATUS_MODE}${PLAIN}"
+    echo -e "公网 443：${ENTRY_STATUS_LISTENER_DISPLAY}"
+    echo -e "监听进程：${ENTRY_STATUS_LISTENER_PROCESS}"
     if [[ "$ENTRY_STATUS_LISTENER" == "xray" ]]; then
-        echo -e "Xray 公网监听端口: ${GREEN}公网 443 当前由 Xray 监听${PLAIN}"
+        echo -e "Xray 公网：${GREEN}公网 443 当前由 Xray/面板托管 Xray 监听${PLAIN}"
     else
-        echo -e "Xray 公网监听端口: 未检测到 Xray 监听公网 443"
+        echo -e "Xray 公网：未检测到 Xray 监听公网 443"
     fi
-    echo -e "tcppeek 服务状态: ${ENTRY_STATUS_TCPPEEK_SERVICE}"
-    echo -e "nginx 服务状态: ${ENTRY_STATUS_NGINX_SERVICE}"
-    echo -e "Xray/3x-ui 服务状态: ${ENTRY_STATUS_XRAY_SERVICE}"
     if [[ "$ENTRY_STATUS_CONSISTENT" == "yes" ]]; then
-        echo -e "配置模式与实际监听: ${GREEN}一致${PLAIN}"
+        echo -e "一致性：${GREEN}配置模式与实际监听一致${PLAIN}"
     else
-        echo -e "配置模式与实际监听: ${YELLOW}不一致${PLAIN}"
+        echo -e "一致性：${YELLOW}配置模式与实际监听不一致${PLAIN}"
         echo -e "${YELLOW}配置模式与实际监听不一致，建议重新应用当前入口模式。${PLAIN}"
+    fi
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}本地监听${PLAIN}"
+    echo -e "Caddy：${ENTRY_STATUS_CADDY_ADDR}:${ENTRY_STATUS_CADDY_PORT} - $(listen_line_status "$ENTRY_STATUS_CADDY_ADDR" "$ENTRY_STATUS_CADDY_PORT" "$ENTRY_STATUS_CADDY_LISTEN_LINE")"
+    echo -e "Xray： ${ENTRY_STATUS_XRAY_ADDR}:${ENTRY_STATUS_XRAY_PORT} - $(listen_line_status "$ENTRY_STATUS_XRAY_ADDR" "$ENTRY_STATUS_XRAY_PORT" "$ENTRY_STATUS_XRAY_LISTEN_LINE")"
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}服务状态${PLAIN}"
+    echo -e "nginx：${ENTRY_STATUS_NGINX_SERVICE}"
+    echo -e "TCP Peek + Splice / vpso-mux 分流器：${ENTRY_STATUS_TCPPEEK_SERVICE}"
+    echo -e "Xray/3x-ui/x-ui：${ENTRY_STATUS_XRAY_SERVICE}"
+}
+
+show_current_entry_summary() {
+    detect_current_entry_status
+    echo -e "${BOLD}当前入口模式：${CYAN}${ENTRY_STATUS_MODE}${PLAIN}"
+    if [[ "$ENTRY_STATUS_CONSISTENT" != "yes" ]]; then
+        echo -e "${YELLOW}⚠️ 配置模式与公网 443 实际监听不一致，详情看 [1]，建议确认后重新应用当前入口模式。${PLAIN}"
     fi
 }
 
 load_sni_stack_env() {
     local env_file="/etc/vps-optimize/sni-stack.env"
     if [[ ! -f "$env_file" ]]; then
-        echo -e "${RED}❌ 未找到 ${env_file}，请先运行主菜单 [18] -> [1] 首次配置 443 单入口。${PLAIN}"
+        echo -e "${RED}❌ 未找到 ${env_file}，请先运行主菜单 [19] -> [2] 首次配置 443 单入口。${PLAIN}"
         return 1
     fi
     # shellcheck disable=SC1090
@@ -1997,7 +2078,7 @@ set_xray_fallback_main_route_from_index() {
 print_xray_fallback_mode_explanation() {
     echo -e "${YELLOW}Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 443 默认由一个 Xray 主入站接管。脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。${PLAIN}"
     echo -e "${YELLOW}该模式只负责 Xray 主入站监听公网 443，并 fallback 普通 HTTPS 到 Caddy。${PLAIN}"
-    echo -e "${YELLOW}如需多个本地 Xray 入站通过 443 按 SNI 分流，请使用 Nginx Stream 或 TCP Peek 模式。${PLAIN}"
+    echo -e "${YELLOW}如需多个本地 Xray 入站通过 443 按 SNI 分流，请使用 Nginx Stream 模式或 TCP Peek + Splice 模式。${PLAIN}"
     echo -e "${YELLOW}如果 Web 域名开启 CDN/WAF/源站保护/Cloudflare 回源限制/Caddy 白名单，403 或拒绝访问通常是 Web/CDN/白名单/SNI 策略阻断，不一定是证书或 Caddy 故障。${PLAIN}"
 }
 
@@ -2496,8 +2577,8 @@ show_single_443_engine_status() {
     echo -e "状态文件：${state_file}"
     echo -e "mux 配置：${mux_config}"
     echo -e "------------------------------------------------"
-    echo -e "${GREEN}Nginx Stream 是默认稳定模式。${PLAIN}"
-    echo -e "${YELLOW}TCP Peek + Splice 是实验模式，适合进阶用户。${PLAIN}"
+    echo -e "${GREEN}Nginx Stream 模式是默认稳定模式。${PLAIN}"
+    echo -e "${YELLOW}TCP Peek + Splice 模式适合需要四层 SNI 分流和 splice 转发优化的进阶用户。${PLAIN}"
     echo -e "${YELLOW}首次建议先监听 8444 测试，不要直接接管 443。${PLAIN}"
     echo -e "${YELLOW}切换前会自动备份，可回滚。${PLAIN}"
     echo -e "------------------------------------------------"
@@ -2511,19 +2592,19 @@ show_single_443_engine_status() {
     ss -lntup 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' || echo "未监听或当前用户无权限查看进程"
 }
 
-show_tcp_peek_experimental_info() {
+show_tcp_peek_splice_info() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧪 TCP Peek + Splice 实验模式${PLAIN}"
+    echo -e "${BOLD}TCP Peek + Splice 模式${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}TCP Peek + Splice 是 experimental 四层 SNI 分流引擎，适合进阶用户排障和试验。${PLAIN}"
-    echo -e "它只在 TCP 层 peek TLS ClientHello 的 SNI，不终止 TLS，不管理证书，不替换 Caddy，也不是 Xray 直占 443。"
+    echo -e "${YELLOW}TCP Peek + Splice 模式：基于 MSG_PEEK 读取 TLS ClientHello 中的 SNI，不消费首包，并根据 SNI 将连接分流到 Caddy 或 Xray 本地后端；转发时优先使用 splice 零拷贝，失败时自动回退普通 copy。实际运行的分流器程序为 vpso-mux。${PLAIN}"
+    echo -e "它只在 TCP 层读取 TLS ClientHello 的 SNI，不终止 TLS，不管理证书，不替换 Caddy，也不是 Xray 直占 443。"
     echo -e "推荐流程："
-    echo -e "  1. 先生成 /etc/vps-optimize/vpso-mux.yaml"
-    echo -e "  2. dry-run 校验配置和后端端口"
-    echo -e "  3. 先监听 8444 测试"
+    echo -e "  1. 先生成 TCP Peek + Splice 分流规则：/etc/vps-optimize/vpso-mux.yaml"
+    echo -e "  2. 校验配置和后端端口"
+    echo -e "  3. 使用 TCP Peek + Splice 测试入口监听 8444"
     echo -e "  4. 确认后再事务式切换公网 443"
-    echo -e "  5. 异常时从菜单回滚到 nginx_stream"
+    echo -e "  5. 异常时从菜单回滚到 Nginx Stream 模式"
 }
 
 append_vpso_mux_route_yaml() {
@@ -2629,15 +2710,15 @@ EOF
 generate_tcp_peek_config() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧾 生成 tcp_peek 配置${PLAIN}"
+    echo -e "${BOLD}重新应用 TCP Peek + Splice 配置${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "${YELLOW}阶段 A：只生成配置，不改服务，不改端口，不接管 443。${PLAIN}"
+    echo -e "${YELLOW}只生成 TCP Peek + Splice 分流规则，不改服务，不改端口，不接管 443。${PLAIN}"
     write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$(vpso_mux_config_path)" || return 1
     echo -e "${GREEN}✅ 已生成：$(vpso_mux_config_path)${PLAIN}"
     echo -e "默认后端：$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")"
     echo -e "Caddy 后端：$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")"
-    echo -e "${YELLOW}下一步建议先运行 dry-run，再启动 8444 测试端口。${PLAIN}"
+    echo -e "${YELLOW}下一步建议先校验配置，再使用 TCP Peek + Splice 测试入口监听 8444。${PLAIN}"
 }
 
 install_vpso_mux_binary() {
@@ -2657,7 +2738,7 @@ install_vpso_mux_binary() {
         chmod 755 /usr/local/bin/vpso-mux 2>/dev/null || true
         return 0
     fi
-    echo -e "${RED}❌ 未找到 /usr/local/bin/vpso-mux，且当前系统未安装 Go，无法构建 TCP Peek 守护进程。${PLAIN}"
+    echo -e "${RED}❌ 未找到 /usr/local/bin/vpso-mux，且当前系统未安装 Go，无法构建 vpso-mux 分流器。${PLAIN}"
     echo -e "${YELLOW}请先安装发布版 vpso-mux 二进制，或在源码目录安装 Go 后重试。${PLAIN}"
     return 1
 }
@@ -2665,7 +2746,7 @@ install_vpso_mux_binary() {
 write_vpso_mux_systemd_service() {
     cat <<'EOF' > /etc/systemd/system/vpso-mux.service
 [Unit]
-Description=VPS-Optimize TCP Peek SNI mux
+Description=VPS-Optimize TCP Peek + Splice vpso-mux router
 After=network-online.target
 Wants=network-online.target
 
@@ -2699,14 +2780,14 @@ run_vpso_mux_config_check() {
         (cd "$source_dir" && go run ./cmd/vpso-mux -config "$config_file" -check)
         return $?
     fi
-    echo -e "${RED}❌ 缺少 vpso-mux 二进制或 Go 工具链，无法执行完整 dry-run 校验。${PLAIN}"
+    echo -e "${RED}❌ 缺少 vpso-mux 二进制或 Go 工具链，无法执行完整配置校验。${PLAIN}"
     return 1
 }
 
 tcp_peek_dry_run_config() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧪 tcp_peek dry-run 配置校验${PLAIN}"
+    echo -e "${BOLD}TCP Peek + Splice 分流规则校验${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     local config_file
@@ -2718,20 +2799,20 @@ tcp_peek_dry_run_config() {
     tcp_probe_host "Caddy 127.0.0.1:${CADDY_LISTEN_PORT}" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || true
     tcp_probe_host "Xray/REALITY 127.0.0.1:${XRAY_LISTEN_PORT}" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || true
     print_sni_ip_whitelist_summary
-    echo -e "${GREEN}✅ dry-run 完成。请先使用 8444 测试端口验证，不要直接接管 443。${PLAIN}"
+    echo -e "${GREEN}✅ 配置校验完成。请先使用 TCP Peek + Splice 测试入口验证，不要直接接管 443。${PLAIN}"
 }
 
 start_tcp_peek_test_port() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧪 启动 tcp_peek 测试端口 8444${PLAIN}"
+    echo -e "${BOLD}TCP Peek + Splice 测试入口${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     if [[ "$(single_443_current_engine)" == "tcp_peek" ]]; then
-        echo -e "${RED}❌ 当前 engine 已是 tcp_peek。为避免误停公网 443，本入口不覆盖运行中的 443 配置。${PLAIN}"
+        echo -e "${RED}❌ 当前入口已经是 TCP Peek + Splice 模式。为避免误停公网 443，本入口不覆盖运行中的 443 配置。${PLAIN}"
         return 1
     fi
-    echo -e "${YELLOW}阶段 C：vpso-mux 只监听 8444，Nginx stream 继续负责公网 443。${PLAIN}"
+    echo -e "${YELLOW}vpso-mux 分流器只监听 8444，Nginx Stream 模式继续负责公网 443。${PLAIN}"
     write_vpso_mux_config_from_sni_stack "8444" "$(vpso_mux_config_path)" || return 1
     install_vpso_mux_binary || return 1
     run_vpso_mux_config_check "$(vpso_mux_config_path)" || return 1
@@ -2749,17 +2830,16 @@ start_tcp_peek_test_port() {
 switch_public_443_to_tcp_peek() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🚦 切换公网 443 到 tcp_peek${PLAIN}"
+    echo -e "${BOLD}切换公网 443 到 TCP Peek + Splice 模式${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "${RED}TCP Peek + Splice 是实验模式，不会被默认启用。${PLAIN}"
-    echo -e "${YELLOW}切换会备份配置、停止 Nginx stream 对 ${NGINX_LISTEN_PORT} 的监听，并启动 vpso-mux 监听公网 ${NGINX_LISTEN_PORT}。${PLAIN}"
+    echo -e "${YELLOW}TCP Peek + Splice 模式会备份配置、停止 Nginx Stream 对 ${NGINX_LISTEN_PORT} 的监听，并启动 vpso-mux 分流器监听公网 ${NGINX_LISTEN_PORT}。${PLAIN}"
     if [[ -z "$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")" ]]; then
         echo -e "${RED}⚠️ 面板/订阅域名 ${PANEL_DOMAIN} 当前没有 IP 白名单；切换后该 SNI route 将公开到 Caddy。${PLAIN}"
     fi
-    confirm_risk_action "切换公网 443 到 tcp_peek experimental 引擎" \
-        "Nginx stream 443 监听关系、vpso-mux 配置和 systemd 服务" \
-        "菜单 [18] -> [18] 可回滚到 nginx_stream；失败时脚本会自动恢复本次备份" \
+    confirm_risk_action "切换公网 443 到 TCP Peek + Splice 模式" \
+        "Nginx Stream 443 监听关系、vpso-mux 分流器配置和 systemd 服务" \
+        "菜单 [19] -> [7] 可回滚到 Nginx Stream 模式；失败时脚本会自动恢复本次备份" \
         "已完成 8444 测试，并确认面板白名单、Caddy、Xray 后端都正常。" || return 1
 
     warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
@@ -2770,7 +2850,7 @@ switch_public_443_to_tcp_peek() {
     create_sni_stack_backup
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
     install_vpso_mux_binary || { quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true; rollback_sni_stack_after_failure "$backup_dir" "vpso-mux 二进制安装失败"; return 1; }
-    run_vpso_mux_config_check "$tmp_config" || { quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true; rollback_sni_stack_after_failure "$backup_dir" "vpso-mux dry-run 校验失败"; return 1; }
+    run_vpso_mux_config_check "$tmp_config" || { quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true; rollback_sni_stack_after_failure "$backup_dir" "vpso-mux 配置校验失败"; return 1; }
     write_vpso_mux_systemd_service
     mv "$tmp_config" "$(vpso_mux_config_path)" || { rollback_sni_stack_after_failure "$backup_dir" "vpso-mux 配置替换失败"; return 1; }
     nginx_conf="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
@@ -2793,25 +2873,25 @@ switch_public_443_to_tcp_peek() {
     tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || { systemctl stop vpso-mux >/dev/null 2>&1 || true; rollback_sni_stack_after_failure "$backup_dir" "Caddy 后端不可达"; return 1; }
     tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || { systemctl stop vpso-mux >/dev/null 2>&1 || true; rollback_sni_stack_after_failure "$backup_dir" "Xray 后端不可达"; return 1; }
     write_single_443_engine_state "tcp_peek" "$backup_dir"
-    echo -e "${GREEN}✅ 公网 443 已切换到 tcp_peek experimental 引擎。${PLAIN}"
+    echo -e "${GREEN}✅ 公网 443 已切换到 TCP Peek + Splice 模式。${PLAIN}"
     sni_stack_health_check_enhanced
 }
 
 rollback_tcp_peek_to_nginx_stream() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}↩️ 从 tcp_peek 回滚到 nginx_stream${PLAIN}"
+    echo -e "${BOLD}从 TCP Peek + Splice 模式回滚到 Nginx Stream 模式${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     confirm_risk_action "回滚 443 到 Nginx Stream 稳定模式" \
-        "vpso-mux 服务和 Nginx stream 443 监听关系" \
+        "vpso-mux 分流器服务和 Nginx Stream 443 监听关系" \
         "如 Nginx 回滚失败，请用最近的 /etc/vps-optimize/backups/sni-stack_* 手动恢复" \
         "Nginx Stream 是默认稳定模式，回滚后会重新运行链路体检。" || return 1
     systemctl stop vpso-mux >/dev/null 2>&1 || true
     systemctl disable vpso-mux >/dev/null 2>&1 || true
     reapply_sni_stack_from_env --yes || return 1
     write_single_443_engine_state "nginx_stream"
-    echo -e "${GREEN}✅ 已回滚到 nginx_stream 稳定模式。${PLAIN}"
+    echo -e "${GREEN}✅ 已回滚到 Nginx Stream 模式。${PLAIN}"
     sni_stack_health_check
 }
 
@@ -2923,8 +3003,8 @@ check_entry_mode_dependencies() {
             command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
             ;;
         "tcp-peek")
-            [[ -x /usr/local/bin/vpso-mux ]] || { echo -e "${RED}❌ tcppeek/vpso-mux 不存在：缺少 /usr/local/bin/vpso-mux，拒绝切换。${PLAIN}"; return 1; }
-            command -v caddy >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 Caddy，tcp-peek 模式无法转发 Web 流量。${PLAIN}"; return 1; }
+            [[ -x /usr/local/bin/vpso-mux ]] || { echo -e "${RED}❌ vpso-mux 分流器不存在：缺少 /usr/local/bin/vpso-mux，拒绝切换到 TCP Peek + Splice 模式。${PLAIN}"; return 1; }
+            command -v caddy >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 Caddy，TCP Peek + Splice 模式无法转发 Web 流量。${PLAIN}"; return 1; }
             ;;
         "xray-fallback")
             xray_entry_service_name >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 xray/x-ui/3x-ui systemd 服务，拒绝切换。${PLAIN}"; return 1; }
@@ -2982,7 +3062,7 @@ rollback_last_entry_mode() {
 
     if [[ "$manual" -eq 1 ]]; then
         confirm_risk_action "回滚上一次 443 入口模式切换" \
-            "Nginx/Caddy/Xray/tcppeek 入口相关配置和服务状态" \
+            "Nginx/Caddy/Xray/vpso-mux 入口相关配置和服务状态" \
             "再次切换入口模式，或用备份目录手动恢复" \
             "将使用备份目录 ${backup_dir} 覆盖当前入口配置。" || return 1
     fi
@@ -3097,9 +3177,9 @@ select_initial_entry_mode() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}选择本次首次配置使用的 443 入口模式${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(默认稳定模式，适合大多数用户)${PLAIN}"
-    echo -e "${GREEN}  2. Xray Fallback${PLAIN}      ${YELLOW}(需你已在 Xray/3x-ui 准备好公网 443 主入站)${PLAIN}"
-    echo -e "${GREEN}  3. TCP Peek${PLAIN}           ${YELLOW}(使用 vpso-mux 接管公网 443，进阶模式)${PLAIN}"
+    echo -e "${GREEN}  1. Nginx Stream 模式${PLAIN}       ${YELLOW}(默认稳定模式，适合大多数用户)${PLAIN}"
+    echo -e "${GREEN}  2. Xray Fallback 模式${PLAIN}      ${YELLOW}(需你已在 Xray/3x-ui 准备好公网 443 主入站)${PLAIN}"
+    echo -e "${GREEN}  3. TCP Peek + Splice 模式${PLAIN}  ${YELLOW}(vpso-mux 分流器接管公网 443，进阶模式)${PLAIN}"
     echo -e "${RED}  0. 取消${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     read_trimmed choice "请选择入口模式（默认 1）: "
@@ -3123,13 +3203,13 @@ prepare_initial_entry_mode_dependencies() {
         "xray-fallback")
             xray_entry_service_name >/dev/null 2>&1 || {
                 echo -e "${RED}❌ 未检测到 xray/x-ui/3x-ui systemd 服务，无法首次配置为 xray-fallback。${PLAIN}"
-                echo -e "${YELLOW}请先在 [4 面板、节点与订阅工具] 中安装并配置 Xray/3x-ui 主入站，或改选 Nginx Stream / TCP Peek。${PLAIN}"
+                echo -e "${YELLOW}请先在 [4 面板、节点与订阅工具] 中安装并配置 Xray/3x-ui 主入站，或改选 Nginx Stream 模式 / TCP Peek + Splice 模式。${PLAIN}"
                 return 1
             }
             print_xray_fallback_mode_explanation
             confirm_risk_action "首次配置使用 Xray Fallback 模式" \
                 "公网 443 将由已有 Xray 主入站接管，普通 HTTPS fallback 到 Caddy" \
-                "返回首次配置并选择 Nginx Stream 或 TCP Peek" \
+                "返回首次配置并选择 Nginx Stream 模式或 TCP Peek + Splice 模式" \
                 "确认你已经在 Xray/3x-ui 中准备好公网 443 主入站；脚本不会创建或修改 3x-ui/Xray 入站内部配置。" || return 1
             ;;
     esac
@@ -3352,17 +3432,17 @@ sni_stack_health_check_enhanced() {
     fi
     echo -e "nginx 状态：${ENTRY_STATUS_NGINX_SERVICE}"
     echo -e "Xray/3x-ui 状态：${ENTRY_STATUS_XRAY_SERVICE}"
-    echo -e "tcppeek 状态：${ENTRY_STATUS_TCPPEEK_SERVICE}"
+    echo -e "TCP Peek + Splice 状态：${ENTRY_STATUS_TCPPEEK_SERVICE}"
     echo -e "caddy 状态：$(service_status_compact caddy)"
     if [[ -f "$mux_config" ]]; then
-        echo -e "tcppeek/vpso-mux 配置状态：${GREEN}存在 ${mux_config}${PLAIN}"
+        echo -e "TCP Peek + Splice 分流规则：${GREEN}存在 ${mux_config}${PLAIN}"
     else
-        echo -e "tcppeek/vpso-mux 配置状态：${YELLOW}未找到 ${mux_config}${PLAIN}"
+        echo -e "TCP Peek + Splice 分流规则：${YELLOW}未找到 ${mux_config}${PLAIN}"
     fi
     if [[ -f "$mux_service" ]]; then
-        echo -e "tcppeek/vpso-mux systemd：${GREEN}存在 ${mux_service}${PLAIN}"
+        echo -e "vpso-mux 分流器 systemd：${GREEN}存在 ${mux_service}${PLAIN}"
     else
-        echo -e "tcppeek/vpso-mux systemd：${YELLOW}未找到 ${mux_service}${PLAIN}"
+        echo -e "vpso-mux 分流器 systemd：${YELLOW}未找到 ${mux_service}${PLAIN}"
     fi
 
     echo -e "------------------------------------------------"
@@ -3386,7 +3466,7 @@ sni_stack_health_check_enhanced() {
     fi
     if [[ "$mode" == "xray-fallback" ]]; then
         echo -e "${YELLOW}当前为 Xray Fallback 模式，Xray 入站管理中的多 SNI 分流规则不生效。${PLAIN}"
-        echo -e "${YELLOW}如需多个本地 Xray 入站，请切换到 Nginx Stream 或 TCP Peek。${PLAIN}"
+        echo -e "${YELLOW}如需多个本地 Xray 入站，请切换到 Nginx Stream 模式或 TCP Peek + Splice 模式。${PLAIN}"
         echo -e "${YELLOW}普通 HTTPS 流量会先进入 Xray，再 fallback 到 Caddy；403/拒绝访问通常优先排查 Web 白名单、CDN/WAF、源站保护、Cloudflare 回源限制或 Host/SNI 策略。${PLAIN}"
         print_xray_fallback_main_route_summary
     fi
@@ -3504,7 +3584,7 @@ save_and_offer_reapply_sni_stack() {
             return 1
         fi
     else
-        echo -e "${YELLOW}稍后可执行 [18] -> [4] 重新应用上次配置。${PLAIN}"
+        echo -e "${YELLOW}稍后可执行 [19] -> [6] 重新应用上次配置。${PLAIN}"
         [[ -n "$env_backup" ]] && echo -e "${CYAN}参数修改前备份已保留：${env_backup}${PLAIN}"
     fi
 }
@@ -3667,12 +3747,12 @@ edit_sni_stack_runtime_profile() {
         echo -e "${BOLD}🧭 修改 443 分流参数${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：后续修改面板端口/路径、订阅端口/路径、REALITY SNI、入口端口时使用。${PLAIN}"
-        echo -e "${YELLOW}新增网站请走 [18] -> [2]，不用重跑首次配置。${PLAIN}"
+        echo -e "${YELLOW}新增网站请走 [19] -> [8]，不用重跑首次配置。${PLAIN}"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
             print_sni_stack_current_summary
         else
-            echo -e "${RED}未找到 443 配置，请先运行 [18] -> [1]。${PLAIN}"
+            echo -e "${RED}未找到 443 配置，请先运行 [19] -> [2]。${PLAIN}"
             return 1
         fi
         echo -e "------------------------------------------------"
@@ -4387,9 +4467,9 @@ print_sni_stack_result() {
     entry_mode="${ENTRY_MODE:-nginx-stream}"
     entry_mode=$(normalize_entry_mode_name "$entry_mode" 2>/dev/null || echo "nginx-stream")
     case "$entry_mode" in
-        "nginx-stream") entry_label="Nginx Stream"; entry_listener="nginx" ;;
-        "xray-fallback") entry_label="Xray Fallback"; entry_listener="xray/3x-ui 主入站" ;;
-        "tcp-peek") entry_label="TCP Peek"; entry_listener="vpso-mux" ;;
+        "nginx-stream") entry_label="Nginx Stream 模式"; entry_listener="nginx" ;;
+        "xray-fallback") entry_label="Xray Fallback 模式"; entry_listener="xray/3x-ui 主入站" ;;
+        "tcp-peek") entry_label="TCP Peek + Splice 模式"; entry_listener="vpso-mux 分流器" ;;
         *) entry_label="$entry_mode"; entry_listener="$entry_mode" ;;
     esac
     check_ports=("$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}" "${XRAY_SNI_ROUTE_PORTS[@]}")
@@ -4542,7 +4622,7 @@ list_sni_stack_sites() {
     [[ -n "$panel_ranges" ]] && echo -e "${YELLOW}面板域名 IP 白名单：${panel_ranges}${PLAIN}"
     echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
     [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#TCP_ROUTE_SNIS[@]} 个旧 TCP/SNI 入站。${PLAIN}"
-    [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#XRAY_SNI_ROUTE_SNIS[@]} 个 Xray 入站，请在 [18] -> [9] 查看。${PLAIN}"
+        [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#XRAY_SNI_ROUTE_SNIS[@]} 个 Xray 入站，请在 [19] -> [10] 查看。${PLAIN}"
     echo -e "------------------------------------------------"
     if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
         echo -e "${YELLOW}当前没有额外的网站/反代域名。${PLAIN}"
@@ -5175,7 +5255,7 @@ sync_xray_sni_routes_to_entry_mode() {
             ;;
         "tcp-peek")
             local tmp_config target_config
-            echo -e "${CYAN}正在同步 Xray 入站分流规则到 tcppeek 配置...${PLAIN}"
+            echo -e "${CYAN}正在同步 Xray 入站分流规则到 TCP Peek + Splice 配置...${PLAIN}"
             target_config=$(vpso_mux_config_path)
             tmp_config="${target_config}.tmp.$$"
             write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_config" || return 1
@@ -5183,13 +5263,13 @@ sync_xray_sni_routes_to_entry_mode() {
                 quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true
                 return 1
             fi
-            mv "$tmp_config" "$target_config" || { echo -e "${RED}❌ tcppeek 配置替换失败：${target_config}${PLAIN}"; return 1; }
+            mv "$tmp_config" "$target_config" || { echo -e "${RED}❌ TCP Peek + Splice 配置替换失败：${target_config}${PLAIN}"; return 1; }
             if systemctl is-active --quiet vpso-mux 2>/dev/null; then
                 systemctl restart vpso-mux || { echo -e "${RED}❌ vpso-mux 重启失败，请查看日志。${PLAIN}"; return 1; }
             else
-                echo -e "${YELLOW}vpso-mux 当前未运行，已仅生成并校验配置文件。${PLAIN}"
+                echo -e "${YELLOW}vpso-mux 分流器当前未运行，已仅生成并校验配置文件。${PLAIN}"
             fi
-            echo -e "${GREEN}✅ 已同步到 tcppeek 配置：${target_config}${PLAIN}"
+            echo -e "${GREEN}✅ 已同步到 TCP Peek + Splice 配置：${target_config}${PLAIN}"
             ;;
         "xray-fallback")
             xray_sni_routes_fallback_notice
@@ -5405,14 +5485,16 @@ manage_sni_stack_ip_whitelist() {
 show_main_help() {
     echo -e "${CYAN}VPS-Optimize > 主菜单 > 帮助${PLAIN}"
     echo "1/2 适合新机器先体检和初始化。"
-    echo "4   管理 3x-ui、S-UI、Sing-box、Xray 和订阅工具。"
-    echo "5   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
-    echo "7   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
-    echo "9   网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
-    echo "14  健康总览和反馈诊断信息，用于排错或提交 Issue。"
-    echo "15  备份与回滚，高风险操作前建议先跑。"
-    echo "18  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
-    echo "9 -> 7  流量达量关机保护，按账单周期防刷流量和超额账单。"
+    echo "3   基础组件与常用服务；安装 Docker、Python、WARP 和常用工具。"
+    echo "4   普通 Caddy 反代；适合未接入 443 单入口的普通网站/面板反代。"
+    echo "5   管理 3x-ui、S-UI、Sing-box、Xray 和订阅工具。"
+    echo "6   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
+    echo "8   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
+    echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
+    echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
+    echo "16  备份与回滚，高风险操作前建议先跑。"
+    echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
+    echo "10 -> 7  流量达量关机保护，按账单周期防刷流量和超额账单。"
     echo "? 查看帮助，0/q 退出。"
 }
 
@@ -5438,9 +5520,9 @@ show_panel_help() {
 
 show_sni_help() {
     echo -e "${CYAN}VPS-Optimize > 443 单入口管理中心 > 帮助${PLAIN}"
-    echo "1 查看当前入口状态：显示 ENTRY_MODE、公网 443 监听和服务状态。"
+    echo "1 查看当前入口状态 / 监听详情：显示公网 443、Caddy、Xray 和服务状态。"
     echo "2 首次配置 / 安装：建立共享 Web 域名、Caddy、证书和默认 Nginx Stream 入口。"
-    echo "3/4/5 入口模式切换：在 Nginx Stream、Xray Fallback、TCP Peek 之间切换。"
+    echo "3/4/5 入口模式切换：在 Nginx Stream 模式、Xray Fallback 模式、TCP Peek + Splice 模式之间切换。"
     echo "6 重新应用：按当前 ENTRY_MODE 重新生成并启动入口配置。"
     echo "7 回滚：恢复上一次入口模式切换前的备份。"
     echo "8 管理 Web 域名/反代：后续新增或删除网站，不需要重跑首次配置。"
@@ -5449,8 +5531,8 @@ show_sni_help() {
     echo "11 链路体检：排查 ENTRY_MODE、监听、证书、Web 和 Xray 分流。"
     echo "12 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
     echo "13/14/15 维护项：证书、共享参数和订阅 External Proxy 提示。"
-    echo "16 vpso-mux 日志：仅用于 TCP Peek 模式排错。"
-    echo "普通 Caddy 未接入 443 单入口时，用 [3] -> [21] 管理域名 IP 白名单。"
+    echo "16 查看 TCP Peek + Splice 状态：查看 vpso-mux 分流器日志。"
+    echo "普通 Caddy 未接入 443 单入口时，用主菜单 [4 普通 Caddy 反代] -> [4] 管理域名 IP 白名单。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -5999,7 +6081,7 @@ func_caddy_cf_maintenance_menu() {
                 fi
 
                 if [[ ! -x "$acme_bin" ]]; then
-                    echo -e "${RED}❌ 未检测到 acme.sh，请先运行主菜单 [18] -> [1] 首次配置 443 单入口。${PLAIN}"
+                    echo -e "${RED}❌ 未检测到 acme.sh，请先运行主菜单 [19] -> [2] 首次配置 443 单入口。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -6329,7 +6411,7 @@ func_caddy_manage_ip_whitelist() {
     echo -e "${BOLD}🔐 普通 Caddy 域名 IP 白名单${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}适用于未启用 443 单入口、由 Caddy 直接对外服务的域名。${PLAIN}"
-    echo -e "${YELLOW}如果该域名已接入 443 单入口，请用 [18] -> [8]，不要在 Caddy 层限制。${PLAIN}"
+    echo -e "${YELLOW}如果该域名已接入 443 单入口，请用 [19] -> [9]，不要在 Caddy 层限制。${PLAIN}"
     echo -e "------------------------------------------------"
 
     if ! command -v caddy >/dev/null 2>&1 || [[ ! -f /etc/caddy/Caddyfile ]]; then
@@ -6361,7 +6443,7 @@ func_caddy_manage_ip_whitelist() {
         return
     fi
     if [[ "$first_site_line" =~ ^https://[^[:space:]]+:[0-9]+[[:space:]]*\{ ]]; then
-        echo -e "${RED}❌ 这个配置看起来属于 443 单入口本地 Caddy TLS 站点。请改用 [18] -> [8] 管理白名单。${PLAIN}"
+        echo -e "${RED}❌ 这个配置看起来属于 443 单入口本地 Caddy TLS 站点。请改用 [19] -> [9] 管理白名单。${PLAIN}"
         read -n 1 -s -r -p "按任意键继续..."
         return
     fi
@@ -7420,7 +7502,7 @@ func_docker_project_status() {
     echo -e "${BOLD}🐳 443 / 订阅工具相关容器状态${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}这里只看本项目场景相关容器：SublinkPro、妙妙屋、Sub-Store、Dockge、Komari。${PLAIN}"
-    echo -e "${YELLOW}3x-ui、Caddy、Nginx 通常是 systemd 服务，状态请看 [14] 或 [18] 体检。${PLAIN}"
+    echo -e "${YELLOW}3x-ui、Caddy、Nginx 通常是 systemd 服务，状态请看 [15] 或 [19] 体检。${PLAIN}"
     echo -e "------------------------------------------------"
     print_subscription_compose_status
     echo -e "------------------------------------------------"
@@ -7453,7 +7535,7 @@ func_docker_443_exposure_audit() {
 
     if $found_public; then
         echo -e "------------------------------------------------"
-        echo -e "${YELLOW}建议：订阅工具、Dockge、Komari 用 127.0.0.1 绑定，公网访问走 [18] -> [2] 添加 443 反代域名。${PLAIN}"
+        echo -e "${YELLOW}建议：订阅工具、Dockge、Komari 用 127.0.0.1 绑定，公网访问走 [19] -> [8] 添加 443 反代域名。${PLAIN}"
         echo -e "${YELLOW}如确实需要公网直连，请确认云安全组、系统防火墙和访问密码都已收紧。${PLAIN}"
     else
         echo -e "${GREEN}✅ 未发现 Docker 容器通过 0.0.0.0 / :: 直接暴露端口。${PLAIN}"
@@ -7469,7 +7551,7 @@ func_docker_manage() {
     if ! command -v docker >/dev/null 2>&1; then 
         clear
         echo -e "${RED}❌ 错误：检测到系统尚未安装 Docker 引擎！${PLAIN}"
-        echo -e "${YELLOW}💡 请先在主菜单进入 [3 基础组件与反代分流] 安装 Docker。${PLAIN}"
+        echo -e "${YELLOW}💡 请先在主菜单进入 [3 基础组件与常用服务] 安装 Docker。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -8286,10 +8368,10 @@ print_project_runtime_overview() {
             echo -e "订阅路径 : 普通 ${SUB_URI_PATH} / Clash-Mihomo ${CLASH_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
             echo -e "扩展分流 : 网站/反代 ${#SITE_DOMAINS[@]} 个，TCP/SNI 入站 ${#TCP_ROUTE_SNIS[@]} 个"
         else
-            echo -e "443 入口 : ${YELLOW}检测到配置文件，但读取失败，请运行 [18] -> [3] 体检。${PLAIN}"
+        echo -e "443 入口 : ${YELLOW}检测到配置文件，但读取失败，请运行 [19] -> [11] 体检。${PLAIN}"
         fi
     else
-        echo -e "443 入口 : ${BLUE}尚未配置；需要面板/订阅/REALITY 共用 443 时进入 [18]。${PLAIN}"
+        echo -e "443 入口 : ${BLUE}尚未配置；需要面板/订阅/REALITY 共用 443 时进入 [19]。${PLAIN}"
     fi
 
     if command -v docker >/dev/null 2>&1; then
@@ -8436,7 +8518,7 @@ func_443_network_test() {
     echo -e "${CYAN}================================================${PLAIN}"
 
     if [[ ! -f /etc/vps-optimize/sni-stack.env ]]; then
-        echo -e "${YELLOW}未检测到 443 单入口配置。请先进入 [18] -> [1] 完成首次配置。${PLAIN}"
+        echo -e "${YELLOW}未检测到 443 单入口配置。请先进入 [19] -> [2] 完成首次配置。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -8781,7 +8863,7 @@ install_docker_compose_standalone() {
 ensure_docker_compose_ready() {
     DOCKER_COMPOSE_CMD=""
     if ! command -v docker >/dev/null 2>&1; then
-        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 基础组件与反代分流] 中安装 Docker。${PLAIN}"
+        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 基础组件与常用服务] 中安装 Docker。${PLAIN}"
         return 1
     fi
 
@@ -8813,7 +8895,7 @@ func_sublinkpro() {
     
     # 1. 检查 Docker 引擎
     if ! command -v docker >/dev/null 2>&1; then
-        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 基础组件与反代分流] 中安装 Docker。${PLAIN}"
+        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 基础组件与常用服务] 中安装 Docker。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -8852,7 +8934,7 @@ func_sublinkpro() {
 
     echo -e "${YELLOW}💡 SublinkPro 将被安全部署在: ${CYAN}$install_dir${PLAIN}"
     echo -e "${YELLOW}💡 SublinkPro 监听地址将使用: ${CYAN}${sublink_bind_addr}:${sublink_port}${PLAIN}"
-    echo -e "${YELLOW}💡 需要公网 HTTPS 访问时，建议部署后走 [18] -> [2] 添加 443 单入口反代域名。${PLAIN}"
+    echo -e "${YELLOW}💡 需要公网 HTTPS 访问时，建议部署后走 [19] -> [8] 添加 443 单入口反代域名。${PLAIN}"
     echo -e "${YELLOW}账号密码说明：当前安装流程不提供自定义后台账号密码。${PLAIN}"
     echo -e "${YELLOW}默认后台账号：${CYAN}admin${PLAIN} / 默认后台密码：${CYAN}123456${PLAIN}"
     echo -e "${YELLOW}部署完成后请尽快登录后台修改默认密码。${PLAIN}"
@@ -8892,7 +8974,7 @@ EOF
         echo -e "👤 ${BOLD}默认后台账号:${PLAIN} admin"
         echo -e "🔑 ${BOLD}默认后台密码:${PLAIN} 123456"
         echo -e "${YELLOW}⚠️ 当前安装流程未提供自定义账号密码，请登录后尽快修改默认密码。${PLAIN}"
-        echo -e "${YELLOW}公网访问建议：主菜单 [18] -> [2] 为该本地端口添加 443 反代域名。${PLAIN}"
+        echo -e "${YELLOW}公网访问建议：主菜单 [19] -> [8] 为该本地端口添加 443 反代域名。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${YELLOW}⚠️ 核心防丢提示：${PLAIN}"
         echo -e "系统产生的数据库、模板和日志都已持久化映射在 ${CYAN}$install_dir${PLAIN} 下。"
@@ -8937,7 +9019,7 @@ func_miaomiaowu() {
     echo -e "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}"
     echo -e "${YELLOW}监听地址：${CYAN}${mmw_bind_addr}:${mmw_port}${PLAIN}"
     echo -e "${YELLOW}数据目录：${CYAN}${install_dir}/data、subscribes、rule_templates${PLAIN}"
-    echo -e "${YELLOW}公网 HTTPS 访问建议走 [18] -> [2]，不要直接开放容器端口。${PLAIN}"
+    echo -e "${YELLOW}公网 HTTPS 访问建议走 [19] -> [8]，不要直接开放容器端口。${PLAIN}"
     echo -e "${YELLOW}账号密码说明：当前安装流程不预设账号密码。${PLAIN}"
     echo -e "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}"
     echo -e "------------------------------------------------"
@@ -8987,7 +9069,7 @@ EOF
         echo -e "本地访问地址：${BOLD}http://${access_host}:${mmw_port}${PLAIN}"
         echo -e "账号密码：${YELLOW}无默认账号密码，首次打开页面创建管理员账号。${PLAIN}"
         echo -e "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}"
-        echo -e "${YELLOW}公网访问建议：主菜单 [18] -> [2] 为该本地端口添加 443 反代域名。${PLAIN}"
+        echo -e "${YELLOW}公网访问建议：主菜单 [19] -> [8] 为该本地端口添加 443 反代域名。${PLAIN}"
         echo -e "${YELLOW}请定期备份 ${install_dir}/data、subscribes、rule_templates。${PLAIN}"
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
@@ -9219,7 +9301,7 @@ func_komari() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}安装 Komari 探针监控面板 (Docker Compose)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}Komari 用于服务器探针监控。默认只监听本地地址；公网 HTTPS 可走普通 Caddy 反代，已启用 443 单入口时走 [18] -> [2]。${PLAIN}"
+    echo -e "${YELLOW}Komari 用于服务器探针监控。默认只监听本地地址；公网 HTTPS 可走普通 Caddy 反代，已启用 443 单入口时走 [19] -> [8]。${PLAIN}"
     echo -e "${YELLOW}如果探针客户端需要直连端口，可把监听地址改为 0.0.0.0，并确认云安全组已放行。${PLAIN}"
     echo -e "------------------------------------------------"
 
@@ -9327,7 +9409,7 @@ EOF
         else
             echo -e "${YELLOW}默认管理员账号请查看日志：${CYAN}$DOCKER_COMPOSE_CMD logs komari${PLAIN}"
         fi
-        echo -e "${YELLOW}如需公网 HTTPS 访问：未启用 443 单入口可用 [3] -> [13] 普通 Caddy 反代；已启用 443 单入口请用 [18] -> [2] 添加反代域名。${PLAIN}"
+        echo -e "${YELLOW}如需公网 HTTPS 访问：未启用 443 单入口可用 [4] -> [1] 普通 Caddy 反代；已启用 443 单入口请用 [19] -> [8] 添加反代域名。${PLAIN}"
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
     fi
@@ -11662,7 +11744,7 @@ func_panel_deploy_menu() {
         echo -e "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：管理 3x-ui、S-UI、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
-        echo -e "${YELLOW}提示：面板或订阅工具对外访问，可用普通 Caddy 反代；已启用 443 单入口时用 [18] 统一管理。${PLAIN}"
+        echo -e "${YELLOW}提示：面板或订阅工具对外访问，可用普通 Caddy 反代；已启用 443 单入口时用 [19] 统一管理。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 管理 3x-ui 面板${PLAIN}       ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
         echo -e "${GREEN}  2. 管理 S-UI 面板${PLAIN}        ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
@@ -11714,7 +11796,7 @@ func_panel_deploy_menu() {
 func_sni_stack_quick_menu() {
     while true; do
         clear
-        show_current_entry_status
+        show_current_entry_summary
         echo -e "------------------------------------------------"
         echo -e "${CYAN}================================================${PLAIN}"
         print_breadcrumb "443 单入口管理中心"
@@ -11724,11 +11806,11 @@ func_sni_stack_quick_menu() {
         echo -e "${YELLOW}首次部署先选 [2]；已有配置后用 [3]/[4]/[5] 在三种入口模式间切换。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 当前状态与入口模式${PLAIN}"
-        echo -e "${GREEN}  1. 查看当前入口状态${PLAIN}"
-        echo -e "${GREEN}  2. 首次配置 / 安装 443 单入口${PLAIN} ${YELLOW}(默认 Nginx Stream，第一次部署用)${PLAIN}"
+        echo -e "${GREEN}  1. 查看当前入口状态 / 监听详情${PLAIN} ${YELLOW}(公网 443、Caddy、Xray、服务状态)${PLAIN}"
+        echo -e "${GREEN}  2. 首次配置 / 安装 443 单入口${PLAIN} ${YELLOW}(默认 Nginx Stream 模式，第一次部署用)${PLAIN}"
         echo -e "${GREEN}  3. 切换到 Nginx Stream 模式${PLAIN}  ${YELLOW}(默认稳定模式)${PLAIN}"
         echo -e "${GREEN}  4. 切换到 Xray Fallback 模式${PLAIN} ${YELLOW}(需已有 Xray/3x-ui 主入站)${PLAIN}"
-        echo -e "${GREEN}  5. 切换到 TCP Peek 模式${PLAIN}      ${YELLOW}(自动生成/安装 vpso-mux，进阶模式)${PLAIN}"
+        echo -e "${GREEN}  5. 切换到 TCP Peek + Splice 模式${PLAIN} ${YELLOW}(自动生成/安装 vpso-mux 分流器，进阶模式)${PLAIN}"
         echo -e "${CYAN}  6. 重新应用当前入口模式${PLAIN}"
         echo -e "${YELLOW}  7. 回滚上一次入口模式切换${PLAIN}"
         echo -e "------------------------------------------------"
@@ -11741,7 +11823,7 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN} 13. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
         echo -e "${CYAN} 14. 修改 443 共享参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
         echo -e "${CYAN} 15. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}"
-        echo -e "${CYAN} 16. 查看 vpso-mux 日志${PLAIN}        ${YELLOW}(TCP Peek 排错)${PLAIN}"
+        echo -e "${CYAN} 16. 查看 TCP Peek + Splice 状态${PLAIN} ${YELLOW}(vpso-mux 分流器日志)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${YELLOW}说明：三种 443 入口不是三套独立安装器；[2] 建立共享配置，[3]/[4]/[5] 负责检查依赖、生成目标配置并切换入口。${PLAIN}"
         echo -e "------------------------------------------------"
@@ -11784,25 +11866,26 @@ normalize_main_choice() {
 
     case "$choice" in
         q|quit|exit|0|退出) echo "0" ;;
-        pre|preflight|check|体检|预检) echo "1" ;;
+        pre|preflight|check|预检) echo "1" ;;
         init|base|初始化) echo "2" ;;
-        env|docker|caddy|组件) echo "3" ;;
-        panel|node|nodes|面板|节点) echo "4" ;;
-        ssh) echo "5" ;;
-        fail2ban|f2b) echo "6" ;;
-        fw|firewall|防火墙) echo "7" ;;
-        tweak|system|系统) echo "8" ;;
-        net|kernel|bbr|网络|内核) echo "9" ;;
-        docker-safe|docker安全) echo "10" ;;
-        test|speed|测速) echo "11" ;;
-        port|端口) echo "12" ;;
-        info|hardware|探针) echo "13" ;;
-        h|health|健康) echo "14" ;;
-        b|backup|bak|备份) echo "15" ;;
-        u|upd|update|更新) echo "16" ;;
-        reboot|重启) echo "17" ;;
-        sni|443|单入口) echo "18" ;;
-        traffic|quota|bill|流量|达量|账单) echo "9" ;;
+        env|docker|组件) echo "3" ;;
+        caddy|proxy|reverse|反代|普通反代) echo "4" ;;
+        panel|node|nodes|面板|节点) echo "5" ;;
+        ssh) echo "6" ;;
+        fail2ban|f2b) echo "7" ;;
+        fw|firewall|防火墙) echo "8" ;;
+        tweak|system|系统) echo "9" ;;
+        net|kernel|bbr|网络|内核) echo "10" ;;
+        docker-safe|docker安全) echo "11" ;;
+        test|speed|测速) echo "12" ;;
+        port|端口) echo "13" ;;
+        info|hardware|探针) echo "14" ;;
+        h|health|健康|体检) echo "15" ;;
+        b|backup|bak|备份) echo "16" ;;
+        u|upd|update|更新) echo "17" ;;
+        reboot|重启) echo "18" ;;
+        sni|443|单入口) echo "19" ;;
+        traffic|quota|bill|流量|达量|账单) echo "10" ;;
         *) echo "$choice" ;;
     esac
 }
@@ -11860,8 +11943,8 @@ main_menu() {
         print_breadcrumb "主菜单"
         echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e " ${YELLOW}快捷输入：443 直达单入口，traffic 到网络菜单，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
-        echo -e " ${YELLOW}高风险操作必须输入大写 YES；不确定时先做 [15] 备份。${PLAIN}"
+        echo -e " ${YELLOW}快捷输入：443 直达单入口，caddy 进普通反代，traffic 到网络菜单，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
+        echo -e " ${YELLOW}高风险操作必须输入大写 YES；不确定时先做 [16] 备份。${PLAIN}"
         print_auto_update_notice
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${BOLD}${BLUE}▶ 模式入口${PLAIN}"
@@ -11872,30 +11955,31 @@ main_menu() {
         echo -e " ${BOLD}${BLUE}▶ ① 推荐流程：新机器先跑这里${PLAIN}"
         echo -e "  ${GREEN}1.${PLAIN} 运维预检与风险扫描    ${YELLOW}(部署前先看端口/系统/服务状态)${PLAIN}"
         echo -e "  ${GREEN}2.${PLAIN} 基础环境初始化        ${YELLOW}(工具/时区/系统更新/基础 BBR)${PLAIN}"
-        echo -e "  ${GREEN}3.${PLAIN} 基础组件与反代分流    ${YELLOW}(Docker/Caddy/WARP/443入口向导)${PLAIN}"
-        echo -e "  ${GREEN}4.${PLAIN} 面板、节点与订阅工具  ${YELLOW}(3x-ui/Sing-box/订阅管理/Dockge)${PLAIN}"
+        echo -e "  ${GREEN}3.${PLAIN} 基础组件与常用服务    ${YELLOW}(Docker/Python/WARP/常用工具)${PLAIN}"
+        echo -e "  ${GREEN}4.${PLAIN} 普通 Caddy 反代       ${YELLOW}(未接入 443 单入口的网站/面板反代)${PLAIN}"
+        echo -e "  ${GREEN}5.${PLAIN} 面板、节点与订阅工具  ${YELLOW}(3x-ui/Sing-box/订阅管理/Dockge)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ② 安全与访问控制${PLAIN}"
-        echo -e "  ${GREEN}5.${PLAIN} SSH 安全中心          ${YELLOW}(端口/公钥/密钥登录模式)${PLAIN}"
-        echo -e "  ${GREEN}6.${PLAIN} Fail2ban 防爆破       ${YELLOW}(自动封禁 SSH 爆破 IP)${PLAIN}"
-        echo -e "  ${GREEN}7.${PLAIN} 防火墙规则管理        ${YELLOW}(放行/删除/查看/关闭)${PLAIN}"
-        echo -e "  ${GREEN}8.${PLAIN} 系统开关与清理        ${YELLOW}(IPv6/IPv4优先/Ping/主机名/清理)${PLAIN}"
+        echo -e "  ${GREEN}6.${PLAIN} SSH 安全中心          ${YELLOW}(端口/公钥/密钥登录模式)${PLAIN}"
+        echo -e "  ${GREEN}7.${PLAIN} Fail2ban 防爆破       ${YELLOW}(自动封禁 SSH 爆破 IP)${PLAIN}"
+        echo -e "  ${GREEN}8.${PLAIN} 防火墙规则管理        ${YELLOW}(放行/删除/查看/关闭)${PLAIN}"
+        echo -e "  ${GREEN}9.${PLAIN} 系统开关与清理        ${YELLOW}(IPv6/IPv4优先/Ping/主机名/清理)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ③ 网络性能与容器${PLAIN}"
-        echo -e "  ${GREEN}9.${PLAIN} 网络与内核优化        ${YELLOW}(BBR/TCP/ZRAM/DNS/轻量内核)${PLAIN}"
-        echo -e " ${GREEN}10.${PLAIN} Docker 安全管理       ${YELLOW}(本地防穿透/恢复访问)${PLAIN}"
+        echo -e " ${GREEN}10.${PLAIN} 网络与内核优化        ${YELLOW}(BBR/TCP/ZRAM/DNS/轻量内核)${PLAIN}"
+        echo -e " ${GREEN}11.${PLAIN} Docker 安全管理       ${YELLOW}(本地防穿透/恢复访问)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ④ 诊断、备份与维护${PLAIN}"
-        echo -e " ${GREEN}11.${PLAIN} 测速与质量检测        ${YELLOW}(YABS/流媒体/回程/IP质量)${PLAIN}"
-        echo -e " ${GREEN}12.${PLAIN} 端口排查与释放        ${YELLOW}(查看占用并强杀进程)${PLAIN}"
-        echo -e " ${GREEN}13.${PLAIN} 系统硬件探针          ${YELLOW}(CPU/内存/磁盘/网络实时信息)${PLAIN}"
-        echo -e " ${GREEN}14.${PLAIN} 服务健康总览          ${YELLOW}(服务状态/证书摘要/端口概览)${PLAIN}"
-        echo -e " ${GREEN}15.${PLAIN} 配置备份与回滚        ${YELLOW}(备份/列表/恢复/清理)${PLAIN}"
-        echo -e " ${BOLD}${YELLOW}16.${PLAIN} 更新脚本              ${CYAN}(快捷词：u / update / upd)${PLAIN}"
-        echo -e " ${RED}17.${PLAIN} 重启服务器"
+        echo -e " ${GREEN}12.${PLAIN} 测速与质量检测        ${YELLOW}(YABS/流媒体/回程/IP质量)${PLAIN}"
+        echo -e " ${GREEN}13.${PLAIN} 端口排查与释放        ${YELLOW}(查看占用并强杀进程)${PLAIN}"
+        echo -e " ${GREEN}14.${PLAIN} 系统硬件探针          ${YELLOW}(CPU/内存/磁盘/网络实时信息)${PLAIN}"
+        echo -e " ${GREEN}15.${PLAIN} 服务健康总览          ${YELLOW}(服务状态/证书摘要/端口概览)${PLAIN}"
+        echo -e " ${GREEN}16.${PLAIN} 配置备份与回滚        ${YELLOW}(备份/列表/恢复/清理)${PLAIN}"
+        echo -e " ${BOLD}${YELLOW}17.${PLAIN} 更新脚本              ${CYAN}(快捷词：u / update / upd)${PLAIN}"
+        echo -e " ${RED}18.${PLAIN} 重启服务器"
         echo -e ""
         echo -e " ${BOLD}${BLUE}▶ ⑤ 高频直达${PLAIN}"
-        echo -e " ${GREEN}18.${PLAIN} 443 单入口管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
+        echo -e " ${GREEN}19.${PLAIN} 443 单入口管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${RED} 0.${PLAIN} 退出面板"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -11910,21 +11994,22 @@ main_menu() {
             1) func_preflight_check ;;
             2) func_base_init ;;
             3) func_env_install ;;
-            4) func_panel_deploy_menu ;;
-            5) func_ssh_security_menu ;;
-            6) func_fail2ban ;;
-            7) func_firewall_manage ;;
-            8) func_system_tweaks ;;
-            9) func_net_kernel_menu ;;
-            10) func_docker_manage ;;
-            11) func_test_scripts ;;
-            12) func_port_kill ;;
-            13) func_system_info ;;
-            14) func_health_dashboard ;;
-            15) func_backup_center ;;
-            16) func_update_script ;;
-            17) func_reboot_server ;;
-            18) func_sni_stack_quick_menu ;;
+            4) func_caddy_reverse_proxy_menu ;;
+            5) func_panel_deploy_menu ;;
+            6) func_ssh_security_menu ;;
+            7) func_fail2ban ;;
+            8) func_firewall_manage ;;
+            9) func_system_tweaks ;;
+            10) func_net_kernel_menu ;;
+            11) func_docker_manage ;;
+            12) func_test_scripts ;;
+            13) func_port_kill ;;
+            14) func_system_info ;;
+            15) func_health_dashboard ;;
+            16) func_backup_center ;;
+            17) func_update_script ;;
+            18) func_reboot_server ;;
+            19) func_sni_stack_quick_menu ;;
             0) exit 0 ;;
             *) 
                 echo -e "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}"

@@ -1,6 +1,8 @@
-# TCP Peek + Splice 443 分流引擎
+# TCP Peek + Splice 分流引擎
 
-`tcp_peek` 是 VPS-Optimize 新增的 experimental 443 单入口引擎。它的目标是用一个轻量本地守护进程 `vpso-mux` 承担原来 Nginx stream 的四层入口职责：
+TCP Peek + Splice 模式：基于 MSG_PEEK 读取 TLS ClientHello 中的 SNI，不消费首包，并根据 SNI 将连接分流到 Caddy 或 Xray 本地后端；转发时优先使用 splice 零拷贝，失败时自动回退普通 copy。实际运行的分流器程序为 vpso-mux。
+
+`tcp_peek` 只是脚本内部兼容名称，`ENTRY_MODE=tcp-peek` 继续有效。面向用户的正式名称是 TCP Peek + Splice 模式，实际运行的二进制保持为 `vpso-mux`。
 
 ```text
 公网 TCP 443
@@ -8,7 +10,7 @@
   -> recv(MSG_PEEK) 偷看 TLS ClientHello SNI
   -> 按 SNI / whitelist 选择后端
   -> splice 零拷贝双向转发
-  -> splice 不可用时 fallback 到普通 copy 转发
+  -> splice 不可用时回退到普通 copy 转发
 ```
 
 它不终止 TLS，不解密 TLS，不修改首包，不管理证书，不替换 Caddy，也不是让 Xray/REALITY 直接占用 443。
@@ -17,20 +19,20 @@
 
 本文中的 `SERVER_IP`、`panel.example.com`、`site.example.com`、`8444`、`8443`、`1443` 都是示例值，用来说明测试方式和链路关系。实际部署时请替换成你自己的服务器 IP、域名和脚本当前保存的端口。
 
-TCP Peek 复用 443 单入口的公共 Web 域名、Caddy 后端、证书和 Web 白名单配置；Xray 入站分流规则也复用 `/etc/vps-optimize/xray-sni-routes.conf`，不维护另一份节点规则。证书策略仍是 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。
+TCP Peek + Splice 模式复用 443 单入口的公共 Web 域名、Caddy 后端、证书和 Web 白名单配置；Xray 入站分流规则也复用 `/etc/vps-optimize/xray-sni-routes.conf`，不维护另一份节点规则。证书策略仍是 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。
 
-## 为什么新增 tcp_peek
+## 为什么新增 TCP Peek + Splice 模式
 
-现有稳定方案是 `nginx_stream`：公网只开放 443，由 Nginx stream `ssl_preread` 按 SNI 分流到 Caddy、REALITY、面板、订阅和网站。这套方案继续是默认稳定模式。
+现有稳定方案是 Nginx Stream 模式：公网只开放 443，由 Nginx stream `ssl_preread` 按 SNI 分流到 Caddy、REALITY、面板、订阅和网站。这套方案继续是默认稳定模式。
 
-`tcp_peek` 提供一个可实验、可回滚的替代入口，便于进阶用户在不引入完整 Nginx stream 入口的情况下做四层 SNI 分流，并观察自研转发链路的行为。
+TCP Peek + Splice 模式提供一个可回滚的替代入口，便于进阶用户在不引入完整 Nginx stream 入口的情况下做四层 SNI 分流，并观察 `vpso-mux` 分流器的转发链路行为。
 
 ## 和 Nginx Stream 的区别
 
-| 项目 | nginx_stream | tcp_peek |
+| 项目 | Nginx Stream 模式 | TCP Peek + Splice 模式 |
 | --- | --- | --- |
-| 状态 | 默认 stable | experimental |
-| 入口进程 | Nginx stream | vpso-mux |
+| 状态 | 默认稳定模式 | 进阶可选模式 |
+| 入口进程 | Nginx stream | vpso-mux 分流器 |
 | SNI 获取 | `ssl_preread` | `recv(MSG_PEEK)` 解析 ClientHello |
 | TLS 终止 | 不终止 | 不终止 |
 | 证书 | 仍由 Caddy 处理网站/面板证书 | 仍由 Caddy 处理网站/面板证书 |
@@ -41,7 +43,7 @@ TCP Peek 复用 443 单入口的公共 Web 域名、Caddy 后端、证书和 Web
 
 ```text
                  +-----------------------+
-client:443 ----> | vpso-mux tcp_peek     |
+client:443 ----> | vpso-mux 分流器       |
                  | MSG_PEEK ClientHello  |
                  +----------+------------+
                             |
@@ -74,20 +76,19 @@ backend socket -> pipe -> client socket
 
 ## 为什么仍保留 nginx_stream
 
-`nginx_stream` 是默认稳定模式，已经覆盖证书、Caddy、REALITY、面板、订阅、网站、白名单和回滚流程。`tcp_peek` 只是新增 experimental 引擎，不会默认接管 443，也不会删除现有 Nginx stream 逻辑。
+Nginx Stream 模式是默认稳定模式，已经覆盖证书、Caddy、REALITY、面板、订阅、网站、白名单和回滚流程。TCP Peek + Splice 模式不会默认接管 443，也不会删除现有 Nginx Stream 逻辑。
 
 ## 如何先用 8444 测试
 
 菜单路径：
 
 ```text
-主菜单 [18 443 单入口管理中心]
-  -> [14] 生成 tcp_peek 配置
-  -> [15] tcp_peek dry-run 配置校验
-  -> [16] 启动 tcp_peek 测试端口 8444
+主菜单 [19 443 单入口管理中心]
+  -> [5] 切换到 TCP Peek + Splice 模式
+  -> [16] 查看 TCP Peek + Splice 状态
 ```
 
-测试端口阶段不会改公网 443，Nginx stream 仍继续负责线上入口。
+如需先用测试端口验证，可使用脚本中的 TCP Peek + Splice 测试入口让 `vpso-mux` 只监听 `8444`。测试端口阶段不会改公网 443，Nginx Stream 模式仍继续负责线上入口。
 
 常用测试命令：
 
@@ -105,14 +106,14 @@ curl -vk --resolve site.example.com:8444:SERVER_IP https://site.example.com:8444
 确认 8444 测试正常后再进入：
 
 ```text
-主菜单 [18 443 单入口管理中心]
-  -> [17] 切换公网 443 到 tcp_peek
+主菜单 [19 443 单入口管理中心]
+  -> [5] 切换到 TCP Peek + Splice 模式
 ```
 
 切换会执行事务式流程：
 
 1. 生成临时 `vpso-mux.yaml`。
-2. dry-run 校验配置。
+2. 校验配置。
 3. 创建完整备份。
 4. 替换正式 mux 配置。
 5. 隔离当前 VPS-Optimize 管理的 Nginx stream 443 配置。
@@ -127,11 +128,11 @@ curl -vk --resolve site.example.com:8444:SERVER_IP https://site.example.com:8444
 菜单路径：
 
 ```text
-主菜单 [18 443 单入口管理中心]
-  -> [18] 从 tcp_peek 回滚到 nginx_stream
+主菜单 [19 443 单入口管理中心]
+  -> [7] 回滚上一次入口模式切换
 ```
 
-回滚会停止并禁用 `vpso-mux`，读取 `sni-stack.env` 重新生成 Nginx stream 和 Caddy 配置，恢复默认 stable 引擎，并运行链路体检。
+回滚会停止并禁用 `vpso-mux`，读取 `sni-stack.env` 重新生成 Nginx Stream 和 Caddy 配置，恢复到上一次入口模式，并运行链路体检。
 
 ## 白名单如何生效
 
@@ -143,7 +144,7 @@ curl -vk --resolve site.example.com:8444:SERVER_IP https://site.example.com:8444
 - unknown SNI 默认仍走 Xray/REALITY。
 - 单 IP 会被程序按 `/32` 或 `/128` 处理。
 
-如果面板或订阅 route 没有 whitelist，dry-run 会给出高亮警告。
+如果面板或订阅 route 没有 whitelist，配置校验会给出高亮警告。
 
 ## 常见故障
 
@@ -155,7 +156,7 @@ curl -vk --resolve site.example.com:8444:SERVER_IP https://site.example.com:8444
 ss -lntup | grep ':443'
 ```
 
-切换到 `tcp_peek` 后应看到 `vpso-mux`。如果仍是 Nginx、Caddy 或 Xray，说明入口关系没有切干净，建议立即回滚。
+切换到 TCP Peek + Splice 模式后应看到 `vpso-mux`。如果仍是 Nginx、Caddy 或 Xray，说明入口关系没有切干净，建议立即回滚。
 
 ### SNI 解析失败
 
@@ -183,7 +184,7 @@ ss -lntup | grep ':1443'
 systemctl status xray --no-pager
 ```
 
-### splice 失败 fallback
+### splice 失败回退
 
 查看日志：
 

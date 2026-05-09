@@ -8,12 +8,12 @@
 
 | 目标 | 菜单路径 |
 |---|---|
-| 创建全量配置备份 | `主菜单 [15 配置备份与回滚] -> [1 创建全量配置备份]` |
-| 查看备份列表 | `主菜单 [15 配置备份与回滚] -> [2 查看现有备份列表]` |
-| 从备份回滚 | `主菜单 [15 配置备份与回滚] -> [3 从备份一键回滚]` |
-| 443 链路体检 | `主菜单 [18 443 单入口管理中心] -> [3 443 单入口链路体检]` |
-| Caddy/证书体检 | `主菜单 [18 443 单入口管理中心] -> [6 CF DNS / Caddy 证书维护] -> [13 Caddy/证书一键体检]` |
-| 生成反馈诊断信息 | `主菜单 [14 服务健康总览]` |
+| 创建全量配置备份 | `主菜单 [16 配置备份与回滚] -> [1 创建全量配置备份]` |
+| 查看备份列表 | `主菜单 [16 配置备份与回滚] -> [2 查看现有备份列表]` |
+| 从备份回滚 | `主菜单 [16 配置备份与回滚] -> [3 从备份一键回滚]` |
+| 443 链路体检 | `主菜单 [19 443 单入口管理中心] -> [11 443 链路体检]` |
+| Caddy/证书体检 | `主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护] -> [13 Caddy/证书一键体检]` |
+| 生成反馈诊断信息 | `主菜单 [15 服务健康总览]` |
 
 ## VPS-Optimize 自身
 
@@ -39,7 +39,7 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 |---|---|
 | `/etc/vps-optimize/sni-stack.env` | 443 单入口保存的核心参数 |
 | `/etc/vps-optimize/443-engine.conf` | 当前 443 单入口引擎状态，默认 `nginx_stream` |
-| `/etc/vps-optimize/vpso-mux.yaml` | experimental `tcp_peek` / `vpso-mux` 配置 |
+| `/etc/vps-optimize/vpso-mux.yaml` | `tcp_peek`（内部兼容名）/ `vpso-mux` 分流器配置 |
 | `/etc/vps-optimize/sni-stack.last-backup` | 最近一次 443 单入口备份路径记录 |
 | `/etc/vps-optimize/backups/sni-stack_*` | 443 单入口自动备份目录 |
 | `/etc/nginx/stream.d/vps_sni_*.conf` | Nginx stream SNI 分流配置 |
@@ -50,8 +50,8 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 | `/root/cert/<domain>.key` | 面向用户查看的私钥软链接 |
 | `/root/cert/caddy_cf_manifest.txt` | 已管理域名和证书路径清单 |
 | `/root/cert/acme_last_error.log` | 最近一次 acme 错误日志，存在时再看 |
-| `/etc/systemd/system/vpso-mux.service` | experimental `vpso-mux` systemd 服务 |
-| `/usr/local/bin/vpso-mux` | experimental TCP Peek + Splice 守护进程 |
+| `/etc/systemd/system/vpso-mux.service` | `vpso-mux` 分流器 systemd 服务 |
+| `/usr/local/bin/vpso-mux` | TCP Peek + Splice 模式的 vpso-mux 分流器 |
 
 检查当前 443 参数：
 
@@ -70,9 +70,9 @@ ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096'
 相关入口：
 
 ```text
-主菜单 [18 443 单入口管理中心] -> [3 443 单入口链路体检]
-主菜单 [18 443 单入口管理中心] -> [4 重新应用上次配置]
-主菜单 [18 443 单入口管理中心] -> [6 CF DNS / Caddy 证书维护]
+主菜单 [19 443 单入口管理中心] -> [11 443 链路体检]
+主菜单 [19 443 单入口管理中心] -> [6 重新应用当前入口模式]
+主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护]
 ```
 
 ## Caddy
@@ -98,13 +98,13 @@ find /etc/caddy -maxdepth 3 -type f
 如果只是普通反代，入口是：
 
 ```text
-主菜单 [3 基础组件与反代分流] -> [13 普通 Caddy 反代]
+主菜单 [4 普通 Caddy 反代] -> [1 添加普通 Caddy 反代]
 ```
 
 如果已经启用 443 单入口，新增网站入口是：
 
 ```text
-主菜单 [18 443 单入口管理中心] -> [2 管理网站/反代域名]
+主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]
 ```
 
 ## Nginx
@@ -154,7 +154,7 @@ ls -l /root/.config/vps-panel/cloudflare.env 2>/dev/null
 更新入口：
 
 ```text
-主菜单 [18 443 单入口管理中心] -> [6 CF DNS / Caddy 证书维护] -> [8 更新 Cloudflare API Token]
+主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护] -> [8 更新 Cloudflare API Token]
 ```
 
 ## 3x-ui / x-ui
@@ -179,8 +179,8 @@ find /usr/local -maxdepth 3 -type d -name '*x-ui*' 2>/dev/null
 VPS-Optimize 入口：
 
 ```text
-主菜单 [4 面板、节点与订阅工具] -> [1 管理 3x-ui 面板]
-主菜单 [4 面板、节点与订阅工具] -> [11 面板救砖 / SSL 清理]
+主菜单 [5 面板、节点与订阅工具] -> [1 管理 3x-ui 面板]
+主菜单 [5 面板、节点与订阅工具] -> [11 面板救砖 / SSL 清理]
 ```
 
 ## 3x-ui 外置增强管理
@@ -211,7 +211,7 @@ tail -n 100 /var/log/xui-custom-manager.log 2>/dev/null
 入口：
 
 ```text
-主菜单 [4 面板、节点与订阅工具] -> [16 3x-ui 外置增强管理]
+主菜单 [5 面板、节点与订阅工具] -> [16 3x-ui 外置增强管理]
 ```
 
 详细说明见 [../README_xui_custom_manager.md](../README_xui_custom_manager.md)。
@@ -242,9 +242,9 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 入口：
 
 ```text
-主菜单 [3 基础组件与反代分流] -> [1 Docker 引擎]
-主菜单 [4 面板、节点与订阅工具]
-主菜单 [10 Docker 安全管理]
+主菜单 [3 基础组件与常用服务] -> [1 Docker 引擎]
+主菜单 [5 面板、节点与订阅工具]
+主菜单 [11 Docker 安全管理]
 ```
 
 ## Port Traffic Dog
@@ -280,7 +280,7 @@ nft list ruleset 2>/dev/null | grep -i port_traffic_monitor || true
 入口：
 
 ```text
-主菜单 [4 面板、节点与订阅工具] -> [14 端口流量监控]
+主菜单 [5 面板、节点与订阅工具] -> [14 端口流量监控]
 ```
 
 详细说明见 [../README_dog.md](../README_dog.md)。
@@ -309,10 +309,10 @@ fail2ban-client status sshd 2>/dev/null || fail2ban-client status ssh 2>/dev/nul
 入口：
 
 ```text
-主菜单 [5 SSH 安全中心]
-主菜单 [5 SSH 安全中心] -> [2 用户密钥登录模式] -> [1 为用户添加 SSH 公钥]
-主菜单 [6 Fail2ban 防爆破]
-主菜单 [7 防火墙规则管理]
+主菜单 [6 SSH 安全中心]
+主菜单 [6 SSH 安全中心] -> [2 用户密钥登录模式] -> [1 为用户添加 SSH 公钥]
+主菜单 [7 Fail2ban 防爆破]
+主菜单 [8 防火墙规则管理]
 ```
 
 ## 日志速查
@@ -343,5 +343,5 @@ fail2ban-client status sshd 2>/dev/null || fail2ban-client status ssh 2>/dev/nul
 提交 Issue 前先脱敏。诊断信息入口：
 
 ```text
-主菜单 [14 服务健康总览]
+主菜单 [15 服务健康总览]
 ```

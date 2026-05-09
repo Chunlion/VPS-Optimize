@@ -132,7 +132,7 @@ if grep -q '重置日只支持 1-28' dist/vps.sh; then
     exit 1
 fi
 grep -q 'counter reset detected on ${IFACE}, baseline reset and preserved' dist/vps.sh
-grep -q 'traffic|quota|bill|流量|达量|账单) echo "9"' dist/vps.sh
+grep -q 'traffic|quota|bill|流量|达量|账单) echo "10"' dist/vps.sh
 if grep -q '20\..*流量达量关机保护' dist/vps.sh; then
     echo "Traffic guard must stay in the network submenu, not the main menu." >&2
     exit 1
@@ -163,14 +163,15 @@ grep -q '50-cloud-init.conf' dist/vps.sh
 grep -q 'for unit in ssh.socket sshd.socket' dist/vps.sh
 grep -q 'func_network_interface_manage' dist/vps.sh
 grep -q 'network_set_iface_mtu' dist/vps.sh
-grep -q '5) func_ssh_security_menu' dist/vps.sh
-grep -q '6) func_fail2ban' dist/vps.sh
-grep -q '18) func_sni_stack_quick_menu' dist/vps.sh
+grep -q '4) func_caddy_reverse_proxy_menu' dist/vps.sh
+grep -q '6) func_ssh_security_menu' dist/vps.sh
+grep -q '7) func_fail2ban' dist/vps.sh
+grep -q '19) func_sni_stack_quick_menu' dist/vps.sh
 if grep -q '6) func_add_ssh_key' dist/vps.sh || grep -q '6\..*添加 SSH 公钥' dist/vps.sh || grep -q 'key|pubkey|公钥) echo "6"' dist/vps.sh; then
     echo "Main menu must not keep duplicate SSH public key entry or hidden shortcut compatibility." >&2
     exit 1
 fi
-if grep -q '19) func_sni_stack_quick_menu' dist/vps.sh; then
+if grep -q '18) func_sni_stack_quick_menu' dist/vps.sh; then
     echo "Main menu numbering must be compact after removing duplicate SSH key entry." >&2
     exit 1
 fi
