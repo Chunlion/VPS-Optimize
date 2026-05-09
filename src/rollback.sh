@@ -38,10 +38,14 @@ restore_sni_stack_backup_files() {
     local domain conf_file
     [[ -n "$backup_dir" && -d "$backup_dir" ]] || return 1
 
-    mkdir -p /etc/nginx/stream.d /etc/caddy/conf.d /etc/vps-optimize
+    mkdir -p /etc/nginx/stream.d /etc/caddy/conf.d /etc/vps-optimize /etc/systemd/system /usr/local/bin
     [[ -f "$backup_dir/nginx.conf" ]] && cp -a "$backup_dir/nginx.conf" /etc/nginx/nginx.conf
     [[ -f "$backup_dir/Caddyfile" ]] && cp -a "$backup_dir/Caddyfile" /etc/caddy/Caddyfile
     [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]] && cp -a "$backup_dir/vps-optimize/sni-stack.env" /etc/vps-optimize/sni-stack.env
+    [[ -f "$backup_dir/vps-optimize/443-engine.conf" ]] && cp -a "$backup_dir/vps-optimize/443-engine.conf" /etc/vps-optimize/443-engine.conf
+    [[ -f "$backup_dir/vps-optimize/vpso-mux.yaml" ]] && cp -a "$backup_dir/vps-optimize/vpso-mux.yaml" /etc/vps-optimize/vpso-mux.yaml
+    [[ -f "$backup_dir/systemd/vpso-mux.service" ]] && cp -a "$backup_dir/systemd/vpso-mux.service" /etc/systemd/system/vpso-mux.service
+    [[ -f "$backup_dir/usr-local-bin/vpso-mux" ]] && cp -a "$backup_dir/usr-local-bin/vpso-mux" /usr/local/bin/vpso-mux
 
     while IFS= read -r conf_file; do
         quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-sni" >/dev/null 2>&1 || true
@@ -66,6 +70,7 @@ rollback_sni_stack_after_failure() {
         caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ Caddy 回滚后配置检查仍未通过，请手动检查 /etc/caddy/Caddyfile。${PLAIN}"
         restart_service_if_available nginx >/dev/null 2>&1 || true
         restart_service_if_available caddy >/dev/null 2>&1 || true
+        systemctl daemon-reload >/dev/null 2>&1 || true
         echo -e "${YELLOW}已回滚到：${backup_dir}${PLAIN}"
     else
         echo -e "${RED}❌ 自动回滚失败，请手动使用备份目录恢复：${backup_dir}${PLAIN}"

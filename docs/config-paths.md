@@ -38,6 +38,8 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 | 路径 | 说明 |
 |---|---|
 | `/etc/vps-optimize/sni-stack.env` | 443 单入口保存的核心参数 |
+| `/etc/vps-optimize/443-engine.conf` | 当前 443 单入口引擎状态，默认 `nginx_stream` |
+| `/etc/vps-optimize/vpso-mux.yaml` | experimental `tcp_peek` / `vpso-mux` 配置 |
 | `/etc/vps-optimize/sni-stack.last-backup` | 最近一次 443 单入口备份路径记录 |
 | `/etc/vps-optimize/backups/sni-stack_*` | 443 单入口自动备份目录 |
 | `/etc/nginx/stream.d/vps_sni_*.conf` | Nginx stream SNI 分流配置 |
@@ -48,6 +50,8 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 | `/root/cert/<domain>.key` | 面向用户查看的私钥软链接 |
 | `/root/cert/caddy_cf_manifest.txt` | 已管理域名和证书路径清单 |
 | `/root/cert/acme_last_error.log` | 最近一次 acme 错误日志，存在时再看 |
+| `/etc/systemd/system/vpso-mux.service` | experimental `vpso-mux` systemd 服务 |
+| `/usr/local/bin/vpso-mux` | experimental TCP Peek + Splice 守护进程 |
 
 检查当前 443 参数：
 

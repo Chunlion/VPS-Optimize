@@ -1934,6 +1934,482 @@ sni_stack_health_check() {
     echo -e "体检结果：${GREEN}通过 ${ok}${PLAIN} / ${YELLOW}警告 ${warn}${PLAIN} / ${RED}失败 ${fail}${PLAIN}"
 }
 
+vpso_mux_config_path() {
+    echo "/etc/vps-optimize/vpso-mux.yaml"
+}
+
+vpso_mux_service_name() {
+    echo "vpso-mux.service"
+}
+
+single_443_engine_state_path() {
+    echo "/etc/vps-optimize/443-engine.conf"
+}
+
+yaml_quote() {
+    local value="$1"
+    value=$(printf '%s' "$value" | sed "s/'/''/g")
+    printf "'%s'" "$value"
+}
+
+single_443_current_engine() {
+    local state_file
+    state_file=$(single_443_engine_state_path)
+    if [[ -f "$state_file" ]]; then
+        (
+            # shellcheck disable=SC1090
+            source "$state_file" 2>/dev/null || true
+            printf '%s' "${engine:-nginx_stream}"
+        )
+        return 0
+    fi
+    printf 'nginx_stream'
+}
+
+sni_stack_route_name() {
+    local prefix="$1"
+    local sni="$2"
+    sni=$(echo "$sni" | tr '.-' '__' | tr -cd 'a-zA-Z0-9_')
+    printf '%s_%s' "$prefix" "$sni"
+}
+
+sni_stack_route_summary_for_state() {
+    local caddy_backend xray_backend summary i domain
+    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
+    summary="panel:${PANEL_DOMAIN}->${caddy_backend},reality:${REALITY_SNI}->${xray_backend},default->${xray_backend}"
+    for i in "${!SITE_DOMAINS[@]}"; do
+        domain="${SITE_DOMAINS[$i]}"
+        [[ -n "$domain" ]] && summary+=",site:${domain}->${caddy_backend}"
+    done
+    for i in "${!TCP_ROUTE_SNIS[@]}"; do
+        domain="${TCP_ROUTE_SNIS[$i]}"
+        [[ -n "$domain" ]] && summary+=",tcp:${domain}->$(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}")"
+    done
+    printf '%s' "$summary"
+}
+
+sni_stack_whitelist_summary_for_state() {
+    local summary="" i
+    for i in "${!SNI_IP_WHITELIST_DOMAINS[@]}"; do
+        [[ -n "${SNI_IP_WHITELIST_DOMAINS[$i]}" && -n "${SNI_IP_WHITELIST_RANGES[$i]}" ]] || continue
+        [[ -n "$summary" ]] && summary+="|"
+        summary+="${SNI_IP_WHITELIST_DOMAINS[$i]}:${SNI_IP_WHITELIST_RANGES[$i]}"
+    done
+    printf '%s' "$summary"
+}
+
+write_single_443_engine_state() {
+    local selected_engine="$1"
+    local backup_id="${2:-}"
+    local state_file mux_config mux_service caddy_backend xray_backend routes whitelist_rules
+    state_file=$(single_443_engine_state_path)
+    mux_config=$(vpso_mux_config_path)
+    mux_service=$(vpso_mux_service_name)
+    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
+    routes=$(sni_stack_route_summary_for_state)
+    whitelist_rules=$(sni_stack_whitelist_summary_for_state)
+    [[ -z "$backup_id" ]] && backup_id=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null || true)
+
+    mkdir -p /etc/vps-optimize
+    cat <<EOF > "$state_file"
+engine='${selected_engine}'
+listen_addr='${NGINX_LISTEN_ADDR}'
+listen_port='${NGINX_LISTEN_PORT}'
+caddy_backend='${caddy_backend}'
+xray_backend='${xray_backend}'
+default_backend='${xray_backend}'
+routes='${routes}'
+whitelist_rules='${whitelist_rules}'
+last_backup_id='${backup_id}'
+mux_config_path='${mux_config}'
+mux_systemd_service_name='${mux_service}'
+EOF
+    chmod 600 "$state_file" 2>/dev/null || true
+}
+
+show_single_443_engine_status() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🔎 当前 443 单入口引擎${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    local engine state_file mux_config
+    engine=$(single_443_current_engine)
+    state_file=$(single_443_engine_state_path)
+    mux_config=$(vpso_mux_config_path)
+    echo -e "当前 engine：${GREEN}${engine}${PLAIN}"
+    echo -e "状态文件：${state_file}"
+    echo -e "mux 配置：${mux_config}"
+    echo -e "------------------------------------------------"
+    echo -e "${GREEN}Nginx Stream 是默认稳定模式。${PLAIN}"
+    echo -e "${YELLOW}TCP Peek + Splice 是实验模式，适合进阶用户。${PLAIN}"
+    echo -e "${YELLOW}首次建议先监听 8444 测试，不要直接接管 443。${PLAIN}"
+    echo -e "${YELLOW}切换前会自动备份，可回滚。${PLAIN}"
+    echo -e "------------------------------------------------"
+    if [[ -f /etc/vps-optimize/sni-stack.env ]]; then
+        load_sni_stack_env >/dev/null 2>&1 && print_sni_stack_current_summary
+    else
+        echo -e "${YELLOW}未检测到 sni-stack.env，尚未完成 443 单入口初始化。${PLAIN}"
+    fi
+    echo -e "------------------------------------------------"
+    echo -e "公网 443 监听："
+    ss -lntup 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' || echo "未监听或当前用户无权限查看进程"
+}
+
+show_tcp_peek_experimental_info() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧪 TCP Peek + Splice 实验模式${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}TCP Peek + Splice 是 experimental 四层 SNI 分流引擎，适合进阶用户排障和试验。${PLAIN}"
+    echo -e "它只在 TCP 层 peek TLS ClientHello 的 SNI，不终止 TLS，不管理证书，不替换 Caddy，也不是 Xray 直占 443。"
+    echo -e "推荐流程："
+    echo -e "  1. 先生成 /etc/vps-optimize/vpso-mux.yaml"
+    echo -e "  2. dry-run 校验配置和后端端口"
+    echo -e "  3. 先监听 8444 测试"
+    echo -e "  4. 确认后再事务式切换公网 443"
+    echo -e "  5. 异常时从菜单回滚到 nginx_stream"
+}
+
+append_vpso_mux_route_yaml() {
+    local file="$1"
+    local name="$2"
+    local sni="$3"
+    local backend="$4"
+    local whitelist="$5"
+    {
+        echo "  - name: $(yaml_quote "$name")"
+        echo "    sni:"
+        echo "      - $(yaml_quote "$sni")"
+        echo "    backend: $(yaml_quote "$backend")"
+        if [[ -n "$whitelist" ]]; then
+            echo "    whitelist:"
+            local range
+            for range in $whitelist; do
+                echo "      - $(yaml_quote "$range")"
+            done
+        fi
+    } >> "$file"
+}
+
+write_vpso_mux_config_from_sni_stack() {
+    local listen_port="${1:-$NGINX_LISTEN_PORT}"
+    local output_file="${2:-$(vpso_mux_config_path)}"
+    local caddy_backend xray_backend listen_addr route_name ranges i domain backend
+    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
+    mkdir -p "$(dirname "$output_file")"
+
+    {
+        echo "listen:"
+        echo "  tcp:"
+        if [[ "$NGINX_LISTEN_ADDR" == "0.0.0.0" ]]; then
+            echo "    - $(yaml_quote "0.0.0.0:${listen_port}")"
+            echo "    - $(yaml_quote "[::]:${listen_port}")"
+        elif [[ "$NGINX_LISTEN_ADDR" == "::" ]]; then
+            echo "    - $(yaml_quote "[::]:${listen_port}")"
+        else
+            listen_addr=$(format_hostport "$NGINX_LISTEN_ADDR" "$listen_port")
+            echo "    - $(yaml_quote "$listen_addr")"
+        fi
+        echo ""
+        echo "timeouts:"
+        echo "  peek: $(yaml_quote "3s")"
+        echo "  dial: $(yaml_quote "5s")"
+        echo "  idle: $(yaml_quote "300s")"
+        echo "  shutdown: $(yaml_quote "10s")"
+        echo ""
+        echo "splice:"
+        echo "  enabled: true"
+        echo "  pipe_size: 1048576"
+        echo "  fallback_to_copy: true"
+        echo ""
+        echo "default_backend: $(yaml_quote "$xray_backend")"
+        echo ""
+        echo "routes:"
+    } > "$output_file"
+
+    ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
+    append_vpso_mux_route_yaml "$output_file" "panel" "$PANEL_DOMAIN" "$caddy_backend" "$ranges"
+    if [[ -z "$ranges" ]]; then
+        echo -e "${YELLOW}⚠️ 面板域名 ${PANEL_DOMAIN} 当前未配置 IP 白名单；切换前请确认这是你想要的行为。${PLAIN}"
+    fi
+
+    for i in "${!SITE_DOMAINS[@]}"; do
+        domain="${SITE_DOMAINS[$i]}"
+        [[ -n "$domain" ]] || continue
+        route_name=$(sni_stack_route_name "site" "$domain")
+        ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
+        append_vpso_mux_route_yaml "$output_file" "$route_name" "$domain" "$caddy_backend" "$ranges"
+    done
+
+    for i in "${!TCP_ROUTE_SNIS[@]}"; do
+        domain="${TCP_ROUTE_SNIS[$i]}"
+        [[ -n "$domain" ]] || continue
+        route_name=$(sni_stack_route_name "tcp" "$domain")
+        backend=$(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}")
+        ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
+        append_vpso_mux_route_yaml "$output_file" "$route_name" "$domain" "$backend" "$ranges"
+    done
+
+    append_vpso_mux_route_yaml "$output_file" "reality" "$REALITY_SNI" "$xray_backend" ""
+
+    cat <<EOF >> "$output_file"
+
+logging:
+  level: $(yaml_quote "info")
+  format: $(yaml_quote "json")
+EOF
+    chmod 600 "$output_file" 2>/dev/null || true
+}
+
+generate_tcp_peek_config() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧾 生成 tcp_peek 配置${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    echo -e "${YELLOW}阶段 A：只生成配置，不改服务，不改端口，不接管 443。${PLAIN}"
+    write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$(vpso_mux_config_path)" || return 1
+    echo -e "${GREEN}✅ 已生成：$(vpso_mux_config_path)${PLAIN}"
+    echo -e "默认后端：$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")"
+    echo -e "Caddy 后端：$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")"
+    echo -e "${YELLOW}下一步建议先运行 dry-run，再启动 8444 测试端口。${PLAIN}"
+}
+
+install_vpso_mux_binary() {
+    if [[ -x /usr/local/bin/vpso-mux ]]; then
+        return 0
+    fi
+    local source_dir="${SCRIPT_DIR:-$(pwd)}"
+    if command -v go >/dev/null 2>&1 && [[ -d "$source_dir/cmd/vpso-mux" ]]; then
+        echo -e "${CYAN}▶ 正在从当前源码构建 vpso-mux...${PLAIN}"
+        (cd "$source_dir" && go build -o /usr/local/bin/vpso-mux ./cmd/vpso-mux) || return 1
+        chmod 755 /usr/local/bin/vpso-mux
+        return 0
+    fi
+    if command -v go >/dev/null 2>&1; then
+        echo -e "${CYAN}▶ 正在通过 go install 安装 vpso-mux...${PLAIN}"
+        GOBIN=/usr/local/bin go install github.com/Chunlion/VPS-Optimize/cmd/vpso-mux@latest || return 1
+        chmod 755 /usr/local/bin/vpso-mux 2>/dev/null || true
+        return 0
+    fi
+    echo -e "${RED}❌ 未找到 /usr/local/bin/vpso-mux，且当前系统未安装 Go，无法构建 experimental 守护进程。${PLAIN}"
+    echo -e "${YELLOW}请先安装发布版 vpso-mux 二进制，或在源码目录安装 Go 后重试。${PLAIN}"
+    return 1
+}
+
+write_vpso_mux_systemd_service() {
+    cat <<'EOF' > /etc/systemd/system/vpso-mux.service
+[Unit]
+Description=VPS-Optimize TCP Peek SNI mux
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/vpso-mux -config /etc/vps-optimize/vpso-mux.yaml
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=1048576
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    chmod 644 /etc/systemd/system/vpso-mux.service
+    systemctl daemon-reload >/dev/null 2>&1 || true
+}
+
+run_vpso_mux_config_check() {
+    local config_file="${1:-$(vpso_mux_config_path)}"
+    if [[ -x /usr/local/bin/vpso-mux ]]; then
+        /usr/local/bin/vpso-mux -config "$config_file" -check
+        return $?
+    fi
+    local source_dir="${SCRIPT_DIR:-$(pwd)}"
+    if command -v go >/dev/null 2>&1 && [[ -d "$source_dir/cmd/vpso-mux" ]]; then
+        (cd "$source_dir" && go run ./cmd/vpso-mux -config "$config_file" -check)
+        return $?
+    fi
+    echo -e "${RED}❌ 缺少 vpso-mux 二进制或 Go 工具链，无法执行完整 dry-run 校验。${PLAIN}"
+    return 1
+}
+
+tcp_peek_dry_run_config() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧪 tcp_peek dry-run 配置校验${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    local config_file
+    config_file=$(vpso_mux_config_path)
+    [[ -f "$config_file" ]] || { echo -e "${YELLOW}未找到 ${config_file}，正在先生成配置。${PLAIN}"; write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$config_file" || return 1; }
+    echo -e "${CYAN}▶ 校验 YAML、SNI、backend、whitelist 和重复 SNI...${PLAIN}"
+    run_vpso_mux_config_check "$config_file" || return 1
+    echo -e "${CYAN}▶ 检查本地后端端口...${PLAIN}"
+    tcp_probe_host "Caddy 127.0.0.1:${CADDY_LISTEN_PORT}" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || true
+    tcp_probe_host "Xray/REALITY 127.0.0.1:${XRAY_LISTEN_PORT}" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || true
+    print_sni_ip_whitelist_summary
+    echo -e "${GREEN}✅ dry-run 完成。请先使用 8444 测试端口验证，不要直接接管 443。${PLAIN}"
+}
+
+start_tcp_peek_test_port() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧪 启动 tcp_peek 测试端口 8444${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    if [[ "$(single_443_current_engine)" == "tcp_peek" ]]; then
+        echo -e "${RED}❌ 当前 engine 已是 tcp_peek。为避免误停公网 443，本入口不覆盖运行中的 443 配置。${PLAIN}"
+        return 1
+    fi
+    echo -e "${YELLOW}阶段 C：vpso-mux 只监听 8444，Nginx stream 继续负责公网 443。${PLAIN}"
+    write_vpso_mux_config_from_sni_stack "8444" "$(vpso_mux_config_path)" || return 1
+    install_vpso_mux_binary || return 1
+    run_vpso_mux_config_check "$(vpso_mux_config_path)" || return 1
+    write_vpso_mux_systemd_service
+    systemctl enable vpso-mux >/dev/null 2>&1 || true
+    systemctl restart vpso-mux || { echo -e "${RED}❌ vpso-mux 启动失败，请查看日志。${PLAIN}"; return 1; }
+    echo -e "${GREEN}✅ vpso-mux 已启动在测试端口 8444。${PLAIN}"
+    echo -e "测试命令："
+    echo -e "  openssl s_client -connect SERVER_IP:8444 -servername ${PANEL_DOMAIN}"
+    [[ ${#SITE_DOMAINS[@]} -gt 0 ]] && echo -e "  openssl s_client -connect SERVER_IP:8444 -servername ${SITE_DOMAINS[0]}"
+    echo -e "  openssl s_client -connect SERVER_IP:8444 -servername random.example.com"
+    [[ ${#SITE_DOMAINS[@]} -gt 0 ]] && echo -e "  curl -vk --resolve ${SITE_DOMAINS[0]}:8444:SERVER_IP https://${SITE_DOMAINS[0]}:8444/"
+}
+
+switch_public_443_to_tcp_peek() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🚦 切换公网 443 到 tcp_peek${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    echo -e "${RED}TCP Peek + Splice 是实验模式，不会被默认启用。${PLAIN}"
+    echo -e "${YELLOW}切换会备份配置、停止 Nginx stream 对 ${NGINX_LISTEN_PORT} 的监听，并启动 vpso-mux 监听公网 ${NGINX_LISTEN_PORT}。${PLAIN}"
+    if [[ -z "$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")" ]]; then
+        echo -e "${RED}⚠️ 面板/订阅域名 ${PANEL_DOMAIN} 当前没有 IP 白名单；切换后该 SNI route 将公开到 Caddy。${PLAIN}"
+    fi
+    confirm_risk_action "切换公网 443 到 tcp_peek experimental 引擎" \
+        "Nginx stream 443 监听关系、vpso-mux 配置和 systemd 服务" \
+        "菜单 [18] -> [18] 可回滚到 nginx_stream；失败时脚本会自动恢复本次备份" \
+        "已完成 8444 测试，并确认面板白名单、Caddy、Xray 后端都正常。" || return 1
+
+    warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
+    warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
+    local tmp_config backup_dir nginx_conf
+    tmp_config="/etc/vps-optimize/vpso-mux.yaml.tmp.$$"
+    write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_config" || return 1
+    create_sni_stack_backup
+    backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
+    install_vpso_mux_binary || { quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true; rollback_sni_stack_after_failure "$backup_dir" "vpso-mux 二进制安装失败"; return 1; }
+    run_vpso_mux_config_check "$tmp_config" || { quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true; rollback_sni_stack_after_failure "$backup_dir" "vpso-mux dry-run 校验失败"; return 1; }
+    write_vpso_mux_systemd_service
+    mv "$tmp_config" "$(vpso_mux_config_path)" || { rollback_sni_stack_after_failure "$backup_dir" "vpso-mux 配置替换失败"; return 1; }
+    nginx_conf="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
+    [[ -e "$nginx_conf" ]] && quarantine_path "$nginx_conf" "/etc/vps-optimize/quarantine/nginx-sni" >/dev/null 2>&1 || true
+    if ! nginx -t >/dev/null 2>&1; then
+        rollback_sni_stack_after_failure "$backup_dir" "禁用 Nginx stream 443 后 nginx -t 失败"
+        return 1
+    fi
+    systemctl restart nginx || { rollback_sni_stack_after_failure "$backup_dir" "Nginx 重启失败"; return 1; }
+    systemctl enable vpso-mux >/dev/null 2>&1 || true
+    if ! systemctl restart vpso-mux; then
+        rollback_sni_stack_after_failure "$backup_dir" "vpso-mux 重启失败"
+        return 1
+    fi
+    if ! ss -lntup 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' | grep -q 'vpso-mux'; then
+        systemctl stop vpso-mux >/dev/null 2>&1 || true
+        rollback_sni_stack_after_failure "$backup_dir" "公网 443 未由 vpso-mux 监听"
+        return 1
+    fi
+    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || { systemctl stop vpso-mux >/dev/null 2>&1 || true; rollback_sni_stack_after_failure "$backup_dir" "Caddy 后端不可达"; return 1; }
+    tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || { systemctl stop vpso-mux >/dev/null 2>&1 || true; rollback_sni_stack_after_failure "$backup_dir" "Xray 后端不可达"; return 1; }
+    write_single_443_engine_state "tcp_peek" "$backup_dir"
+    echo -e "${GREEN}✅ 公网 443 已切换到 tcp_peek experimental 引擎。${PLAIN}"
+    sni_stack_health_check_enhanced
+}
+
+rollback_tcp_peek_to_nginx_stream() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}↩️ 从 tcp_peek 回滚到 nginx_stream${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    confirm_risk_action "回滚 443 到 Nginx Stream 稳定模式" \
+        "vpso-mux 服务和 Nginx stream 443 监听关系" \
+        "如 Nginx 回滚失败，请用最近的 /etc/vps-optimize/backups/sni-stack_* 手动恢复" \
+        "Nginx Stream 是默认稳定模式，回滚后会重新运行链路体检。" || return 1
+    systemctl stop vpso-mux >/dev/null 2>&1 || true
+    systemctl disable vpso-mux >/dev/null 2>&1 || true
+    reapply_sni_stack_from_env --yes || return 1
+    write_single_443_engine_state "nginx_stream"
+    echo -e "${GREEN}✅ 已回滚到 nginx_stream 稳定模式。${PLAIN}"
+    sni_stack_health_check
+}
+
+view_vpso_mux_logs() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}📜 vpso-mux 日志${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    journalctl -u vpso-mux -n 120 --no-pager 2>/dev/null || echo "未读取到 vpso-mux 日志。"
+}
+
+sni_stack_health_check_enhanced() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧪 443 链路体检增强${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    local engine caddy_backend xray_backend route_count ranges i domain
+    engine=$(single_443_current_engine)
+    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
+    route_count=$((2 + ${#SITE_DOMAINS[@]} + ${#TCP_ROUTE_SNIS[@]}))
+    echo -e "当前 engine：${GREEN}${engine}${PLAIN}"
+    echo -e "公网 443 监听进程："
+    ss -lntup 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' || echo "未监听或当前用户无权限查看进程"
+    echo -e "Nginx stream 是否启用：$(systemctl is-active nginx 2>/dev/null || echo unknown)"
+    echo -e "vpso-mux 是否运行：$(systemctl is-active vpso-mux 2>/dev/null || echo inactive)"
+    echo -e "Caddy 本地后端：${caddy_backend}"
+    get_listen_line_by_port "$CADDY_LISTEN_PORT" | grep -q "$CADDY_LISTEN_ADDR" && echo -e "${GREEN}✅ Caddy 期望监听 ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}${PLAIN}" || echo -e "${YELLOW}⚠️ Caddy 监听地址需确认：$(get_listen_line_by_port "$CADDY_LISTEN_PORT")${PLAIN}"
+    echo -e "Xray/REALITY 本地后端：${xray_backend}"
+    get_listen_line_by_port "$XRAY_LISTEN_PORT" | grep -q "$XRAY_LISTEN_ADDR" && echo -e "${GREEN}✅ Xray 期望监听 ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}" || echo -e "${YELLOW}⚠️ Xray 监听地址需确认：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")${PLAIN}"
+    echo -e "default_backend 当前指向：${xray_backend}"
+    echo -e "routes 数量：${route_count}"
+    echo -e "unknown SNI 策略：default_backend -> ${xray_backend}"
+    echo -e "------------------------------------------------"
+    ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
+    echo -e "route panel: ${PANEL_DOMAIN} -> ${caddy_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
+    for i in "${!SITE_DOMAINS[@]}"; do
+        domain="${SITE_DOMAINS[$i]}"
+        [[ -n "$domain" ]] || continue
+        ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
+        echo -e "route site: ${domain} -> ${caddy_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
+    done
+    for i in "${!TCP_ROUTE_SNIS[@]}"; do
+        domain="${TCP_ROUTE_SNIS[$i]}"
+        [[ -n "$domain" ]] || continue
+        ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
+        echo -e "route tcp: ${domain} -> $(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}") whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
+    done
+    echo -e "route reality: ${REALITY_SNI} -> ${xray_backend} whitelist=no"
+    echo -e "------------------------------------------------"
+    echo -e "最近 20 行 vpso-mux 日志："
+    journalctl -u vpso-mux -n 20 --no-pager 2>/dev/null || echo "未读取到 vpso-mux 日志。"
+    echo -e "------------------------------------------------"
+    echo -e "测试命令："
+    echo -e "  openssl s_client -connect SERVER_IP:${NGINX_LISTEN_PORT} -servername ${PANEL_DOMAIN}"
+    [[ ${#SITE_DOMAINS[@]} -gt 0 ]] && echo -e "  openssl s_client -connect SERVER_IP:${NGINX_LISTEN_PORT} -servername ${SITE_DOMAINS[0]}"
+    echo -e "  openssl s_client -connect SERVER_IP:${NGINX_LISTEN_PORT} -servername random.example.com"
+}
+
 check_sni_stack_subscription_hint() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -2191,6 +2667,7 @@ reapply_sni_stack_from_env() {
     write_nginx_sni_stream_config || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 配置校验失败"; return 1; }
     systemctl restart caddy || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 服务重启失败"; return 1; }
     systemctl restart nginx || { rollback_sni_stack_after_failure "$backup_dir" "Nginx 服务重启失败"; return 1; }
+    write_single_443_engine_state "nginx_stream" "$backup_dir"
     print_sni_stack_result
 }
 
@@ -2940,6 +3417,7 @@ apply_sni_stack_runtime_config() {
     systemctl enable nginx >/dev/null 2>&1 || true
     systemctl restart nginx || { rollback_sni_stack_after_failure "$backup_dir" "Nginx 服务重启失败"; return 1; }
     save_sni_stack_env
+    write_single_443_engine_state "nginx_stream" "$backup_dir"
     generate_caddy_cf_manifest
 }
 
@@ -3576,6 +4054,7 @@ show_sni_help() {
     echo "8 域名 IP 白名单：只对指定域名限制源 IP，不影响其他 SNI。"
     echo "9 TCP/SNI 入站：把 3x-ui 已配置的本地 TCP 入站接入公网 443，不开放新端口。"
     echo "10 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
+    echo "11-20 experimental 引擎：Nginx Stream 是默认稳定模式；TCP Peek + Splice 需先生成配置、dry-run、8444 测试，再考虑接管 443。"
     echo "普通 Caddy 未接入 443 单入口时，用 [3] -> [21] 管理域名 IP 白名单。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
@@ -9862,6 +10341,19 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}  9. 管理 TCP/SNI 本地入站${PLAIN}     ${YELLOW}(3x-ui 新入站走公网 443)${PLAIN}"
         echo -e "${CYAN} 10. 443 网络访问测试${PLAIN}          ${YELLOW}(面板/订阅/Caddy/REALITY 链路)${PLAIN}"
         echo -e "------------------------------------------------"
+        echo -e "${BOLD}${BLUE}▶ Experimental 443 引擎${PLAIN}"
+        echo -e "${GREEN} 11. 查看当前 443 引擎${PLAIN}"
+        echo -e "${GREEN} 12. Nginx Stream 稳定模式${PLAIN}     ${YELLOW}(默认稳定模式，可回滚)${PLAIN}"
+        echo -e "${YELLOW} 13. TCP Peek + Splice 实验模式${PLAIN} ${YELLOW}(适合进阶用户，先读说明)${PLAIN}"
+        echo -e "${CYAN} 14. 生成 tcp_peek 配置${PLAIN}        ${YELLOW}(阶段 A，不改服务端口)${PLAIN}"
+        echo -e "${CYAN} 15. tcp_peek dry-run 配置校验${PLAIN} ${YELLOW}(阶段 B，检查后端和规则)${PLAIN}"
+        echo -e "${CYAN} 16. 启动 tcp_peek 测试端口 8444${PLAIN} ${YELLOW}(阶段 C，不接管 443)${PLAIN}"
+        echo -e "${RED} 17. 切换公网 443 到 tcp_peek${PLAIN}  ${YELLOW}(阶段 D，自动备份，可回滚)${PLAIN}"
+        echo -e "${GREEN} 18. 从 tcp_peek 回滚到 nginx_stream${PLAIN}"
+        echo -e "${CYAN} 19. 查看 vpso-mux 日志${PLAIN}"
+        echo -e "${CYAN} 20. 443 链路体检增强${PLAIN}"
+        echo -e "${YELLOW}提示：Nginx Stream 是默认稳定模式；TCP Peek + Splice 是实验模式，首次建议先监听 8444 测试。${PLAIN}"
+        echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -9879,6 +10371,16 @@ func_sni_stack_quick_menu() {
             8) manage_sni_stack_ip_whitelist; continue ;;
             9) manage_sni_stack_tcp_routes; continue ;;
             10) func_443_network_test; continue ;;
+            11) show_single_443_engine_status ;;
+            12) rollback_tcp_peek_to_nginx_stream ;;
+            13) show_tcp_peek_experimental_info ;;
+            14) generate_tcp_peek_config ;;
+            15) tcp_peek_dry_run_config ;;
+            16) start_tcp_peek_test_port ;;
+            17) switch_public_443_to_tcp_peek ;;
+            18) rollback_tcp_peek_to_nginx_stream ;;
+            19) view_vpso_mux_logs ;;
+            20) sni_stack_health_check_enhanced ;;
             "?"|help) show_sni_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;

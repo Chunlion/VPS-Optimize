@@ -93,6 +93,12 @@ fi
 grep -q 'func_sni_stack_quick_menu' dist/vps.sh
 grep -q 'manage_sni_stack_tcp_routes' dist/vps.sh
 grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh
+grep -q 'single_443_current_engine' dist/vps.sh
+grep -q 'generate_tcp_peek_config' dist/vps.sh
+grep -q 'switch_public_443_to_tcp_peek' dist/vps.sh
+grep -q 'rollback_tcp_peek_to_nginx_stream' dist/vps.sh
+grep -q 'sni_stack_health_check_enhanced' dist/vps.sh
+grep -q 'vpso-mux.service' dist/vps.sh
 grep -q 'func_443_network_test' dist/vps.sh
 grep -q 'func_docker_443_exposure_audit' dist/vps.sh
 grep -q 'func_docker_project_status' dist/vps.sh

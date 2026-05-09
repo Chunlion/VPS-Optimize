@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- 暂无。
+- 新增 experimental `tcp_peek` 443 单入口引擎：`vpso-mux` 使用 `MSG_PEEK` 解析 TLS ClientHello SNI，优先 `splice` 转发并支持 copy fallback；Nginx stream 仍是默认稳定模式。
+- 443 单入口管理中心追加 engine 状态、tcp_peek 配置生成、dry-run、8444 测试端口、切换、回滚、日志和增强体检入口。
+- 新增 `docs/443-tcp-peek-engine.md`，说明 experimental 引擎边界、测试流程、白名单、切换和回滚。
 
 ## v1.8 - 2026-05-08
 

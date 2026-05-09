@@ -74,6 +74,7 @@ cy
 | 文档 | 适合情况 |
 |---|---|
 | [INSTALL.md](INSTALL.md) | 第一次安装，不知道该走哪条路线 |
+| [docs/443-tcp-peek-engine.md](docs/443-tcp-peek-engine.md) | 了解 experimental TCP Peek + Splice 443 引擎 |
 | [docs/existing-server-migration.md](docs/existing-server-migration.md) | 已有 3x-ui、Caddy/Nginx、网站或订阅工具，需要迁移 |
 | [docs/recovery-runbook.md](docs/recovery-runbook.md) | SSH 失联、防火墙误封、443 改坏、服务起不来 |
 | [docs/compatibility.md](docs/compatibility.md) | 系统、虚拟化、IPv6、Docker 兼容性不确定 |
