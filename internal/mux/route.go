@@ -131,6 +131,8 @@ func matchRouteAllowed(route *Route, clientIP netip.Addr) Match {
 	match.Blocked = true
 	if route.Blackhole != "" {
 		match.Backend = route.Blackhole
+	} else {
+		match.Backend = ""
 	}
 	return match
 }

@@ -60,7 +60,7 @@ func TestRouteWhitelistBlocksClient(t *testing.T) {
 		Whitelist: []string{"1.2.3.4/32"},
 	}}
 	match := MatchRoute(cfg, "panel.example.com", netip.MustParseAddr("198.51.100.9"))
-	if match.Allowed || !match.Blocked {
+	if match.Allowed || !match.Blocked || match.Backend != "" {
 		t.Fatalf("unexpected whitelist decision: %+v", match)
 	}
 }

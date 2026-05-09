@@ -3764,6 +3764,13 @@ sni_stack_health_check() {
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
 
+    local current_mode
+    current_mode=$(get_entry_mode)
+    if [[ "$current_mode" != "nginx-stream" ]]; then
+        sni_stack_health_check_enhanced
+        return $?
+    fi
+
     local ok=0 warn=0 fail=0
     check_listen() {
         local name="$1"
@@ -4111,8 +4118,7 @@ write_vpso_mux_config_from_sni_stack() {
         [[ -n "$domain" ]] || continue
         route_name=$(sni_stack_route_name "tcp" "$domain")
         backend=$(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}")
-        ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
-        append_vpso_mux_route_yaml "$output_file" "$route_name" "$domain" "$backend" "$ranges"
+        append_vpso_mux_route_yaml "$output_file" "$route_name" "$domain" "$backend" ""
     done
 
     for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
@@ -4152,22 +4158,34 @@ install_vpso_mux_binary() {
     if [[ -x /usr/local/bin/vpso-mux ]]; then
         return 0
     fi
+
+    if ! command -v go >/dev/null 2>&1; then
+        echo -e "${CYAN}▶ 未检测到 Go，正在安装 vpso-mux 构建工具链...${PLAIN}"
+        if is_debian; then
+            install_pkg golang-go || install_pkg golang || return 1
+        elif is_redhat; then
+            install_pkg golang || return 1
+        else
+            echo -e "${RED}❌ 当前系统暂不支持自动安装 Go，请先安装 Go 1.22+ 后重试。${PLAIN}"
+            return 1
+        fi
+    fi
+
+    command -v go >/dev/null 2>&1 || { echo -e "${RED}❌ Go 安装后仍不可用，无法构建 vpso-mux。${PLAIN}"; return 1; }
+
     local source_dir="${SCRIPT_DIR:-$(pwd)}"
-    if command -v go >/dev/null 2>&1 && [[ -d "$source_dir/cmd/vpso-mux" ]]; then
+    if [[ -d "$source_dir/cmd/vpso-mux" ]]; then
         echo -e "${CYAN}▶ 正在从当前源码构建 vpso-mux...${PLAIN}"
         (cd "$source_dir" && go build -o /usr/local/bin/vpso-mux ./cmd/vpso-mux) || return 1
         chmod 755 /usr/local/bin/vpso-mux
         return 0
     fi
-    if command -v go >/dev/null 2>&1; then
-        echo -e "${CYAN}▶ 正在通过 go install 安装 vpso-mux...${PLAIN}"
-        GOBIN=/usr/local/bin go install github.com/Chunlion/VPS-Optimize/cmd/vpso-mux@latest || return 1
-        chmod 755 /usr/local/bin/vpso-mux 2>/dev/null || true
-        return 0
-    fi
-    echo -e "${RED}❌ 未找到 /usr/local/bin/vpso-mux，且当前系统未安装 Go，无法构建 vpso-mux 分流器。${PLAIN}"
-    echo -e "${YELLOW}请先安装发布版 vpso-mux 二进制，或在源码目录安装 Go 后重试。${PLAIN}"
-    return 1
+
+    echo -e "${CYAN}▶ 正在通过 go install 安装 vpso-mux...${PLAIN}"
+    GOBIN=/usr/local/bin go install github.com/Chunlion/VPS-Optimize/cmd/vpso-mux@latest || return 1
+    chmod 755 /usr/local/bin/vpso-mux 2>/dev/null || true
+    [[ -x /usr/local/bin/vpso-mux ]] || { echo -e "${RED}❌ vpso-mux 安装后仍不可执行：/usr/local/bin/vpso-mux${PLAIN}"; return 1; }
+    return 0
 }
 
 write_vpso_mux_systemd_service() {
@@ -4314,12 +4332,7 @@ rollback_tcp_peek_to_nginx_stream() {
         "vpso-mux 分流器服务和 Nginx Stream 443 监听关系" \
         "如 Nginx 回滚失败，请用最近的 /etc/vps-optimize/backups/sni-stack_* 手动恢复" \
         "Nginx Stream 是默认稳定模式，回滚后会重新运行链路体检。" || return 1
-    systemctl stop vpso-mux >/dev/null 2>&1 || true
-    systemctl disable vpso-mux >/dev/null 2>&1 || true
-    reapply_sni_stack_from_env --yes || return 1
-    write_single_443_engine_state "nginx_stream"
-    echo -e "${GREEN}✅ 已回滚到 Nginx Stream 模式。${PLAIN}"
-    sni_stack_health_check
+    switch_entry_mode "nginx-stream"
 }
 
 normalize_entry_mode_name() {
@@ -4430,12 +4443,12 @@ check_entry_mode_dependencies() {
             command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
             ;;
         "tcp-peek")
-            [[ -x /usr/local/bin/vpso-mux ]] || { echo -e "${RED}❌ vpso-mux 分流器不存在：缺少 /usr/local/bin/vpso-mux，拒绝切换到 TCP Peek + Splice 模式。${PLAIN}"; return 1; }
-            command -v caddy >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 Caddy，TCP Peek + Splice 模式无法转发 Web 流量。${PLAIN}"; return 1; }
+            install_vpso_mux_binary || { echo -e "${RED}❌ vpso-mux 分流器安装/构建失败，拒绝切换到 TCP Peek + Splice 模式。${PLAIN}"; return 1; }
+            command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
             ;;
         "xray-fallback")
             xray_entry_service_name >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 xray/x-ui/3x-ui systemd 服务，拒绝切换。${PLAIN}"; return 1; }
-            command -v caddy >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 Caddy，xray-fallback 无法 fallback 普通 HTTPS 到 Caddy。${PLAIN}"; return 1; }
+            command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
             ;;
     esac
 }
@@ -4540,7 +4553,11 @@ apply_nginx_stream_mode() {
     systemctl enable nginx >/dev/null 2>&1 || true
     systemctl restart nginx || return 1
     verify_public_443_listener_for_mode "nginx-stream" || return 1
+    probe_tls_sni_certificate "Nginx Stream 面板 SNI" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
     tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    if xray_entry_service_name >/dev/null 2>&1; then
+        restart_xray_entry_service || return 1
+    fi
     tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || return 1
     write_single_443_engine_state "nginx_stream" "$backup_dir"
 }
@@ -4566,7 +4583,11 @@ apply_tcppeek_mode() {
     systemctl enable vpso-mux >/dev/null 2>&1 || true
     systemctl restart vpso-mux || return 1
     verify_public_443_listener_for_mode "tcp-peek" || return 1
+    probe_tls_sni_certificate "TCP Peek 面板 SNI" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
     tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    if xray_entry_service_name >/dev/null 2>&1; then
+        restart_xray_entry_service || return 1
+    fi
     tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || return 1
     write_single_443_engine_state "tcp_peek" "$backup_dir"
 }
@@ -4583,6 +4604,7 @@ apply_xray_fallback_mode() {
     restart_xray_entry_service || return 1
     verify_public_443_listener_for_mode "xray-fallback" || return 1
     tcp_probe_host "Caddy fallback 后端" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    probe_tls_sni_certificate "Xray Fallback 面板 SNI" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
     write_single_443_engine_state "xray_fallback" "$backup_dir"
 }
 
@@ -4946,8 +4968,7 @@ sni_stack_health_check_enhanced() {
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
         domain="${TCP_ROUTE_SNIS[$i]}"
         [[ -n "$domain" ]] || continue
-        ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
-        echo -e "route tcp: ${domain} -> $(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}") whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
+        echo -e "route tcp: ${domain} -> $(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}") whitelist=no（非 Web/Caddy 域名不启用白名单）"
     done
     for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
         domain="${XRAY_SNI_ROUTE_SNIS[$i]}"
@@ -5210,25 +5231,10 @@ edit_sni_stack_runtime_profile() {
 
 reapply_sni_stack_from_env() {
     load_sni_stack_env || return 1
-    local backup_dir
     if [[ "${1:-}" != "--yes" ]]; then
         print_sni_stack_preview || return 1
     fi
-    create_sni_stack_backup
-    backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
-    install_nginx_stream_stack || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 组件检查/配置失败"; return 1; }
-    harden_nginx_public_errors
-    ensure_caddy_local_base_config || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 基础配置初始化失败"; return 1; }
-    cleanup_old_nginx_sni_stream_configs
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 配置校验失败"; return 1; }
-    write_nginx_sni_stream_config || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 配置校验失败"; return 1; }
-    systemctl restart caddy || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 服务重启失败"; return 1; }
-    systemctl restart nginx || { rollback_sni_stack_after_failure "$backup_dir" "Nginx 服务重启失败"; return 1; }
-    write_single_443_engine_state "nginx_stream" "$backup_dir"
-    print_sni_stack_result
+    reapply_current_entry_mode --yes
 }
 
 
@@ -6013,28 +6019,29 @@ print_sni_stack_result() {
     echo -e "  journalctl -u caddy -n 80 --no-pager"
     echo -e "  journalctl -u x-ui -u 3x-ui -n 80 --no-pager"
     echo -e ""
-    echo -e "${RED}绝对不要做：Caddy 监听公网 443；Xray 监听公网 443；3x-ui 面板或新增 TCP/SNI 入站暴露公网；3x-ui 证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+    case "$entry_mode" in
+        "xray-fallback")
+            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；3x-ui 面板、订阅服务或额外本地入站暴露公网；3x-ui 证书路径未清空就跑 Web fallback；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+            ;;
+        *)
+            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；Xray/3x-ui 主入站直接占用公网 443；3x-ui 面板或新增本地入站暴露公网；3x-ui 证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+            ;;
+    esac
 }
 
 apply_sni_stack_runtime_config() {
-    local backup_dir
+    local backup_dir current_mode
+    current_mode="${ENTRY_MODE:-$(get_entry_mode)}"
+    current_mode=$(normalize_entry_mode_name "$current_mode" 2>/dev/null || echo "nginx-stream")
+
     create_sni_stack_backup
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
-    install_nginx_stream_stack || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 组件检查/配置失败"; return 1; }
-    harden_nginx_public_errors
-    ensure_caddy_local_base_config || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 基础配置初始化失败"; return 1; }
-    cleanup_old_nginx_sni_stream_configs
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 配置校验失败"; return 1; }
-    write_nginx_sni_stream_config || { rollback_sni_stack_after_failure "$backup_dir" "Nginx stream 配置校验失败"; return 1; }
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || { rollback_sni_stack_after_failure "$backup_dir" "Caddy 服务重启失败"; return 1; }
-    systemctl enable nginx >/dev/null 2>&1 || true
-    systemctl restart nginx || { rollback_sni_stack_after_failure "$backup_dir" "Nginx 服务重启失败"; return 1; }
+    check_entry_mode_dependencies "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "入口模式依赖检查失败"; return 1; }
+    stop_public_443_entry_services_for_target "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "停止旧公网 443 入口服务失败"; return 1; }
+    apply_entry_mode_by_name "$current_mode" "$backup_dir" || { rollback_sni_stack_after_failure "$backup_dir" "入口模式 ${current_mode} 应用失败"; return 1; }
+    ENTRY_MODE="$current_mode"
     save_sni_stack_env
-    write_single_443_engine_state "nginx_stream" "$backup_dir"
+    write_single_443_engine_state "$(entry_mode_engine_name "$current_mode")" "$backup_dir"
     generate_caddy_cf_manifest
 }
 
@@ -6299,12 +6306,10 @@ list_sni_stack_tcp_routes() {
         return 0
     fi
 
-    local i num route_ranges
+    local i num
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
         num=$((i + 1))
         echo -e "${GREEN}${num}.${PLAIN} ${TCP_ROUTE_SNIS[$i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$i]}:${TCP_ROUTE_PORTS[$i]}"
-        route_ranges=$(sni_ip_whitelist_ranges_for_domain "${TCP_ROUTE_SNIS[$i]}")
-        [[ -n "$route_ranges" ]] && echo -e "   ${YELLOW}IP 白名单：${route_ranges}${PLAIN}"
     done
 }
 
@@ -6319,8 +6324,7 @@ add_sni_stack_tcp_route() {
     echo -e "${YELLOW}安全边界：后端只允许 127.0.0.1/localhost/::1，不会开放新公网端口。${PLAIN}"
     echo -e "------------------------------------------------"
 
-    local route_sni route_addr route_port existing idx enable_ip_whitelist whitelist_input whitelist_ranges current_client_ip
-    local -a whitelist_array=()
+    local route_sni route_addr route_port existing idx
     read_trimmed route_sni "请输入用于分流的新 SNI/域名（例如 relay.example.com）: "
     route_sni=$(normalize_domain_input "$route_sni")
     if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
@@ -6353,20 +6357,10 @@ add_sni_stack_tcp_route() {
         return 1
     fi
 
-    read_trimmed enable_ip_whitelist "是否为 ${route_sni} 启用 IP 白名单？(y/n，默认 n): "
-    if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
-        current_client_ip=$(detect_ssh_client_ip)
-        [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
-        read_trimmed whitelist_input "请输入允许访问 ${route_sni} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
-        normalize_ip_whitelist_input "$whitelist_input" whitelist_array || return 1
-        append_vps_public_ips_to_whitelist whitelist_array
-        whitelist_ranges=$(join_array_by_space "${whitelist_array[@]}")
-    fi
-
     echo -e ""
     echo -e "${CYAN}即将添加 TCP/SNI 分流：${route_sni}:${NGINX_LISTEN_PORT} -> ${route_addr}:${route_port}${PLAIN}"
     echo -e "${YELLOW}请确认 3x-ui 入站已监听 ${route_addr}:${route_port}，且客户端连接端口使用 ${NGINX_LISTEN_PORT}。${PLAIN}"
-    [[ -n "${whitelist_ranges:-}" ]] && echo -e "${YELLOW}IP 白名单：${whitelist_ranges}${PLAIN}"
+    echo -e "${YELLOW}说明：Web 白名单只保护 Caddy/Web 域名，不会应用到 TCP/SNI 或 Xray 节点流量。${PLAIN}"
     confirm_risk_action "新增 443 TCP/SNI 入站 ${route_sni}" \
         "Nginx stream SNI 分流规则，会把该 SNI 直通到本地 3x-ui 入站" \
         "使用 443 单入口备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" \
@@ -6376,7 +6370,6 @@ add_sni_stack_tcp_route() {
     TCP_ROUTE_SNIS[$idx]="$route_sni"
     TCP_ROUTE_ADDRS[$idx]="$route_addr"
     TCP_ROUTE_PORTS[$idx]="$route_port"
-    [[ -n "${whitelist_ranges:-}" ]] && set_sni_ip_whitelist_for_domain "$route_sni" "$whitelist_ranges"
     save_and_offer_reapply_sni_stack
 }
 
@@ -6791,7 +6784,7 @@ manage_sni_stack_tcp_routes() {
         echo -e "${GREEN}  2. 新增 TCP/SNI 入站${PLAIN}"
         echo -e "${GREEN}  3. 修改 TCP/SNI 入站${PLAIN}"
         echo -e "${GREEN}  4. 删除 TCP/SNI 入站${PLAIN}"
-        echo -e "${GREEN}  5. 管理域名 IP 白名单${PLAIN}       ${YELLOW}(可限制某个 TCP/SNI 入站来源 IP)${PLAIN}"
+        echo -e "${BLUE}  5. 查看 Web 白名单适用范围${PLAIN}"
         echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"
         echo -e "${GREEN}  7. 443 单入口链路体检${PLAIN}"
         echo -e "------------------------------------------------"
@@ -6805,7 +6798,10 @@ manage_sni_stack_tcp_routes() {
             2) add_sni_stack_tcp_route ;;
             3) edit_sni_stack_tcp_route ;;
             4) remove_sni_stack_tcp_route ;;
-            5) manage_sni_stack_ip_whitelist ;;
+            5)
+                echo -e "${YELLOW}Web 白名单只适用于 Caddy/Web 域名：面板、订阅、普通网站、面板域名和自定义反代域名。${PLAIN}"
+                echo -e "${YELLOW}TCP/SNI 入站和 Xray 节点流量不会启用 IP 白名单；如需限制来源，请在后端服务或防火墙侧单独设计。${PLAIN}"
+                ;;
             6) reapply_sni_stack_from_env ;;
             7) sni_stack_health_check ;;
             0) break ;;
@@ -9878,6 +9874,28 @@ tcp_probe_host() {
         return 0
     fi
     echo -e "${RED}❌ ${label}: ${host}:${port} 连接失败${PLAIN}"
+    return 1
+}
+
+probe_tls_sni_certificate() {
+    local label="$1"
+    local host="$2"
+    local port="$3"
+    local sni="$4"
+    local connect_target
+
+    if ! command -v timeout >/dev/null 2>&1 || ! command -v openssl >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ ${label}: 缺少 timeout 或 openssl，跳过 TLS/SNI 证书探测。${PLAIN}"
+        return 0
+    fi
+
+    connect_target=$(format_hostport "$host" "$port")
+    if timeout 10 openssl s_client -connect "$connect_target" -servername "$sni" </dev/null 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
+        echo -e "${GREEN}✅ ${label}: ${connect_target} / SNI ${sni} 已返回证书链${PLAIN}"
+        return 0
+    fi
+
+    echo -e "${RED}❌ ${label}: ${connect_target} / SNI ${sni} 未正常返回证书链${PLAIN}"
     return 1
 }
 
