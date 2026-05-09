@@ -4173,7 +4173,11 @@ require github.com/Chunlion/VPS-Optimize ${module_version}
 
 replace golang.org/x/sys => golang.org/x/sys v0.30.0
 EOF
-    (cd "$tmp_dir" && GOBIN=/usr/local/bin go install github.com/Chunlion/VPS-Optimize/cmd/vpso-mux)
+    (
+        cd "$tmp_dir" || exit 1
+        go mod download || exit 1
+        GOBIN=/usr/local/bin go install github.com/Chunlion/VPS-Optimize/cmd/vpso-mux
+    )
 }
 
 install_vpso_mux_binary() {

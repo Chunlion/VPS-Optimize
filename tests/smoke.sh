@@ -102,6 +102,7 @@ grep -q 'sni_stack_health_check_enhanced' dist/vps.sh
 grep -q 'vpso-mux.service' dist/vps.sh
 grep -q 'go_install_vpso_mux_latest' dist/vps.sh
 grep -q 'replace golang.org/x/sys => golang.org/x/sys v0.30.0' dist/vps.sh
+grep -q 'go mod download' dist/vps.sh
 grep -q 'golang.org/x/sys v0.30.0' go.mod
 if grep -q 'golang.org/x/sys v0.31.0' go.mod; then
     echo "vpso-mux must stay installable with Go 1.22 from common distro packages." >&2

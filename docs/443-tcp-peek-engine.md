@@ -26,6 +26,14 @@
   -> [16] 查看 TCP Peek + Splice 状态
 ```
 
+3x-ui 面板、订阅和 Xray 入站的具体填写方式见 [443 单入口分流教程](443-single-entry.md) 的“3x-ui 三种入口模式配置速查”。这里先给结论：
+
+| ENTRY_MODE | 3x-ui/Xray 应怎么监听 | 切换时最重要的注意事项 |
+| --- | --- | --- |
+| `nginx-stream` | 面板、订阅、Xray 入站都监听 `127.0.0.1` 本地端口 | 3x-ui/Xray 不要直接占用公网 `443` |
+| `tcp-peek` | 和 `nginx-stream` 相同，仍是本地端口 | 通常不需要改 3x-ui；公网 `443` 只从 `nginx` 换成 `vpso-mux` |
+| `xray-fallback` | 需要一个 3x-ui/Xray 主入站监听公网 `443`，并 fallback 到 Caddy 本地端口 | 切回其他模式前，必须先把这个 Xray 主入站从公网 `443` 移走 |
+
 ## Nginx Stream 默认稳定实现
 
 Nginx Stream 是默认稳定模式。公网 `443` 由 Nginx stream 监听，使用 `ssl_preread` 读取 TLS ClientHello 里的 SNI，但不终止 TLS、不解密流量。

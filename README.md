@@ -273,6 +273,8 @@ TCP Peek + Splice 模式：基于 MSG_PEEK 读取 TLS ClientHello 中的 SNI，�
 
 Xray 入站管理只记录 `SNI -> 本地地址:端口`，不是 3x-ui 入站编辑器。用户需要先在 3x-ui 中创建并启用本地入站，再把 SNI 分流记录写入脚本。Nginx Stream 模式和 TCP Peek + Splice 模式支持多个 Xray 本地入站分流。Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 `443` 默认由一个 Xray 主入站接管。脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。如需多个本地 Xray 入站分流，请使用 Nginx Stream 模式或 TCP Peek + Splice 模式。
 
+3x-ui 具体怎么填请看 [443 单入口分流详细教程](docs/443-single-entry.md) 里的“三种入口模式配置速查”。简要原则：Nginx Stream 和 TCP Peek 模式下，3x-ui 面板、订阅和 Xray 入站都应监听本机端口；Xray Fallback 模式下，只有一个 Xray 主入站监听公网 `443`，并由它 fallback 到 Caddy 本地端口。切回 Nginx Stream 或 TCP Peek 前，必须先把这个 Xray 主入站从公网 `443` 移走。
+
 普通 TLS 节点和 REALITY 节点不要混在一起判断：普通 TLS 更关注本机证书、Caddy fallback、Host/SNI 是否匹配；REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定。不要求 REALITY `serverName` 加入 Caddy，也不要求本机证书覆盖 REALITY `serverName`。
 
 证书策略保持简单固定：继续使用 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。

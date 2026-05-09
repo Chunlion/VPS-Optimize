@@ -2,9 +2,9 @@
 
 遇到面板打不开、订阅 404、证书失败或 REALITY 连接失败时，先看：[443 单入口排错手册](443-single-entry-troubleshooting.md)。
 
-这篇文档教你把 VPS 的公网 `443` 统一交给 Nginx stream，再按 SNI 分流到 Caddy、3x-ui 面板、订阅服务、网站反代和 REALITY 入站。
+这篇文档教你把 VPS 的公网 `443` 统一接入 VPS-Optimize 的 443 单入口。默认推荐 Nginx Stream，也可以在配置完成后切换到 TCP Peek + Splice 或 Xray Fallback。
 
-推荐架构是：
+默认 Nginx Stream 架构是：
 
 ```text
 公网 443 -> Nginx stream 按 SNI 分流
@@ -72,17 +72,147 @@ https://panel.example.com:1443/
 
 | 组件 | 监听位置 | 职责 |
 | --- | --- | --- |
-| Nginx stream | `0.0.0.0:443` | 公网唯一入口，按 SNI 分流 |
+| Nginx stream | `0.0.0.0:443` | 默认入口模式，按 SNI 分流 |
+| vpso-mux | `0.0.0.0:443` | TCP Peek + Splice 模式入口，和 Nginx Stream 二选一 |
+| Xray/3x-ui 主入站 | `0.0.0.0:443` | Xray Fallback 模式入口，和前两者二选一 |
 | Caddy | `127.0.0.1:8443` | 签发 Web 证书，反代面板、订阅和网站 |
 | 3x-ui 面板 | `127.0.0.1:40000` | 本机 HTTP 后端，不使用自带证书作为公网 HTTPS |
 | 3x-ui 订阅 | `127.0.0.1:2096` | 本机 HTTP 后端，由 Caddy 代理公网 HTTPS |
-| REALITY 入站 | `127.0.0.1:1443` | 由 Nginx stream 转发 REALITY 流量 |
+| REALITY / Xray 本地入站 | `127.0.0.1:1443` | 在 Nginx Stream 或 TCP Peek 模式下由入口按 SNI 转发 |
 
-核心原则只有三条：
+核心原则：
 
-1. 公网 `443` 只给 Nginx stream。
+1. 公网 `443` 同一时间只给一个入口进程：`nginx`、`vpso-mux` 或 Xray 主入站。
 2. Caddy 负责浏览器 HTTPS，3x-ui 面板和订阅只作为本地 HTTP 后端。
 3. REALITY 的 `dest` / `Target` 和 `serverNames` / `SNI` 写外部真实 HTTPS 站点，不要写自己的面板域名。
+
+## 3x-ui 三种入口模式配置速查
+
+三种入口模式共享同一套 Web 配置：面板域名、订阅路径、网站反代、Caddy 本地端口、证书和 Web 白名单都一样。区别只是谁监听公网 `443`，以及 3x-ui/Xray 主入站是否需要直接占用公网 `443`。
+
+### 三种模式都相同的 3x-ui 设置
+
+这些设置在 Nginx Stream、TCP Peek + Splice、Xray Fallback 三种模式下都一样：
+
+| 3x-ui 位置 | 应填写的内容 |
+| --- | --- |
+| 面板设置 -> 常规 -> 面板监听 IP | `127.0.0.1` |
+| 面板设置 -> 常规 -> 面板端口 | `40000`，或你的实际面板端口 |
+| 面板设置 -> 常规 -> url 根路径 / webBasePath | `/panel/`，或你的实际面板路径 |
+| 面板设置 -> 常规 -> 面板证书路径/私钥路径 | 清空 |
+| 订阅设置 -> 监听 IP | `127.0.0.1` |
+| 订阅设置 -> 监听端口 | `2096`，或你的实际订阅端口 |
+| 订阅设置 -> URI 路径 | `/sub/`，或你的实际普通订阅路径前缀 |
+| 订阅设置 -> Clash/Mihomo URI 路径 | `/clash/`，或你的实际 Clash/Mihomo 路径前缀 |
+| 订阅设置 -> 证书路径/私钥路径 | 清空 |
+
+443 跑通后，订阅反向代理 URI 建议填写公网 HTTPS 地址：
+
+```text
+普通订阅反向代理 URI：https://panel.example.com/sub/
+Clash/Mihomo 反向代理 URI：https://panel.example.com/clash/
+```
+
+`panel.example.com`、`/sub/`、`/clash/` 都是示例值，请替换成你的实际面板域名和路径。
+
+### 模式 1：Nginx Stream
+
+这是默认稳定模式。3x-ui/Xray 节点入站不要监听公网 `443`，只监听本机端口。
+
+| 3x-ui / Xray 入站设置 | 示例值 |
+| --- | --- |
+| REALITY 或其他本地 Xray 入站监听地址 | `127.0.0.1` |
+| REALITY 或其他本地 Xray 入站监听端口 | `1443`，或你的实际本地入站端口 |
+| 客户端连接地址 | `node.example.com` 或服务器公网 IP |
+| 客户端连接端口 | `443` |
+| REALITY `dest` / `Target` | 外部真实 HTTPS 站点，例如 `www.microsoft.com:443` |
+| REALITY `serverNames` / `SNI` | 同一个外部真实 HTTPS 站点，例如 `www.microsoft.com` |
+| External Proxy | 地址填 `node.example.com` 或服务器公网 IP，端口填 `443` |
+
+如果要多个本地 Xray 入站共用公网 `443`，先在 3x-ui 里创建多个本地入站，每个入站使用不同的 `127.0.0.1:端口`，再到：
+
+```text
+主菜单 [19 443 单入口管理中心] -> [10 Xray 入站管理]
+```
+
+只记录 `SNI -> 127.0.0.1:端口`。脚本不会创建、删除或修改 3x-ui 入站内部配置。
+
+### 模式 2：TCP Peek + Splice
+
+TCP Peek + Splice 模式下，3x-ui 的配置和 Nginx Stream 模式基本相同：面板、订阅和 Xray 入站仍然监听本机地址，客户端仍然连接公网 `443`。
+
+| 项目 | 说明 |
+| --- | --- |
+| 3x-ui 面板和订阅 | 保持 `127.0.0.1` 本地 HTTP 后端，证书路径清空 |
+| REALITY 或其他 Xray 入站 | 保持 `127.0.0.1:1443` 这类本地监听 |
+| 客户端连接端口 | 仍然是 `443` |
+| External Proxy | 仍然输出 `node.example.com:443` 或 `服务器公网 IP:443` |
+| Xray 入站管理 | 和 Nginx Stream 一样支持多个本地 Xray 入站按 SNI 分流 |
+
+从 Nginx Stream 切到 TCP Peek + Splice 时，通常不需要改 3x-ui 面板里的任何配置。变化的是公网 `443` 的监听进程：从 `nginx` 换成 `vpso-mux`。
+
+### 模式 3：Xray Fallback
+
+Xray Fallback 是特殊模式。公网 `443` 由你已经配置好的 3x-ui/Xray 主入站监听，普通 HTTPS 再由这个主入站 fallback 到 Caddy 本地端口。脚本不会替你编辑 3x-ui/Xray 入站内部配置。
+
+切到 xray-fallback 之前，你需要先在 3x-ui 里准备一个“主入站”：
+
+| 3x-ui / Xray 主入站设置 | 示例值 |
+| --- | --- |
+| 主入站监听地址 | `0.0.0.0`，或面板允许的公网监听方式 |
+| 主入站监听端口 | `443` |
+| fallback / fallback dest / 回落目标 | `127.0.0.1:8443`，端口以脚本里的 Caddy 本地端口为准 |
+| 客户端连接地址 | `node.example.com` 或服务器公网 IP |
+| 客户端连接端口 | `443` |
+| External Proxy | 如果订阅链接没有输出 `:443`，就设置地址为节点域名或服务器公网 IP，端口为 `443` |
+
+Web 面板和订阅仍然走 Caddy，所以面板证书路径、订阅证书路径仍然必须清空。`panel.example.com` 访问链路应是：
+
+```text
+浏览器 -> 公网 443 -> Xray 主入站 fallback -> Caddy 127.0.0.1:8443 -> 3x-ui 面板/订阅
+```
+
+xray-fallback 模式不支持脚本继续把多个 SNI 分流到多个本地 Xray 入站。`Xray 入站管理` 菜单只能查看已有规则和当前主入站候选，不能新增、删除或同步规则。需要多个本地 Xray 入站时，请使用 Nginx Stream 或 TCP Peek + Splice。
+
+如果你的主入站是 REALITY，请确认你使用的 3x-ui/Xray 入站类型确实能把普通 HTTPS fallback 到 Caddy。本脚本只检查公网 `443` 是否由 Xray 监听、Caddy fallback 后端是否可达，不会替你生成 Xray fallback 规则。
+
+### 模式切换时 3x-ui 要不要改
+
+| 切换方向 | 3x-ui 需要做什么 |
+| --- | --- |
+| Nginx Stream -> TCP Peek + Splice | 通常不用改 3x-ui。保持面板/订阅/Xray 入站都监听本机地址，客户端端口仍是 `443`。 |
+| TCP Peek + Splice -> Nginx Stream | 通常不用改 3x-ui。切回后公网 `443` 由 Nginx stream 监听。 |
+| Nginx Stream 或 TCP Peek + Splice -> Xray Fallback | 先在 3x-ui 里把一个主入站改为公网 `443`，并配置 fallback 到 Caddy 本地端口，再执行脚本切换。 |
+| Xray Fallback -> Nginx Stream 或 TCP Peek + Splice | 先把 3x-ui/Xray 主入站从公网 `443` 移走，改回 `127.0.0.1:1443` 这类本地端口，或先禁用该公网 443 主入站，再执行脚本切换。 |
+| 重新应用当前模式 | 如果只是重建配置，不需要改 3x-ui；如果你改过面板端口、订阅路径或 Xray 本地端口，先在 `[14 修改 443 共享参数]` 同步脚本保存值。 |
+
+从 xray-fallback 切回 Nginx Stream 或 TCP Peek + Splice 前，最容易出错的是忘记把 3x-ui/Xray 主入站从公网 `443` 移走。否则 Nginx 或 `vpso-mux` 会和 Xray 抢同一个公网端口，切换会失败或自动回滚。
+
+### 切换前后检查清单
+
+切换前检查：
+
+```text
+主菜单 [19 443 单入口管理中心] -> [1 查看当前入口状态 / 监听详情]
+ss -lntp | grep ':443'
+```
+
+切换后检查：
+
+```text
+主菜单 [19 443 单入口管理中心] -> [11 443 链路体检]
+主菜单 [19 443 单入口管理中心] -> [12 443 网络访问测试]
+```
+
+预期监听方：
+
+| ENTRY_MODE | 公网 443 应由谁监听 |
+| --- | --- |
+| `nginx-stream` | `nginx` |
+| `tcp-peek` | `vpso-mux` |
+| `xray-fallback` | `xray` / `3x-ui` / `x-ui` 托管的 Xray |
+
+无论哪种模式，都不要让 Caddy、3x-ui 面板端口、订阅端口或额外本地入站直接暴露公网。
 
 ## Xray 入站管理边界
 
