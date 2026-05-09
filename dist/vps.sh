@@ -2924,6 +2924,172 @@ caddy_format_configs() {
     fi
 }
 
+get_entry_mode() {
+    local env_file="/etc/vps-optimize/sni-stack.env"
+    local mode=""
+
+    if [[ ! -f "$env_file" ]]; then
+        echo "not-configured"
+        return 0
+    fi
+
+    mode=$(
+        # shellcheck disable=SC1090
+        source "$env_file" 2>/dev/null || true
+        printf '%s' "${ENTRY_MODE:-}"
+    )
+
+    case "$mode" in
+        ""|"nginx-stream"|"nginx_stream")
+            echo "nginx-stream"
+            ;;
+        "xray-fallback"|"xray_fallback")
+            echo "xray-fallback"
+            ;;
+        "tcp-peek"|"tcp_peek")
+            echo "tcp-peek"
+            ;;
+        *)
+            echo "invalid:${mode}"
+            ;;
+    esac
+}
+
+set_entry_mode() {
+    local mode="$1"
+    local env_file="/etc/vps-optimize/sni-stack.env"
+
+    case "$mode" in
+        "nginx_stream") mode="nginx-stream" ;;
+        "xray_fallback") mode="xray-fallback" ;;
+        "tcp_peek") mode="tcp-peek" ;;
+    esac
+
+    case "$mode" in
+        "nginx-stream"|"xray-fallback"|"tcp-peek") ;;
+        *)
+            echo -e "${RED}Invalid ENTRY_MODE: ${mode}${PLAIN}"
+            return 1
+            ;;
+    esac
+
+    mkdir -p /etc/vps-optimize
+    if [[ -f "$env_file" ]] && grep -q '^ENTRY_MODE=' "$env_file" 2>/dev/null; then
+        sed -i "s|^ENTRY_MODE=.*|ENTRY_MODE='${mode}'|" "$env_file"
+    else
+        printf "ENTRY_MODE='%s'\n" "$mode" >> "$env_file"
+    fi
+    chmod 600 "$env_file" 2>/dev/null || true
+}
+
+detect_443_listener() {
+    local lines line proc normalized seen procs
+    lines=$(ss -lntp 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' || true)
+
+    if [[ -z "$lines" ]]; then
+        echo "none|none"
+        return 0
+    fi
+
+    seen=" "
+    procs=""
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        proc=$(echo "$line" | sed -n 's/.*users:((("\([^"]*\)".*/\1/p' | head -n1)
+        proc="${proc:-unknown}"
+        case "$proc" in
+            nginx*) normalized="nginx" ;;
+            xray*) normalized="xray" ;;
+            vpso-mux*|tcppeek*|tcp-peek*) normalized="tcppeek" ;;
+            caddy*) normalized="caddy" ;;
+            *) normalized="unknown:${proc}" ;;
+        esac
+        if [[ "$seen" != *" ${normalized} "* ]]; then
+            seen+="${normalized} "
+            if [[ -z "$procs" ]]; then
+                procs="$normalized"
+            else
+                procs="${procs},${normalized}"
+            fi
+        fi
+    done <<< "$lines"
+
+    if [[ "$procs" == *,* ]]; then
+        echo "multiple|${procs}"
+    else
+        echo "${procs}|${procs}"
+    fi
+}
+
+detect_current_entry_status() {
+    local env_file="/etc/vps-optimize/sni-stack.env"
+    local listener_info expected_listener
+
+    ENTRY_STATUS_MODE=$(get_entry_mode)
+    ENTRY_STATUS_CADDY_ADDR="not-configured"
+    ENTRY_STATUS_CADDY_PORT="not-configured"
+    ENTRY_STATUS_XRAY_ADDR="not-configured"
+    ENTRY_STATUS_XRAY_PORT="not-configured"
+
+    if [[ -f "$env_file" ]]; then
+        # shellcheck disable=SC1090
+        source "$env_file" 2>/dev/null || true
+        ENTRY_STATUS_CADDY_ADDR="${CADDY_LISTEN_ADDR:-not-configured}"
+        ENTRY_STATUS_CADDY_PORT="${CADDY_LISTEN_PORT:-not-configured}"
+        ENTRY_STATUS_XRAY_ADDR="${XRAY_LISTEN_ADDR:-not-configured}"
+        ENTRY_STATUS_XRAY_PORT="${XRAY_LISTEN_PORT:-not-configured}"
+    fi
+
+    listener_info=$(detect_443_listener)
+    ENTRY_STATUS_LISTENER="${listener_info%%|*}"
+    ENTRY_STATUS_LISTENER_PROCESS="${listener_info#*|}"
+    ENTRY_STATUS_NGINX_SERVICE=$(service_status_compact nginx)
+    ENTRY_STATUS_XRAY_SERVICE=$(service_status_compact xray)
+    ENTRY_STATUS_TCPPEEK_SERVICE=$(service_status_compact vpso-mux)
+    ENTRY_STATUS_CADDY_LISTEN_LINE="not-configured"
+    ENTRY_STATUS_XRAY_LISTEN_LINE="not-configured"
+
+    if is_valid_port "$ENTRY_STATUS_CADDY_PORT"; then
+        ENTRY_STATUS_CADDY_LISTEN_LINE=$(get_listen_line_by_port "$ENTRY_STATUS_CADDY_PORT")
+    fi
+    if is_valid_port "$ENTRY_STATUS_XRAY_PORT"; then
+        ENTRY_STATUS_XRAY_LISTEN_LINE=$(get_listen_line_by_port "$ENTRY_STATUS_XRAY_PORT")
+    fi
+
+    case "$ENTRY_STATUS_MODE" in
+        "nginx-stream") expected_listener="nginx" ;;
+        "xray-fallback") expected_listener="xray" ;;
+        "tcp-peek") expected_listener="tcppeek" ;;
+        *) expected_listener="" ;;
+    esac
+
+    if [[ -n "$expected_listener" && "$ENTRY_STATUS_LISTENER" == "$expected_listener" ]]; then
+        ENTRY_STATUS_CONSISTENT="yes"
+    else
+        ENTRY_STATUS_CONSISTENT="no"
+    fi
+}
+
+show_current_entry_status() {
+    detect_current_entry_status
+    echo -e "${BOLD}Current 443 entry status${PLAIN}"
+    echo -e "ENTRY_MODE: ${ENTRY_STATUS_MODE}"
+    echo -e "Public 443 listener: ${ENTRY_STATUS_LISTENER_PROCESS}"
+    echo -e "Caddy local listen: ${ENTRY_STATUS_CADDY_ADDR}:${ENTRY_STATUS_CADDY_PORT}"
+    echo -e "  ${ENTRY_STATUS_CADDY_LISTEN_LINE}"
+    echo -e "Xray local listen: ${ENTRY_STATUS_XRAY_ADDR}:${ENTRY_STATUS_XRAY_PORT}"
+    echo -e "  ${ENTRY_STATUS_XRAY_LISTEN_LINE}"
+    echo -e "tcppeek service: ${ENTRY_STATUS_TCPPEEK_SERVICE}"
+    echo -e "nginx service: ${ENTRY_STATUS_NGINX_SERVICE}"
+    echo -e "xray service: ${ENTRY_STATUS_XRAY_SERVICE}"
+    if [[ "$ENTRY_STATUS_CONSISTENT" == "yes" ]]; then
+        echo -e "Mode/listener consistency: ${GREEN}consistent${PLAIN}"
+    else
+        echo -e "Mode/listener consistency: ${YELLOW}inconsistent${PLAIN}"
+        echo -e "${YELLOW}配置模式与实际监听不一致，建议重新应用当前入口模式。${PLAIN}"
+    fi
+}
+
 load_sni_stack_env() {
     local env_file="/etc/vps-optimize/sni-stack.env"
     if [[ ! -f "$env_file" ]]; then
@@ -2932,6 +3098,7 @@ load_sni_stack_env() {
     fi
     # shellcheck disable=SC1090
     source "$env_file"
+    ENTRY_MODE=$(get_entry_mode)
     PANEL_WEB_PATH=$(normalize_path_prefix "${PANEL_WEB_PATH:-/panel/}")
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
     CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
@@ -4564,9 +4731,19 @@ issue_and_install_cert_for_domain() {
 
 save_sni_stack_env() {
     mkdir -p /etc/vps-optimize
-    local site_domains_csv site_backend_addrs_csv site_backend_ports_csv
+    local entry_mode site_domains_csv site_backend_addrs_csv site_backend_ports_csv
     local tcp_route_snis_csv tcp_route_addrs_csv tcp_route_ports_csv
     local sni_ip_whitelist_domains_csv sni_ip_whitelist_ranges_pipe
+    entry_mode="${ENTRY_MODE:-$(get_entry_mode)}"
+    case "$entry_mode" in
+        "nginx_stream") entry_mode="nginx-stream" ;;
+        "xray_fallback") entry_mode="xray-fallback" ;;
+        "tcp_peek") entry_mode="tcp-peek" ;;
+    esac
+    case "$entry_mode" in
+        "nginx-stream"|"xray-fallback"|"tcp-peek") ;;
+        *) entry_mode="nginx-stream" ;;
+    esac
     site_domains_csv=$(IFS=','; echo "${SITE_DOMAINS[*]}")
     site_backend_addrs_csv=$(IFS=','; echo "${SITE_BACKEND_ADDRS[*]}")
     site_backend_ports_csv=$(IFS=','; echo "${SITE_BACKEND_PORTS[*]}")
@@ -4576,6 +4753,7 @@ save_sni_stack_env() {
     sni_ip_whitelist_domains_csv=$(IFS=','; echo "${SNI_IP_WHITELIST_DOMAINS[*]}")
     sni_ip_whitelist_ranges_pipe=$(IFS='|'; echo "${SNI_IP_WHITELIST_RANGES[*]}")
     cat <<EOF > /etc/vps-optimize/sni-stack.env
+ENTRY_MODE='${entry_mode}'
 PANEL_DOMAIN='${PANEL_DOMAIN}'
 SITE_DOMAIN='${SITE_DOMAINS[0]:-}'
 SITE_DOMAINS_CSV='${site_domains_csv}'
@@ -11666,6 +11844,8 @@ func_panel_deploy_menu() {
 func_sni_stack_quick_menu() {
     while true; do
         clear
+        show_current_entry_status
+        echo -e "------------------------------------------------"
         echo -e "${CYAN}================================================${PLAIN}"
         print_breadcrumb "443 单入口管理中心"
         echo -e "${BOLD}🧩 443 单入口管理中心${PLAIN}"
