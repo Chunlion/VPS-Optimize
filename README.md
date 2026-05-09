@@ -264,7 +264,7 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 - Caddy 默认监听 `127.0.0.1:8443`。
 - REALITY 默认监听 `127.0.0.1:1443`。
 - 3x-ui 面板默认监听 `127.0.0.1:40000`。
-- 3x-ui 面板 SSL/HTTPS 应关闭，证书路径和私钥路径留空。
+- 3x-ui 安装阶段选择证书只是临时完成安装流程；接入 443 单入口前，应清空 3x-ui 面板和订阅证书路径，让 Caddy 接管公网 HTTPS。
 - REALITY 的 `dest` / `Target` 和 `serverNames` / `SNI` 必须写外部真实 HTTPS 站点，不要写面板域名。
 
 Xray 入站管理只记录 `SNI -> 本地地址:端口`，不是 3x-ui 入站编辑器。用户需要先在 3x-ui 中创建并启用本地入站，再把 SNI 分流记录写入脚本。Nginx Stream 和 TCP Peek 模式支持多个 Xray 本地入站分流。Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 `443` 默认由一个 Xray 主入站接管。脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。如需多个本地 Xray 入站分流，请使用 Nginx Stream 或 TCP Peek 模式。
@@ -484,7 +484,7 @@ systemctl status sshd --no-pager
 优先检查：
 
 - 3x-ui 面板是否监听 `127.0.0.1:40000`。
-- 3x-ui 面板 SSL/HTTPS 是否关闭。
+- 3x-ui 面板和订阅证书路径是否已清空，让 Caddy 接管公网 HTTPS。
 - Caddy 是否监听 `127.0.0.1:8443`。
 - Nginx stream 是否监听公网 `0.0.0.0:443`。
 - 云安全组是否放行 `443`。

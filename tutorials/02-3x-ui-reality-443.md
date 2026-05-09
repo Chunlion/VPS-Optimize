@@ -88,13 +88,13 @@ site.example.com -> Caddy -> 本地网站后端
 |---|---|
 | 公网 `443` 只给 Nginx stream | 避免 Caddy、Xray、面板抢端口 |
 | Caddy 默认监听本地 `8443` | 浏览器 HTTPS 由 Caddy 处理 |
-| 3x-ui 面板关闭自带 HTTPS | 面板作为本地 HTTP 后端 |
+| 3x-ui 面板不使用自带证书作为公网 HTTPS | 面板作为本地 HTTP 后端 |
 | REALITY 使用外部真实 SNI | 不要把 `dest` 写成自己的面板域名 |
 | 成功后再收紧防火墙 | 先跑通，再只保留必要端口 |
 
 `Xray 入站管理` 只记录 `SNI -> 本地地址:端口`，不是 3x-ui 入站编辑器；需要先在 3x-ui 中创建并启用本地入站。Nginx Stream 和 TCP Peek 模式支持多个本地 Xray 入站按 SNI 分流；Xray 本身可以有多个入站，但 xray-fallback 模式下公网 `443` 默认由一个 Xray 主入站接管，脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。
 
-普通 TLS 和 REALITY 要分开判断：普通 TLS 更关注本机证书、Caddy fallback、Host/SNI 是否匹配；REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定，不要求 REALITY `serverName` 加入 Caddy，也不要求本机证书覆盖 REALITY `serverName`。证书策略仍然使用 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。
+普通 TLS 和 REALITY 要分开判断：普通 TLS 更关注本机证书、Caddy fallback、Host/SNI 是否匹配；REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定，不要求 REALITY `serverName` 加入 Caddy，也不要求本机证书覆盖 REALITY `serverName`。证书策略仍然使用 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。3x-ui 安装阶段选择的证书只用于完成安装流程，不是 443 单入口最终使用的证书方案。
 
 ## 操作步骤
 
@@ -132,7 +132,19 @@ ss -lntp | grep ':443' || echo "443 未监听"
 主菜单 [4 面板、节点与订阅工具] -> [1 管理 3x-ui 面板]
 ```
 
-如果未安装，选择安装 3x-ui。安装时先让它正常跑起来即可，后面接入 443 前再统一整理监听地址和证书路径。
+如果未安装，选择安装 3x-ui。安装器可能强制要求选择证书方式，例如为域名申请证书、为 IP 申请证书，或选择已有证书路径。这里的选择只是为了完成 3x-ui 安装流程，不是 443 单入口最终使用的证书方案。
+
+如果安装器强制要求选择证书方式，可以先按提示选择一种方式完成安装。如果你不确定选哪个，可以临时选择为域名申请证书完成安装；后续接入 443 单入口前，需要清空 3x-ui 面板和订阅证书路径。
+
+| 安装器选项 | 在本教程中的作用 | 后续处理 |
+|---|---|---|
+| 为域名申请证书 | 可用于临时完成 3x-ui 安装 | 接入 443 前清空 3x-ui 证书路径 |
+| 为 IP 申请证书 | 仅作为临时过渡，不推荐作为正式公网 HTTPS | 接入 443 前清空 3x-ui 证书路径 |
+| 选择已有证书路径 | 可用于临时完成安装 | 接入 443 前清空 3x-ui 证书路径 |
+
+最终架构是：公网 HTTPS 由 Caddy 统一处理，证书由 VPS-Optimize 使用 `acme.sh + Cloudflare DNS API` 申请和安装；3x-ui 面板和订阅只作为本地 HTTP 后端，3x-ui 自带证书不作为最终公网证书方案。
+
+安装时先让它正常跑起来即可，后面接入 443 前再统一整理监听地址和证书路径。
 
 建议记录这些值：
 
@@ -147,6 +159,8 @@ ss -lntp | grep ':443' || echo "443 未监听"
 | Clash/Mihomo 路径 | `/clash/` |
 
 ### 3. 清空 3x-ui 面板证书路径
+
+只要你准备接入 VPS-Optimize 的 443 单入口，就应清空 3x-ui 面板和订阅证书路径，让 Caddy 接管公网 HTTPS。
 
 进入 3x-ui 面板：
 
@@ -165,7 +179,7 @@ ss -lntp | grep ':443' || echo "443 未监听"
 
 保存并重启面板。
 
-原因：接入 443 单入口后，公网 HTTPS 由 Caddy 处理，3x-ui 面板只做本地 HTTP 后端。如果面板自己也开 HTTPS，很容易出现重定向循环、502 或证书路径混乱。
+原因：接入 443 单入口后，公网 HTTPS 由 Caddy 处理，3x-ui 面板只做本地 HTTP 后端。如果不清空，可能导致 502 Bad Gateway、HTTP/HTTPS 后端协议不匹配、重定向循环、证书路径混乱、面板或订阅异常。
 
 ### 4. 设置面板监听
 

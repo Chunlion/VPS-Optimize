@@ -9,7 +9,7 @@ CYAN='\033[1;36m'
 PLAIN='\033[0m'
 BOLD='\033[1m'
 
-SCRIPT_VERSION="v1.8"
+SCRIPT_VERSION="v1.9"
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
 TRAFFIC_GUARD_CONFIG="/etc/vps-optimize/traffic-guard.conf"
