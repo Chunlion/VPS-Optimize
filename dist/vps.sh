@@ -4438,7 +4438,7 @@ start_tcp_peek_test_port() {
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
     tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
-    tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || return 1
+    tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1 || return 1
     run_tcppeek_preflight_service 1 "8444" || return 1
     echo -e "${GREEN}✅ vpso-mux 预检服务已启动在测试端口 8444，公网 443 未改动。${PLAIN}"
     echo -e "测试命令："
@@ -4461,7 +4461,7 @@ preflight_tcppeek_before_cutover() {
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
     tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
-    tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || {
+    tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1 || {
         echo -e "${RED}❌ Xray 本地入站不可达，拒绝切换 TCP Peek。请先在 3x-ui/Xray 中准备本地监听入站。${PLAIN}"
         return 1
     }
@@ -4835,7 +4835,7 @@ apply_nginx_stream_mode() {
     if xray_entry_service_name >/dev/null 2>&1; then
         restart_xray_entry_service || echo -e "${YELLOW}⚠️ Xray/3x-ui 服务重启失败；Nginx Stream/Web 入口已恢复，请单独检查 Xray 入站。${PLAIN}"
     fi
-    if ! tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT"; then
+    if ! tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1; then
         echo -e "${YELLOW}⚠️ Nginx Stream/Web 入口已恢复，但 Xray/REALITY 本地入站未连通。${PLAIN}"
         echo -e "${YELLOW}请在 3x-ui/Xray 确认本地入站正在监听 ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}，或把脚本里的 Xray 本地端口改成实际值。${PLAIN}"
     fi
@@ -4874,7 +4874,7 @@ apply_tcppeek_mode() {
     if xray_entry_service_name >/dev/null 2>&1; then
         restart_xray_entry_service || return 1
     fi
-    tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || return 1
+    tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1 || return 1
     write_single_443_engine_state "tcp_peek" "$backup_dir"
 }
 
@@ -10180,15 +10180,63 @@ tcp_probe_host() {
     local label="$1"
     local host="$2"
     local port="$3"
-    if ! command -v timeout >/dev/null 2>&1; then
-        echo -e "${YELLOW}⚠️ ${label}: 缺少 timeout，跳过 TCP 探测。${PLAIN}"
-        return 1
-    fi
-    if timeout 5 bash -c 'cat < /dev/null > /dev/tcp/$1/$2' _ "$host" "$port" 2>/dev/null; then
-        echo -e "${GREEN}✅ ${label}: ${host}:${port} 可连接${PLAIN}"
-        return 0
-    fi
+    local attempts="${4:-3}"
+    local delay="${5:-1}"
+    local i
+
+    for ((i = 1; i <= attempts; i++)); do
+        if tcp_probe_once "$host" "$port"; then
+            echo -e "${GREEN}✅ ${label}: ${host}:${port} 可连接${PLAIN}"
+            return 0
+        fi
+        if local_listen_socket_matches_probe "$host" "$port"; then
+            echo -e "${GREEN}✅ ${label}: ${host}:${port} 已检测到本地监听${PLAIN}"
+            return 0
+        fi
+        [[ "$i" -lt "$attempts" ]] && sleep "$delay"
+    done
+
     echo -e "${RED}❌ ${label}: ${host}:${port} 连接失败${PLAIN}"
+    return 1
+}
+
+tcp_probe_once() {
+    local host="$1"
+    local port="$2"
+
+    if command -v nc >/dev/null 2>&1; then
+        nc -z -w 3 "$host" "$port" >/dev/null 2>&1 && return 0
+    fi
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 5 bash -c 'cat < /dev/null > /dev/tcp/$1/$2' _ "$host" "$port" 2>/dev/null && return 0
+    fi
+    return 1
+}
+
+is_loopback_probe_host() {
+    case "$1" in
+        127.*|localhost|::1|"[::1]") return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+local_listen_socket_matches_probe() {
+    local host="$1"
+    local port="$2"
+    local endpoint
+
+    is_loopback_probe_host "$host" || return 1
+    command -v ss >/dev/null 2>&1 || return 1
+
+    while IFS= read -r endpoint; do
+        [[ -n "$endpoint" ]] || continue
+        case "$endpoint" in
+            127.*:"$port"|0.0.0.0:"$port"|\*:"$port"|"[::1]":"$port"|"[::]":"$port")
+                return 0
+                ;;
+        esac
+    done < <(ss -H -lnt 2>/dev/null | awk -v p=":${port}" '$4 ~ p"$" {print $4}')
+
     return 1
 }
 

@@ -130,6 +130,10 @@ grep -q 'listener=$(detect_443_listener "$NGINX_LISTEN_PORT")' dist/vps.sh
 grep -q 'for ((i = 1; i <= tries; i++)); do' dist/vps.sh
 grep -q 'stop_vpso_mux_services_for_restore' dist/vps.sh
 grep -q 'systemctl stop vpso-mux-preflight' dist/vps.sh
+grep -q 'tcp_probe_once' dist/vps.sh
+grep -q 'local_listen_socket_matches_probe "$host" "$port"' dist/vps.sh
+grep -q 'is_loopback_probe_host "$host"' dist/vps.sh
+grep -q 'Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1' dist/vps.sh
 grep -q 'nginx -T .*grep -Fq "$conf_file"' dist/vps.sh
 grep -q 'apply_nginx_stream_mode "$backup_dir"' dist/vps.sh
 grep -q 'local current_mode backup_dir assume_yes' dist/vps.sh
