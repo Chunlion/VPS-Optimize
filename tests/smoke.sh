@@ -122,8 +122,28 @@ grep -q 'TCP Peek 8444 预检' dist/vps.sh
 grep -q 'print_vpso_mux_failure_context' dist/vps.sh
 grep -q 'print_nginx_stream_failure_context' dist/vps.sh
 grep -q 'assert_nginx_stream_config_loaded' dist/vps.sh
+grep -q 'listener_info_has_entry' dist/vps.sh
+grep -q 'listener_info_has_entry "$listener" "xray"' dist/vps.sh
+grep -q 'listener_info_has_entry "$listener" "nginx"' dist/vps.sh
+grep -q 'listener_info_has_entry "$listener" "tcppeek"' dist/vps.sh
+grep -q 'listener=$(detect_443_listener "$NGINX_LISTEN_PORT")' dist/vps.sh
+grep -q 'for ((i = 1; i <= tries; i++)); do' dist/vps.sh
+grep -q 'stop_vpso_mux_services_for_restore' dist/vps.sh
+grep -q 'systemctl stop vpso-mux-preflight' dist/vps.sh
 grep -q 'nginx -T .*grep -Fq "$conf_file"' dist/vps.sh
 grep -q 'apply_nginx_stream_mode "$backup_dir"' dist/vps.sh
+grep -q 'local current_mode backup_dir assume_yes' dist/vps.sh
+grep -q 'if \[\[ "$assume_yes" != "--yes" \]\]; then' dist/vps.sh
+grep -q 'if ! restart_service_if_available nginx; then' dist/vps.sh
+grep -q 'stop_vpso_mux_service_if_public_443 || return 1' dist/vps.sh
+grep -q 'stop_xray_entry_service_if_public_443 || return 1' dist/vps.sh
+grep -q 'Xray 仍在监听公网 443' dist/vps.sh
+grep -q 'if ! stop_public_443_entry_services_for_target "$old_mode"; then' dist/vps.sh
+grep -q 'if ! apply_entry_mode_by_name "$old_mode" "$backup_dir"; then' dist/vps.sh
+grep -q 'backup_dir=$(backup_entry_mode_config) || return 1' dist/vps.sh
+grep -q 'issue_and_install_cert_for_domain "$PANEL_DOMAIN" "$CF_TOKEN" || { rollback_sni_stack_after_failure "$backup_dir"' dist/vps.sh
+grep -q 'issue_and_install_cert_for_domain "$site_domain" "$CF_TOKEN" || { rollback_sni_stack_after_failure "$backup_dir"' dist/vps.sh
+grep -q 'preflight_entry_mode_before_cutover "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir"' dist/vps.sh
 if awk '/if \[\[ "\$NGINX_LISTEN_ADDR" == "0\.0\.0\.0" \]\]/{flag=1; next} /elif \[\[ "\$NGINX_LISTEN_ADDR" == "::" \]\]/{flag=0} flag {print}' dist/vps.sh | grep -q '\[::\]:\${listen_port}'; then
     echo "vpso-mux must not emit both 0.0.0.0 and [::] listeners for one public port." >&2
     exit 1

@@ -1788,8 +1788,9 @@ listen_line_status() {
 }
 
 detect_443_listener() {
+    local port="${1:-${NGINX_LISTEN_PORT:-443}}"
     local lines line proc normalized seen procs
-    lines=$(ss -lntp 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' || true)
+    lines=$(ss -lntp 2>/dev/null | awk -v p=":${port}" '$4 ~ p"$" {print}' || true)
 
     if [[ -z "$lines" ]]; then
         echo "none|none"
@@ -1817,6 +1818,15 @@ detect_443_listener() {
     else
         echo "${procs}|${procs}"
     fi
+}
+
+listener_info_has_entry() {
+    local listener_info="$1"
+    local expected="$2"
+    local primary labels
+    primary="${listener_info%%|*}"
+    labels="${listener_info#*|}"
+    [[ "$primary" == "$expected" || ",${labels}," == *",${expected},"* ]]
 }
 
 detect_current_entry_status() {
@@ -1861,7 +1871,7 @@ detect_current_entry_status() {
 
     expected_listener=$(entry_mode_expected_listener "$ENTRY_STATUS_MODE")
 
-    if [[ -n "$expected_listener" && "$ENTRY_STATUS_LISTENER" == "$expected_listener" ]]; then
+    if [[ -n "$expected_listener" ]] && listener_info_has_entry "$listener_info" "$expected_listener"; then
         ENTRY_STATUS_CONSISTENT="yes"
     else
         ENTRY_STATUS_CONSISTENT="no"
@@ -3167,17 +3177,58 @@ restart_xray_entry_service() {
 stop_xray_entry_service_if_public_443() {
     local listener svc
     listener=$(detect_443_listener)
-    [[ "${listener%%|*}" == "xray" ]] || return 0
+    listener_info_has_entry "$listener" "xray" || return 0
     svc=$(xray_entry_service_name) || return 0
-    systemctl stop "$svc" >/dev/null 2>&1 || true
+    if ! systemctl stop "$svc"; then
+        echo -e "${RED}❌ 停止 ${svc} 失败，公网 443 仍可能被 Xray 占用。${PLAIN}"
+        return 1
+    fi
+    sleep 1
+    listener=$(detect_443_listener)
+    if listener_info_has_entry "$listener" "xray"; then
+        echo -e "${RED}❌ ${svc} 已执行停止，但 Xray 仍在监听公网 443，拒绝继续切换入口。${PLAIN}"
+        return 1
+    fi
+}
+
+stop_vpso_mux_service_if_public_443() {
+    local listener
+    listener=$(detect_443_listener)
+    listener_info_has_entry "$listener" "tcppeek" || return 0
+    if ! systemctl stop vpso-mux; then
+        echo -e "${RED}❌ 停止 vpso-mux 失败，公网 443 仍可能被 TCP Peek 占用。${PLAIN}"
+        print_vpso_mux_failure_context "$NGINX_LISTEN_PORT"
+        return 1
+    fi
+    sleep 1
+    listener=$(detect_443_listener)
+    if listener_info_has_entry "$listener" "tcppeek"; then
+        echo -e "${RED}❌ vpso-mux 已执行停止，但 TCP Peek 仍在监听公网 443，拒绝继续切换入口。${PLAIN}"
+        print_vpso_mux_failure_context "$NGINX_LISTEN_PORT"
+        return 1
+    fi
 }
 
 disable_nginx_stream_public_443() {
     local nginx_conf="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
+    local listener
     [[ -e "$nginx_conf" ]] && quarantine_path "$nginx_conf" "/etc/vps-optimize/quarantine/nginx-sni" >/dev/null 2>&1 || true
     if command -v nginx >/dev/null 2>&1; then
-        nginx -t >/dev/null 2>&1 || return 1
-        restart_service_if_available nginx >/dev/null 2>&1 || true
+        if ! nginx -t; then
+            print_nginx_stream_failure_context "$NGINX_LISTEN_PORT"
+            return 1
+        fi
+        if ! restart_service_if_available nginx; then
+            print_nginx_stream_failure_context "$NGINX_LISTEN_PORT"
+            return 1
+        fi
+        sleep 1
+        listener=$(detect_443_listener)
+        if listener_info_has_entry "$listener" "nginx"; then
+            echo -e "${RED}❌ Nginx Stream 443 配置已移除，但 nginx 仍在监听公网 443，拒绝继续切换入口。${PLAIN}"
+            print_nginx_stream_failure_context "$NGINX_LISTEN_PORT"
+            return 1
+        fi
     fi
 }
 
@@ -3189,10 +3240,10 @@ stop_public_443_entry_services_for_target() {
         disable_nginx_stream_public_443 || return 1
     fi
     if [[ "$target_mode" != "tcp-peek" ]]; then
-        systemctl stop vpso-mux >/dev/null 2>&1 || true
+        stop_vpso_mux_service_if_public_443 || return 1
     fi
     if [[ "$target_mode" != "xray-fallback" ]]; then
-        stop_xray_entry_service_if_public_443
+        stop_xray_entry_service_if_public_443 || return 1
     fi
 }
 
@@ -3213,13 +3264,20 @@ guard_current_ssh_not_on_entry_port() {
 
 verify_public_443_listener_for_mode() {
     local mode="$1"
-    local expected listener
+    local expected listener i
+    local tries="${2:-10}"
+    local delay="${3:-0.5}"
     mode=$(normalize_entry_mode_name "$mode") || return 1
     expected=$(entry_mode_expected_listener "$mode") || return 1
-    listener=$(detect_443_listener)
-    if [[ "${listener%%|*}" == "$expected" ]]; then
-        return 0
-    fi
+
+    for ((i = 1; i <= tries; i++)); do
+        listener=$(detect_443_listener "$NGINX_LISTEN_PORT")
+        if listener_info_has_entry "$listener" "$expected"; then
+            return 0
+        fi
+        [[ "$i" -lt "$tries" ]] && sleep "$delay"
+    done
+
     echo -e "${RED}❌ 公网 443 监听不符合 ${mode}：期望 ${expected}，实际 ${listener#*|}${PLAIN}"
     return 1
 }
@@ -3316,6 +3374,13 @@ backup_entry_mode_config() {
     echo "$backup_dir"
 }
 
+stop_vpso_mux_services_for_restore() {
+    echo -e "${YELLOW}▶ 正在停止 vpso-mux 相关服务，避免覆盖运行中的分流器二进制...${PLAIN}"
+    systemctl stop vpso-mux-preflight >/dev/null 2>&1 || true
+    systemctl stop vpso-mux >/dev/null 2>&1 || true
+    sleep 1
+}
+
 rollback_last_entry_mode() {
     local backup_dir="${1:-}"
     local manual=0
@@ -3345,32 +3410,20 @@ rollback_last_entry_mode() {
     fi
 
     echo -e "${YELLOW}▶ 正在回滚上一次入口模式切换：${backup_dir}${PLAIN}"
+    stop_vpso_mux_services_for_restore
     restore_sni_stack_backup_files "$backup_dir" || { echo -e "${RED}❌ 回滚文件恢复失败。${PLAIN}"; return 1; }
     systemctl daemon-reload >/dev/null 2>&1 || true
     load_sni_stack_env >/dev/null 2>&1 || true
     old_mode=${old_mode:-$(get_entry_mode)}
 
-    case "$old_mode" in
-        "nginx-stream")
-            systemctl stop vpso-mux >/dev/null 2>&1 || true
-            if ! apply_nginx_stream_mode "$backup_dir"; then
-                echo -e "${RED}❌ 回滚到 Nginx Stream 时未能恢复公网 443 监听，请查看上面的 Nginx 诊断。${PLAIN}"
-                return 1
-            fi
-            ;;
-        "tcp-peek")
-            restart_service_if_available caddy >/dev/null 2>&1 || true
-            restart_service_if_available nginx >/dev/null 2>&1 || true
-            systemctl enable vpso-mux >/dev/null 2>&1 || true
-            systemctl restart vpso-mux >/dev/null 2>&1 || true
-            ;;
-        "xray-fallback")
-            systemctl stop vpso-mux >/dev/null 2>&1 || true
-            disable_nginx_stream_public_443 >/dev/null 2>&1 || true
-            restart_service_if_available caddy >/dev/null 2>&1 || true
-            restart_xray_entry_service >/dev/null 2>&1 || true
-            ;;
-    esac
+    if ! stop_public_443_entry_services_for_target "$old_mode"; then
+        echo -e "${RED}❌ 回滚时未能停止冲突的公网 443 入口服务，请查看上面的诊断。${PLAIN}"
+        return 1
+    fi
+    if ! apply_entry_mode_by_name "$old_mode" "$backup_dir"; then
+        echo -e "${RED}❌ 回滚到 ${old_mode} 时未能恢复公网 443 监听，请查看上面的诊断。${PLAIN}"
+        return 1
+    fi
     set_entry_mode "$old_mode" >/dev/null 2>&1 || true
     write_single_443_engine_state "$(entry_mode_engine_name "$old_mode" 2>/dev/null || echo nginx_stream)" "$backup_dir"
     echo -e "${GREEN}✅ 已回滚到上一次入口模式：${old_mode}${PLAIN}"
@@ -3571,16 +3624,19 @@ switch_entry_mode() {
 }
 
 reapply_current_entry_mode() {
-    local current_mode backup_dir
+    local current_mode backup_dir assume_yes
+    assume_yes="${1:-}"
     load_sni_stack_env || return 1
     current_mode=$(get_entry_mode)
     current_mode=$(normalize_entry_mode_name "$current_mode") || { echo -e "${RED}❌ 当前 ENTRY_MODE 无效：${current_mode}${PLAIN}"; return 1; }
     echo -e "${CYAN}正在重新应用当前 443 入口模式：${current_mode}${PLAIN}"
     guard_current_ssh_not_on_entry_port "重新应用 443 入口模式" || return 1
-    confirm_risk_action "重新应用 443 入口模式 ${current_mode}" \
-        "公网 ${NGINX_LISTEN_PORT} 的入口监听配置和相关 systemd 服务" \
-        "菜单 [19] -> [7] 回滚到上一次入口模式备份" \
-        "请确认当前 SSH 不依赖公网 ${NGINX_LISTEN_PORT}，并已准备好云厂商控制台。" || return 1
+    if [[ "$assume_yes" != "--yes" ]]; then
+        confirm_risk_action "重新应用 443 入口模式 ${current_mode}" \
+            "公网 ${NGINX_LISTEN_PORT} 的入口监听配置和相关 systemd 服务" \
+            "菜单 [19] -> [7] 回滚到上一次入口模式备份" \
+            "请确认当前 SSH 不依赖公网 ${NGINX_LISTEN_PORT}，并已准备好云厂商控制台。" || return 1
+    fi
     check_entry_mode_dependencies "$current_mode" || return 1
     backup_dir=$(backup_entry_mode_config) || return 1
     if [[ "$current_mode" == "xray-fallback" ]]; then
@@ -5934,19 +5990,18 @@ func_caddy_cf_reality_wizard() {
     chmod 600 "$cf_env_file"
 
     local backup_dir
-    create_sni_stack_backup
-    backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
+    backup_dir=$(backup_entry_mode_config) || return 1
     prepare_initial_entry_mode_dependencies "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir" "入口模式依赖检查失败"; return 1; }
     quarantine_legacy_caddy_443_configs
-    issue_and_install_cert_for_domain "$PANEL_DOMAIN" "$CF_TOKEN" || return 1
+    issue_and_install_cert_for_domain "$PANEL_DOMAIN" "$CF_TOKEN" || { rollback_sni_stack_after_failure "$backup_dir" "面板域名证书签发/安装失败"; return 1; }
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local site_domain
         for site_domain in "${SITE_DOMAINS[@]}"; do
             [[ -z "$site_domain" ]] && continue
-            issue_and_install_cert_for_domain "$site_domain" "$CF_TOKEN" || return 1
+            issue_and_install_cert_for_domain "$site_domain" "$CF_TOKEN" || { rollback_sni_stack_after_failure "$backup_dir" "站点域名 ${site_domain} 证书签发/安装失败"; return 1; }
         done
     fi
-    preflight_entry_mode_before_cutover "$ENTRY_MODE" || { echo -e "${RED}❌ 入口模式 ${ENTRY_MODE} 预检失败，公网 443 未切换。${PLAIN}"; return 1; }
+    preflight_entry_mode_before_cutover "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir" "入口模式 ${ENTRY_MODE} 预检失败，公网 443 未切换"; return 1; }
     stop_public_443_entry_services_for_target "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir" "停止旧公网 443 入口服务失败"; return 1; }
     apply_entry_mode_by_name "$ENTRY_MODE" "$backup_dir" || { rollback_sni_stack_after_failure "$backup_dir" "入口模式 ${ENTRY_MODE} 应用失败"; return 1; }
     save_sni_stack_env
