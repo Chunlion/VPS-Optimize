@@ -15,6 +15,36 @@ assert_dist_contains() {
     fi
 }
 
+assert_file_contains() {
+    local file="$1"
+    local needle="$2"
+    local message="${3:-${file} is missing required content: ${needle}}"
+    if ! grep -Fq -- "$needle" "$file"; then
+        echo "$message" >&2
+        exit 1
+    fi
+}
+
+assert_file_not_contains() {
+    local file="$1"
+    local needle="$2"
+    local message="${3:-${file} contains stale content: ${needle}}"
+    if grep -Fq -- "$needle" "$file"; then
+        echo "$message" >&2
+        exit 1
+    fi
+}
+
+assert_file_not_matches() {
+    local file="$1"
+    local pattern="$2"
+    local message="${3:-${file} contains stale content matching: ${pattern}}"
+    if grep -Eq -- "$pattern" "$file"; then
+        echo "$message" >&2
+        exit 1
+    fi
+}
+
 bash -n scripts/build.sh
 bash -n vps.sh
 bash -n dist/vps.sh
@@ -147,8 +177,8 @@ if grep -q 'write_single_443_engine_state "nginx_stream"' dist/vps.sh || grep -q
     exit 1
 fi
 grep -q 'generate_tcp_peek_config' dist/vps.sh
-grep -q 'switch_public_443_to_tcp_peek' dist/vps.sh
-grep -q 'rollback_tcp_peek_to_nginx_stream' dist/vps.sh
+assert_file_not_contains 'dist/vps.sh' 'switch_public_443_to_tcp_peek' 'TCP Peek-specific cutover wrapper must be removed; use the [5] entry-mode switch instead.'
+assert_file_not_contains 'dist/vps.sh' 'rollback_tcp_peek_to_nginx_stream' 'TCP Peek-specific rollback wrapper must be removed; use the broader [7] rollback instead.'
 grep -q 'sni_stack_health_check_enhanced' dist/vps.sh
 grep -q 'vpso-mux.service' dist/vps.sh
 grep -q 'vpso-mux-preflight.service' dist/vps.sh
@@ -182,10 +212,10 @@ grep -q '/var/lib/vps-optimize/vpso-mux/status.json' dist/vps.sh
 grep -q 'show_vpso_mux_runtime_status' dist/vps.sh
 grep -Fq '5) switch_entry_mode "tcp-peek" ;;' dist/vps.sh
 grep -Fq '7) rollback_last_entry_mode ;;' dist/vps.sh
-assert_dist_contains '19. 切换公网 443 到 TCP Peek + Splice 模式' '443 menu must expose the experimental TCP Peek cutover entry at [19].'
-assert_dist_contains '19) switch_public_443_to_tcp_peek ;;' '443 menu [19] must dispatch to the TCP Peek cutover wrapper.'
-assert_dist_contains '20. 从 TCP Peek 回滚到 Nginx Stream 模式' '443 menu must expose the TCP Peek rollback entry at [20].'
-assert_dist_contains '20) rollback_tcp_peek_to_nginx_stream ;;' '443 menu [20] must dispatch to the TCP Peek rollback wrapper.'
+assert_file_not_contains 'dist/vps.sh' '19. 切换公网 443 到 TCP Peek + Splice 模式' '443 menu must not expose a redundant TCP Peek-specific cutover entry.'
+assert_file_not_contains 'dist/vps.sh' '19) switch_public_443_to_tcp_peek ;;' '443 menu must not dispatch to a removed TCP Peek-specific cutover wrapper.'
+assert_file_not_contains 'dist/vps.sh' '20. 从 TCP Peek 回滚到 Nginx Stream 模式' '443 menu must not expose a redundant TCP Peek-specific rollback entry.'
+assert_file_not_contains 'dist/vps.sh' '20) rollback_tcp_peek_to_nginx_stream ;;' '443 menu must not dispatch to a removed TCP Peek-specific rollback wrapper.'
 while IFS='|' read -r menu_no menu_label case_action; do
     [[ -n "$menu_no" ]] || continue
     if ! grep -Fq " ${menu_no}. ${menu_label}" dist/vps.sh; then
@@ -205,9 +235,58 @@ done <<'SNI_MENU_MAP'
 16|查看 TCP Peek + Splice 状态 / 8444 预检|start_tcp_peek_test_port ;;
 17|TCP Peek 分流规则校验|tcp_peek_dry_run_config ;;
 18|查看 TCP Peek + Splice 日志|view_vpso_mux_logs ;;
-19|切换公网 443 到 TCP Peek + Splice 模式|switch_public_443_to_tcp_peek ;;
-20|从 TCP Peek 回滚到 Nginx Stream 模式|rollback_tcp_peek_to_nginx_stream ;;
 SNI_MENU_MAP
+
+docs_menu_files=(
+    ".github/ISSUE_TEMPLATE/bug_report.md"
+    "README.md"
+    "INSTALL.md"
+    "docs/443-single-entry.md"
+    "docs/443-tcp-peek-engine.md"
+    "docs/443-single-entry-troubleshooting.md"
+    "docs/compatibility.md"
+    "docs/config-paths.md"
+    "docs/existing-server-migration.md"
+    "docs/recovery-runbook.md"
+    "tutorials/01-new-vps-hardening.md"
+    "tutorials/02-3x-ui-reality-443.md"
+    "tutorials/03-subscription-tools-with-caddy.md"
+)
+for file in "${docs_menu_files[@]}"; do
+    assert_file_not_contains "$file" '主菜单 [18 443 单入口管理中心]' "${file} must not point users to the old main menu [18] 443 entry."
+    assert_file_not_contains "$file" '主菜单 [14 服务健康总览]' "${file} must not point users to the old main menu [14] health entry."
+    assert_file_not_contains "$file" '[15 配置备份与回滚]' "${file} must not point users to the old backup menu [15]."
+done
+assert_file_not_contains "docs/443-single-entry.md" '主菜单 [3] -> [13] 普通 Caddy 反代' "443 tutorial must not point users to the old ordinary Caddy menu path."
+assert_file_not_contains "docs/443-single-entry.md" '[19] -> [2] -> [5]' "443 tutorial must not point Web whitelist users to the old nested whitelist path."
+
+tcp_peek_doc_files=(
+    "README.md"
+    "docs/443-single-entry.md"
+    "docs/443-tcp-peek-engine.md"
+)
+for file in "${tcp_peek_doc_files[@]}"; do
+    assert_file_not_matches "$file" '进阶(模式|实现|可选模式)' "${file} must not describe TCP Peek as an advanced mode."
+    assert_file_not_contains "$file" '[19] 切换公网 443 到 TCP Peek + Splice 模式' "${file} should use the existing [5] entry-mode switch instead of a redundant [19] TCP Peek cutover."
+    assert_file_not_contains "$file" '-> [19] 切换公网 443 到 TCP Peek + Splice 模式' "${file} should not list the removed [19] TCP Peek cutover entry."
+    assert_file_not_contains "$file" '[20] 从 TCP Peek 回滚到 Nginx Stream 模式' "${file} should prefer the broader [7] rollback path over the TCP Peek-specific rollback entry."
+    assert_file_not_contains "$file" 'TCP Peek 专用回滚' "${file} should not recommend a TCP Peek-specific rollback path."
+done
+
+assert_file_contains "README.md" '配置过程和 Nginx Stream 一样' "README must explain that TCP Peek uses the same configuration flow as Nginx Stream."
+assert_file_contains ".github/ISSUE_TEMPLATE/bug_report.md" '主菜单 [19 443 单入口管理中心] -> [2 首次配置 / 安装 443 单入口]' "Bug report template must show the current 443 menu path."
+assert_file_contains ".github/ISSUE_TEMPLATE/bug_report.md" '主菜单 [15 服务健康总览]' "Bug report template must show the current health menu path."
+assert_file_contains "README.md" '正式切换使用 `[5] 切换到 TCP Peek + Splice 模式`' "README must point TCP Peek formal cutover at the existing entry-mode switch [5]."
+assert_file_contains "README.md" '[7] 回滚上一次入口模式切换' "README must point rollback guidance at the broader entry-mode rollback [7]."
+assert_file_contains "docs/443-single-entry.md" 'TCP Peek 的优点' "443 tutorial must list TCP Peek advantages."
+assert_file_contains "docs/443-single-entry.md" '配置过程和 Nginx Stream 一样' "443 tutorial must say TCP Peek uses the same configuration flow."
+assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443 单入口管理中心] -> [5 切换到 TCP Peek + Splice 模式]' "443 tutorial must show the existing TCP Peek cutover entry [5]."
+assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443 单入口管理中心] -> [7 回滚上一次入口模式切换]' "443 tutorial must point rollback guidance at the broader entry-mode rollback [7]."
+assert_file_contains "docs/443-tcp-peek-engine.md" 'TCP Peek 的主要优点' "TCP Peek engine doc must list TCP Peek advantages."
+assert_file_contains "docs/443-tcp-peek-engine.md" '配置过程和 Nginx Stream 一样' "TCP Peek engine doc must say TCP Peek uses the same configuration flow."
+assert_file_contains "docs/443-tcp-peek-engine.md" '  -> [5] 切换到 TCP Peek + Splice 模式' "TCP Peek engine doc must show the existing cutover entry [5]."
+assert_file_contains "docs/443-tcp-peek-engine.md" '  -> [7] 回滚上一次入口模式切换' "TCP Peek engine doc must point rollback guidance at the broader entry-mode rollback [7]."
+assert_file_contains "tutorials/01-new-vps-hardening.md" '[15 服务健康总览] -> [16 配置备份与回滚]' "New VPS tutorial must use current health and backup menu numbers."
 grep -q 'print_vpso_mux_failure_context' dist/vps.sh
 grep -q 'print_nginx_stream_failure_context' dist/vps.sh
 grep -q 'assert_nginx_stream_config_loaded' dist/vps.sh

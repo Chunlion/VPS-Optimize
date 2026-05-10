@@ -1,6 +1,6 @@
 # 443 单入口技术实现
 
-本文说明 VPS-Optimize 的三种 443 单入口实现方式：Nginx Stream 默认稳定实现、TCP Peek + Splice / vpso-mux 进阶实现、Xray Fallback 特殊实现。
+本文说明 VPS-Optimize 的三种 443 单入口实现方式：Nginx Stream 默认稳定实现、TCP Peek + Splice / vpso-mux 同配置实现、Xray Fallback 特殊实现。
 
 示例中的 `panel.example.com`、`site.example.com`、`node.example.com`、`SERVER_IP`、`8443`、`8444`、`1443` 都是示例值，仅用于说明链路关系。实际部署时请替换成你的真实域名、服务器 IP 和脚本当前保存的端口。
 
@@ -24,7 +24,7 @@
   -> [4] 切换到 Xray Fallback 模式
   -> [5] 切换到 TCP Peek + Splice 模式
   -> [7] 回滚上一次入口模式切换
-  -> [16] TCP Peek 8444 预检 / 安装测试
+  -> [16] 查看 TCP Peek + Splice 状态 / 8444 预检
   -> [17] TCP Peek 分流规则校验
   -> [18] 查看 TCP Peek + Splice 日志
 ```
@@ -34,7 +34,7 @@
 | ENTRY_MODE | 3x-ui/Xray 应怎么监听 | 切换时最重要的注意事项 |
 | --- | --- | --- |
 | `nginx-stream` | 面板、订阅、Xray 入站都监听 `127.0.0.1` 本地端口 | 3x-ui/Xray 不要直接占用公网 `443` |
-| `tcp-peek` | 和 `nginx-stream` 相同，仍是本地端口 | 通常不需要改 3x-ui；公网 `443` 只从 `nginx` 换成 `vpso-mux` |
+| `tcp-peek` | 和 `nginx-stream` 相同，仍是本地端口 | 配置过程相同；公网 `443` 只从 `nginx` 换成 `vpso-mux` |
 | `xray-fallback` | 需要一个 3x-ui/Xray 主入站监听公网 `443`，并 fallback 到 Caddy 本地端口 | 切回其他模式前，必须先把这个 Xray 主入站从公网 `443` 移走 |
 
 ## Nginx Stream 默认稳定实现
@@ -51,11 +51,18 @@ Nginx Stream 是默认稳定模式。公网 `443` 由 Nginx stream 监听，使�
 
 这个实现覆盖面最完整，适合作为长期默认入口。它负责稳定接入 Caddy、REALITY、面板、订阅、网站、Web 白名单和回滚流程。
 
-## TCP Peek + Splice / vpso-mux 进阶实现
+## TCP Peek + Splice / vpso-mux 实现
 
-TCP Peek + Splice / vpso-mux 是进阶模式、可回滚，默认不接管 `443`。第一次使用时先运行 `主菜单 [19 443 单入口管理中心] -> [16] TCP Peek 8444 预检 / 安装测试`，确认 `vpso-mux` 能在 `8444` 启动并转发。只有用户随后执行 `[5] 切换到 TCP Peek + Splice 模式`，公网 `443` 才会从 Nginx Stream 切到 `vpso-mux`。
+TCP Peek + Splice / vpso-mux 和 Nginx Stream 使用同一套 443 单入口配置。Web 域名、证书、Caddy 后端、Web 白名单和 Xray SNI 分流记录都不需要另起一套；3x-ui 面板、订阅和 Xray 入站仍按本地监听填写。第一次使用时先运行 `主菜单 [19 443 单入口管理中心] -> [16] 查看 TCP Peek + Splice 状态 / 8444 预检`，确认 `vpso-mux` 能在 `8444` 启动并转发；再运行 `[17] TCP Peek 分流规则校验`。只有用户随后执行 `[5] 切换到 TCP Peek + Splice 模式`，公网 `443` 才会从 Nginx Stream 切到 `vpso-mux`。
 
 `vpso-mux` 使用 `MSG_PEEK` 查看 TLS ClientHello 中的 SNI，不消费首包；后端收到的 ClientHello 仍与客户端原始数据一致。转发优先使用 splice，失败或不可用时回退普通 copy。
+
+TCP Peek 的主要优点：
+
+- 配置过程和 Nginx Stream 一样，切换时复用已经保存的域名、证书、Caddy 后端、Web 白名单和 Xray SNI 路由。
+- `MSG_PEEK` 只查看 ClientHello，不消费首包，后端收到的仍是客户端原始 TLS 握手数据。
+- 转发优先使用 splice，减少用户态数据拷贝；不可用时自动回退普通 copy。
+- `vpso-mux` 是专门为 443 SNI 分流准备的入口程序，状态、日志、配置校验和 8444 预检都围绕这个链路展开。
 
 TCP Peek 生成的 `vpso-mux.yaml` 会按脚本保存的公网监听地址只写一个监听项。默认 `0.0.0.0:443` 只监听 IPv4；如果你明确需要 IPv6 入口，请把公网监听地址设置为 `::` 后重新生成配置，避免同一端口同时写 `0.0.0.0` 和 `[::]` 导致双栈绑定冲突。
 
@@ -71,7 +78,7 @@ TCP Peek 生成的 `vpso-mux.yaml` 会按脚本保存的公网监听地址只写
 
 | 项目 | Nginx Stream | TCP Peek + Splice / vpso-mux |
 | --- | --- | --- |
-| 定位 | 默认稳定模式 | 进阶可选模式 |
+| 配置过程 | 使用 443 单入口共享配置 | 使用同一套 443 单入口共享配置 |
 | 入口进程 | `nginx` | `vpso-mux` |
 | SNI 获取 | `ssl_preread` | `MSG_PEEK` 解析 ClientHello |
 | TLS 处理 | 不终止 TLS | 不终止 TLS |
@@ -121,7 +128,7 @@ Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监�
 
 ```text
 主菜单 [19 443 单入口管理中心]
-  -> [16] TCP Peek 8444 预检 / 安装测试
+  -> [16] 查看 TCP Peek + Splice 状态 / 8444 预检
   -> [17] TCP Peek 分流规则校验
   -> [5] 切换到 TCP Peek + Splice 模式
 ```
@@ -139,7 +146,7 @@ Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监�
   -> [7] 回滚上一次入口模式切换
 ```
 
-回滚会停止并禁用 `vpso-mux`，读取 `sni-stack.env` 重新生成 Nginx Stream 和 Caddy 配置，恢复到上一次入口模式，并运行链路体检。
+通用回滚会恢复上一次入口模式切换前的备份，适合撤销最近一次 `[3]`、`[4]` 或 `[5]` 触发的入口切换。TCP Peek 切换后需要回退时，也使用这个范围更广的回滚入口。
 
 ## 常见故障
 

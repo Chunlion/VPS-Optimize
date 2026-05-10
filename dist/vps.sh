@@ -4639,27 +4639,6 @@ preflight_entry_mode_before_cutover() {
     esac
 }
 
-switch_public_443_to_tcp_peek() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}切换公网 443 到 TCP Peek + Splice 模式${PLAIN}"
-    echo -e "${CYAN}================================================${PLAIN}"
-    switch_entry_mode "tcp-peek"
-}
-
-rollback_tcp_peek_to_nginx_stream() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}从 TCP Peek + Splice 模式回滚到 Nginx Stream 模式${PLAIN}"
-    echo -e "${CYAN}================================================${PLAIN}"
-    load_sni_stack_env || return 1
-    confirm_risk_action "回滚 443 到 Nginx Stream 稳定模式" \
-        "vpso-mux 分流器服务和 Nginx Stream 443 监听关系" \
-        "如 Nginx 回滚失败，请用最近的 /etc/vps-optimize/backups/sni-stack_* 手动恢复" \
-        "Nginx Stream 是默认稳定模式，回滚后会重新运行链路体检。" || return 1
-    switch_entry_mode "nginx-stream"
-}
-
 normalize_entry_mode_name() {
     local mode="$1"
     case "$mode" in
@@ -7581,8 +7560,6 @@ show_sni_help() {
     echo "16 查看 TCP Peek + Splice 状态 / 8444 预检：展示 status.json 统计；预检只监听 8444，不改公网 443。"
     echo "17 TCP Peek 分流规则校验：只检查配置，不重启入口。"
     echo "18 查看 TCP Peek + Splice 日志：查看 vpso-mux 分流器日志。"
-    echo "19 切换公网 443 到 TCP Peek + Splice 模式：TCP Peek 实验入口直达；保留 [5] 兼容入口。"
-    echo "20 从 TCP Peek + Splice 回滚到 Nginx Stream 模式：稳定模式回退入口；不替代 [7] 的备份回滚。"
     echo "普通 Caddy 未接入 443 单入口时，用主菜单 [4 普通 Caddy 反代] -> [4] 管理域名 IP 白名单。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
@@ -13910,8 +13887,6 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN} 16. 查看 TCP Peek + Splice 状态 / 8444 预检${PLAIN} ${YELLOW}(不改公网 443)${PLAIN}"
         echo -e "${CYAN} 17. TCP Peek 分流规则校验${PLAIN} ${YELLOW}(只检查配置，不重启入口)${PLAIN}"
         echo -e "${CYAN} 18. 查看 TCP Peek + Splice 日志${PLAIN} ${YELLOW}(vpso-mux 分流器日志)${PLAIN}"
-        echo -e "${CYAN} 19. 切换公网 443 到 TCP Peek + Splice 模式${PLAIN} ${YELLOW}(实验入口直达，等同 [5])${PLAIN}"
-        echo -e "${CYAN} 20. 从 TCP Peek 回滚到 Nginx Stream 模式${PLAIN} ${YELLOW}(稳定模式回退，不替代 [7] 备份回滚)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${YELLOW}说明：三种 443 入口不是三套独立安装器；[2] 建立共享配置，[3]/[4]/[5] 负责检查依赖、生成目标配置并切换入口。${PLAIN}"
         echo -e "------------------------------------------------"
@@ -13940,8 +13915,6 @@ func_sni_stack_quick_menu() {
             16) start_tcp_peek_test_port ;;
             17) tcp_peek_dry_run_config ;;
             18) view_vpso_mux_logs ;;
-            19) switch_public_443_to_tcp_peek ;;
-            20) rollback_tcp_peek_to_nginx_stream ;;
             "?"|help) show_sni_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
