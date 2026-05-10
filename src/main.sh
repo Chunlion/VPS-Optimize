@@ -6182,7 +6182,7 @@ show_panel_help() {
     echo "3/4 分别管理 Sing-box 和 Xray。"
     echo "5/6/7 管理订阅工具，部署后建议用 Caddy 或 443 单入口对外访问。"
     echo "11 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
-    echo "14 端口流量监控，单独管理 Port Traffic Dog。"
+    echo "14 端口实际流量监控，只看已监控端口实际跑过的流量。"
     echo "16 3x-ui 外置增强管理，适合自定义重置日期、校准已用流量、备份恢复和查看日志。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
@@ -9338,8 +9338,8 @@ func_test_scripts() {
 # ---------------------------------------------------------
 func_port_dog() {
     clear
-    echo -e "${CYAN}👉 正在拉取并执行 Port Traffic Dog 监控狗...${PLAIN}"
-    run_remote_script "安装 Port Traffic Dog 监控狗" "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh"
+    echo -e "${CYAN}👉 正在拉取并执行端口实际流量监控工具...${PLAIN}"
+    run_remote_script "安装端口实际流量监控工具" "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh"
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
@@ -12513,7 +12513,7 @@ func_panel_deploy_menu() {
         echo -e "${GREEN} 11. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
         echo -e "${GREEN} 12. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
         echo -e "${GREEN} 13. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
-        echo -e "${GREEN} 14. 端口流量监控${PLAIN}          ${YELLOW}(Port Traffic Dog)${PLAIN}"
+        echo -e "${GREEN} 14. 端口实际流量监控${PLAIN}      ${YELLOW}(只看已监控端口实际流量)${PLAIN}"
         echo -e "${GREEN} 15. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
         echo -e "${GREEN} 16. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
         echo -e "------------------------------------------------"
