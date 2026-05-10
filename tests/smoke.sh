@@ -6,6 +6,15 @@ cd "$repo_root"
 
 bash scripts/build.sh >/dev/null
 
+assert_dist_contains() {
+    local needle="$1"
+    local message="${2:-Release script is missing required content: ${needle}}"
+    if ! grep -Fq "$needle" dist/vps.sh; then
+        echo "$message" >&2
+        exit 1
+    fi
+}
+
 bash -n scripts/build.sh
 bash -n vps.sh
 bash -n dist/vps.sh
@@ -20,6 +29,15 @@ bash -n dog.sh
 bash -n xui-custom-manager.sh
 grep -q 'modules=(' scripts/build.sh
 grep -q 'main.sh     # feature implementation and menu wiring' scripts/build.sh
+if command -v go >/dev/null 2>&1; then
+    GO_BIN=go
+elif command -v go.exe >/dev/null 2>&1; then
+    GO_BIN=go.exe
+else
+    echo "Go is required for vpso-mux release validation." >&2
+    exit 1
+fi
+GOTOOLCHAIN=local "$GO_BIN" test ./...
 
 dangerous_patterns='rm -rf|rm -r[[:space:]]|wget .*[&][&]|curl .*\|[[:space:]]*gpg|\|[[:space:]]*bash|bash[[:space:]]*<'
 if grep -En "$dangerous_patterns" dist/vps.sh dog.sh; then
@@ -137,6 +155,11 @@ grep -q 'vpso-mux-preflight.service' dist/vps.sh
 grep -q 'go_install_vpso_mux_latest' dist/vps.sh
 grep -q 'GOTOOLCHAIN=local' dist/vps.sh
 grep -q '拒绝在生产机上自动下载临时 Go 工具链' dist/vps.sh
+assert_dist_contains 'go build -p 1 -o /usr/local/bin/vpso-mux github.com/Chunlion/VPS-Optimize/cmd/vpso-mux' 'Release script must build the vpso-mux command package.'
+assert_dist_contains 'ExecStart=/usr/local/bin/vpso-mux -config /etc/vps-optimize/vpso-mux.yaml' 'Release script must install the public vpso-mux systemd entry.'
+assert_dist_contains 'ExecStart=/usr/local/bin/vpso-mux -config /etc/vps-optimize/vpso-mux.preflight.yaml' 'Release script must install the TCP Peek 8444 preflight systemd entry.'
+assert_dist_contains 'run_tcppeek_preflight_service 0 "8444" || return 1' 'TCP Peek cutover must still run the 8444 preflight before touching public 443.'
+assert_dist_contains 'write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_config" || return 1' 'TCP Peek cutover must render vpso-mux config from the shared 443 stack.'
 if grep -q 'go1.23.0 download' dist/vps.sh; then
     echo "TCP Peek cutover must not download a temporary Go toolchain." >&2
     exit 1
@@ -159,6 +182,10 @@ grep -q '/var/lib/vps-optimize/vpso-mux/status.json' dist/vps.sh
 grep -q 'show_vpso_mux_runtime_status' dist/vps.sh
 grep -Fq '5) switch_entry_mode "tcp-peek" ;;' dist/vps.sh
 grep -Fq '7) rollback_last_entry_mode ;;' dist/vps.sh
+assert_dist_contains '19. 切换公网 443 到 TCP Peek + Splice 模式' '443 menu must expose the experimental TCP Peek cutover entry at [19].'
+assert_dist_contains '19) switch_public_443_to_tcp_peek ;;' '443 menu [19] must dispatch to the TCP Peek cutover wrapper.'
+assert_dist_contains '20. 从 TCP Peek 回滚到 Nginx Stream 模式' '443 menu must expose the TCP Peek rollback entry at [20].'
+assert_dist_contains '20) rollback_tcp_peek_to_nginx_stream ;;' '443 menu [20] must dispatch to the TCP Peek rollback wrapper.'
 while IFS='|' read -r menu_no menu_label case_action; do
     [[ -n "$menu_no" ]] || continue
     if ! grep -Fq " ${menu_no}. ${menu_label}" dist/vps.sh; then

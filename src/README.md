@@ -25,3 +25,12 @@ Rules for new code:
 - Put feature-specific flows in `main.sh` until a feature family becomes stable enough to split into its own module.
 - Do not make the release script source `src/*.sh` at runtime; regenerate `dist/vps.sh` with `scripts/build.sh`.
 - Keep menu numbers stable for backward compatibility; prefer adding aliases or moving display groups over renumbering existing entries.
+
+Minimum verification after editing `src/main.sh`:
+
+1. `bash -n src/main.sh`
+2. `bash scripts/build.sh`
+3. `bash -n dist/vps.sh`
+4. `bash tests/smoke.sh`
+
+`tests/smoke.sh` is the reusable release gate: it rebuilds `dist/vps.sh`, checks shell syntax, runs `GOTOOLCHAIN=local go test ./...` for `vpso-mux`, and asserts key 443/TCP Peek release menu wiring.
