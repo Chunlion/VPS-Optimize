@@ -252,6 +252,14 @@ grep -q 'func_docker_project_status' dist/vps.sh
 grep -q 'print_project_runtime_overview' dist/vps.sh
 grep -q 'xui_panel_status_compact' dist/vps.sh
 grep -q '3x-ui面板' dist/vps.sh
+if grep -Fq 'raw.githubusercontent.com/alireza0/s-ui/master/install.sh' dist/vps.sh; then
+    echo "S-UI installer URL must not be present in the release script." >&2
+    exit 1
+fi
+if grep -Fq 'S-UI' dist/vps.sh; then
+    echo "S-UI menu text must not be present in the release script." >&2
+    exit 1
+fi
 if grep -q 'x-ui\[$(service_status_compact x-ui)\]' dist/vps.sh; then
     echo "Health overview must not show x-ui as a separate installed product." >&2
     exit 1

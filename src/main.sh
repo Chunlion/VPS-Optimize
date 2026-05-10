@@ -6154,7 +6154,7 @@ show_main_help() {
     echo "1/2 适合新机器先体检和初始化。"
     echo "3   基础组件与常用服务；安装 Docker、Python、WARP 和常用工具。"
     echo "4   普通 Caddy 反代；适合未接入 443 单入口的普通网站/面板反代。"
-    echo "5   管理 3x-ui、S-UI、Sing-box、Xray 和订阅工具。"
+    echo "5   管理 3x-ui、Sing-box、Xray 和订阅工具。"
     echo "6   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
     echo "8   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
     echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
@@ -9405,48 +9405,6 @@ func_xui_custom_manager() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
-func_sui_panel() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}安装 S-UI 面板${PLAIN}"
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}账号密码说明：本入口会运行 S-UI 官方安装器。${PLAIN}"
-    echo -e "${YELLOW}管理员账号、密码和面板访问参数由官方安装器设置或在安装结束时输出。${PLAIN}"
-    echo -e "${YELLOW}请留意安装结束输出并及时保存；后续也可通过 s-ui 官方菜单修改。${PLAIN}"
-    echo -e "------------------------------------------------"
-    echo -e "${CYAN}👉 正在拉取 alireza0 的 S-UI 官方安装脚本...${PLAIN}"
-    run_remote_script "安装 S-UI 面板" "https://raw.githubusercontent.com/alireza0/s-ui/master/install.sh"
-    pause_after_external_script "操作结束，按回车键返回菜单..."
-}
-
-func_sui_manage() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧭 S-UI 管理 / 卸载${PLAIN}"
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}用途：进入 S-UI 官方管理菜单，执行配置查看、账号管理、更新或卸载等操作。${PLAIN}"
-    echo -e "------------------------------------------------"
-
-    if ! command -v s-ui >/dev/null 2>&1; then
-        echo -e "${YELLOW}未检测到 s-ui 命令，当前机器可能尚未安装 S-UI。${PLAIN}"
-        local yn
-        read_trimmed yn "是否现在安装 S-UI？(y/n): "
-        if [[ "$yn" =~ ^[Yy]$ ]]; then
-            func_sui_panel
-        else
-            echo -e "${BLUE}已取消操作。${PLAIN}"
-            read -n 1 -s -r -p "按任意键返回..."
-        fi
-        return
-    fi
-
-    echo -e "${GREEN}即将打开 S-UI 官方管理菜单。${PLAIN}"
-    echo -e "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}"
-    echo -e "------------------------------------------------"
-    s-ui
-    pause_after_external_script "操作结束，按回车键返回菜单..."
-}
-
 func_singbox() {
     clear
     echo -e "${CYAN}👉 正在拉取甬哥的 Sing-box 四合一脚本...${PLAIN}"
@@ -10329,10 +10287,6 @@ func_service_action_menu() {
 
 func_xpanel_menu() {
     func_service_action_menu "3x-ui / x-ui 面板" "安装或进入官方菜单进行配置、更新、重置、卸载。" "安装 3x-ui 面板" func_xpanel "管理 / 卸载 3x-ui 面板" func_xpanel_manage
-}
-
-func_sui_menu() {
-    func_service_action_menu "S-UI 面板" "安装或进入 S-UI 官方菜单进行配置、更新、卸载。" "安装 S-UI 面板" func_sui_panel "管理 / 卸载 S-UI 面板" func_sui_manage
 }
 
 func_singbox_menu() {
@@ -12497,25 +12451,24 @@ func_panel_deploy_menu() {
         print_breadcrumb "面板、节点与订阅工具"
         echo -e "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：管理 3x-ui、S-UI、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
+        echo -e "${YELLOW}用途：管理 3x-ui、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
         echo -e "${YELLOW}提示：面板或订阅工具对外访问，可用普通 Caddy 反代；已启用 443 单入口时用 [19] 统一管理。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 管理 3x-ui 面板${PLAIN}       ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  2. 管理 S-UI 面板${PLAIN}        ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  3. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  4. 管理 Xray${PLAIN}             ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  5. 管理 SublinkPro${PLAIN}       ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  6. 管理 妙妙屋订阅管理${PLAIN}     ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  7. 管理 Sub-Store${PLAIN}        ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  8. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${BOLD}${YELLOW}  9. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
-        echo -e "${GREEN} 10. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
-        echo -e "${GREEN} 11. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
-        echo -e "${GREEN} 12. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
-        echo -e "${GREEN} 13. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
-        echo -e "${GREEN} 14. 端口实际流量监控${PLAIN}      ${YELLOW}(只看已监控端口实际流量)${PLAIN}"
-        echo -e "${GREEN} 15. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
-        echo -e "${GREEN} 16. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
+        echo -e "${GREEN}  2. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  3. 管理 Xray${PLAIN}             ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  4. 管理 SublinkPro${PLAIN}       ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  5. 管理 妙妙屋订阅管理${PLAIN}     ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  6. 管理 Sub-Store${PLAIN}        ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  7. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${BOLD}${YELLOW}  8. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
+        echo -e "${GREEN}  9. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
+        echo -e "${GREEN} 10. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
+        echo -e "${GREEN} 11. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
+        echo -e "${GREEN} 12. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
+        echo -e "${GREEN} 13. 端口实际流量监控${PLAIN}      ${YELLOW}(只看已监控端口实际流量)${PLAIN}"
+        echo -e "${GREEN} 14. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
+        echo -e "${GREEN} 15. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -12525,21 +12478,20 @@ func_panel_deploy_menu() {
         read_trimmed pd_choice "👉 请选择操作: "
         case $pd_choice in
             1) func_xpanel_menu ;;
-            2) func_sui_menu ;;
-            3) func_singbox_menu ;;
-            4) func_xray_menu ;;
-            5) func_sublinkpro_menu ;;
-            6) func_miaomiaowu_menu ;;
-            7) func_substore_menu ;;
-            8) func_dockge_menu ;;
-            9) func_update_subscription_tools ;;
-            10) func_migrate_compose_to_dockge ;;
-            11) func_rescue_panel ;;
-            12) func_dns_unlock ;;
-            13) func_ip_sentinel ;;
-            14) func_port_dog ;;
-            15) func_komari_menu ;;
-            16) func_xui_custom_manager ;;
+            2) func_singbox_menu ;;
+            3) func_xray_menu ;;
+            4) func_sublinkpro_menu ;;
+            5) func_miaomiaowu_menu ;;
+            6) func_substore_menu ;;
+            7) func_dockge_menu ;;
+            8) func_update_subscription_tools ;;
+            9) func_migrate_compose_to_dockge ;;
+            10) func_rescue_panel ;;
+            11) func_dns_unlock ;;
+            12) func_ip_sentinel ;;
+            13) func_port_dog ;;
+            14) func_komari_menu ;;
+            15) func_xui_custom_manager ;;
             xcm|XCM|xui-custom|外置|外置增强|外置管理) func_xui_custom_manager ;;
             "?"|help) show_panel_help; pause_return ;;
             0|q|Q) break ;;
