@@ -302,7 +302,7 @@ TCP Peek + Splice 切换前必须先跑 `主菜单 [19] -> [16] 查看 TCP Peek 
 节点和订阅相关入口集中在：
 
 ```text
-4. 面板、节点与订阅工具
+5. 面板、节点与订阅工具
 ```
 
 常用入口：
@@ -348,7 +348,7 @@ Komari 默认部署到 `/opt/komari`，数据保存在 `/opt/komari/data`。安�
 
 ### 3x-ui 外置增强管理
 
-项目包含 `xui-custom-manager.sh`，用于补充 3x-ui / x-ui 面板外更适合脚本处理的维护功能：自定义重置日期、流量校准、备份恢复、健康检查、查看日志和清理旧备份。
+项目包含 `xui-custom-manager.sh`，用于补充 3x-ui / x-ui 面板外更适合脚本处理的维护功能：自定义重置日期、校准已用流量、备份恢复、健康检查、查看日志和清理旧备份。
 
 入口：
 
@@ -363,6 +363,7 @@ wget -qO xui-custom-manager.sh https://raw.githubusercontent.com/Chunlion/VPS-Op
 ```
 
 首次打开后会自动注册 `xcm` 快捷命令。`xcm` 是手动入口，会优先拉取最新版；systemd timer 只调用本地稳定执行器 `/usr/local/bin/xui-custom-manager.sh --reset-check`。
+在 VPS-Optimize 主菜单也可以直接输入 `xcm` 或 `外置` 进入这个工具。
 
 详细说明请看：[README_xui_custom_manager.md](README_xui_custom_manager.md)。
 

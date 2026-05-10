@@ -748,19 +748,20 @@ def choose_inbound():
 while True:
     clear_screen()
     print("================================================")
-    print("🧭 3x-ui 外置增强管理 - 自定义重置日期")
+    print("🧭 3x-ui 外置增强管理 - 自定义流量重置日期")
     print("================================================")
     print(f"全局状态：{'启用' if config.get('enabled') else '禁用'}")
     print(f"默认日期：每月 {config.get('default_day', 1)} 号")
     print(f"自动检查：{'已启用' if timer_status() else '未启用'}")
     print()
     print("提示：请在 3x-ui 面板里关闭对应入站的原生 monthly 重置。")
+    print("如果只是想看本次会影响谁，选 [4]，会先预览，输入 YES 才会执行。")
     print("------------------------------------------------")
     print(" 1. 开启/关闭自定义重置")
-    print(f" 2. 设置默认日期 当前：每月 {config.get('default_day', 1)} 号")
-    print(" 3. 管理入站/客户端 单独设置某个入站或客户端")
-    print(" 4. 立即检查一次 先预览，确认后执行")
-    print(" 5. 查看当前配置")
+    print(f" 2. 设置默认重置日 当前：每月 {config.get('default_day', 1)} 号")
+    print(" 3. 管理入站/客户端重置日")
+    print(" 4. 预览并手动执行一次重置检查")
+    print(" 5. 查看当前 JSON 配置")
     print("------------------------------------------------")
     print(" 0. 返回主菜单 / q 返回")
     print("================================================")
@@ -800,7 +801,7 @@ PY
                 echo "timer 状态：$(timer_active_status)"
             else
                 echo "错误：自定义重置已启用，但自动检查安装或启动失败。"
-                echo "你仍然可以使用“立即检查一次”手动执行。"
+                echo "你仍然可以使用“预览并手动执行一次重置检查”手动执行。"
             fi
             pause
             ;;
@@ -948,7 +949,7 @@ def calibrate_target(target):
 while True:
     clear_screen()
     print("================================================")
-    print("🧭 3x-ui 外置增强管理 - 流量校准")
+    print("🧭 3x-ui 外置增强管理 - 校准已用流量")
     print("================================================")
     print("说明：这里只校准已用流量 up/down，不修改流量上限 total。")
     print("单位：GiB，1 GiB = 1024^3 bytes")
@@ -1901,7 +1902,7 @@ print_health_report() {
     fi
 
     echo "预览模式："
-    echo "  可在“自定义重置日期 -> 立即检查一次”预览本次计划。"
+    echo "  可在“自定义流量重置日期 -> 预览并手动执行一次重置检查”预览本次计划。"
 }
 
 health_check() {
@@ -1916,7 +1917,7 @@ menu_logs() {
     while true; do
         clear_screen
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🧾 3x-ui 外置增强管理 - 查看日志${PLAIN}"
+        echo -e "${BOLD}🧾 3x-ui 外置增强管理 - 查看日志与报错${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：查看外置脚本、自动检查 timer 和 x-ui 服务日志。${PLAIN}"
         echo -e "${YELLOW}提示：脚本日志包含历史记录，旧菜单或 read error 可能是旧版本留下的。${PLAIN}"
@@ -1989,7 +1990,7 @@ menu_backup_restore() {
     while true; do
         clear_screen
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}💾 3x-ui 外置增强管理 - 备份与恢复${PLAIN}"
+        echo -e "${BOLD}💾 3x-ui 外置增强管理 - 备份 / 恢复 x-ui${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：备份或恢复 x-ui 数据库、配置目录和程序目录。${PLAIN}"
         echo -e "${YELLOW}备份目录：$BACKUP_DIR${PLAIN}"
@@ -2032,6 +2033,28 @@ menu_backup_restore() {
     done
 }
 
+show_quick_guide() {
+    clear_screen
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧭 3x-ui 外置增强管理 - 功能索引${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}按你想做的事选入口：${PLAIN}"
+    echo "  想让不同入站/客户端按不同日期重置流量 -> [1] 自定义流量重置日期"
+    echo "  想先看看今天会重置谁，不想直接写库       -> [1] -> [4] 预览并手动执行一次重置检查"
+    echo "  想把面板里的已用流量改成实际值           -> [2] 校准已用流量"
+    echo "  想先留后路，或从旧状态恢复               -> [3] 备份 / 恢复 x-ui"
+    echo "  想检查 timer、数据库、monthly 冲突        -> [4] 健康检查 / monthly 冲突"
+    echo "  想看报错、自动检查记录或 x-ui 日志        -> [5] 查看日志与报错"
+    echo "  想删旧备份文件                            -> [6] 清理旧备份"
+    echo "------------------------------------------------"
+    echo "命令行入口："
+    echo "  xcm                                  打开本菜单"
+    echo "  xui-custom-manager.sh --dry-run      只预览本次重置计划"
+    echo "  xui-custom-manager.sh --reset-check  执行一次自动重置检查"
+    echo "------------------------------------------------"
+    echo -e "${YELLOW}注意：涉及写数据库或恢复备份的操作都会先备份，并要求输入大写 YES。${PLAIN}"
+}
+
 main_menu() {
     register_xcm_shortcut
 
@@ -2040,8 +2063,8 @@ main_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}🧭 3x-ui 外置增强管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：补充 3x-ui 面板缺失能力，例如自定义重置、流量校准、备份恢复和健康检查。${PLAIN}"
-        echo -e "${YELLOW}提示：写库前会自动备份；看不准时先做备份，再执行写入操作。${PLAIN}"
+        echo -e "${YELLOW}用途：补充 3x-ui 面板缺失能力，例如自定义重置、校准已用流量、备份恢复和健康检查。${PLAIN}"
+        echo -e "${YELLOW}提示：不知道选哪个时输入 ? 查看“我要做什么”索引；写库前会自动备份。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "配置：$CONFIG_FILE"
         echo -e "备份：$BACKUP_DIR"
@@ -2049,21 +2072,26 @@ main_menu() {
         echo -e "自动检查：$(timer_active_status) | 本地执行器：$(runner_status) | 快捷命令：xcm"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD} ▶ 重置${PLAIN}"
-        echo -e "${GREEN}  1. 自定义重置日期${PLAIN}            ${YELLOW}(入站 / 客户端分开设置)${PLAIN}"
+        echo -e "${GREEN}  1. 自定义流量重置日期${PLAIN}        ${YELLOW}(入站 / 客户端分开设置)${PLAIN}"
         echo -e "${BOLD} ▶ 流量${PLAIN}"
-        echo -e "${GREEN}  2. 流量校准${PLAIN}                  ${YELLOW}(只改 up/down，不改 total)${PLAIN}"
+        echo -e "${GREEN}  2. 校准已用流量${PLAIN}              ${YELLOW}(只改 up/down，不改 total)${PLAIN}"
         echo -e "${BOLD} ▶ 备份${PLAIN}"
-        echo -e "${GREEN}  3. 备份与恢复${PLAIN}                ${YELLOW}(数据库 / 配置 / 程序)${PLAIN}"
+        echo -e "${GREEN}  3. 备份 / 恢复 x-ui${PLAIN}          ${YELLOW}(数据库 / 配置 / 程序)${PLAIN}"
         echo -e "${BOLD} ▶ 诊断${PLAIN}"
-        echo -e "${GREEN}  4. 健康检查${PLAIN}                  ${YELLOW}(服务 / 数据库 / 日志 / timer)${PLAIN}"
-        echo -e "${GREEN}  5. 查看日志${PLAIN}                  ${YELLOW}(脚本 / reset-check / systemd)${PLAIN}"
+        echo -e "${GREEN}  4. 健康检查 / monthly 冲突${PLAIN}   ${YELLOW}(服务 / 数据库 / timer)${PLAIN}"
+        echo -e "${GREEN}  5. 查看日志与报错${PLAIN}            ${YELLOW}(脚本 / reset-check / systemd)${PLAIN}"
         echo -e "${GREEN}  6. 清理旧备份${PLAIN}                ${YELLOW}(每次只删一个明确备份文件)${PLAIN}"
         echo -e "------------------------------------------------"
+        echo -e "${BLUE}  ?. 功能索引 / 我想做什么${PLAIN}"
         echo -e "${RED}  0. 退出 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        read_menu_choice choice
+        read_menu_choice choice "👉 请输入数字 / ? 查看索引 / q 返回: "
 
         case "$choice" in
+            "?"|help|HELP|帮助)
+                show_quick_guide
+                pause
+                ;;
             1)
                 run_custom_reset_ui
                 ;;

@@ -7540,6 +7540,7 @@ show_main_help() {
     echo "16  备份与回滚，高风险操作前建议先跑。"
     echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
     echo "10 -> 7  流量达量关机保护，按账单周期防刷流量和超额账单。"
+    echo "xcm/外置  直达 3x-ui 外置增强管理；也可走 5 -> 16。"
     echo "? 查看帮助，0/q 退出。"
 }
 
@@ -7560,6 +7561,7 @@ show_panel_help() {
     echo "5/6/7 管理订阅工具，部署后建议用 Caddy 或 443 单入口对外访问。"
     echo "11 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
     echo "14 端口流量监控，单独管理 Port Traffic Dog。"
+    echo "16 3x-ui 外置增强管理，适合自定义重置日期、校准已用流量、备份恢复和查看日志。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -10773,7 +10775,8 @@ func_xui_custom_manager() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}🧭 3x-ui 外置增强管理${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}用途：补充 3x-ui 面板内没有的维护能力，例如自定义流量重置、数据库流量校准、备份恢复和健康检查。${PLAIN}"
+    echo -e "${YELLOW}用途：补充 3x-ui 面板内没有的维护能力，例如自定义流量重置、校准已用流量、备份恢复和健康检查。${PLAIN}"
+    echo -e "${YELLOW}提示：也可以在主菜单直接输入 xcm 或“外置”进入；脚本内输入 ? 可看功能索引。${PLAIN}"
     echo -e "${YELLOW}建议：修改数据库或恢复备份前，先做快照或通过脚本备份 x-ui 数据。${PLAIN}"
     echo -e "------------------------------------------------"
     run_remote_script "运行 3x-ui 外置增强管理脚本" "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh"
@@ -13889,7 +13892,7 @@ func_panel_deploy_menu() {
         echo -e "${GREEN} 13. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
         echo -e "${GREEN} 14. 端口流量监控${PLAIN}          ${YELLOW}(Port Traffic Dog)${PLAIN}"
         echo -e "${GREEN} 15. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
-        echo -e "${GREEN} 16. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(面板缺失功能 / 流量重置 / 备份恢复)${PLAIN}"
+        echo -e "${GREEN} 16. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -13914,6 +13917,7 @@ func_panel_deploy_menu() {
             14) func_port_dog ;;
             15) func_komari_menu ;;
             16) func_xui_custom_manager ;;
+            xcm|XCM|xui-custom|外置|外置增强|外置管理) func_xui_custom_manager ;;
             "?"|help) show_panel_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
@@ -14006,6 +14010,7 @@ normalize_main_choice() {
         init|base|初始化) echo "2" ;;
         env|docker|组件) echo "3" ;;
         caddy|proxy|reverse|反代|普通反代) echo "4" ;;
+        xcm|xui-custom|外置|外置增强|外置管理) echo "xui-custom" ;;
         panel|node|nodes|面板|节点) echo "5" ;;
         ssh) echo "6" ;;
         fail2ban|f2b) echo "7" ;;
@@ -14079,7 +14084,7 @@ main_menu() {
         print_breadcrumb "主菜单"
         echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e " ${YELLOW}快捷输入：443 直达单入口，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
+        echo -e " ${YELLOW}快捷输入：443 直达单入口，xcm 进 3x-ui 外置增强，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
         echo -e " ${YELLOW}高风险操作必须输入大写 YES；不确定时先做 [16] 备份。${PLAIN}"
         print_auto_update_notice
         echo -e "${CYAN}================================================${PLAIN}"
@@ -14127,6 +14132,7 @@ main_menu() {
         case $choice in
             n|N|newbie|guide|新手|向导) func_beginner_menu ;;
             "?"|help|帮助) show_main_help; echo ""; pause_return ;;
+            xui-custom) func_xui_custom_manager ;;
             1) func_preflight_check ;;
             2) func_base_init ;;
             3) func_env_install ;;
