@@ -157,6 +157,30 @@ grep -q '443 单入口切换变更预览' dist/vps.sh
 grep -q 'vpso_mux_status_json_path' dist/vps.sh
 grep -q '/var/lib/vps-optimize/vpso-mux/status.json' dist/vps.sh
 grep -q 'show_vpso_mux_runtime_status' dist/vps.sh
+grep -Fq '5) switch_entry_mode "tcp-peek" ;;' dist/vps.sh
+grep -Fq '7) rollback_last_entry_mode ;;' dist/vps.sh
+while IFS='|' read -r menu_no menu_label case_action; do
+    [[ -n "$menu_no" ]] || continue
+    if ! grep -Fq " ${menu_no}. ${menu_label}" dist/vps.sh; then
+        echo "443 single-entry menu item ${menu_no} label is missing or changed." >&2
+        exit 1
+    fi
+    if ! grep -Fq "${menu_no}) ${case_action}" dist/vps.sh; then
+        echo "443 single-entry menu item ${menu_no} dispatch no longer matches its label." >&2
+        exit 1
+    fi
+done <<'SNI_MENU_MAP'
+11|443 链路体检|sni_stack_health_check_enhanced ;;
+12|443 网络访问测试|func_443_network_test; continue ;;
+13|CF DNS / Caddy 证书维护|func_caddy_cf_maintenance_menu; continue ;;
+14|修改 443 共享参数|edit_sni_stack_runtime_profile; continue ;;
+15|订阅链接 / External Proxy 提示|check_sni_stack_subscription_hint ;;
+16|查看 TCP Peek + Splice 状态 / 8444 预检|start_tcp_peek_test_port ;;
+17|TCP Peek 分流规则校验|tcp_peek_dry_run_config ;;
+18|查看 TCP Peek + Splice 日志|view_vpso_mux_logs ;;
+19|切换公网 443 到 TCP Peek + Splice 模式|switch_public_443_to_tcp_peek ;;
+20|从 TCP Peek 回滚到 Nginx Stream 模式|rollback_tcp_peek_to_nginx_stream ;;
+SNI_MENU_MAP
 grep -q 'print_vpso_mux_failure_context' dist/vps.sh
 grep -q 'print_nginx_stream_failure_context' dist/vps.sh
 grep -q 'assert_nginx_stream_config_loaded' dist/vps.sh
