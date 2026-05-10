@@ -37,9 +37,9 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 
 | 路径 | 说明 |
 |---|---|
-| `/etc/vps-optimize/sni-stack.env` | 443 单入口保存的核心参数 |
-| `/etc/vps-optimize/443-engine.conf` | 当前 443 单入口引擎状态，默认 `nginx_stream` |
-| `/etc/vps-optimize/vpso-mux.yaml` | `tcp_peek`（内部兼容名）/ `vpso-mux` 分流器配置 |
+| `/etc/vps-optimize/sni-stack.env` | 443 单入口保存的核心参数，`ENTRY_MODE` 使用 `nginx-stream` / `xray-fallback` / `tcp-peek` |
+| `/etc/vps-optimize/443-engine.conf` | 当前 443 单入口引擎状态，默认 `nginx-stream` |
+| `/etc/vps-optimize/vpso-mux.yaml` | `tcp-peek` / `vpso-mux` 分流器配置 |
 | `/etc/vps-optimize/sni-stack.last-backup` | 最近一次 443 单入口备份路径记录 |
 | `/etc/vps-optimize/backups/sni-stack_*` | 443 单入口自动备份目录 |
 | `/etc/nginx/stream.d/vps_sni_*.conf` | Nginx stream SNI 分流配置 |

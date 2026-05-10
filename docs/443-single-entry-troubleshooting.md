@@ -163,6 +163,8 @@ systemctl status caddy --no-pager
 
 `当前 443 入口状态` 显示 `配置模式：nginx-stream`，`nginx：运行中`，但 `公网 443：未监听`。
 
+如果状态页同时出现旧命名兼容提示，例如 `nginx_stream` 或 `tcp_peek`，先按提示重新应用当前入口模式。脚本会按新命名读取并写回 `nginx-stream`、`xray-fallback` 或 `tcp-peek`，避免后续判断继续依赖旧状态值。
+
 ### 常见原因
 
 - `/etc/nginx/stream.d/vps_sni_443.conf` 被切换或回滚流程隔离后没有重新生成。

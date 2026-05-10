@@ -45,6 +45,30 @@ apt_update_once
 [[ "$(nginx_stream_listen_directives "::1" "443")" == "    listen [::1]:443;" ]]
 [[ "$(xui_cert_setting_key_sql_list)" == *"subcertfile"* ]]
 
+(
+    source <(sed -n '/^configure_system_timezone_for_init()/,/^# --- 启动面板 ---/p' src/main.sh | sed '$d')
+    entry_mode_tmp_dir=$(mktemp -d /tmp/vps-entry-mode-smoke.XXXXXX)
+    single_443_engine_state_path() { printf '%s\n' "$entry_mode_tmp_dir/443-engine.conf"; }
+    get_entry_mode() { printf '%s' "${SMOKE_ENTRY_MODE:-nginx-stream}"; }
+
+    [[ "$(normalize_entry_mode_name "nginx_stream")" == "nginx-stream" ]]
+    [[ "$(normalize_entry_mode_name "xray_fallback")" == "xray-fallback" ]]
+    [[ "$(normalize_entry_mode_name "tcp_peek")" == "tcp-peek" ]]
+    [[ "$(entry_mode_engine_name "tcp_peek")" == "tcp-peek" ]]
+
+    SMOKE_ENTRY_MODE="tcp-peek"
+    [[ "$(single_443_current_engine)" == "tcp-peek" ]]
+    printf '%s\n' "engine='tcp_peek'" > "$(single_443_engine_state_path)"
+    [[ "$(single_443_current_engine)" == "tcp-peek" ]]
+    printf '%s\n' "engine='nginx_stream'" > "$(single_443_engine_state_path)"
+    [[ "$(single_443_current_engine)" == "nginx-stream" ]]
+    printf '%s\n' "engine='xray-fallback'" > "$(single_443_engine_state_path)"
+    [[ "$(single_443_current_engine)" == "xray-fallback" ]]
+
+    rm -f "$(single_443_engine_state_path)"
+    rmdir "$entry_mode_tmp_dir"
+)
+
 remote_tmp_dir=$(mktemp -d /tmp/vps-remote-smoke.XXXXXX)
 remote_script="$remote_tmp_dir/remote.sh"
 printf '%s\n' '#!/usr/bin/env bash' 'echo remote-run-ok' > "$remote_script"
@@ -95,6 +119,15 @@ grep -q 'func_sni_stack_quick_menu' dist/vps.sh
 grep -q 'manage_sni_stack_tcp_routes' dist/vps.sh
 grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh
 grep -q 'single_443_current_engine' dist/vps.sh
+grep -q 'write_single_443_engine_state "nginx-stream"' dist/vps.sh
+grep -q 'write_single_443_engine_state "tcp-peek"' dist/vps.sh
+grep -q 'write_single_443_engine_state "xray-fallback"' dist/vps.sh
+grep -q 'entry_mode_engine_name()' dist/vps.sh
+grep -q 'echo "$mode"' dist/vps.sh
+if grep -q 'write_single_443_engine_state "nginx_stream"' dist/vps.sh || grep -q 'write_single_443_engine_state "tcp_peek"' dist/vps.sh || grep -q 'write_single_443_engine_state "xray_fallback"' dist/vps.sh; then
+    echo "443 engine state must write canonical hyphenated mode names." >&2
+    exit 1
+fi
 grep -q 'generate_tcp_peek_config' dist/vps.sh
 grep -q 'switch_public_443_to_tcp_peek' dist/vps.sh
 grep -q 'rollback_tcp_peek_to_nginx_stream' dist/vps.sh

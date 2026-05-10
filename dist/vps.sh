@@ -3051,6 +3051,7 @@ get_entry_mode() {
 
     mode=$(
         # shellcheck disable=SC1090
+        unset ENTRY_MODE
         source "$env_file" 2>/dev/null || true
         printf '%s' "${ENTRY_MODE:-}"
     )
@@ -3069,6 +3070,46 @@ get_entry_mode() {
             echo "invalid:${mode}"
             ;;
     esac
+}
+
+print_entry_mode_compat_notice() {
+    local env_file="/etc/vps-optimize/sni-stack.env"
+    local state_file env_mode state_engine normalized
+    state_file=$(single_443_engine_state_path 2>/dev/null || echo "/etc/vps-optimize/443-engine.conf")
+
+    if [[ -f "$env_file" ]]; then
+        env_mode=$(
+            # shellcheck disable=SC1090
+            unset ENTRY_MODE
+            source "$env_file" 2>/dev/null || true
+            printf '%s' "${ENTRY_MODE:-}"
+        )
+        if [[ -z "$env_mode" ]]; then
+            echo -e "${YELLOW}兼容提示：${env_file} 未写 ENTRY_MODE，已按 nginx-stream 读取；下次保存会写入 ENTRY_MODE='nginx-stream'。${PLAIN}"
+        else
+            case "$env_mode" in
+                "nginx_stream"|"xray_fallback"|"tcp_peek")
+                    normalized=$(normalize_entry_mode_name "$env_mode" 2>/dev/null || echo "nginx-stream")
+                    echo -e "${YELLOW}兼容提示：检测到旧 ENTRY_MODE='${env_mode}'，当前按 '${normalized}' 读取；下次保存会写入新命名。${PLAIN}"
+                    ;;
+            esac
+        fi
+    fi
+
+    if [[ -f "$state_file" ]]; then
+        state_engine=$(
+            # shellcheck disable=SC1090
+            unset engine
+            source "$state_file" 2>/dev/null || true
+            printf '%s' "${engine:-}"
+        )
+        case "$state_engine" in
+            "nginx_stream"|"xray_fallback"|"tcp_peek")
+                normalized=$(normalize_entry_mode_name "$state_engine" 2>/dev/null || echo "nginx-stream")
+                echo -e "${YELLOW}兼容提示：检测到旧 engine='${state_engine}'，当前按 '${normalized}' 读取；下次切换/重新应用会写入新命名。${PLAIN}"
+                ;;
+        esac
+    fi
 }
 
 set_entry_mode() {
@@ -3134,6 +3175,7 @@ entry_listener_display_name() {
 
 entry_mode_expected_listener() {
     local mode="$1"
+    mode=$(normalize_entry_mode_name "$mode" 2>/dev/null || echo "$mode")
     case "$mode" in
         "nginx-stream") echo "nginx" ;;
         "xray-fallback") echo "xray" ;;
@@ -3260,6 +3302,7 @@ show_current_entry_status() {
     detect_current_entry_status
     echo -e "${BOLD}当前 443 入口状态${PLAIN}"
     echo -e "配置模式：${CYAN}${ENTRY_STATUS_MODE}${PLAIN}"
+    print_entry_mode_compat_notice
     echo -e "公网 443：${ENTRY_STATUS_LISTENER_DISPLAY}"
     echo -e "监听进程：${ENTRY_STATUS_LISTENER_PROCESS}"
     if [[ "$ENTRY_STATUS_LISTENER" == "xray" ]]; then
@@ -3287,6 +3330,7 @@ show_current_entry_status() {
 show_current_entry_summary() {
     detect_current_entry_status
     echo -e "${BOLD}当前入口模式：${CYAN}${ENTRY_STATUS_MODE}${PLAIN}"
+    print_entry_mode_compat_notice
     if [[ "$ENTRY_STATUS_CONSISTENT" != "yes" ]]; then
         echo -e "${YELLOW}⚠️ 配置模式与公网 443 实际监听不一致，详情看 [1]，建议确认后重新应用当前入口模式。${PLAIN}"
     fi
@@ -3930,17 +3974,30 @@ yaml_quote() {
 }
 
 single_443_current_engine() {
-    local state_file
+    local state_file raw_engine env_mode normalized
     state_file=$(single_443_engine_state_path)
     if [[ -f "$state_file" ]]; then
-        (
+        raw_engine=$(
             # shellcheck disable=SC1090
+            unset engine
             source "$state_file" 2>/dev/null || true
-            printf '%s' "${engine:-nginx_stream}"
+            printf '%s' "${engine:-}"
         )
-        return 0
+        if [[ -n "$raw_engine" ]]; then
+            normalized=$(normalize_entry_mode_name "$raw_engine" 2>/dev/null || true)
+            if [[ -n "$normalized" ]]; then
+                printf '%s' "$normalized"
+            else
+                printf 'invalid:%s' "$raw_engine"
+            fi
+            return 0
+        fi
     fi
-    printf 'nginx_stream'
+    env_mode=$(get_entry_mode)
+    case "$env_mode" in
+        "nginx-stream"|"xray-fallback"|"tcp-peek") printf '%s' "$env_mode" ;;
+        *) printf 'nginx-stream' ;;
+    esac
 }
 
 sni_stack_route_name() {
@@ -3982,8 +4039,10 @@ sni_stack_whitelist_summary_for_state() {
 
 write_single_443_engine_state() {
     local selected_engine="$1"
+    local selected_engine_raw="$1"
     local backup_id="${2:-}"
     local state_file mux_config mux_service caddy_backend xray_backend routes whitelist_rules
+    selected_engine=$(normalize_entry_mode_name "$selected_engine_raw") || { echo -e "${RED}Invalid engine: ${selected_engine_raw}${PLAIN}"; return 1; }
     state_file=$(single_443_engine_state_path)
     mux_config=$(vpso_mux_config_path)
     mux_service=$(vpso_mux_service_name)
@@ -4522,7 +4581,7 @@ start_tcp_peek_test_port() {
     fi
     show_vpso_mux_runtime_status
     echo -e "------------------------------------------------"
-    if [[ "$(single_443_current_engine)" == "tcp_peek" ]]; then
+    if [[ "$(single_443_current_engine)" == "tcp-peek" ]]; then
         echo -e "${YELLOW}当前入口已经是 TCP Peek + Splice 模式。为避免误停公网 443，本入口不覆盖运行中的 443 配置。${PLAIN}"
         return 0
     fi
@@ -4614,11 +4673,7 @@ normalize_entry_mode_name() {
 entry_mode_engine_name() {
     local mode="$1"
     mode=$(normalize_entry_mode_name "$mode") || return 1
-    case "$mode" in
-        "nginx-stream") echo "nginx_stream" ;;
-        "xray-fallback") echo "xray_fallback" ;;
-        "tcp-peek") echo "tcp_peek" ;;
-    esac
+    echo "$mode"
 }
 
 print_entry_mode_cutover_paths() {
@@ -5025,6 +5080,7 @@ rollback_last_entry_mode() {
     if [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]]; then
         old_mode=$(
             # shellcheck disable=SC1090
+            unset ENTRY_MODE
             source "$backup_dir/vps-optimize/sni-stack.env" 2>/dev/null || true
             printf '%s' "${ENTRY_MODE:-nginx-stream}"
         )
@@ -5054,7 +5110,7 @@ rollback_last_entry_mode() {
         return 1
     fi
     set_entry_mode "$old_mode" >/dev/null 2>&1 || true
-    write_single_443_engine_state "$(entry_mode_engine_name "$old_mode" 2>/dev/null || echo nginx_stream)" "$backup_dir"
+    write_single_443_engine_state "$(entry_mode_engine_name "$old_mode" 2>/dev/null || echo nginx-stream)" "$backup_dir"
     echo -e "${GREEN}✅ 已回滚到上一次入口模式：${old_mode}${PLAIN}"
 }
 
@@ -5090,7 +5146,7 @@ apply_nginx_stream_mode() {
         echo -e "${YELLOW}⚠️ Nginx Stream/Web 入口已恢复，但 Xray/REALITY 本地入站未连通。${PLAIN}"
         echo -e "${YELLOW}请在 3x-ui/Xray 确认本地入站正在监听 ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}，或把脚本里的 Xray 本地端口改成实际值。${PLAIN}"
     fi
-    write_single_443_engine_state "nginx_stream" "$backup_dir"
+    write_single_443_engine_state "nginx-stream" "$backup_dir"
 }
 
 apply_tcppeek_mode() {
@@ -5126,7 +5182,7 @@ apply_tcppeek_mode() {
         restart_xray_entry_service || return 1
     fi
     tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1 || return 1
-    write_single_443_engine_state "tcp_peek" "$backup_dir"
+    write_single_443_engine_state "tcp-peek" "$backup_dir"
 }
 
 apply_xray_fallback_mode() {
@@ -5142,7 +5198,7 @@ apply_xray_fallback_mode() {
     verify_public_443_listener_for_mode "xray-fallback" || return 1
     tcp_probe_host "Caddy fallback 后端" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
     probe_tls_sni_certificate "Xray Fallback 面板 SNI" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
-    write_single_443_engine_state "xray_fallback" "$backup_dir"
+    write_single_443_engine_state "xray-fallback" "$backup_dir"
 }
 
 apply_entry_mode_by_name() {
@@ -5428,6 +5484,7 @@ sni_stack_health_check_enhanced() {
 
     echo -e "${BOLD}入口状态${PLAIN}"
     echo -e "当前 ENTRY_MODE：${GREEN}${mode}${PLAIN}"
+    print_entry_mode_compat_notice
     echo -e "实际公网 443 监听服务：${ENTRY_STATUS_LISTENER_PROCESS}"
     public_443_lines=$(ss -lntp 2>/dev/null | grep -E '(:443[[:space:]]|:443$)' || true)
     echo -e "${public_443_lines:-未监听或当前用户无权限查看进程}"

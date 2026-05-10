@@ -231,6 +231,8 @@ TCP Peek + Splice 额外要求：
 | `tcp-peek` | `vpso-mux` |
 | `xray-fallback` | `xray` / `3x-ui` / `x-ui` 托管的 Xray |
 
+`ENTRY_MODE` 的新配置值只写入 `nginx-stream`、`xray-fallback`、`tcp-peek`。如果旧配置里没有 `ENTRY_MODE`，脚本按 `nginx-stream` 读取；如果旧配置或 `/etc/vps-optimize/443-engine.conf` 里还有 `nginx_stream`、`xray_fallback`、`tcp_peek`，脚本会按对应的新值兼容读取，并在状态页提示迁移。下次保存、切换或重新应用入口模式时会写回新命名。
+
 无论哪种模式，都不要让 Caddy、3x-ui 面板端口、订阅端口或额外本地入站直接暴露公网。
 
 ## Xray 入站管理边界

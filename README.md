@@ -273,6 +273,8 @@ TCP Peek + Splice 模式：基于 MSG_PEEK 读取 TLS ClientHello 中的 SNI，�
 
 Xray 入站管理只记录 `SNI -> 本地地址:端口`，不是 3x-ui 入站编辑器。用户需要先在 3x-ui 中创建并启用本地入站，再把 SNI 分流记录写入脚本。Nginx Stream 模式和 TCP Peek + Splice 模式支持多个 Xray 本地入站分流。Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 `443` 默认由一个 Xray 主入站接管。脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。如需多个本地 Xray 入站分流，请使用 Nginx Stream 模式或 TCP Peek + Splice 模式。
 
+`ENTRY_MODE` 当前使用 `nginx-stream`、`xray-fallback`、`tcp-peek` 三个值。旧配置里缺少 `ENTRY_MODE` 时按 `nginx-stream` 兼容读取；旧的 `nginx_stream`、`xray_fallback`、`tcp_peek` 只保留读取兼容，下次保存、切换或重新应用会写回新命名。
+
 3x-ui 具体怎么填请看 [443 单入口分流详细教程](docs/443-single-entry.md) 里的“三种入口模式配置速查”。简要原则：Nginx Stream 和 TCP Peek 模式下，3x-ui 面板、订阅和 Xray 入站都应监听本机端口；Xray Fallback 模式下，只有一个 Xray 主入站监听公网 `443`，并由它 fallback 到 Caddy 本地端口。切回 Nginx Stream 或 TCP Peek 前，必须先把这个 Xray 主入站从公网 `443` 移走。
 
 TCP Peek + Splice 切换前必须先跑 `主菜单 [19] -> [16] 查看 TCP Peek + Splice 状态 / 8444 预检`。正式 `[5]` 切换不会在公网 `443` 切换路径里自动下载 Go 工具链或远端编译 `vpso-mux`；如果当前 SSH 正连在入口端口，例如 `443`，脚本会拒绝切换，避免把当前管理连接踢掉。
