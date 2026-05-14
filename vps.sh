@@ -13,6 +13,37 @@ MODULES=(
     validate
     rollback
     backup
+    runtime
+    system_core
+    caddy_certificates
+    caddy_proxy
+    environment
+    caddy_legacy
+    sni_stack_config
+    tcp_peek_engine
+    sni_stack_health
+    sni_stack_profiles
+    sni_stack_install
+    sni_stack_sites
+    xray_sni_routes
+    sni_stack_menus
+    caddy_maintenance
+    ssh_security
+    docker_manage
+    kernel_tuning
+    diagnostics_status
+    diagnostics_network
+    panel_installers
+    subscription_tools
+    panel_rescue
+    server_maintenance
+    updater
+    preflight
+    health_dashboard
+    dns_optimize
+    traffic_guard
+    network_interface
+    menus
     main
 )
 

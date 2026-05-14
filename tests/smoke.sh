@@ -48,17 +48,14 @@ assert_file_not_matches() {
 bash -n scripts/build.sh
 bash -n vps.sh
 bash -n dist/vps.sh
-bash -n src/common.sh
-bash -n src/ui.sh
-bash -n src/input.sh
-bash -n src/validate.sh
-bash -n src/rollback.sh
-bash -n src/backup.sh
-bash -n src/main.sh
+for module in src/*.sh; do
+    bash -n "$module"
+done
 bash -n dog.sh
 bash -n xui-custom-manager.sh
 grep -q 'modules=(' scripts/build.sh
-grep -q 'main.sh     # feature implementation and menu wiring' scripts/build.sh
+grep -q 'runtime.sh  # root/runtime guard' scripts/build.sh
+grep -q 'main.sh     # bootstrap into menu wiring' scripts/build.sh
 if command -v go >/dev/null 2>&1; then
     GO_BIN=go
 elif command -v go.exe >/dev/null 2>&1; then
@@ -94,7 +91,8 @@ apt_update_once
 [[ "$(xui_cert_setting_key_sql_list)" == *"subcertfile"* ]]
 
 (
-    source <(sed -n '/^configure_system_timezone_for_init()/,/^# --- 启动面板 ---/p' src/main.sh | sed '$d')
+    source src/sni_stack_config.sh
+    source src/tcp_peek_engine.sh
     entry_mode_tmp_dir=$(mktemp -d /tmp/vps-entry-mode-smoke.XXXXXX)
     single_443_engine_state_path() { printf '%s\n' "$entry_mode_tmp_dir/443-engine.conf"; }
     get_entry_mode() { printf '%s' "${SMOKE_ENTRY_MODE:-nginx-stream}"; }

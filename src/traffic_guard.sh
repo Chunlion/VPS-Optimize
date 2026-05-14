@@ -1,0 +1,786 @@
+# shellcheck shell=bash
+# Traffic quota accounting, guard checker installation, and quota protection menus.
+
+traffic_guard_human_bytes() {
+    local bytes="${1:-0}"
+    awk -v b="$bytes" 'BEGIN {
+        split("B KB MB GB TB PB", u, " ");
+        i=1;
+        while (b >= 1024 && i < 6) { b=b/1024; i++ }
+        if (i == 1) printf "%.0f%s", b, u[i]; else printf "%.2f%s", b, u[i]
+    }'
+}
+
+traffic_guard_gb_to_bytes() {
+    local gb="$1"
+    gb="${gb//，/.}"
+    gb="${gb//,/}"
+    awk -v gb="$gb" 'BEGIN {
+        if (gb !~ /^[0-9]+([.][0-9]+)?$/ || gb <= 0) exit 1;
+        printf "%.0f", gb * 1024 * 1024 * 1024
+    }'
+}
+
+traffic_guard_gb_to_bytes_zero_ok() {
+    local gb="$1"
+    gb="${gb//，/.}"
+    gb="${gb//,/}"
+    awk -v gb="$gb" 'BEGIN {
+        if (gb !~ /^[0-9]+([.][0-9]+)?$/) exit 1;
+        printf "%.0f", gb * 1024 * 1024 * 1024
+    }'
+}
+
+traffic_guard_bytes_to_gb() {
+    local bytes="${1:-0}"
+    [[ "$bytes" =~ ^[0-9]+$ ]] || bytes=0
+    awk -v b="$bytes" 'BEGIN { printf "%.2f", b / 1024 / 1024 / 1024 }'
+}
+
+traffic_guard_iface_is_physical_candidate() {
+    local iface="$1"
+    case "$iface" in
+        lo|docker*|br-*|veth*|tailscale*|wg*|tun*|tap*|zt*|virbr*|vmnet*|cni*|flannel*|kube*|dummy*|ifb*)
+            return 1
+            ;;
+    esac
+    return 0
+}
+
+traffic_guard_best_active_iface() {
+    local path iface oper rx tx score best_iface="" best_score=-1
+    for path in /sys/class/net/*; do
+        [[ -e "$path" ]] || continue
+        iface="${path##*/}"
+        traffic_guard_valid_iface "$iface" || continue
+        traffic_guard_iface_is_physical_candidate "$iface" || continue
+        oper=$(cat "${path}/operstate" 2>/dev/null || echo "unknown")
+        [[ "$oper" == "down" ]] && continue
+        rx=$(cat "${path}/statistics/rx_bytes" 2>/dev/null || echo 0)
+        tx=$(cat "${path}/statistics/tx_bytes" 2>/dev/null || echo 0)
+        [[ "$rx" =~ ^[0-9]+$ ]] || rx=0
+        [[ "$tx" =~ ^[0-9]+$ ]] || tx=0
+        score=$(( rx + tx ))
+        if (( score > best_score )); then
+            best_score="$score"
+            best_iface="$iface"
+        fi
+    done
+    printf '%s' "$best_iface"
+}
+
+traffic_guard_detect_iface() {
+    local iface
+    iface=$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="dev") {print $(i+1); exit}}')
+    if traffic_guard_valid_iface "$iface" && traffic_guard_iface_is_physical_candidate "$iface"; then
+        printf '%s' "$iface"
+        return 0
+    fi
+    iface=$(ip -o -4 route show default 2>/dev/null | awk '{print $5; exit}')
+    if traffic_guard_valid_iface "$iface" && traffic_guard_iface_is_physical_candidate "$iface"; then
+        printf '%s' "$iface"
+        return 0
+    fi
+    iface=$(ip -o -6 route show default 2>/dev/null | awk '{print $5; exit}')
+    if traffic_guard_valid_iface "$iface" && traffic_guard_iface_is_physical_candidate "$iface"; then
+        printf '%s' "$iface"
+        return 0
+    fi
+    iface=$(traffic_guard_best_active_iface)
+    printf '%s' "$iface"
+}
+
+traffic_guard_valid_iface() {
+    local iface="$1"
+    [[ -n "$iface" && "$iface" != *"/"* && "$iface" != *".."* ]] || return 1
+    [[ -r "/sys/class/net/${iface}/statistics/rx_bytes" && -r "/sys/class/net/${iface}/statistics/tx_bytes" ]]
+}
+
+traffic_guard_mode_label() {
+    case "$1" in
+        tx) echo "出站 TX 计费" ;;
+        rx) echo "入站 RX 计费" ;;
+        total) echo "出入总量 RX+TX" ;;
+        max) echo "任一方向达量" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+traffic_guard_normalize_cycle_day() {
+    local cycle_day="${1:-1}"
+    [[ "$cycle_day" =~ ^[0-9]+$ ]] || cycle_day=1
+    cycle_day=$((10#$cycle_day))
+    (( cycle_day >= 1 && cycle_day <= 31 )) || cycle_day=1
+    printf '%s' "$cycle_day"
+}
+
+traffic_guard_cycle_date_for_month() {
+    local year_month="$1"
+    local cycle_day
+    local last_day effective_day
+    cycle_day=$(traffic_guard_normalize_cycle_day "${2:-1}")
+    last_day=$(date -d "${year_month}-01 +1 month -1 day" +%d 2>/dev/null || echo 31)
+    last_day=$((10#$last_day))
+    effective_day="$cycle_day"
+    (( effective_day > last_day )) && effective_day="$last_day"
+    printf '%s-%02d' "$year_month" "$effective_day"
+}
+
+traffic_guard_current_cycle_key() {
+    local cycle_day="${1:-1}"
+    local current_month previous_month current_day reset_date reset_day
+    cycle_day=$(traffic_guard_normalize_cycle_day "$cycle_day")
+    current_month=$(date +%Y-%m)
+    reset_date=$(traffic_guard_cycle_date_for_month "$current_month" "$cycle_day")
+    reset_day="${reset_date##*-}"
+    current_day=$(date +%d)
+    if (( 10#$current_day >= 10#$reset_day )); then
+        printf '%s' "$reset_date"
+    else
+        previous_month=$(date -d "${current_month}-01 -1 month" +%Y-%m)
+        traffic_guard_cycle_date_for_month "$previous_month" "$cycle_day"
+    fi
+}
+
+traffic_guard_read_stats() {
+    local iface="$1"
+    cat "/sys/class/net/${iface}/statistics/rx_bytes" "/sys/class/net/${iface}/statistics/tx_bytes" 2>/dev/null
+}
+
+traffic_guard_mode_usage_bytes() {
+    local mode="$1"
+    local rx="${2:-0}"
+    local tx="${3:-0}"
+    [[ "$rx" =~ ^[0-9]+$ ]] || rx=0
+    [[ "$tx" =~ ^[0-9]+$ ]] || tx=0
+    case "$mode" in
+        rx) printf '%s' "$rx" ;;
+        total) printf '%s' "$(( rx + tx ))" ;;
+        max)
+            if (( rx > tx )); then printf '%s' "$rx"; else printf '%s' "$tx"; fi
+            ;;
+        tx|*) printf '%s' "$tx" ;;
+    esac
+}
+
+traffic_guard_existing_state_usage() {
+    local iface="$1"
+    local mode="$2"
+    local cycle_day="${3:-}"
+    local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    [[ -r "$TRAFFIC_GUARD_CONFIG" && -r "$state_file" ]] || return 1
+    (
+        local expected_cycle
+        # shellcheck disable=SC1090
+        . "$TRAFFIC_GUARD_CONFIG"
+        # shellcheck disable=SC1090
+        . "$state_file"
+        [[ "${IFACE:-}" == "$iface" && "${MODE:-}" == "$mode" ]] || exit 1
+        expected_cycle=$(traffic_guard_current_cycle_key "${cycle_day:-${CYCLE_DAY:-1}}")
+        [[ "${CYCLE_KEY:-}" == "$expected_cycle" ]] || exit 1
+        [[ "${LAST_USAGE:-}" =~ ^[0-9]+$ ]] || exit 1
+        printf '%s' "$LAST_USAGE"
+    )
+}
+
+traffic_guard_detect_initial_used_bytes() {
+    local iface="$1"
+    local mode="$2"
+    local current_stats current_rx current_tx
+    mapfile -t current_stats < <(traffic_guard_read_stats "$iface")
+    current_rx="${current_stats[0]:-0}"
+    current_tx="${current_stats[1]:-0}"
+    traffic_guard_mode_usage_bytes "$mode" "$current_rx" "$current_tx"
+}
+
+traffic_guard_write_state_baseline() {
+    local iface="$1"
+    local cycle_day="$2"
+    local initial_used_bytes="${3:-0}"
+    local current_stats current_rx current_tx cycle_key state_file
+
+    [[ "$initial_used_bytes" =~ ^[0-9]+$ ]] || initial_used_bytes=0
+    traffic_guard_valid_iface "$iface" || return 1
+    mapfile -t current_stats < <(traffic_guard_read_stats "$iface")
+    current_rx="${current_stats[0]:-0}"
+    current_tx="${current_stats[1]:-0}"
+    cycle_key=$(traffic_guard_current_cycle_key "$cycle_day")
+    mkdir -p "$TRAFFIC_GUARD_STATE_DIR" || return 1
+    chmod 700 "$TRAFFIC_GUARD_STATE_DIR" 2>/dev/null || true
+    state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    {
+        echo "CYCLE_KEY='${cycle_key}'"
+        echo "BASE_RX='${current_rx}'"
+        echo "BASE_TX='${current_tx}'"
+        echo "OFFSET_BYTES='${initial_used_bytes}'"
+        echo "WARN_SENT='0'"
+        echo "TRIPPED='0'"
+        echo "LAST_RX='${current_rx}'"
+        echo "LAST_TX='${current_tx}'"
+        echo "LAST_USAGE='${initial_used_bytes}'"
+        echo "LAST_CHECKED_AT='$(date -Is 2>/dev/null || date)'"
+    } > "$state_file"
+    chmod 600 "$state_file" 2>/dev/null || true
+}
+
+install_traffic_guard_checker() {
+    mkdir -p "$(dirname "$TRAFFIC_GUARD_CHECKER")" "$TRAFFIC_GUARD_STATE_DIR" "$(dirname "$TRAFFIC_GUARD_CONFIG")" || return 1
+    cat > "$TRAFFIC_GUARD_CHECKER" <<'GUARD_SCRIPT'
+#!/usr/bin/env bash
+set -u
+
+CONFIG="/etc/vps-optimize/traffic-guard.conf"
+STATE_DIR="/var/lib/vps-optimize/traffic-guard"
+STATE_FILE="${STATE_DIR}/state"
+LOG_FILE="/var/log/vps-traffic-guard.log"
+
+log_msg() {
+    local msg="$1"
+    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    printf '%s %s\n' "$(date -Is 2>/dev/null || date)" "$msg" >> "$LOG_FILE" 2>/dev/null || true
+    logger -t vps-traffic-guard "$msg" 2>/dev/null || true
+}
+
+guard_exit() {
+    local rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+        log_msg "checker exited unexpectedly rc=${rc}; keep timer healthy and retry next run"
+        exit 0
+    fi
+}
+trap guard_exit EXIT
+
+normalize_cycle_day() {
+    local cycle_day="${1:-1}"
+    [[ "$cycle_day" =~ ^[0-9]+$ ]] || cycle_day=1
+    cycle_day=$((10#$cycle_day))
+    (( cycle_day >= 1 && cycle_day <= 31 )) || cycle_day=1
+    printf '%s' "$cycle_day"
+}
+
+cycle_date_for_month() {
+    local year_month="$1"
+    local cycle_day
+    local last_day effective_day
+    cycle_day=$(normalize_cycle_day "${2:-1}")
+    last_day=$(date -d "${year_month}-01 +1 month -1 day" +%d 2>/dev/null || echo 31)
+    last_day=$((10#$last_day))
+    effective_day="$cycle_day"
+    (( effective_day > last_day )) && effective_day="$last_day"
+    printf '%s-%02d' "$year_month" "$effective_day"
+}
+
+current_cycle_key() {
+    local cycle_day="${1:-1}"
+    local current_month previous_month current_day reset_date reset_day
+    cycle_day=$(normalize_cycle_day "$cycle_day")
+    current_month=$(date +%Y-%m)
+    reset_date=$(cycle_date_for_month "$current_month" "$cycle_day")
+    reset_day="${reset_date##*-}"
+    current_day=$(date +%d)
+    if (( 10#$current_day >= 10#$reset_day )); then
+        printf '%s' "$reset_date"
+    else
+        previous_month=$(date -d "${current_month}-01 -1 month" +%Y-%m)
+        cycle_date_for_month "$previous_month" "$cycle_day"
+    fi
+}
+
+save_state() {
+    mkdir -p "$STATE_DIR" || exit 1
+    chmod 700 "$STATE_DIR" 2>/dev/null || true
+    {
+        echo "CYCLE_KEY='${CYCLE_KEY:-}'"
+        echo "BASE_RX='${BASE_RX:-0}'"
+        echo "BASE_TX='${BASE_TX:-0}'"
+        echo "OFFSET_BYTES='${OFFSET_BYTES:-0}'"
+        echo "WARN_SENT='${WARN_SENT:-0}'"
+        echo "TRIPPED='${TRIPPED:-0}'"
+        echo "LAST_RX='${CURRENT_RX:-0}'"
+        echo "LAST_TX='${CURRENT_TX:-0}'"
+        echo "LAST_USAGE='${USAGE_BYTES:-0}'"
+        echo "LAST_CHECKED_AT='$(date -Is 2>/dev/null || date)'"
+    } > "$STATE_FILE"
+    chmod 600 "$STATE_FILE" 2>/dev/null || true
+}
+
+[[ -r "$CONFIG" ]] || exit 0
+# shellcheck disable=SC1090
+. "$CONFIG"
+
+[[ "${ENABLED:-0}" == "1" ]] || exit 0
+IFACE="${IFACE:-}"
+MODE="${MODE:-tx}"
+LIMIT_BYTES="${LIMIT_BYTES:-0}"
+CYCLE_DAY="${CYCLE_DAY:-1}"
+WARN_PERCENT="${WARN_PERCENT:-90}"
+ACTION="${ACTION:-poweroff}"
+INITIAL_USED_BYTES="${INITIAL_USED_BYTES:-0}"
+
+[[ -n "$IFACE" && -r "/sys/class/net/${IFACE}/statistics/rx_bytes" && -r "/sys/class/net/${IFACE}/statistics/tx_bytes" ]] || {
+    log_msg "interface ${IFACE:-empty} is not readable, skip"
+    exit 0
+}
+[[ "$LIMIT_BYTES" =~ ^[0-9]+$ && "$LIMIT_BYTES" -gt 0 ]] || exit 0
+[[ "$WARN_PERCENT" =~ ^[0-9]+$ ]] || WARN_PERCENT=90
+(( WARN_PERCENT >= 1 && WARN_PERCENT <= 99 )) || WARN_PERCENT=90
+
+CURRENT_RX=$(cat "/sys/class/net/${IFACE}/statistics/rx_bytes" 2>/dev/null || echo 0)
+CURRENT_TX=$(cat "/sys/class/net/${IFACE}/statistics/tx_bytes" 2>/dev/null || echo 0)
+CYCLE_NOW=$(current_cycle_key "$CYCLE_DAY")
+
+STATE_EXISTS=0
+if [[ -r "$STATE_FILE" ]]; then
+    STATE_EXISTS=1
+    # shellcheck disable=SC1090
+    . "$STATE_FILE"
+fi
+
+if [[ "${CYCLE_KEY:-}" != "$CYCLE_NOW" ]]; then
+    CYCLE_KEY="$CYCLE_NOW"
+    BASE_RX="$CURRENT_RX"
+    BASE_TX="$CURRENT_TX"
+    if [[ "$STATE_EXISTS" -eq 0 ]]; then
+        OFFSET_BYTES="${INITIAL_USED_BYTES:-0}"
+    else
+        OFFSET_BYTES=0
+    fi
+    WARN_SENT=0
+    TRIPPED=0
+    USAGE_BYTES="$OFFSET_BYTES"
+    save_state
+    log_msg "new cycle ${CYCLE_KEY}, baseline reset on ${IFACE}, initial used ${OFFSET_BYTES} bytes"
+    exit 0
+fi
+
+BASE_RX="${BASE_RX:-$CURRENT_RX}"
+BASE_TX="${BASE_TX:-$CURRENT_TX}"
+OFFSET_BYTES="${OFFSET_BYTES:-0}"
+WARN_SENT="${WARN_SENT:-0}"
+TRIPPED="${TRIPPED:-0}"
+
+if (( CURRENT_RX < BASE_RX || CURRENT_TX < BASE_TX )); then
+    PREVIOUS_USAGE="${LAST_USAGE:-${OFFSET_BYTES:-0}}"
+    [[ "$PREVIOUS_USAGE" =~ ^[0-9]+$ ]] || PREVIOUS_USAGE=0
+    BASE_RX="$CURRENT_RX"
+    BASE_TX="$CURRENT_TX"
+    OFFSET_BYTES="$PREVIOUS_USAGE"
+    WARN_SENT=0
+    TRIPPED=0
+    USAGE_BYTES="$OFFSET_BYTES"
+    save_state
+    log_msg "counter reset detected on ${IFACE}, baseline reset and preserved ${OFFSET_BYTES} bytes"
+    exit 0
+fi
+
+DELTA_RX=$(( CURRENT_RX - BASE_RX ))
+DELTA_TX=$(( CURRENT_TX - BASE_TX ))
+case "$MODE" in
+    rx) USAGE_BYTES="$DELTA_RX" ;;
+    total) USAGE_BYTES=$(( DELTA_RX + DELTA_TX )) ;;
+    max)
+        if (( DELTA_RX > DELTA_TX )); then USAGE_BYTES="$DELTA_RX"; else USAGE_BYTES="$DELTA_TX"; fi
+        ;;
+    tx|*) USAGE_BYTES="$DELTA_TX" ;;
+esac
+USAGE_BYTES=$(( USAGE_BYTES + OFFSET_BYTES ))
+
+if [[ "$TRIPPED" != "1" ]] && (( USAGE_BYTES * 100 >= LIMIT_BYTES * WARN_PERCENT )) && (( USAGE_BYTES < LIMIT_BYTES )) && [[ "$WARN_SENT" != "1" ]]; then
+    WARN_SENT=1
+    save_state
+    log_msg "warning ${USAGE_BYTES}/${LIMIT_BYTES} bytes (${WARN_PERCENT}%) on ${IFACE}, mode=${MODE}"
+    exit 0
+fi
+
+if (( USAGE_BYTES >= LIMIT_BYTES )); then
+    TRIPPED=1
+    save_state
+    log_msg "quota reached ${USAGE_BYTES}/${LIMIT_BYTES} bytes on ${IFACE}, mode=${MODE}, action=${ACTION}"
+    case "$ACTION" in
+        log)
+            exit 0
+            ;;
+        poweroff|*)
+            sync
+            systemctl poweroff >/dev/null 2>&1 || poweroff >/dev/null 2>&1 || shutdown -h now >/dev/null 2>&1 || log_msg "poweroff command failed; will retry on next timer run"
+            ;;
+    esac
+fi
+
+save_state
+exit 0
+GUARD_SCRIPT
+    chmod 700 "$TRAFFIC_GUARD_CHECKER" || return 1
+}
+
+reset_traffic_guard_failed_state() {
+    systemctl reset-failed vps-traffic-guard.service vps-traffic-guard.timer >/dev/null 2>&1 || true
+}
+
+install_traffic_guard_units() {
+    local interval="$1"
+    [[ "$interval" =~ ^[0-9]+$ ]] || interval=60
+    (( interval >= 30 )) || interval=30
+
+    cat > /etc/systemd/system/vps-traffic-guard.service <<EOF
+[Unit]
+Description=VPS-Optimize traffic quota guard
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=${TRAFFIC_GUARD_CHECKER}
+EOF
+
+    cat > /etc/systemd/system/vps-traffic-guard.timer <<EOF
+[Unit]
+Description=Run VPS-Optimize traffic quota guard periodically
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=${interval}s
+AccuracySec=10s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    systemctl daemon-reload >/dev/null 2>&1 || return 1
+    reset_traffic_guard_failed_state
+    systemctl enable --now vps-traffic-guard.timer >/dev/null 2>&1 || return 1
+    reset_traffic_guard_failed_state
+}
+
+write_traffic_guard_config() {
+    local iface="$1"
+    local mode="$2"
+    local limit_gb="$3"
+    local limit_bytes="$4"
+    local cycle_day="$5"
+    local warn_percent="$6"
+    local action="$7"
+    local initial_used_gb="$8"
+    local initial_used_bytes="$9"
+    local interval="${10}"
+
+    mkdir -p "$(dirname "$TRAFFIC_GUARD_CONFIG")" || return 1
+    cat > "$TRAFFIC_GUARD_CONFIG" <<EOF
+# VPS-Optimize traffic quota guard
+# Generated: $(date -Is 2>/dev/null || date)
+ENABLED=1
+IFACE='${iface}'
+MODE='${mode}'
+LIMIT_GB='${limit_gb}'
+LIMIT_BYTES='${limit_bytes}'
+CYCLE_DAY='${cycle_day}'
+WARN_PERCENT='${warn_percent}'
+ACTION='${action}'
+INITIAL_USED_GB='${initial_used_gb}'
+INITIAL_USED_BYTES='${initial_used_bytes}'
+CHECK_INTERVAL='${interval}'
+EOF
+    chmod 600 "$TRAFFIC_GUARD_CONFIG" 2>/dev/null || true
+}
+
+load_traffic_guard_config() {
+    [[ -r "$TRAFFIC_GUARD_CONFIG" ]] || return 1
+    # shellcheck disable=SC1090
+    . "$TRAFFIC_GUARD_CONFIG"
+}
+
+traffic_guard_usage_from_state() {
+    local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    [[ -r "$state_file" ]] || return 1
+    # shellcheck disable=SC1090
+    . "$state_file"
+    printf '%s' "${LAST_USAGE:-0}"
+}
+
+show_traffic_guard_status() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "网络/内核优化 > 流量达量关机保护"
+    echo -e "${BOLD}🧯 流量达量关机保护状态${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    if ! load_traffic_guard_config; then
+        echo -e "${YELLOW}当前未配置流量达量关机保护。${PLAIN}"
+        echo -e "${BLUE}建议先选择 [1] 配置，避免 VPS 被刷流量产生超额账单。${PLAIN}"
+        return 0
+    fi
+
+    local timer_state service_state usage limit pct cycle_key state_file current_stats current_rx current_tx
+    timer_state=$(systemctl is-active vps-traffic-guard.timer 2>/dev/null || echo "inactive")
+    service_state=$(systemctl is-enabled vps-traffic-guard.timer 2>/dev/null || echo "disabled")
+    usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
+    limit="${LIMIT_BYTES:-0}"
+    if [[ "$limit" =~ ^[0-9]+$ && "$limit" -gt 0 ]]; then
+        pct=$(awk -v u="$usage" -v l="$limit" 'BEGIN { printf "%.2f", (u/l)*100 }')
+    else
+        pct="0.00"
+    fi
+    cycle_key=$(traffic_guard_current_cycle_key "${CYCLE_DAY:-1}")
+
+    echo -e "开关状态 : ${GREEN}${ENABLED:-0}${PLAIN}  timer: ${timer_state}/${service_state}"
+    echo -e "监控网卡 : ${CYAN}${IFACE:-未知}${PLAIN}"
+    echo -e "计费模式 : ${CYAN}$(traffic_guard_mode_label "${MODE:-tx}")${PLAIN}"
+    echo -e "本周期   : ${CYAN}${cycle_key}${PLAIN} 起，配置为每月 ${CYCLE_DAY:-1} 日重置（短月份按最后一天）"
+    echo -e "阈值     : ${YELLOW}${LIMIT_GB:-未知}GB${PLAIN} ($(traffic_guard_human_bytes "$limit"))"
+    echo -e "已用     : ${GREEN}$(traffic_guard_human_bytes "$usage")${PLAIN} / ${pct}%"
+    echo -e "预警线   : ${WARN_PERCENT:-90}%  动作: ${ACTION:-poweroff}"
+    if traffic_guard_valid_iface "${IFACE:-}"; then
+        mapfile -t current_stats < <(traffic_guard_read_stats "$IFACE")
+        current_rx="${current_stats[0]:-0}"
+        current_tx="${current_stats[1]:-0}"
+        echo -e "网卡计数 : RX ${CYAN}$(traffic_guard_human_bytes "$current_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$current_tx")${PLAIN}（自开机累计）"
+    fi
+    echo -e "配置文件 : ${CYAN}${TRAFFIC_GUARD_CONFIG}${PLAIN}"
+    echo -e "日志文件 : ${CYAN}${TRAFFIC_GUARD_LOG}${PLAIN}"
+
+    state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    if [[ -r "$state_file" ]]; then
+        local last_checked
+        last_checked=$(grep -m1 '^LAST_CHECKED_AT=' "$state_file" | cut -d= -f2- | sed "s/^'//;s/'$//")
+        echo -e "最近检查 : ${CYAN}${last_checked}${PLAIN}"
+    else
+        echo -e "${YELLOW}尚未生成状态文件，timer 首次运行后会自动初始化基线。${PLAIN}"
+    fi
+}
+
+configure_traffic_guard() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "网络/内核优化 > 配置流量达量关机保护"
+    echo -e "${BOLD}🧯 配置流量达量关机保护${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}用途：定时读取网卡流量，达到阈值后自动关机，避免超额流量产生账单。${PLAIN}"
+    echo -e "${YELLOW}注意：脚本只能按本机网卡计数估算，云厂商后台统计可能有延迟或口径差异，请留安全余量。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local default_iface iface limit_gb limit_bytes initial_used_gb initial_used_bytes
+    local cycle_day cycle_default_day warn_percent action_choice action mode_choice mode interval
+    local current_stats current_rx current_tx detected_used_bytes detected_used_gb existing_used_bytes
+    default_iface=$(traffic_guard_detect_iface)
+    iface=$(ask_with_default "监控网卡（自动推荐活跃公网网卡）" "${default_iface:-eth0}")
+    if ! traffic_guard_valid_iface "$iface"; then
+        echo -e "${RED}❌ 网卡 ${iface} 不存在或无法读取统计数据。${PLAIN}"
+        pause_return
+        return 1
+    fi
+    mapfile -t current_stats < <(traffic_guard_read_stats "$iface")
+    current_rx="${current_stats[0]:-0}"
+    current_tx="${current_stats[1]:-0}"
+    echo -e "${GREEN}✅ 已选择网卡：${iface}${PLAIN}"
+    echo -e "当前网卡自开机累计：RX ${CYAN}$(traffic_guard_human_bytes "$current_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$current_tx")${PLAIN}"
+    echo -e "${YELLOW}说明：系统只能读取本机网卡计数；云厂商账单口径可能不同，请优先参考云后台并留余量。${PLAIN}"
+
+    while true; do
+        limit_gb=$(ask_with_default "本周期流量阈值 GB（建议填套餐的 80%-95%）" "900")
+        if limit_bytes=$(traffic_guard_gb_to_bytes "$limit_gb" 2>/dev/null); then
+            break
+        fi
+        echo -e "${RED}❌ 阈值无效，请输入大于 0 的数字，例如 900 或 0.5。${PLAIN}"
+    done
+
+    while true; do
+        cycle_default_day=$(date +%d)
+        cycle_default_day=$((10#$cycle_default_day))
+        cycle_day=$(ask_with_default "每月套餐/账单重置日 1-31（短月份自动按最后一天）" "$cycle_default_day")
+        if [[ "$cycle_day" =~ ^[0-9]+$ ]] && (( 10#$cycle_day >= 1 && 10#$cycle_day <= 31 )); then
+            break
+        fi
+        echo -e "${RED}❌ 重置日只支持 1-31。${PLAIN}"
+    done
+
+    echo -e "计费模式："
+    echo -e "  1. 出站 TX 计费"
+    echo -e "  2. 出入总量 RX+TX"
+    echo -e "  3. 任一方向达量"
+    echo -e "  4. 入站 RX 计费"
+    read_trimmed mode_choice "请选择计费模式 (默认 1): "
+    case "${mode_choice:-1}" in
+        2) mode="total" ;;
+        3) mode="max" ;;
+        4) mode="rx" ;;
+        *) mode="tx" ;;
+    esac
+
+    detected_used_bytes=$(traffic_guard_detect_initial_used_bytes "$iface" "$mode" "$cycle_day")
+    detected_used_gb=$(traffic_guard_bytes_to_gb "$detected_used_bytes")
+    existing_used_bytes=$(traffic_guard_existing_state_usage "$iface" "$mode" "$cycle_day" 2>/dev/null || true)
+    if [[ "$existing_used_bytes" =~ ^[0-9]+$ && "$existing_used_bytes" != "$detected_used_bytes" ]]; then
+        echo -e "检测到已有保护状态已用：${YELLOW}$(traffic_guard_human_bytes "$existing_used_bytes")${PLAIN}"
+        echo -e "${YELLOW}本次重新配置默认按当前网卡累计估算，启用后会重置基线，避免旧状态误导。${PLAIN}"
+    fi
+    echo -e "按当前网卡自开机累计和计费模式估算已用：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}（默认可直接回车）"
+    echo -e "${YELLOW}如果云厂商后台显示不同，请手动覆盖这里的 GB 数值。${PLAIN}"
+    while true; do
+        initial_used_gb=$(ask_with_default "本周期已用流量 GB" "$detected_used_gb")
+        if initial_used_bytes=$(traffic_guard_gb_to_bytes_zero_ok "$initial_used_gb" 2>/dev/null); then
+            break
+        fi
+        echo -e "${RED}❌ 已用流量无效，请输入不小于 0 的数字。${PLAIN}"
+    done
+
+    while true; do
+        warn_percent=$(ask_with_default "预警百分比 1-99" "90")
+        if [[ "$warn_percent" =~ ^[0-9]+$ ]] && (( 10#$warn_percent >= 1 && 10#$warn_percent <= 99 )); then
+            break
+        fi
+        echo -e "${RED}❌ 预警百分比无效。${PLAIN}"
+    done
+
+    interval=$(ask_with_default "检查间隔秒数（最低 30，默认 60）" "60")
+    if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( 10#$interval < 30 )); then
+        interval=60
+    fi
+
+    echo -e "触发动作："
+    echo -e "  1. 立即关机 ${YELLOW}(防止继续产生流量费用)${PLAIN}"
+    echo -e "  2. 只写日志 ${YELLOW}(测试配置，不关机)${PLAIN}"
+    read_trimmed action_choice "请选择触发动作 (默认 1): "
+    if [[ "${action_choice:-1}" == "2" ]]; then
+        action="log"
+    else
+        action="poweroff"
+    fi
+
+    echo -e "------------------------------------------------"
+    echo -e "网卡：${CYAN}${iface}${PLAIN}"
+    echo -e "阈值：${YELLOW}${limit_gb}GB${PLAIN}，本周期已用抵扣：${initial_used_gb}GB"
+    echo -e "模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}"
+    echo -e "周期：每月 ${cycle_day} 日重置（短月份按最后一天）；检查间隔：${interval}s；预警：${warn_percent}%"
+    echo -e "动作：${RED}${action}${PLAIN}"
+
+    if [[ "$action" == "poweroff" ]]; then
+        confirm_danger "启用流量达量自动关机" \
+            "安装 vps-traffic-guard systemd timer；达到阈值会执行 systemctl poweroff。" \
+            "从云厂商控制台手动开机；开机后进入本菜单调整阈值、重置基线或停用保护。" \
+            "建议阈值低于套餐上限，并确认云厂商后台流量口径。" || return 1
+    fi
+
+    write_traffic_guard_config "$iface" "$mode" "$limit_gb" "$limit_bytes" "$cycle_day" "$warn_percent" "$action" "$initial_used_gb" "$initial_used_bytes" "$interval" || {
+        echo -e "${RED}❌ 写入配置失败。${PLAIN}"
+        pause_return
+        return 1
+    }
+    install_traffic_guard_checker || {
+        echo -e "${RED}❌ 安装检查脚本失败。${PLAIN}"
+        pause_return
+        return 1
+    }
+    traffic_guard_write_state_baseline "$iface" "$cycle_day" "$initial_used_bytes" || {
+        echo -e "${RED}❌ 写入流量保护基线失败。${PLAIN}"
+        pause_return
+        return 1
+    }
+    install_traffic_guard_units "$interval" || {
+        echo -e "${RED}❌ 启用 systemd timer 失败，请检查 systemd 状态。${PLAIN}"
+        pause_return
+        return 1
+    }
+
+    "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || true
+    reset_traffic_guard_failed_state
+    echo -e "${GREEN}✅ 流量达量关机保护已启用。${PLAIN}"
+    echo -e "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}"
+    pause_return
+}
+
+reset_traffic_guard_baseline() {
+    local iface mode cycle_day initial_used_gb initial_used_bytes
+    local detected_used_bytes detected_used_gb
+    load_traffic_guard_config || {
+        echo -e "${YELLOW}尚未配置流量达量关机保护。${PLAIN}"
+        pause_return
+        return 1
+    }
+    iface="${IFACE:-}"
+    mode="${MODE:-tx}"
+    cycle_day="${CYCLE_DAY:-1}"
+    traffic_guard_valid_iface "$iface" || {
+        echo -e "${RED}❌ 当前配置的网卡 ${iface} 不可读。${PLAIN}"
+        pause_return
+        return 1
+    }
+    detected_used_bytes=$(traffic_guard_detect_initial_used_bytes "$iface" "$mode" "$cycle_day")
+    detected_used_gb=$(traffic_guard_bytes_to_gb "$detected_used_bytes")
+    echo -e "按当前网卡和计费模式估算已用：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}"
+    initial_used_gb=$(ask_with_default "重置后本周期已用流量 GB" "$detected_used_gb")
+    if ! initial_used_bytes=$(traffic_guard_gb_to_bytes_zero_ok "$initial_used_gb" 2>/dev/null); then
+        echo -e "${RED}❌ 已用流量无效。${PLAIN}"
+        pause_return
+        return 1
+    fi
+    confirm_risk_action "重置流量保护基线" \
+        "本周期统计会从当前网卡计数重新开始，已用抵扣设置为 ${initial_used_gb}GB。" \
+        "重新进入本菜单再次重置基线，或参考云厂商后台手动修正已用流量。" \
+        "请只在账单周期开始、刚配置完成或确认云厂商统计后执行。" || return 1
+
+    traffic_guard_write_state_baseline "$iface" "$cycle_day" "$initial_used_bytes" || {
+        echo -e "${RED}❌ 写入流量保护基线失败。${PLAIN}"
+        pause_return
+        return 1
+    }
+    echo -e "${GREEN}✅ 已重置 ${iface} 的流量统计基线。${PLAIN}"
+    echo -e "当前模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}；本周期已用：$(traffic_guard_human_bytes "$initial_used_bytes")"
+    pause_return
+}
+
+disable_traffic_guard() {
+    if ! systemctl list-unit-files vps-traffic-guard.timer >/dev/null 2>&1 && [[ ! -f "$TRAFFIC_GUARD_CONFIG" ]]; then
+        echo -e "${YELLOW}未检测到流量保护配置。${PLAIN}"
+        pause_return
+        return 0
+    fi
+    confirm_risk_action "停用流量达量关机保护" \
+        "vps-traffic-guard.timer 会停止，达到流量阈值后不再自动关机。" \
+        "重新进入本菜单选择 [1] 启用保护。" \
+        "停用后请自行监控云厂商流量，避免超额账单。" || return 1
+    systemctl disable --now vps-traffic-guard.timer >/dev/null 2>&1 || true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    reset_traffic_guard_failed_state
+    if [[ -f "$TRAFFIC_GUARD_CONFIG" ]]; then
+        sed -i 's/^ENABLED=.*/ENABLED=0/' "$TRAFFIC_GUARD_CONFIG" 2>/dev/null || true
+    fi
+    echo -e "${GREEN}✅ 已停用流量达量关机保护，配置文件仍保留：${TRAFFIC_GUARD_CONFIG}${PLAIN}"
+    pause_return
+}
+
+func_traffic_guard_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "网络/内核优化 > 流量达量关机保护"
+        echo -e "${BOLD}🧯 流量达量关机保护${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}达到套餐安全阈值后自动关机，优先防止刷流量造成天价账单。${PLAIN}"
+        echo -e "${YELLOW}推荐阈值低于云厂商套餐上限，并按出站 TX 或总量模式保守配置。${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN}  1. 配置 / 启用保护${PLAIN}"
+        echo -e "${GREEN}  2. 查看状态与已用量${PLAIN}"
+        echo -e "${GREEN}  3. 重置本周期统计基线${PLAIN}"
+        echo -e "${YELLOW}  4. 停用保护${PLAIN}"
+        echo -e "${GREEN}  5. 查看最近日志${PLAIN}"
+        echo -e "------------------------------------------------"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local choice
+        read_trimmed choice "👉 请选择操作: "
+        case "$choice" in
+            1) configure_traffic_guard ;;
+            2) show_traffic_guard_status; pause_return ;;
+            3) reset_traffic_guard_baseline ;;
+            4) disable_traffic_guard ;;
+            5)
+                echo -e "${CYAN}--- ${TRAFFIC_GUARD_LOG} ---${PLAIN}"
+                tail -n 30 "$TRAFFIC_GUARD_LOG" 2>/dev/null || echo "暂无日志"
+                pause_return
+                ;;
+            0|q|Q) break ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}

@@ -1374,16 +1374,22 @@ func_backup_center() {
 }
 
 # ---------------------------------------------------------
-# Module: main.sh
+# Module: runtime.sh
 # ---------------------------------------------------------
 # shellcheck shell=bash
-# Main feature implementation. Shared helpers live in src/*.sh.
+# Runtime privilege guard shared by source and generated release scripts.
 
 # --- Runtime guard ---
 if [[ $EUID -ne 0 ]]; then
     echo -e "${RED}❌ 错误：请以 root 用户身份运行本脚本！${PLAIN}"
     exit 1
 fi
+
+# ---------------------------------------------------------
+# Module: system_core.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Base system initialization, firewall, hostname, hosts, and system toggles.
 
 configure_system_timezone_for_init() {
     local current_tz choice custom_tz target_tz
@@ -2128,18 +2134,11 @@ func_system_tweaks() {
 # 统一包管理与执行守卫 (新增：请放在 func_env_install 函数上方)
 # ---------------------------------------------------------
 
-
-
-
-
-
-
-
-
-
-
-
-
+# ---------------------------------------------------------
+# Module: caddy_certificates.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# acme.sh account preparation, Cloudflare DNS certificate issuance, and certificate manifests.
 
 get_acme_account_email() {
     local account_conf="/root/.acme.sh/account.conf"
@@ -2365,6 +2364,13 @@ generate_caddy_cf_manifest() {
 # ---------------------------------------------------------
 # 3. 常用环境及软件 (重构版：防覆盖、严格容错、剔除静默失败)
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: caddy_proxy.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Ordinary Caddy reverse proxy workflows outside the 443 single-entry stack.
+
 func_caddy_add_reverse_proxy() {
     echo -e "${CYAN}▶ 正在检查并安装 Caddy...${PLAIN}"
     if ! install_caddy_if_needed; then
@@ -2489,6 +2495,12 @@ func_caddy_reverse_proxy_menu() {
     done
 }
 
+# ---------------------------------------------------------
+# Module: environment.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Common runtime environment and dependency installation workflows.
+
 func_env_install() {
     while true; do
         clear
@@ -2544,6 +2556,13 @@ func_env_install() {
 # ---------------------------------------------------------
 # 旧版 Reality+CF 向导已禁用，菜单 [19] 使用下方新的 SNI stack 向导。
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: caddy_legacy.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Disabled legacy Caddy + Reality wizard compatibility stub.
+
 func_caddy_cf_reality_wizard_legacy_disabled() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -2747,11 +2766,11 @@ EOF
 # 新增功能：CF DNS 证书二次维护菜单
 # ---------------------------------------------------------
 
-
-
-
-
-
+# ---------------------------------------------------------
+# Module: sni_stack_config.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# 443 single-entry shared environment, route, listener, and whitelist helpers.
 
 detect_vps_public_ip_by_family() {
     local family="$1"
@@ -3950,6 +3969,12 @@ sni_stack_health_check() {
     echo -e "------------------------------------------------"
     echo -e "体检结果：${GREEN}通过 ${ok}${PLAIN} / ${YELLOW}警告 ${warn}${PLAIN} / ${RED}失败 ${fail}${PLAIN}"
 }
+
+# ---------------------------------------------------------
+# Module: tcp_peek_engine.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# 443 entry-mode switching plus vpso-mux TCP Peek engine management.
 
 vpso_mux_config_path() {
     echo "/etc/vps-optimize/vpso-mux.yaml"
@@ -5338,6 +5363,12 @@ entry_mode_supports_xray_sni_routes() {
     [[ "$mode" == "nginx-stream" || "$mode" == "tcp-peek" ]]
 }
 
+# ---------------------------------------------------------
+# Module: sni_stack_health.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# 443 single-entry health checks, HTTP/TLS probes, and subscription hints.
+
 print_443_health_status_code_hints() {
     echo -e "${BOLD}状态码提示${PLAIN}"
     echo -e "  - 403/401：可能是 Web 白名单、CDN/WAF、源站保护、Host/SNI 策略或后端鉴权。"
@@ -5605,6 +5636,12 @@ check_sni_stack_subscription_hint() {
     echo -e "${YELLOW}如果链接里还是 :${XRAY_LISTEN_PORT}，说明 3x-ui 订阅仍在输出本地入站端口，请回到入站设置检查 External Proxy。${PLAIN}"
 }
 
+# ---------------------------------------------------------
+# Module: sni_stack_profiles.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# 443 single-entry profile editing and reapply helpers.
+
 save_and_offer_reapply_sni_stack() {
     local yn env_file env_backup
     env_file="/etc/vps-optimize/sni-stack.env"
@@ -5831,6 +5868,11 @@ reapply_sni_stack_from_env() {
     reapply_current_entry_mode --yes
 }
 
+# ---------------------------------------------------------
+# Module: sni_stack_install.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# 443 single-entry collection, installation, rendering, certificates, and runtime apply flows.
 
 collect_sni_stack_config() {
     clear
@@ -6646,6 +6688,12 @@ apply_sni_stack_runtime_config() {
     generate_caddy_cf_manifest
 }
 
+# ---------------------------------------------------------
+# Module: sni_stack_sites.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# 443 single-entry web-domain and custom TCP-route CRUD workflows.
+
 list_sni_stack_sites() {
     load_sni_stack_env || return 1
     echo -e "${CYAN}================================================${PLAIN}"
@@ -7096,6 +7144,12 @@ remove_sni_stack_tcp_route() {
     save_and_offer_reapply_sni_stack
 }
 
+# ---------------------------------------------------------
+# Module: xray_sni_routes.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Xray SNI route records and sync workflows for nginx-stream/tcp-peek modes.
+
 xray_sni_routes_fallback_notice() {
     echo -e "${YELLOW}当前为 Xray Fallback 模式。${PLAIN}"
     print_xray_fallback_mode_explanation
@@ -7506,92 +7560,11 @@ manage_sni_stack_ip_whitelist() {
     done
 }
 
-show_main_help() {
-    echo -e "${CYAN}VPS-Optimize > 主菜单 > 帮助${PLAIN}"
-    echo "1/2 适合新机器先体检和初始化。"
-    echo "3   基础组件与常用服务；安装 Docker、Python、WARP 和常用工具。"
-    echo "4   普通 Caddy 反代；适合未接入 443 单入口的普通网站/面板反代。"
-    echo "5   管理 3x-ui、Sing-box、Xray 和订阅工具。"
-    echo "6   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
-    echo "8   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
-    echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
-    echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
-    echo "16  备份与回滚，高风险操作前建议先跑。"
-    echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
-    echo "10 -> 7  流量达量关机保护，按账单周期防刷流量和超额账单。"
-    echo "xcm/外置  直达 3x-ui 外置增强管理；也可走 5 -> 16。"
-    echo "? 查看帮助，0/q 退出。"
-}
-
-show_beginner_help() {
-    echo -e "${CYAN}VPS-Optimize > 新手向导 > 帮助${PLAIN}"
-    echo "1 新机器初始化：按安全顺序引导预检、初始化、SSH、公钥、Fail2ban、防火墙、备份。"
-    echo "2 安装面板/节点：进入面板、节点与订阅工具菜单。"
-    echo "3 配置 443 单入口：进入 443 管理中心，适合面板、订阅和 REALITY 共用 443。"
-    echo "4 健康检查：查看服务、端口、证书，并可生成反馈诊断信息。"
-    echo "5 备份/回滚：创建备份或从已有备份恢复。"
-    echo "? 查看帮助，0/q 返回主菜单。"
-}
-
-show_panel_help() {
-    echo -e "${CYAN}VPS-Optimize > 面板、节点与订阅工具 > 帮助${PLAIN}"
-    echo "1 管理 3x-ui / x-ui，适合安装、进入官方菜单、修复面板。"
-    echo "3/4 分别管理 Sing-box 和 Xray。"
-    echo "5/6/7 管理订阅工具，部署后建议用 Caddy 或 443 单入口对外访问。"
-    echo "11 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
-    echo "14 端口实际流量监控，只看已监控端口实际跑过的流量。"
-    echo "16 3x-ui 外置增强管理，适合自定义重置日期、校准已用流量、备份恢复和查看日志。"
-    echo "? 查看帮助，0/q 返回主菜单。"
-}
-
-show_sni_help() {
-    echo -e "${CYAN}VPS-Optimize > 443 单入口管理中心 > 帮助${PLAIN}"
-    echo "1 查看当前入口状态 / 监听详情：显示公网 443、Caddy、Xray 和服务状态。"
-    echo "2 首次配置 / 安装：建立共享 Web 域名、Caddy、证书和默认 Nginx Stream 入口。"
-    echo "3/4/5 入口模式切换：在 Nginx Stream 模式、Xray Fallback 模式、TCP Peek + Splice 模式之间切换。"
-    echo "6 重新应用：按当前 ENTRY_MODE 重新生成并启动入口配置。"
-    echo "7 回滚：恢复上一次入口模式切换前的备份。"
-    echo "8 管理 Web 域名/反代：后续新增或删除网站，不需要重跑首次配置。"
-    echo "9 Web 域名 IP 白名单：只限制 Web/Caddy 域名，不影响 Xray 节点。"
-    echo "10 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。"
-    echo "11 链路体检：排查 ENTRY_MODE、监听、证书、Web 和 Xray 分流。"
-    echo "12 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
-    echo "13/14/15 维护项：证书、共享参数和订阅 External Proxy 提示。"
-    echo "16 查看 TCP Peek + Splice 状态 / 8444 预检：展示 status.json 统计；预检只监听 8444，不改公网 443。"
-    echo "17 TCP Peek 分流规则校验：只检查配置，不重启入口。"
-    echo "18 查看 TCP Peek + Splice 日志：查看 vpso-mux 分流器日志。"
-    echo "普通 Caddy 未接入 443 单入口时，用主菜单 [4 普通 Caddy 反代] -> [4] 管理域名 IP 白名单。"
-    echo "? 查看帮助，0/q 返回主菜单。"
-}
-
-show_backup_help() {
-    echo -e "${CYAN}VPS-Optimize > 备份与回滚 > 帮助${PLAIN}"
-    echo "1 创建备份：高风险操作前先用。"
-    echo "2 查看备份：确认可用备份和时间。"
-    echo "3 回滚：会覆盖当前配置，必须输入 YES。"
-    echo "4 隔离旧备份：只移动到隔离目录，不直接删除。"
-    echo "? 查看帮助，0/q 返回主菜单。"
-}
-
-show_net_kernel_help() {
-    echo -e "${CYAN}VPS-Optimize > 网络/内核优化 > 帮助${PLAIN}"
-    echo "1 BBR / 拥塞控制：调用外部调优脚本，执行前建议备份。"
-    echo "2 TCP 参数：修改 sysctl，适合有明确参数需求的用户。"
-    echo "3 ZRAM / Swap：适合小内存 VPS。"
-    echo "4 安装/切换内核：高风险，必须确认快照和救援控制台可用。"
-    echo "5 清理旧内核：不要删除当前内核和云厂商定制内核。"
-    echo "6 DNS 更改优化：国内/国外默认 DNS，也支持自定义 IPv4 和 IPv6。"
-    echo "7 流量达量关机保护：按网卡流量和账单周期自动关机，防止超额账单。"
-    echo "8 网卡管理工具：查看网卡、路由、DNS，临时调整 MTU 或刷新 DHCP。"
-    echo "? 查看帮助，0/q 返回主菜单。"
-}
-
-show_health_help() {
-    echo -e "${CYAN}VPS-Optimize > 诊断/健康检查 > 帮助${PLAIN}"
-    echo "健康总览会检查关键服务、监听端口和证书摘要。"
-    echo "系统硬件探针会附带 443、Caddy、3x-ui、订阅工具和 Docker 场景概览。"
-    echo "生成反馈诊断信息用于提交 GitHub Issue，会尽量避免输出 Token、私钥和敏感密钥。"
-}
+# ---------------------------------------------------------
+# Module: sni_stack_menus.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# 443 single-entry secondary menus for sites, routes, and web whitelist controls.
 
 manage_sni_stack_sites() {
     while true; do
@@ -7630,6 +7603,12 @@ manage_sni_stack_sites() {
         read -n 1 -s -r -p "按任意键继续..."
     done
 }
+
+# ---------------------------------------------------------
+# Module: caddy_maintenance.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Cloudflare/Caddy certificate maintenance, Caddy config repair, whitelist, and cleanup tools.
 
 func_caddy_cf_reality_wizard() {
     if [[ -f /etc/vps-optimize/sni-stack.env ]]; then
@@ -8711,6 +8690,13 @@ EOF
 # ---------------------------------------------------------
 # 4. SSH 安全加固 (终极完美版：防截断、防覆盖、防 Socket 冲突)
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: ssh_security.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# SSH hardening, SSH key workflows, authentication modes, and Fail2ban management.
+
 ssh_service_restart() {
     systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null
 }
@@ -9474,6 +9460,13 @@ func_add_ssh_key() {
 # ---------------------------------------------------------
 # 5. Docker 深度管理 (重构版：非破坏性修改与防宕机回滚)
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: docker_manage.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Docker exposure audit, managed project status, and Docker safety workflows.
+
 docker_port_line_is_public() {
     local line="$1"
     case "$line" in
@@ -9720,6 +9713,13 @@ EOF
 # ---------------------------------------------------------
 # 6. BBR 增强管理
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: kernel_tuning.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# BBR, TCP tuning, ZRAM, optimized kernel installation, and old-kernel cleanup.
+
 func_bbr_manage() {
     clear
     echo -e "${CYAN}👉 正在调用 ylx2016 网络极速脚本...${PLAIN}"
@@ -10299,6 +10299,13 @@ func_clean_kernel() {
 # ---------------------------------------------------------
 # 11. 极速硬件探针
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: diagnostics_status.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Compact service status helpers and system hardware/runtime overview.
+
 service_status_compact() {
     local svc="$1"
     if service_unit_exists "$svc"; then
@@ -10458,6 +10465,13 @@ func_system_info() {
 # ---------------------------------------------------------
 # 12. 综合测试合集
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: diagnostics_network.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# 443 network probes, benchmark script launchers, and port-dog integration.
+
 probe_host_for_listen_addr() {
     local addr="$1"
     case "$addr" in
@@ -10698,6 +10712,12 @@ func_port_dog() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
+# ---------------------------------------------------------
+# Module: panel_installers.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Panel, node, DNS unlock, and IP sentinel installation shortcuts.
+
 func_xpanel() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -10893,6 +10913,13 @@ func_ip_sentinel() {
 # ---------------------------------------------------------
 # 新增功能：安装 SublinkPro (强大的订阅转换与管理面板)
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: subscription_tools.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Subscription tool containers, compose project operations, Dockge migration, and service menus.
+
 install_docker_compose_standalone() {
     local compose_url tmp_file
     compose_url="https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)"
@@ -11878,6 +11905,13 @@ func_migrate_compose_to_dockge() {
 # ---------------------------------------------------------
 # 18. 面板救砖/重置 SSL (兼容新版 3x-ui 证书字段)
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: panel_rescue.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Panel rescue and SSL reset workflows.
+
 func_rescue_panel() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -11971,6 +12005,13 @@ func_rescue_panel() {
 # ---------------------------------------------------------
 # 新增功能：网络端口占用可视化排查与进程查杀 (底层调用优化版)
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: server_maintenance.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Port process release and server reboot workflows.
+
 func_port_kill() {
     while true; do
         clear
@@ -12055,6 +12096,13 @@ func_reboot_server() {
 # ---------------------------------------------------------
 # 19. 脚本热更新
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: updater.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Script update cache, version comparison, notice, and hot-update workflows.
+
 fetch_latest_script_version() {
     local line version
     if command -v curl >/dev/null 2>&1; then
@@ -12204,6 +12252,13 @@ func_update_script() {
 # ---------------------------------------------------------
 # 20. 一键运维预检
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: preflight.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Deployment preflight checks and issue diagnostic bundle generation.
+
 preflight_install_missing_commands() {
     local missing=("$@")
     local pkgs=()
@@ -12559,6 +12614,12 @@ generate_issue_diagnostics() {
     echo "===== 诊断信息结束，请提交前再次检查是否有敏感信息 ====="
 }
 
+# ---------------------------------------------------------
+# Module: health_dashboard.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Service health dashboard and runtime issue summaries.
+
 func_health_dashboard() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -12674,9 +12735,11 @@ func_health_dashboard() {
     esac
 }
 
-
-
-
+# ---------------------------------------------------------
+# Module: dns_optimize.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# DNS resolver profile optimization workflows.
 
 dns_write_static_resolv_conf() {
     local v4_servers="$1"
@@ -12814,6 +12877,13 @@ func_dns_optimize() {
 # ---------------------------------------------------------
 # 23. 流量达量关机保护
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: traffic_guard.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Traffic quota accounting, guard checker installation, and quota protection menus.
+
 traffic_guard_human_bytes() {
     local bytes="${1:-0}"
     awk -v b="$bytes" 'BEGIN {
@@ -13597,6 +13667,12 @@ func_traffic_guard_menu() {
     done
 }
 
+# ---------------------------------------------------------
+# Module: network_interface.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Network interface overview and operational controls.
+
 network_iface_exists() {
     local iface="$1"
     [[ -n "$iface" && "$iface" != *"/"* && "$iface" != *".."* && -d "/sys/class/net/${iface}" ]]
@@ -13755,6 +13831,101 @@ func_network_interface_manage() {
 # ---------------------------------------------------------
 # 24. 网络加速与内核优化菜单 (二级直达)
 # ---------------------------------------------------------
+
+# ---------------------------------------------------------
+# Module: menus.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Help text plus top-level and second-level menu wiring.
+
+show_main_help() {
+    echo -e "${CYAN}VPS-Optimize > 主菜单 > 帮助${PLAIN}"
+    echo "1/2 适合新机器先体检和初始化。"
+    echo "3   基础组件与常用服务；安装 Docker、Python、WARP 和常用工具。"
+    echo "4   普通 Caddy 反代；适合未接入 443 单入口的普通网站/面板反代。"
+    echo "5   管理 3x-ui、Sing-box、Xray 和订阅工具。"
+    echo "6   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
+    echo "8   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
+    echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
+    echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
+    echo "16  备份与回滚，高风险操作前建议先跑。"
+    echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
+    echo "10 -> 7  流量达量关机保护，按账单周期防刷流量和超额账单。"
+    echo "xcm/外置  直达 3x-ui 外置增强管理；也可走 5 -> 16。"
+    echo "? 查看帮助，0/q 退出。"
+}
+
+show_beginner_help() {
+    echo -e "${CYAN}VPS-Optimize > 新手向导 > 帮助${PLAIN}"
+    echo "1 新机器初始化：按安全顺序引导预检、初始化、SSH、公钥、Fail2ban、防火墙、备份。"
+    echo "2 安装面板/节点：进入面板、节点与订阅工具菜单。"
+    echo "3 配置 443 单入口：进入 443 管理中心，适合面板、订阅和 REALITY 共用 443。"
+    echo "4 健康检查：查看服务、端口、证书，并可生成反馈诊断信息。"
+    echo "5 备份/回滚：创建备份或从已有备份恢复。"
+    echo "? 查看帮助，0/q 返回主菜单。"
+}
+
+show_panel_help() {
+    echo -e "${CYAN}VPS-Optimize > 面板、节点与订阅工具 > 帮助${PLAIN}"
+    echo "1 管理 3x-ui / x-ui，适合安装、进入官方菜单、修复面板。"
+    echo "3/4 分别管理 Sing-box 和 Xray。"
+    echo "5/6/7 管理订阅工具，部署后建议用 Caddy 或 443 单入口对外访问。"
+    echo "11 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
+    echo "14 端口实际流量监控，只看已监控端口实际跑过的流量。"
+    echo "16 3x-ui 外置增强管理，适合自定义重置日期、校准已用流量、备份恢复和查看日志。"
+    echo "? 查看帮助，0/q 返回主菜单。"
+}
+
+show_sni_help() {
+    echo -e "${CYAN}VPS-Optimize > 443 单入口管理中心 > 帮助${PLAIN}"
+    echo "1 查看当前入口状态 / 监听详情：显示公网 443、Caddy、Xray 和服务状态。"
+    echo "2 首次配置 / 安装：建立共享 Web 域名、Caddy、证书和默认 Nginx Stream 入口。"
+    echo "3/4/5 入口模式切换：在 Nginx Stream 模式、Xray Fallback 模式、TCP Peek + Splice 模式之间切换。"
+    echo "6 重新应用：按当前 ENTRY_MODE 重新生成并启动入口配置。"
+    echo "7 回滚：恢复上一次入口模式切换前的备份。"
+    echo "8 管理 Web 域名/反代：后续新增或删除网站，不需要重跑首次配置。"
+    echo "9 Web 域名 IP 白名单：只限制 Web/Caddy 域名，不影响 Xray 节点。"
+    echo "10 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。"
+    echo "11 链路体检：排查 ENTRY_MODE、监听、证书、Web 和 Xray 分流。"
+    echo "12 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
+    echo "13/14/15 维护项：证书、共享参数和订阅 External Proxy 提示。"
+    echo "16 查看 TCP Peek + Splice 状态 / 8444 预检：展示 status.json 统计；预检只监听 8444，不改公网 443。"
+    echo "17 TCP Peek 分流规则校验：只检查配置，不重启入口。"
+    echo "18 查看 TCP Peek + Splice 日志：查看 vpso-mux 分流器日志。"
+    echo "普通 Caddy 未接入 443 单入口时，用主菜单 [4 普通 Caddy 反代] -> [4] 管理域名 IP 白名单。"
+    echo "? 查看帮助，0/q 返回主菜单。"
+}
+
+show_backup_help() {
+    echo -e "${CYAN}VPS-Optimize > 备份与回滚 > 帮助${PLAIN}"
+    echo "1 创建备份：高风险操作前先用。"
+    echo "2 查看备份：确认可用备份和时间。"
+    echo "3 回滚：会覆盖当前配置，必须输入 YES。"
+    echo "4 隔离旧备份：只移动到隔离目录，不直接删除。"
+    echo "? 查看帮助，0/q 返回主菜单。"
+}
+
+show_net_kernel_help() {
+    echo -e "${CYAN}VPS-Optimize > 网络/内核优化 > 帮助${PLAIN}"
+    echo "1 BBR / 拥塞控制：调用外部调优脚本，执行前建议备份。"
+    echo "2 TCP 参数：修改 sysctl，适合有明确参数需求的用户。"
+    echo "3 ZRAM / Swap：适合小内存 VPS。"
+    echo "4 安装/切换内核：高风险，必须确认快照和救援控制台可用。"
+    echo "5 清理旧内核：不要删除当前内核和云厂商定制内核。"
+    echo "6 DNS 更改优化：国内/国外默认 DNS，也支持自定义 IPv4 和 IPv6。"
+    echo "7 流量达量关机保护：按网卡流量和账单周期自动关机，防止超额账单。"
+    echo "8 网卡管理工具：查看网卡、路由、DNS，临时调整 MTU 或刷新 DHCP。"
+    echo "? 查看帮助，0/q 返回主菜单。"
+}
+
+show_health_help() {
+    echo -e "${CYAN}VPS-Optimize > 诊断/健康检查 > 帮助${PLAIN}"
+    echo "健康总览会检查关键服务、监听端口和证书摘要。"
+    echo "系统硬件探针会附带 443、Caddy、3x-ui、订阅工具和 Docker 场景概览。"
+    echo "生成反馈诊断信息用于提交 GitHub Issue，会尽量避免输出 Token、私钥和敏感密钥。"
+}
+
+
 func_net_kernel_menu() {
     while true; do
         clear
@@ -14086,6 +14257,12 @@ main_menu() {
     done
 }
 
-# --- 启动面板 ---
+# ---------------------------------------------------------
+# Module: main.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Main bootstrap. Feature implementation lives in the focused src/*.sh modules.
+
+# --- ???? ---
 main_menu
 

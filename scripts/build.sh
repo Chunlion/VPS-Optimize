@@ -11,7 +11,38 @@ modules=(
     validate.sh # validation and normalization helpers
     rollback.sh # quarantine and restore helpers
     backup.sh   # backup center and backup helper functions
-    main.sh     # feature implementation and menu wiring
+    runtime.sh  # root/runtime guard
+    system_core.sh
+    caddy_certificates.sh
+    caddy_proxy.sh
+    environment.sh
+    caddy_legacy.sh
+    sni_stack_config.sh
+    tcp_peek_engine.sh
+    sni_stack_health.sh
+    sni_stack_profiles.sh
+    sni_stack_install.sh
+    sni_stack_sites.sh
+    xray_sni_routes.sh
+    sni_stack_menus.sh
+    caddy_maintenance.sh
+    ssh_security.sh
+    docker_manage.sh
+    kernel_tuning.sh
+    diagnostics_status.sh
+    diagnostics_network.sh
+    panel_installers.sh
+    subscription_tools.sh
+    panel_rescue.sh
+    server_maintenance.sh
+    updater.sh
+    preflight.sh
+    health_dashboard.sh
+    dns_optimize.sh
+    traffic_guard.sh
+    network_interface.sh
+    menus.sh
+    main.sh     # bootstrap into menu wiring
 )
 
 mkdir -p "$out_dir"
