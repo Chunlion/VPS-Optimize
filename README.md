@@ -180,6 +180,8 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 - Xray 入站管理只记录 `SNI -> 本地地址:端口`，不会编辑 3x-ui 入站。
 - REALITY 的 `serverName` / `dest` 通常是外部真实 HTTPS 目标，不要求写进 Caddy。
 
+TCP Peek + Splice 的配置过程和 Nginx Stream 一样；正式切换使用 `[5] 切换到 TCP Peek + Splice 模式`，需要撤销时使用 `[7] 回滚上一次入口模式切换`。
+
 完整教程看 [443 单入口分流详细教程](docs/443-single-entry.md)，排错看 [443 单入口排错手册](docs/443-single-entry-troubleshooting.md)。
 
 <a id="node-tools"></a>

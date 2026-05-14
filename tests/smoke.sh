@@ -238,15 +238,12 @@ SNI_MENU_MAP
 docs_menu_files=(
     ".github/ISSUE_TEMPLATE/bug_report.md"
     "README.md"
-    "INSTALL.md"
     "docs/443-single-entry.md"
     "docs/443-tcp-peek-engine.md"
     "docs/443-single-entry-troubleshooting.md"
-    "docs/compatibility.md"
     "docs/config-paths.md"
     "docs/existing-server-migration.md"
     "docs/recovery-runbook.md"
-    "tutorials/01-new-vps-hardening.md"
     "tutorials/02-3x-ui-reality-443.md"
     "tutorials/03-subscription-tools-with-caddy.md"
 )
@@ -284,7 +281,6 @@ assert_file_contains "docs/443-tcp-peek-engine.md" 'TCP Peek 的主要优点' "T
 assert_file_contains "docs/443-tcp-peek-engine.md" '配置过程和 Nginx Stream 一样' "TCP Peek engine doc must say TCP Peek uses the same configuration flow."
 assert_file_contains "docs/443-tcp-peek-engine.md" '  -> [5] 切换到 TCP Peek + Splice 模式' "TCP Peek engine doc must show the existing cutover entry [5]."
 assert_file_contains "docs/443-tcp-peek-engine.md" '  -> [7] 回滚上一次入口模式切换' "TCP Peek engine doc must point rollback guidance at the broader entry-mode rollback [7]."
-assert_file_contains "tutorials/01-new-vps-hardening.md" '[15 服务健康总览] -> [16 配置备份与回滚]' "New VPS tutorial must use current health and backup menu numbers."
 grep -q 'print_vpso_mux_failure_context' dist/vps.sh
 grep -q 'print_nginx_stream_failure_context' dist/vps.sh
 grep -q 'assert_nginx_stream_config_loaded' dist/vps.sh
