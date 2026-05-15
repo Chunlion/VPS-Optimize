@@ -25,12 +25,17 @@ type Config struct {
 		PipeSize       int  `yaml:"pipe_size"`
 		FallbackToCopy bool `yaml:"fallback_to_copy"`
 	} `yaml:"splice"`
+	Limits struct {
+		MaxConnections int `yaml:"max_connections"`
+	} `yaml:"limits"`
 	DefaultBackend string  `yaml:"default_backend"`
 	Routes         []Route `yaml:"routes"`
 	Logging        struct {
 		Level  string `yaml:"level"`
 		Format string `yaml:"format"`
 	} `yaml:"logging"`
+
+	routeIndex *routeIndex
 }
 
 type Durations struct {
@@ -61,6 +66,7 @@ func DefaultConfig() *Config {
 	cfg.Splice.Enabled = true
 	cfg.Splice.PipeSize = 1048576
 	cfg.Splice.FallbackToCopy = true
+	cfg.Limits.MaxConnections = 4096
 	cfg.Logging.Level = "info"
 	cfg.Logging.Format = "json"
 	return cfg
@@ -113,6 +119,9 @@ func ValidateConfig(c *Config) ([]string, error) {
 	if c.Splice.PipeSize < 0 {
 		return warnings, fmt.Errorf("splice.pipe_size must be >= 0")
 	}
+	if c.Limits.MaxConnections < 0 {
+		return warnings, fmt.Errorf("limits.max_connections must be >= 0")
+	}
 
 	seen := map[string]string{}
 	for i := range c.Routes {
@@ -150,6 +159,7 @@ func ValidateConfig(c *Config) ([]string, error) {
 			warnings = append(warnings, fmt.Sprintf("route %q looks sensitive but has no whitelist", route.Name))
 		}
 	}
+	c.routeIndex = buildRouteIndex(c.Routes)
 	return warnings, nil
 }
 

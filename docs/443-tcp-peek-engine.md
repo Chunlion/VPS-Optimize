@@ -134,6 +134,27 @@ splice:
 
 需要注意的是，splice 优化的是“已选定后端之后的字节转发”，不改变分流逻辑。SNI 判断仍然发生在连接开始时的 ClientHello 阶段；一旦后端选定，后续同一条 TCP 连接不会再根据内容重新分流。
 
+splice 路径也会受 `timeouts.idle` 控制。`vpso-mux` 使用非阻塞 splice 并在读写文件描述符前等待可读/可写事件；如果连接长时间没有数据，会按 idle 超时关闭，而不是让空闲连接一直占住转发 goroutine。copy 路径继续使用普通读写 deadline。
+
+### 并发保护和状态刷新
+
+`vpso-mux` 内置连接并发保护。脚本生成的新配置会写入：
+
+```yaml
+limits:
+  max_connections: 4096
+```
+
+旧的 `vpso-mux.yaml` 即使没有 `limits` 字段，也会由程序自动使用同样的默认值；用户不需要手动迁移配置。如果确实要关闭这个限制，可以把 `max_connections` 设为 `0`，表示不做程序内连接数限制。
+
+慢速握手也会被保护：客户端连接后如果在 `timeouts.peek` 时间内没有发出完整的 ClientHello，`vpso-mux` 会关闭这条连接，而不是把它转到默认 Xray/REALITY 后端。默认 `timeouts.peek` 是 `3s`，正常浏览器和代理客户端不会感知到这个变化。
+
+运行状态写入 `/var/lib/vps-optimize/vpso-mux/status.json`。新版本不再每条连接都立即写磁盘，而是把计数保存在内存里并定时刷新，退出前再写一次。状态页会显示当前连接数、连接上限、拒绝连接数、后端拨号错误、peek 错误、peek 超时次数和双向转发字节数，便于判断是否遇到连接洪峰、慢握手占用或后端端口异常。
+
+### 路由索引
+
+`vpso-mux` 会在配置校验通过后预编译路由索引。精确 SNI 使用 map 查询，通配 SNI 保留为有序列表；匹配语义保持不变，仍然是精确匹配优先于通配匹配，通配匹配保持配置中的顺序。这个优化不会改变 `vpso-mux.yaml` 格式，也不要求用户重新填写域名。
+
 TCP Peek 的主要优点：
 
 - 配置过程和 Nginx Stream 一样，切换时复用已经保存的域名、证书、Caddy 后端、Web 白名单和 Xray SNI 路由。
@@ -214,6 +235,8 @@ Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监�
 
 正式切换会生成并校验 `vpso-mux.yaml`、创建备份、隔离当前 VPS-Optimize 管理的 Nginx stream 443 配置、启动 `vpso-mux` 接管公网 `443`，并检查 Caddy 和 Xray 本地后端可达。失败时会尝试自动回滚。
 
+`8444` 预检会额外做 TCP Peek 路由矩阵检查：面板域名和 Web 域名会通过测试端口按 SNI 获取证书链；默认 Xray/REALITY 后端、旧 TCP/SNI 记录和 `Xray 入站管理` 记录会检查对应本地地址和端口是否可连。这样可以在正式接管公网 `443` 之前发现缺失证书、Caddy 未就绪或本地 Xray 入站端口未监听的问题。
+
 如果当前 SSH 会话连接在入口端口，例如 `443`，脚本会拒绝切换，避免直接断开当前管理连接。请改用云厂商 VNC/Serial Console，或先用非入口端口 SSH 登录。
 
 回滚上一轮入口模式切换：
@@ -259,4 +282,9 @@ TCP Peek 常见边界：
 | 命中了默认后端 | SNI 没有匹配任何 route，或 SNI 解析失败 | 检查 `/etc/vps-optimize/vpso-mux.yaml` 里的 routes 和实际客户端 SNI |
 | Web 域名被拦截 | 该 Web route 配了白名单，源 IP 不在范围内 | 检查对应域名的 Web 白名单，不要把它当成 Xray 节点限制 |
 | `copy_fallback` 增加 | splice 未使用或运行中回退 copy | 一般不影响可用性；如需稳定观察性能，可先保持默认回退 |
+| `backend_dial_errors` 增加 | SNI 命中了规则，但目标本地后端连接失败 | 检查 Caddy / Xray / 3x-ui 本地监听端口 |
+| `peek_errors` 增加 | ClientHello 解析或读取出现异常 | 检查异常客户端、扫描流量或过大的握手包 |
+| `peek_timeouts` 增加 | 有连接在超时时间内没有发出完整 ClientHello | 检查是否有慢连接、探测流量或异常客户端 |
+| `rejected_connections` 增加 | 达到连接上限、peek 超时或被白名单拦截 | 看 `recent_errors` 和 route hits，再决定是否调整客户端或连接上限 |
+| 转发字节一直为 0 | 连接进入了入口，但没有完成有效双向转发 | 结合 route hits、后端拨号错误和日志继续定位 |
 | 后端连接失败 | SNI 命中了规则，但本地后端端口没监听或地址不一致 | 检查 Caddy / Xray / 3x-ui 本地监听端口是否与脚本保存值一致 |

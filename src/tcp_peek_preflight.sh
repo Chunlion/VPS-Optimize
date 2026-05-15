@@ -37,6 +37,45 @@ port_listener_has_process() {
     ss -lntp 2>/dev/null | grep -E "(:${port}[[:space:]]|:${port}$)" | grep -q "$proc_pattern"
 }
 
+tcppeek_preflight_probe_route_matrix() {
+    local test_port="$1"
+    local connect_host domain i route_addr route_port failures=0
+    connect_host=$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")
+
+    echo -e "${CYAN}▶ 检查 TCP Peek 8444 路由矩阵...${PLAIN}"
+    probe_tls_sni_certificate "TCP Peek 8444 面板 SNI 预检" "$connect_host" "$test_port" "$PANEL_DOMAIN" || failures=1
+
+    for domain in "${SITE_DOMAINS[@]}"; do
+        [[ -n "$domain" ]] || continue
+        probe_tls_sni_certificate "TCP Peek 8444 Web SNI 预检 ${domain}" "$connect_host" "$test_port" "$domain" || failures=1
+    done
+
+    tcp_probe_host "TCP Peek 默认 Xray/REALITY 后端" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 3 1 || failures=1
+
+    for i in "${!TCP_ROUTE_SNIS[@]}"; do
+        domain="${TCP_ROUTE_SNIS[$i]}"
+        route_addr="${TCP_ROUTE_ADDRS[$i]}"
+        route_port="${TCP_ROUTE_PORTS[$i]}"
+        [[ -n "$domain" && -n "$route_addr" && -n "$route_port" ]] || continue
+        tcp_probe_host "TCP Peek 本地 TCP/SNI 后端 ${domain}" "$(probe_host_for_listen_addr "$route_addr")" "$route_port" 3 1 || failures=1
+    done
+
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        domain="${XRAY_SNI_ROUTE_SNIS[$i]}"
+        route_addr="${XRAY_SNI_ROUTE_ADDRS[$i]}"
+        route_port="${XRAY_SNI_ROUTE_PORTS[$i]}"
+        [[ -n "$domain" && -n "$route_addr" && -n "$route_port" ]] || continue
+        tcp_probe_host "TCP Peek Xray SNI 后端 ${domain}" "$(probe_host_for_listen_addr "$route_addr")" "$route_port" 3 1 || failures=1
+    done
+
+    if [[ "$failures" -ne 0 ]]; then
+        echo -e "${RED}❌ TCP Peek 8444 路由矩阵预检失败，公网 443 未改动。${PLAIN}"
+        return 1
+    fi
+    echo -e "${GREEN}✅ TCP Peek 8444 路由矩阵预检通过。${PLAIN}"
+    return 0
+}
+
 run_tcppeek_preflight_service() {
     local keep_running="${1:-0}"
     local test_port="${2:-8444}"
@@ -63,7 +102,7 @@ run_tcppeek_preflight_service() {
         echo -e "${RED}❌ TCP Peek 8444 预检未监听到 vpso-mux，拒绝切换公网 443。${PLAIN}"
         return 1
     fi
-    probe_tls_sni_certificate "TCP Peek 8444 面板 SNI 预检" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$test_port" "$PANEL_DOMAIN" || {
+    tcppeek_preflight_probe_route_matrix "$test_port" || {
         systemctl stop vpso-mux-preflight >/dev/null 2>&1 || true
         return 1
     }

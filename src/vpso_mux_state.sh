@@ -207,11 +207,22 @@ print(f"启动时间：{value('start_time', 'unknown')}")
 print(f"更新时间：{value('updated_at', 'unknown')}")
 listen = data.get("listen_addresses") or []
 print("监听地址：" + (", ".join(listen) if listen else "unknown"))
+max_connections = value('max_connections', 'unlimited')
+if max_connections == 0:
+    max_connections = 'unlimited'
+print(f"连接上限：{max_connections}")
+print(f"当前连接数：{value('active_connections')}")
 print(f"连接总数：{value('total_connections')}")
+print(f"拒绝连接数：{value('rejected_connections')}")
+print(f"后端拨号错误：{value('backend_dial_errors')}")
 print(f"splice 成功次数：{value('splice_success')}")
 print(f"copy fallback 次数：{value('copy_fallback')}")
 print(f"白名单拦截次数：{value('whitelist_blocked')}")
 print(f"no_sni 次数：{value('no_sni')}")
+print(f"peek 错误次数：{value('peek_errors')}")
+print(f"peek 超时次数：{value('peek_timeouts')}")
+print(f"客户端->后端字节：{value('bytes_client_to_backend')}")
+print(f"后端->客户端字节：{value('bytes_backend_to_client')}")
 
 route_hits = data.get("route_hits") or {}
 print("按 route 命中次数：")

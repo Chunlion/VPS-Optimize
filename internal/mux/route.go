@@ -22,6 +22,16 @@ type Match struct {
 	Blocked   bool
 }
 
+type routeIndex struct {
+	exact    map[string]*Route
+	wildcard []wildcardRoute
+}
+
+type wildcardRoute struct {
+	suffix string
+	route  *Route
+}
+
 var domainLabelPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
 func NormalizeSNI(sni string) string {
@@ -64,6 +74,9 @@ func MatchRoute(c *Config, sni string, clientIP netip.Addr) Match {
 	}
 
 	if sni != "" {
+		if c.routeIndex != nil {
+			return c.routeIndex.match(sni, clientIP, c.DefaultBackend)
+		}
 		for i := range c.Routes {
 			route := &c.Routes[i]
 			if routeMatches(route, sni, false) {
@@ -80,6 +93,48 @@ func MatchRoute(c *Config, sni string, clientIP netip.Addr) Match {
 
 	return Match{
 		Backend:   c.DefaultBackend,
+		RouteName: "default",
+		Allowed:   true,
+	}
+}
+
+func buildRouteIndex(routes []Route) *routeIndex {
+	idx := &routeIndex{exact: map[string]*Route{}}
+	for i := range routes {
+		route := &routes[i]
+		for _, item := range route.SNI {
+			item = NormalizeSNI(item)
+			if strings.HasPrefix(item, "*.") {
+				idx.wildcard = append(idx.wildcard, wildcardRoute{
+					suffix: strings.TrimPrefix(item, "*"),
+					route:  route,
+				})
+				continue
+			}
+			idx.exact[item] = route
+		}
+	}
+	return idx
+}
+
+func (idx *routeIndex) match(sni string, clientIP netip.Addr, defaultBackend string) Match {
+	if idx == nil {
+		return Match{
+			Backend:   defaultBackend,
+			RouteName: "default",
+			Allowed:   true,
+		}
+	}
+	if route := idx.exact[sni]; route != nil {
+		return matchRouteAllowed(route, clientIP)
+	}
+	for _, item := range idx.wildcard {
+		if wildcardSuffixMatch(item.suffix, sni) {
+			return matchRouteAllowed(item.route, clientIP)
+		}
+	}
+	return Match{
+		Backend:   defaultBackend,
 		RouteName: "default",
 		Allowed:   true,
 	}
@@ -102,7 +157,10 @@ func routeMatches(route *Route, sni string, wildcardOnly bool) bool {
 }
 
 func wildcardMatch(pattern, sni string) bool {
-	suffix := strings.TrimPrefix(pattern, "*")
+	return wildcardSuffixMatch(strings.TrimPrefix(pattern, "*"), sni)
+}
+
+func wildcardSuffixMatch(suffix, sni string) bool {
 	if suffix == "" || !strings.HasSuffix(sni, suffix) {
 		return false
 	}

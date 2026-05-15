@@ -16,22 +16,24 @@ func TestSpliceUnavailableFallsBackToCopy(t *testing.T) {
 	defer dstPeer.Close()
 
 	done := make(chan struct {
-		mode string
-		err  error
+		mode  string
+		bytes int64
+		err   error
 	}, 1)
 	go func() {
-		mode, err := copyDirection(dstConn, srcConn, TransferOptions{
+		mode, bytes, err := copyDirection(dstConn, srcConn, TransferOptions{
 			SpliceEnabled:  true,
 			FallbackToCopy: true,
 			IdleTimeout:    time.Second,
-			SpliceCopy: func(_ *net.TCPConn, _ *net.TCPConn, _ int) (int64, error) {
+			SpliceCopy: func(_ *net.TCPConn, _ *net.TCPConn, _ int, _ time.Duration) (int64, error) {
 				return 0, ErrSpliceUnavailable
 			},
 		})
 		done <- struct {
-			mode string
-			err  error
-		}{mode: mode, err: err}
+			mode  string
+			bytes int64
+			err   error
+		}{mode: mode, bytes: bytes, err: err}
 	}()
 
 	if _, err := srcPeer.Write([]byte("hello")); err != nil {
@@ -52,6 +54,29 @@ func TestSpliceUnavailableFallsBackToCopy(t *testing.T) {
 	}
 	if result.mode != "copy" {
 		t.Fatalf("mode = %q, want copy", result.mode)
+	}
+	if result.bytes != 5 {
+		t.Fatalf("bytes = %d, want 5", result.bytes)
+	}
+}
+
+func TestCopyDirectionIdleTimeout(t *testing.T) {
+	srcConn, srcPeer := tcpPair(t)
+	defer srcConn.Close()
+	defer srcPeer.Close()
+	dstConn, dstPeer := tcpPair(t)
+	defer dstConn.Close()
+	defer dstPeer.Close()
+
+	mode, bytes, err := copyDirection(dstConn, srcConn, TransferOptions{IdleTimeout: 20 * time.Millisecond})
+	if mode != "copy" {
+		t.Fatalf("mode = %q, want copy", mode)
+	}
+	if bytes != 0 {
+		t.Fatalf("bytes = %d, want 0", bytes)
+	}
+	if err != ErrIdleTimeout {
+		t.Fatalf("error = %v, want ErrIdleTimeout", err)
 	}
 }
 

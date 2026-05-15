@@ -8,71 +8,84 @@ import (
 	"time"
 )
 
-var ErrSpliceUnavailable = errors.New("splice unavailable")
+var (
+	ErrSpliceUnavailable = errors.New("splice unavailable")
+	ErrIdleTimeout       = errors.New("idle timeout")
+)
 
 type TransferOptions struct {
 	SpliceEnabled  bool
 	FallbackToCopy bool
 	PipeSize       int
 	IdleTimeout    time.Duration
-	SpliceCopy     func(dst, src *net.TCPConn, pipeSize int) (int64, error)
+	SpliceCopy     func(dst, src *net.TCPConn, pipeSize int, idleTimeout time.Duration) (int64, error)
 }
 
 type TransferResult struct {
-	Mode string
-	Err  error
+	Direction string
+	Mode      string
+	Bytes     int64
+	Err       error
 }
 
-func ProxyBidirectional(client, backend net.Conn, opts TransferOptions) (string, error) {
+func ProxyBidirectional(client, backend net.Conn, opts TransferOptions) (string, int64, int64, error) {
 	var wg sync.WaitGroup
 	results := make(chan TransferResult, 2)
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		mode, err := copyDirection(backend, client, opts)
+		mode, bytes, err := copyDirection(backend, client, opts)
 		closeWrite(backend)
-		results <- TransferResult{Mode: mode, Err: err}
+		results <- TransferResult{Direction: "client_to_backend", Mode: mode, Bytes: bytes, Err: err}
 	}()
 	go func() {
 		defer wg.Done()
-		mode, err := copyDirection(client, backend, opts)
+		mode, bytes, err := copyDirection(client, backend, opts)
 		closeWrite(client)
-		results <- TransferResult{Mode: mode, Err: err}
+		results <- TransferResult{Direction: "backend_to_client", Mode: mode, Bytes: bytes, Err: err}
 	}()
 	wg.Wait()
 	close(results)
 
 	mode := "copy"
+	var clientToBackend int64
+	var backendToClient int64
 	var finalErr error
 	for result := range results {
 		if result.Mode == "splice" {
 			mode = "splice"
 		}
-		if result.Err != nil && !errors.Is(result.Err, io.EOF) {
+		if result.Direction == "client_to_backend" {
+			clientToBackend = result.Bytes
+		} else {
+			backendToClient = result.Bytes
+		}
+		if result.Err != nil && !errors.Is(result.Err, io.EOF) && !errors.Is(result.Err, ErrIdleTimeout) {
 			finalErr = result.Err
 		}
 	}
-	return mode, finalErr
+	return mode, clientToBackend, backendToClient, finalErr
 }
 
-func copyDirection(dst, src net.Conn, opts TransferOptions) (string, error) {
+func copyDirection(dst, src net.Conn, opts TransferOptions) (string, int64, error) {
 	if opts.SpliceEnabled && opts.SpliceCopy != nil {
 		dstTCP, dstOK := dst.(*net.TCPConn)
 		srcTCP, srcOK := src.(*net.TCPConn)
 		if dstOK && srcOK {
-			if _, err := opts.SpliceCopy(dstTCP, srcTCP, opts.PipeSize); err == nil {
-				return "splice", nil
+			if bytes, err := opts.SpliceCopy(dstTCP, srcTCP, opts.PipeSize, opts.IdleTimeout); err == nil {
+				return "splice", bytes, nil
 			} else if !opts.FallbackToCopy {
-				return "splice", err
+				return "splice", bytes, err
 			}
 		}
 	}
-	err := copyWithIdleDeadline(dst, src, opts.IdleTimeout)
-	return "copy", err
+	bytes, err := copyWithIdleDeadline(dst, src, opts.IdleTimeout)
+	return "copy", bytes, err
 }
 
-func copyWithIdleDeadline(dst, src net.Conn, idle time.Duration) error {
+func copyWithIdleDeadline(dst, src net.Conn, idle time.Duration) (int64, error) {
 	buf := make([]byte, 32*1024)
+	var total int64
 	for {
 		if idle > 0 {
 			_ = src.SetReadDeadline(time.Now().Add(idle))
@@ -84,19 +97,28 @@ func copyWithIdleDeadline(dst, src net.Conn, idle time.Duration) error {
 			}
 			nw, ew := dst.Write(buf[:nr])
 			if ew != nil {
-				return ew
+				return total, ew
 			}
 			if nw != nr {
-				return io.ErrShortWrite
+				return total, io.ErrShortWrite
 			}
+			total += int64(nw)
 		}
 		if er != nil {
 			if errors.Is(er, io.EOF) {
-				return nil
+				return total, nil
 			}
-			return er
+			if isTimeoutError(er) {
+				return total, ErrIdleTimeout
+			}
+			return total, er
 		}
 	}
+}
+
+func isTimeoutError(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func closeWrite(conn net.Conn) {

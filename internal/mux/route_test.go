@@ -37,6 +37,26 @@ func TestRouteWildcardMatch(t *testing.T) {
 	}
 }
 
+func TestRouteIndexExactMatchWinsOverWildcard(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Listen.TCP = []string{"127.0.0.1:443"}
+	cfg.DefaultBackend = "127.0.0.1:1443"
+	cfg.Routes = []Route{
+		{Name: "wild", SNI: []string{"*.example.com"}, Backend: "127.0.0.1:8443"},
+		{Name: "exact", SNI: []string{"panel.example.com"}, Backend: "127.0.0.1:9443"},
+	}
+	if _, err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("ValidateConfig: %v", err)
+	}
+	if cfg.routeIndex == nil {
+		t.Fatalf("ValidateConfig did not build route index")
+	}
+	match := MatchRoute(cfg, "panel.example.com", netip.MustParseAddr("203.0.113.8"))
+	if match.RouteName != "exact" || match.Backend != "127.0.0.1:9443" {
+		t.Fatalf("unexpected match: %+v", match)
+	}
+}
+
 func TestWhitelistIPv4IPv6AndCIDR(t *testing.T) {
 	rules := []string{"1.2.3.4", "2001:db8::/32", "10.0.0.0/8"}
 	cases := []string{"1.2.3.4", "2001:db8::1", "10.20.30.40"}
