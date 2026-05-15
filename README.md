@@ -61,7 +61,7 @@ cy
 
 面板预览：
 
-![VPS-Optimize 面板预览](https://i.mji.rip/2026/05/10/4b9c53b6bcb7068a866816a6be93ce1d.png)
+![VPS-Optimize 面板预览](https://i.mji.rip/2026/05/15/cc94b05778e0f1a504200000e13d2d0d.png)
 
 <a id="docs"></a>
 ## 🗂️ 文档导航
