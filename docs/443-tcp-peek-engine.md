@@ -57,6 +57,83 @@ TCP Peek + Splice / vpso-mux 和 Nginx Stream 使用同一套 443 单入口配�
 
 `vpso-mux` 使用 `MSG_PEEK` 查看 TLS ClientHello 中的 SNI，不消费首包；后端收到的 ClientHello 仍与客户端原始数据一致。转发优先使用 splice，失败或不可用时回退普通 copy。
 
+### TCP Peek 的连接生命周期
+
+一次客户端连接进入 `vpso-mux` 后，大致按下面的顺序处理：
+
+```text
+客户端 TCP 连接
+  -> vpso-mux accept
+  -> recv(MSG_PEEK) 只查看接收缓冲区里的 ClientHello
+  -> 从 ClientHello 扩展里解析 SNI
+  -> 按 SNI 和源 IP 白名单选择 backend
+  -> dial 后端本地端口
+  -> 双向转发原始 TCP 字节流
+```
+
+这里最关键的是 `MSG_PEEK`。普通 `recv` 会把数据从 socket 接收缓冲区取走，后续转发时需要把已经读走的首包重新写给后端；`MSG_PEEK` 只是“看一眼”，不会移动读取位置。因此 `vpso-mux` 解析完 SNI 后，客户端发来的 TLS ClientHello 仍然留在原 socket 缓冲区里。后端连接建立后，第一批被转发过去的字节仍是客户端原始 ClientHello。
+
+所以 TCP Peek 不是 TLS 终止，也不是中间人解密：
+
+- 它不持有、不选择、不签发证书。
+- 它不读取 HTTP 路径、Header、WebSocket 内容或 TLS 加密后的应用层数据。
+- 证书和 HTTP 反代仍由 Caddy 负责；Xray/REALITY 节点流量仍由 Xray/3x-ui 本地入站负责。
+- 它只依赖 TLS 握手明文阶段里的 SNI 来做四层分流。
+
+### ClientHello 里到底看什么
+
+TLS 连接开始时，客户端会先发送 ClientHello。ClientHello 仍是明文结构，其中通常包含 `server_name` 扩展，也就是浏览器或代理客户端想访问的域名。`vpso-mux` 只解析这部分字段：
+
+```text
+TLS record
+  -> record type = handshake
+  -> handshake type = ClientHello
+  -> extensions
+  -> server_name extension
+  -> hostname SNI
+```
+
+实现上会先 peek 约 4 KiB 数据。如果 ClientHello 没收完整，会继续扩大 peek 缓冲，最多到 16 KiB，并受 `timeouts.peek` 控制，脚本默认写入 `3s`。解析出的 SNI 会统一转成小写，并去掉末尾的点，例如 `Panel.Example.COM.` 会变成 `panel.example.com`。如果数据不是 TLS ClientHello、ClientHello 不完整、没有 SNI，或者协议本身不带 SNI，就不会命中特定域名规则，后续按默认后端处理。
+
+这也是为什么本方案适合 HTTPS/TLS/SNI 流量，不适合按 HTTP path 或明文协议内容分流。到了 TLS 握手之后，应用层内容已经加密，`vpso-mux` 不会也不能靠它判断路径。
+
+### 路由选择规则
+
+脚本根据 443 单入口共享配置生成 `/etc/vps-optimize/vpso-mux.yaml`。生成出来的路由大致分成几类：
+
+| 路由来源 | 目标后端 | 是否使用 Web 白名单 |
+| --- | --- | --- |
+| 面板域名 | Caddy 本地 HTTPS 端口 | 是，如果该域名配置了白名单 |
+| 普通网站 / 反代域名 | Caddy 本地 HTTPS 端口 | 是，如果该域名配置了白名单 |
+| 旧 TCP/SNI 本地入站记录 | 对应本地地址和端口 | 否 |
+| Xray 入站管理记录 | 对应本地 Xray 入站地址和端口 | 否 |
+| REALITY 伪装 SNI | 默认 Xray/REALITY 本地后端 | 否 |
+| 未命中 SNI / 无 SNI / 非 TLS | 默认 Xray/REALITY 本地后端 | 否 |
+
+匹配时先做精确 SNI 匹配，再做通配域名匹配。通配只匹配一层子域名，例如 `*.example.com` 可以匹配 `a.example.com`，不会匹配 `a.b.example.com`。如果某个 Web 路由配置了白名单，`vpso-mux` 会在分流前检查客户端源 IP；不在白名单内时直接拦截该连接。Xray 入站、REALITY SNI 和默认后端不应用 Web 白名单，避免把节点流量误伤。
+
+### splice 和 copy 的区别
+
+完成路由选择并连接到后端后，`vpso-mux` 才开始转发。转发有两种模式：
+
+| 模式 | 工作方式 | 适合情况 |
+| --- | --- | --- |
+| `splice` | Linux 内核在 socket 和 pipe 之间搬运数据，尽量减少用户态拷贝 | 正常优先路径 |
+| `copy` | Go 进程用普通读写循环转发数据 | splice 不可用、失败或被关闭时的回退路径 |
+
+默认配置是：
+
+```yaml
+splice:
+  enabled: true
+  pipe_size: 1048576
+  fallback_to_copy: true
+```
+
+也就是说，`vpso-mux` 会优先尝试 splice。如果当前内核、socket 状态或运行环境不适合 splice，并且 `fallback_to_copy` 为 `true`，它会自动回退到普通 copy。copy 不是错误，只是少了零拷贝优化；状态页或 `status.json` 里的 `copy_fallback` 可以用来观察是否经常回退。
+
+需要注意的是，splice 优化的是“已选定后端之后的字节转发”，不改变分流逻辑。SNI 判断仍然发生在连接开始时的 ClientHello 阶段；一旦后端选定，后续同一条 TCP 连接不会再根据内容重新分流。
+
 TCP Peek 的主要优点：
 
 - 配置过程和 Nginx Stream 一样，切换时复用已经保存的域名、证书、Caddy 后端、Web 白名单和 Xray SNI 路由。
@@ -173,3 +250,13 @@ systemctl status xray --no-pager
 ```
 
 非 TLS、无 SNI、ClientHello 不完整或客户端协议不带 SNI 时会走默认后端。这不是 TLS 终止失败，因为 Nginx Stream 和 `vpso-mux` 都不解密、不终止 TLS。
+
+TCP Peek 常见边界：
+
+| 现象 | 原因 | 处理方向 |
+| --- | --- | --- |
+| `no_sni` 次数增加 | 客户端没有带 SNI，或连接不是标准 TLS ClientHello | 确认客户端节点域名/SNI 设置；非 TLS 流量会走默认后端 |
+| 命中了默认后端 | SNI 没有匹配任何 route，或 SNI 解析失败 | 检查 `/etc/vps-optimize/vpso-mux.yaml` 里的 routes 和实际客户端 SNI |
+| Web 域名被拦截 | 该 Web route 配了白名单，源 IP 不在范围内 | 检查对应域名的 Web 白名单，不要把它当成 Xray 节点限制 |
+| `copy_fallback` 增加 | splice 未使用或运行中回退 copy | 一般不影响可用性；如需稳定观察性能，可先保持默认回退 |
+| 后端连接失败 | SNI 命中了规则，但本地后端端口没监听或地址不一致 | 检查 Caddy / Xray / 3x-ui 本地监听端口是否与脚本保存值一致 |
