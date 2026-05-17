@@ -100,8 +100,11 @@ collect_sni_stack_config() {
 
     echo -e "${YELLOW}443 单入口需要 3x-ui 面板/订阅后端使用 HTTP，由 Caddy 统一托管公网证书。${PLAIN}"
     echo -e "${YELLOW}本向导会让 Caddy 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}"
+    echo -e "${CYAN}证书处理分两种情况：${PLAIN}"
+    echo -e "  3x-ui 3.x 新安装：在官方安装器里选择 Skip SSL / 不申请 SSL，本步骤只做兜底检查。"
+    echo -e "  3x-ui 2.x、升级旧配置、或曾经启用过 3x-ui SSL：继续按旧流程清空面板/订阅证书路径。"
     local cert_clear_confirm
-    read_trimmed cert_clear_confirm "是否现在自动清空 3x-ui 面板/订阅证书路径？(Y/n，默认 yes): "
+    read_trimmed cert_clear_confirm "是否现在兜底清空 2.x/旧配置中的 3x-ui 面板/订阅证书路径？(Y/n，默认 yes): "
     cert_clear_confirm="${cert_clear_confirm:-yes}"
     if is_yes "$cert_clear_confirm"; then
         if ! clear_xui_cert_settings_for_single_443; then
@@ -791,7 +794,8 @@ print_sni_stack_result() {
     echo -e "  面板监听地址：${PANEL_LISTEN_ADDR}"
     echo -e "  面板端口：    ${PANEL_LISTEN_PORT}"
     echo -e "  webBasePath： ${PANEL_WEB_PATH}"
-    echo -e "  面板证书路径/私钥路径：清空"
+    echo -e "  3.x 新安装 SSL 选项：Skip SSL / 不申请 SSL"
+    echo -e "  2.x/旧配置面板证书路径/私钥路径：清空"
     echo -e "  Caddy 后端连接：http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
     echo -e "  Subscription URI Path：${SUB_URI_PATH}"
@@ -799,7 +803,7 @@ print_sni_stack_result() {
     echo -e "  Clash/Mihomo URI Path：${CLASH_URI_PATH}"
     echo -e "  Clash/Mihomo External URL：https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
     echo -e "${YELLOW}  不建议使用 webBasePath=/，随机面板路径能降低被批量扫描命中的概率。${PLAIN}"
-    echo -e "  订阅证书路径/私钥路径：清空"
+    echo -e "  2.x/旧配置订阅证书路径/私钥路径：清空"
     echo -e ""
     echo -e "${BOLD}三、Xray / 3x-ui REALITY 入站这样填${PLAIN}"
     echo -e "  入站监听地址 listen：${XRAY_LISTEN_ADDR}"
@@ -817,7 +821,7 @@ print_sni_stack_result() {
     echo -e ""
     echo -e "${BOLD}四、常见错误怎么判断${PLAIN}"
     echo -e "  ERR_SSL_PROTOCOL_ERROR：通常是访问了内部端口，外部只访问 https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
-    echo -e "  ERR_TOO_MANY_REDIRECTS：通常是 3x-ui 面板或订阅证书路径没清空，或外部地址/路径配置不一致"
+    echo -e "  ERR_TOO_MANY_REDIRECTS：通常是 3.x 误启用 3x-ui SSL、2.x/旧配置证书路径没清空，或外部地址/路径配置不一致"
     echo -e "  HTTP 404：先检查访问路径是否等于 3x-ui 的 webBasePath，再检查 Caddy 是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  502 Bad Gateway：通常是 3x-ui 没启动、端口不对，或 3x-ui 后端仍是 HTTPS"
     echo -e ""
@@ -862,10 +866,10 @@ print_sni_stack_result() {
     echo -e ""
     case "$entry_mode" in
         "xray-fallback")
-            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；3x-ui 面板、订阅服务或额外本地入站暴露公网；3x-ui 证书路径未清空就跑 Web fallback；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；3x-ui 面板、订阅服务或额外本地入站暴露公网；3.x 安装时启用 3x-ui SSL 或 2.x/旧配置证书路径未清空就跑 Web fallback；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
             ;;
         *)
-            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；Xray/3x-ui 主入站直接占用公网 443；3x-ui 面板或新增本地入站暴露公网；3x-ui 证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；Xray/3x-ui 主入站直接占用公网 443；3x-ui 面板或新增本地入站暴露公网；3.x 安装时启用 3x-ui SSL 或 2.x/旧配置证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
             ;;
     esac
 }

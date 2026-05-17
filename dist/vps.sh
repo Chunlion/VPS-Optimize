@@ -3110,7 +3110,7 @@ check_xui_cert_settings_for_single_443() {
         [[ -n "$rows" ]] || continue
 
         found=1
-        echo -e "${YELLOW}⚠️ ${db_path} 仍有 3x-ui 面板/订阅证书路径，443 单入口下建议清空：${PLAIN}"
+        echo -e "${YELLOW}⚠️ ${db_path} 仍有 3x-ui 面板/订阅证书路径。3.x 新安装应选择 Skip SSL；2.x/旧配置在 443 单入口下建议清空：${PLAIN}"
         while IFS='|' read -r key value; do
             [[ -n "$key" ]] || continue
             echo -e "  ${key}=${value}"
@@ -3123,7 +3123,7 @@ check_xui_cert_settings_for_single_443() {
     fi
 
     if [[ "$found" -eq 1 ]]; then
-        echo -e "${YELLOW}建议：进入 [5] -> [11] 面板救砖 / SSL 清理，或在 3x-ui 面板里清空证书路径并重启。${PLAIN}"
+        echo -e "${YELLOW}建议：3.x 新安装回到安装器选择 Skip SSL / 不申请 SSL；2.x/旧配置进入 [5] -> [11] 面板救砖 / SSL 清理，或在 3x-ui 面板里清空证书路径并重启。${PLAIN}"
         return 1
     fi
 
@@ -5902,7 +5902,7 @@ edit_sni_stack_panel_subscription_profile() {
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     echo -e "${YELLOW}适用于：你在 3x-ui 里修改了面板端口、订阅端口、普通订阅路径或 Clash/Mihomo 路径。${PLAIN}"
-    echo -e "${YELLOW}注意：3x-ui 面板设置 -> 常规 -> 证书、订阅设置 -> 证书 路径必须清空，Caddy 才能按 HTTP 反代。${PLAIN}"
+    echo -e "${YELLOW}注意：3x-ui 3.x 新安装请选择 Skip SSL / 不申请 SSL；2.x 或旧配置仍需清空证书、订阅设置里的证书路径，Caddy 才能按 HTTP 反代。${PLAIN}"
     echo -e "${YELLOW}修改前请先在 3x-ui 面板里保存对应设置，再来这里同步脚本。${PLAIN}"
     echo -e "------------------------------------------------"
     echo -e "当前面板后端：${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
@@ -6200,8 +6200,11 @@ collect_sni_stack_config() {
 
     echo -e "${YELLOW}443 单入口需要 3x-ui 面板/订阅后端使用 HTTP，由 Caddy 统一托管公网证书。${PLAIN}"
     echo -e "${YELLOW}本向导会让 Caddy 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}"
+    echo -e "${CYAN}证书处理分两种情况：${PLAIN}"
+    echo -e "  3x-ui 3.x 新安装：在官方安装器里选择 Skip SSL / 不申请 SSL，本步骤只做兜底检查。"
+    echo -e "  3x-ui 2.x、升级旧配置、或曾经启用过 3x-ui SSL：继续按旧流程清空面板/订阅证书路径。"
     local cert_clear_confirm
-    read_trimmed cert_clear_confirm "是否现在自动清空 3x-ui 面板/订阅证书路径？(Y/n，默认 yes): "
+    read_trimmed cert_clear_confirm "是否现在兜底清空 2.x/旧配置中的 3x-ui 面板/订阅证书路径？(Y/n，默认 yes): "
     cert_clear_confirm="${cert_clear_confirm:-yes}"
     if is_yes "$cert_clear_confirm"; then
         if ! clear_xui_cert_settings_for_single_443; then
@@ -6891,7 +6894,8 @@ print_sni_stack_result() {
     echo -e "  面板监听地址：${PANEL_LISTEN_ADDR}"
     echo -e "  面板端口：    ${PANEL_LISTEN_PORT}"
     echo -e "  webBasePath： ${PANEL_WEB_PATH}"
-    echo -e "  面板证书路径/私钥路径：清空"
+    echo -e "  3.x 新安装 SSL 选项：Skip SSL / 不申请 SSL"
+    echo -e "  2.x/旧配置面板证书路径/私钥路径：清空"
     echo -e "  Caddy 后端连接：http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
     echo -e "  Subscription URI Path：${SUB_URI_PATH}"
@@ -6899,7 +6903,7 @@ print_sni_stack_result() {
     echo -e "  Clash/Mihomo URI Path：${CLASH_URI_PATH}"
     echo -e "  Clash/Mihomo External URL：https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
     echo -e "${YELLOW}  不建议使用 webBasePath=/，随机面板路径能降低被批量扫描命中的概率。${PLAIN}"
-    echo -e "  订阅证书路径/私钥路径：清空"
+    echo -e "  2.x/旧配置订阅证书路径/私钥路径：清空"
     echo -e ""
     echo -e "${BOLD}三、Xray / 3x-ui REALITY 入站这样填${PLAIN}"
     echo -e "  入站监听地址 listen：${XRAY_LISTEN_ADDR}"
@@ -6917,7 +6921,7 @@ print_sni_stack_result() {
     echo -e ""
     echo -e "${BOLD}四、常见错误怎么判断${PLAIN}"
     echo -e "  ERR_SSL_PROTOCOL_ERROR：通常是访问了内部端口，外部只访问 https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
-    echo -e "  ERR_TOO_MANY_REDIRECTS：通常是 3x-ui 面板或订阅证书路径没清空，或外部地址/路径配置不一致"
+    echo -e "  ERR_TOO_MANY_REDIRECTS：通常是 3.x 误启用 3x-ui SSL、2.x/旧配置证书路径没清空，或外部地址/路径配置不一致"
     echo -e "  HTTP 404：先检查访问路径是否等于 3x-ui 的 webBasePath，再检查 Caddy 是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  502 Bad Gateway：通常是 3x-ui 没启动、端口不对，或 3x-ui 后端仍是 HTTPS"
     echo -e ""
@@ -6962,10 +6966,10 @@ print_sni_stack_result() {
     echo -e ""
     case "$entry_mode" in
         "xray-fallback")
-            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；3x-ui 面板、订阅服务或额外本地入站暴露公网；3x-ui 证书路径未清空就跑 Web fallback；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；3x-ui 面板、订阅服务或额外本地入站暴露公网；3.x 安装时启用 3x-ui SSL 或 2.x/旧配置证书路径未清空就跑 Web fallback；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
             ;;
         *)
-            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；Xray/3x-ui 主入站直接占用公网 443；3x-ui 面板或新增本地入站暴露公网；3x-ui 证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；Xray/3x-ui 主入站直接占用公网 443；3x-ui 面板或新增本地入站暴露公网；3.x 安装时启用 3x-ui SSL 或 2.x/旧配置证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
             ;;
     esac
 }
@@ -11018,7 +11022,7 @@ func_port_dog() {
 
 func_xpanel() {
     clear
-    local version_choice install_url install_desc
+    local version_choice install_url install_desc ssl_hint
     local -a install_args=()
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}安装 3x-ui / x-ui 面板${PLAIN}"
@@ -11036,11 +11040,13 @@ func_xpanel() {
         1|latest|最新版)
             install_desc="安装 3x-ui / x-ui 面板（最新版）"
             install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
+            ssl_hint="最新版 3.x 安装器如果询问 SSL certificate setup method，请选择 Skip SSL / 不申请 SSL。443 单入口会由本脚本的 Caddy + acme.sh 统一托管公网证书。"
             ;;
         2|2.9.4|v2.9.4)
             install_desc="安装 3x-ui / x-ui 面板（v2.9.4）"
             install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh"
             install_args=("v2.9.4")
+            ssl_hint="v2.9.4 属于 2.x 老流程：如果安装器或面板里已经设置过 SSL 证书，后续 443 单入口向导会继续按旧方式清空面板/订阅证书路径。"
             ;;
         0|q|Q)
             echo -e "${BLUE}已取消安装。${PLAIN}"
@@ -11053,6 +11059,7 @@ func_xpanel() {
             return
             ;;
     esac
+    echo -e "${YELLOW}${ssl_hint}${PLAIN}"
     echo -e "${CYAN}👉 正在拉取 mhsanaei 的官方 3x-ui 安装脚本...${PLAIN}"
     if run_remote_script "$install_desc" "$install_url" "${install_args[@]}"; then
         detect_xui_single_443_defaults

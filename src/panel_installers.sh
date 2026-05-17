@@ -3,7 +3,7 @@
 
 func_xpanel() {
     clear
-    local version_choice install_url install_desc
+    local version_choice install_url install_desc ssl_hint
     local -a install_args=()
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}安装 3x-ui / x-ui 面板${PLAIN}"
@@ -21,11 +21,13 @@ func_xpanel() {
         1|latest|最新版)
             install_desc="安装 3x-ui / x-ui 面板（最新版）"
             install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
+            ssl_hint="最新版 3.x 安装器如果询问 SSL certificate setup method，请选择 Skip SSL / 不申请 SSL。443 单入口会由本脚本的 Caddy + acme.sh 统一托管公网证书。"
             ;;
         2|2.9.4|v2.9.4)
             install_desc="安装 3x-ui / x-ui 面板（v2.9.4）"
             install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh"
             install_args=("v2.9.4")
+            ssl_hint="v2.9.4 属于 2.x 老流程：如果安装器或面板里已经设置过 SSL 证书，后续 443 单入口向导会继续按旧方式清空面板/订阅证书路径。"
             ;;
         0|q|Q)
             echo -e "${BLUE}已取消安装。${PLAIN}"
@@ -38,6 +40,7 @@ func_xpanel() {
             return
             ;;
     esac
+    echo -e "${YELLOW}${ssl_hint}${PLAIN}"
     echo -e "${CYAN}👉 正在拉取 mhsanaei 的官方 3x-ui 安装脚本...${PLAIN}"
     if run_remote_script "$install_desc" "$install_url" "${install_args[@]}"; then
         detect_xui_single_443_defaults

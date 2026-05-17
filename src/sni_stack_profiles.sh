@@ -34,7 +34,7 @@ edit_sni_stack_panel_subscription_profile() {
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     echo -e "${YELLOW}适用于：你在 3x-ui 里修改了面板端口、订阅端口、普通订阅路径或 Clash/Mihomo 路径。${PLAIN}"
-    echo -e "${YELLOW}注意：3x-ui 面板设置 -> 常规 -> 证书、订阅设置 -> 证书 路径必须清空，Caddy 才能按 HTTP 反代。${PLAIN}"
+    echo -e "${YELLOW}注意：3x-ui 3.x 新安装请选择 Skip SSL / 不申请 SSL；2.x 或旧配置仍需清空证书、订阅设置里的证书路径，Caddy 才能按 HTTP 反代。${PLAIN}"
     echo -e "${YELLOW}修改前请先在 3x-ui 面板里保存对应设置，再来这里同步脚本。${PLAIN}"
     echo -e "------------------------------------------------"
     echo -e "当前面板后端：${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
