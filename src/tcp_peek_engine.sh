@@ -694,11 +694,7 @@ start_tcp_peek_test_port() {
         "停止 vpso-mux-preflight.service，或继续使用 Nginx Stream / Xray Fallback，不会改动公网 443" \
         "低内存或低磁盘机器会被资源预检查拦截；公网 443 在本步骤不会被替换。" || return 1
     install_vpso_mux_binary || return 1
-    ensure_caddy_local_base_config || return 1
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
+    apply_caddy_configs_for_single_443 || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
     tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
@@ -717,11 +713,7 @@ preflight_tcppeek_before_cutover() {
     require_vpso_mux_binary_for_cutover || return 1
     warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
-    ensure_caddy_local_base_config || return 1
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
+    apply_caddy_configs_for_single_443 || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
     tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
@@ -889,14 +881,14 @@ preview_entry_mode_cutover() {
         echo -e "${GREEN}  2. 继续切换${PLAIN}"
         echo -e "${RED}  0. 取消，不修改任何配置${PLAIN}"
         read_trimmed choice "请选择操作（默认 0 取消）: "
-        case "${choice:-0}" in
+        case "$(echo "${choice:-0}" | tr '[:upper:]' '[:lower:]')" in
             1|d|D|diff)
                 show_entry_mode_cutover_diff "$target_mode"
                 ;;
-            2|y|Y|yes|YES)
+            2|y|yes)
                 return 0
                 ;;
-            0|n|N|no|NO|q|Q)
+            0|n|no|q)
                 echo -e "${BLUE}已取消 443 入口切换，未修改任何配置。${PLAIN}"
                 return 1
                 ;;
@@ -994,6 +986,9 @@ disable_nginx_stream_public_443() {
             echo -e "${RED}❌ Nginx Stream 443 配置已移除，但 nginx 仍在监听公网 443，拒绝继续切换入口。${PLAIN}"
             print_nginx_stream_failure_context "$NGINX_LISTEN_PORT"
             return 1
+        fi
+        if systemctl is-active --quiet nginx; then
+            echo -e "${YELLOW}ℹ️ nginx 服务仍在运行，但已不监听公网 ${NGINX_LISTEN_PORT}；这是允许的，单入口只要求公网 443 由目标入口独占。${PLAIN}"
         fi
     fi
 }
@@ -1200,12 +1195,8 @@ apply_nginx_stream_mode() {
     local backup_dir="${1:-}"
     install_nginx_stream_stack || return 1
     harden_nginx_public_errors
-    ensure_caddy_local_base_config || return 1
+    apply_caddy_configs_for_single_443 || return 1
     cleanup_old_nginx_sni_stream_configs
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
     write_nginx_sni_stream_config || return 1
     assert_nginx_stream_config_loaded "$NGINX_LISTEN_PORT" || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
@@ -1237,11 +1228,7 @@ apply_tcppeek_mode() {
     require_vpso_mux_binary_for_cutover || return 1
     warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
-    ensure_caddy_local_base_config || return 1
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
+    apply_caddy_configs_for_single_443 || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
     tmp_config="/etc/vps-optimize/vpso-mux.yaml.tmp.$$"
@@ -1269,11 +1256,7 @@ apply_tcppeek_mode() {
 
 apply_xray_fallback_mode() {
     local backup_dir="${1:-}"
-    ensure_caddy_local_base_config || return 1
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
+    apply_caddy_configs_for_single_443 || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
     restart_xray_entry_service || return 1
@@ -1295,7 +1278,7 @@ apply_entry_mode_by_name() {
 }
 
 select_initial_entry_mode() {
-    local choice
+    local choice tcppeek_bootstrap
     ENTRY_MODE="nginx-stream"
 
     echo -e "${CYAN}================================================${PLAIN}"
@@ -1303,15 +1286,26 @@ select_initial_entry_mode() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${GREEN}  1. Nginx Stream 模式${PLAIN}       ${YELLOW}(默认稳定模式，适合大多数用户)${PLAIN}"
     echo -e "${GREEN}  2. Xray Fallback 模式${PLAIN}      ${YELLOW}(需你已在 Xray/3x-ui 准备好公网 443 主入站)${PLAIN}"
-    echo -e "${GREEN}  3. TCP Peek + Splice 模式${PLAIN}  ${YELLOW}(需已有 vpso-mux；新机器建议先选 Nginx Stream，再跑 8444 预检后切换)${PLAIN}"
+    echo -e "${GREEN}  3. TCP Peek + Splice 模式${PLAIN}  ${YELLOW}(首次安装会先提示安装/使用 Nginx Stream，再跑 8444 预检后切换)${PLAIN}"
     echo -e "${RED}  0. 取消${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     read_trimmed choice "请选择入口模式（默认 1）: "
     case "${choice:-1}" in
         1) ENTRY_MODE="nginx-stream" ;;
         2) ENTRY_MODE="xray-fallback" ;;
-        3) ENTRY_MODE="tcp-peek" ;;
-        0) echo -e "${BLUE}已取消首次配置。${PLAIN}"; return 1 ;;
+        3)
+            echo -e "${YELLOW}TCP Peek 首次接管 443 前必须先安装/使用 Nginx Stream，建立可用的共享配置和 Nginx/Caddy 基线。${PLAIN}"
+            echo -e "${YELLOW}推荐流程：先安装/使用 Nginx Stream 完成首次安装，再进入 [19] -> [16] 做 8444 预检，最后用 [5] 切换到 TCP Peek。${PLAIN}"
+            read_trimmed tcppeek_bootstrap "是否先安装/使用 Nginx Stream 完成本次首次安装？(Y/n，默认 yes): "
+            tcppeek_bootstrap="${tcppeek_bootstrap:-yes}"
+            if is_yes "$tcppeek_bootstrap"; then
+                ENTRY_MODE="nginx-stream"
+            else
+                echo -e "${BLUE}已取消首次配置。${PLAIN}"
+                return 1
+            fi
+            ;;
+        0|q|Q) echo -e "${BLUE}已取消首次配置。${PLAIN}"; return 1 ;;
         *) echo -e "${RED}❌ 无效选择。${PLAIN}"; return 1 ;;
     esac
     echo -e "${GREEN}✅ 已选择 443 入口模式：${ENTRY_MODE}${PLAIN}"
@@ -1351,7 +1345,7 @@ switch_entry_mode() {
 
     if [[ "$target_mode" == "$current_mode" ]]; then
         read_trimmed yn "当前已经是 ${target_mode}，是否重新应用当前模式？(y/n，默认 n): "
-        [[ "$yn" =~ ^[Yy]$ ]] && reapply_current_entry_mode
+        is_yes "$yn" && reapply_current_entry_mode
         return $?
     fi
 

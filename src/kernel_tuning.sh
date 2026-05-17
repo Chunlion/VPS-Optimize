@@ -20,7 +20,7 @@ func_tcp_tune() {
     echo -e "------------------------------------------------"
     
     read_trimmed yn "❓ 准备好粘贴参数了吗？(y 继续 / n 取消): "
-    if [[ ! "$yn" =~ ^[Yy]$ ]]; then return; fi
+    if ! is_yes "$yn"; then return; fi
     
     local temp_f="/etc/sysctl.d/99-omnitt-tune.conf"
     local backup_f="${temp_f}.bak_$(date +%s)"
@@ -461,7 +461,7 @@ func_install_kernel() {
     echo -e "${GREEN}  2. XanMod 性能内核${PLAIN} ${YELLOW}(高级：自动匹配 x64v1-v4 并向下兜底)${PLAIN}"
     echo -e "     适合：愿意折腾、追求低延迟/新特性；仅 amd64，建议有快照或救援控制台。"
     echo -e "------------------------------------------------"
-    echo -e "${RED}  0. 返回${PLAIN}"
+    echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local kernel_choice virt

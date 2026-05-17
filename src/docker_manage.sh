@@ -130,7 +130,7 @@ func_docker_manage() {
         echo -e "${GREEN}  4. Docker 端口暴露审计${PLAIN} ${YELLOW}(检查是否绕过 443 单入口)${PLAIN}"
         echo -e "${BOLD}${YELLOW}  5. UPD 更新订阅工具容器${PLAIN} ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         
         local c
         read_trimmed c "👉 请选择操作: "
@@ -239,7 +239,7 @@ EOF
             3) func_docker_project_status ;;
             4) func_docker_443_exposure_audit ;;
             5) func_update_subscription_tools ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}"; sleep 1 ;;
         esac
     done

@@ -678,7 +678,7 @@ func_fail2ban() {
     echo -e "  ${GREEN}1.${PLAIN} 一键安装并配置 Fail2ban ${YELLOW}(自动绑定当前 SSH 端口)${PLAIN}"
     echo -e "  ${BLUE}2.${PLAIN} 更新防护端口 ${YELLOW}(如果您刚改了 SSH 端口，选此项重载)${PLAIN}"
     echo -e "  ${RED}3.${PLAIN} 彻底卸载 Fail2ban"
-    echo -e "  ${RED}0.${PLAIN} 返回主菜单"
+    echo -e "  ${RED}0.${PLAIN} 返回主菜单 / q 返回"
     echo -e "------------------------------------------------"
     
     local f_choice
@@ -733,7 +733,7 @@ EOF
             quarantine_path /etc/fail2ban "/etc/vps-optimize/quarantine" >/dev/null 2>&1 || true
             echo -e "${GREEN}✅ Fail2ban 已卸载，旧配置已隔离到 /etc/vps-optimize/quarantine。${PLAIN}"
             ;;
-        0) return ;;
+        0|q|Q) return ;;
         *) echo -e "${RED}❌ 无效的输入！${PLAIN}"; sleep 1 ;;
     esac
     read -n 1 -s -r -p "按任意键继续..."
@@ -754,7 +754,7 @@ func_add_ssh_key() {
     if ssh_add_public_key_for_user "$user"; then
         echo -e "${GREEN}✅ 公钥添加完成。请立刻新开一个 SSH 窗口测试私钥登录。${PLAIN}"
         read_trimmed enable_mode "是否同时写入“密钥优先，保留密码登录”模式？(y/N): "
-        if [[ "$enable_mode" =~ ^[Yy]$ ]]; then
+        if is_yes "$enable_mode"; then
             ssh_apply_auth_mode key_preferred || true
         fi
         echo -e "${YELLOW}确认私钥登录 100% 成功后，可进入 [5 SSH 安全中心] -> [2 用户密钥登录模式] 禁用密码登录。${PLAIN}"

@@ -365,8 +365,8 @@ confirm_danger() {
     echo "- 当前 SSH 会话不要断开。"
     [[ -n "$advice" ]] && echo -e "- ${advice}"
     echo ""
-    read_trimmed confirm "继续请输入 YES，直接回车取消: "
-    [[ "$confirm" == "YES" ]]
+    read_trimmed confirm "继续请输入 yes，直接回车取消（大小写均可）: "
+    is_yes "$confirm"
 }
 
 confirm_risk_action() {
@@ -382,9 +382,21 @@ confirm_risk_action() {
 trim_input() {
     local value="$*"
     value="${value//$'\r'/}"
+    value="${value//$'\xc2\xa0'/ }"
+    value="${value//$'\xe3\x80\x80'/ }"
     value="${value#"${value%%[![:space:]]*}"}"
     value="${value%"${value##*[![:space:]]}"}"
     printf '%s' "$value"
+}
+
+normalize_menu_choice_input() {
+    local value lower
+    value="$(trim_input "$1")"
+    lower=$(echo "$value" | tr '[:upper:]' '[:lower:]')
+    case "$lower" in
+        q|quit|exit|back|return|返回|退出) printf '0' ;;
+        *) printf '%s' "$value" ;;
+    esac
 }
 
 read_trimmed() {
@@ -392,7 +404,11 @@ read_trimmed() {
     local prompt="${2:-}"
     local __raw_input
     read -r -p "$prompt" __raw_input
-    printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
+    if [[ "$__target" == *choice* && "$__target" != "mode_choice" && "$__target" != "action_choice" ]]; then
+        printf -v "$__target" '%s' "$(normalize_menu_choice_input "$__raw_input")"
+    else
+        printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
+    fi
 }
 
 read_secret_trimmed() {
@@ -516,6 +532,12 @@ is_yes() {
     local value
     value="$(trim_input "$1")"
     [[ "$value" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
+is_no() {
+    local value
+    value="$(trim_input "$1")"
+    [[ "$value" =~ ^[Nn]([Oo])?$ ]]
 }
 
 is_suspicious_public_ipv4() {
@@ -1706,7 +1728,7 @@ func_firewall_manage() {
                 echo -e "${GREEN}✅ 防火墙已彻底禁用！${PLAIN}"
                 sleep 2
                 ;;
-            "?"|help) echo "防火墙菜单用于放行、删除、查看或关闭系统防火墙规则。删除规则和关闭防火墙都必须输入 YES。"; pause_return ;;
+            "?"|help) echo "防火墙菜单用于放行、删除、查看或关闭系统防火墙规则。删除规则和关闭防火墙都必须输入 yes 确认，大小写均可。"; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
         esac
@@ -2050,7 +2072,7 @@ func_system_tweaks() {
         echo -e "${GREEN}  6. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]"
         echo -e "${GREEN}  7. 本机 hosts 解析管理${PLAIN}    (/etc/hosts 本机域名解析)"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local tweak_choice
@@ -2059,11 +2081,11 @@ func_system_tweaks() {
         case $tweak_choice in
             1)
                 read_trimmed yn "❓ 开启 IPv6？(y 开启 / n 关闭): "
-                if [[ "$yn" =~ ^[Yy]$ ]]; then 
+                if is_yes "$yn"; then
                     quarantine_path /etc/sysctl.d/99-disable-ipv6.conf "/etc/vps-optimize/quarantine/sysctl" >/dev/null 2>&1 || true
                     sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null 2>&1
                     echo -e "${GREEN}✅ IPv6 已开启${PLAIN}"
-                elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                elif is_no "$yn"; then
                     [[ -f /etc/sysctl.d/99-disable-ipv6.conf ]] && cp -p /etc/sysctl.d/99-disable-ipv6.conf "/etc/sysctl.d/99-disable-ipv6.conf.bak_$(date +%s)" 2>/dev/null || true
                     echo "net.ipv6.conf.all.disable_ipv6 = 1" > /etc/sysctl.d/99-disable-ipv6.conf
                     sysctl -p /etc/sysctl.d/99-disable-ipv6.conf >/dev/null 2>&1
@@ -2071,12 +2093,12 @@ func_system_tweaks() {
                 fi; sleep 1 ;;
             2)
                 read_trimmed yn "❓ 设置 IPv4 为最高出站优先级？(y 开启 / n 恢复默认): "
-                if [[ "$yn" =~ ^[Yy]$ ]]; then 
+                if is_yes "$yn"; then
                     [[ -f /etc/gai.conf ]] || touch /etc/gai.conf
                     cp -p /etc/gai.conf "/etc/gai.conf.bak_$(date +%s)" 2>/dev/null || true
                     sed -Ei '/^[[:space:]]*#?[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+100\b.*?$/ {s/.+100\b([[:space:]]*#.*)?$/precedence ::ffff:0:0\/96  100\1/; :a;n;b a}; /^[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+[0-9]+.*$/ {s/^.*precedence.+::ffff:0:0\/96[^0-9]+([0-9]+).*$/precedence ::ffff:0:0\/96  100\t#原值为 \1/; :a;n;ba;}; $aprecedence ::ffff:0:0\/96  100' /etc/gai.conf
                     echo -e "${GREEN}✅ 已设为 IPv4 优先${PLAIN}"
-                elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                elif is_no "$yn"; then
                     [[ -f /etc/gai.conf ]] || touch /etc/gai.conf
                     cp -p /etc/gai.conf "/etc/gai.conf.bak_$(date +%s)" 2>/dev/null || true
                     sed -i '/precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
@@ -2084,11 +2106,11 @@ func_system_tweaks() {
                 fi; sleep 1 ;;
             3)
                 read_trimmed yn "❓ 允许被 Ping？(y 允许 / n 禁止): "
-                if [[ "$yn" =~ ^[Yy]$ ]]; then 
+                if is_yes "$yn"; then
                     quarantine_path /etc/sysctl.d/99-disable-ping.conf "/etc/vps-optimize/quarantine/sysctl" >/dev/null 2>&1 || true
                     sysctl -w net.ipv4.icmp_echo_ignore_all=0 >/dev/null 2>&1
                     echo -e "${GREEN}✅ 已允许被 Ping${PLAIN}"
-                elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                elif is_no "$yn"; then
                     [[ -f /etc/sysctl.d/99-disable-ping.conf ]] && cp -p /etc/sysctl.d/99-disable-ping.conf "/etc/sysctl.d/99-disable-ping.conf.bak_$(date +%s)" 2>/dev/null || true
                     echo "net.ipv4.icmp_echo_ignore_all = 1" > /etc/sysctl.d/99-disable-ping.conf
                     sysctl -p /etc/sysctl.d/99-disable-ping.conf >/dev/null 2>&1
@@ -2096,7 +2118,7 @@ func_system_tweaks() {
                 fi; sleep 1 ;;
             4)
                 read_trimmed yn "❓ 开启系统自动更新？(y 开启 / n 关闭): "
-                if [[ "$yn" =~ ^[Yy]$ ]]; then 
+                if is_yes "$yn"; then
                     if [[ "$OS" =~ debian|ubuntu ]]; then
                         install_pkg unattended-upgrades || { echo -e "${RED}❌ unattended-upgrades 安装失败。${PLAIN}"; sleep 1; continue; }
                         systemctl enable --now unattended-upgrades >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ unattended-upgrades 服务启用失败，请手动检查。${PLAIN}"
@@ -2105,7 +2127,7 @@ func_system_tweaks() {
                         systemctl enable --now dnf-automatic.timer >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ dnf-automatic.timer 启用失败，请手动检查。${PLAIN}"
                     fi
                     echo -e "${GREEN}✅ 自动更新已开启${PLAIN}"
-                elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                elif is_no "$yn"; then
                     if [[ "$OS" =~ debian|ubuntu ]]; then systemctl disable --now unattended-upgrades >/dev/null 2>&1
                     else systemctl disable --now dnf-automatic.timer >/dev/null 2>&1; fi
                     echo -e "${GREEN}✅ 自动更新已关闭${PLAIN}"
@@ -2124,7 +2146,7 @@ func_system_tweaks() {
                 sleep 1 ;;
             6) func_change_hostname; sleep 1 ;;
             7) func_hosts_manage ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -2403,7 +2425,7 @@ func_caddy_add_reverse_proxy() {
     local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
     read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
-    if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
+    if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}"
         read_trimmed ip_whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
@@ -2420,7 +2442,7 @@ func_caddy_add_reverse_proxy() {
     local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
     [[ -f /etc/caddy/Caddyfile ]] && cp -p /etc/caddy/Caddyfile "$backup_file"
 
-    if [[ "$is_https" =~ ^[Yy]$ ]]; then
+    if is_yes "$is_https"; then
         cat <<EOF > "$domain_conf"
 $domain {
 $(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://127.0.0.1:$port {
@@ -2573,7 +2595,7 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
     echo -e "------------------------------------------------"
 
     read_trimmed reality_occupied "❓ 当前 443 端口是否已被 3x-ui VLESS-Reality 占用？(y/n): "
-    if [[ "$reality_occupied" =~ ^[Nn]$ ]]; then
+    if is_no "$reality_occupied"; then
         echo -e "${BLUE}ℹ️ 您选择了未占用 443，本向导仍将使用本地端口模式，避免与未来业务冲突。${PLAIN}"
     fi
 
@@ -2584,7 +2606,7 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
         echo -e "${RED}❌ 监听端口无效！必须是 1-65535 的纯数字。${PLAIN}"
         return
     fi
-    if [[ "$reality_occupied" =~ ^[Yy]$ ]] && [[ "$listen_port" -eq 443 ]]; then
+    if is_yes "$reality_occupied" && [[ "$listen_port" -eq 443 ]]; then
         echo -e "${RED}❌ 443 已用于 Reality，请改用本地高位端口 (如 8443/9443)。${PLAIN}"
         return
     fi
@@ -2735,7 +2757,7 @@ EOF
         ((success_count++))
 
         read_trimmed continue_add "继续添加下一个域名？(y/n): "
-        if [[ ! "$continue_add" =~ ^[Yy]$ ]]; then
+        if ! is_yes "$continue_add"; then
             break
         fi
     done
@@ -2879,6 +2901,159 @@ caddy_ip_whitelist_block() {
     # vps-optimize-ip-whitelist-end
 
 EOF
+}
+
+xui_setting_default_value() {
+    local key="$1"
+    case "$key" in
+        webListen|subListen|webDomain|subDomain|webCertFile|webKeyFile|subCertFile|subKeyFile|subURI|subClashURI) echo "" ;;
+        webPort) echo "2053" ;;
+        webBasePath) echo "/" ;;
+        subPort) echo "2096" ;;
+        subPath) echo "/sub/" ;;
+        subClashPath) echo "/clash/" ;;
+        *) echo "" ;;
+    esac
+}
+
+xui_backend_addr_from_listen() {
+    local listen_addr
+    listen_addr="$(trim_input "$1")"
+    case "$listen_addr" in
+        ""|"0.0.0.0"|"::") echo "127.0.0.1" ;;
+        "localhost") echo "127.0.0.1" ;;
+        *) echo "$listen_addr" ;;
+    esac
+}
+
+detect_xui_command() {
+    if [[ -x /usr/local/x-ui/x-ui ]]; then
+        echo "/usr/local/x-ui/x-ui"
+    elif command -v x-ui >/dev/null 2>&1; then
+        command -v x-ui
+    elif command -v 3x-ui >/dev/null 2>&1; then
+        command -v 3x-ui
+    fi
+}
+
+xui_cli_show_value() {
+    local key="$1"
+    local xui_bin info cli_key
+    xui_bin=$(detect_xui_command) || return 1
+    info=$("$xui_bin" setting -show true 2>/dev/null || true)
+    [[ -n "$info" ]] || return 1
+    case "$key" in
+        webPort) cli_key="port" ;;
+        webBasePath) cli_key="webBasePath" ;;
+        *) cli_key="$key" ;;
+    esac
+    printf '%s\n' "$info" | awk -F': ' -v k="$cli_key" '$1 == k {print $2; exit}'
+}
+
+xui_db_setting_value() {
+    local key="$1"
+    local db_path value
+    command -v sqlite3 >/dev/null 2>&1 || return 1
+    while IFS= read -r db_path; do
+        [[ -n "$db_path" && -f "$db_path" ]] || continue
+        value=$(sqlite3 "$db_path" "select value from settings where lower(key)=lower('${key}') limit 1;" 2>/dev/null || true)
+        if [[ -z "$value" ]]; then
+            value=$(sqlite3 "$db_path" "select value from setting where lower(key)=lower('${key}') limit 1;" 2>/dev/null || true)
+        fi
+        value="$(trim_input "$value")"
+        if [[ -n "$value" ]]; then
+            printf '%s' "$value"
+            return 0
+        fi
+    done < <(find_xui_database_candidates)
+    return 1
+}
+
+xui_detect_setting_value() {
+    local key="$1"
+    local default_value="${2:-$(xui_setting_default_value "$key")}"
+    local value
+    value="$(xui_cli_show_value "$key" 2>/dev/null || true)"
+    value="$(trim_input "$value")"
+    if [[ -z "$value" ]]; then
+        value="$(xui_db_setting_value "$key" 2>/dev/null || true)"
+        value="$(trim_input "$value")"
+    fi
+    printf '%s' "${value:-$default_value}"
+}
+
+detect_xui_single_443_defaults() {
+    XUI_DETECTED_BIN="$(detect_xui_command 2>/dev/null || true)"
+    XUI_DETECTED_DB="$(find_xui_database_candidates | head -n1)"
+    XUI_DETECTED_WEB_LISTEN="$(xui_detect_setting_value webListen)"
+    XUI_DETECTED_WEB_PORT="$(xui_detect_setting_value webPort 2053)"
+    XUI_DETECTED_WEB_BASE_PATH="$(normalize_path_prefix "$(xui_detect_setting_value webBasePath /)")"
+    XUI_DETECTED_SUB_LISTEN="$(xui_detect_setting_value subListen)"
+    XUI_DETECTED_SUB_PORT="$(xui_detect_setting_value subPort 2096)"
+    XUI_DETECTED_SUB_PATH="$(normalize_path_prefix "$(xui_detect_setting_value subPath /sub/)")"
+    XUI_DETECTED_SUB_CLASH_PATH="$(normalize_path_prefix "$(xui_detect_setting_value subClashPath /clash/)")"
+    XUI_DETECTED_PANEL_ADDR="$(xui_backend_addr_from_listen "$XUI_DETECTED_WEB_LISTEN")"
+    XUI_DETECTED_SUB_ADDR="$(xui_backend_addr_from_listen "$XUI_DETECTED_SUB_LISTEN")"
+}
+
+print_xui_single_443_detected_defaults() {
+    if [[ -z "${XUI_DETECTED_BIN:-}" && -z "${XUI_DETECTED_DB:-}" ]]; then
+        echo -e "${YELLOW}⚠️ 未检测到 3x-ui 命令或数据库，将使用 443 向导默认值。${PLAIN}"
+        return 0
+    fi
+    echo -e "${CYAN}▶ 已检测到 3x-ui 当前设置，下面会作为默认值，可按回车沿用：${PLAIN}"
+    [[ -n "${XUI_DETECTED_BIN:-}" ]] && echo -e "  命令：${XUI_DETECTED_BIN}"
+    [[ -n "${XUI_DETECTED_DB:-}" ]] && echo -e "  数据库：${XUI_DETECTED_DB}"
+    echo -e "  面板后端：${XUI_DETECTED_PANEL_ADDR}:${XUI_DETECTED_WEB_PORT}${XUI_DETECTED_WEB_BASE_PATH}"
+    echo -e "  订阅后端：${XUI_DETECTED_SUB_ADDR}:${XUI_DETECTED_SUB_PORT}${XUI_DETECTED_SUB_PATH}"
+    echo -e "  Clash/Mihomo 路径：${XUI_DETECTED_SUB_CLASH_PATH}"
+}
+
+clear_xui_cert_settings_for_single_443() {
+    local xui_bin cert_cmd_done=false db_found=false cert_key_sql db_path service_name
+    xui_bin=$(detect_xui_command 2>/dev/null || true)
+
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        echo -e "${CYAN}▶ 正在安装 sqlite3，用于清空 3x-ui 数据库里的证书路径...${PLAIN}"
+        install_pkg sqlite3 sqlite >/dev/null 2>&1 || true
+    fi
+
+    for service_name in x-ui 3x-ui x-panel; do
+        systemctl stop "$service_name" >/dev/null 2>&1 || true
+    done
+
+    if [[ -n "$xui_bin" ]]; then
+        if "$xui_bin" cert -webCert "" -webCertKey "" >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ 已通过 3x-ui 官方 cert 命令清空面板证书路径。${PLAIN}"
+            cert_cmd_done=true
+        else
+            echo -e "${YELLOW}⚠️ 官方 cert 命令未能清空，将继续尝试修正数据库。${PLAIN}"
+        fi
+    fi
+
+    if command -v sqlite3 >/dev/null 2>&1; then
+        cert_key_sql=$(xui_cert_setting_key_sql_list)
+        while IFS= read -r db_path; do
+            [[ -f "$db_path" ]] || continue
+            if sqlite3 "$db_path" "update settings set value='' where lower(key) in (${cert_key_sql});" 2>/dev/null || \
+               sqlite3 "$db_path" "update setting set value='' where lower(key) in (${cert_key_sql});" 2>/dev/null; then
+                echo -e "${GREEN}✅ 已清空证书字段：${db_path}${PLAIN}"
+                db_found=true
+            fi
+        done < <(find_xui_database_candidates)
+    fi
+
+    for service_name in x-ui 3x-ui x-panel; do
+        if systemctl list-unit-files "${service_name}.service" --no-legend 2>/dev/null | grep -q . || systemctl status "$service_name" >/dev/null 2>&1; then
+            systemctl restart "$service_name" >/dev/null 2>&1 || systemctl start "$service_name" >/dev/null 2>&1 || true
+        fi
+    done
+
+    if ! $cert_cmd_done && ! $db_found; then
+        echo -e "${YELLOW}⚠️ 未找到可自动清空的 3x-ui 证书设置，请在面板里手动清空证书路径并重启。${PLAIN}"
+        return 1
+    fi
+    echo -e "${GREEN}✅ 已尝试清空 3x-ui 面板/订阅证书路径，443 单入口将由 Caddy 托管证书。${PLAIN}"
 }
 
 
@@ -3292,6 +3467,11 @@ detect_current_entry_status() {
     ENTRY_STATUS_LISTENER_PROCESS="${listener_info#*|}"
     ENTRY_STATUS_LISTENER_DISPLAY=$(entry_listener_display_name "$ENTRY_STATUS_LISTENER")
     ENTRY_STATUS_NGINX_SERVICE=$(service_status_compact nginx)
+    if listener_info_has_entry "$listener_info" "nginx"; then
+        ENTRY_STATUS_NGINX_ROLE="正在监听公网 ${NGINX_LISTEN_PORT:-443}"
+    else
+        ENTRY_STATUS_NGINX_ROLE="未监听公网 ${NGINX_LISTEN_PORT:-443}；服务运行仅代表 80/其他站点或默认丢弃规则仍可用"
+    fi
     xui_status=$(xui_panel_status_compact)
     if xui_svc=$(xui_panel_service_name 2>/dev/null); then
         xui_status="${xui_svc}.service ${xui_status}"
@@ -3341,7 +3521,7 @@ show_current_entry_status() {
     echo -e "Xray： ${ENTRY_STATUS_XRAY_ADDR}:${ENTRY_STATUS_XRAY_PORT} - $(listen_line_status "$ENTRY_STATUS_XRAY_ADDR" "$ENTRY_STATUS_XRAY_PORT" "$ENTRY_STATUS_XRAY_LISTEN_LINE")"
     echo -e "------------------------------------------------"
     echo -e "${BOLD}服务状态${PLAIN}"
-    echo -e "nginx：${ENTRY_STATUS_NGINX_SERVICE}"
+    echo -e "nginx：${ENTRY_STATUS_NGINX_SERVICE}（${ENTRY_STATUS_NGINX_ROLE}）"
     echo -e "TCP Peek + Splice / vpso-mux 分流器：${ENTRY_STATUS_TCPPEEK_SERVICE}"
     echo -e "Xray/3x-ui/x-ui：${ENTRY_STATUS_XRAY_SERVICE}"
 }
@@ -4669,11 +4849,7 @@ start_tcp_peek_test_port() {
         "停止 vpso-mux-preflight.service，或继续使用 Nginx Stream / Xray Fallback，不会改动公网 443" \
         "低内存或低磁盘机器会被资源预检查拦截；公网 443 在本步骤不会被替换。" || return 1
     install_vpso_mux_binary || return 1
-    ensure_caddy_local_base_config || return 1
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
+    apply_caddy_configs_for_single_443 || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
     tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
@@ -4692,11 +4868,7 @@ preflight_tcppeek_before_cutover() {
     require_vpso_mux_binary_for_cutover || return 1
     warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
-    ensure_caddy_local_base_config || return 1
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
+    apply_caddy_configs_for_single_443 || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
     tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
@@ -4864,14 +5036,14 @@ preview_entry_mode_cutover() {
         echo -e "${GREEN}  2. 继续切换${PLAIN}"
         echo -e "${RED}  0. 取消，不修改任何配置${PLAIN}"
         read_trimmed choice "请选择操作（默认 0 取消）: "
-        case "${choice:-0}" in
+        case "$(echo "${choice:-0}" | tr '[:upper:]' '[:lower:]')" in
             1|d|D|diff)
                 show_entry_mode_cutover_diff "$target_mode"
                 ;;
-            2|y|Y|yes|YES)
+            2|y|yes)
                 return 0
                 ;;
-            0|n|N|no|NO|q|Q)
+            0|n|no|q)
                 echo -e "${BLUE}已取消 443 入口切换，未修改任何配置。${PLAIN}"
                 return 1
                 ;;
@@ -4969,6 +5141,9 @@ disable_nginx_stream_public_443() {
             echo -e "${RED}❌ Nginx Stream 443 配置已移除，但 nginx 仍在监听公网 443，拒绝继续切换入口。${PLAIN}"
             print_nginx_stream_failure_context "$NGINX_LISTEN_PORT"
             return 1
+        fi
+        if systemctl is-active --quiet nginx; then
+            echo -e "${YELLOW}ℹ️ nginx 服务仍在运行，但已不监听公网 ${NGINX_LISTEN_PORT}；这是允许的，单入口只要求公网 443 由目标入口独占。${PLAIN}"
         fi
     fi
 }
@@ -5175,12 +5350,8 @@ apply_nginx_stream_mode() {
     local backup_dir="${1:-}"
     install_nginx_stream_stack || return 1
     harden_nginx_public_errors
-    ensure_caddy_local_base_config || return 1
+    apply_caddy_configs_for_single_443 || return 1
     cleanup_old_nginx_sni_stream_configs
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
     write_nginx_sni_stream_config || return 1
     assert_nginx_stream_config_loaded "$NGINX_LISTEN_PORT" || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
@@ -5212,11 +5383,7 @@ apply_tcppeek_mode() {
     require_vpso_mux_binary_for_cutover || return 1
     warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
-    ensure_caddy_local_base_config || return 1
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
+    apply_caddy_configs_for_single_443 || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
     tmp_config="/etc/vps-optimize/vpso-mux.yaml.tmp.$$"
@@ -5244,11 +5411,7 @@ apply_tcppeek_mode() {
 
 apply_xray_fallback_mode() {
     local backup_dir="${1:-}"
-    ensure_caddy_local_base_config || return 1
-    write_caddy_panel_config
-    write_caddy_site_config
-    caddy_format_configs
-    caddy validate --config /etc/caddy/Caddyfile || return 1
+    apply_caddy_configs_for_single_443 || return 1
     systemctl enable caddy >/dev/null 2>&1 || true
     systemctl restart caddy || return 1
     restart_xray_entry_service || return 1
@@ -5270,7 +5433,7 @@ apply_entry_mode_by_name() {
 }
 
 select_initial_entry_mode() {
-    local choice
+    local choice tcppeek_bootstrap
     ENTRY_MODE="nginx-stream"
 
     echo -e "${CYAN}================================================${PLAIN}"
@@ -5278,15 +5441,26 @@ select_initial_entry_mode() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${GREEN}  1. Nginx Stream 模式${PLAIN}       ${YELLOW}(默认稳定模式，适合大多数用户)${PLAIN}"
     echo -e "${GREEN}  2. Xray Fallback 模式${PLAIN}      ${YELLOW}(需你已在 Xray/3x-ui 准备好公网 443 主入站)${PLAIN}"
-    echo -e "${GREEN}  3. TCP Peek + Splice 模式${PLAIN}  ${YELLOW}(需已有 vpso-mux；新机器建议先选 Nginx Stream，再跑 8444 预检后切换)${PLAIN}"
+    echo -e "${GREEN}  3. TCP Peek + Splice 模式${PLAIN}  ${YELLOW}(首次安装会先提示安装/使用 Nginx Stream，再跑 8444 预检后切换)${PLAIN}"
     echo -e "${RED}  0. 取消${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     read_trimmed choice "请选择入口模式（默认 1）: "
     case "${choice:-1}" in
         1) ENTRY_MODE="nginx-stream" ;;
         2) ENTRY_MODE="xray-fallback" ;;
-        3) ENTRY_MODE="tcp-peek" ;;
-        0) echo -e "${BLUE}已取消首次配置。${PLAIN}"; return 1 ;;
+        3)
+            echo -e "${YELLOW}TCP Peek 首次接管 443 前必须先安装/使用 Nginx Stream，建立可用的共享配置和 Nginx/Caddy 基线。${PLAIN}"
+            echo -e "${YELLOW}推荐流程：先安装/使用 Nginx Stream 完成首次安装，再进入 [19] -> [16] 做 8444 预检，最后用 [5] 切换到 TCP Peek。${PLAIN}"
+            read_trimmed tcppeek_bootstrap "是否先安装/使用 Nginx Stream 完成本次首次安装？(Y/n，默认 yes): "
+            tcppeek_bootstrap="${tcppeek_bootstrap:-yes}"
+            if is_yes "$tcppeek_bootstrap"; then
+                ENTRY_MODE="nginx-stream"
+            else
+                echo -e "${BLUE}已取消首次配置。${PLAIN}"
+                return 1
+            fi
+            ;;
+        0|q|Q) echo -e "${BLUE}已取消首次配置。${PLAIN}"; return 1 ;;
         *) echo -e "${RED}❌ 无效选择。${PLAIN}"; return 1 ;;
     esac
     echo -e "${GREEN}✅ 已选择 443 入口模式：${ENTRY_MODE}${PLAIN}"
@@ -5326,7 +5500,7 @@ switch_entry_mode() {
 
     if [[ "$target_mode" == "$current_mode" ]]; then
         read_trimmed yn "当前已经是 ${target_mode}，是否重新应用当前模式？(y/n，默认 n): "
-        [[ "$yn" =~ ^[Yy]$ ]] && reapply_current_entry_mode
+        is_yes "$yn" && reapply_current_entry_mode
         return $?
     fi
 
@@ -5706,8 +5880,8 @@ save_and_offer_reapply_sni_stack() {
     save_sni_stack_env
     echo -e "${GREEN}✅ 已保存新的 443 单入口运行参数。${PLAIN}"
     echo -e "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的端口或路径。${PLAIN}"
-    read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？输入 YES 继续，直接回车取消: "
-    if [[ "$yn" == "YES" ]]; then
+    read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？输入 yes 继续，直接回车取消（大小写均可）: "
+    if is_yes "$yn"; then
         if ! reapply_sni_stack_from_env --yes; then
             if [[ -n "$env_backup" && -f "$env_backup" ]]; then
                 cp -p "$env_backup" "$env_file" 2>/dev/null || true
@@ -5894,7 +6068,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "${GREEN}  4. 修改面板域名${PLAIN}"
         echo -e "${GREEN}  5. 重新应用当前保存的配置${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
@@ -5905,7 +6079,7 @@ edit_sni_stack_runtime_profile() {
             3) edit_sni_stack_entry_profile ;;
             4) edit_sni_stack_panel_domain_profile ;;
             5) reapply_sni_stack_from_env ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择。${PLAIN}"; sleep 1 ;;
         esac
         echo ""
@@ -5936,6 +6110,26 @@ collect_sni_stack_config() {
     echo -e "${YELLOW}Caddy/Xray/3x-ui 本地后端默认绑定 127.0.0.1。${PLAIN}"
     echo -e "------------------------------------------------"
 
+    local default_panel_addr="127.0.0.1"
+    local default_panel_port="40000"
+    local default_panel_path="/panel/"
+    local default_sub_addr="127.0.0.1"
+    local default_sub_port="2096"
+    local default_sub_path="/sub/"
+    local default_clash_path="/clash/"
+    detect_xui_single_443_defaults
+    if [[ -n "${XUI_DETECTED_BIN:-}" || -n "${XUI_DETECTED_DB:-}" ]]; then
+        default_panel_addr="${XUI_DETECTED_PANEL_ADDR:-127.0.0.1}"
+        default_panel_port="${XUI_DETECTED_WEB_PORT:-40000}"
+        default_panel_path="${XUI_DETECTED_WEB_BASE_PATH:-/panel/}"
+        default_sub_addr="${XUI_DETECTED_SUB_ADDR:-127.0.0.1}"
+        default_sub_port="${XUI_DETECTED_SUB_PORT:-2096}"
+        default_sub_path="${XUI_DETECTED_SUB_PATH:-/sub/}"
+        default_clash_path="${XUI_DETECTED_SUB_CLASH_PATH:-/clash/}"
+    fi
+    print_xui_single_443_detected_defaults
+    echo -e "------------------------------------------------"
+
     read_trimmed PANEL_DOMAIN "面板域名（必填，例如 panel.example.com）: "
     SITE_DOMAINS=()
     SITE_BACKEND_ADDRS=()
@@ -5956,30 +6150,30 @@ collect_sni_stack_config() {
 
     local advanced_mode
     read_trimmed advanced_mode "是否进入高级模式并允许修改本地服务监听地址？(y/n，默认 n): "
-    if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
+    if is_yes "$advanced_mode"; then
         CADDY_LISTEN_ADDR=$(ask_with_default "Caddy 本地监听地址" "127.0.0.1")
         XRAY_LISTEN_ADDR=$(ask_with_default "Xray REALITY 本地监听地址" "127.0.0.1")
-        PANEL_LISTEN_ADDR=$(ask_with_default "3x-ui 面板监听地址" "127.0.0.1")
-        SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "127.0.0.1")
+        PANEL_LISTEN_ADDR=$(ask_with_default "3x-ui 面板监听地址" "$default_panel_addr")
+        SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "$default_sub_addr")
     else
         CADDY_LISTEN_ADDR="127.0.0.1"
         XRAY_LISTEN_ADDR="127.0.0.1"
-        PANEL_LISTEN_ADDR="127.0.0.1"
-        SUB_LISTEN_ADDR="127.0.0.1"
+        PANEL_LISTEN_ADDR="$default_panel_addr"
+        SUB_LISTEN_ADDR="$default_sub_addr"
         echo -e "${GREEN}普通模式：Caddy/Xray/3x-ui/订阅/网站后端均使用 127.0.0.1。${PLAIN}"
     fi
 
     CADDY_LISTEN_PORT=$(ask_with_default "Caddy 本地监听端口" "8443")
     XRAY_LISTEN_PORT=$(ask_with_default "Xray REALITY 本地监听端口" "1443")
-    PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "40000")
-    PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath（必须和面板 url 根路径一致）" "/panel/")")
-    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（可自定义）" "2096")
-    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和客户端 Subscription，建议写 /sub/）" "/sub/")")
-    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "/clash/")")
+    PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "$default_panel_port")
+    PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath（必须和面板 url 根路径一致）" "$default_panel_path")")
+    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（可自定义）" "$default_sub_port")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和客户端 Subscription，建议写 /sub/）" "$default_sub_path")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "$default_clash_path")")
     local panel_whitelist_enabled panel_whitelist_input panel_whitelist_ranges current_client_ip
     local -a panel_whitelist_array=()
     read_trimmed panel_whitelist_enabled "是否为面板域名启用 IP 白名单？(y/n，默认 n): "
-    if [[ "$panel_whitelist_enabled" =~ ^[Yy]$ ]]; then
+    if is_yes "$panel_whitelist_enabled"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
         read_trimmed panel_whitelist_input "请输入允许访问面板域名的 IP/CIDR（多个用空格或英文逗号分隔）: "
@@ -5994,7 +6188,7 @@ collect_sni_stack_config() {
             if [[ -z "${SITE_DOMAINS[$i]}" ]]; then
                 continue
             fi
-            if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
+            if is_yes "$advanced_mode"; then
                 SITE_BACKEND_ADDRS[$i]=$(ask_with_default "网站 ${SITE_DOMAINS[$i]} 的后端监听地址" "127.0.0.1")
             else
                 SITE_BACKEND_ADDRS[$i]="127.0.0.1"
@@ -6004,11 +6198,20 @@ collect_sni_stack_config() {
         done
     fi
 
-    echo -e "${YELLOW}请确认 3x-ui 面板设置 -> 常规 -> 证书、订阅设置 -> 证书 路径已经清空。${PLAIN}"
+    echo -e "${YELLOW}443 单入口需要 3x-ui 面板/订阅后端使用 HTTP，由 Caddy 统一托管公网证书。${PLAIN}"
     echo -e "${YELLOW}本向导会让 Caddy 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}"
     local cert_clear_confirm
-    read_trimmed cert_clear_confirm "确认已经清空面板证书和订阅证书路径？(y/n): "
-    is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
+    read_trimmed cert_clear_confirm "是否现在自动清空 3x-ui 面板/订阅证书路径？(Y/n，默认 yes): "
+    cert_clear_confirm="${cert_clear_confirm:-yes}"
+    if is_yes "$cert_clear_confirm"; then
+        if ! clear_xui_cert_settings_for_single_443; then
+            read_trimmed cert_clear_confirm "未能自动确认清空，是否已经手动清空面板证书和订阅证书路径？(y/n，默认 n): "
+            is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
+        fi
+    else
+        read_trimmed cert_clear_confirm "确认已经手动清空面板证书和订阅证书路径？(y/n，默认 n): "
+        is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
+    fi
 
     echo -e "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}"
     read_secret_trimmed CF_TOKEN "CF Token: "
@@ -6470,6 +6673,50 @@ EOF
     done
 }
 
+stage_and_validate_caddy_configs_for_single_443() {
+    local plan_dir plan_conf_dir validate_log
+    install_caddy_if_needed || return 1
+    plan_dir=$(mktemp -d /tmp/vpso-caddy-plan.XXXXXX) || return 1
+    chmod 700 "$plan_dir" 2>/dev/null || true
+    plan_conf_dir="${plan_dir}/conf.d"
+    validate_log="${plan_dir}/caddy-validate.log"
+    mkdir -p "$plan_conf_dir" || return 1
+
+    cat <<EOF > "${plan_dir}/Caddyfile"
+{
+    auto_https off
+}
+
+import ${plan_conf_dir}/*
+EOF
+    write_caddy_panel_config "${plan_conf_dir}/${PANEL_DOMAIN}.caddy"
+    write_caddy_site_config "$plan_conf_dir"
+
+    echo -e "${CYAN}▶ 正在预校验 Caddy 计划配置，暂不改动 /etc/caddy...${PLAIN}"
+    if caddy validate --config "${plan_dir}/Caddyfile" >"$validate_log" 2>&1; then
+        echo -e "${GREEN}✅ Caddy 计划配置校验通过。${PLAIN}"
+        return 0
+    fi
+
+    echo -e "${RED}❌ Caddy 计划配置校验失败，已停止写入和切换。${PLAIN}"
+    echo -e "${YELLOW}预检目录：${plan_dir}${PLAIN}"
+    echo -e "${YELLOW}最近校验输出：${PLAIN}"
+    tail -n 80 "$validate_log" 2>/dev/null || true
+    return 1
+}
+
+apply_caddy_configs_for_single_443() {
+    stage_and_validate_caddy_configs_for_single_443 || return 1
+    ensure_caddy_local_base_config || return 1
+    write_caddy_panel_config
+    write_caddy_site_config
+    caddy_format_configs
+    if ! caddy validate --config /etc/caddy/Caddyfile; then
+        echo -e "${RED}❌ Caddy 实际配置校验失败，拒绝继续。${PLAIN}"
+        return 1
+    fi
+}
+
 issue_and_install_cert_for_domain() {
     local domain="$1"
     local cf_token="$2"
@@ -6560,7 +6807,7 @@ harden_single_443_firewall() {
     echo -e "${YELLOW}可选：防火墙只保留 SSH 与 Nginx 公网入口端口。${PLAIN}"
     echo -e "${YELLOW}提醒：若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，脚本的“自动追加当前活动端口”功能可能再次放行它。${PLAIN}"
     read_trimmed yn "是否现在收紧防火墙？(y/n，默认 n): "
-    [[ "$yn" =~ ^[Yy]$ ]] || return 0
+    is_yes "$yn" || return 0
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}
     remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}" "${XRAY_SNI_ROUTE_PORTS[@]}" "40000" "8443" "1443" "2096" "3000")
@@ -6836,7 +7083,7 @@ add_sni_stack_site() {
     done
 
     read_trimmed advanced_mode "是否进入高级模式并允许修改后端监听地址？(y/n，默认 n): "
-    if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
+    if is_yes "$advanced_mode"; then
         site_addr=$(ask_with_default "后端监听地址" "127.0.0.1")
     else
         site_addr="127.0.0.1"
@@ -6849,7 +7096,7 @@ add_sni_stack_site() {
     warn_if_public_bind "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
 
     read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
-    if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
+    if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
         read_trimmed whitelist_input "请输入允许访问 ${site_domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
@@ -6983,7 +7230,7 @@ remove_sni_stack_site() {
     apply_sni_stack_runtime_config || return 1
 
     read_trimmed delete_cert "是否同时隔离 ${domain} 的 Caddy 证书文件？(y/n，默认 n): "
-    if [[ "$delete_cert" =~ ^[Yy]$ ]]; then
+    if is_yes "$delete_cert"; then
         quarantine_path "/etc/caddy/certs/${domain}.crt" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
         quarantine_path "/etc/caddy/certs/${domain}.key" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
         quarantine_path "/root/cert/${domain}.crt" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
@@ -7426,7 +7673,7 @@ manage_xray_inbound_routes() {
             echo -e "${YELLOW}  3. 删除入站分流规则（当前模式不可用）${PLAIN}"
             echo -e "${YELLOW}  4. 同步规则到当前入口模式（当前模式不可用）${PLAIN}"
             echo -e "------------------------------------------------"
-            echo -e "${RED}  0. 返回${PLAIN}"
+            echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
 
             local fallback_choice
@@ -7437,7 +7684,7 @@ manage_xray_inbound_routes() {
                     echo -e "${YELLOW}当前为 xray-fallback 模式，Xray 入站管理默认不可新增、删除或同步规则。${PLAIN}"
                     echo -e "${YELLOW}如需多个本地 Xray 入站通过 443 按 SNI 分流，请切换到 nginx-stream 或 tcp-peek。${PLAIN}"
                     ;;
-                0) break ;;
+                0|q|Q) break ;;
                 *) echo -e "${RED}❌ 无效选择。${PLAIN}" ;;
             esac
             echo ""
@@ -7460,7 +7707,7 @@ manage_xray_inbound_routes() {
         echo -e "${GREEN}  4. 检查入站端口状态${PLAIN}"
         echo -e "${GREEN}  5. 同步到当前入口模式${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回${PLAIN}"
+        echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
@@ -7471,7 +7718,7 @@ manage_xray_inbound_routes() {
             3) remove_xray_sni_route ;;
             4) check_xray_sni_route_ports ;;
             5) sync_xray_sni_routes_to_entry_mode ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择。${PLAIN}" ;;
         esac
         echo ""
@@ -7496,7 +7743,7 @@ manage_sni_stack_tcp_routes() {
         echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"
         echo -e "${GREEN}  7. 443 单入口链路体检${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
@@ -7512,7 +7759,7 @@ manage_sni_stack_tcp_routes() {
                 ;;
             6) reapply_sni_stack_from_env ;;
             7) sni_stack_health_check ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
         echo ""
@@ -7549,7 +7796,7 @@ manage_sni_stack_ip_whitelist() {
             fi
         done
         echo -e "------------------------------------------------"
-        echo -e "${RED}0. 返回上一级${PLAIN}"
+        echo -e "${RED}0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice idx action whitelist_input whitelist_ranges current_client_ip
@@ -7569,7 +7816,7 @@ manage_sni_stack_ip_whitelist() {
         echo -e "当前白名单：${current_ranges:-未启用}"
         echo -e "1. 设置/覆盖白名单"
         echo -e "2. 清除白名单"
-        echo -e "0. 取消"
+        echo -e "0/q. 取消"
         read_trimmed action "请选择操作: "
         case "$action" in
             1)
@@ -7603,7 +7850,7 @@ manage_sni_stack_ip_whitelist() {
                 remove_sni_ip_whitelist_for_domain "$domain"
                 save_and_offer_reapply_sni_stack
                 ;;
-            0|"")
+            0|q|Q|"")
                 ;;
             *)
                 echo -e "${RED}❌ 无效操作。${PLAIN}"
@@ -7636,7 +7883,7 @@ manage_sni_stack_sites() {
         echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"
         echo -e "${GREEN}  7. 443 单入口链路体检${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
@@ -7649,7 +7896,7 @@ manage_sni_stack_sites() {
             5) manage_sni_stack_ip_whitelist ;;
             6) reapply_sni_stack_from_env ;;
             7) sni_stack_health_check ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
         echo ""
@@ -8062,7 +8309,7 @@ func_caddy_cf_maintenance_menu() {
         echo -e "${GREEN} 15. 隔离旧 Caddy 配置${PLAIN}        ${YELLOW}(避免抢占 443)${PLAIN}"
         echo -e "${RED} 16. 隔离某个域名的 Caddy 配置与证书${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local m_choice
@@ -8326,7 +8573,7 @@ func_caddy_cf_maintenance_menu() {
                 manage_sni_stack_sites
                 ;;
 
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
 
@@ -8517,7 +8764,7 @@ func_caddy_manage_ip_whitelist() {
     fi
     echo -e "1. 设置/覆盖白名单"
     echo -e "2. 清除白名单"
-    echo -e "0. 取消"
+    echo -e "0/q. 取消"
     read_trimmed action "请选择操作: "
 
     backup_file="${conf_file}.bak_$(date +%s)"
@@ -8566,7 +8813,7 @@ func_caddy_manage_ip_whitelist() {
                 mv "$backup_file" "$conf_file"
             fi
             ;;
-        0|"")
+        0|q|Q|"")
             echo -e "${BLUE}已取消。${PLAIN}"
             ;;
         *)
@@ -8689,7 +8936,7 @@ func_caddy_add_insecure() {
     fi
 
     read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
-    if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
+    if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
         read_trimmed ip_whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
@@ -9427,7 +9674,7 @@ func_fail2ban() {
     echo -e "  ${GREEN}1.${PLAIN} 一键安装并配置 Fail2ban ${YELLOW}(自动绑定当前 SSH 端口)${PLAIN}"
     echo -e "  ${BLUE}2.${PLAIN} 更新防护端口 ${YELLOW}(如果您刚改了 SSH 端口，选此项重载)${PLAIN}"
     echo -e "  ${RED}3.${PLAIN} 彻底卸载 Fail2ban"
-    echo -e "  ${RED}0.${PLAIN} 返回主菜单"
+    echo -e "  ${RED}0.${PLAIN} 返回主菜单 / q 返回"
     echo -e "------------------------------------------------"
     
     local f_choice
@@ -9482,7 +9729,7 @@ EOF
             quarantine_path /etc/fail2ban "/etc/vps-optimize/quarantine" >/dev/null 2>&1 || true
             echo -e "${GREEN}✅ Fail2ban 已卸载，旧配置已隔离到 /etc/vps-optimize/quarantine。${PLAIN}"
             ;;
-        0) return ;;
+        0|q|Q) return ;;
         *) echo -e "${RED}❌ 无效的输入！${PLAIN}"; sleep 1 ;;
     esac
     read -n 1 -s -r -p "按任意键继续..."
@@ -9503,7 +9750,7 @@ func_add_ssh_key() {
     if ssh_add_public_key_for_user "$user"; then
         echo -e "${GREEN}✅ 公钥添加完成。请立刻新开一个 SSH 窗口测试私钥登录。${PLAIN}"
         read_trimmed enable_mode "是否同时写入“密钥优先，保留密码登录”模式？(y/N): "
-        if [[ "$enable_mode" =~ ^[Yy]$ ]]; then
+        if is_yes "$enable_mode"; then
             ssh_apply_auth_mode key_preferred || true
         fi
         echo -e "${YELLOW}确认私钥登录 100% 成功后，可进入 [5 SSH 安全中心] -> [2 用户密钥登录模式] 禁用密码登录。${PLAIN}"
@@ -9649,7 +9896,7 @@ func_docker_manage() {
         echo -e "${GREEN}  4. Docker 端口暴露审计${PLAIN} ${YELLOW}(检查是否绕过 443 单入口)${PLAIN}"
         echo -e "${BOLD}${YELLOW}  5. UPD 更新订阅工具容器${PLAIN} ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         
         local c
         read_trimmed c "👉 请选择操作: "
@@ -9758,7 +10005,7 @@ EOF
             3) func_docker_project_status ;;
             4) func_docker_443_exposure_audit ;;
             5) func_update_subscription_tools ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -9792,7 +10039,7 @@ func_tcp_tune() {
     echo -e "------------------------------------------------"
     
     read_trimmed yn "❓ 准备好粘贴参数了吗？(y 继续 / n 取消): "
-    if [[ ! "$yn" =~ ^[Yy]$ ]]; then return; fi
+    if ! is_yes "$yn"; then return; fi
     
     local temp_f="/etc/sysctl.d/99-omnitt-tune.conf"
     local backup_f="${temp_f}.bak_$(date +%s)"
@@ -10233,7 +10480,7 @@ func_install_kernel() {
     echo -e "${GREEN}  2. XanMod 性能内核${PLAIN} ${YELLOW}(高级：自动匹配 x64v1-v4 并向下兜底)${PLAIN}"
     echo -e "     适合：愿意折腾、追求低延迟/新特性；仅 amd64，建议有快照或救援控制台。"
     echo -e "------------------------------------------------"
-    echo -e "${RED}  0. 返回${PLAIN}"
+    echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local kernel_choice virt
@@ -10729,7 +10976,7 @@ func_test_scripts() {
         echo -e "${GREEN}  5. 流媒体解锁检测         ${YELLOW}  6. 三网回程路由测试${PLAIN}"
         echo -e "${GREEN}  7. IP 质量 / 欺诈度检测   ${YELLOW}  8. NodeSeek 综合测试${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local t
@@ -10744,7 +10991,7 @@ func_test_scripts() {
             6) ran_test=true; run_remote_script "运行三网回程路由测试" "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh" ;;
             7) ran_test=true; run_remote_script "运行 IP 质量 / 欺诈度检测" "https://IP.Check.Place" ;;
             8) ran_test=true; run_remote_script "运行 NodeSeek 综合测试" "https://run.NodeQuality.com" ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1; continue ;;
         esac
         echo ""
@@ -10771,6 +11018,8 @@ func_port_dog() {
 
 func_xpanel() {
     clear
+    local version_choice install_url install_desc
+    local -a install_args=()
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}安装 3x-ui / x-ui 面板${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
@@ -10778,8 +11027,37 @@ func_xpanel() {
     echo -e "${YELLOW}管理员账号、密码和面板路径通常由官方安装器交互设置或在安装结束时输出。${PLAIN}"
     echo -e "${YELLOW}请留意安装结束输出并及时保存；后续也可通过 x-ui / 3x-ui 官方菜单修改。${PLAIN}"
     echo -e "------------------------------------------------"
-    echo -e "${CYAN}👉 正在拉取 mhsanaei 的官方 x-panel 一键脚本...${PLAIN}"
-    run_remote_script "安装 3x-ui / x-ui 面板" "https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
+    echo -e "${GREEN}  1. 安装最新版${PLAIN}       ${YELLOW}(默认，跟随官方 master 安装器)${PLAIN}"
+    echo -e "${GREEN}  2. 安装 v2.9.4${PLAIN}      ${YELLOW}(固定版本，适合需要按 2.9.4 教程复现的机器)${PLAIN}"
+    echo -e "${RED}  0. 取消${PLAIN}"
+    echo -e "------------------------------------------------"
+    read_trimmed version_choice "请选择 3x-ui 安装版本（默认 1）: "
+    case "$(echo "${version_choice:-1}" | tr '[:upper:]' '[:lower:]')" in
+        1|latest|最新版)
+            install_desc="安装 3x-ui / x-ui 面板（最新版）"
+            install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
+            ;;
+        2|2.9.4|v2.9.4)
+            install_desc="安装 3x-ui / x-ui 面板（v2.9.4）"
+            install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh"
+            install_args=("v2.9.4")
+            ;;
+        0|q|Q)
+            echo -e "${BLUE}已取消安装。${PLAIN}"
+            pause_after_external_script "按回车键返回菜单..."
+            return
+            ;;
+        *)
+            echo -e "${RED}❌ 无效选择，已取消安装。${PLAIN}"
+            pause_after_external_script "按回车键返回菜单..."
+            return
+            ;;
+    esac
+    echo -e "${CYAN}👉 正在拉取 mhsanaei 的官方 3x-ui 安装脚本...${PLAIN}"
+    if run_remote_script "$install_desc" "$install_url" "${install_args[@]}"; then
+        detect_xui_single_443_defaults
+        print_xui_single_443_detected_defaults
+    fi
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
@@ -10802,7 +11080,7 @@ func_xpanel_manage() {
         echo -e "${YELLOW}未检测到 x-ui / 3x-ui 命令，当前机器可能尚未安装 3x-ui 面板。${PLAIN}"
         local yn
         read_trimmed yn "是否现在安装 3x-ui 面板？(y/n): "
-        if [[ "$yn" =~ ^[Yy]$ ]]; then
+        if is_yes "$yn"; then
             func_xpanel
         else
             echo -e "${BLUE}已取消操作。${PLAIN}"
@@ -10899,7 +11177,7 @@ func_xray_manage() {
         echo -e "${YELLOW}未检测到 xray 管理命令，当前机器可能尚未安装 233boy Xray 脚本。${PLAIN}"
         local yn
         read_trimmed yn "是否现在安装 Xray？(y/n): "
-        if [[ "$yn" =~ ^[Yy]$ ]]; then
+        if is_yes "$yn"; then
             func_xray_233boy
         else
             echo -e "${BLUE}已取消操作。${PLAIN}"
@@ -10934,7 +11212,7 @@ func_dns_unlock() {
     
     local yn
     read_trimmed yn "❓ 确认现在运行 Alice DNS 解锁脚本吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         run_remote_script "运行 Alice DNS 解锁脚本" "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"
     else
         echo -e "${BLUE}已安全取消操作。${PLAIN}"
@@ -10953,7 +11231,7 @@ func_ip_sentinel() {
     echo -e "------------------------------------------------"
     
     read_trimmed yn "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         run_remote_script "安装并配置 IP Sentinel" "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh"
     else
         echo -e "${BLUE}已取消操作。${PLAIN}"
@@ -11077,7 +11355,7 @@ func_sublinkpro() {
     echo -e "------------------------------------------------"
     
     read_trimmed yn "❓ 确认现在开始一键安装吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir"
         cd "$install_dir" || return
 
@@ -11162,7 +11440,7 @@ func_miaomiaowu() {
 
     local yn
     read_trimmed yn "确认现在部署 妙妙屋订阅管理 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir"/{data,subscribes,rule_templates}
         cd "$install_dir" || return
 
@@ -11255,7 +11533,7 @@ func_substore() {
 
     local yn
     read_trimmed yn "确认现在部署 Sub-Store 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 
@@ -11325,7 +11603,7 @@ func_update_subscription_tools() {
     echo -e "${BOLD}${YELLOW}  3. UPD 更新 Sub-Store${PLAIN}        ${CYAN}(/opt/sub-store)${PLAIN}"
     echo -e "${BOLD}${YELLOW}  4. UPD 全部更新${PLAIN}"
     echo -e "------------------------------------------------"
-    echo -e "${RED}  0. 返回${PLAIN}"
+    echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local choice
@@ -11354,7 +11632,7 @@ func_update_subscription_tools() {
     echo -e "${GREEN}✅ 更新流程已执行完成。${PLAIN}"
     local prune_confirm
     read_trimmed prune_confirm "是否清理无标签旧镜像以释放磁盘空间？(y/n，默认 n): "
-    if [[ "$prune_confirm" =~ ^[Yy]$ ]]; then
+    if is_yes "$prune_confirm"; then
         docker image prune -f
     fi
     read -n 1 -s -r -p "按任意键返回..."
@@ -11396,7 +11674,7 @@ func_dockge() {
 
     local yn
     read_trimmed yn "确认现在部署 Dockge 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir" "$stacks_dir"
         cd "$install_dir" || return
 
@@ -11462,7 +11740,7 @@ func_komari() {
     warn_if_public_bind "Komari 探针监控面板" "$komari_bind_addr" "$komari_port" || return 1
 
     read_trimmed custom_admin "是否自定义初始管理员账号和密码？(y/n，默认 n): "
-    if [[ "$custom_admin" =~ ^[Yy]$ ]]; then
+    if is_yes "$custom_admin"; then
         while true; do
             read_trimmed admin_username "管理员用户名（默认 admin）: "
             admin_username="${admin_username:-admin}"
@@ -11497,7 +11775,7 @@ func_komari() {
     fi
     echo -e "------------------------------------------------"
     read_trimmed yn "确认现在部署 Komari 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 
@@ -11604,7 +11882,7 @@ manage_compose_project() {
         echo -e "${GREEN}  3. 更新镜像并重建${PLAIN}"
         echo -e "${YELLOW}  4. 停止并移除容器（保留目录数据）${PLAIN}"
         echo -e "${RED}  5. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}"
-        echo -e "${RED}  0. 返回上级菜单${PLAIN}"
+        echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         read_trimmed choice "👉 请选择操作: "
@@ -11660,7 +11938,7 @@ manage_compose_project() {
                 fi
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
-            0) return ;;
+            0|q|Q) return ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -11735,7 +12013,7 @@ func_singbox_menu() {
         echo -e "${GREEN}  1. 安装 Sing-box（甬哥四合一脚本）${PLAIN}"
         echo -e "${GREEN}  2. 安装 Sing-box（233boy 一键脚本）${PLAIN}"
         echo -e "${GREEN}  3. 管理 / 卸载 Sing-box${PLAIN}"
-        echo -e "${RED}  0. 返回上级菜单${PLAIN}"
+        echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         read_trimmed choice "👉 请选择操作: "
 
@@ -11743,7 +12021,7 @@ func_singbox_menu() {
             1) func_singbox ;;
             2) func_singbox_233boy ;;
             3) func_singbox_manage ;;
-            0) return ;;
+            0|q|Q) return ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -11856,7 +12134,7 @@ migrate_compose_project_to_dockge() {
         "确认项目没有绝对路径依赖，且已备份重要数据。" || { echo -e "${BLUE}已取消迁移 ${source_dir}。${PLAIN}"; return 0; }
 
     read_trimmed restart_confirm "是否先停止旧容器并在新目录重新启动？(Y/n): "
-    if [[ "$restart_confirm" =~ ^[Nn]$ ]]; then
+    if is_no "$restart_confirm"; then
         restart_stack="false"
     fi
 
@@ -11922,12 +12200,12 @@ func_migrate_compose_to_dockge() {
         echo -e "${YELLOW}⚠️ 未在 /opt 下检测到常见 Compose 项目。${PLAIN}"
     fi
     echo -e "${CYAN}  c. 手动输入项目目录${PLAIN}"
-    echo -e "${RED}  0. 返回${PLAIN}"
+    echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
     echo -e "------------------------------------------------"
 
     read_trimmed choice "请选择要迁移的项目: "
     case "$choice" in
-        0) return ;;
+        0|q|Q) return ;;
         a|A)
             if [[ "${#DOCKGE_MIGRATION_DIRS[@]}" -eq 0 ]]; then
                 echo -e "${YELLOW}⚠️ 没有可自动迁移的项目。${PLAIN}"
@@ -11975,70 +12253,15 @@ func_rescue_panel() {
     
     local yn
     read_trimmed yn "❓ 确定要清空面板证书路径并尝试退回 HTTP 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
-        
-        # 核心修改：使用我们的全局极简包管理器！兼容了包名差异。
-        if ! command -v sqlite3 >/dev/null 2>&1; then
-            echo -e "${CYAN}▶ 正在安装 sqlite3 数据库工具...${PLAIN}"
-            install_pkg sqlite3 sqlite
-        fi
-        
-        local xui_bin=""
-        if [[ -x /usr/local/x-ui/x-ui ]]; then
-            xui_bin="/usr/local/x-ui/x-ui"
-        elif command -v x-ui >/dev/null 2>&1; then
-            xui_bin="$(command -v x-ui)"
-        elif command -v 3x-ui >/dev/null 2>&1; then
-            xui_bin="$(command -v 3x-ui)"
-        fi
+    if is_yes "$yn"; then
+        local xui_bin
+        xui_bin=$(detect_xui_command 2>/dev/null || true)
         if [[ -n "$xui_bin" ]]; then
             echo -e "${CYAN}当前 3x-ui 证书状态：${PLAIN}"
             "$xui_bin" setting -getCert true 2>/dev/null || true
             echo -e "------------------------------------------------"
         fi
-
-        # 停服务
-        systemctl stop x-ui >/dev/null 2>&1
-        systemctl stop 3x-ui >/dev/null 2>&1
-        systemctl stop x-panel >/dev/null 2>&1
-        
-        local cert_cmd_done=false
-        if [[ -n "$xui_bin" ]]; then
-            if "$xui_bin" cert -webCert "" -webCertKey "" >/dev/null 2>&1; then
-                echo -e "${GREEN}✅ 已通过 3x-ui 官方 cert 命令清空面板与订阅证书路径。${PLAIN}"
-                cert_cmd_done=true
-            else
-                echo -e "${YELLOW}⚠️ 官方 cert 命令清理失败，将继续尝试直接修正数据库。${PLAIN}"
-            fi
-        fi
-
-        # 新版/旧版字段名不完全一致，所以按 key 的小写形式兼容面板和订阅证书字段。
-        local db_found=false
-        local cert_key_sql
-        local db_path
-        cert_key_sql=$(xui_cert_setting_key_sql_list)
-        while IFS= read -r db_path; do
-            if [[ -f "$db_path" ]]; then
-                if sqlite3 "$db_path" "update settings set value='' where lower(key) in (${cert_key_sql});" 2>/dev/null; then
-                    echo -e "${GREEN}✅ 已清空常见 SSL 证书字段：${db_path}${PLAIN}"
-                    db_found=true
-                else
-                    echo -e "${YELLOW}⚠️ 数据库存在但更新失败：${db_path}${PLAIN}"
-                fi
-            fi
-        done < <(find_xui_database_candidates)
-        
-        if ! $db_found && ! $cert_cmd_done; then
-            echo -e "${RED}❌ 未检测到常见面板的数据库文件！您可能没有安装 x-ui 或 x-panel。${PLAIN}"
-        elif ! $db_found; then
-            echo -e "${YELLOW}⚠️ 未在常见路径找到数据库，已依赖官方 cert 命令处理。${PLAIN}"
-        fi
-        
-        # 重启服务
-        systemctl restart x-ui >/dev/null 2>&1 || systemctl start x-ui >/dev/null 2>&1
-        systemctl restart 3x-ui >/dev/null 2>&1 || systemctl start 3x-ui >/dev/null 2>&1
-        systemctl start x-panel >/dev/null 2>&1
-        
+        clear_xui_cert_settings_for_single_443 || true
         echo -e "------------------------------------------------"
         if [[ -n "$xui_bin" ]]; then
             echo -e "${CYAN}清理后的 3x-ui 证书状态：${PLAIN}"
@@ -12547,13 +12770,13 @@ func_preflight_check() {
         [[ ${#cmd_miss[@]} -gt 0 ]] && echo -e "  - 安装缺失基础命令: ${cmd_miss[*]}"
         [[ ${#minimal_miss[@]} -gt 0 ]] && echo -e "  - 补齐精简系统兼容组件"
         read_trimmed fix_confirm "是否现在自动修复这些简单问题？(y/N): "
-        if [[ "$fix_confirm" =~ ^[Yy]$ ]]; then
+        if is_yes "$fix_confirm"; then
             [[ ${#minimal_miss[@]} -gt 0 ]] && ensure_minimal_system_compat
             $can_fix_ntp && preflight_enable_ntp
             [[ ${#cmd_miss[@]} -gt 0 ]] && preflight_install_missing_commands "${cmd_miss[@]}"
             echo -e "${GREEN}✅ 简单修复已执行。${PLAIN}"
             read_trimmed rerun_confirm "是否立即重新体检？(y/N): "
-            if [[ "$rerun_confirm" =~ ^[Yy]$ ]]; then
+            if is_yes "$rerun_confirm"; then
                 func_preflight_check
                 return
             fi
@@ -13951,7 +14174,7 @@ show_backup_help() {
     echo -e "${CYAN}VPS-Optimize > 备份与回滚 > 帮助${PLAIN}"
     echo "1 创建备份：高风险操作前先用。"
     echo "2 查看备份：确认可用备份和时间。"
-    echo "3 回滚：会覆盖当前配置，必须输入 YES。"
+    echo "3 回滚：会覆盖当前配置，必须输入 yes 确认，大小写均可。"
     echo "4 隔离旧备份：只移动到隔离目录，不直接删除。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
@@ -14194,7 +14417,7 @@ func_beginner_menu() {
         echo -e "${GREEN}  5. 备份/回滚${PLAIN}         ${YELLOW}(创建备份或恢复配置)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local beginner_choice
@@ -14232,7 +14455,7 @@ main_menu() {
         echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${YELLOW}快捷输入：443 直达单入口，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
-        echo -e " ${YELLOW}高风险操作必须输入大写 YES；不确定时先做 [16] 备份。${PLAIN}"
+        echo -e " ${YELLOW}高风险操作需要输入 yes 确认，大小写均可；不确定时先做 [16] 备份。${PLAIN}"
         print_auto_update_notice
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${BOLD}${BLUE}▶ 模式入口${PLAIN}"

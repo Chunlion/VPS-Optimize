@@ -224,7 +224,7 @@ manage_xray_inbound_routes() {
             echo -e "${YELLOW}  3. 删除入站分流规则（当前模式不可用）${PLAIN}"
             echo -e "${YELLOW}  4. 同步规则到当前入口模式（当前模式不可用）${PLAIN}"
             echo -e "------------------------------------------------"
-            echo -e "${RED}  0. 返回${PLAIN}"
+            echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
 
             local fallback_choice
@@ -235,7 +235,7 @@ manage_xray_inbound_routes() {
                     echo -e "${YELLOW}当前为 xray-fallback 模式，Xray 入站管理默认不可新增、删除或同步规则。${PLAIN}"
                     echo -e "${YELLOW}如需多个本地 Xray 入站通过 443 按 SNI 分流，请切换到 nginx-stream 或 tcp-peek。${PLAIN}"
                     ;;
-                0) break ;;
+                0|q|Q) break ;;
                 *) echo -e "${RED}❌ 无效选择。${PLAIN}" ;;
             esac
             echo ""
@@ -258,7 +258,7 @@ manage_xray_inbound_routes() {
         echo -e "${GREEN}  4. 检查入站端口状态${PLAIN}"
         echo -e "${GREEN}  5. 同步到当前入口模式${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回${PLAIN}"
+        echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
@@ -269,7 +269,7 @@ manage_xray_inbound_routes() {
             3) remove_xray_sni_route ;;
             4) check_xray_sni_route_ports ;;
             5) sync_xray_sni_routes_to_entry_mode ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择。${PLAIN}" ;;
         esac
         echo ""
@@ -294,7 +294,7 @@ manage_sni_stack_tcp_routes() {
         echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"
         echo -e "${GREEN}  7. 443 单入口链路体检${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
@@ -310,7 +310,7 @@ manage_sni_stack_tcp_routes() {
                 ;;
             6) reapply_sni_stack_from_env ;;
             7) sni_stack_health_check ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
         echo ""
@@ -347,7 +347,7 @@ manage_sni_stack_ip_whitelist() {
             fi
         done
         echo -e "------------------------------------------------"
-        echo -e "${RED}0. 返回上一级${PLAIN}"
+        echo -e "${RED}0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice idx action whitelist_input whitelist_ranges current_client_ip
@@ -367,7 +367,7 @@ manage_sni_stack_ip_whitelist() {
         echo -e "当前白名单：${current_ranges:-未启用}"
         echo -e "1. 设置/覆盖白名单"
         echo -e "2. 清除白名单"
-        echo -e "0. 取消"
+        echo -e "0/q. 取消"
         read_trimmed action "请选择操作: "
         case "$action" in
             1)
@@ -401,7 +401,7 @@ manage_sni_stack_ip_whitelist() {
                 remove_sni_ip_whitelist_for_domain "$domain"
                 save_and_offer_reapply_sni_stack
                 ;;
-            0|"")
+            0|q|Q|"")
                 ;;
             *)
                 echo -e "${RED}❌ 无效操作。${PLAIN}"

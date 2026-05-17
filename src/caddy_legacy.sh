@@ -11,7 +11,7 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
     echo -e "------------------------------------------------"
 
     read_trimmed reality_occupied "❓ 当前 443 端口是否已被 3x-ui VLESS-Reality 占用？(y/n): "
-    if [[ "$reality_occupied" =~ ^[Nn]$ ]]; then
+    if is_no "$reality_occupied"; then
         echo -e "${BLUE}ℹ️ 您选择了未占用 443，本向导仍将使用本地端口模式，避免与未来业务冲突。${PLAIN}"
     fi
 
@@ -22,7 +22,7 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
         echo -e "${RED}❌ 监听端口无效！必须是 1-65535 的纯数字。${PLAIN}"
         return
     fi
-    if [[ "$reality_occupied" =~ ^[Yy]$ ]] && [[ "$listen_port" -eq 443 ]]; then
+    if is_yes "$reality_occupied" && [[ "$listen_port" -eq 443 ]]; then
         echo -e "${RED}❌ 443 已用于 Reality，请改用本地高位端口 (如 8443/9443)。${PLAIN}"
         return
     fi
@@ -173,7 +173,7 @@ EOF
         ((success_count++))
 
         read_trimmed continue_add "继续添加下一个域名？(y/n): "
-        if [[ ! "$continue_add" =~ ^[Yy]$ ]]; then
+        if ! is_yes "$continue_add"; then
             break
         fi
     done

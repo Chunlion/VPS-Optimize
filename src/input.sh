@@ -4,9 +4,21 @@
 trim_input() {
     local value="$*"
     value="${value//$'\r'/}"
+    value="${value//$'\xc2\xa0'/ }"
+    value="${value//$'\xe3\x80\x80'/ }"
     value="${value#"${value%%[![:space:]]*}"}"
     value="${value%"${value##*[![:space:]]}"}"
     printf '%s' "$value"
+}
+
+normalize_menu_choice_input() {
+    local value lower
+    value="$(trim_input "$1")"
+    lower=$(echo "$value" | tr '[:upper:]' '[:lower:]')
+    case "$lower" in
+        q|quit|exit|back|return|返回|退出) printf '0' ;;
+        *) printf '%s' "$value" ;;
+    esac
 }
 
 read_trimmed() {
@@ -14,7 +26,11 @@ read_trimmed() {
     local prompt="${2:-}"
     local __raw_input
     read -r -p "$prompt" __raw_input
-    printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
+    if [[ "$__target" == *choice* && "$__target" != "mode_choice" && "$__target" != "action_choice" ]]; then
+        printf -v "$__target" '%s' "$(normalize_menu_choice_input "$__raw_input")"
+    else
+        printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
+    fi
 }
 
 read_secret_trimmed() {

@@ -12,8 +12,8 @@ save_and_offer_reapply_sni_stack() {
     save_sni_stack_env
     echo -e "${GREEN}✅ 已保存新的 443 单入口运行参数。${PLAIN}"
     echo -e "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的端口或路径。${PLAIN}"
-    read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？输入 YES 继续，直接回车取消: "
-    if [[ "$yn" == "YES" ]]; then
+    read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？输入 yes 继续，直接回车取消（大小写均可）: "
+    if is_yes "$yn"; then
         if ! reapply_sni_stack_from_env --yes; then
             if [[ -n "$env_backup" && -f "$env_backup" ]]; then
                 cp -p "$env_backup" "$env_file" 2>/dev/null || true
@@ -200,7 +200,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "${GREEN}  4. 修改面板域名${PLAIN}"
         echo -e "${GREEN}  5. 重新应用当前保存的配置${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
@@ -211,7 +211,7 @@ edit_sni_stack_runtime_profile() {
             3) edit_sni_stack_entry_profile ;;
             4) edit_sni_stack_panel_domain_profile ;;
             5) reapply_sni_stack_from_env ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择。${PLAIN}"; sleep 1 ;;
         esac
         echo ""

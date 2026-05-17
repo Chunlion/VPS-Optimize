@@ -18,7 +18,7 @@ manage_sni_stack_sites() {
         echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"
         echo -e "${GREEN}  7. 443 单入口链路体检${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
@@ -31,7 +31,7 @@ manage_sni_stack_sites() {
             5) manage_sni_stack_ip_whitelist ;;
             6) reapply_sni_stack_from_env ;;
             7) sni_stack_health_check ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
         echo ""

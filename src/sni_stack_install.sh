@@ -10,6 +10,26 @@ collect_sni_stack_config() {
     echo -e "${YELLOW}Caddy/Xray/3x-ui 本地后端默认绑定 127.0.0.1。${PLAIN}"
     echo -e "------------------------------------------------"
 
+    local default_panel_addr="127.0.0.1"
+    local default_panel_port="40000"
+    local default_panel_path="/panel/"
+    local default_sub_addr="127.0.0.1"
+    local default_sub_port="2096"
+    local default_sub_path="/sub/"
+    local default_clash_path="/clash/"
+    detect_xui_single_443_defaults
+    if [[ -n "${XUI_DETECTED_BIN:-}" || -n "${XUI_DETECTED_DB:-}" ]]; then
+        default_panel_addr="${XUI_DETECTED_PANEL_ADDR:-127.0.0.1}"
+        default_panel_port="${XUI_DETECTED_WEB_PORT:-40000}"
+        default_panel_path="${XUI_DETECTED_WEB_BASE_PATH:-/panel/}"
+        default_sub_addr="${XUI_DETECTED_SUB_ADDR:-127.0.0.1}"
+        default_sub_port="${XUI_DETECTED_SUB_PORT:-2096}"
+        default_sub_path="${XUI_DETECTED_SUB_PATH:-/sub/}"
+        default_clash_path="${XUI_DETECTED_SUB_CLASH_PATH:-/clash/}"
+    fi
+    print_xui_single_443_detected_defaults
+    echo -e "------------------------------------------------"
+
     read_trimmed PANEL_DOMAIN "面板域名（必填，例如 panel.example.com）: "
     SITE_DOMAINS=()
     SITE_BACKEND_ADDRS=()
@@ -30,30 +50,30 @@ collect_sni_stack_config() {
 
     local advanced_mode
     read_trimmed advanced_mode "是否进入高级模式并允许修改本地服务监听地址？(y/n，默认 n): "
-    if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
+    if is_yes "$advanced_mode"; then
         CADDY_LISTEN_ADDR=$(ask_with_default "Caddy 本地监听地址" "127.0.0.1")
         XRAY_LISTEN_ADDR=$(ask_with_default "Xray REALITY 本地监听地址" "127.0.0.1")
-        PANEL_LISTEN_ADDR=$(ask_with_default "3x-ui 面板监听地址" "127.0.0.1")
-        SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "127.0.0.1")
+        PANEL_LISTEN_ADDR=$(ask_with_default "3x-ui 面板监听地址" "$default_panel_addr")
+        SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "$default_sub_addr")
     else
         CADDY_LISTEN_ADDR="127.0.0.1"
         XRAY_LISTEN_ADDR="127.0.0.1"
-        PANEL_LISTEN_ADDR="127.0.0.1"
-        SUB_LISTEN_ADDR="127.0.0.1"
+        PANEL_LISTEN_ADDR="$default_panel_addr"
+        SUB_LISTEN_ADDR="$default_sub_addr"
         echo -e "${GREEN}普通模式：Caddy/Xray/3x-ui/订阅/网站后端均使用 127.0.0.1。${PLAIN}"
     fi
 
     CADDY_LISTEN_PORT=$(ask_with_default "Caddy 本地监听端口" "8443")
     XRAY_LISTEN_PORT=$(ask_with_default "Xray REALITY 本地监听端口" "1443")
-    PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "40000")
-    PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath（必须和面板 url 根路径一致）" "/panel/")")
-    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（可自定义）" "2096")
-    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和客户端 Subscription，建议写 /sub/）" "/sub/")")
-    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "/clash/")")
+    PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "$default_panel_port")
+    PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath（必须和面板 url 根路径一致）" "$default_panel_path")")
+    SUB_LISTEN_PORT=$(ask_with_default "3x-ui 订阅服务端口（可自定义）" "$default_sub_port")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 普通订阅路径前缀（不带端口和客户端 Subscription，建议写 /sub/）" "$default_sub_path")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "$default_clash_path")")
     local panel_whitelist_enabled panel_whitelist_input panel_whitelist_ranges current_client_ip
     local -a panel_whitelist_array=()
     read_trimmed panel_whitelist_enabled "是否为面板域名启用 IP 白名单？(y/n，默认 n): "
-    if [[ "$panel_whitelist_enabled" =~ ^[Yy]$ ]]; then
+    if is_yes "$panel_whitelist_enabled"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
         read_trimmed panel_whitelist_input "请输入允许访问面板域名的 IP/CIDR（多个用空格或英文逗号分隔）: "
@@ -68,7 +88,7 @@ collect_sni_stack_config() {
             if [[ -z "${SITE_DOMAINS[$i]}" ]]; then
                 continue
             fi
-            if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
+            if is_yes "$advanced_mode"; then
                 SITE_BACKEND_ADDRS[$i]=$(ask_with_default "网站 ${SITE_DOMAINS[$i]} 的后端监听地址" "127.0.0.1")
             else
                 SITE_BACKEND_ADDRS[$i]="127.0.0.1"
@@ -78,11 +98,20 @@ collect_sni_stack_config() {
         done
     fi
 
-    echo -e "${YELLOW}请确认 3x-ui 面板设置 -> 常规 -> 证书、订阅设置 -> 证书 路径已经清空。${PLAIN}"
+    echo -e "${YELLOW}443 单入口需要 3x-ui 面板/订阅后端使用 HTTP，由 Caddy 统一托管公网证书。${PLAIN}"
     echo -e "${YELLOW}本向导会让 Caddy 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}"
     local cert_clear_confirm
-    read_trimmed cert_clear_confirm "确认已经清空面板证书和订阅证书路径？(y/n): "
-    is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
+    read_trimmed cert_clear_confirm "是否现在自动清空 3x-ui 面板/订阅证书路径？(Y/n，默认 yes): "
+    cert_clear_confirm="${cert_clear_confirm:-yes}"
+    if is_yes "$cert_clear_confirm"; then
+        if ! clear_xui_cert_settings_for_single_443; then
+            read_trimmed cert_clear_confirm "未能自动确认清空，是否已经手动清空面板证书和订阅证书路径？(y/n，默认 n): "
+            is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
+        fi
+    else
+        read_trimmed cert_clear_confirm "确认已经手动清空面板证书和订阅证书路径？(y/n，默认 n): "
+        is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
+    fi
 
     echo -e "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}"
     read_secret_trimmed CF_TOKEN "CF Token: "
@@ -544,6 +573,50 @@ EOF
     done
 }
 
+stage_and_validate_caddy_configs_for_single_443() {
+    local plan_dir plan_conf_dir validate_log
+    install_caddy_if_needed || return 1
+    plan_dir=$(mktemp -d /tmp/vpso-caddy-plan.XXXXXX) || return 1
+    chmod 700 "$plan_dir" 2>/dev/null || true
+    plan_conf_dir="${plan_dir}/conf.d"
+    validate_log="${plan_dir}/caddy-validate.log"
+    mkdir -p "$plan_conf_dir" || return 1
+
+    cat <<EOF > "${plan_dir}/Caddyfile"
+{
+    auto_https off
+}
+
+import ${plan_conf_dir}/*
+EOF
+    write_caddy_panel_config "${plan_conf_dir}/${PANEL_DOMAIN}.caddy"
+    write_caddy_site_config "$plan_conf_dir"
+
+    echo -e "${CYAN}▶ 正在预校验 Caddy 计划配置，暂不改动 /etc/caddy...${PLAIN}"
+    if caddy validate --config "${plan_dir}/Caddyfile" >"$validate_log" 2>&1; then
+        echo -e "${GREEN}✅ Caddy 计划配置校验通过。${PLAIN}"
+        return 0
+    fi
+
+    echo -e "${RED}❌ Caddy 计划配置校验失败，已停止写入和切换。${PLAIN}"
+    echo -e "${YELLOW}预检目录：${plan_dir}${PLAIN}"
+    echo -e "${YELLOW}最近校验输出：${PLAIN}"
+    tail -n 80 "$validate_log" 2>/dev/null || true
+    return 1
+}
+
+apply_caddy_configs_for_single_443() {
+    stage_and_validate_caddy_configs_for_single_443 || return 1
+    ensure_caddy_local_base_config || return 1
+    write_caddy_panel_config
+    write_caddy_site_config
+    caddy_format_configs
+    if ! caddy validate --config /etc/caddy/Caddyfile; then
+        echo -e "${RED}❌ Caddy 实际配置校验失败，拒绝继续。${PLAIN}"
+        return 1
+    fi
+}
+
 issue_and_install_cert_for_domain() {
     local domain="$1"
     local cf_token="$2"
@@ -634,7 +707,7 @@ harden_single_443_firewall() {
     echo -e "${YELLOW}可选：防火墙只保留 SSH 与 Nginx 公网入口端口。${PLAIN}"
     echo -e "${YELLOW}提醒：若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，脚本的“自动追加当前活动端口”功能可能再次放行它。${PLAIN}"
     read_trimmed yn "是否现在收紧防火墙？(y/n，默认 n): "
-    [[ "$yn" =~ ^[Yy]$ ]] || return 0
+    is_yes "$yn" || return 0
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}
     remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}" "${XRAY_SNI_ROUTE_PORTS[@]}" "40000" "8443" "1443" "2096" "3000")

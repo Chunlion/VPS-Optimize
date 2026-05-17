@@ -13,70 +13,15 @@ func_rescue_panel() {
     
     local yn
     read_trimmed yn "❓ 确定要清空面板证书路径并尝试退回 HTTP 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
-        
-        # 核心修改：使用我们的全局极简包管理器！兼容了包名差异。
-        if ! command -v sqlite3 >/dev/null 2>&1; then
-            echo -e "${CYAN}▶ 正在安装 sqlite3 数据库工具...${PLAIN}"
-            install_pkg sqlite3 sqlite
-        fi
-        
-        local xui_bin=""
-        if [[ -x /usr/local/x-ui/x-ui ]]; then
-            xui_bin="/usr/local/x-ui/x-ui"
-        elif command -v x-ui >/dev/null 2>&1; then
-            xui_bin="$(command -v x-ui)"
-        elif command -v 3x-ui >/dev/null 2>&1; then
-            xui_bin="$(command -v 3x-ui)"
-        fi
+    if is_yes "$yn"; then
+        local xui_bin
+        xui_bin=$(detect_xui_command 2>/dev/null || true)
         if [[ -n "$xui_bin" ]]; then
             echo -e "${CYAN}当前 3x-ui 证书状态：${PLAIN}"
             "$xui_bin" setting -getCert true 2>/dev/null || true
             echo -e "------------------------------------------------"
         fi
-
-        # 停服务
-        systemctl stop x-ui >/dev/null 2>&1
-        systemctl stop 3x-ui >/dev/null 2>&1
-        systemctl stop x-panel >/dev/null 2>&1
-        
-        local cert_cmd_done=false
-        if [[ -n "$xui_bin" ]]; then
-            if "$xui_bin" cert -webCert "" -webCertKey "" >/dev/null 2>&1; then
-                echo -e "${GREEN}✅ 已通过 3x-ui 官方 cert 命令清空面板与订阅证书路径。${PLAIN}"
-                cert_cmd_done=true
-            else
-                echo -e "${YELLOW}⚠️ 官方 cert 命令清理失败，将继续尝试直接修正数据库。${PLAIN}"
-            fi
-        fi
-
-        # 新版/旧版字段名不完全一致，所以按 key 的小写形式兼容面板和订阅证书字段。
-        local db_found=false
-        local cert_key_sql
-        local db_path
-        cert_key_sql=$(xui_cert_setting_key_sql_list)
-        while IFS= read -r db_path; do
-            if [[ -f "$db_path" ]]; then
-                if sqlite3 "$db_path" "update settings set value='' where lower(key) in (${cert_key_sql});" 2>/dev/null; then
-                    echo -e "${GREEN}✅ 已清空常见 SSL 证书字段：${db_path}${PLAIN}"
-                    db_found=true
-                else
-                    echo -e "${YELLOW}⚠️ 数据库存在但更新失败：${db_path}${PLAIN}"
-                fi
-            fi
-        done < <(find_xui_database_candidates)
-        
-        if ! $db_found && ! $cert_cmd_done; then
-            echo -e "${RED}❌ 未检测到常见面板的数据库文件！您可能没有安装 x-ui 或 x-panel。${PLAIN}"
-        elif ! $db_found; then
-            echo -e "${YELLOW}⚠️ 未在常见路径找到数据库，已依赖官方 cert 命令处理。${PLAIN}"
-        fi
-        
-        # 重启服务
-        systemctl restart x-ui >/dev/null 2>&1 || systemctl start x-ui >/dev/null 2>&1
-        systemctl restart 3x-ui >/dev/null 2>&1 || systemctl start 3x-ui >/dev/null 2>&1
-        systemctl start x-panel >/dev/null 2>&1
-        
+        clear_xui_cert_settings_for_single_443 || true
         echo -e "------------------------------------------------"
         if [[ -n "$xui_bin" ]]; then
             echo -e "${CYAN}清理后的 3x-ui 证书状态：${PLAIN}"

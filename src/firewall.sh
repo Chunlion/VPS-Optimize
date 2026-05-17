@@ -225,7 +225,7 @@ func_firewall_manage() {
                 echo -e "${GREEN}✅ 防火墙已彻底禁用！${PLAIN}"
                 sleep 2
                 ;;
-            "?"|help) echo "防火墙菜单用于放行、删除、查看或关闭系统防火墙规则。删除规则和关闭防火墙都必须输入 YES。"; pause_return ;;
+            "?"|help) echo "防火墙菜单用于放行、删除、查看或关闭系统防火墙规则。删除规则和关闭防火墙都必须输入 yes 确认，大小写均可。"; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
         esac

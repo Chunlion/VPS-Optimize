@@ -107,7 +107,7 @@ func_sublinkpro() {
     echo -e "------------------------------------------------"
     
     read_trimmed yn "❓ 确认现在开始一键安装吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir"
         cd "$install_dir" || return
 
@@ -192,7 +192,7 @@ func_miaomiaowu() {
 
     local yn
     read_trimmed yn "确认现在部署 妙妙屋订阅管理 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir"/{data,subscribes,rule_templates}
         cd "$install_dir" || return
 
@@ -285,7 +285,7 @@ func_substore() {
 
     local yn
     read_trimmed yn "确认现在部署 Sub-Store 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 
@@ -355,7 +355,7 @@ func_update_subscription_tools() {
     echo -e "${BOLD}${YELLOW}  3. UPD 更新 Sub-Store${PLAIN}        ${CYAN}(/opt/sub-store)${PLAIN}"
     echo -e "${BOLD}${YELLOW}  4. UPD 全部更新${PLAIN}"
     echo -e "------------------------------------------------"
-    echo -e "${RED}  0. 返回${PLAIN}"
+    echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local choice
@@ -384,7 +384,7 @@ func_update_subscription_tools() {
     echo -e "${GREEN}✅ 更新流程已执行完成。${PLAIN}"
     local prune_confirm
     read_trimmed prune_confirm "是否清理无标签旧镜像以释放磁盘空间？(y/n，默认 n): "
-    if [[ "$prune_confirm" =~ ^[Yy]$ ]]; then
+    if is_yes "$prune_confirm"; then
         docker image prune -f
     fi
     read -n 1 -s -r -p "按任意键返回..."
@@ -426,7 +426,7 @@ func_dockge() {
 
     local yn
     read_trimmed yn "确认现在部署 Dockge 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir" "$stacks_dir"
         cd "$install_dir" || return
 
@@ -492,7 +492,7 @@ func_komari() {
     warn_if_public_bind "Komari 探针监控面板" "$komari_bind_addr" "$komari_port" || return 1
 
     read_trimmed custom_admin "是否自定义初始管理员账号和密码？(y/n，默认 n): "
-    if [[ "$custom_admin" =~ ^[Yy]$ ]]; then
+    if is_yes "$custom_admin"; then
         while true; do
             read_trimmed admin_username "管理员用户名（默认 admin）: "
             admin_username="${admin_username:-admin}"
@@ -527,7 +527,7 @@ func_komari() {
     fi
     echo -e "------------------------------------------------"
     read_trimmed yn "确认现在部署 Komari 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 
@@ -634,7 +634,7 @@ manage_compose_project() {
         echo -e "${GREEN}  3. 更新镜像并重建${PLAIN}"
         echo -e "${YELLOW}  4. 停止并移除容器（保留目录数据）${PLAIN}"
         echo -e "${RED}  5. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}"
-        echo -e "${RED}  0. 返回上级菜单${PLAIN}"
+        echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         read_trimmed choice "👉 请选择操作: "
@@ -690,7 +690,7 @@ manage_compose_project() {
                 fi
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
-            0) return ;;
+            0|q|Q) return ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -765,7 +765,7 @@ func_singbox_menu() {
         echo -e "${GREEN}  1. 安装 Sing-box（甬哥四合一脚本）${PLAIN}"
         echo -e "${GREEN}  2. 安装 Sing-box（233boy 一键脚本）${PLAIN}"
         echo -e "${GREEN}  3. 管理 / 卸载 Sing-box${PLAIN}"
-        echo -e "${RED}  0. 返回上级菜单${PLAIN}"
+        echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         read_trimmed choice "👉 请选择操作: "
 
@@ -773,7 +773,7 @@ func_singbox_menu() {
             1) func_singbox ;;
             2) func_singbox_233boy ;;
             3) func_singbox_manage ;;
-            0) return ;;
+            0|q|Q) return ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -886,7 +886,7 @@ migrate_compose_project_to_dockge() {
         "确认项目没有绝对路径依赖，且已备份重要数据。" || { echo -e "${BLUE}已取消迁移 ${source_dir}。${PLAIN}"; return 0; }
 
     read_trimmed restart_confirm "是否先停止旧容器并在新目录重新启动？(Y/n): "
-    if [[ "$restart_confirm" =~ ^[Nn]$ ]]; then
+    if is_no "$restart_confirm"; then
         restart_stack="false"
     fi
 
@@ -952,12 +952,12 @@ func_migrate_compose_to_dockge() {
         echo -e "${YELLOW}⚠️ 未在 /opt 下检测到常见 Compose 项目。${PLAIN}"
     fi
     echo -e "${CYAN}  c. 手动输入项目目录${PLAIN}"
-    echo -e "${RED}  0. 返回${PLAIN}"
+    echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
     echo -e "------------------------------------------------"
 
     read_trimmed choice "请选择要迁移的项目: "
     case "$choice" in
-        0) return ;;
+        0|q|Q) return ;;
         a|A)
             if [[ "${#DOCKGE_MIGRATION_DIRS[@]}" -eq 0 ]]; then
                 echo -e "${YELLOW}⚠️ 没有可自动迁移的项目。${PLAIN}"

@@ -316,7 +316,7 @@ func_firewall_manage() {
                 echo -e "${GREEN}✅ 防火墙已彻底禁用！${PLAIN}"
                 sleep 2
                 ;;
-            "?"|help) echo "防火墙菜单用于放行、删除、查看或关闭系统防火墙规则。删除规则和关闭防火墙都必须输入 YES。"; pause_return ;;
+            "?"|help) echo "防火墙菜单用于放行、删除、查看或关闭系统防火墙规则。删除规则和关闭防火墙都必须输入 yes 确认，大小写均可。"; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
         esac
@@ -660,7 +660,7 @@ func_system_tweaks() {
         echo -e "${GREEN}  6. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]"
         echo -e "${GREEN}  7. 本机 hosts 解析管理${PLAIN}    (/etc/hosts 本机域名解析)"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local tweak_choice
@@ -669,11 +669,11 @@ func_system_tweaks() {
         case $tweak_choice in
             1)
                 read_trimmed yn "❓ 开启 IPv6？(y 开启 / n 关闭): "
-                if [[ "$yn" =~ ^[Yy]$ ]]; then 
+                if is_yes "$yn"; then
                     quarantine_path /etc/sysctl.d/99-disable-ipv6.conf "/etc/vps-optimize/quarantine/sysctl" >/dev/null 2>&1 || true
                     sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null 2>&1
                     echo -e "${GREEN}✅ IPv6 已开启${PLAIN}"
-                elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                elif is_no "$yn"; then
                     [[ -f /etc/sysctl.d/99-disable-ipv6.conf ]] && cp -p /etc/sysctl.d/99-disable-ipv6.conf "/etc/sysctl.d/99-disable-ipv6.conf.bak_$(date +%s)" 2>/dev/null || true
                     echo "net.ipv6.conf.all.disable_ipv6 = 1" > /etc/sysctl.d/99-disable-ipv6.conf
                     sysctl -p /etc/sysctl.d/99-disable-ipv6.conf >/dev/null 2>&1
@@ -681,12 +681,12 @@ func_system_tweaks() {
                 fi; sleep 1 ;;
             2)
                 read_trimmed yn "❓ 设置 IPv4 为最高出站优先级？(y 开启 / n 恢复默认): "
-                if [[ "$yn" =~ ^[Yy]$ ]]; then 
+                if is_yes "$yn"; then
                     [[ -f /etc/gai.conf ]] || touch /etc/gai.conf
                     cp -p /etc/gai.conf "/etc/gai.conf.bak_$(date +%s)" 2>/dev/null || true
                     sed -Ei '/^[[:space:]]*#?[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+100\b.*?$/ {s/.+100\b([[:space:]]*#.*)?$/precedence ::ffff:0:0\/96  100\1/; :a;n;b a}; /^[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+[0-9]+.*$/ {s/^.*precedence.+::ffff:0:0\/96[^0-9]+([0-9]+).*$/precedence ::ffff:0:0\/96  100\t#原值为 \1/; :a;n;ba;}; $aprecedence ::ffff:0:0\/96  100' /etc/gai.conf
                     echo -e "${GREEN}✅ 已设为 IPv4 优先${PLAIN}"
-                elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                elif is_no "$yn"; then
                     [[ -f /etc/gai.conf ]] || touch /etc/gai.conf
                     cp -p /etc/gai.conf "/etc/gai.conf.bak_$(date +%s)" 2>/dev/null || true
                     sed -i '/precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
@@ -694,11 +694,11 @@ func_system_tweaks() {
                 fi; sleep 1 ;;
             3)
                 read_trimmed yn "❓ 允许被 Ping？(y 允许 / n 禁止): "
-                if [[ "$yn" =~ ^[Yy]$ ]]; then 
+                if is_yes "$yn"; then
                     quarantine_path /etc/sysctl.d/99-disable-ping.conf "/etc/vps-optimize/quarantine/sysctl" >/dev/null 2>&1 || true
                     sysctl -w net.ipv4.icmp_echo_ignore_all=0 >/dev/null 2>&1
                     echo -e "${GREEN}✅ 已允许被 Ping${PLAIN}"
-                elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                elif is_no "$yn"; then
                     [[ -f /etc/sysctl.d/99-disable-ping.conf ]] && cp -p /etc/sysctl.d/99-disable-ping.conf "/etc/sysctl.d/99-disable-ping.conf.bak_$(date +%s)" 2>/dev/null || true
                     echo "net.ipv4.icmp_echo_ignore_all = 1" > /etc/sysctl.d/99-disable-ping.conf
                     sysctl -p /etc/sysctl.d/99-disable-ping.conf >/dev/null 2>&1
@@ -706,7 +706,7 @@ func_system_tweaks() {
                 fi; sleep 1 ;;
             4)
                 read_trimmed yn "❓ 开启系统自动更新？(y 开启 / n 关闭): "
-                if [[ "$yn" =~ ^[Yy]$ ]]; then 
+                if is_yes "$yn"; then
                     if [[ "$OS" =~ debian|ubuntu ]]; then
                         install_pkg unattended-upgrades || { echo -e "${RED}❌ unattended-upgrades 安装失败。${PLAIN}"; sleep 1; continue; }
                         systemctl enable --now unattended-upgrades >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ unattended-upgrades 服务启用失败，请手动检查。${PLAIN}"
@@ -715,7 +715,7 @@ func_system_tweaks() {
                         systemctl enable --now dnf-automatic.timer >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ dnf-automatic.timer 启用失败，请手动检查。${PLAIN}"
                     fi
                     echo -e "${GREEN}✅ 自动更新已开启${PLAIN}"
-                elif [[ "$yn" =~ ^[Nn]$ ]]; then 
+                elif is_no "$yn"; then
                     if [[ "$OS" =~ debian|ubuntu ]]; then systemctl disable --now unattended-upgrades >/dev/null 2>&1
                     else systemctl disable --now dnf-automatic.timer >/dev/null 2>&1; fi
                     echo -e "${GREEN}✅ 自动更新已关闭${PLAIN}"
@@ -734,7 +734,7 @@ func_system_tweaks() {
                 sleep 1 ;;
             6) func_change_hostname; sleep 1 ;;
             7) func_hosts_manage ;;
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done

@@ -110,6 +110,159 @@ caddy_ip_whitelist_block() {
 EOF
 }
 
+xui_setting_default_value() {
+    local key="$1"
+    case "$key" in
+        webListen|subListen|webDomain|subDomain|webCertFile|webKeyFile|subCertFile|subKeyFile|subURI|subClashURI) echo "" ;;
+        webPort) echo "2053" ;;
+        webBasePath) echo "/" ;;
+        subPort) echo "2096" ;;
+        subPath) echo "/sub/" ;;
+        subClashPath) echo "/clash/" ;;
+        *) echo "" ;;
+    esac
+}
+
+xui_backend_addr_from_listen() {
+    local listen_addr
+    listen_addr="$(trim_input "$1")"
+    case "$listen_addr" in
+        ""|"0.0.0.0"|"::") echo "127.0.0.1" ;;
+        "localhost") echo "127.0.0.1" ;;
+        *) echo "$listen_addr" ;;
+    esac
+}
+
+detect_xui_command() {
+    if [[ -x /usr/local/x-ui/x-ui ]]; then
+        echo "/usr/local/x-ui/x-ui"
+    elif command -v x-ui >/dev/null 2>&1; then
+        command -v x-ui
+    elif command -v 3x-ui >/dev/null 2>&1; then
+        command -v 3x-ui
+    fi
+}
+
+xui_cli_show_value() {
+    local key="$1"
+    local xui_bin info cli_key
+    xui_bin=$(detect_xui_command) || return 1
+    info=$("$xui_bin" setting -show true 2>/dev/null || true)
+    [[ -n "$info" ]] || return 1
+    case "$key" in
+        webPort) cli_key="port" ;;
+        webBasePath) cli_key="webBasePath" ;;
+        *) cli_key="$key" ;;
+    esac
+    printf '%s\n' "$info" | awk -F': ' -v k="$cli_key" '$1 == k {print $2; exit}'
+}
+
+xui_db_setting_value() {
+    local key="$1"
+    local db_path value
+    command -v sqlite3 >/dev/null 2>&1 || return 1
+    while IFS= read -r db_path; do
+        [[ -n "$db_path" && -f "$db_path" ]] || continue
+        value=$(sqlite3 "$db_path" "select value from settings where lower(key)=lower('${key}') limit 1;" 2>/dev/null || true)
+        if [[ -z "$value" ]]; then
+            value=$(sqlite3 "$db_path" "select value from setting where lower(key)=lower('${key}') limit 1;" 2>/dev/null || true)
+        fi
+        value="$(trim_input "$value")"
+        if [[ -n "$value" ]]; then
+            printf '%s' "$value"
+            return 0
+        fi
+    done < <(find_xui_database_candidates)
+    return 1
+}
+
+xui_detect_setting_value() {
+    local key="$1"
+    local default_value="${2:-$(xui_setting_default_value "$key")}"
+    local value
+    value="$(xui_cli_show_value "$key" 2>/dev/null || true)"
+    value="$(trim_input "$value")"
+    if [[ -z "$value" ]]; then
+        value="$(xui_db_setting_value "$key" 2>/dev/null || true)"
+        value="$(trim_input "$value")"
+    fi
+    printf '%s' "${value:-$default_value}"
+}
+
+detect_xui_single_443_defaults() {
+    XUI_DETECTED_BIN="$(detect_xui_command 2>/dev/null || true)"
+    XUI_DETECTED_DB="$(find_xui_database_candidates | head -n1)"
+    XUI_DETECTED_WEB_LISTEN="$(xui_detect_setting_value webListen)"
+    XUI_DETECTED_WEB_PORT="$(xui_detect_setting_value webPort 2053)"
+    XUI_DETECTED_WEB_BASE_PATH="$(normalize_path_prefix "$(xui_detect_setting_value webBasePath /)")"
+    XUI_DETECTED_SUB_LISTEN="$(xui_detect_setting_value subListen)"
+    XUI_DETECTED_SUB_PORT="$(xui_detect_setting_value subPort 2096)"
+    XUI_DETECTED_SUB_PATH="$(normalize_path_prefix "$(xui_detect_setting_value subPath /sub/)")"
+    XUI_DETECTED_SUB_CLASH_PATH="$(normalize_path_prefix "$(xui_detect_setting_value subClashPath /clash/)")"
+    XUI_DETECTED_PANEL_ADDR="$(xui_backend_addr_from_listen "$XUI_DETECTED_WEB_LISTEN")"
+    XUI_DETECTED_SUB_ADDR="$(xui_backend_addr_from_listen "$XUI_DETECTED_SUB_LISTEN")"
+}
+
+print_xui_single_443_detected_defaults() {
+    if [[ -z "${XUI_DETECTED_BIN:-}" && -z "${XUI_DETECTED_DB:-}" ]]; then
+        echo -e "${YELLOW}⚠️ 未检测到 3x-ui 命令或数据库，将使用 443 向导默认值。${PLAIN}"
+        return 0
+    fi
+    echo -e "${CYAN}▶ 已检测到 3x-ui 当前设置，下面会作为默认值，可按回车沿用：${PLAIN}"
+    [[ -n "${XUI_DETECTED_BIN:-}" ]] && echo -e "  命令：${XUI_DETECTED_BIN}"
+    [[ -n "${XUI_DETECTED_DB:-}" ]] && echo -e "  数据库：${XUI_DETECTED_DB}"
+    echo -e "  面板后端：${XUI_DETECTED_PANEL_ADDR}:${XUI_DETECTED_WEB_PORT}${XUI_DETECTED_WEB_BASE_PATH}"
+    echo -e "  订阅后端：${XUI_DETECTED_SUB_ADDR}:${XUI_DETECTED_SUB_PORT}${XUI_DETECTED_SUB_PATH}"
+    echo -e "  Clash/Mihomo 路径：${XUI_DETECTED_SUB_CLASH_PATH}"
+}
+
+clear_xui_cert_settings_for_single_443() {
+    local xui_bin cert_cmd_done=false db_found=false cert_key_sql db_path service_name
+    xui_bin=$(detect_xui_command 2>/dev/null || true)
+
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        echo -e "${CYAN}▶ 正在安装 sqlite3，用于清空 3x-ui 数据库里的证书路径...${PLAIN}"
+        install_pkg sqlite3 sqlite >/dev/null 2>&1 || true
+    fi
+
+    for service_name in x-ui 3x-ui x-panel; do
+        systemctl stop "$service_name" >/dev/null 2>&1 || true
+    done
+
+    if [[ -n "$xui_bin" ]]; then
+        if "$xui_bin" cert -webCert "" -webCertKey "" >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ 已通过 3x-ui 官方 cert 命令清空面板证书路径。${PLAIN}"
+            cert_cmd_done=true
+        else
+            echo -e "${YELLOW}⚠️ 官方 cert 命令未能清空，将继续尝试修正数据库。${PLAIN}"
+        fi
+    fi
+
+    if command -v sqlite3 >/dev/null 2>&1; then
+        cert_key_sql=$(xui_cert_setting_key_sql_list)
+        while IFS= read -r db_path; do
+            [[ -f "$db_path" ]] || continue
+            if sqlite3 "$db_path" "update settings set value='' where lower(key) in (${cert_key_sql});" 2>/dev/null || \
+               sqlite3 "$db_path" "update setting set value='' where lower(key) in (${cert_key_sql});" 2>/dev/null; then
+                echo -e "${GREEN}✅ 已清空证书字段：${db_path}${PLAIN}"
+                db_found=true
+            fi
+        done < <(find_xui_database_candidates)
+    fi
+
+    for service_name in x-ui 3x-ui x-panel; do
+        if systemctl list-unit-files "${service_name}.service" --no-legend 2>/dev/null | grep -q . || systemctl status "$service_name" >/dev/null 2>&1; then
+            systemctl restart "$service_name" >/dev/null 2>&1 || systemctl start "$service_name" >/dev/null 2>&1 || true
+        fi
+    done
+
+    if ! $cert_cmd_done && ! $db_found; then
+        echo -e "${YELLOW}⚠️ 未找到可自动清空的 3x-ui 证书设置，请在面板里手动清空证书路径并重启。${PLAIN}"
+        return 1
+    fi
+    echo -e "${GREEN}✅ 已尝试清空 3x-ui 面板/订阅证书路径，443 单入口将由 Caddy 托管证书。${PLAIN}"
+}
+
 
 
 
@@ -521,6 +674,11 @@ detect_current_entry_status() {
     ENTRY_STATUS_LISTENER_PROCESS="${listener_info#*|}"
     ENTRY_STATUS_LISTENER_DISPLAY=$(entry_listener_display_name "$ENTRY_STATUS_LISTENER")
     ENTRY_STATUS_NGINX_SERVICE=$(service_status_compact nginx)
+    if listener_info_has_entry "$listener_info" "nginx"; then
+        ENTRY_STATUS_NGINX_ROLE="正在监听公网 ${NGINX_LISTEN_PORT:-443}"
+    else
+        ENTRY_STATUS_NGINX_ROLE="未监听公网 ${NGINX_LISTEN_PORT:-443}；服务运行仅代表 80/其他站点或默认丢弃规则仍可用"
+    fi
     xui_status=$(xui_panel_status_compact)
     if xui_svc=$(xui_panel_service_name 2>/dev/null); then
         xui_status="${xui_svc}.service ${xui_status}"
@@ -570,7 +728,7 @@ show_current_entry_status() {
     echo -e "Xray： ${ENTRY_STATUS_XRAY_ADDR}:${ENTRY_STATUS_XRAY_PORT} - $(listen_line_status "$ENTRY_STATUS_XRAY_ADDR" "$ENTRY_STATUS_XRAY_PORT" "$ENTRY_STATUS_XRAY_LISTEN_LINE")"
     echo -e "------------------------------------------------"
     echo -e "${BOLD}服务状态${PLAIN}"
-    echo -e "nginx：${ENTRY_STATUS_NGINX_SERVICE}"
+    echo -e "nginx：${ENTRY_STATUS_NGINX_SERVICE}（${ENTRY_STATUS_NGINX_ROLE}）"
     echo -e "TCP Peek + Splice / vpso-mux 分流器：${ENTRY_STATUS_TCPPEEK_SERVICE}"
     echo -e "Xray/3x-ui/x-ui：${ENTRY_STATUS_XRAY_SERVICE}"
 }

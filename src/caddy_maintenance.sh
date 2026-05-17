@@ -400,7 +400,7 @@ func_caddy_cf_maintenance_menu() {
         echo -e "${GREEN} 15. 隔离旧 Caddy 配置${PLAIN}        ${YELLOW}(避免抢占 443)${PLAIN}"
         echo -e "${RED} 16. 隔离某个域名的 Caddy 配置与证书${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local m_choice
@@ -664,7 +664,7 @@ func_caddy_cf_maintenance_menu() {
                 manage_sni_stack_sites
                 ;;
 
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
 
@@ -855,7 +855,7 @@ func_caddy_manage_ip_whitelist() {
     fi
     echo -e "1. 设置/覆盖白名单"
     echo -e "2. 清除白名单"
-    echo -e "0. 取消"
+    echo -e "0/q. 取消"
     read_trimmed action "请选择操作: "
 
     backup_file="${conf_file}.bak_$(date +%s)"
@@ -904,7 +904,7 @@ func_caddy_manage_ip_whitelist() {
                 mv "$backup_file" "$conf_file"
             fi
             ;;
-        0|"")
+        0|q|Q|"")
             echo -e "${BLUE}已取消。${PLAIN}"
             ;;
         *)
@@ -1027,7 +1027,7 @@ func_caddy_add_insecure() {
     fi
 
     read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
-    if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
+    if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
         read_trimmed ip_whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "

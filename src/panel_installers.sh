@@ -3,6 +3,8 @@
 
 func_xpanel() {
     clear
+    local version_choice install_url install_desc
+    local -a install_args=()
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}安装 3x-ui / x-ui 面板${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
@@ -10,8 +12,37 @@ func_xpanel() {
     echo -e "${YELLOW}管理员账号、密码和面板路径通常由官方安装器交互设置或在安装结束时输出。${PLAIN}"
     echo -e "${YELLOW}请留意安装结束输出并及时保存；后续也可通过 x-ui / 3x-ui 官方菜单修改。${PLAIN}"
     echo -e "------------------------------------------------"
-    echo -e "${CYAN}👉 正在拉取 mhsanaei 的官方 x-panel 一键脚本...${PLAIN}"
-    run_remote_script "安装 3x-ui / x-ui 面板" "https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
+    echo -e "${GREEN}  1. 安装最新版${PLAIN}       ${YELLOW}(默认，跟随官方 master 安装器)${PLAIN}"
+    echo -e "${GREEN}  2. 安装 v2.9.4${PLAIN}      ${YELLOW}(固定版本，适合需要按 2.9.4 教程复现的机器)${PLAIN}"
+    echo -e "${RED}  0. 取消${PLAIN}"
+    echo -e "------------------------------------------------"
+    read_trimmed version_choice "请选择 3x-ui 安装版本（默认 1）: "
+    case "$(echo "${version_choice:-1}" | tr '[:upper:]' '[:lower:]')" in
+        1|latest|最新版)
+            install_desc="安装 3x-ui / x-ui 面板（最新版）"
+            install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
+            ;;
+        2|2.9.4|v2.9.4)
+            install_desc="安装 3x-ui / x-ui 面板（v2.9.4）"
+            install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh"
+            install_args=("v2.9.4")
+            ;;
+        0|q|Q)
+            echo -e "${BLUE}已取消安装。${PLAIN}"
+            pause_after_external_script "按回车键返回菜单..."
+            return
+            ;;
+        *)
+            echo -e "${RED}❌ 无效选择，已取消安装。${PLAIN}"
+            pause_after_external_script "按回车键返回菜单..."
+            return
+            ;;
+    esac
+    echo -e "${CYAN}👉 正在拉取 mhsanaei 的官方 3x-ui 安装脚本...${PLAIN}"
+    if run_remote_script "$install_desc" "$install_url" "${install_args[@]}"; then
+        detect_xui_single_443_defaults
+        print_xui_single_443_detected_defaults
+    fi
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
@@ -34,7 +65,7 @@ func_xpanel_manage() {
         echo -e "${YELLOW}未检测到 x-ui / 3x-ui 命令，当前机器可能尚未安装 3x-ui 面板。${PLAIN}"
         local yn
         read_trimmed yn "是否现在安装 3x-ui 面板？(y/n): "
-        if [[ "$yn" =~ ^[Yy]$ ]]; then
+        if is_yes "$yn"; then
             func_xpanel
         else
             echo -e "${BLUE}已取消操作。${PLAIN}"
@@ -131,7 +162,7 @@ func_xray_manage() {
         echo -e "${YELLOW}未检测到 xray 管理命令，当前机器可能尚未安装 233boy Xray 脚本。${PLAIN}"
         local yn
         read_trimmed yn "是否现在安装 Xray？(y/n): "
-        if [[ "$yn" =~ ^[Yy]$ ]]; then
+        if is_yes "$yn"; then
             func_xray_233boy
         else
             echo -e "${BLUE}已取消操作。${PLAIN}"
@@ -166,7 +197,7 @@ func_dns_unlock() {
     
     local yn
     read_trimmed yn "❓ 确认现在运行 Alice DNS 解锁脚本吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         run_remote_script "运行 Alice DNS 解锁脚本" "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"
     else
         echo -e "${BLUE}已安全取消操作。${PLAIN}"
@@ -185,7 +216,7 @@ func_ip_sentinel() {
     echo -e "------------------------------------------------"
     
     read_trimmed yn "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         run_remote_script "安装并配置 IP Sentinel" "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh"
     else
         echo -e "${BLUE}已取消操作。${PLAIN}"

@@ -90,7 +90,7 @@ add_sni_stack_site() {
     done
 
     read_trimmed advanced_mode "是否进入高级模式并允许修改后端监听地址？(y/n，默认 n): "
-    if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
+    if is_yes "$advanced_mode"; then
         site_addr=$(ask_with_default "后端监听地址" "127.0.0.1")
     else
         site_addr="127.0.0.1"
@@ -103,7 +103,7 @@ add_sni_stack_site() {
     warn_if_public_bind "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
 
     read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
-    if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
+    if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
         read_trimmed whitelist_input "请输入允许访问 ${site_domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
@@ -237,7 +237,7 @@ remove_sni_stack_site() {
     apply_sni_stack_runtime_config || return 1
 
     read_trimmed delete_cert "是否同时隔离 ${domain} 的 Caddy 证书文件？(y/n，默认 n): "
-    if [[ "$delete_cert" =~ ^[Yy]$ ]]; then
+    if is_yes "$delete_cert"; then
         quarantine_path "/etc/caddy/certs/${domain}.crt" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
         quarantine_path "/etc/caddy/certs/${domain}.key" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
         quarantine_path "/root/cert/${domain}.crt" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true

@@ -32,7 +32,7 @@ func_caddy_cf_maintenance_menu() {
         echo -e "${GREEN} 15. 隔离旧 Caddy 配置${PLAIN}        ${YELLOW}(避免抢占 443)${PLAIN}"
         echo -e "${RED} 16. 隔离某个域名的 Caddy 配置与证书${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local m_choice
@@ -296,7 +296,7 @@ func_caddy_cf_maintenance_menu() {
                 manage_sni_stack_sites
                 ;;
 
-            0) break ;;
+            0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
 

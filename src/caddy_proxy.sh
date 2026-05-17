@@ -33,7 +33,7 @@ func_caddy_add_reverse_proxy() {
     local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
     read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
-    if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
+    if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}"
         read_trimmed ip_whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
@@ -50,7 +50,7 @@ func_caddy_add_reverse_proxy() {
     local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
     [[ -f /etc/caddy/Caddyfile ]] && cp -p /etc/caddy/Caddyfile "$backup_file"
 
-    if [[ "$is_https" =~ ^[Yy]$ ]]; then
+    if is_yes "$is_https"; then
         cat <<EOF > "$domain_conf"
 $domain {
 $(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://127.0.0.1:$port {

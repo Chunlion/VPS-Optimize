@@ -63,7 +63,7 @@ show_backup_help() {
     echo -e "${CYAN}VPS-Optimize > 备份与回滚 > 帮助${PLAIN}"
     echo "1 创建备份：高风险操作前先用。"
     echo "2 查看备份：确认可用备份和时间。"
-    echo "3 回滚：会覆盖当前配置，必须输入 YES。"
+    echo "3 回滚：会覆盖当前配置，必须输入 yes 确认，大小写均可。"
     echo "4 隔离旧备份：只移动到隔离目录，不直接删除。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
@@ -306,7 +306,7 @@ func_beginner_menu() {
         echo -e "${GREEN}  5. 备份/回滚${PLAIN}         ${YELLOW}(创建备份或恢复配置)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
-        echo -e "${RED}  0. 返回主菜单${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local beginner_choice
@@ -344,7 +344,7 @@ main_menu() {
         echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${YELLOW}快捷输入：443 直达单入口，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
-        echo -e " ${YELLOW}高风险操作必须输入大写 YES；不确定时先做 [16] 备份。${PLAIN}"
+        echo -e " ${YELLOW}高风险操作需要输入 yes 确认，大小写均可；不确定时先做 [16] 备份。${PLAIN}"
         print_auto_update_notice
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${BOLD}${BLUE}▶ 模式入口${PLAIN}"

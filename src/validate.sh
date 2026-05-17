@@ -74,6 +74,12 @@ is_yes() {
     [[ "$value" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
+is_no() {
+    local value
+    value="$(trim_input "$1")"
+    [[ "$value" =~ ^[Nn]([Oo])?$ ]]
+}
+
 is_suspicious_public_ipv4() {
     local ip="$1"
     local a b c d
