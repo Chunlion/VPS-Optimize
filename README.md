@@ -127,7 +127,7 @@ cy
 <a id="shortcuts"></a>
 ## ⌨️ 快捷输入
 
-主面板支持常用快捷词：`443` / `sni` 进入 443 单入口，`caddy` 进入普通反代，`h` 看健康总览，`b` 做备份，`u` 更新脚本，`q` 退出。
+主面板支持常用快捷词：`443` / `sni` 进入 443 单入口，`caddy` / `nginx` 进入反代，`h` 看健康总览，`b` 做备份，`u` 更新脚本，`q` 退出。
 
 `dog` 面板常用快捷词：`add`、`limit`、`tg`、`report`、`u`、`q`。
 
@@ -165,7 +165,7 @@ TCP Peek + Splice 的配置过程和 Nginx Stream 一样；正式切换使用 `[
 
 这里包含 3x-ui、Sing-box、Xray、SublinkPro、妙妙屋、Sub-Store、Dockge、Komari、端口流量监控和 3x-ui 外置增强管理。
 
-订阅工具建议按“本地监听 + Caddy/443 对外”的方式部署。新部署的订阅工具默认优先绑定 `127.0.0.1`，公网 HTTPS 访问再到 `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]` 添加域名。
+订阅工具建议按“本地监听 + Caddy/443 对外”的方式部署。新部署的订阅工具默认优先绑定 `127.0.0.1`，公网 HTTPS 访问再到 `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]` 添加域名。未启用 443 单入口时，也可以在 `主菜单 [4 反代]` 里选择 Caddy 或 Nginx HTTPS 反代；Nginx 反代复用现有 `acme.sh + Cloudflare DNS API` 证书流程，证书仍安装到 `/etc/caddy/certs/${domain}.crt|key` 并软链到 `/root/cert/`。需要直接查看或编辑已应用的 Caddy/Nginx 配置时，走 `[4 反代] -> [6 查看/编辑已应用配置文件]`，脚本会先备份，再校验并 reload。
 
 Docker Compose 项目都有管理入口。停止服务会保留数据；归档目录需要输入 `ARCHIVE` 二次确认，避免误删配置和数据库。
 

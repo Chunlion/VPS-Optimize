@@ -99,7 +99,7 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 |---|---|
 | 只有 3x-ui，没有其他网站 | 直接按 3x-ui + 443 教程部署 |
 | 已有 3x-ui 且自带 HTTPS | 先清空 3x-ui 证书路径，再接入 443 |
-| 已有普通 Caddy 反代 | 记录旧域名和后端，启用 443 后逐个补录 |
+| 已有 Caddy 反代 | 记录旧域名和后端，启用 443 后逐个补录 |
 | 已有 Nginx/Apache 网站 | 先把网站后端改为本地端口，再用 Caddy 反代 |
 | 已有订阅工具 Docker 容器 | 保留容器，只把外部访问改成 Caddy/443 单入口 |
 

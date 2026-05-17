@@ -170,7 +170,7 @@ TCP Peek 的优点：
 
 ### 模式 3：Xray Fallback
 
-Xray Fallback 是特殊模式。公网 `443` 由你已经配置好的 3x-ui/Xray 主入站监听，普通 HTTPS 再由这个主入站 fallback 到 Caddy 本地端口。脚本不会替你编辑 3x-ui/Xray 入站内部配置。
+Xray Fallback 是特殊模式。公网 `443` 由你已经配置好的 3x-ui/Xray 主入站监听，HTTPS 再由这个主入站 fallback 到 Caddy 本地端口。脚本不会替你编辑 3x-ui/Xray 入站内部配置。
 
 切到 xray-fallback 之前，你需要先在 3x-ui 里准备一个“主入站”：
 
@@ -191,7 +191,7 @@ Web 面板和订阅仍然走 Caddy，所以面板证书路径、订阅证书路�
 
 xray-fallback 模式不支持脚本继续把多个 SNI 分流到多个本地 Xray 入站。`Xray 入站管理` 菜单只能查看已有规则和当前主入站候选，不能新增、删除或同步规则。需要多个本地 Xray 入站时，请使用 Nginx Stream 或 TCP Peek + Splice。
 
-如果你的主入站是 REALITY，请确认你使用的 3x-ui/Xray 入站类型确实能把普通 HTTPS fallback 到 Caddy。本脚本只检查公网 `443` 是否由 Xray 监听、Caddy fallback 后端是否可达，不会替你生成 Xray fallback 规则。
+如果你的主入站是 REALITY，请确认你使用的 3x-ui/Xray 入站类型确实能把 HTTPS fallback 到 Caddy。本脚本只检查公网 `443` 是否由 Xray 监听、Caddy fallback 后端是否可达，不会替你生成 Xray fallback 规则。
 
 ### 模式切换时 3x-ui 要不要改
 
@@ -277,7 +277,7 @@ REALITY 节点不同。REALITY 更关注外部目标站点是否真实可访问�
 
 | 部署方式 | 使用入口 | 生效位置 | 影响范围 |
 | --- | --- | --- | --- |
-| 未启用 443 单入口，只用普通 Caddy 反代 | 新增时用 `主菜单 [4 普通 Caddy 反代] -> [1 添加普通 Caddy 反代]`；已有域名用 `[4] -> [4 普通 Caddy 域名 IP 白名单]` | Caddy 当前域名站点块，使用 `remote_ip` 匹配 | 只影响当前 Caddy 域名 |
+| 未启用 443 单入口，只用 Caddy 反代 | 新增时用 `主菜单 [4 反代] -> [1 添加 Caddy 反代]`；已有域名用 `[4] -> [5 Caddy 域名 IP 白名单]`；直接编辑配置用 `[4] -> [6 查看/编辑已应用配置文件]` | Caddy 当前域名站点块，使用 `remote_ip` 匹配 | 只影响当前 Caddy 域名 |
 | 已启用 443 Nginx stream 单入口 | `主菜单 [19 443 单入口管理中心] -> [9 管理 Web 域名 IP 白名单]` | Nginx stream 层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
 
 白名单支持单个 IP 和 CIDR，例如：

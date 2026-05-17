@@ -8,7 +8,7 @@ func_env_install() {
         print_breadcrumb "基础组件与常用服务"
         echo -e "${BOLD}📦 基础组件与常用服务${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：安装基础组件、转发隧道和常用服务。普通 Caddy 反代走主菜单 [4]，443 单入口只走主菜单 [19]。${PLAIN}"
+        echo -e "${YELLOW}用途：安装基础组件、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]，443 单入口只走主菜单 [19]。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 基础运行环境${PLAIN}"
         echo -e "${GREEN}  1. Docker 引擎        ${YELLOW}  2. Python 环境        ${GREEN}  3. iperf3 测速工具${PLAIN}"
@@ -44,7 +44,7 @@ func_env_install() {
             10) run_remote_script "安装宝塔面板" "http://v7.hostcli.com/install/install-ubuntu_6.0.sh" ;;
             11) run_remote_script "安装 PVE 虚拟化工具" "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh" ;;
             12) run_remote_script "安装 Argox 节点" "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh" ;;
-            "?"|help) echo "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。普通 Caddy 反代走主菜单 [4]；443 单入口走主菜单 [19]。"; pause_return ;;
+            "?"|help) echo "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443 单入口走主菜单 [19]。"; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
         esac

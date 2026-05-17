@@ -636,7 +636,7 @@ issue_and_install_cert_for_domain() {
     "$acme_bin" --install-cert -d "$domain" --ecc \
         --fullchain-file "/etc/caddy/certs/${domain}.crt" \
         --key-file "/etc/caddy/certs/${domain}.key" \
-        --reloadcmd "systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true" >/dev/null 2>&1 || return 1
+        --reloadcmd "systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true; systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1 || true" >/dev/null 2>&1 || return 1
     if id caddy >/dev/null 2>&1; then
         chown root:caddy "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key" >/dev/null 2>&1
         chmod 640 "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key"

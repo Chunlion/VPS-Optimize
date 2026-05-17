@@ -114,6 +114,20 @@ apt_update_once
 [[ "$(xui_cert_setting_key_sql_list)" == *"subcertfile"* ]]
 
 (
+    source src/caddy_proxy.sh
+    nginx_proxy_tmp=$(mktemp /tmp/vps-nginx-proxy.XXXXXX)
+    [[ "$(nginx_proxy_conf_path "panel.example.com")" == "/etc/nginx/conf.d/vps_proxy_panel.example.com.conf" ]]
+    write_nginx_reverse_proxy_conf "panel.example.com" "40000" "n" "$nginx_proxy_tmp"
+    grep -q 'server_name panel.example.com;' "$nginx_proxy_tmp"
+    grep -q 'ssl_certificate /etc/caddy/certs/panel.example.com.crt;' "$nginx_proxy_tmp"
+    grep -q 'proxy_pass http://127.0.0.1:40000;' "$nginx_proxy_tmp"
+    write_nginx_reverse_proxy_conf "panel.example.com" "40001" "y" "$nginx_proxy_tmp"
+    grep -q 'proxy_ssl_verify off;' "$nginx_proxy_tmp"
+    grep -q 'proxy_pass https://127.0.0.1:40001;' "$nginx_proxy_tmp"
+    rm -f "$nginx_proxy_tmp"
+)
+
+(
     source src/sni_stack_config.sh
     source src/vpso_mux_state.sh
     source src/vpso_mux_config.sh
@@ -308,7 +322,7 @@ for file in "${docs_menu_files[@]}"; do
     assert_file_not_contains "$file" '主菜单 [14 服务健康总览]' "${file} must not point users to the old main menu [14] health entry."
     assert_file_not_contains "$file" '[15 配置备份与回滚]' "${file} must not point users to the old backup menu [15]."
 done
-assert_file_not_contains "docs/443-single-entry.md" '主菜单 [3] -> [13] 普通 Caddy 反代' "443 tutorial must not point users to the old ordinary Caddy menu path."
+assert_file_not_contains "docs/443-single-entry.md" '主菜单 [3] -> [13] Caddy 反代' "443 tutorial must not point users to the old Caddy menu path."
 assert_file_not_contains "docs/443-single-entry.md" '[19] -> [2] -> [5]' "443 tutorial must not point Web whitelist users to the old nested whitelist path."
 
 tcp_peek_doc_files=(
@@ -447,6 +461,23 @@ grep -q 'for unit in ssh.socket sshd.socket' dist/vps.sh
 grep -q 'func_network_interface_manage' dist/vps.sh
 grep -q 'network_set_iface_mtu' dist/vps.sh
 grep -q '4) func_caddy_reverse_proxy_menu' dist/vps.sh
+grep -q 'nginx|ngx|proxy|reverse' dist/vps.sh
+grep -q 'func_nginx_add_reverse_proxy' dist/vps.sh
+grep -q '2) func_nginx_add_reverse_proxy ;;' dist/vps.sh
+grep -q 'func_edit_applied_proxy_config' dist/vps.sh
+grep -q '6) func_edit_applied_proxy_config ;;' dist/vps.sh
+grep -q 'collect_editable_proxy_config_files' dist/vps.sh
+grep -q 'validate_proxy_config_kind' dist/vps.sh
+grep -q 'reload_proxy_config_kind' dist/vps.sh
+grep -q 'nginx_proxy_warn_if_single_entry_enabled' dist/vps.sh
+grep -q 'write_nginx_reverse_proxy_conf' dist/vps.sh
+grep -q '/etc/nginx/conf.d/vps_proxy_${domain}.conf' dist/vps.sh
+grep -q '/etc/nginx/conf.d/00-vps-proxy-map.conf' dist/vps.sh
+grep -q 'issue_and_install_cert_for_domain "$domain" "$CF_TOKEN"' dist/vps.sh
+grep -q 'systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx' dist/vps.sh
+assert_file_not_contains 'dist/vps.sh' '普通反代' 'Menu wording should use 反代 without 普通.'
+assert_file_not_contains 'dist/vps.sh' '添加普通 Caddy' 'Caddy menu wording should omit 普通.'
+assert_file_not_contains 'dist/vps.sh' '添加普通 Nginx' 'Nginx menu wording should omit 普通.'
 grep -q '6) func_ssh_security_menu' dist/vps.sh
 grep -q '7) func_fail2ban' dist/vps.sh
 grep -q '19) func_sni_stack_quick_menu' dist/vps.sh

@@ -95,10 +95,12 @@ journalctl -u caddy -n 100 --no-pager
 find /etc/caddy -maxdepth 3 -type f
 ```
 
-如果只是普通反代，入口是：
+如果只是反代，入口是：
 
 ```text
-主菜单 [4 普通 Caddy 反代] -> [1 添加普通 Caddy 反代]
+主菜单 [4 反代] -> [1 添加 Caddy 反代]
+主菜单 [4 反代] -> [2 添加 Nginx HTTPS 反代]
+主菜单 [4 反代] -> [6 查看/编辑已应用配置文件]
 ```
 
 如果已经启用 443 单入口，新增网站入口是：
@@ -115,6 +117,8 @@ find /etc/caddy -maxdepth 3 -type f
 | `/etc/nginx/stream.d` | 443 单入口 stream 配置目录 |
 | `/etc/nginx/stream.d/vps_sni_*.conf` | 443 单入口 SNI 分流配置 |
 | `/etc/nginx/conf.d/00-vps-default-drop.conf` | 默认丢弃站点配置，存在时用于减少默认站点暴露 |
+| `/etc/nginx/conf.d/00-vps-proxy-map.conf` | Nginx HTTPS 反代的 WebSocket Connection 变量映射 |
+| `/etc/nginx/conf.d/vps_proxy_*.conf` | Nginx HTTPS 反代站点配置 |
 | `/etc/nginx/conf.d` | 传统 Nginx HTTP 配置目录 |
 | `/etc/nginx/sites-enabled` | Debian/Ubuntu 常见站点启用目录 |
 | `/etc/nginx/sites-available` | Debian/Ubuntu 常见站点可用目录 |

@@ -5,7 +5,7 @@ show_main_help() {
     echo -e "${CYAN}VPS-Optimize > 主菜单 > 帮助${PLAIN}"
     echo "1/2 适合新机器先体检和初始化。"
     echo "3   基础组件与常用服务；安装 Docker、Python、WARP 和常用工具。"
-    echo "4   普通 Caddy 反代；适合未接入 443 单入口的普通网站/面板反代。"
+    echo "4   反代（Caddy/Nginx）；适合未接入 443 单入口的网站/面板反代。"
     echo "5   管理 3x-ui、Sing-box、Xray 和订阅工具。"
     echo "6   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
     echo "8   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
@@ -55,7 +55,7 @@ show_sni_help() {
     echo "16 查看 TCP Peek + Splice 状态 / 8444 预检：展示 status.json 统计；预检只监听 8444，不改公网 443。"
     echo "17 TCP Peek 分流规则校验：只检查配置，不重启入口。"
     echo "18 查看 TCP Peek + Splice 日志：查看 vpso-mux 分流器日志。"
-    echo "普通 Caddy 未接入 443 单入口时，用主菜单 [4 普通 Caddy 反代] -> [4] 管理域名 IP 白名单。"
+    echo "Caddy 未接入 443 单入口时，用主菜单 [4 反代] -> [5] 管理域名 IP 白名单。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -140,7 +140,7 @@ func_panel_deploy_menu() {
         echo -e "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：管理 3x-ui、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
-        echo -e "${YELLOW}提示：面板或订阅工具对外访问，可用普通 Caddy 反代；已启用 443 单入口时用 [19] 统一管理。${PLAIN}"
+        echo -e "${YELLOW}提示：面板或订阅工具对外访问，可用 Caddy 反代；已启用 443 单入口时用 [19] 统一管理。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 管理 3x-ui 面板${PLAIN}       ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
         echo -e "${GREEN}  2. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
@@ -268,7 +268,7 @@ normalize_main_choice() {
         pre|preflight|check|预检) echo "1" ;;
         init|base|初始化) echo "2" ;;
         env|docker|组件) echo "3" ;;
-        caddy|proxy|reverse|反代|普通反代) echo "4" ;;
+        caddy|nginx|ngx|proxy|reverse|反代) echo "4" ;;
         xcm|xui-custom|外置|外置增强|外置管理) echo "xui-custom" ;;
         panel|node|nodes|面板|节点) echo "5" ;;
         ssh) echo "6" ;;
@@ -356,7 +356,7 @@ main_menu() {
         echo -e "  ${GREEN}1.${PLAIN} 运维预检与风险扫描    ${YELLOW}(部署前先看端口/系统/服务状态)${PLAIN}"
         echo -e "  ${GREEN}2.${PLAIN} 基础环境初始化        ${YELLOW}(工具/时区/系统更新/基础 BBR)${PLAIN}"
         echo -e "  ${GREEN}3.${PLAIN} 基础组件与常用服务    ${YELLOW}(Docker/Python/WARP/常用工具)${PLAIN}"
-        echo -e "  ${GREEN}4.${PLAIN} 普通 Caddy 反代       ${YELLOW}(未接入 443 单入口的网站/面板反代)${PLAIN}"
+        echo -e "  ${GREEN}4.${PLAIN} 反代（Caddy/Nginx）   ${YELLOW}(未接入 443 单入口的网站/面板反代)${PLAIN}"
         echo -e "  ${GREEN}5.${PLAIN} 面板、节点与订阅工具  ${YELLOW}(3x-ui/Sing-box/订阅管理/Dockge)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ② 安全与访问控制${PLAIN}"

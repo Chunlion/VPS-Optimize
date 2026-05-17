@@ -807,14 +807,14 @@ insert_caddy_ip_whitelist_block() {
 func_caddy_manage_ip_whitelist() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🔐 普通 Caddy 域名 IP 白名单${PLAIN}"
+    echo -e "${BOLD}🔐 Caddy 域名 IP 白名单${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}适用于未启用 443 单入口、由 Caddy 直接对外服务的域名。${PLAIN}"
     echo -e "${YELLOW}如果该域名已接入 443 单入口，请用 [19] -> [9]，不要在 Caddy 层限制。${PLAIN}"
     echo -e "------------------------------------------------"
 
     if ! command -v caddy >/dev/null 2>&1 || [[ ! -f /etc/caddy/Caddyfile ]]; then
-        echo -e "${RED}❌ 未检测到 Caddy 或 /etc/caddy/Caddyfile，请先配置普通 Caddy 反代。${PLAIN}"
+        echo -e "${RED}❌ 未检测到 Caddy 或 /etc/caddy/Caddyfile，请先配置 Caddy 反代。${PLAIN}"
         read -n 1 -s -r -p "按任意键继续..."
         return
     fi

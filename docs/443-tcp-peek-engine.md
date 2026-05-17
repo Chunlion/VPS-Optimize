@@ -209,13 +209,13 @@ splice:
 
 ## Xray Fallback 特殊实现
 
-Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监听，普通 HTTPS fallback 到 Caddy。本脚本不会创建、删除或修改 3x-ui/Xray 入站内部配置。
+Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监听，HTTPS fallback 到 Caddy。本脚本不会创建、删除或修改 3x-ui/Xray 入站内部配置。
 
 ```text
 公网 443
   -> Xray/3x-ui 主入站
   -> Xray 节点流量由该主入站处理
-  -> 普通 HTTPS fallback 到 Caddy 本地后端
+  -> HTTPS fallback 到 Caddy 本地后端
 ```
 
 在 xray-fallback 模式下，`Xray 入站管理` 菜单不可用于多本地入站 SNI 分流。原因是公网 `443` 已由 Xray 主入站接管，脚本当前不支持在该模式下继续把多个 SNI 分流到多个本地 Xray 入站。如需多个本地 Xray 入站分流，请使用 Nginx Stream 模式或 TCP Peek + Splice / vpso-mux 模式。
