@@ -632,8 +632,9 @@ manage_compose_project() {
         echo -e "${GREEN}  1. 查看运行状态${PLAIN}"
         echo -e "${GREEN}  2. 重启服务${PLAIN}"
         echo -e "${GREEN}  3. 更新镜像并重建${PLAIN}"
-        echo -e "${YELLOW}  4. 停止并移除容器（保留目录数据）${PLAIN}"
-        echo -e "${RED}  5. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}"
+        echo -e "${CYAN}  4. 查看/编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}"
+        echo -e "${YELLOW}  5. 停止并移除容器（保留目录数据）${PLAIN}"
+        echo -e "${RED}  6. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}"
         echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
@@ -655,6 +656,10 @@ manage_compose_project() {
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
             4)
+                edit_applied_config_file "$compose_file" "compose" "${project_name} Compose 配置"
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            5)
                 if confirm_risk_action "停止并移除 ${project_name} 容器" \
                     "Docker Compose 容器运行状态" \
                     "在 ${project_dir} 中重新执行 compose up -d，或回到管理菜单重建" \
@@ -667,7 +672,7 @@ manage_compose_project() {
                 fi
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
-            5)
+            6)
                 echo -e "${RED}⚠️  高风险：这会停止容器并把 ${project_dir} 移入隔离目录，配置、数据库或本地数据不再原地可用。${PLAIN}"
                 echo -e "${YELLOW}隔离后如需彻底清理，请确认无误后手动处理隔离目录。${PLAIN}"
                 if confirm_risk_action "归档 ${project_name} 部署目录" \

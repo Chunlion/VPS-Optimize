@@ -105,6 +105,26 @@ source src/backup.sh
 
 [[ "$(trim_input "  q  ")" == "q" ]]
 [[ "$(normalize_domain_input " HTTPS://Panel.Example.COM:443/path ")" == "panel.example.com" ]]
+declare -f func_edit_applied_config_center >/dev/null
+declare -f edit_applied_config_file >/dev/null
+declare -f validate_applied_config_kind >/dev/null
+declare -f collect_applied_config_files >/dev/null
+config_edit_tmp_dir=$(mktemp -d /tmp/vps-config-edit-smoke.XXXXXX)
+printf '%s\n' 'node.example.com|127.0.0.1|1443' > "$config_edit_tmp_dir/routes.conf"
+validate_xray_routes_file "$config_edit_tmp_dir/routes.conf"
+printf '%s\n' 'node.example.com|127.0.0.1|70000' > "$config_edit_tmp_dir/routes.conf"
+if validate_xray_routes_file "$config_edit_tmp_dir/routes.conf"; then
+    echo "xray route validator must reject invalid ports." >&2
+    exit 1
+fi
+printf '%s\n' '127.0.0.1 localhost' > "$config_edit_tmp_dir/hosts"
+validate_hosts_file "$config_edit_tmp_dir/hosts"
+printf '%s\n' 'example-host' > "$config_edit_tmp_dir/hostname"
+validate_hostname_file "$config_edit_tmp_dir/hostname"
+rm -f "$config_edit_tmp_dir/routes.conf"
+rm -f "$config_edit_tmp_dir/hosts"
+rm -f "$config_edit_tmp_dir/hostname"
+rmdir "$config_edit_tmp_dir"
 APT_UPDATED=1
 apt_update_once
 [[ "$APT_UPDATED" == "1" ]]
@@ -442,6 +462,11 @@ fi
 awk "/<<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" dist/vps.sh | bash -n
 grep -q 'func_health_dashboard' dist/vps.sh
 grep -q 'func_backup_center' dist/vps.sh
+grep -q 'func_edit_applied_config_center' dist/vps.sh
+grep -q 'edit_applied_config_file' dist/vps.sh
+grep -q 'collect_applied_config_files' dist/vps.sh
+grep -q 'validate_applied_config_kind' dist/vps.sh
+grep -q '5. 查看/编辑脚本已应用配置' dist/vps.sh
 grep -q 'func_hosts_manage' dist/vps.sh
 grep -q 'hosts_add_or_update_entry' dist/vps.sh
 grep -q 'func_ssh_security_menu' dist/vps.sh
@@ -475,6 +500,10 @@ grep -q '/etc/nginx/conf.d/vps_proxy_${domain}.conf' dist/vps.sh
 grep -q '/etc/nginx/conf.d/00-vps-proxy-map.conf' dist/vps.sh
 grep -q 'issue_and_install_cert_for_domain "$domain" "$CF_TOKEN"' dist/vps.sh
 grep -q 'systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx' dist/vps.sh
+grep -q '4. 查看/编辑 Compose 配置' dist/vps.sh
+grep -q 'edit_applied_config_file "$compose_file" "compose"' dist/vps.sh
+assert_file_contains "README.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "README must document the global applied-config editor."
+assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "Config paths doc must list the global applied-config editor."
 assert_file_not_contains 'dist/vps.sh' '普通反代' 'Menu wording should use 反代 without 普通.'
 assert_file_not_contains 'dist/vps.sh' '添加普通 Caddy' 'Caddy menu wording should omit 普通.'
 assert_file_not_contains 'dist/vps.sh' '添加普通 Nginx' 'Nginx menu wording should omit 普通.'
