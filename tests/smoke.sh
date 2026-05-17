@@ -45,6 +45,17 @@ assert_file_not_matches() {
     fi
 }
 
+assert_function_defined_once() {
+    local file="$1"
+    local function_name="$2"
+    local count
+    count=$(grep -Ec "^${function_name}\\(\\) \\{" "$file" || true)
+    if [[ "$count" != "1" ]]; then
+        echo "${function_name} must be defined exactly once in ${file}; found ${count}." >&2
+        exit 1
+    fi
+}
+
 bash -n scripts/build.sh
 bash -n vps.sh
 bash -n dist/vps.sh
@@ -56,6 +67,18 @@ bash -n xui-custom-manager.sh
 grep -q 'modules=(' scripts/build.sh
 grep -q 'runtime.sh  # root/runtime guard' scripts/build.sh
 grep -q 'main.sh     # bootstrap into menu wiring' scripts/build.sh
+assert_file_contains scripts/build.sh 'vpso_mux_state.sh   # vpso-mux paths, engine state, and runtime status'
+assert_file_contains scripts/build.sh 'vpso_mux_config.sh  # vpso-mux YAML rendering'
+assert_file_contains scripts/build.sh 'vpso_mux_install.sh # vpso-mux binary/systemd helpers'
+assert_file_contains scripts/build.sh 'tcp_peek_engine.sh  # TCP Peek preflight and entry-mode switching'
+build_order=$(awk '/^[[:space:]]+[a-z0-9_]+\.sh/{print $1}' scripts/build.sh | tr '\n' ' ')
+case "$build_order" in
+    *"sni_stack_config.sh vpso_mux_state.sh vpso_mux_config.sh vpso_mux_install.sh tcp_peek_engine.sh sni_stack_health.sh"*) ;;
+    *)
+        echo "vpso-mux/TCP Peek modules are not in the expected build order." >&2
+        exit 1
+        ;;
+esac
 if command -v go >/dev/null 2>&1; then
     GO_BIN=go
 elif command -v go.exe >/dev/null 2>&1; then
@@ -92,6 +115,9 @@ apt_update_once
 
 (
     source src/sni_stack_config.sh
+    source src/vpso_mux_state.sh
+    source src/vpso_mux_config.sh
+    source src/vpso_mux_install.sh
     source src/tcp_peek_engine.sh
     entry_mode_tmp_dir=$(mktemp -d /tmp/vps-entry-mode-smoke.XXXXXX)
     single_443_engine_state_path() { printf '%s\n' "$entry_mode_tmp_dir/443-engine.conf"; }
@@ -165,6 +191,36 @@ grep -q 'func_sni_stack_quick_menu' dist/vps.sh
 grep -q 'manage_sni_stack_tcp_routes' dist/vps.sh
 grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh
 grep -q 'single_443_current_engine' dist/vps.sh
+for function_name in \
+    vpso_mux_config_path \
+    vpso_mux_service_name \
+    vpso_mux_status_json_path \
+    single_443_engine_state_path \
+    yaml_quote \
+    single_443_current_engine \
+    sni_stack_route_name \
+    sni_stack_route_summary_for_state \
+    sni_stack_whitelist_summary_for_state \
+    write_single_443_engine_state \
+    show_single_443_engine_status \
+    show_tcp_peek_splice_info \
+    print_vpso_mux_systemd_fallback_status \
+    print_vpso_mux_status_json \
+    show_vpso_mux_runtime_status \
+    append_vpso_mux_route_yaml \
+    write_vpso_mux_config_from_sni_stack \
+    generate_tcp_peek_config \
+    go_install_vpso_mux_latest \
+    vpso_mux_build_resource_check \
+    require_vpso_mux_binary_for_cutover \
+    install_vpso_mux_binary \
+    write_vpso_mux_systemd_service \
+    run_vpso_mux_config_check \
+    print_vpso_mux_failure_context
+do
+    assert_function_defined_once dist/vps.sh "$function_name"
+    assert_file_not_matches src/tcp_peek_engine.sh "^${function_name}\\(\\)" "src/tcp_peek_engine.sh must not keep duplicate ${function_name}."
+done
 grep -q 'write_single_443_engine_state "nginx-stream"' dist/vps.sh
 grep -q 'write_single_443_engine_state "tcp-peek"' dist/vps.sh
 grep -q 'write_single_443_engine_state "xray-fallback"' dist/vps.sh

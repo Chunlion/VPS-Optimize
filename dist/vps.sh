@@ -4151,10 +4151,10 @@ sni_stack_health_check() {
 }
 
 # ---------------------------------------------------------
-# Module: tcp_peek_engine.sh
+# Module: vpso_mux_state.sh
 # ---------------------------------------------------------
 # shellcheck shell=bash
-# 443 entry-mode switching plus vpso-mux TCP Peek engine management.
+# vpso-mux paths, engine state, route summaries, and runtime status output.
 
 vpso_mux_config_path() {
     echo "/etc/vps-optimize/vpso-mux.yaml"
@@ -4419,6 +4419,12 @@ show_vpso_mux_runtime_status() {
     echo -e "状态文件：${status_file}"
 }
 
+# ---------------------------------------------------------
+# Module: vpso_mux_config.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# vpso-mux YAML rendering and TCP Peek config generation.
+
 append_vpso_mux_route_yaml() {
     local file="$1"
     local name="$2"
@@ -4533,6 +4539,12 @@ generate_tcp_peek_config() {
     echo -e "Caddy 后端：$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")"
     echo -e "${YELLOW}下一步建议先校验配置，再使用 TCP Peek + Splice 测试入口监听 8444。${PLAIN}"
 }
+
+# ---------------------------------------------------------
+# Module: vpso_mux_install.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# vpso-mux build, install, systemd, and failure-context helpers.
 
 go_install_vpso_mux_latest() {
     local module_version tmp_dir
@@ -4697,6 +4709,12 @@ print_vpso_mux_failure_context() {
         netstat -lntp 2>/dev/null | awk -v p=":${port}" '$4 ~ p"$" {print}' || true
     fi
 }
+
+# ---------------------------------------------------------
+# Module: tcp_peek_engine.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# TCP Peek preflight, entry-mode cutover, and runtime actions.
 
 vpso_mux_preflight_config_path() {
     echo "/etc/vps-optimize/vpso-mux.preflight.yaml"

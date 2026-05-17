@@ -18,7 +18,10 @@ modules=(
     environment.sh
     caddy_legacy.sh
     sni_stack_config.sh
-    tcp_peek_engine.sh
+    vpso_mux_state.sh   # vpso-mux paths, engine state, and runtime status
+    vpso_mux_config.sh  # vpso-mux YAML rendering
+    vpso_mux_install.sh # vpso-mux binary/systemd helpers
+    tcp_peek_engine.sh  # TCP Peek preflight and entry-mode switching
     sni_stack_health.sh
     sni_stack_profiles.sh
     sni_stack_install.sh
