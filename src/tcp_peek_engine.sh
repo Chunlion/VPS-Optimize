@@ -357,16 +357,6 @@ preview_entry_mode_cutover() {
     done
 }
 
-entry_mode_expected_listener() {
-    local mode="$1"
-    mode=$(normalize_entry_mode_name "$mode") || return 1
-    case "$mode" in
-        "nginx-stream") echo "nginx" ;;
-        "xray-fallback") echo "xray" ;;
-        "tcp-peek") echo "tcppeek" ;;
-    esac
-}
-
 systemd_unit_exists() {
     local unit="$1"
     systemctl list-unit-files "$unit" >/dev/null 2>&1 || systemctl status "$unit" >/dev/null 2>&1

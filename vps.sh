@@ -20,6 +20,9 @@ MODULES=(
     environment
     caddy_legacy
     sni_stack_config
+    vpso_mux_state
+    vpso_mux_config
+    vpso_mux_install
     tcp_peek_engine
     sni_stack_health
     sni_stack_profiles

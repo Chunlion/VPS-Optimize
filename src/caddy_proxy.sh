@@ -132,6 +132,65 @@ map $http_upgrade $vps_proxy_connection_upgrade {
 EOF
 }
 
+nginx_ip_whitelist_block() {
+    local ranges="$1"
+    [[ -z "$ranges" ]] && return 0
+    {
+        echo "    # vps-optimize-ip-whitelist-start"
+        local range
+        for range in $ranges; do
+            echo "    allow ${range};"
+        done
+        echo "    deny all;"
+        echo "    # vps-optimize-ip-whitelist-end"
+    }
+}
+
+strip_nginx_ip_whitelist_block() {
+    local conf_file="$1"
+    local tmp_file
+    tmp_file=$(mktemp /tmp/nginx-ipwl.XXXXXX) || return 1
+    awk '
+        /# vps-optimize-ip-whitelist-start/ {skip=1; next}
+        /# vps-optimize-ip-whitelist-end/ {skip=0; next}
+        !skip {print}
+    ' "$conf_file" > "$tmp_file" || { rm -f "$tmp_file"; return 1; }
+    mv "$tmp_file" "$conf_file"
+}
+
+insert_nginx_ip_whitelist_block() {
+    local conf_file="$1"
+    local ranges="$2"
+    local tmp_file block
+    strip_nginx_ip_whitelist_block "$conf_file" || return 1
+    tmp_file=$(mktemp /tmp/nginx-ipwl.XXXXXX) || return 1
+    block=$(nginx_ip_whitelist_block "$ranges")
+    awk -v block="$block" '
+        inserted == 0 && /^[[:space:]]*location[[:space:]]+\/[[:space:]]*\{/ {
+            printf "%s\n", block
+            print
+            inserted=1
+            next
+        }
+        {print}
+        END { if (inserted == 0) exit 1 }
+    ' "$conf_file" > "$tmp_file" || { rm -f "$tmp_file"; return 1; }
+    mv "$tmp_file" "$conf_file"
+}
+
+nginx_proxy_whitelist_ranges_from_conf() {
+    local conf_file="$1"
+    awk '
+        /# vps-optimize-ip-whitelist-start/ {in_block=1; next}
+        /# vps-optimize-ip-whitelist-end/ {in_block=0; next}
+        in_block && /^[[:space:]]*allow[[:space:]]+/ {
+            gsub(/^[[:space:]]*allow[[:space:]]+/, "", $0)
+            gsub(/[;[:space:]]+$/, "", $0)
+            if ($0 != "") print $0
+        }
+    ' "$conf_file" | paste -sd' ' -
+}
+
 nginx_proxy_domain_exists() {
     local domain="$1"
     [[ -e "$(nginx_proxy_conf_path "$domain")" ]] && return 0
@@ -187,8 +246,10 @@ write_nginx_reverse_proxy_conf() {
     local port="$2"
     local is_https="$3"
     local conf_file="$4"
+    local ip_whitelist_ranges="${5:-}"
     local backend_scheme="http"
     local proxy_ssl_block=""
+    local ip_whitelist_block=""
     local listen_80_ipv6=""
     local listen_443_ipv6=""
 
@@ -197,6 +258,7 @@ write_nginx_reverse_proxy_conf() {
         proxy_ssl_block="    proxy_ssl_server_name on;
     proxy_ssl_verify off;"
     fi
+    ip_whitelist_block=$(nginx_ip_whitelist_block "$ip_whitelist_ranges")
     if [[ -s /proc/net/if_inet6 && "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null || echo 1)" != "1" ]]; then
         listen_80_ipv6="    listen [::]:80;"
         listen_443_ipv6="    listen [::]:443 ssl http2;"
@@ -221,6 +283,7 @@ ${listen_443_ipv6}
     ssl_prefer_server_ciphers off;
 
     location / {
+${ip_whitelist_block}
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -238,7 +301,8 @@ EOF
 func_nginx_add_reverse_proxy() {
     echo -e "${CYAN}▶ 正在配置 Nginx HTTPS 反代...${PLAIN}"
     nginx_proxy_warn_if_single_entry_enabled || return 1
-    local domain port is_https conf_file
+    local domain port is_https conf_file enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
+    local -a ip_whitelist_array=()
     read_trimmed domain "请输入解析后的域名 (如 panel.example.com): "
     read_trimmed port "请输入本地后端端口 (如 40000): "
     domain=$(normalize_domain_input "$domain")
@@ -259,12 +323,26 @@ func_nginx_add_reverse_proxy() {
     fi
 
     read_trimmed is_https "后端是否是自带证书的 HTTPS 服务？(y/n，默认 n): "
+    read_trimmed enable_ip_whitelist "是否只允许指定 IP/CIDR 访问该 Nginx 域名？(y/n，默认 n): "
+    if is_yes "$enable_ip_whitelist"; then
+        current_client_ip=$(detect_ssh_client_ip)
+        [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}"
+        read_trimmed ip_whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
+        if ! normalize_ip_whitelist_input "$ip_whitelist_input" ip_whitelist_array; then
+            echo -e "${RED}❌ 白名单为空或格式错误，已取消本次反代配置。${PLAIN}"
+            return 1
+        fi
+        append_vps_public_ips_to_whitelist ip_whitelist_array
+        ip_whitelist_ranges=$(join_array_by_space "${ip_whitelist_array[@]}")
+    else
+        ip_whitelist_ranges=""
+    fi
     nginx_proxy_ensure_certificate "$domain" || return 1
     install_nginx_http_if_needed || { echo -e "${RED}❌ Nginx 安装失败，请检查软件源、网络或系统版本。${PLAIN}"; return 1; }
     ensure_nginx_http_conf_d || return 1
     harden_nginx_public_errors
     write_nginx_proxy_map_conf || return 1
-    write_nginx_reverse_proxy_conf "$domain" "$port" "$is_https" "$conf_file" || return 1
+    write_nginx_reverse_proxy_conf "$domain" "$port" "$is_https" "$conf_file" "$ip_whitelist_ranges" || return 1
 
     echo -e "${CYAN}▶ 正在校验 Nginx 配置...${PLAIN}"
     if ! nginx -t >/dev/null 2>&1; then
@@ -278,6 +356,7 @@ func_nginx_add_reverse_proxy() {
     if systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1; then
         echo -e "${GREEN}✅ Nginx 反代已生效：https://${domain}${PLAIN}"
         echo -e "${GREEN}✅ 后端：127.0.0.1:${port}${PLAIN}"
+        [[ -n "$ip_whitelist_ranges" ]] && echo -e "${GREEN}✅ 已为 ${domain} 启用 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
         echo -e "${CYAN}配置文件：${conf_file}${PLAIN}"
         echo -e "${CYAN}证书路径：/etc/caddy/certs/${domain}.crt 和 /etc/caddy/certs/${domain}.key${PLAIN}"
     else
@@ -285,6 +364,248 @@ func_nginx_add_reverse_proxy() {
         quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-proxy" >/dev/null 2>&1 || true
         return 1
     fi
+}
+
+func_nginx_add_insecure() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🛡️ Nginx 后端 HTTPS 跳过证书校验${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    nginx_proxy_warn_if_single_entry_enabled || return 1
+
+    local domain port conf_file backup_file ip_whitelist_ranges
+    read_trimmed domain "请输入要设置的域名 (如 panel.example.com): "
+    read_trimmed port "请输入 HTTPS 后端本地端口 (如 40000): "
+    domain=$(normalize_domain_input "$domain")
+    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
+        echo -e "${RED}❌ 域名或端口格式错误。${PLAIN}"
+        return 1
+    fi
+
+    nginx_proxy_ensure_certificate "$domain" || return 1
+    install_nginx_http_if_needed || return 1
+    ensure_nginx_http_conf_d || return 1
+    harden_nginx_public_errors
+    write_nginx_proxy_map_conf || return 1
+
+    conf_file=$(nginx_proxy_conf_path "$domain")
+    if [[ -f "$conf_file" ]]; then
+        backup_file="${conf_file}.bak_$(date +%s)"
+        cp -p "$conf_file" "$backup_file" || { echo -e "${RED}❌ 备份失败，已取消。${PLAIN}"; return 1; }
+        ip_whitelist_ranges=$(nginx_proxy_whitelist_ranges_from_conf "$conf_file")
+        echo -e "${CYAN}已备份现有配置：${backup_file}${PLAIN}"
+    else
+        ip_whitelist_ranges=""
+    fi
+
+    write_nginx_reverse_proxy_conf "$domain" "$port" "y" "$conf_file" "$ip_whitelist_ranges" || return 1
+    if nginx -t >/dev/null 2>&1; then
+        if systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ Nginx 已设置为 HTTPS 后端并跳过后端证书校验：${domain} -> https://127.0.0.1:${port}${PLAIN}"
+            [[ -n "$ip_whitelist_ranges" ]] && echo -e "${GREEN}✅ 已保留 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
+        else
+            echo -e "${RED}❌ Nginx 校验通过，但 reload/restart 失败。${PLAIN}"
+            [[ -n "$backup_file" && -f "$backup_file" ]] && cp -p "$backup_file" "$conf_file"
+            return 1
+        fi
+    else
+        echo -e "${RED}❌ Nginx 配置校验失败，正在回滚。${PLAIN}"
+        [[ -n "$backup_file" && -f "$backup_file" ]] && cp -p "$backup_file" "$conf_file"
+        nginx -t
+        return 1
+    fi
+}
+
+func_proxy_add_insecure() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🛡️ 后端 HTTPS 跳过证书校验${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${GREEN}  1. Caddy 跳过后端证书校验${PLAIN}"
+    echo -e "${GREEN}  2. Nginx 跳过后端证书校验${PLAIN}"
+    echo -e "${RED}  0. 取消${PLAIN}"
+    local choice
+    read_trimmed choice "请选择操作: "
+    case "$choice" in
+        1) func_caddy_add_insecure ;;
+        2) func_nginx_add_insecure ;;
+        0|q|Q|"") echo -e "${BLUE}已取消。${PLAIN}" ;;
+        *) echo -e "${RED}❌ 无效选择。${PLAIN}" ;;
+    esac
+}
+
+func_nginx_manage_ip_whitelist() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🔐 Nginx 域名 IP 白名单${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}适用于未启用 443 单入口、由 Nginx HTTPS 反代直接对外服务的域名。${PLAIN}"
+    echo -e "${YELLOW}如果该域名已接入 443 单入口，请用 [19] -> [9]，不要在 Nginx HTTP 层限制。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local domain conf_file action backup_file
+    read_trimmed domain "请输入要管理的域名 (如 panel.example.com): "
+    domain=$(normalize_domain_input "$domain")
+    if ! is_valid_domain "$domain"; then
+        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+        return 1
+    fi
+    conf_file=$(nginx_proxy_conf_path "$domain")
+    if [[ ! -f "$conf_file" ]]; then
+        echo -e "${RED}❌ 未找到 ${conf_file}。该入口只管理脚本创建的 Nginx HTTPS 反代配置。${PLAIN}"
+        return 1
+    fi
+
+    echo -e "当前配置文件：${conf_file}"
+    if grep -q '# vps-optimize-ip-whitelist-start' "$conf_file" 2>/dev/null; then
+        echo -e "${YELLOW}当前状态：已启用脚本管理的 IP 白名单。${PLAIN}"
+        echo -e "当前白名单：$(nginx_proxy_whitelist_ranges_from_conf "$conf_file")"
+    else
+        echo -e "${BLUE}当前状态：未启用脚本管理的 IP 白名单。${PLAIN}"
+    fi
+    echo -e "1. 设置/覆盖白名单"
+    echo -e "2. 清除白名单"
+    echo -e "0/q. 取消"
+    read_trimmed action "请选择操作: "
+
+    backup_file="${conf_file}.bak_$(date +%s)"
+    case "$action" in
+        1)
+            local ip_whitelist_input ip_whitelist_ranges current_client_ip
+            local -a ip_whitelist_array=()
+            current_client_ip=$(detect_ssh_client_ip)
+            [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
+            read_trimmed ip_whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
+            if ! normalize_ip_whitelist_input "$ip_whitelist_input" ip_whitelist_array; then
+                echo -e "${RED}❌ 白名单为空或格式错误，已取消操作。${PLAIN}"
+                return 1
+            fi
+            append_vps_public_ips_to_whitelist ip_whitelist_array
+            ip_whitelist_ranges=$(join_array_by_space "${ip_whitelist_array[@]}")
+            cp -p "$conf_file" "$backup_file" || { echo -e "${RED}❌ 备份失败，已取消。${PLAIN}"; return 1; }
+            if insert_nginx_ip_whitelist_block "$conf_file" "$ip_whitelist_ranges" && nginx -t >/dev/null 2>&1; then
+                if systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1; then
+                    echo -e "${GREEN}✅ 已为 ${domain} 启用 Nginx IP 白名单：${ip_whitelist_ranges}${PLAIN}"
+                    echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
+                else
+                    echo -e "${RED}❌ Nginx 重载失败，正在回滚...${PLAIN}"
+                    cp -p "$backup_file" "$conf_file"
+                    systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1 || true
+                    return 1
+                fi
+            else
+                echo -e "${RED}❌ 写入后 Nginx 校验失败，正在回滚...${PLAIN}"
+                cp -p "$backup_file" "$conf_file"
+                nginx -t
+                return 1
+            fi
+            ;;
+        2)
+            if ! grep -q '# vps-optimize-ip-whitelist-start' "$conf_file" 2>/dev/null; then
+                echo -e "${BLUE}该域名没有脚本管理的白名单块，无需清除。${PLAIN}"
+                return 0
+            fi
+            cp -p "$conf_file" "$backup_file" || { echo -e "${RED}❌ 备份失败，已取消。${PLAIN}"; return 1; }
+            if strip_nginx_ip_whitelist_block "$conf_file" && nginx -t >/dev/null 2>&1; then
+                systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1 || true
+                echo -e "${GREEN}✅ 已清除 ${domain} 的 Nginx IP 白名单。${PLAIN}"
+                echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
+            else
+                echo -e "${RED}❌ 清除后 Nginx 校验失败，正在回滚...${PLAIN}"
+                cp -p "$backup_file" "$conf_file"
+                return 1
+            fi
+            ;;
+        0|q|Q|"")
+            echo -e "${BLUE}已取消。${PLAIN}"
+            ;;
+        *)
+            echo -e "${RED}❌ 无效操作。${PLAIN}"
+            ;;
+    esac
+}
+
+func_proxy_manage_ip_whitelist() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🔐 域名 IP 白名单（Caddy / Nginx）${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${GREEN}  1. Caddy 域名 IP 白名单${PLAIN}"
+    echo -e "${GREEN}  2. Nginx 域名 IP 白名单${PLAIN}"
+    echo -e "${RED}  0. 取消${PLAIN}"
+    local choice
+    read_trimmed choice "请选择操作: "
+    case "$choice" in
+        1) func_caddy_manage_ip_whitelist ;;
+        2) func_nginx_manage_ip_whitelist ;;
+        0|q|Q|"") echo -e "${BLUE}已取消。${PLAIN}" ;;
+        *) echo -e "${RED}❌ 无效选择。${PLAIN}" ;;
+    esac
+}
+
+func_nginx_clear_proxy_config() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧹 清空 Nginx HTTPS 反代配置${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}只隔离 VPS-Optimize 创建的 /etc/nginx/conf.d/vps_proxy_*.conf 和 00-vps-proxy-map.conf。${PLAIN}"
+    echo -e "${YELLOW}不会清理 /etc/nginx/stream.d，也不会影响 443 单入口配置。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    local -a files=()
+    local conf_file backup_dir moved=0
+    for conf_file in /etc/nginx/conf.d/vps_proxy_*.conf /etc/nginx/conf.d/00-vps-proxy-map.conf; do
+        [[ -f "$conf_file" ]] && files+=("$conf_file")
+    done
+    if [[ ${#files[@]} -eq 0 ]]; then
+        echo -e "${BLUE}未检测到脚本创建的 Nginx HTTPS 反代配置。${PLAIN}"
+        return 0
+    fi
+    printf '  - %s\n' "${files[@]}"
+    if ! confirm_danger "清空 Nginx HTTPS 反代配置" \
+        "上述 Nginx HTTPS 反代配置会被移入隔离目录，相关域名将不再由 Nginx 反代访问。" \
+        "从隔离目录 /etc/vps-optimize/quarantine/nginx-proxy 手动移回对应文件后执行 nginx -t && systemctl reload nginx。"; then
+        echo -e "${BLUE}已取消清空操作。${PLAIN}"
+        return 0
+    fi
+
+    backup_dir="/etc/vps-optimize/backups/nginx-proxy-clear_$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$backup_dir"
+    for conf_file in "${files[@]}"; do
+        cp -p "$conf_file" "$backup_dir/$(basename "$conf_file")" 2>/dev/null || true
+        if quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-proxy" >/dev/null 2>&1; then
+            moved=$((moved + 1))
+        else
+            echo -e "${YELLOW}⚠️ 隔离失败：${conf_file}${PLAIN}"
+        fi
+    done
+    if nginx -t >/dev/null 2>&1; then
+        systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1 || true
+        echo -e "${GREEN}✅ 已隔离 ${moved} 个 Nginx HTTPS 反代配置。${PLAIN}"
+        echo -e "${CYAN}备份目录：${backup_dir}${PLAIN}"
+    else
+        echo -e "${RED}❌ 清理后 Nginx 校验失败，请检查 nginx -t 输出。${PLAIN}"
+        nginx -t
+        return 1
+    fi
+}
+
+func_proxy_clear_config() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧹 清空反代配置（Caddy / Nginx）${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${GREEN}  1. 清空 Caddy 反代配置${PLAIN}"
+    echo -e "${GREEN}  2. 清空 Nginx HTTPS 反代配置${PLAIN}"
+    echo -e "${RED}  0. 取消${PLAIN}"
+    local choice
+    read_trimmed choice "请选择操作: "
+    case "$choice" in
+        1) func_caddy_clear_config ;;
+        2) func_nginx_clear_proxy_config ;;
+        0|q|Q|"") echo -e "${BLUE}已取消。${PLAIN}" ;;
+        *) echo -e "${RED}❌ 无效选择。${PLAIN}" ;;
+    esac
 }
 
 append_editable_proxy_config_file() {
@@ -458,11 +779,11 @@ func_caddy_reverse_proxy_menu() {
         echo -e "${GREEN}  1. 添加 Caddy 反代${PLAIN}"
         echo -e "${GREEN}  2. 添加 Nginx HTTPS 反代${PLAIN} ${YELLOW}(复用 acme.sh + CF DNS 证书)${PLAIN}"
         echo -e "${CYAN}  3. 查看 Caddy/共享证书路径${PLAIN}"
-        echo -e "${CYAN}  4. Caddy 跳过后端证书校验${PLAIN} ${YELLOW}(后端自签 HTTPS 时使用)${PLAIN}"
-        echo -e "${CYAN}  5. Caddy 域名 IP 白名单${PLAIN}"
+        echo -e "${CYAN}  4. 后端 HTTPS 跳过证书校验${PLAIN} ${YELLOW}(Caddy/Nginx，后端自签 HTTPS 时使用)${PLAIN}"
+        echo -e "${CYAN}  5. 域名 IP 白名单${PLAIN} ${YELLOW}(Caddy/Nginx)${PLAIN}"
         echo -e "${CYAN}  6. 查看/编辑已应用配置文件${PLAIN} ${YELLOW}(Caddy/Nginx，校验后 reload)${PLAIN}"
-        echo -e "${RED}  7. 清空 Caddy 配置${PLAIN}"
-        echo -e "${RED}  8. 删除底层 ACME 证书${PLAIN}"
+        echo -e "${RED}  7. 清空反代配置${PLAIN} ${YELLOW}(Caddy/Nginx)${PLAIN}"
+        echo -e "${RED}  8. 删除底层 ACME 证书/域名配置${PLAIN} ${YELLOW}(会同时清理脚本创建的 Nginx 配置)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -473,10 +794,10 @@ func_caddy_reverse_proxy_menu() {
             1) func_caddy_add_reverse_proxy ;;
             2) func_nginx_add_reverse_proxy ;;
             3) func_view_caddy_cert ;;
-            4) func_caddy_add_insecure ;;
-            5) func_caddy_manage_ip_whitelist ;;
+            4) func_proxy_add_insecure ;;
+            5) func_proxy_manage_ip_whitelist ;;
             6) func_edit_applied_proxy_config ;;
-            7) func_caddy_clear_config ;;
+            7) func_proxy_clear_config ;;
             8) func_caddy_delete_cert ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;

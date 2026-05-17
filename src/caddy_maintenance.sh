@@ -941,7 +941,7 @@ func_caddy_delete_cert() {
     echo -e "\n${CYAN}▶ 正在执行核弹级清理流程...${PLAIN}"
     echo -e "${YELLOW}此操作将永久删除该域名的证书与配置，无法恢复！${PLAIN}"
     echo -e "请确认操作...${PLAIN}"
-    if confirm_danger "彻底清理 ${domain} 的证书与配置" "会停止 Caddy，删除该域名证书、acme.sh 残留和 Caddy 配置，再启动 Caddy。" "请先确认已有系统快照或 Caddy 备份；删除后的证书需要重新签发。"; then
+    if confirm_danger "彻底清理 ${domain} 的证书与配置" "会停止 Caddy，隔离该域名的 Caddy/Nginx 配置、共享证书文件和 acme.sh 残留，再启动/重载相关服务。" "请先确认已有系统快照或反代配置备份；删除后的证书需要重新签发。"; then
         # 1. 停止 Caddy，强制释放 80/443 端口
         systemctl stop caddy >/dev/null 2>&1
         echo -e "${GREEN}✅ [1/4] 已强制停止 Caddy 服务，释放网络端口。${PLAIN}"
@@ -977,18 +977,38 @@ func_caddy_delete_cert() {
             echo -e "${BLUE}ℹ️ [3/4] 系统未安装独立 acme.sh 环境，已跳过。${PLAIN}"
         fi
         
-        # 4. 外科手术：模块化安全删除
+        # 4. 外科手术：模块化安全删除 Caddy/Nginx 域名配置
         local domain_conf="/etc/caddy/conf.d/${domain}.caddy"
         if [[ -f "$domain_conf" ]]; then
-            echo -e "${YELLOW}⏳ [4/4] 检测到专属配置文件，正在隔离...${PLAIN}"
+            echo -e "${YELLOW}⏳ [4/5] 检测到 Caddy 专属配置文件，正在隔离...${PLAIN}"
             quarantine_path "$domain_conf" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
-            echo -e "${GREEN}✅ [4/4] 专属配置文件 ($domain_conf) 已隔离！${PLAIN}"
+            echo -e "${GREEN}✅ [4/5] Caddy 专属配置文件 ($domain_conf) 已隔离！${PLAIN}"
         else
-            echo -e "${GREEN}✅ [4/4] 未发现该域名的专属配置文件。${PLAIN}"
+            echo -e "${GREEN}✅ [4/5] 未发现该域名的 Caddy 专属配置文件。${PLAIN}"
         fi
+        local nginx_domain_conf
+        nginx_domain_conf=$(nginx_proxy_conf_path "$domain" 2>/dev/null || echo "/etc/nginx/conf.d/vps_proxy_${domain}.conf")
+        if [[ -f "$nginx_domain_conf" ]]; then
+            quarantine_path "$nginx_domain_conf" "/etc/vps-optimize/quarantine/nginx-proxy" >/dev/null 2>&1 || true
+            echo -e "${GREEN}✅ 已隔离 Nginx 反代配置：${nginx_domain_conf}${PLAIN}"
+        fi
+
+        # 5. 隔离共享证书安装路径，Nginx 反代也复用这些证书。
+        local shared_cert_file
+        echo -e "${YELLOW}⏳ [5/5] 正在隔离共享证书安装路径...${PLAIN}"
+        for shared_cert_file in "/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key" "/root/cert/${domain}.crt" "/root/cert/${domain}.key"; do
+            if [[ -e "$shared_cert_file" || -L "$shared_cert_file" ]]; then
+                quarantine_path "$shared_cert_file" "/etc/vps-optimize/quarantine/shared-certs" >/dev/null 2>&1 || true
+                echo -e "${GREEN}✅ 已隔离共享证书路径：${shared_cert_file}${PLAIN}"
+            fi
+        done
 
         # 重启 Caddy 以加载干净的配置
         systemctl start caddy >/dev/null 2>&1
+        if command -v nginx >/dev/null 2>&1; then
+            nginx -t >/dev/null 2>&1 && { systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1 || true; }
+        fi
+        generate_caddy_cf_manifest 2>/dev/null || true
 
         echo -e "------------------------------------------------"
         echo -e "${GREEN}🎉 清理彻底完成！当前域名环境已处于出厂真空状态。${PLAIN}"

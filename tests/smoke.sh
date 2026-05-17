@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'echo "Smoke failed at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
@@ -45,6 +46,15 @@ assert_file_not_matches() {
     fi
 }
 
+assert_path_absent() {
+    local path="$1"
+    local message="${2:-${path} must not exist.}"
+    if [[ -e "$path" ]]; then
+        echo "$message" >&2
+        exit 1
+    fi
+}
+
 assert_function_defined_once() {
     local file="$1"
     local function_name="$2"
@@ -79,6 +89,22 @@ case "$build_order" in
         exit 1
         ;;
 esac
+source_order=$(awk '/^[[:space:]]+[a-z0-9_]+$/{print $1}' vps.sh | tr '\n' ' ')
+case "$source_order" in
+    *"sni_stack_config vpso_mux_state vpso_mux_config vpso_mux_install tcp_peek_engine sni_stack_health"*) ;;
+    *)
+        echo "Source checkout entrypoint vps.sh is not aligned with the vpso-mux/TCP Peek build order." >&2
+        exit 1
+        ;;
+esac
+assert_path_absent "src/entry_mode_cutover.sh" "entry_mode_cutover.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
+assert_path_absent "src/tcp_peek_preflight.sh" "tcp_peek_preflight.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
+assert_file_not_contains scripts/build.sh 'entry_mode_cutover.sh' "Stale entry-mode cutover module must not be added to the release build."
+assert_file_not_contains scripts/build.sh 'tcp_peek_preflight.sh' "Stale TCP Peek preflight module must not be added to the release build."
+assert_file_not_contains vps.sh 'entry_mode_cutover' "Source entrypoint must not load the stale entry-mode cutover module."
+assert_file_not_contains vps.sh 'tcp_peek_preflight' "Source entrypoint must not load the stale TCP Peek preflight module."
+assert_file_contains src/README.md '443/TCP Peek ownership:' "Source README must document 443/TCP Peek module ownership."
+assert_file_contains src/README.md 'Do not reintroduce split shadow modules' "Source README must warn against stale split 443/TCP Peek modules."
 if command -v go >/dev/null 2>&1; then
     GO_BIN=go
 elif command -v go.exe >/dev/null 2>&1; then
@@ -104,6 +130,21 @@ source src/rollback.sh
 source src/backup.sh
 
 [[ "$(trim_input "  q  ")" == "q" ]]
+[[ "$(normalize_menu_choice_input "  q  ")" == "0" ]]
+[[ "$(normalize_menu_choice_input " 返回 ")" == "0" ]]
+choice=""
+read_trimmed choice "" <<< " 返回 "
+[[ "$choice" == "0" ]]
+choice=""
+read_trimmed choice "" <<< " Q "
+[[ "$choice" == "0" ]]
+is_yes "yes"
+is_yes "YES"
+is_yes "YeS"
+if is_yes "no"; then
+    echo "is_yes must not accept no." >&2
+    exit 1
+fi
 [[ "$(normalize_domain_input " HTTPS://Panel.Example.COM:443/path ")" == "panel.example.com" ]]
 declare -f func_edit_applied_config_center >/dev/null
 declare -f edit_applied_config_file >/dev/null
@@ -144,6 +185,14 @@ apt_update_once
     write_nginx_reverse_proxy_conf "panel.example.com" "40001" "y" "$nginx_proxy_tmp"
     grep -q 'proxy_ssl_verify off;' "$nginx_proxy_tmp"
     grep -q 'proxy_pass https://127.0.0.1:40001;' "$nginx_proxy_tmp"
+    write_nginx_reverse_proxy_conf "panel.example.com" "40002" "n" "$nginx_proxy_tmp" "198.51.100.10 2001:db8::/32"
+    grep -q '# vps-optimize-ip-whitelist-start' "$nginx_proxy_tmp"
+    grep -q 'allow 198.51.100.10;' "$nginx_proxy_tmp"
+    grep -q 'allow 2001:db8::/32;' "$nginx_proxy_tmp"
+    grep -q 'deny all;' "$nginx_proxy_tmp"
+    [[ "$(nginx_proxy_whitelist_ranges_from_conf "$nginx_proxy_tmp")" == "198.51.100.10 2001:db8::/32" ]]
+    strip_nginx_ip_whitelist_block "$nginx_proxy_tmp"
+    ! grep -q '# vps-optimize-ip-whitelist-start' "$nginx_proxy_tmp"
     rm -f "$nginx_proxy_tmp"
 )
 
@@ -171,8 +220,52 @@ apt_update_once
     printf '%s\n' "engine='xray-fallback'" > "$(single_443_engine_state_path)"
     [[ "$(single_443_current_engine)" == "xray-fallback" ]]
 
+    initial_entry_output="$entry_mode_tmp_dir/initial-entry.out"
+    select_initial_entry_mode >"$initial_entry_output" 2>&1 <<< $'3\nYeS\n'
+    [[ "$ENTRY_MODE" == "nginx-stream" ]]
+    grep -Fq 'TCP Peek 首次接管 443 前必须先安装/使用 Nginx Stream' "$initial_entry_output"
+    grep -Fq '已选择 443 入口模式：nginx-stream' "$initial_entry_output"
+
     rm -f "$(single_443_engine_state_path)"
+    rm -f "$initial_entry_output"
     rmdir "$entry_mode_tmp_dir"
+)
+
+(
+    source src/panel_installers.sh
+    clear() { :; }
+    pause_after_external_script() { :; }
+    detect_xui_single_443_defaults() { :; }
+    print_xui_single_443_detected_defaults() { :; }
+    run_remote_script() {
+        CAPTURED_DESC="$1"
+        CAPTURED_URL="$2"
+        shift 2
+        CAPTURED_ARGS="$*"
+        return 0
+    }
+
+    panel_output=$(mktemp /tmp/vps-xpanel-smoke.XXXXXX)
+
+    CAPTURED_DESC=""
+    CAPTURED_URL=""
+    CAPTURED_ARGS=""
+    func_xpanel >"$panel_output" 2>&1 <<< $'\n'
+    [[ "$CAPTURED_DESC" == "安装 3x-ui / x-ui 面板（最新版）" ]]
+    [[ "$CAPTURED_URL" == "https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh" ]]
+    [[ -z "$CAPTURED_ARGS" ]]
+    grep -Fq '最新版 3.x 安装器如果询问 SSL certificate setup method，请选择 Skip SSL / 不申请 SSL' "$panel_output"
+
+    CAPTURED_DESC=""
+    CAPTURED_URL=""
+    CAPTURED_ARGS=""
+    func_xpanel >"$panel_output" 2>&1 <<< $'2\n'
+    [[ "$CAPTURED_DESC" == "安装 3x-ui / x-ui 面板（v2.9.4）" ]]
+    [[ "$CAPTURED_URL" == "https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh" ]]
+    [[ "$CAPTURED_ARGS" == "v2.9.4" ]]
+    grep -Fq 'v2.9.4 属于 2.x 老流程' "$panel_output"
+
+    rm -f "$panel_output"
 )
 
 remote_tmp_dir=$(mktemp -d /tmp/vps-remote-smoke.XXXXXX)
@@ -225,6 +318,17 @@ grep -q 'func_sni_stack_quick_menu' dist/vps.sh
 grep -q 'manage_sni_stack_tcp_routes' dist/vps.sh
 grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh
 grep -q 'single_443_current_engine' dist/vps.sh
+for function_name in \
+    normalize_entry_mode_name \
+    entry_mode_engine_name \
+    entry_mode_expected_listener \
+    preflight_tcppeek_before_cutover \
+    preflight_entry_mode_before_cutover \
+    switch_entry_mode
+do
+    assert_function_defined_once dist/vps.sh "$function_name"
+done
+assert_file_not_matches src/tcp_peek_engine.sh '^entry_mode_expected_listener\(\)' "entry_mode_expected_listener belongs to shared 443 state/listener helpers, not the TCP Peek engine module."
 for function_name in \
     vpso_mux_config_path \
     vpso_mux_service_name \
@@ -300,6 +404,8 @@ grep -q '/var/lib/vps-optimize/vpso-mux/status.json' dist/vps.sh
 grep -q 'show_vpso_mux_runtime_status' dist/vps.sh
 grep -Fq '5) switch_entry_mode "tcp-peek" ;;' dist/vps.sh
 grep -Fq '7) rollback_last_entry_mode ;;' dist/vps.sh
+grep -Fq 'TCP Peek 首次接管 443 前必须先安装/使用 Nginx Stream' dist/vps.sh
+grep -Fq '是否先安装/使用 Nginx Stream 完成本次首次安装？(Y/n，默认 yes):' dist/vps.sh
 assert_file_not_contains 'dist/vps.sh' '19. 切换公网 443 到 TCP Peek + Splice 模式' '443 menu must not expose a redundant TCP Peek-specific cutover entry.'
 assert_file_not_contains 'dist/vps.sh' '19) switch_public_443_to_tcp_peek ;;' '443 menu must not dispatch to a removed TCP Peek-specific cutover wrapper.'
 assert_file_not_contains 'dist/vps.sh' '20. 从 TCP Peek 回滚到 Nginx Stream 模式' '443 menu must not expose a redundant TCP Peek-specific rollback entry.'
@@ -394,6 +500,7 @@ grep -q 'if ! restart_service_if_available nginx; then' dist/vps.sh
 grep -q 'stop_vpso_mux_service_if_public_443 || return 1' dist/vps.sh
 grep -q 'stop_xray_entry_service_if_public_443 || return 1' dist/vps.sh
 grep -q 'Xray 仍在监听公网 443' dist/vps.sh
+grep -q 'nginx 服务仍在运行，但已不监听公网 ${NGINX_LISTEN_PORT}' dist/vps.sh
 grep -q 'if ! stop_public_443_entry_services_for_target "$old_mode"; then' dist/vps.sh
 grep -q 'if ! apply_entry_mode_by_name "$old_mode" "$backup_dir"; then' dist/vps.sh
 grep -q 'backup_dir=$(backup_entry_mode_config) || return 1' dist/vps.sh
@@ -415,6 +522,13 @@ grep -q 'func_docker_project_status' dist/vps.sh
 grep -q 'print_project_runtime_overview' dist/vps.sh
 grep -q 'xui_panel_status_compact' dist/vps.sh
 grep -q '3x-ui面板' dist/vps.sh
+grep -Fq '安装 3x-ui / x-ui 面板（最新版）' dist/vps.sh
+grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh' dist/vps.sh
+grep -Fq '最新版 3.x 安装器如果询问 SSL certificate setup method，请选择 Skip SSL / 不申请 SSL' dist/vps.sh
+grep -Fq '安装 3x-ui / x-ui 面板（v2.9.4）' dist/vps.sh
+grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh' dist/vps.sh
+grep -Fq 'install_args=("v2.9.4")' dist/vps.sh
+grep -Fq 'v2.9.4 属于 2.x 老流程' dist/vps.sh
 if grep -Fq 'raw.githubusercontent.com/alireza0/s-ui/master/install.sh' dist/vps.sh; then
     echo "S-UI installer URL must not be present in the release script." >&2
     exit 1
@@ -489,6 +603,16 @@ grep -q '4) func_caddy_reverse_proxy_menu' dist/vps.sh
 grep -q 'nginx|ngx|proxy|reverse' dist/vps.sh
 grep -q 'func_nginx_add_reverse_proxy' dist/vps.sh
 grep -q '2) func_nginx_add_reverse_proxy ;;' dist/vps.sh
+grep -q 'func_proxy_add_insecure' dist/vps.sh
+grep -q 'func_nginx_add_insecure' dist/vps.sh
+grep -q 'func_proxy_manage_ip_whitelist' dist/vps.sh
+grep -q 'func_nginx_manage_ip_whitelist' dist/vps.sh
+grep -q 'func_proxy_clear_config' dist/vps.sh
+grep -q 'func_nginx_clear_proxy_config' dist/vps.sh
+grep -q 'nginx_ip_whitelist_block' dist/vps.sh
+grep -q '后端 HTTPS 跳过证书校验' dist/vps.sh
+grep -q '域名 IP 白名单' dist/vps.sh
+grep -q '清空反代配置' dist/vps.sh
 grep -q 'func_edit_applied_proxy_config' dist/vps.sh
 grep -q '6) func_edit_applied_proxy_config ;;' dist/vps.sh
 grep -q 'collect_editable_proxy_config_files' dist/vps.sh
@@ -500,10 +624,15 @@ grep -q '/etc/nginx/conf.d/vps_proxy_${domain}.conf' dist/vps.sh
 grep -q '/etc/nginx/conf.d/00-vps-proxy-map.conf' dist/vps.sh
 grep -q 'issue_and_install_cert_for_domain "$domain" "$CF_TOKEN"' dist/vps.sh
 grep -q 'systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx' dist/vps.sh
+grep -q 'vps-optimize-ip-whitelist-start' dist/vps.sh
+grep -q 'allow ${range};' dist/vps.sh
+grep -q '/etc/vps-optimize/quarantine/nginx-proxy' dist/vps.sh
 grep -q '4. 查看/编辑 Compose 配置' dist/vps.sh
 grep -q 'edit_applied_config_file "$compose_file" "compose"' dist/vps.sh
 assert_file_contains "README.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "README must document the global applied-config editor."
 assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "Config paths doc must list the global applied-config editor."
+assert_file_contains "README.md" '[4 反代] 里的后端 HTTPS 跳过证书校验、域名 IP 白名单、查看/编辑已应用配置和清空反代配置都同时提供 Caddy/Nginx 入口' "README must document Nginx parity in the reverse proxy menu."
+assert_file_contains "docs/443-single-entry.md" '[4] -> [5 域名 IP 白名单]' "443 doc must describe the combined Caddy/Nginx whitelist menu."
 assert_file_not_contains 'dist/vps.sh' '普通反代' 'Menu wording should use 反代 without 普通.'
 assert_file_not_contains 'dist/vps.sh' '添加普通 Caddy' 'Caddy menu wording should omit 普通.'
 assert_file_not_contains 'dist/vps.sh' '添加普通 Nginx' 'Nginx menu wording should omit 普通.'

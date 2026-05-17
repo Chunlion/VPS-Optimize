@@ -20,7 +20,8 @@ Build order is intentional. Foundational helpers are loaded first, then focused 
    Root/runtime guard.
 8. Feature modules
    `system_core.sh`, `caddy_certificates.sh`, `caddy_proxy.sh`, `environment.sh`, `caddy_legacy.sh`,
-   `sni_stack_*.sh`, `tcp_peek_engine.sh`, `xray_sni_routes.sh`, `caddy_maintenance.sh`,
+   `sni_stack_*.sh`, `vpso_mux_state.sh`, `vpso_mux_config.sh`, `vpso_mux_install.sh`,
+   `tcp_peek_engine.sh`, `xray_sni_routes.sh`, `caddy_maintenance.sh`,
    `ssh_security.sh`, `docker_manage.sh`, `kernel_tuning.sh`, `diagnostics_*.sh`,
    `panel_installers.sh`, `subscription_tools.sh`, `panel_rescue.sh`, `server_maintenance.sh`,
    `updater.sh`, `preflight.sh`, `health_dashboard.sh`, `dns_optimize.sh`,
@@ -37,6 +38,14 @@ Rules for new code:
 - Keep `main.sh` as a tiny bootstrap so the generated release script still starts from the same menu.
 - Do not make the release script source `src/*.sh` at runtime; regenerate `dist/vps.sh` with `scripts/build.sh`.
 - Keep menu numbers stable for backward compatibility; prefer adding aliases or moving display groups over renumbering existing entries.
+
+443/TCP Peek ownership:
+
+- `vpso_mux_state.sh` owns vpso-mux paths, 443 engine state, and runtime status display.
+- `vpso_mux_config.sh` owns vpso-mux YAML rendering.
+- `vpso_mux_install.sh` owns vpso-mux build, install, systemd, and failure-context helpers.
+- `tcp_peek_engine.sh` owns TCP Peek preflight plus entry-mode preview, cutover, rollback, and reapply workflows.
+- Do not reintroduce split shadow modules such as `entry_mode_cutover.sh` or `tcp_peek_preflight.sh`; they are not part of `scripts/build.sh` and would create stale implementations.
 
 Minimum verification after editing any `src/*.sh` module:
 
