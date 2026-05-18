@@ -599,7 +599,7 @@ nginx_single_443_web_conf_path() {
 nginx_http_listen_directive() {
     local addr="$1"
     local port="$2"
-    if [[ "$addr" == "::" || "$addr" == "::1" ]]; then
+    if [[ "$addr" == *:* && "$addr" != \[*\] ]]; then
         printf '    listen [%s]:%s ssl http2;\n' "$addr" "$port"
     else
         printf '    listen %s:%s ssl http2;\n' "$addr" "$port"

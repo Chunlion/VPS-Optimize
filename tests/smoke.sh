@@ -245,6 +245,48 @@ apt_update_once
 )
 
 (
+    source src/input.sh
+    source src/validate.sh
+    source src/sni_stack_config.sh
+    source src/sni_stack_install.sh
+    nginx_sni_web_tmp=$(mktemp /tmp/vps-nginx-sni-web.XXXXXX)
+    NGINX_LISTEN_PORT=443
+    CADDY_LISTEN_ADDR=127.0.0.1
+    CADDY_LISTEN_PORT=8443
+    PANEL_DOMAIN=panel.example.com
+    PANEL_LISTEN_ADDR=127.0.0.1
+    PANEL_LISTEN_PORT=40000
+    SUB_LISTEN_ADDR=127.0.0.1
+    SUB_LISTEN_PORT=2096
+    SUB_URI_PATH=/sub/
+    CLASH_URI_PATH=/clash/
+    SITE_DOMAINS=(site.example.com dockge.example.com)
+    SITE_BACKEND_ADDRS=(127.0.0.1 localhost)
+    SITE_BACKEND_PORTS=(3000 5000)
+    write_nginx_single_443_web_config "$nginx_sni_web_tmp"
+    [[ "$(nginx_http_listen_directive "127.0.0.1" "8443")" == "    listen 127.0.0.1:8443 ssl http2;" ]]
+    [[ "$(nginx_http_listen_directive "::1" "8443")" == "    listen [::1]:8443 ssl http2;" ]]
+    [[ "$(format_hostport "::1" "8443")" == "[::1]:8443" ]]
+    grep -Fq 'server_name panel.example.com;' "$nginx_sni_web_tmp"
+    grep -Fq 'listen 127.0.0.1:8443 ssl http2;' "$nginx_sni_web_tmp"
+    grep -Fq 'ssl_certificate /etc/caddy/certs/panel.example.com.crt;' "$nginx_sni_web_tmp"
+    grep -Fq 'location = /sub {' "$nginx_sni_web_tmp"
+    grep -Fq 'return 308 /sub/;' "$nginx_sni_web_tmp"
+    grep -Fq 'location ^~ /sub/ {' "$nginx_sni_web_tmp"
+    grep -Fq 'proxy_set_header X-Forwarded-Port 443;' "$nginx_sni_web_tmp"
+    grep -Fq 'proxy_set_header Connection $vps_proxy_connection_upgrade;' "$nginx_sni_web_tmp"
+    grep -Fq 'proxy_pass http://127.0.0.1:2096;' "$nginx_sni_web_tmp"
+    grep -Fq 'proxy_pass http://127.0.0.1:40000;' "$nginx_sni_web_tmp"
+    grep -Fq 'server_name site.example.com;' "$nginx_sni_web_tmp"
+    grep -Fq 'ssl_certificate /etc/caddy/certs/site.example.com.crt;' "$nginx_sni_web_tmp"
+    grep -Fq 'proxy_pass http://127.0.0.1:3000;' "$nginx_sni_web_tmp"
+    grep -Fq 'server_name dockge.example.com;' "$nginx_sni_web_tmp"
+    grep -Fq 'proxy_pass http://localhost:5000;' "$nginx_sni_web_tmp"
+    [[ "$(grep -c '^server {' "$nginx_sni_web_tmp")" == "3" ]]
+    rm -f "$nginx_sni_web_tmp"
+)
+
+(
     source src/sni_stack_config.sh
     source src/vpso_mux_state.sh
     source src/vpso_mux_config.sh

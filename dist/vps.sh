@@ -783,7 +783,7 @@ warn_if_public_bind() {
 format_hostport() {
     local addr="$1"
     local port="$2"
-    if [[ "$addr" == "::" || "$addr" == "::1" ]]; then
+    if [[ "$addr" == *:* && "$addr" != \[*\] ]]; then
         echo "[${addr}]:${port}"
     else
         echo "${addr}:${port}"
@@ -794,7 +794,7 @@ nginx_stream_listen_directives() {
     local addr="$1"
     local port="$2"
 
-    if [[ "$addr" == "::" || "$addr" == "::1" ]]; then
+    if [[ "$addr" == *:* && "$addr" != \[*\] ]]; then
         printf '    listen [%s]:%s;\n' "$addr" "$port"
         return 0
     fi
@@ -7972,7 +7972,7 @@ nginx_single_443_web_conf_path() {
 nginx_http_listen_directive() {
     local addr="$1"
     local port="$2"
-    if [[ "$addr" == "::" || "$addr" == "::1" ]]; then
+    if [[ "$addr" == *:* && "$addr" != \[*\] ]]; then
         printf '    listen [%s]:%s ssl http2;\n' "$addr" "$port"
     else
         printf '    listen %s:%s ssl http2;\n' "$addr" "$port"
@@ -8766,7 +8766,9 @@ switch_sni_stack_web_proxy_engine() {
     echo -e "当前入口模式：${entry_mode}"
     echo -e "当前 Web 反代引擎：${current_label} (${current_engine})"
     echo -e "本地 TLS 后端：$(web_proxy_backend)"
+    echo -e "读取来源：/etc/vps-optimize/sni-stack.env（脚本保存的 443 共享配置）"
     echo -e "${YELLOW}切换时会按当前域名、证书、后端和白名单重新渲染所选引擎，并隔离另一套 443 本地 Web 反代配置。${PLAIN}"
+    echo -e "${YELLOW}如果你手工改过 Caddy/Nginx 文件但没有通过本菜单保存，请先在 [8]/[14] 同步脚本保存值后再切换。${PLAIN}"
     echo -e "------------------------------------------------"
     echo -e "${GREEN}  1. Caddy 本地 HTTPS 反代${PLAIN}"
     echo -e "${GREEN}  2. Nginx 本地 HTTPS 反代${PLAIN}"

@@ -323,7 +323,7 @@ warn_if_public_bind() {
 format_hostport() {
     local addr="$1"
     local port="$2"
-    if [[ "$addr" == "::" || "$addr" == "::1" ]]; then
+    if [[ "$addr" == *:* && "$addr" != \[*\] ]]; then
         echo "[${addr}]:${port}"
     else
         echo "${addr}:${port}"
@@ -334,7 +334,7 @@ nginx_stream_listen_directives() {
     local addr="$1"
     local port="$2"
 
-    if [[ "$addr" == "::" || "$addr" == "::1" ]]; then
+    if [[ "$addr" == *:* && "$addr" != \[*\] ]]; then
         printf '    listen [%s]:%s;\n' "$addr" "$port"
         return 0
     fi
