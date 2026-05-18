@@ -149,7 +149,7 @@ print_sni_stack_result() {
     echo -e "  面板端口：    ${PANEL_LISTEN_PORT}"
     echo -e "  webBasePath： ${PANEL_WEB_PATH}"
     echo -e "  面板证书路径/私钥路径：清空"
-    echo -e "  Caddy 后端连接：http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "  Web 反代引擎后端连接：http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
     echo -e "  Subscription URI Path：${SUB_URI_PATH}"
     echo -e "  Subscription External URL：https://${PANEL_DOMAIN}${SUB_URI_PATH}"

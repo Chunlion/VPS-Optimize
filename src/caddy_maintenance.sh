@@ -8,7 +8,7 @@ func_caddy_cf_reality_wizard() {
         echo -e "${BOLD}检测到已有 443 单入口配置${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}如果只是新增网站或反代域名，请返回并选择 [8] 管理 Web 域名/反代。${PLAIN}"
-        echo -e "${YELLOW}继续首次配置会重写 443 入口、Caddy/Web 和 Xray 分流相关核心配置。${PLAIN}"
+        echo -e "${YELLOW}继续首次配置会重写 443 入口、Web 反代引擎和 Xray 分流相关核心配置。${PLAIN}"
         echo -e "------------------------------------------------"
         grep -E '^(PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null || true
         echo -e "------------------------------------------------"
@@ -32,6 +32,7 @@ func_caddy_cf_reality_wizard() {
     backup_dir=$(backup_entry_mode_config) || return 1
     prepare_initial_entry_mode_dependencies "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir" "入口模式依赖检查失败"; return 1; }
     quarantine_legacy_caddy_443_configs
+    quarantine_legacy_nginx_https_proxy_configs
     issue_and_install_cert_for_domain "$PANEL_DOMAIN" "$CF_TOKEN" || { rollback_sni_stack_after_failure "$backup_dir" "面板域名证书签发/安装失败"; return 1; }
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local site_domain

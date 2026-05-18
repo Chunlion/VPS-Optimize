@@ -17,6 +17,7 @@ manage_sni_stack_sites() {
         echo -e "${GREEN}  5. 管理域名 IP 白名单${PLAIN}       ${YELLOW}(只限制被选择的域名)${PLAIN}"
         echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"
         echo -e "${GREEN}  7. 443 单入口链路体检${PLAIN}"
+        echo -e "${GREEN}  8. 切换 Web 反代引擎${PLAIN}       ${YELLOW}(Caddy / Nginx 本地反代)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -31,6 +32,7 @@ manage_sni_stack_sites() {
             5) manage_sni_stack_ip_whitelist ;;
             6) reapply_sni_stack_from_env ;;
             7) sni_stack_health_check ;;
+            8) switch_sni_stack_web_proxy_engine ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac

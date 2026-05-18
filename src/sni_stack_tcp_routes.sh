@@ -68,7 +68,7 @@ add_sni_stack_tcp_route() {
     echo -e ""
     echo -e "${CYAN}即将添加 TCP/SNI 分流：${route_sni}:${NGINX_LISTEN_PORT} -> ${route_addr}:${route_port}${PLAIN}"
     echo -e "${YELLOW}请确认 3x-ui 入站已监听 ${route_addr}:${route_port}，且客户端连接端口使用 ${NGINX_LISTEN_PORT}。${PLAIN}"
-    echo -e "${YELLOW}说明：Web 白名单只保护 Caddy/Web 域名，不会应用到 TCP/SNI 或 Xray 节点流量。${PLAIN}"
+    echo -e "${YELLOW}说明：Web 白名单只保护 Web 域名，不会应用到 TCP/SNI 或 Xray 节点流量。${PLAIN}"
     confirm_risk_action "新增 443 TCP/SNI 入站 ${route_sni}" \
         "Nginx stream SNI 分流规则，会把该 SNI 直通到本地 3x-ui 入站" \
         "使用 443 单入口备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" \

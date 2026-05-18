@@ -112,7 +112,7 @@ select_xray_fallback_main_route_for_switch() {
         echo -e "${YELLOW}未找到 $(xray_sni_routes_path) 中的 Xray 入站分流规则。${PLAIN}"
         echo -e "${YELLOW}切换到 xray-fallback 时，将由用户已配置的 Xray 主入站接管公网 443；脚本不会修改 3x-ui/Xray 入站内部配置。${PLAIN}"
         confirm_risk_action "继续切换到 xray-fallback" \
-            "公网 443 将由 Xray 主入站接管，普通 HTTPS fallback 到 Caddy" \
+            "公网 443 将由 Xray 主入站接管，普通 HTTPS fallback 到所选 Web 反代引擎" \
             "取消切换，先在 Xray 入站管理中记录一个主入站候选" \
             "确认你已经在 3x-ui/Xray 中准备好将作为主入站的配置。" || return 1
         XRAY_FALLBACK_MAIN_SNI=""
@@ -194,7 +194,7 @@ print_xray_route_port_status() {
 
     echo -e "${CYAN}${sni}${PLAIN} -> ${addr}:${port}"
     if [[ "${CADDY_LISTEN_PORT:-}" == "$port" ]]; then
-        echo -e "${RED}  ❌ 与 Caddy 本地端口 ${CADDY_LISTEN_PORT} 冲突，请换一个本地入站端口。${PLAIN}"
+        echo -e "${RED}  ❌ 与 Web 反代引擎本地端口 ${CADDY_LISTEN_PORT} 冲突，请换一个本地入站端口。${PLAIN}"
     fi
 
     conflict=$(xray_sni_route_port_conflict "$addr" "$port" "$(xray_sni_route_index "$sni" 2>/dev/null || true)" || true)

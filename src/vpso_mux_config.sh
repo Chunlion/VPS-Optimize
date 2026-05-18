@@ -25,8 +25,8 @@ append_vpso_mux_route_yaml() {
 write_vpso_mux_config_from_sni_stack() {
     local listen_port="${1:-$NGINX_LISTEN_PORT}"
     local output_file="${2:-$(vpso_mux_config_path)}"
-    local caddy_backend xray_backend listen_addr route_name ranges i domain backend
-    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    local web_backend xray_backend listen_addr route_name ranges i domain backend
+    web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
     mkdir -p "$(dirname "$output_file")"
 
@@ -62,7 +62,7 @@ write_vpso_mux_config_from_sni_stack() {
     } > "$output_file"
 
     ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
-    append_vpso_mux_route_yaml "$output_file" "panel" "$PANEL_DOMAIN" "$caddy_backend" "$ranges"
+    append_vpso_mux_route_yaml "$output_file" "panel" "$PANEL_DOMAIN" "$web_backend" "$ranges"
     if [[ -z "$ranges" ]]; then
         echo -e "${YELLOW}⚠️ 面板域名 ${PANEL_DOMAIN} 当前未配置 IP 白名单；切换前请确认这是你想要的行为。${PLAIN}"
     fi
@@ -72,7 +72,7 @@ write_vpso_mux_config_from_sni_stack() {
         [[ -n "$domain" ]] || continue
         route_name=$(sni_stack_route_name "site" "$domain")
         ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
-        append_vpso_mux_route_yaml "$output_file" "$route_name" "$domain" "$caddy_backend" "$ranges"
+        append_vpso_mux_route_yaml "$output_file" "$route_name" "$domain" "$web_backend" "$ranges"
     done
 
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
@@ -112,6 +112,6 @@ generate_tcp_peek_config() {
     write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$(vpso_mux_config_path)" || return 1
     echo -e "${GREEN}✅ 已生成：$(vpso_mux_config_path)${PLAIN}"
     echo -e "默认后端：$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")"
-    echo -e "Caddy 后端：$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")"
+    echo -e "Web 反代后端：$(web_proxy_engine_label) $(web_proxy_backend)"
     echo -e "${YELLOW}下一步建议先校验配置，再使用 TCP Peek + Splice 测试入口监听 8444。${PLAIN}"
 }

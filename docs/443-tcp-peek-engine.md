@@ -8,9 +8,11 @@
 
 三种入口模式共用同一套公开配置：
 
-- Web 域名、Caddy 后端映射、证书和 Web 白名单共用。
+- Web 域名、Web 反代引擎后端映射、证书和 Web 白名单共用。
 - 证书仍使用现有 `acme.sh + Cloudflare DNS API` 流程，不引入 Caddy DNS 模块，不使用 `xcaddy`。
-- Web 白名单只保护 Caddy/Web 域名，不用于限制 Xray 节点流量。
+- Web 白名单只保护 Web 域名，不用于限制 Xray 节点流量。
+- 443 单入口下的 Web 反代引擎可选择 Caddy 或 Nginx，切换入口模式时复用同一份配置。
+- 使用 Nginx Stream 或 TCP Peek 时，Web 白名单在入口层按 `SNI + 源 IP` 生效；`xray-fallback + Nginx 本地 Web 反代` 不允许新增或覆盖 Web 白名单。
 - 只有一个服务可以监听公网 `443`：`nginx`、`xray` 或 `vpso-mux`。
 - 如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，按 `nginx-stream` 兼容处理。
 - `ENTRY_MODE` 和 `/etc/vps-optimize/443-engine.conf` 的 `engine` 统一写入 `nginx-stream`、`xray-fallback`、`tcp-peek`。旧版本写过的 `nginx_stream`、`xray_fallback`、`tcp_peek` 只作为读取兼容别名保留；脚本状态页会提示，下次保存、切换或重新应用时会写回新命名。
@@ -35,7 +37,7 @@
 | --- | --- | --- |
 | `nginx-stream` | 面板、订阅、Xray 入站都监听 `127.0.0.1` 本地端口 | 3x-ui/Xray 不要直接占用公网 `443` |
 | `tcp-peek` | 和 `nginx-stream` 相同，仍是本地端口 | 配置过程相同；公网 `443` 只从 `nginx` 换成 `vpso-mux` |
-| `xray-fallback` | 需要一个 3x-ui/Xray 主入站监听公网 `443`，并 fallback 到 Caddy 本地端口 | 切回其他模式前，必须先把这个 Xray 主入站从公网 `443` 移走 |
+| `xray-fallback` | 需要一个 3x-ui/Xray 主入站监听公网 `443`，并 fallback 到 Web 反代引擎本地端口 | 切回其他模式前，必须先把这个 Xray 主入站从公网 `443` 移走 |
 
 ## Nginx Stream 默认稳定实现
 
@@ -44,16 +46,16 @@ Nginx Stream 是默认稳定模式。公网 `443` 由 Nginx stream 监听，使�
 ```text
 公网 443
   -> Nginx stream ssl_preread
-  -> panel/site/sub SNI  -> Caddy 本地 TLS
+  -> panel/site/sub SNI  -> Caddy/Nginx 本地 Web 反代 TLS
   -> Xray/REALITY SNI   -> Xray/3x-ui 本地入站
   -> unknown SNI        -> 默认 Xray/REALITY 后端
 ```
 
-这个实现覆盖面最完整，适合作为长期默认入口。它负责稳定接入 Caddy、REALITY、面板、订阅、网站、Web 白名单和回滚流程。
+这个实现覆盖面最完整，适合作为长期默认入口。它负责稳定接入 Web 反代引擎、REALITY、面板、订阅、网站、Web 白名单和回滚流程。
 
 ## TCP Peek + Splice / vpso-mux 实现
 
-TCP Peek + Splice / vpso-mux 和 Nginx Stream 使用同一套 443 单入口配置。Web 域名、证书、Caddy 后端、Web 白名单和 Xray SNI 分流记录都不需要另起一套；3x-ui 面板、订阅和 Xray 入站仍按本地监听填写。第一次使用时先运行 `主菜单 [19 443 单入口管理中心] -> [16] 查看 TCP Peek + Splice 状态 / 8444 预检`，确认 `vpso-mux` 能在 `8444` 启动并转发；再运行 `[17] TCP Peek 分流规则校验`。只有用户随后执行 `[5] 切换到 TCP Peek + Splice 模式`，公网 `443` 才会从 Nginx Stream 切到 `vpso-mux`。
+TCP Peek + Splice / vpso-mux 和 Nginx Stream 使用同一套 443 单入口配置。Web 域名、证书、Web 反代引擎后端、Web 白名单和 Xray SNI 分流记录都不需要另起一套；3x-ui 面板、订阅和 Xray 入站仍按本地监听填写。第一次使用时先运行 `主菜单 [19 443 单入口管理中心] -> [16] 查看 TCP Peek + Splice 状态 / 8444 预检`，确认 `vpso-mux` 能在 `8444` 启动并转发；再运行 `[17] TCP Peek 分流规则校验`。只有用户随后执行 `[5] 切换到 TCP Peek + Splice 模式`，公网 `443` 才会从 Nginx Stream 切到 `vpso-mux`。
 
 `vpso-mux` 使用 `MSG_PEEK` 查看 TLS ClientHello 中的 SNI，不消费首包；后端收到的 ClientHello 仍与客户端原始数据一致。转发优先使用 splice，失败或不可用时回退普通 copy。
 
@@ -77,7 +79,7 @@ TCP Peek + Splice / vpso-mux 和 Nginx Stream 使用同一套 443 单入口配�
 
 - 它不持有、不选择、不签发证书。
 - 它不读取 HTTP 路径、Header、WebSocket 内容或 TLS 加密后的应用层数据。
-- 证书和 HTTP 反代仍由 Caddy 负责；Xray/REALITY 节点流量仍由 Xray/3x-ui 本地入站负责。
+- 证书和 HTTP 反代仍由当前 Web 反代引擎负责；Xray/REALITY 节点流量仍由 Xray/3x-ui 本地入站负责。
 - 它只依赖 TLS 握手明文阶段里的 SNI 来做四层分流。
 
 ### ClientHello 里到底看什么
@@ -103,8 +105,8 @@ TLS record
 
 | 路由来源 | 目标后端 | 是否使用 Web 白名单 |
 | --- | --- | --- |
-| 面板域名 | Caddy 本地 HTTPS 端口 | 是，如果该域名配置了白名单 |
-| 普通网站 / 反代域名 | Caddy 本地 HTTPS 端口 | 是，如果该域名配置了白名单 |
+| 面板域名 | Caddy/Nginx 本地 Web 反代 HTTPS 端口 | 是，如果该域名配置了白名单 |
+| 普通网站 / 反代域名 | Caddy/Nginx 本地 Web 反代 HTTPS 端口 | 是，如果该域名配置了白名单 |
 | 旧 TCP/SNI 本地入站记录 | 对应本地地址和端口 | 否 |
 | Xray 入站管理记录 | 对应本地 Xray 入站地址和端口 | 否 |
 | REALITY 伪装 SNI | 默认 Xray/REALITY 本地后端 | 否 |
@@ -157,7 +159,7 @@ limits:
 
 TCP Peek 的主要优点：
 
-- 配置过程和 Nginx Stream 一样，切换时复用已经保存的域名、证书、Caddy 后端、Web 白名单和 Xray SNI 路由。
+- 配置过程和 Nginx Stream 一样，切换时复用已经保存的域名、证书、Web 反代引擎后端、Web 白名单和 Xray SNI 路由。
 - `MSG_PEEK` 只查看 ClientHello，不消费首包，后端收到的仍是客户端原始 TLS 握手数据。
 - 转发优先使用 splice，减少用户态数据拷贝；不可用时自动回退普通 copy。
 - `vpso-mux` 是专门为 443 SNI 分流准备的入口程序，状态、日志、配置校验和 8444 预检都围绕这个链路展开。
@@ -180,7 +182,7 @@ TCP Peek 生成的 `vpso-mux.yaml` 会按脚本保存的公网监听地址只写
 | 入口进程 | `nginx` | `vpso-mux` |
 | SNI 获取 | `ssl_preread` | `MSG_PEEK` 解析 ClientHello |
 | TLS 处理 | 不终止 TLS | 不终止 TLS |
-| 证书 | Caddy 处理 Web/面板证书 | Caddy 处理 Web/面板证书 |
+| 证书 | 当前 Web 反代引擎处理 Web/面板证书 | 当前 Web 反代引擎处理 Web/面板证书 |
 | 未知 SNI | 默认 Xray/REALITY 后端 | 默认 Xray/REALITY 后端 |
 | 转发 | Nginx stream proxy | splice，失败回退 copy |
 
@@ -209,13 +211,13 @@ splice:
 
 ## Xray Fallback 特殊实现
 
-Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监听，HTTPS fallback 到 Caddy。本脚本不会创建、删除或修改 3x-ui/Xray 入站内部配置。
+Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监听，HTTPS fallback 到当前 Web 反代引擎。本脚本不会创建、删除或修改 3x-ui/Xray 入站内部配置。
 
 ```text
 公网 443
   -> Xray/3x-ui 主入站
   -> Xray 节点流量由该主入站处理
-  -> HTTPS fallback 到 Caddy 本地后端
+  -> HTTPS fallback 到 Caddy/Nginx 本地 Web 反代后端
 ```
 
 在 xray-fallback 模式下，`Xray 入站管理` 菜单不可用于多本地入站 SNI 分流。原因是公网 `443` 已由 Xray 主入站接管，脚本当前不支持在该模式下继续把多个 SNI 分流到多个本地 Xray 入站。如需多个本地 Xray 入站分流，请使用 Nginx Stream 模式或 TCP Peek + Splice / vpso-mux 模式。
@@ -231,11 +233,11 @@ Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监�
   -> [5] 切换到 TCP Peek + Splice 模式
 ```
 
-切换流程不会在公网 `443` 切换路径里自动下载 Go 工具链或远端编译 `vpso-mux`。如果 `/usr/local/bin/vpso-mux` 不存在，脚本会拒绝切换，要求先走 `[16]` 的 `8444` 预检。正式切换前脚本会再次启动独立 `vpso-mux-preflight.service` 监听 `8444`，确认 Caddy 和 Xray 本地后端可达；预检失败时公网 `443` 不会被替换。
+切换流程不会在公网 `443` 切换路径里自动下载 Go 工具链或远端编译 `vpso-mux`。如果 `/usr/local/bin/vpso-mux` 不存在，脚本会拒绝切换，要求先走 `[16]` 的 `8444` 预检。正式切换前脚本会再次启动独立 `vpso-mux-preflight.service` 监听 `8444`，确认 Web 反代引擎和 Xray 本地后端可达；预检失败时公网 `443` 不会被替换。
 
-正式切换会生成并校验 `vpso-mux.yaml`、创建备份、隔离当前 VPS-Optimize 管理的 Nginx stream 443 配置、启动 `vpso-mux` 接管公网 `443`，并检查 Caddy 和 Xray 本地后端可达。失败时会尝试自动回滚。
+正式切换会生成并校验 `vpso-mux.yaml`、创建备份、隔离当前 VPS-Optimize 管理的 Nginx stream 443 配置、启动 `vpso-mux` 接管公网 `443`，并检查 Web 反代引擎和 Xray 本地后端可达。失败时会尝试自动回滚。
 
-`8444` 预检会额外做 TCP Peek 路由矩阵检查：面板域名和 Web 域名会通过测试端口按 SNI 获取证书链；默认 Xray/REALITY 后端、旧 TCP/SNI 记录和 `Xray 入站管理` 记录会检查对应本地地址和端口是否可连。这样可以在正式接管公网 `443` 之前发现缺失证书、Caddy 未就绪或本地 Xray 入站端口未监听的问题。
+`8444` 预检会额外做 TCP Peek 路由矩阵检查：面板域名和 Web 域名会通过测试端口按 SNI 获取证书链；默认 Xray/REALITY 后端、旧 TCP/SNI 记录和 `Xray 入站管理` 记录会检查对应本地地址和端口是否可连。这样可以在正式接管公网 `443` 之前发现缺失证书、Web 反代引擎未就绪或本地 Xray 入站端口未监听的问题。
 
 如果当前 SSH 会话连接在入口端口，例如 `443`，脚本会拒绝切换，避免直接断开当前管理连接。请改用云厂商 VNC/Serial Console，或先用非入口端口 SSH 登录。
 
@@ -258,7 +260,7 @@ ss -lntup | grep ':443'
 
 切换到 TCP Peek + Splice 后应看到 `vpso-mux`。如果仍是 Nginx、Caddy 或 Xray，说明入口关系没有切换干净，建议立即回滚。
 
-检查 Caddy 本地 TLS 后端：
+检查 Web 反代引擎本地 TLS 后端：
 
 ```bash
 ss -lntup | grep ':8443'

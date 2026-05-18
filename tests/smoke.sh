@@ -667,6 +667,7 @@ grep -q 'collect_editable_proxy_config_files' dist/vps.sh
 grep -q 'validate_proxy_config_kind' dist/vps.sh
 grep -q 'reload_proxy_config_kind' dist/vps.sh
 grep -q 'nginx_proxy_warn_if_single_entry_enabled' dist/vps.sh
+grep -q 'quarantine_legacy_nginx_https_proxy_configs' dist/vps.sh
 grep -q 'write_nginx_reverse_proxy_conf' dist/vps.sh
 grep -q '/etc/nginx/conf.d/vps_proxy_${domain}.conf' dist/vps.sh
 grep -q '/etc/nginx/conf.d/00-vps-proxy-map.conf' dist/vps.sh
@@ -675,12 +676,24 @@ grep -q 'systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx' dist
 grep -q 'vps-optimize-ip-whitelist-start' dist/vps.sh
 grep -q 'allow ${range};' dist/vps.sh
 grep -q '/etc/vps-optimize/quarantine/nginx-proxy' dist/vps.sh
+grep -q 'WEB_PROXY_ENGINE' dist/vps.sh
+grep -q 'normalize_web_proxy_engine' dist/vps.sh
+grep -q 'write_nginx_single_443_web_config' dist/vps.sh
+grep -q 'apply_web_proxy_configs_for_single_443' dist/vps.sh
+grep -q 'switch_sni_stack_web_proxy_engine' dist/vps.sh
+grep -q 'vps_sni_web_${CADDY_LISTEN_PORT}.conf' dist/vps.sh
+grep -q 'xray-fallback + Nginx 本地 Web 反代' dist/vps.sh
 grep -q '4. 查看/编辑 Compose 配置' dist/vps.sh
 grep -q 'edit_applied_config_file "$compose_file" "compose"' dist/vps.sh
 assert_file_contains "README.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "README must document the global applied-config editor."
 assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "Config paths doc must list the global applied-config editor."
 assert_file_contains "README.md" '[4 反代] 里的后端 HTTPS 跳过证书校验、域名 IP 白名单、查看/编辑已应用配置和清空反代配置都同时提供 Caddy/Nginx 入口' "README must document Nginx parity in the reverse proxy menu."
+assert_file_contains "README.md" '443 单入口下的 Web 反代引擎可以选择 Caddy 或 Nginx' "README must document selectable Web proxy engines in 443 single-entry."
+assert_file_contains "README.md" 'xray-fallback + Nginx 本地 Web 反代' "README must warn about the unsupported whitelist combination."
 assert_file_contains "docs/443-single-entry.md" '[4] -> [5 域名 IP 白名单]' "443 doc must describe the combined Caddy/Nginx whitelist menu."
+assert_file_contains "docs/443-single-entry.md" '[8 切换 Web 反代引擎]' "443 doc must document switching the Web reverse proxy engine."
+assert_file_contains "docs/443-single-entry.md" 'Nginx 本地 Web 反代 | 不允许新增或覆盖 Web 白名单' "443 doc must prohibit unsupported Nginx fallback whitelist usage."
+assert_file_contains "docs/443-tcp-peek-engine.md" 'Web 反代引擎可选择 Caddy 或 Nginx' "TCP Peek doc must describe the shared Caddy/Nginx Web proxy engine."
 assert_file_contains "README.md" 'Nginx 反代会直接监听公网 80/443' "README must explain the non-single-entry Nginx HTTPS reverse proxy behavior."
 subscription_public_hint='公网 HTTPS 访问建议：未启用 443 单入口时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时，请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/subscription_apps.sh" "$subscription_public_hint" "Subscription/Komari installers must explain both non-single-entry and 443 single-entry reverse proxy paths."

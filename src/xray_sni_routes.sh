@@ -66,7 +66,7 @@ add_xray_sni_route() {
         return 1
     fi
     for existing in "${SITE_DOMAINS[@]}"; do
-        [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已作为 Web/Caddy 域名使用，Xray 入站规则必须和 Web 域名分开。${PLAIN}"; return 1; }
+        [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已作为 Web 域名使用，Xray 入站规则必须和 Web 域名分开。${PLAIN}"; return 1; }
     done
     for existing in "${TCP_ROUTE_SNIS[@]}"; do
         [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已存在于旧 TCP/SNI 本地入站规则中。${PLAIN}"; return 1; }
@@ -81,7 +81,7 @@ add_xray_sni_route() {
     is_loopback_listen_addr "$route_addr" || { echo -e "${RED}❌ 为避免公网暴露，本地监听地址只允许 127.0.0.1、localhost 或 ::1。${PLAIN}"; return 1; }
     is_valid_port "$route_port" || { echo -e "${RED}❌ 本地监听端口无效：${route_port}${PLAIN}"; return 1; }
     if [[ "$route_port" == "$CADDY_LISTEN_PORT" ]]; then
-        echo -e "${RED}❌ 该端口与 Caddy 本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}"
+        echo -e "${RED}❌ 该端口与 Web 反代引擎本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}"
         return 1
     fi
     if [[ "$route_port" == "$NGINX_LISTEN_PORT" || "$route_port" == "$PANEL_LISTEN_PORT" || "$route_port" == "$SUB_LISTEN_PORT" ]]; then
@@ -305,7 +305,7 @@ manage_sni_stack_tcp_routes() {
             3) edit_sni_stack_tcp_route ;;
             4) remove_sni_stack_tcp_route ;;
             5)
-                echo -e "${YELLOW}Web 白名单只适用于 Caddy/Web 域名：面板、订阅、普通网站、面板域名和自定义反代域名。${PLAIN}"
+                echo -e "${YELLOW}Web 白名单只适用于 Web 域名：面板、订阅、普通网站、面板域名和自定义反代域名。${PLAIN}"
                 echo -e "${YELLOW}TCP/SNI 入站和 Xray 节点流量不会启用 IP 白名单；如需限制来源，请在后端服务或防火墙侧单独设计。${PLAIN}"
                 ;;
             6) reapply_sni_stack_from_env ;;
@@ -325,8 +325,16 @@ manage_sni_stack_ip_whitelist() {
         echo -e "${BOLD}🔐 443 域名 IP 白名单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         load_sni_stack_env || return 1
+        local whitelist_supported="yes"
+        if ! web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "${WEB_PROXY_ENGINE:-caddy}"; then
+            whitelist_supported="no"
+        fi
         echo -e "${YELLOW}只限制你选择的 Web 域名；支持面板、订阅、网站/反代，Xray 入站、REALITY SNI 与未知 SNI 不受 Web 白名单影响。${PLAIN}"
-        echo -e "${YELLOW}443 单入口会在 Nginx stream 层按 SNI + 源 IP 拦截，避免影响同入口其他服务。${PLAIN}"
+        echo -e "${YELLOW}Nginx Stream/TCP Peek 入口会在入口层按 SNI + 源 IP 拦截，避免影响同入口其他服务。${PLAIN}"
+        if [[ "$whitelist_supported" != "yes" ]]; then
+            echo -e "${RED}当前组合为 xray-fallback + Nginx 本地 Web 反代，无法可靠获取真实客户端源 IP，禁止新增或覆盖 Web 白名单。${PLAIN}"
+            echo -e "${YELLOW}你仍可清除已有白名单；如需继续使用白名单，请切到 Nginx Stream/TCP Peek，或选择 Caddy 作为 Web 反代引擎。${PLAIN}"
+        fi
         echo -e "------------------------------------------------"
 
         local -a domains=("$PANEL_DOMAIN")
@@ -371,6 +379,11 @@ manage_sni_stack_ip_whitelist() {
         read_trimmed action "请选择操作: "
         case "$action" in
             1)
+                if [[ "$whitelist_supported" != "yes" ]]; then
+                    echo -e "${RED}❌ 当前组合禁止设置 Web 白名单。请先切换入口模式或 Web 反代引擎。${PLAIN}"
+                    pause_return
+                    continue
+                fi
                 current_client_ip=$(detect_ssh_client_ip)
                 [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
                 read_trimmed whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
@@ -382,7 +395,7 @@ manage_sni_stack_ip_whitelist() {
                 append_vps_public_ips_to_whitelist whitelist_array
                 whitelist_ranges=$(join_array_by_space "${whitelist_array[@]}")
                 confirm_risk_action "为 ${domain} 启用 IP 白名单" \
-                    "Nginx stream 会仅对该 SNI 做源 IP 限制" \
+                    "443 入口层会仅对该 SNI 做源 IP 限制" \
                     "使用 443 单入口自动备份回滚，或清除该域名白名单后重新应用" \
                     "确认你的管理 IP 已包含在白名单中，且该域名不是 Cloudflare 橙云代理访问。" || continue
                 set_sni_ip_whitelist_for_domain "$domain" "$whitelist_ranges"

@@ -900,7 +900,7 @@ restore_sni_stack_backup_files() {
     local domain conf_file
     [[ -n "$backup_dir" && -d "$backup_dir" ]] || return 1
 
-    mkdir -p /etc/nginx/stream.d /etc/caddy/conf.d /etc/vps-optimize /etc/systemd/system /usr/local/bin
+    mkdir -p /etc/nginx/stream.d /etc/nginx/conf.d /etc/caddy/conf.d /etc/vps-optimize /etc/systemd/system /usr/local/bin
     [[ -f "$backup_dir/nginx.conf" ]] && cp -a "$backup_dir/nginx.conf" /etc/nginx/nginx.conf
     [[ -f "$backup_dir/Caddyfile" ]] && cp -a "$backup_dir/Caddyfile" /etc/caddy/Caddyfile
     [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]] && cp -a "$backup_dir/vps-optimize/sni-stack.env" /etc/vps-optimize/sni-stack.env
@@ -914,6 +914,11 @@ restore_sni_stack_backup_files() {
         quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-sni" >/dev/null 2>&1 || true
     done < <(find /etc/nginx/stream.d -maxdepth 1 -type f -name 'vps_sni_*.conf' 2>/dev/null | sort)
     cp -a "$backup_dir/nginx_stream.d/"*.conf /etc/nginx/stream.d/ 2>/dev/null || true
+
+    while IFS= read -r conf_file; do
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-conf-d" >/dev/null 2>&1 || true
+    done < <(find /etc/nginx/conf.d -maxdepth 1 \( -name 'vps_sni_web_*.conf' -o -name 'vps_proxy_*.conf' \) 2>/dev/null | sort)
+    cp -a "$backup_dir/nginx_conf.d/"*.conf /etc/nginx/conf.d/ 2>/dev/null || true
 
     for domain in "$PANEL_DOMAIN" "${SITE_DOMAINS[@]}"; do
         [[ -n "$domain" ]] || continue
@@ -1034,9 +1039,12 @@ sni_stack_backup_dir() {
 create_sni_stack_backup() {
     local backup_dir
     backup_dir="${1:-$(sni_stack_backup_dir)}"
-    mkdir -p "$backup_dir/nginx_stream.d" "$backup_dir/caddy_conf.d" "$backup_dir/vps-optimize" "$backup_dir/systemd" "$backup_dir/usr-local-bin" "$backup_dir/x-ui"
+    mkdir -p "$backup_dir/nginx_stream.d" "$backup_dir/nginx_conf.d" "$backup_dir/caddy_conf.d" "$backup_dir/vps-optimize" "$backup_dir/systemd" "$backup_dir/usr-local-bin" "$backup_dir/x-ui"
     [[ -f /etc/nginx/nginx.conf ]] && cp -a /etc/nginx/nginx.conf "$backup_dir/nginx.conf" 2>/dev/null || true
     [[ -d /etc/nginx/stream.d ]] && cp -a /etc/nginx/stream.d/vps_sni_*.conf "$backup_dir/nginx_stream.d/" 2>/dev/null || true
+    [[ -d /etc/nginx/conf.d ]] && cp -a /etc/nginx/conf.d/vps_sni_web_*.conf "$backup_dir/nginx_conf.d/" 2>/dev/null || true
+    [[ -d /etc/nginx/conf.d ]] && cp -a /etc/nginx/conf.d/vps_proxy_*.conf "$backup_dir/nginx_conf.d/" 2>/dev/null || true
+    [[ -f /etc/nginx/conf.d/00-vps-proxy-map.conf ]] && cp -a /etc/nginx/conf.d/00-vps-proxy-map.conf "$backup_dir/nginx_conf.d/" 2>/dev/null || true
     [[ -f /etc/caddy/Caddyfile ]] && cp -a /etc/caddy/Caddyfile "$backup_dir/Caddyfile" 2>/dev/null || true
     [[ -d /etc/caddy/conf.d ]] && cp -a /etc/caddy/conf.d/*.caddy "$backup_dir/caddy_conf.d/" 2>/dev/null || true
     [[ -f /etc/vps-optimize/sni-stack.env ]] && cp -a /etc/vps-optimize/sni-stack.env "$backup_dir/vps-optimize/sni-stack.env" 2>/dev/null || true
@@ -3057,6 +3065,18 @@ nginx_proxy_warn_if_single_entry_enabled() {
     return 0
 }
 
+quarantine_legacy_nginx_https_proxy_configs() {
+    local conf_file moved=0
+    for conf_file in /etc/nginx/conf.d/vps_proxy_*.conf; do
+        [[ -e "$conf_file" ]] || continue
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-proxy-to-443-entry" >/dev/null 2>&1 || true
+        moved=$((moved + 1))
+    done
+    if [[ "$moved" -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️ 已隔离 ${moved} 个旧 Nginx HTTPS 反代配置，避免抢占公网 443。${PLAIN}"
+    fi
+}
+
 nginx_proxy_ensure_certificate() {
     local domain="$1"
     local cert_file="/etc/caddy/certs/${domain}.crt"
@@ -4044,6 +4064,59 @@ caddy_ip_whitelist_block() {
 EOF
 }
 
+normalize_web_proxy_engine() {
+    local engine="${1:-caddy}"
+    engine=$(echo "$engine" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+    case "$engine" in
+        ""|"caddy") echo "caddy" ;;
+        "nginx"|"nginx-local"|"nginx-http") echo "nginx" ;;
+        *) return 1 ;;
+    esac
+}
+
+current_web_proxy_engine() {
+    WEB_PROXY_ENGINE=$(normalize_web_proxy_engine "${WEB_PROXY_ENGINE:-caddy}" 2>/dev/null || echo "caddy")
+    echo "$WEB_PROXY_ENGINE"
+}
+
+web_proxy_engine_label() {
+    case "$(normalize_web_proxy_engine "${1:-${WEB_PROXY_ENGINE:-caddy}}" 2>/dev/null || echo caddy)" in
+        nginx) echo "Nginx 本地 HTTPS 反代" ;;
+        *) echo "Caddy 本地 HTTPS 反代" ;;
+    esac
+}
+
+web_proxy_backend() {
+    format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT"
+}
+
+web_proxy_engine_supports_web_whitelist() {
+    local mode="${1:-${ENTRY_MODE:-$(get_entry_mode)}}"
+    local engine="${2:-${WEB_PROXY_ENGINE:-caddy}}"
+    mode=$(normalize_entry_mode_name "$mode" 2>/dev/null || echo "nginx-stream")
+    engine=$(normalize_web_proxy_engine "$engine" 2>/dev/null || echo "caddy")
+
+    # With xray-fallback, the local Web proxy only sees Xray/local traffic. For the
+    # Nginx local Web engine this would make allow/deny rules misleading, so block it.
+    [[ "$mode" == "xray-fallback" && "$engine" == "nginx" ]] && return 1
+    return 0
+}
+
+assert_web_proxy_whitelist_supported() {
+    local mode="${1:-${ENTRY_MODE:-$(get_entry_mode)}}"
+    local engine="${2:-${WEB_PROXY_ENGINE:-caddy}}"
+    if [[ ${#SNI_IP_WHITELIST_DOMAINS[@]} -eq 0 ]]; then
+        return 0
+    fi
+    if web_proxy_engine_supports_web_whitelist "$mode" "$engine"; then
+        return 0
+    fi
+    echo -e "${RED}❌ 当前组合不支持 Web 白名单：ENTRY_MODE=xray-fallback 且 WEB_PROXY_ENGINE=nginx。${PLAIN}"
+    echo -e "${YELLOW}原因：Xray fallback 到本地 Nginx 后，Nginx 无法可靠拿到真实客户端源 IP。${PLAIN}"
+    echo -e "${YELLOW}请改用 Nginx Stream/TCP Peek 入口模式，或先清除 Web 白名单后再使用该组合。${PLAIN}"
+    return 1
+}
+
 xui_setting_default_value() {
     local key="$1"
     case "$key" in
@@ -4194,7 +4267,7 @@ clear_xui_cert_settings_for_single_443() {
         echo -e "${YELLOW}⚠️ 未找到可自动清空的 3x-ui 证书设置，请在面板里手动清空证书路径并重启。${PLAIN}"
         return 1
     fi
-    echo -e "${GREEN}✅ 已尝试清空 3x-ui 面板/订阅证书路径，443 单入口将由 Caddy 托管证书。${PLAIN}"
+    echo -e "${GREEN}✅ 已尝试清空 3x-ui 面板/订阅证书路径，443 单入口将由 Web 反代引擎托管证书。${PLAIN}"
 }
 
 
@@ -4306,9 +4379,12 @@ probe_reality_sni() {
 }
 
 print_sni_stack_preview() {
-    local entry_mode entry_label
+    local entry_mode entry_label web_engine web_label web_backend
     entry_mode="${ENTRY_MODE:-nginx-stream}"
     entry_mode=$(normalize_entry_mode_name "$entry_mode" 2>/dev/null || echo "nginx-stream")
+    web_engine=$(current_web_proxy_engine)
+    web_label=$(web_proxy_engine_label "$web_engine")
+    web_backend=$(web_proxy_backend)
     case "$entry_mode" in
         "nginx-stream") entry_label="Nginx Stream 模式" ;;
         "xray-fallback") entry_label="Xray Fallback 模式" ;;
@@ -4320,15 +4396,16 @@ print_sni_stack_preview() {
     echo -e "${BOLD}即将写入的 443 单入口分流配置预览${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "配置模式 ENTRY_MODE：${entry_mode}"
+    echo -e "Web 反代引擎 WEB_PROXY_ENGINE：${web_engine} (${web_label})"
     echo -e "公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${entry_label}"
-    echo -e "面板域名：${PANEL_DOMAIN} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "面板域名：${PANEL_DOMAIN} -> ${web_backend} -> http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "面板路径：https://${PANEL_DOMAIN}${PANEL_WEB_PATH:-/panel/}"
     echo -e "普通订阅路径：https://${PANEL_DOMAIN}${SUB_URI_PATH:-/sub/} -> http://${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
     echo -e "Clash/Mihomo 路径：https://${PANEL_DOMAIN}${CLASH_URI_PATH:-/clash/} -> http://${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i
         for i in "${!SITE_DOMAINS[@]}"; do
-            echo -e "网站/反代域名：${SITE_DOMAINS[$i]} -> ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]}"
+            echo -e "网站/反代域名：${SITE_DOMAINS[$i]} -> ${web_backend} -> ${SITE_BACKEND_ADDRS[$i]}:${SITE_BACKEND_PORTS[$i]}"
         done
     fi
     if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
@@ -4351,7 +4428,7 @@ print_sni_stack_preview() {
         done
     fi
     if [[ "$entry_mode" == "xray-fallback" ]]; then
-        echo -e "Xray 主入站：公网 ${NGINX_LISTEN_PORT} 由 Xray 接管，普通 HTTPS fallback 到 ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
+        echo -e "Xray 主入站：公网 ${NGINX_LISTEN_PORT} 由 Xray 接管，普通 HTTPS fallback 到 ${web_backend}"
         echo -e "提示：脚本不会创建或修改 3x-ui/Xray 入站内部配置。"
     else
         echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
@@ -4360,7 +4437,7 @@ print_sni_stack_preview() {
     echo -e ""
     echo -e "${YELLOW}确认后会备份现有配置，并按所选 ENTRY_MODE 生成入口配置。${PLAIN}"
     confirm_risk_action "写入 443 单入口共享配置" \
-        "${entry_label}、Caddy 配置和 443 分流规则" \
+        "${entry_label}、${web_label}配置和 443 分流规则" \
         "使用本次自动备份目录恢复，或进入 443 维护菜单回滚" \
         "确认公网 443 没有其他服务需要直接占用。"
 }
@@ -4640,8 +4717,12 @@ detect_current_entry_status() {
 
 show_current_entry_status() {
     detect_current_entry_status
+    local web_engine web_label
+    web_engine=$(normalize_web_proxy_engine "${WEB_PROXY_ENGINE:-caddy}" 2>/dev/null || echo "caddy")
+    web_label=$(web_proxy_engine_label "$web_engine")
     echo -e "${BOLD}当前 443 入口状态${PLAIN}"
     echo -e "配置模式：${CYAN}${ENTRY_STATUS_MODE}${PLAIN}"
+    echo -e "Web 反代：${web_label} (${web_engine})"
     print_entry_mode_compat_notice
     echo -e "公网 443：${ENTRY_STATUS_LISTENER_DISPLAY}"
     echo -e "监听进程：${ENTRY_STATUS_LISTENER_PROCESS}"
@@ -4658,7 +4739,7 @@ show_current_entry_status() {
     fi
     echo -e "------------------------------------------------"
     echo -e "${BOLD}本地监听${PLAIN}"
-    echo -e "Caddy：${ENTRY_STATUS_CADDY_ADDR}:${ENTRY_STATUS_CADDY_PORT} - $(listen_line_status "$ENTRY_STATUS_CADDY_ADDR" "$ENTRY_STATUS_CADDY_PORT" "$ENTRY_STATUS_CADDY_LISTEN_LINE")"
+    echo -e "Web 反代：${ENTRY_STATUS_CADDY_ADDR}:${ENTRY_STATUS_CADDY_PORT} - $(listen_line_status "$ENTRY_STATUS_CADDY_ADDR" "$ENTRY_STATUS_CADDY_PORT" "$ENTRY_STATUS_CADDY_LISTEN_LINE")"
     echo -e "Xray： ${ENTRY_STATUS_XRAY_ADDR}:${ENTRY_STATUS_XRAY_PORT} - $(listen_line_status "$ENTRY_STATUS_XRAY_ADDR" "$ENTRY_STATUS_XRAY_PORT" "$ENTRY_STATUS_XRAY_LISTEN_LINE")"
     echo -e "------------------------------------------------"
     echo -e "${BOLD}服务状态${PLAIN}"
@@ -4685,6 +4766,7 @@ load_sni_stack_env() {
     # shellcheck disable=SC1090
     source "$env_file"
     ENTRY_MODE=$(get_entry_mode)
+    WEB_PROXY_ENGINE=$(normalize_web_proxy_engine "${WEB_PROXY_ENGINE:-caddy}" 2>/dev/null || echo "caddy")
     PANEL_WEB_PATH=$(normalize_path_prefix "${PANEL_WEB_PATH:-/panel/}")
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
     CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
@@ -4704,7 +4786,12 @@ get_listen_line_by_port() {
 print_sni_stack_current_summary() {
     local env_file="/etc/vps-optimize/sni-stack.env"
     local caddy_conf="/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy"
+    local nginx_web_conf="/etc/nginx/conf.d/vps_sni_web_${CADDY_LISTEN_PORT}.conf"
     local nginx_conf="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
+    local web_engine web_label web_backend
+    web_engine=$(current_web_proxy_engine)
+    web_label=$(web_proxy_engine_label "$web_engine")
+    web_backend=$(web_proxy_backend)
 
     echo -e "${BOLD}当前保存的 443 分流配置${PLAIN} ${CYAN}(${env_file})${PLAIN}"
     echo -e "面板：      https://${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
@@ -4723,14 +4810,19 @@ print_sni_stack_current_summary() {
             echo -e "Xray 入站：  ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}"
         done
     fi
-    echo -e "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Caddy ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
+    echo -e "Web 反代：  ${web_label} (${web_backend})"
+    echo -e "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${web_backend}"
     echo -e "配置文件：  Nginx ${nginx_conf}"
-    echo -e "           Caddy ${caddy_conf}"
+    if [[ "$web_engine" == "nginx" ]]; then
+        echo -e "           Nginx Web ${nginx_web_conf}"
+    else
+        echo -e "           Caddy ${caddy_conf}"
+    fi
     print_sni_ip_whitelist_summary
     echo -e "------------------------------------------------"
     echo -e "${BOLD}当前实际监听状态${PLAIN}"
     echo -e "Nginx 入口：  $(get_listen_line_by_port "$NGINX_LISTEN_PORT")"
-    echo -e "Caddy 本地：  $(get_listen_line_by_port "$CADDY_LISTEN_PORT")"
+    echo -e "Web 反代本地：$(get_listen_line_by_port "$CADDY_LISTEN_PORT")"
     echo -e "面板后端：    $(get_listen_line_by_port "$PANEL_LISTEN_PORT")"
     echo -e "订阅后端：    $(get_listen_line_by_port "$SUB_LISTEN_PORT")"
     echo -e "REALITY 后端：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")"
@@ -4898,9 +4990,9 @@ set_xray_fallback_main_route_from_index() {
 
 print_xray_fallback_mode_explanation() {
     echo -e "${YELLOW}Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 443 默认由一个 Xray 主入站接管。脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。${PLAIN}"
-    echo -e "${YELLOW}该模式只负责 Xray 主入站监听公网 443，并 fallback 普通 HTTPS 到 Caddy。${PLAIN}"
+    echo -e "${YELLOW}该模式只负责 Xray 主入站监听公网 443，并 fallback 普通 HTTPS 到所选 Web 反代引擎。${PLAIN}"
     echo -e "${YELLOW}如需多个本地 Xray 入站通过 443 按 SNI 分流，请使用 Nginx Stream 模式或 TCP Peek + Splice 模式。${PLAIN}"
-    echo -e "${YELLOW}如果 Web 域名开启 CDN/WAF/源站保护/Cloudflare 回源限制/Caddy 白名单，403 或拒绝访问通常是 Web/CDN/白名单/SNI 策略阻断，不一定是证书或 Caddy 故障。${PLAIN}"
+    echo -e "${YELLOW}如果 Web 域名开启 CDN/WAF/源站保护/Cloudflare 回源限制/Web 白名单，403 或拒绝访问通常是 Web/CDN/白名单/SNI 策略阻断，不一定是证书或反代引擎故障。${PLAIN}"
 }
 
 print_xray_fallback_main_route_summary() {
@@ -4924,7 +5016,7 @@ select_xray_fallback_main_route_for_switch() {
         echo -e "${YELLOW}未找到 $(xray_sni_routes_path) 中的 Xray 入站分流规则。${PLAIN}"
         echo -e "${YELLOW}切换到 xray-fallback 时，将由用户已配置的 Xray 主入站接管公网 443；脚本不会修改 3x-ui/Xray 入站内部配置。${PLAIN}"
         confirm_risk_action "继续切换到 xray-fallback" \
-            "公网 443 将由 Xray 主入站接管，普通 HTTPS fallback 到 Caddy" \
+            "公网 443 将由 Xray 主入站接管，普通 HTTPS fallback 到所选 Web 反代引擎" \
             "取消切换，先在 Xray 入站管理中记录一个主入站候选" \
             "确认你已经在 3x-ui/Xray 中准备好将作为主入站的配置。" || return 1
         XRAY_FALLBACK_MAIN_SNI=""
@@ -5006,7 +5098,7 @@ print_xray_route_port_status() {
 
     echo -e "${CYAN}${sni}${PLAIN} -> ${addr}:${port}"
     if [[ "${CADDY_LISTEN_PORT:-}" == "$port" ]]; then
-        echo -e "${RED}  ❌ 与 Caddy 本地端口 ${CADDY_LISTEN_PORT} 冲突，请换一个本地入站端口。${PLAIN}"
+        echo -e "${RED}  ❌ 与 Web 反代引擎本地端口 ${CADDY_LISTEN_PORT} 冲突，请换一个本地入站端口。${PLAIN}"
     fi
 
     conflict=$(xray_sni_route_port_conflict "$addr" "$port" "$(xray_sni_route_index "$sni" 2>/dev/null || true)" || true)
@@ -5187,7 +5279,7 @@ sni_stack_health_check() {
     }
 
     check_listen "Nginx 公网入口" "$NGINX_LISTEN_PORT" ""
-    check_listen "Caddy 本地 TLS" "$CADDY_LISTEN_PORT" "$CADDY_LISTEN_ADDR"
+    check_listen "$(web_proxy_engine_label) 本地 TLS" "$CADDY_LISTEN_PORT" "$CADDY_LISTEN_ADDR"
     check_listen "Xray/3x-ui REALITY" "$XRAY_LISTEN_PORT" "$XRAY_LISTEN_ADDR"
     check_listen "3x-ui 面板" "$PANEL_LISTEN_PORT" "$PANEL_LISTEN_ADDR"
     check_listen "3x-ui 订阅" "$SUB_LISTEN_PORT" "$SUB_LISTEN_ADDR"
@@ -5261,7 +5353,9 @@ sni_stack_health_check() {
 
     echo -e "------------------------------------------------"
     nginx -t >/dev/null 2>&1 && echo -e "${GREEN}✅ nginx -t 通过${PLAIN}" && ((ok++)) || { echo -e "${RED}❌ nginx -t 失败${PLAIN}"; ((fail++)); }
-    caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 && echo -e "${GREEN}✅ Caddy 配置校验通过${PLAIN}" && ((ok++)) || { echo -e "${RED}❌ Caddy 配置校验失败${PLAIN}"; ((fail++)); }
+    if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
+        caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 && echo -e "${GREEN}✅ Caddy 配置校验通过${PLAIN}" && ((ok++)) || { echo -e "${RED}❌ Caddy 配置校验失败${PLAIN}"; ((fail++)); }
+    fi
     if grep -Eq '^[[:space:]]*server_tokens[[:space:]]+off;' /etc/nginx/nginx.conf 2>/dev/null; then
         echo -e "${GREEN}✅ Nginx 已关闭版本号显示 server_tokens off${PLAIN}"
         ((ok++))
@@ -5279,10 +5373,10 @@ sni_stack_health_check() {
 
     if command -v openssl >/dev/null 2>&1; then
         if timeout 10 openssl s_client -connect "127.0.0.1:${NGINX_LISTEN_PORT}" -servername "$PANEL_DOMAIN" </dev/null 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
-            echo -e "${GREEN}✅ 面板 SNI 可从 Nginx 命中 Caddy 证书链${PLAIN}"
+            echo -e "${GREEN}✅ 面板 SNI 可从入口命中 Web 反代引擎证书链${PLAIN}"
             ((ok++))
         else
-            echo -e "${YELLOW}⚠️ 面板 SNI 测试未拿到证书，请检查 Nginx stream 与 Caddy。${PLAIN}"
+            echo -e "${YELLOW}⚠️ 面板 SNI 测试未拿到证书，请检查入口模式与 Web 反代引擎。${PLAIN}"
             ((warn++))
         fi
     fi
@@ -5354,13 +5448,13 @@ sni_stack_route_name() {
 }
 
 sni_stack_route_summary_for_state() {
-    local caddy_backend xray_backend summary i domain
-    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    local web_backend xray_backend summary i domain
+    web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
-    summary="panel:${PANEL_DOMAIN}->${caddy_backend},reality:${REALITY_SNI}->${xray_backend},default->${xray_backend}"
+    summary="panel:${PANEL_DOMAIN}->${web_backend},reality:${REALITY_SNI}->${xray_backend},default->${xray_backend}"
     for i in "${!SITE_DOMAINS[@]}"; do
         domain="${SITE_DOMAINS[$i]}"
-        [[ -n "$domain" ]] && summary+=",site:${domain}->${caddy_backend}"
+        [[ -n "$domain" ]] && summary+=",site:${domain}->${web_backend}"
     done
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
         domain="${TCP_ROUTE_SNIS[$i]}"
@@ -5387,12 +5481,13 @@ write_single_443_engine_state() {
     local selected_engine="$1"
     local selected_engine_raw="$1"
     local backup_id="${2:-}"
-    local state_file mux_config mux_service caddy_backend xray_backend routes whitelist_rules
+    local state_file mux_config mux_service web_backend xray_backend routes whitelist_rules web_engine
     selected_engine=$(normalize_entry_mode_name "$selected_engine_raw") || { echo -e "${RED}Invalid engine: ${selected_engine_raw}${PLAIN}"; return 1; }
     state_file=$(single_443_engine_state_path)
     mux_config=$(vpso_mux_config_path)
     mux_service=$(vpso_mux_service_name)
-    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    web_engine=$(current_web_proxy_engine)
+    web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
     routes=$(sni_stack_route_summary_for_state)
     whitelist_rules=$(sni_stack_whitelist_summary_for_state)
@@ -5403,7 +5498,9 @@ write_single_443_engine_state() {
 engine='${selected_engine}'
 listen_addr='${NGINX_LISTEN_ADDR}'
 listen_port='${NGINX_LISTEN_PORT}'
-caddy_backend='${caddy_backend}'
+web_proxy_engine='${web_engine}'
+web_proxy_backend='${web_backend}'
+caddy_backend='${web_backend}'
 xray_backend='${xray_backend}'
 default_backend='${xray_backend}'
 routes='${routes}'
@@ -5590,8 +5687,8 @@ append_vpso_mux_route_yaml() {
 write_vpso_mux_config_from_sni_stack() {
     local listen_port="${1:-$NGINX_LISTEN_PORT}"
     local output_file="${2:-$(vpso_mux_config_path)}"
-    local caddy_backend xray_backend listen_addr route_name ranges i domain backend
-    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    local web_backend xray_backend listen_addr route_name ranges i domain backend
+    web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
     mkdir -p "$(dirname "$output_file")"
 
@@ -5627,7 +5724,7 @@ write_vpso_mux_config_from_sni_stack() {
     } > "$output_file"
 
     ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
-    append_vpso_mux_route_yaml "$output_file" "panel" "$PANEL_DOMAIN" "$caddy_backend" "$ranges"
+    append_vpso_mux_route_yaml "$output_file" "panel" "$PANEL_DOMAIN" "$web_backend" "$ranges"
     if [[ -z "$ranges" ]]; then
         echo -e "${YELLOW}⚠️ 面板域名 ${PANEL_DOMAIN} 当前未配置 IP 白名单；切换前请确认这是你想要的行为。${PLAIN}"
     fi
@@ -5637,7 +5734,7 @@ write_vpso_mux_config_from_sni_stack() {
         [[ -n "$domain" ]] || continue
         route_name=$(sni_stack_route_name "site" "$domain")
         ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
-        append_vpso_mux_route_yaml "$output_file" "$route_name" "$domain" "$caddy_backend" "$ranges"
+        append_vpso_mux_route_yaml "$output_file" "$route_name" "$domain" "$web_backend" "$ranges"
     done
 
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
@@ -5677,7 +5774,7 @@ generate_tcp_peek_config() {
     write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$(vpso_mux_config_path)" || return 1
     echo -e "${GREEN}✅ 已生成：$(vpso_mux_config_path)${PLAIN}"
     echo -e "默认后端：$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")"
-    echo -e "Caddy 后端：$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")"
+    echo -e "Web 反代后端：$(web_proxy_engine_label) $(web_proxy_backend)"
     echo -e "${YELLOW}下一步建议先校验配置，再使用 TCP Peek + Splice 测试入口监听 8444。${PLAIN}"
 }
 
@@ -6008,10 +6105,9 @@ start_tcp_peek_test_port() {
         "停止 vpso-mux-preflight.service，或继续使用 Nginx Stream / Xray Fallback，不会改动公网 443" \
         "低内存或低磁盘机器会被资源预检查拦截；公网 443 在本步骤不会被替换。" || return 1
     install_vpso_mux_binary || return 1
-    apply_caddy_configs_for_single_443 || return 1
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
-    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    apply_web_proxy_configs_for_single_443 || return 1
+    restart_web_proxy_for_single_443 || return 1
+    tcp_probe_host "$(web_proxy_engine_label) 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
     tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1 || return 1
     run_tcppeek_preflight_service 1 "8444" || return 1
     echo -e "${GREEN}✅ vpso-mux 预检服务已启动在测试端口 8444，公网 443 未改动。${PLAIN}"
@@ -6025,12 +6121,11 @@ start_tcp_peek_test_port() {
 preflight_tcppeek_before_cutover() {
     echo -e "${CYAN}▶ 正在执行 TCP Peek 8444 安全预检，公网 443 暂不改动...${PLAIN}"
     require_vpso_mux_binary_for_cutover || return 1
-    warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
+    warn_if_public_bind "$(web_proxy_engine_label)" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
-    apply_caddy_configs_for_single_443 || return 1
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
-    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    apply_web_proxy_configs_for_single_443 || return 1
+    restart_web_proxy_for_single_443 || return 1
+    tcp_probe_host "$(web_proxy_engine_label) 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
     tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1 || {
         echo -e "${RED}❌ Xray 本地入站不可达，拒绝切换 TCP Peek。请先在 3x-ui/Xray 中准备本地监听入站。${PLAIN}"
         return 1
@@ -6271,6 +6366,22 @@ stop_vpso_mux_service_if_public_443() {
     fi
 }
 
+stop_caddy_service_if_public_443() {
+    local listener
+    listener=$(detect_443_listener)
+    listener_info_has_entry "$listener" "caddy" || return 0
+    if ! systemctl stop caddy; then
+        echo -e "${RED}❌ 停止 caddy 失败，公网 443 仍可能被 Caddy 占用。${PLAIN}"
+        return 1
+    fi
+    sleep 1
+    listener=$(detect_443_listener)
+    if listener_info_has_entry "$listener" "caddy"; then
+        echo -e "${RED}❌ caddy 已执行停止，但仍在监听公网 443，拒绝继续切换入口。${PLAIN}"
+        return 1
+    fi
+}
+
 disable_nginx_stream_public_443() {
     local nginx_conf="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
     local listener
@@ -6300,6 +6411,8 @@ disable_nginx_stream_public_443() {
 stop_public_443_entry_services_for_target() {
     local target_mode="$1"
     target_mode=$(normalize_entry_mode_name "$target_mode") || return 1
+    quarantine_legacy_nginx_https_proxy_configs
+    stop_caddy_service_if_public_443 || return 1
 
     if [[ "$target_mode" != "nginx-stream" ]]; then
         disable_nginx_stream_public_443 || return 1
@@ -6396,19 +6509,26 @@ assert_nginx_stream_config_loaded() {
 check_entry_mode_dependencies() {
     local mode="$1"
     mode=$(normalize_entry_mode_name "$mode") || { echo -e "${RED}❌ 目标入口模式无效：${mode}${PLAIN}"; return 1; }
+    assert_web_proxy_whitelist_supported "$mode" "${WEB_PROXY_ENGINE:-caddy}" || return 1
 
     case "$mode" in
         "nginx-stream")
             command -v nginx >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Nginx，切换时会沿用现有 Nginx stream 安装逻辑。${PLAIN}"
-            command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
+                command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            fi
             ;;
         "tcp-peek")
             require_vpso_mux_binary_for_cutover || return 1
-            command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
+                command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            fi
             ;;
         "xray-fallback")
             xray_entry_service_name >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 xray/x-ui/3x-ui systemd 服务，拒绝切换。${PLAIN}"; return 1; }
-            command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
+                command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            fi
             ;;
     esac
 }
@@ -6499,12 +6619,13 @@ apply_nginx_stream_mode() {
     local backup_dir="${1:-}"
     install_nginx_stream_stack || return 1
     harden_nginx_public_errors
-    apply_caddy_configs_for_single_443 || return 1
+    apply_web_proxy_configs_for_single_443 || return 1
     cleanup_old_nginx_sni_stream_configs
     write_nginx_sni_stream_config || return 1
     assert_nginx_stream_config_loaded "$NGINX_LISTEN_PORT" || return 1
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
+    if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
+        restart_web_proxy_for_single_443 || return 1
+    fi
     systemctl enable nginx >/dev/null 2>&1 || true
     if ! systemctl restart nginx; then
         print_nginx_stream_failure_context "$NGINX_LISTEN_PORT"
@@ -6515,7 +6636,7 @@ apply_nginx_stream_mode() {
         return 1
     fi
     probe_tls_sni_certificate "Nginx Stream 面板 SNI" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
-    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    tcp_probe_host "$(web_proxy_engine_label) 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
     if xray_entry_service_name >/dev/null 2>&1; then
         restart_xray_entry_service || echo -e "${YELLOW}⚠️ Xray/3x-ui 服务重启失败；Nginx Stream/Web 入口已恢复，请单独检查 Xray 入站。${PLAIN}"
     fi
@@ -6530,11 +6651,10 @@ apply_tcppeek_mode() {
     local backup_dir="${1:-}"
     local tmp_config
     require_vpso_mux_binary_for_cutover || return 1
-    warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
+    warn_if_public_bind "$(web_proxy_engine_label)" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
-    apply_caddy_configs_for_single_443 || return 1
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
+    apply_web_proxy_configs_for_single_443 || return 1
+    restart_web_proxy_for_single_443 || return 1
     tmp_config="/etc/vps-optimize/vpso-mux.yaml.tmp.$$"
     write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_config" || return 1
     run_vpso_mux_config_check "$tmp_config" || { quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true; return 1; }
@@ -6550,7 +6670,7 @@ apply_tcppeek_mode() {
         return 1
     fi
     probe_tls_sni_certificate "TCP Peek 面板 SNI" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
-    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    tcp_probe_host "$(web_proxy_engine_label) 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
     if xray_entry_service_name >/dev/null 2>&1; then
         restart_xray_entry_service || return 1
     fi
@@ -6560,12 +6680,11 @@ apply_tcppeek_mode() {
 
 apply_xray_fallback_mode() {
     local backup_dir="${1:-}"
-    apply_caddy_configs_for_single_443 || return 1
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
+    apply_web_proxy_configs_for_single_443 || return 1
+    restart_web_proxy_for_single_443 || return 1
     restart_xray_entry_service || return 1
     verify_public_443_listener_for_mode "xray-fallback" || return 1
-    tcp_probe_host "Caddy fallback 后端" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    tcp_probe_host "$(web_proxy_engine_label) fallback 后端" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
     probe_tls_sni_certificate "Xray Fallback 面板 SNI" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
     write_single_443_engine_state "xray-fallback" "$backup_dir"
 }
@@ -6633,7 +6752,7 @@ prepare_initial_entry_mode_dependencies() {
             }
             print_xray_fallback_mode_explanation
             confirm_risk_action "首次配置使用 Xray Fallback 模式" \
-                "公网 443 将由已有 Xray 主入站接管，普通 HTTPS fallback 到 Caddy" \
+                "公网 443 将由已有 Xray 主入站接管，普通 HTTPS fallback 到所选 Web 反代引擎" \
                 "返回首次配置并选择 Nginx Stream 模式或 TCP Peek + Splice 模式" \
                 "确认你已经在 Xray/3x-ui 中准备好公网 443 主入站；脚本不会创建或修改 3x-ui/Xray 入站内部配置。" || return 1
             ;;
@@ -6755,7 +6874,7 @@ print_443_health_status_code_hints() {
 
 print_443_health_reality_notes() {
     echo -e "${BOLD}REALITY 检查提示${PLAIN}"
-    echo -e "  - 不要要求 REALITY serverName/dest 加入 Caddy。"
+    echo -e "  - 不要要求 REALITY serverName/dest 加入 Web 反代引擎。"
     echo -e "  - 不要要求本机证书覆盖 REALITY serverName。"
     echo -e "  - REALITY 应检查外部目标站点是否真实可访问、TLS 特征是否稳定。"
     echo -e "  - 普通 TLS 节点和 REALITY 节点的 SNI/serverName 检查逻辑必须区分。"
@@ -6836,7 +6955,7 @@ print_xray_route_health_list() {
 
         echo -e "${CYAN}${sni}${PLAIN} -> ${addr}:${port}（${status}）"
         if [[ "${CADDY_LISTEN_PORT:-}" == "$port" ]]; then
-            echo -e "${RED}  ❌ 与 Caddy 本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}"
+            echo -e "${RED}  ❌ 与 Web 反代引擎本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}"
         fi
         line=$(xray_route_listen_line_by_addr_port "$addr" "$port")
         if [[ -n "$line" ]]; then
@@ -6858,9 +6977,10 @@ sni_stack_health_check_enhanced() {
     load_sni_stack_env || return 1
     detect_current_entry_status
 
-    local mode caddy_backend xray_backend panel_backend sub_backend site_backend route_count ranges i domain public_443_lines mux_config mux_service
+    local mode web_backend web_label xray_backend panel_backend sub_backend site_backend route_count ranges i domain public_443_lines mux_config mux_service
     mode="$ENTRY_STATUS_MODE"
-    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    web_backend=$(web_proxy_backend)
+    web_label=$(web_proxy_engine_label)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
     panel_backend=$(format_hostport "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT")
     sub_backend=$(format_hostport "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT")
@@ -6883,7 +7003,9 @@ sni_stack_health_check_enhanced() {
     echo -e "nginx 状态：${ENTRY_STATUS_NGINX_SERVICE}"
     echo -e "Xray/3x-ui 状态：${ENTRY_STATUS_XRAY_SERVICE}"
     echo -e "TCP Peek + Splice 状态：${ENTRY_STATUS_TCPPEEK_SERVICE}"
-    echo -e "caddy 状态：$(service_status_compact caddy)"
+    if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
+        echo -e "caddy 状态：$(service_status_compact caddy)"
+    fi
     if [[ -f "$mux_config" ]]; then
         echo -e "TCP Peek + Splice 分流规则：${GREEN}存在 ${mux_config}${PLAIN}"
     else
@@ -6897,8 +7019,8 @@ sni_stack_health_check_enhanced() {
 
     echo -e "------------------------------------------------"
     echo -e "${BOLD}本地监听${PLAIN}"
-    echo -e "Caddy 本地监听端口：${caddy_backend}"
-    get_listen_line_by_port "$CADDY_LISTEN_PORT" | grep -q "$CADDY_LISTEN_ADDR" && echo -e "${GREEN}✅ Caddy 期望监听 ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}${PLAIN}" || echo -e "${YELLOW}⚠️ Caddy 监听地址需确认：$(get_listen_line_by_port "$CADDY_LISTEN_PORT")${PLAIN}"
+    echo -e "Web 反代引擎本地监听端口：${web_backend} (${web_label})"
+    get_listen_line_by_port "$CADDY_LISTEN_PORT" | grep -q "$CADDY_LISTEN_ADDR" && echo -e "${GREEN}✅ ${web_label} 期望监听 ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}${PLAIN}" || echo -e "${YELLOW}⚠️ ${web_label} 监听地址需确认：$(get_listen_line_by_port "$CADDY_LISTEN_PORT")${PLAIN}"
     echo -e "Xray 本地监听端口：${xray_backend}"
     get_listen_line_by_port "$XRAY_LISTEN_PORT" | grep -q "$XRAY_LISTEN_ADDR" && echo -e "${GREEN}✅ Xray 期望监听 ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}" || echo -e "${YELLOW}⚠️ Xray 监听地址需确认：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")${PLAIN}"
     if [[ "$ENTRY_STATUS_LISTENER" == "xray" ]]; then
@@ -6917,7 +7039,7 @@ sni_stack_health_check_enhanced() {
     if [[ "$mode" == "xray-fallback" ]]; then
         echo -e "${YELLOW}当前为 Xray Fallback 模式，Xray 入站管理中的多 SNI 分流规则不生效。${PLAIN}"
         echo -e "${YELLOW}如需多个本地 Xray 入站，请切换到 Nginx Stream 模式或 TCP Peek + Splice 模式。${PLAIN}"
-        echo -e "${YELLOW}普通 HTTPS 流量会先进入 Xray，再 fallback 到 Caddy；403/拒绝访问通常优先排查 Web 白名单、CDN/WAF、源站保护、Cloudflare 回源限制或 Host/SNI 策略。${PLAIN}"
+        echo -e "${YELLOW}普通 HTTPS 流量会先进入 Xray，再 fallback 到所选 Web 反代引擎；403/拒绝访问通常优先排查 Web 白名单、CDN/WAF、源站保护、Cloudflare 回源限制或 Host/SNI 策略。${PLAIN}"
         print_xray_fallback_main_route_summary
     fi
     print_xray_route_health_list "$mode"
@@ -6954,22 +7076,22 @@ sni_stack_health_check_enhanced() {
     echo -e "routes 数量：${route_count}"
     echo -e "unknown SNI 策略：default_backend -> ${xray_backend}"
     ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
-    echo -e "web panel: ${PANEL_DOMAIN}${PANEL_WEB_PATH} -> Caddy ${caddy_backend} -> 面板后端 ${panel_backend}"
-    echo -e "web subscription: ${PANEL_DOMAIN}${SUB_URI_PATH} -> Caddy ${caddy_backend} -> 订阅后端 ${sub_backend}"
-    echo -e "web clash/mihomo: ${PANEL_DOMAIN}${CLASH_URI_PATH} -> Caddy ${caddy_backend} -> 订阅后端 ${sub_backend}"
-    echo -e "route panel: ${PANEL_DOMAIN} -> ${caddy_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
+    echo -e "web panel: ${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${web_label} ${web_backend} -> 面板后端 ${panel_backend}"
+    echo -e "web subscription: ${PANEL_DOMAIN}${SUB_URI_PATH} -> ${web_label} ${web_backend} -> 订阅后端 ${sub_backend}"
+    echo -e "web clash/mihomo: ${PANEL_DOMAIN}${CLASH_URI_PATH} -> ${web_label} ${web_backend} -> 订阅后端 ${sub_backend}"
+    echo -e "route panel: ${PANEL_DOMAIN} -> ${web_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
     for i in "${!SITE_DOMAINS[@]}"; do
         domain="${SITE_DOMAINS[$i]}"
         [[ -n "$domain" ]] || continue
         ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
         site_backend=$(format_hostport "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}")
-        echo -e "web site: ${domain}/ -> Caddy ${caddy_backend} -> 网站后端 ${site_backend}"
-        echo -e "route site: ${domain} -> ${caddy_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
+        echo -e "web site: ${domain}/ -> ${web_label} ${web_backend} -> 网站后端 ${site_backend}"
+        echo -e "route site: ${domain} -> ${web_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
     done
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
         domain="${TCP_ROUTE_SNIS[$i]}"
         [[ -n "$domain" ]] || continue
-        echo -e "route tcp: ${domain} -> $(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}") whitelist=no（非 Web/Caddy 域名不启用白名单）"
+        echo -e "route tcp: ${domain} -> $(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}") whitelist=no（非 Web 域名不启用白名单）"
     done
     for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
         domain="${XRAY_SNI_ROUTE_SNIS[$i]}"
@@ -7119,25 +7241,27 @@ edit_sni_stack_reality_profile() {
 edit_sni_stack_entry_profile() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}修改 Nginx / Caddy 单入口监听${PLAIN}"
+    echo -e "${BOLD}修改 443 入口 / Web 反代监听${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "${YELLOW}适用于：你要调整公网入口端口、Caddy 本地 TLS 端口，或修正监听地址。普通用户建议保持默认。${PLAIN}"
+    local web_label
+    web_label=$(web_proxy_engine_label)
+    echo -e "${YELLOW}适用于：你要调整公网入口端口、Web 反代本地 TLS 端口，或修正监听地址。普通用户建议保持默认。${PLAIN}"
     echo -e "------------------------------------------------"
     echo -e "当前公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT}"
-    echo -e "当前 Caddy 本地 TLS：${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
+    echo -e "当前 ${web_label} 本地 TLS：${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
     echo -e "------------------------------------------------"
 
     NGINX_LISTEN_ADDR=$(ask_with_default "Nginx 公网监听地址" "$NGINX_LISTEN_ADDR")
     NGINX_LISTEN_PORT=$(ask_with_default "Nginx 公网监听端口" "$NGINX_LISTEN_PORT")
-    CADDY_LISTEN_ADDR=$(ask_with_default "Caddy 本地监听地址" "$CADDY_LISTEN_ADDR")
-    CADDY_LISTEN_PORT=$(ask_with_default "Caddy 本地监听端口" "$CADDY_LISTEN_PORT")
+    CADDY_LISTEN_ADDR=$(ask_with_default "${web_label}监听地址" "$CADDY_LISTEN_ADDR")
+    CADDY_LISTEN_PORT=$(ask_with_default "${web_label}监听端口" "$CADDY_LISTEN_PORT")
 
     is_valid_listen_addr "$NGINX_LISTEN_ADDR" || { echo -e "${RED}❌ Nginx 监听地址无效：${NGINX_LISTEN_ADDR}${PLAIN}"; return 1; }
-    is_valid_listen_addr "$CADDY_LISTEN_ADDR" || { echo -e "${RED}❌ Caddy 监听地址无效：${CADDY_LISTEN_ADDR}${PLAIN}"; return 1; }
+    is_valid_listen_addr "$CADDY_LISTEN_ADDR" || { echo -e "${RED}❌ Web 反代监听地址无效：${CADDY_LISTEN_ADDR}${PLAIN}"; return 1; }
     is_valid_port "$NGINX_LISTEN_PORT" || { echo -e "${RED}❌ Nginx 端口无效：${NGINX_LISTEN_PORT}${PLAIN}"; return 1; }
-    is_valid_port "$CADDY_LISTEN_PORT" || { echo -e "${RED}❌ Caddy 端口无效：${CADDY_LISTEN_PORT}${PLAIN}"; return 1; }
-    warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
+    is_valid_port "$CADDY_LISTEN_PORT" || { echo -e "${RED}❌ Web 反代端口无效：${CADDY_LISTEN_PORT}${PLAIN}"; return 1; }
+    warn_if_public_bind "$web_label" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     if [[ "$NGINX_LISTEN_PORT" != "443" ]]; then
         echo -e "${YELLOW}⚠️  Nginx 公网入口不是 443。请确认云安全组、防火墙和客户端地址都同步改了。${PLAIN}"
     fi
@@ -7213,7 +7337,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 修改面板/订阅端口与路径${PLAIN}"
         echo -e "${GREEN}  2. 修改 REALITY 本地监听 / 伪装 SNI${PLAIN}"
-        echo -e "${GREEN}  3. 修改 Nginx 公网入口 / Caddy 本地 TLS${PLAIN}"
+        echo -e "${GREEN}  3. 修改 Nginx 公网入口 / Web 反代本地 TLS${PLAIN}"
         echo -e "${GREEN}  4. 修改面板域名${PLAIN}"
         echo -e "${GREEN}  5. 重新应用当前保存的配置${PLAIN}"
         echo -e "------------------------------------------------"
@@ -7255,8 +7379,8 @@ collect_sni_stack_config() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}443 单入口共享配置${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}公网 443 将由你选择的入口模式监听；Web 域名、Caddy 后端、证书和白名单为三种模式共享。${PLAIN}"
-    echo -e "${YELLOW}Caddy/Xray/3x-ui 本地后端默认绑定 127.0.0.1。${PLAIN}"
+    echo -e "${YELLOW}公网 443 将由你选择的入口模式监听；Web 域名、反代引擎、证书和白名单为三种模式共享。${PLAIN}"
+    echo -e "${YELLOW}Web 反代引擎、Xray/3x-ui 本地后端默认绑定 127.0.0.1。${PLAIN}"
     echo -e "------------------------------------------------"
 
     local default_panel_addr="127.0.0.1"
@@ -7280,6 +7404,17 @@ collect_sni_stack_config() {
     echo -e "------------------------------------------------"
 
     read_trimmed PANEL_DOMAIN "面板域名（必填，例如 panel.example.com）: "
+    local web_engine_choice
+    WEB_PROXY_ENGINE="caddy"
+    echo -e "${CYAN}请选择 443 单入口 Web 反代引擎：${PLAIN}"
+    echo -e "${GREEN}  1. Caddy 本地 HTTPS 反代${PLAIN} ${YELLOW}(默认，兼容现有 443 单入口配置)${PLAIN}"
+    echo -e "${GREEN}  2. Nginx 本地 HTTPS 反代${PLAIN} ${YELLOW}(只监听本地端口，不抢公网 443)${PLAIN}"
+    read_trimmed web_engine_choice "请选择 Web 反代引擎（默认 1）: "
+    case "${web_engine_choice:-1}" in
+        1) WEB_PROXY_ENGINE="caddy" ;;
+        2) WEB_PROXY_ENGINE="nginx" ;;
+        *) echo -e "${RED}❌ 无效的 Web 反代引擎选择。${PLAIN}"; return 1 ;;
+    esac
     SITE_DOMAINS=()
     SITE_BACKEND_ADDRS=()
     SITE_BACKEND_PORTS=()
@@ -7300,7 +7435,7 @@ collect_sni_stack_config() {
     local advanced_mode
     read_trimmed advanced_mode "是否进入高级模式并允许修改本地服务监听地址？(y/n，默认 n): "
     if is_yes "$advanced_mode"; then
-        CADDY_LISTEN_ADDR=$(ask_with_default "Caddy 本地监听地址" "127.0.0.1")
+        CADDY_LISTEN_ADDR=$(ask_with_default "$(web_proxy_engine_label "$WEB_PROXY_ENGINE")监听地址" "127.0.0.1")
         XRAY_LISTEN_ADDR=$(ask_with_default "Xray REALITY 本地监听地址" "127.0.0.1")
         PANEL_LISTEN_ADDR=$(ask_with_default "3x-ui 面板监听地址" "$default_panel_addr")
         SUB_LISTEN_ADDR=$(ask_with_default "3x-ui 订阅服务监听地址" "$default_sub_addr")
@@ -7309,10 +7444,10 @@ collect_sni_stack_config() {
         XRAY_LISTEN_ADDR="127.0.0.1"
         PANEL_LISTEN_ADDR="$default_panel_addr"
         SUB_LISTEN_ADDR="$default_sub_addr"
-        echo -e "${GREEN}普通模式：Caddy/Xray/3x-ui/订阅/网站后端均使用 127.0.0.1。${PLAIN}"
+        echo -e "${GREEN}普通模式：Web 反代引擎/Xray/3x-ui/订阅/网站后端均使用 127.0.0.1。${PLAIN}"
     fi
 
-    CADDY_LISTEN_PORT=$(ask_with_default "Caddy 本地监听端口" "8443")
+    CADDY_LISTEN_PORT=$(ask_with_default "$(web_proxy_engine_label "$WEB_PROXY_ENGINE")监听端口" "8443")
     XRAY_LISTEN_PORT=$(ask_with_default "Xray REALITY 本地监听端口" "1443")
     PANEL_LISTEN_PORT=$(ask_with_default "3x-ui 面板端口" "$default_panel_port")
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui 面板公网路径 / webBasePath（必须和面板 url 根路径一致）" "$default_panel_path")")
@@ -7323,6 +7458,11 @@ collect_sni_stack_config() {
     local -a panel_whitelist_array=()
     read_trimmed panel_whitelist_enabled "是否为面板域名启用 IP 白名单？(y/n，默认 n): "
     if is_yes "$panel_whitelist_enabled"; then
+        if ! web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-nginx-stream}" "$WEB_PROXY_ENGINE"; then
+            echo -e "${RED}❌ 当前组合不支持 Web 白名单：ENTRY_MODE=xray-fallback 且 WEB_PROXY_ENGINE=nginx。${PLAIN}"
+            echo -e "${YELLOW}请改用 Nginx Stream/TCP Peek 入口模式，或选择 Caddy 作为 Web 反代引擎。${PLAIN}"
+            return 1
+        fi
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
         read_trimmed panel_whitelist_input "请输入允许访问面板域名的 IP/CIDR（多个用空格或英文逗号分隔）: "
@@ -7347,8 +7487,8 @@ collect_sni_stack_config() {
         done
     fi
 
-    echo -e "${YELLOW}443 单入口需要 3x-ui 面板/订阅后端使用 HTTP，由 Caddy 统一托管公网证书。${PLAIN}"
-    echo -e "${YELLOW}本向导会让 Caddy 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}"
+    echo -e "${YELLOW}443 单入口需要 3x-ui 面板/订阅后端使用 HTTP，由 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 统一托管公网证书。${PLAIN}"
+    echo -e "${YELLOW}本向导会让 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}"
     echo -e "${CYAN}证书处理分两种情况：${PLAIN}"
     echo -e "  3x-ui 3.x 新安装：在官方安装器里选择 Skip SSL / 不申请 SSL，本步骤只做兜底检查。"
     echo -e "  3x-ui 2.x、升级旧配置、或曾经启用过 3x-ui SSL：继续按旧流程清空面板/订阅证书路径。"
@@ -7414,7 +7554,7 @@ collect_sni_stack_config() {
     fi
     [[ "$NGINX_LISTEN_PORT" != "443" ]] && echo -e "${YELLOW}⚠️  Nginx 公网端口不是 443，不推荐。${PLAIN}"
 
-    warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
+    warn_if_public_bind "$(web_proxy_engine_label "$WEB_PROXY_ENGINE")" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
     warn_if_public_bind "3x-ui 面板" "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT" || return 1
     warn_if_public_bind "3x-ui 订阅服务" "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT" || return 1
@@ -7596,12 +7736,12 @@ write_nginx_sni_stream_config() {
     local conf_file="${1:-/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf}"
     local validate="${2:-yes}"
     local listen_directives
-    local caddy_backend
+    local web_backend
     local xray_backend
     local guarded_backend_var="\$vps_sni_backend"
     local -a whitelist_block_vars=()
     listen_directives=$(nginx_stream_listen_directives "$NGINX_LISTEN_ADDR" "$NGINX_LISTEN_PORT")
-    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
 
     : > "$conf_file"
@@ -7637,12 +7777,12 @@ EOF
 
     cat <<EOF >> "$conf_file"
 map \$ssl_preread_server_name \$vps_sni_backend {
-    ${PANEL_DOMAIN} caddy_backend;
+    ${PANEL_DOMAIN} web_proxy_backend;
 EOF
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local site_domain
         for site_domain in "${SITE_DOMAINS[@]}"; do
-            [[ -n "$site_domain" ]] && echo "    ${site_domain} caddy_backend;" >> "$conf_file"
+            [[ -n "$site_domain" ]] && echo "    ${site_domain} web_proxy_backend;" >> "$conf_file"
         done
     fi
     if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
@@ -7685,8 +7825,8 @@ EOF
 
     cat <<EOF >> "$conf_file"
 
-upstream caddy_backend {
-    server ${caddy_backend};
+upstream web_proxy_backend {
+    server ${web_backend};
 }
 
 upstream xray_backend {
@@ -7825,6 +7965,176 @@ EOF
     done
 }
 
+nginx_single_443_web_conf_path() {
+    echo "/etc/nginx/conf.d/vps_sni_web_${CADDY_LISTEN_PORT}.conf"
+}
+
+nginx_http_listen_directive() {
+    local addr="$1"
+    local port="$2"
+    if [[ "$addr" == "::" || "$addr" == "::1" ]]; then
+        printf '    listen [%s]:%s ssl http2;\n' "$addr" "$port"
+    else
+        printf '    listen %s:%s ssl http2;\n' "$addr" "$port"
+    fi
+}
+
+write_nginx_single_443_proxy_headers() {
+    cat <<EOF
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port ${NGINX_LISTEN_PORT};
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$vps_proxy_connection_upgrade;
+        proxy_set_header Range \$http_range;
+        proxy_set_header If-Range \$http_if_range;
+EOF
+}
+
+append_nginx_single_443_path_proxy() {
+    local output_file="$1"
+    local path_prefix="$2"
+    local backend="$3"
+    local exact_path
+    path_prefix=$(normalize_path_prefix "$path_prefix")
+    exact_path="${path_prefix%/}"
+    cat <<EOF >> "$output_file"
+
+    location = ${exact_path} {
+        return 308 ${path_prefix};
+    }
+
+    location ^~ ${path_prefix} {
+EOF
+    write_nginx_single_443_proxy_headers >> "$output_file"
+    cat <<EOF >> "$output_file"
+        proxy_pass http://${backend};
+    }
+EOF
+}
+
+write_nginx_single_443_web_config() {
+    local conf_file="${1:-$(nginx_single_443_web_conf_path)}"
+    local panel_backend sub_backend site_backend i site_domain
+    panel_backend=$(format_hostport "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT")
+    sub_backend=$(format_hostport "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT")
+    SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
+    CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
+    mkdir -p "$(dirname "$conf_file")" || return 1
+
+    cat <<EOF > "$conf_file"
+# Managed by VPS-Optimize 443 single-entry. Local HTTPS Web proxy only.
+server {
+$(nginx_http_listen_directive "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    server_name ${PANEL_DOMAIN};
+
+    ssl_certificate /etc/caddy/certs/${PANEL_DOMAIN}.crt;
+    ssl_certificate_key /etc/caddy/certs/${PANEL_DOMAIN}.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    gzip on;
+EOF
+    append_nginx_single_443_path_proxy "$conf_file" "$SUB_URI_PATH" "$sub_backend"
+    append_nginx_single_443_path_proxy "$conf_file" "$CLASH_URI_PATH" "$sub_backend"
+    cat <<EOF >> "$conf_file"
+
+    location / {
+EOF
+    write_nginx_single_443_proxy_headers >> "$conf_file"
+    cat <<EOF >> "$conf_file"
+        proxy_pass http://${panel_backend};
+    }
+}
+EOF
+
+    for i in "${!SITE_DOMAINS[@]}"; do
+        site_domain="${SITE_DOMAINS[$i]}"
+        [[ -n "$site_domain" ]] || continue
+        site_backend=$(format_hostport "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}")
+        cat <<EOF >> "$conf_file"
+
+server {
+$(nginx_http_listen_directive "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    server_name ${site_domain};
+
+    ssl_certificate /etc/caddy/certs/${site_domain}.crt;
+    ssl_certificate_key /etc/caddy/certs/${site_domain}.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    gzip on;
+
+    location / {
+EOF
+        write_nginx_single_443_proxy_headers >> "$conf_file"
+        cat <<EOF >> "$conf_file"
+        proxy_pass http://${site_backend};
+    }
+}
+EOF
+    done
+}
+
+reload_nginx_after_config_quarantine() {
+    command -v nginx >/dev/null 2>&1 || return 0
+    nginx -t >/dev/null 2>&1 || return 1
+    systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1 || true
+}
+
+quarantine_nginx_single_443_web_configs() {
+    local keep_file="${1:-}"
+    local conf_file moved=0
+    for conf_file in /etc/nginx/conf.d/vps_sni_web_*.conf; do
+        [[ -e "$conf_file" ]] || continue
+        [[ -n "$keep_file" && "$conf_file" == "$keep_file" ]] && continue
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-sni-web" >/dev/null 2>&1 || true
+        moved=$((moved + 1))
+    done
+    if [[ "$moved" -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️ 已隔离 ${moved} 个旧 443 Nginx 本地 Web 反代配置。${PLAIN}"
+        reload_nginx_after_config_quarantine || echo -e "${YELLOW}⚠️ Nginx 配置隔离后未能立即重载，后续应用阶段会再次校验。${PLAIN}"
+    fi
+}
+
+quarantine_caddy_single_443_web_configs() {
+    local domain conf_file moved=0
+    for domain in "$PANEL_DOMAIN" "${SITE_DOMAINS[@]}"; do
+        [[ -n "$domain" ]] || continue
+        conf_file="/etc/caddy/conf.d/${domain}.caddy"
+        [[ -e "$conf_file" ]] || continue
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/caddy-sni-web" >/dev/null 2>&1 || true
+        moved=$((moved + 1))
+    done
+    if [[ "$moved" -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️ 已隔离 ${moved} 个旧 443 Caddy 本地 Web 反代配置。${PLAIN}"
+        if command -v caddy >/dev/null 2>&1 && [[ -f /etc/caddy/Caddyfile ]]; then
+            caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 && \
+                { systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true; }
+        fi
+    fi
+}
+
+apply_nginx_web_configs_for_single_443() {
+    local conf_file
+    conf_file=$(nginx_single_443_web_conf_path)
+    install_nginx_http_if_needed || return 1
+    ensure_nginx_http_conf_d || return 1
+    harden_nginx_public_errors
+    write_nginx_proxy_map_conf || return 1
+    quarantine_legacy_nginx_https_proxy_configs
+    quarantine_legacy_caddy_443_configs
+    quarantine_caddy_single_443_web_configs
+    quarantine_nginx_single_443_web_configs "$conf_file"
+    write_nginx_single_443_web_config "$conf_file" || return 1
+    if ! nginx -t; then
+        echo -e "${RED}❌ Nginx 本地 Web 反代配置校验失败，已隔离新增配置。${PLAIN}"
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-sni-web" >/dev/null 2>&1 || true
+        return 1
+    fi
+}
+
 stage_and_validate_caddy_configs_for_single_443() {
     local plan_dir plan_conf_dir validate_log
     install_caddy_if_needed || return 1
@@ -7858,6 +8168,8 @@ EOF
 }
 
 apply_caddy_configs_for_single_443() {
+    quarantine_legacy_nginx_https_proxy_configs
+    quarantine_nginx_single_443_web_configs
     stage_and_validate_caddy_configs_for_single_443 || return 1
     ensure_caddy_local_base_config || return 1
     write_caddy_panel_config
@@ -7867,6 +8179,29 @@ apply_caddy_configs_for_single_443() {
         echo -e "${RED}❌ Caddy 实际配置校验失败，拒绝继续。${PLAIN}"
         return 1
     fi
+}
+
+apply_web_proxy_configs_for_single_443() {
+    WEB_PROXY_ENGINE=$(current_web_proxy_engine)
+    assert_web_proxy_whitelist_supported "${ENTRY_MODE:-$(get_entry_mode)}" "$WEB_PROXY_ENGINE" || return 1
+    case "$WEB_PROXY_ENGINE" in
+        nginx) apply_nginx_web_configs_for_single_443 ;;
+        *) apply_caddy_configs_for_single_443 ;;
+    esac
+}
+
+restart_web_proxy_for_single_443() {
+    WEB_PROXY_ENGINE=$(current_web_proxy_engine)
+    case "$WEB_PROXY_ENGINE" in
+        nginx)
+            systemctl enable nginx >/dev/null 2>&1 || true
+            systemctl restart nginx || return 1
+            ;;
+        *)
+            systemctl enable caddy >/dev/null 2>&1 || true
+            systemctl restart caddy || return 1
+            ;;
+    esac
 }
 
 issue_and_install_cert_for_domain() {
@@ -7898,7 +8233,7 @@ issue_and_install_cert_for_domain() {
 
 save_sni_stack_env() {
     mkdir -p /etc/vps-optimize
-    local entry_mode site_domains_csv site_backend_addrs_csv site_backend_ports_csv
+    local entry_mode web_proxy_engine site_domains_csv site_backend_addrs_csv site_backend_ports_csv
     local tcp_route_snis_csv tcp_route_addrs_csv tcp_route_ports_csv
     local sni_ip_whitelist_domains_csv sni_ip_whitelist_ranges_pipe
     entry_mode="${ENTRY_MODE:-$(get_entry_mode)}"
@@ -7911,6 +8246,7 @@ save_sni_stack_env() {
         "nginx-stream"|"xray-fallback"|"tcp-peek") ;;
         *) entry_mode="nginx-stream" ;;
     esac
+    web_proxy_engine=$(normalize_web_proxy_engine "${WEB_PROXY_ENGINE:-caddy}" 2>/dev/null || echo "caddy")
     site_domains_csv=$(IFS=','; echo "${SITE_DOMAINS[*]}")
     site_backend_addrs_csv=$(IFS=','; echo "${SITE_BACKEND_ADDRS[*]}")
     site_backend_ports_csv=$(IFS=','; echo "${SITE_BACKEND_PORTS[*]}")
@@ -7921,6 +8257,7 @@ save_sni_stack_env() {
     sni_ip_whitelist_ranges_pipe=$(IFS='|'; echo "${SNI_IP_WHITELIST_RANGES[*]}")
     cat <<EOF > /etc/vps-optimize/sni-stack.env
 ENTRY_MODE='${entry_mode}'
+WEB_PROXY_ENGINE='${web_proxy_engine}'
 PANEL_DOMAIN='${PANEL_DOMAIN}'
 SITE_DOMAIN='${SITE_DOMAINS[0]:-}'
 SITE_DOMAINS_CSV='${site_domains_csv}'
@@ -7989,9 +8326,11 @@ harden_single_443_firewall() {
 print_sni_stack_result() {
     local check_ports=()
     local check_regex=""
-    local p entry_mode entry_label entry_listener
+    local p entry_mode entry_label entry_listener web_engine web_label
     entry_mode="${ENTRY_MODE:-nginx-stream}"
     entry_mode=$(normalize_entry_mode_name "$entry_mode" 2>/dev/null || echo "nginx-stream")
+    web_engine=$(current_web_proxy_engine)
+    web_label=$(web_proxy_engine_label "$web_engine")
     case "$entry_mode" in
         "nginx-stream") entry_label="Nginx Stream 模式"; entry_listener="nginx" ;;
         "xray-fallback") entry_label="Xray Fallback 模式"; entry_listener="xray/3x-ui 主入站" ;;
@@ -8012,6 +8351,7 @@ print_sni_stack_result() {
     echo -e "${GREEN}✅ 443 单入口分流配置完成${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "当前入口模式：${entry_label} (${entry_mode})"
+    echo -e "当前 Web 反代引擎：${web_label} (${web_engine})"
     echo -e "${BOLD}一、以后从外面只访问这些地址${PLAIN}"
     echo -e "  面板入口：      https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
     echo -e "  普通订阅入口：  https://${PANEL_DOMAIN}${SUB_URI_PATH}"
@@ -8045,7 +8385,7 @@ print_sni_stack_result() {
     echo -e "  webBasePath： ${PANEL_WEB_PATH}"
     echo -e "  3.x 新安装 SSL 选项：Skip SSL / 不申请 SSL"
     echo -e "  2.x/旧配置面板证书路径/私钥路径：清空"
-    echo -e "  Caddy 后端连接：http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "  Web 反代引擎后端连接：http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
     echo -e "  Subscription URI Path：${SUB_URI_PATH}"
     echo -e "  Subscription External URL：https://${PANEL_DOMAIN}${SUB_URI_PATH}"
@@ -8071,12 +8411,12 @@ print_sni_stack_result() {
     echo -e "${BOLD}四、常见错误怎么判断${PLAIN}"
     echo -e "  ERR_SSL_PROTOCOL_ERROR：通常是访问了内部端口，外部只访问 https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
     echo -e "  ERR_TOO_MANY_REDIRECTS：通常是 3.x 误启用 3x-ui SSL、2.x/旧配置证书路径没清空，或外部地址/路径配置不一致"
-    echo -e "  HTTP 404：先检查访问路径是否等于 3x-ui 的 webBasePath，再检查 Caddy 是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
+    echo -e "  HTTP 404：先检查访问路径是否等于 3x-ui 的 webBasePath，再检查 Web 反代引擎是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  502 Bad Gateway：通常是 3x-ui 没启动、端口不对，或 3x-ui 后端仍是 HTTPS"
     echo -e ""
     echo -e "${BOLD}五、监听状态应该长这样${PLAIN}"
     echo -e "  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${entry_listener}"
-    echo -e "  ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> caddy"
+    echo -e "  ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${web_label}"
     echo -e "  ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT} -> xray"
     echo -e "  ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} -> 3x-ui"
     echo -e "  ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} -> 3x-ui subscription"
@@ -8106,19 +8446,22 @@ print_sni_stack_result() {
         echo -e "  ss -lntp"
     fi
     echo -e "  nginx -t"
-    echo -e "  caddy validate --config /etc/caddy/Caddyfile"
+    if [[ "$web_engine" == "caddy" ]]; then
+        echo -e "  caddy validate --config /etc/caddy/Caddyfile"
+        echo -e "  journalctl -u caddy -n 80 --no-pager"
+    fi
     echo -e "  curl -I http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}/"
     echo -e "  openssl s_client -connect 服务器IP:${NGINX_LISTEN_PORT} -servername ${PANEL_DOMAIN}"
     echo -e "  openssl s_client -connect 服务器IP:${NGINX_LISTEN_PORT} -servername ${REALITY_SNI}"
-    echo -e "  journalctl -u caddy -n 80 --no-pager"
+    [[ "$web_engine" == "nginx" ]] && echo -e "  journalctl -u nginx -n 80 --no-pager"
     echo -e "  journalctl -u x-ui -u 3x-ui -n 80 --no-pager"
     echo -e ""
     case "$entry_mode" in
         "xray-fallback")
-            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；3x-ui 面板、订阅服务或额外本地入站暴露公网；3.x 安装时启用 3x-ui SSL 或 2.x/旧配置证书路径未清空就跑 Web fallback；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+            echo -e "${RED}绝对不要做：Web 反代引擎直接监听公网 443；3x-ui 面板、订阅服务或额外本地入站暴露公网；3.x 安装时启用 3x-ui SSL 或 2.x/旧配置证书路径未清空就跑 Web fallback；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
             ;;
         *)
-            echo -e "${RED}绝对不要做：Caddy 直接监听公网 443；Xray/3x-ui 主入站直接占用公网 443；3x-ui 面板或新增本地入站暴露公网；3.x 安装时启用 3x-ui SSL 或 2.x/旧配置证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
+            echo -e "${RED}绝对不要做：Web 反代引擎直接监听公网 443；Xray/3x-ui 主入站直接占用公网 443；3x-ui 面板或新增本地入站暴露公网；3.x 安装时启用 3x-ui SSL 或 2.x/旧配置证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}"
             ;;
     esac
 }
@@ -8149,9 +8492,13 @@ apply_sni_stack_runtime_config() {
 
 list_sni_stack_sites() {
     load_sni_stack_env || return 1
+    local web_engine web_label
+    web_engine=$(current_web_proxy_engine)
+    web_label=$(web_proxy_engine_label "$web_engine")
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}当前 443 单入口网站/反代域名${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "Web 反代引擎：${web_label} (${web_engine}) -> $(web_proxy_backend)"
     echo -e "面板域名：${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     local panel_ranges
     panel_ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
@@ -8195,7 +8542,10 @@ add_sni_stack_site() {
     fi
 
     echo -e "这个入口适合后续新增网站，例如 SublinkPro、Dockge、博客、订阅管理工具等。"
-    echo -e "${YELLOW}新增域名会走：公网 ${NGINX_LISTEN_PORT} -> Nginx SNI -> Caddy -> 本地后端。${PLAIN}"
+    local web_engine web_label
+    web_engine=$(current_web_proxy_engine)
+    web_label=$(web_proxy_engine_label "$web_engine")
+    echo -e "${YELLOW}新增域名会走：公网 ${NGINX_LISTEN_PORT} -> 443 入口分流 -> ${web_label} -> 本地后端。${PLAIN}"
     echo -e ""
 
     local site_domain site_addr site_port advanced_mode existing idx confirm
@@ -8248,7 +8598,13 @@ add_sni_stack_site() {
     is_valid_port "$site_port" || { echo -e "${RED}❌ 后端端口无效：${site_port}${PLAIN}"; return 1; }
     warn_if_public_bind "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
 
-    read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
+    if web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "$web_engine"; then
+        read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
+    else
+        echo -e "${YELLOW}当前组合为 xray-fallback + Nginx 本地 Web 反代，无法可靠获取真实客户端源 IP，本次禁止为新域名启用 Web 白名单。${PLAIN}"
+        echo -e "${YELLOW}如需 Web 白名单，请改用 Nginx Stream/TCP Peek 入口模式，或选择 Caddy 作为 Web 反代引擎。${PLAIN}"
+        enable_ip_whitelist="n"
+    fi
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
@@ -8262,7 +8618,7 @@ add_sni_stack_site() {
     echo -e "${CYAN}即将添加：${site_domain} -> ${site_addr}:${site_port}${PLAIN}"
     [[ -n "${whitelist_ranges:-}" ]] && echo -e "${YELLOW}IP 白名单：${whitelist_ranges}${PLAIN}"
     confirm_risk_action "新增 443 网站/反代域名 ${site_domain}" \
-        "证书、Caddy 站点配置和 Nginx SNI 分流配置" \
+        "证书、Web 反代引擎配置和 443 入口分流配置" \
         "使用 443 单入口备份恢复，或从网站管理菜单删除该域名" \
         "确认域名已解析到当前 VPS，后端端口可从本机访问。" || return 1
 
@@ -8276,7 +8632,7 @@ add_sni_stack_site() {
     apply_sni_stack_runtime_config || return 1
     echo -e "${GREEN}✅ 已添加网站入口：https://${site_domain}/${PLAIN}"
     echo -e "${YELLOW}提醒：后端服务需要监听 ${site_addr}:${site_port}，浏览器只访问 https://${site_domain}/。${PLAIN}"
-    echo -e "${CYAN}当前 Caddy 后端：reverse_proxy ${site_addr}:${site_port}${PLAIN}"
+    echo -e "${CYAN}当前 Web 反代后端：${web_label} -> ${site_addr}:${site_port}${PLAIN}"
 }
 
 edit_sni_stack_site_backend() {
@@ -8319,7 +8675,7 @@ edit_sni_stack_site_backend() {
     echo -e ""
     echo -e "${CYAN}即将修改：${domain} -> ${new_addr}:${new_port}${PLAIN}"
     confirm_risk_action "修改 443 网站/反代后端" \
-        "Caddy 反代后端和 Nginx SNI 分流配置" \
+        "Web 反代引擎后端和 443 入口分流配置" \
         "使用 443 单入口备份恢复修改前配置" \
         "确认新后端地址和端口已经在本机监听。" || return 1
 
@@ -8327,7 +8683,7 @@ edit_sni_stack_site_backend() {
     SITE_BACKEND_PORTS[$idx]="$new_port"
     apply_sni_stack_runtime_config || return 1
     echo -e "${GREEN}✅ 已更新网站后端：https://${domain}/ -> ${new_addr}:${new_port}${PLAIN}"
-    echo -e "${CYAN}当前 Caddy 后端：reverse_proxy ${new_addr}:${new_port}${PLAIN}"
+    echo -e "${CYAN}当前 Web 反代后端：$(web_proxy_engine_label) -> ${new_addr}:${new_port}${PLAIN}"
 }
 
 remove_sni_stack_site() {
@@ -8361,7 +8717,7 @@ remove_sni_stack_site() {
     idx=$((choice - 1))
     domain="${SITE_DOMAINS[$idx]}"
     confirm_risk_action "从 443 分流中移除 ${domain}" \
-        "该域名的 Caddy 站点和 Nginx SNI 分流规则" \
+        "该域名的 Web 反代引擎配置和 443 入口分流规则" \
         "使用 443 单入口备份恢复，或重新新增该网站/反代域名" \
         "确认该域名不再承载线上面板、订阅或网站。" || return 1
 
@@ -8393,6 +8749,65 @@ remove_sni_stack_site() {
     else
         echo -e "${GREEN}✅ 已删除 ${domain} 的分流配置，证书文件已保留。${PLAIN}"
     fi
+}
+
+switch_sni_stack_web_proxy_engine() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}切换 443 Web 反代引擎${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+
+    local current_engine current_label choice new_engine new_label entry_mode
+    current_engine=$(current_web_proxy_engine)
+    current_label=$(web_proxy_engine_label "$current_engine")
+    entry_mode="${ENTRY_MODE:-$(get_entry_mode)}"
+
+    echo -e "当前入口模式：${entry_mode}"
+    echo -e "当前 Web 反代引擎：${current_label} (${current_engine})"
+    echo -e "本地 TLS 后端：$(web_proxy_backend)"
+    echo -e "${YELLOW}切换时会按当前域名、证书、后端和白名单重新渲染所选引擎，并隔离另一套 443 本地 Web 反代配置。${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "${GREEN}  1. Caddy 本地 HTTPS 反代${PLAIN}"
+    echo -e "${GREEN}  2. Nginx 本地 HTTPS 反代${PLAIN}"
+    echo -e "${RED}  0. 取消${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    read_trimmed choice "请选择 Web 反代引擎（默认保持当前）: "
+    case "$choice" in
+        ""|0|q|Q)
+            echo -e "${BLUE}已取消切换 Web 反代引擎。${PLAIN}"
+            return 0
+            ;;
+        1) new_engine="caddy" ;;
+        2) new_engine="nginx" ;;
+        *)
+            echo -e "${RED}❌ 无效的 Web 反代引擎选择。${PLAIN}"
+            return 1
+            ;;
+    esac
+
+    new_label=$(web_proxy_engine_label "$new_engine")
+    if [[ "$new_engine" == "$current_engine" ]]; then
+        echo -e "${BLUE}Web 反代引擎未变化，仍为 ${current_label}。${PLAIN}"
+        return 0
+    fi
+
+    if [[ ${#SNI_IP_WHITELIST_DOMAINS[@]} -gt 0 ]] && ! web_proxy_engine_supports_web_whitelist "$entry_mode" "$new_engine"; then
+        echo -e "${RED}❌ 不能切换到 ${new_label}：当前已有 Web 白名单，且 xray-fallback + Nginx 本地反代无法可靠获取真实客户端源 IP。${PLAIN}"
+        echo -e "${YELLOW}请先清除 Web 白名单，或改用 Nginx Stream/TCP Peek 入口模式后再切换。${PLAIN}"
+        return 1
+    fi
+    if ! web_proxy_engine_supports_web_whitelist "$entry_mode" "$new_engine"; then
+        echo -e "${YELLOW}⚠️ 当前入口模式为 xray-fallback，切换到 Nginx 本地反代后将禁止新增 Web 白名单。${PLAIN}"
+    fi
+
+    confirm_risk_action "切换 443 Web 反代引擎为 ${new_label}" \
+        "重新生成 ${new_label} 配置，并隔离旧的 443 本地 Web 反代配置；公网 443 入口模式保持 ${entry_mode}" \
+        "使用 443 单入口备份恢复，或切回 ${current_label} 后重新应用" \
+        "确认本机 ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} 未被其他服务占用，且证书文件仍在 /etc/caddy/certs/。" || return 1
+
+    WEB_PROXY_ENGINE="$new_engine"
+    save_and_offer_reapply_sni_stack
 }
 
 list_sni_stack_tcp_routes() {
@@ -8455,14 +8870,14 @@ add_sni_stack_tcp_route() {
     is_loopback_listen_addr "$route_addr" || { echo -e "${RED}❌ 为保证安全，TCP/SNI 入站后端只允许 127.0.0.1、localhost 或 ::1。${PLAIN}"; return 1; }
     is_valid_port "$route_port" || { echo -e "${RED}❌ 入站端口无效：${route_port}${PLAIN}"; return 1; }
     if [[ "$route_port" == "$NGINX_LISTEN_PORT" || "$route_port" == "$CADDY_LISTEN_PORT" || "$route_port" == "$PANEL_LISTEN_PORT" || "$route_port" == "$SUB_LISTEN_PORT" ]]; then
-        echo -e "${RED}❌ 入站端口不能复用公网入口、Caddy、面板或订阅服务端口。${PLAIN}"
+        echo -e "${RED}❌ 入站端口不能复用公网入口、Web 反代、面板或订阅服务端口。${PLAIN}"
         return 1
     fi
 
     echo -e ""
     echo -e "${CYAN}即将添加 TCP/SNI 分流：${route_sni}:${NGINX_LISTEN_PORT} -> ${route_addr}:${route_port}${PLAIN}"
     echo -e "${YELLOW}请确认 3x-ui 入站已监听 ${route_addr}:${route_port}，且客户端连接端口使用 ${NGINX_LISTEN_PORT}。${PLAIN}"
-    echo -e "${YELLOW}说明：Web 白名单只保护 Caddy/Web 域名，不会应用到 TCP/SNI 或 Xray 节点流量。${PLAIN}"
+    echo -e "${YELLOW}说明：Web 白名单只保护 Web 域名，不会应用到 TCP/SNI 或 Xray 节点流量。${PLAIN}"
     confirm_risk_action "新增 443 TCP/SNI 入站 ${route_sni}" \
         "Nginx stream SNI 分流规则，会把该 SNI 直通到本地 3x-ui 入站" \
         "使用 443 单入口备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" \
@@ -8668,7 +9083,7 @@ add_xray_sni_route() {
         return 1
     fi
     for existing in "${SITE_DOMAINS[@]}"; do
-        [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已作为 Web/Caddy 域名使用，Xray 入站规则必须和 Web 域名分开。${PLAIN}"; return 1; }
+        [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已作为 Web 域名使用，Xray 入站规则必须和 Web 域名分开。${PLAIN}"; return 1; }
     done
     for existing in "${TCP_ROUTE_SNIS[@]}"; do
         [[ "$route_sni" == "$existing" ]] && { echo -e "${RED}❌ 该域名已存在于旧 TCP/SNI 本地入站规则中。${PLAIN}"; return 1; }
@@ -8683,7 +9098,7 @@ add_xray_sni_route() {
     is_loopback_listen_addr "$route_addr" || { echo -e "${RED}❌ 为避免公网暴露，本地监听地址只允许 127.0.0.1、localhost 或 ::1。${PLAIN}"; return 1; }
     is_valid_port "$route_port" || { echo -e "${RED}❌ 本地监听端口无效：${route_port}${PLAIN}"; return 1; }
     if [[ "$route_port" == "$CADDY_LISTEN_PORT" ]]; then
-        echo -e "${RED}❌ 该端口与 Caddy 本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}"
+        echo -e "${RED}❌ 该端口与 Web 反代引擎本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}"
         return 1
     fi
     if [[ "$route_port" == "$NGINX_LISTEN_PORT" || "$route_port" == "$PANEL_LISTEN_PORT" || "$route_port" == "$SUB_LISTEN_PORT" ]]; then
@@ -8907,7 +9322,7 @@ manage_sni_stack_tcp_routes() {
             3) edit_sni_stack_tcp_route ;;
             4) remove_sni_stack_tcp_route ;;
             5)
-                echo -e "${YELLOW}Web 白名单只适用于 Caddy/Web 域名：面板、订阅、普通网站、面板域名和自定义反代域名。${PLAIN}"
+                echo -e "${YELLOW}Web 白名单只适用于 Web 域名：面板、订阅、普通网站、面板域名和自定义反代域名。${PLAIN}"
                 echo -e "${YELLOW}TCP/SNI 入站和 Xray 节点流量不会启用 IP 白名单；如需限制来源，请在后端服务或防火墙侧单独设计。${PLAIN}"
                 ;;
             6) reapply_sni_stack_from_env ;;
@@ -8927,8 +9342,16 @@ manage_sni_stack_ip_whitelist() {
         echo -e "${BOLD}🔐 443 域名 IP 白名单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         load_sni_stack_env || return 1
+        local whitelist_supported="yes"
+        if ! web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "${WEB_PROXY_ENGINE:-caddy}"; then
+            whitelist_supported="no"
+        fi
         echo -e "${YELLOW}只限制你选择的 Web 域名；支持面板、订阅、网站/反代，Xray 入站、REALITY SNI 与未知 SNI 不受 Web 白名单影响。${PLAIN}"
-        echo -e "${YELLOW}443 单入口会在 Nginx stream 层按 SNI + 源 IP 拦截，避免影响同入口其他服务。${PLAIN}"
+        echo -e "${YELLOW}Nginx Stream/TCP Peek 入口会在入口层按 SNI + 源 IP 拦截，避免影响同入口其他服务。${PLAIN}"
+        if [[ "$whitelist_supported" != "yes" ]]; then
+            echo -e "${RED}当前组合为 xray-fallback + Nginx 本地 Web 反代，无法可靠获取真实客户端源 IP，禁止新增或覆盖 Web 白名单。${PLAIN}"
+            echo -e "${YELLOW}你仍可清除已有白名单；如需继续使用白名单，请切到 Nginx Stream/TCP Peek，或选择 Caddy 作为 Web 反代引擎。${PLAIN}"
+        fi
         echo -e "------------------------------------------------"
 
         local -a domains=("$PANEL_DOMAIN")
@@ -8973,6 +9396,11 @@ manage_sni_stack_ip_whitelist() {
         read_trimmed action "请选择操作: "
         case "$action" in
             1)
+                if [[ "$whitelist_supported" != "yes" ]]; then
+                    echo -e "${RED}❌ 当前组合禁止设置 Web 白名单。请先切换入口模式或 Web 反代引擎。${PLAIN}"
+                    pause_return
+                    continue
+                fi
                 current_client_ip=$(detect_ssh_client_ip)
                 [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
                 read_trimmed whitelist_input "请输入允许访问 ${domain} 的 IP/CIDR（多个用空格或英文逗号分隔）: "
@@ -8984,7 +9412,7 @@ manage_sni_stack_ip_whitelist() {
                 append_vps_public_ips_to_whitelist whitelist_array
                 whitelist_ranges=$(join_array_by_space "${whitelist_array[@]}")
                 confirm_risk_action "为 ${domain} 启用 IP 白名单" \
-                    "Nginx stream 会仅对该 SNI 做源 IP 限制" \
+                    "443 入口层会仅对该 SNI 做源 IP 限制" \
                     "使用 443 单入口自动备份回滚，或清除该域名白名单后重新应用" \
                     "确认你的管理 IP 已包含在白名单中，且该域名不是 Cloudflare 橙云代理访问。" || continue
                 set_sni_ip_whitelist_for_domain "$domain" "$whitelist_ranges"
@@ -9035,6 +9463,7 @@ manage_sni_stack_sites() {
         echo -e "${GREEN}  5. 管理域名 IP 白名单${PLAIN}       ${YELLOW}(只限制被选择的域名)${PLAIN}"
         echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"
         echo -e "${GREEN}  7. 443 单入口链路体检${PLAIN}"
+        echo -e "${GREEN}  8. 切换 Web 反代引擎${PLAIN}       ${YELLOW}(Caddy / Nginx 本地反代)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -9049,6 +9478,7 @@ manage_sni_stack_sites() {
             5) manage_sni_stack_ip_whitelist ;;
             6) reapply_sni_stack_from_env ;;
             7) sni_stack_health_check ;;
+            8) switch_sni_stack_web_proxy_engine ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
@@ -9070,7 +9500,7 @@ func_caddy_cf_reality_wizard() {
         echo -e "${BOLD}检测到已有 443 单入口配置${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}如果只是新增网站或反代域名，请返回并选择 [8] 管理 Web 域名/反代。${PLAIN}"
-        echo -e "${YELLOW}继续首次配置会重写 443 入口、Caddy/Web 和 Xray 分流相关核心配置。${PLAIN}"
+        echo -e "${YELLOW}继续首次配置会重写 443 入口、Web 反代引擎和 Xray 分流相关核心配置。${PLAIN}"
         echo -e "------------------------------------------------"
         grep -E '^(PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null || true
         echo -e "------------------------------------------------"
@@ -9094,6 +9524,7 @@ func_caddy_cf_reality_wizard() {
     backup_dir=$(backup_entry_mode_config) || return 1
     prepare_initial_entry_mode_dependencies "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir" "入口模式依赖检查失败"; return 1; }
     quarantine_legacy_caddy_443_configs
+    quarantine_legacy_nginx_https_proxy_configs
     issue_and_install_cert_for_domain "$PANEL_DOMAIN" "$CF_TOKEN" || { rollback_sni_stack_after_failure "$backup_dir" "面板域名证书签发/安装失败"; return 1; }
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local site_domain
@@ -12122,7 +12553,7 @@ func_443_network_test() {
     echo -e "------------------------------------------------"
     tcp_probe_host "公网入口 TCP" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" || true
     tcp_probe_host "本机 Nginx 入口" "127.0.0.1" "$NGINX_LISTEN_PORT" || true
-    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || true
+    tcp_probe_host "$(web_proxy_engine_label) 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || true
     tcp_probe_host "3x-ui 面板后端" "$(probe_host_for_listen_addr "$PANEL_LISTEN_ADDR")" "$PANEL_LISTEN_PORT" || true
     tcp_probe_host "3x-ui 订阅后端" "$(probe_host_for_listen_addr "$SUB_LISTEN_ADDR")" "$SUB_LISTEN_PORT" || true
     tcp_probe_host "REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" || true
@@ -15344,13 +15775,13 @@ show_panel_help() {
 
 show_sni_help() {
     echo -e "${CYAN}VPS-Optimize > 443 单入口管理中心 > 帮助${PLAIN}"
-    echo "1 查看当前入口状态 / 监听详情：显示公网 443、Caddy、Xray 和服务状态。"
-    echo "2 首次配置 / 安装：建立共享 Web 域名、Caddy、证书和默认 Nginx Stream 入口。"
+    echo "1 查看当前入口状态 / 监听详情：显示公网 443、Web 反代引擎、Xray 和服务状态。"
+    echo "2 首次配置 / 安装：建立共享 Web 域名、Web 反代引擎、证书和默认 Nginx Stream 入口。"
     echo "3/4/5 入口模式切换：在 Nginx Stream 模式、Xray Fallback 模式、TCP Peek + Splice 模式之间切换。"
     echo "6 重新应用：按当前 ENTRY_MODE 重新生成并启动入口配置。"
     echo "7 回滚：恢复上一次入口模式切换前的备份。"
     echo "8 管理 Web 域名/反代：后续新增或删除网站，不需要重跑首次配置。"
-    echo "9 Web 域名 IP 白名单：只限制 Web/Caddy 域名，不影响 Xray 节点。"
+    echo "9 Web 域名 IP 白名单：只限制 Web 域名，不影响 Xray 节点。"
     echo "10 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。"
     echo "11 链路体检：排查 ENTRY_MODE、监听、证书、Web 和 Xray 分流。"
     echo "12 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
@@ -15358,7 +15789,7 @@ show_sni_help() {
     echo "16 查看 TCP Peek + Splice 状态 / 8444 预检：展示 status.json 统计；预检只监听 8444，不改公网 443。"
     echo "17 TCP Peek 分流规则校验：只检查配置，不重启入口。"
     echo "18 查看 TCP Peek + Splice 日志：查看 vpso-mux 分流器日志。"
-    echo "Caddy 未接入 443 单入口时，用主菜单 [4 反代] -> [5] 管理域名 IP 白名单。"
+    echo "未接入 443 单入口时，用主菜单 [4 反代] -> [5] 管理 Caddy/Nginx 域名 IP 白名单。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -15505,7 +15936,7 @@ func_sni_stack_quick_menu() {
         echo -e "${YELLOW}首次部署先选 [2]；已有配置后用 [3]/[4]/[5] 在三种入口模式间切换。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 当前状态与入口模式${PLAIN}"
-        echo -e "${GREEN}  1. 查看当前入口状态 / 监听详情${PLAIN} ${YELLOW}(公网 443、Caddy、Xray、服务状态)${PLAIN}"
+        echo -e "${GREEN}  1. 查看当前入口状态 / 监听详情${PLAIN} ${YELLOW}(公网 443、Web 反代、Xray、服务状态)${PLAIN}"
         echo -e "${GREEN}  2. 首次配置 / 安装 443 单入口${PLAIN} ${YELLOW}(默认 Nginx Stream 模式，第一次部署用)${PLAIN}"
         echo -e "${GREEN}  3. 切换到 Nginx Stream 模式${PLAIN}  ${YELLOW}(默认稳定模式)${PLAIN}"
         echo -e "${GREEN}  4. 切换到 Xray Fallback 模式${PLAIN} ${YELLOW}(需已有 Xray/3x-ui 主入站)${PLAIN}"
@@ -15515,7 +15946,7 @@ func_sni_stack_quick_menu() {
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}▶ 共享配置与体检${PLAIN}"
         echo -e "${GREEN}  8. 管理 Web 域名/反代${PLAIN}        ${YELLOW}(新增/删除/查看网站，最常用)${PLAIN}"
-        echo -e "${CYAN}  9. 管理 Web 域名 IP 白名单${PLAIN}   ${YELLOW}(只限制 Web/Caddy 域名)${PLAIN}"
+        echo -e "${CYAN}  9. 管理 Web 域名 IP 白名单${PLAIN}   ${YELLOW}(只限制 Web 域名)${PLAIN}"
         echo -e "${CYAN} 10. Xray 入站管理${PLAIN}             ${YELLOW}(SNI -> 本地地址:端口 分流记录)${PLAIN}"
         echo -e "${GREEN} 11. 443 链路体检${PLAIN}              ${YELLOW}(ENTRY_MODE/监听/证书/Web/Xray 分流)${PLAIN}"
         echo -e "${CYAN} 12. 443 网络访问测试${PLAIN}          ${YELLOW}(DNS/TCP/TLS/面板/订阅路径)${PLAIN}"

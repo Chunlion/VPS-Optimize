@@ -11,7 +11,7 @@ print_443_health_status_code_hints() {
 
 print_443_health_reality_notes() {
     echo -e "${BOLD}REALITY 检查提示${PLAIN}"
-    echo -e "  - 不要要求 REALITY serverName/dest 加入 Caddy。"
+    echo -e "  - 不要要求 REALITY serverName/dest 加入 Web 反代引擎。"
     echo -e "  - 不要要求本机证书覆盖 REALITY serverName。"
     echo -e "  - REALITY 应检查外部目标站点是否真实可访问、TLS 特征是否稳定。"
     echo -e "  - 普通 TLS 节点和 REALITY 节点的 SNI/serverName 检查逻辑必须区分。"
@@ -92,7 +92,7 @@ print_xray_route_health_list() {
 
         echo -e "${CYAN}${sni}${PLAIN} -> ${addr}:${port}（${status}）"
         if [[ "${CADDY_LISTEN_PORT:-}" == "$port" ]]; then
-            echo -e "${RED}  ❌ 与 Caddy 本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}"
+            echo -e "${RED}  ❌ 与 Web 反代引擎本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}"
         fi
         line=$(xray_route_listen_line_by_addr_port "$addr" "$port")
         if [[ -n "$line" ]]; then
@@ -114,9 +114,10 @@ sni_stack_health_check_enhanced() {
     load_sni_stack_env || return 1
     detect_current_entry_status
 
-    local mode caddy_backend xray_backend panel_backend sub_backend site_backend route_count ranges i domain public_443_lines mux_config mux_service
+    local mode web_backend web_label xray_backend panel_backend sub_backend site_backend route_count ranges i domain public_443_lines mux_config mux_service
     mode="$ENTRY_STATUS_MODE"
-    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    web_backend=$(web_proxy_backend)
+    web_label=$(web_proxy_engine_label)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
     panel_backend=$(format_hostport "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT")
     sub_backend=$(format_hostport "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT")
@@ -139,7 +140,9 @@ sni_stack_health_check_enhanced() {
     echo -e "nginx 状态：${ENTRY_STATUS_NGINX_SERVICE}"
     echo -e "Xray/3x-ui 状态：${ENTRY_STATUS_XRAY_SERVICE}"
     echo -e "TCP Peek + Splice 状态：${ENTRY_STATUS_TCPPEEK_SERVICE}"
-    echo -e "caddy 状态：$(service_status_compact caddy)"
+    if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
+        echo -e "caddy 状态：$(service_status_compact caddy)"
+    fi
     if [[ -f "$mux_config" ]]; then
         echo -e "TCP Peek + Splice 分流规则：${GREEN}存在 ${mux_config}${PLAIN}"
     else
@@ -153,8 +156,8 @@ sni_stack_health_check_enhanced() {
 
     echo -e "------------------------------------------------"
     echo -e "${BOLD}本地监听${PLAIN}"
-    echo -e "Caddy 本地监听端口：${caddy_backend}"
-    get_listen_line_by_port "$CADDY_LISTEN_PORT" | grep -q "$CADDY_LISTEN_ADDR" && echo -e "${GREEN}✅ Caddy 期望监听 ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}${PLAIN}" || echo -e "${YELLOW}⚠️ Caddy 监听地址需确认：$(get_listen_line_by_port "$CADDY_LISTEN_PORT")${PLAIN}"
+    echo -e "Web 反代引擎本地监听端口：${web_backend} (${web_label})"
+    get_listen_line_by_port "$CADDY_LISTEN_PORT" | grep -q "$CADDY_LISTEN_ADDR" && echo -e "${GREEN}✅ ${web_label} 期望监听 ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}${PLAIN}" || echo -e "${YELLOW}⚠️ ${web_label} 监听地址需确认：$(get_listen_line_by_port "$CADDY_LISTEN_PORT")${PLAIN}"
     echo -e "Xray 本地监听端口：${xray_backend}"
     get_listen_line_by_port "$XRAY_LISTEN_PORT" | grep -q "$XRAY_LISTEN_ADDR" && echo -e "${GREEN}✅ Xray 期望监听 ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}" || echo -e "${YELLOW}⚠️ Xray 监听地址需确认：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")${PLAIN}"
     if [[ "$ENTRY_STATUS_LISTENER" == "xray" ]]; then
@@ -173,7 +176,7 @@ sni_stack_health_check_enhanced() {
     if [[ "$mode" == "xray-fallback" ]]; then
         echo -e "${YELLOW}当前为 Xray Fallback 模式，Xray 入站管理中的多 SNI 分流规则不生效。${PLAIN}"
         echo -e "${YELLOW}如需多个本地 Xray 入站，请切换到 Nginx Stream 模式或 TCP Peek + Splice 模式。${PLAIN}"
-        echo -e "${YELLOW}普通 HTTPS 流量会先进入 Xray，再 fallback 到 Caddy；403/拒绝访问通常优先排查 Web 白名单、CDN/WAF、源站保护、Cloudflare 回源限制或 Host/SNI 策略。${PLAIN}"
+        echo -e "${YELLOW}普通 HTTPS 流量会先进入 Xray，再 fallback 到所选 Web 反代引擎；403/拒绝访问通常优先排查 Web 白名单、CDN/WAF、源站保护、Cloudflare 回源限制或 Host/SNI 策略。${PLAIN}"
         print_xray_fallback_main_route_summary
     fi
     print_xray_route_health_list "$mode"
@@ -210,22 +213,22 @@ sni_stack_health_check_enhanced() {
     echo -e "routes 数量：${route_count}"
     echo -e "unknown SNI 策略：default_backend -> ${xray_backend}"
     ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
-    echo -e "web panel: ${PANEL_DOMAIN}${PANEL_WEB_PATH} -> Caddy ${caddy_backend} -> 面板后端 ${panel_backend}"
-    echo -e "web subscription: ${PANEL_DOMAIN}${SUB_URI_PATH} -> Caddy ${caddy_backend} -> 订阅后端 ${sub_backend}"
-    echo -e "web clash/mihomo: ${PANEL_DOMAIN}${CLASH_URI_PATH} -> Caddy ${caddy_backend} -> 订阅后端 ${sub_backend}"
-    echo -e "route panel: ${PANEL_DOMAIN} -> ${caddy_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
+    echo -e "web panel: ${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${web_label} ${web_backend} -> 面板后端 ${panel_backend}"
+    echo -e "web subscription: ${PANEL_DOMAIN}${SUB_URI_PATH} -> ${web_label} ${web_backend} -> 订阅后端 ${sub_backend}"
+    echo -e "web clash/mihomo: ${PANEL_DOMAIN}${CLASH_URI_PATH} -> ${web_label} ${web_backend} -> 订阅后端 ${sub_backend}"
+    echo -e "route panel: ${PANEL_DOMAIN} -> ${web_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
     for i in "${!SITE_DOMAINS[@]}"; do
         domain="${SITE_DOMAINS[$i]}"
         [[ -n "$domain" ]] || continue
         ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
         site_backend=$(format_hostport "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}")
-        echo -e "web site: ${domain}/ -> Caddy ${caddy_backend} -> 网站后端 ${site_backend}"
-        echo -e "route site: ${domain} -> ${caddy_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
+        echo -e "web site: ${domain}/ -> ${web_label} ${web_backend} -> 网站后端 ${site_backend}"
+        echo -e "route site: ${domain} -> ${web_backend} whitelist=$([[ -n "$ranges" ]] && echo yes || echo no)"
     done
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
         domain="${TCP_ROUTE_SNIS[$i]}"
         [[ -n "$domain" ]] || continue
-        echo -e "route tcp: ${domain} -> $(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}") whitelist=no（非 Web/Caddy 域名不启用白名单）"
+        echo -e "route tcp: ${domain} -> $(format_hostport "${TCP_ROUTE_ADDRS[$i]}" "${TCP_ROUTE_PORTS[$i]}") whitelist=no（非 Web 域名不启用白名单）"
     done
     for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
         domain="${XRAY_SNI_ROUTE_SNIS[$i]}"

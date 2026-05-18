@@ -16,7 +16,7 @@ docs/443-single-entry-troubleshooting.md
 
 ## 示例说明
 
-本文中的域名、路径和端口都是示例，不是必须照抄的固定值。`panel.example.com` 是示例面板域名，`node.example.com` 是示例节点域名，`site.example.com` 是示例网站域名，`40000` 是示例 3x-ui 面板端口，`2096` 是示例订阅端口，`8443` 是示例 Caddy 本地端口，`1443` 是示例 Xray/REALITY 本地端口。
+本文中的域名、路径和端口都是示例，不是必须照抄的固定值。`panel.example.com` 是示例面板域名，`node.example.com` 是示例节点域名，`site.example.com` 是示例网站域名，`40000` 是示例 3x-ui 面板端口，`2096` 是示例订阅端口，`8443` 是示例 Web 反代引擎本地端口，`1443` 是示例 Xray/REALITY 本地端口。
 
 实际部署时请替换成你自己的域名、路径和端口；如果脚本已经保存过配置，以脚本当前显示为准，不要盲目照抄教程里的示例。
 
@@ -79,7 +79,7 @@ Cloudflare 建议：
 panel.example.com  -> Caddy 127.0.0.1:8443 -> 3x-ui 面板 127.0.0.1:40000
 panel.example.com/sub/ -> Caddy -> 3x-ui 订阅 127.0.0.1:2096
 REALITY SNI / 未知 SNI -> Xray REALITY 127.0.0.1:1443
-site.example.com -> Caddy -> 本地网站后端
+site.example.com -> Caddy/Nginx 本地 Web 反代 -> 本地网站后端
 ```
 
 关键原则：
@@ -87,14 +87,14 @@ site.example.com -> Caddy -> 本地网站后端
 | 原则 | 说明 |
 |---|---|
 | 公网 `443` 只给 Nginx stream | 避免 Caddy、Xray、面板抢端口 |
-| Caddy 默认监听本地 `8443` | 浏览器 HTTPS 由 Caddy 处理 |
+| Web 反代引擎默认监听本地 `8443` | 浏览器 HTTPS 由 Caddy 或 Nginx 本地 Web 反代处理 |
 | 3x-ui 面板不使用自带证书作为公网 HTTPS | 面板作为本地 HTTP 后端 |
 | REALITY 使用外部真实 SNI | 不要把 `dest` 写成自己的面板域名 |
 | 成功后再收紧防火墙 | 先跑通，再只保留必要端口 |
 
 `Xray 入站管理` 只记录 `SNI -> 本地地址:端口`，不是 3x-ui 入站编辑器；需要先在 3x-ui 中创建并启用本地入站。Nginx Stream 模式和 TCP Peek + Splice 模式支持多个本地 Xray 入站按 SNI 分流；Xray 本身可以有多个入站，但 xray-fallback 模式下公网 `443` 默认由一个 Xray 主入站接管，脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。
 
-普通 TLS 和 REALITY 要分开判断：普通 TLS 更关注本机证书、Caddy fallback、Host/SNI 是否匹配；REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定，不要求 REALITY `serverName` 加入 Caddy，也不要求本机证书覆盖 REALITY `serverName`。证书策略仍然使用 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。3x-ui 安装阶段选择的证书只用于完成安装流程，不是 443 单入口最终使用的证书方案。
+普通 TLS 和 REALITY 要分开判断：普通 TLS 更关注本机证书、Web fallback、Host/SNI 是否匹配；REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定，不要求 REALITY `serverName` 加入 Web 反代引擎，也不要求本机证书覆盖 REALITY `serverName`。证书策略仍然使用 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。3x-ui 安装阶段选择的证书只用于完成安装流程，不是 443 单入口最终使用的证书方案。
 
 ## 操作步骤
 
@@ -142,7 +142,7 @@ ss -lntp | grep ':443' || echo "443 未监听"
 | 为 IP 申请证书 | 仅作为临时过渡，不推荐作为正式公网 HTTPS | 接入 443 前清空 3x-ui 证书路径 |
 | 选择已有证书路径 | 可用于临时完成安装 | 接入 443 前清空 3x-ui 证书路径 |
 
-最终架构是：公网 HTTPS 由 Caddy 统一处理，证书由 VPS-Optimize 使用 `acme.sh + Cloudflare DNS API` 申请和安装；3x-ui 面板和订阅只作为本地 HTTP 后端，3x-ui 自带证书不作为最终公网证书方案。
+最终架构是：公网 HTTPS 由当前 Web 反代引擎（Caddy 或 Nginx）统一处理，证书由 VPS-Optimize 使用 `acme.sh + Cloudflare DNS API` 申请和安装；3x-ui 面板和订阅只作为本地 HTTP 后端，3x-ui 自带证书不作为最终公网证书方案。
 
 安装时先让它正常跑起来即可，后面接入 443 前再统一整理监听地址和证书路径。
 
@@ -160,7 +160,7 @@ ss -lntp | grep ':443' || echo "443 未监听"
 
 ### 3. 清空 3x-ui 面板证书路径
 
-只要你准备接入 VPS-Optimize 的 443 单入口，就应清空 3x-ui 面板和订阅证书路径，让 Caddy 接管公网 HTTPS。
+只要你准备接入 VPS-Optimize 的 443 单入口，就应清空 3x-ui 面板和订阅证书路径，让 Web 反代引擎接管公网 HTTPS。
 
 进入 3x-ui 面板：
 
@@ -179,7 +179,7 @@ ss -lntp | grep ':443' || echo "443 未监听"
 
 保存并重启面板。
 
-原因：接入 443 单入口后，公网 HTTPS 由 Caddy 处理，3x-ui 面板只做本地 HTTP 后端。如果不清空，可能导致 502 Bad Gateway、HTTP/HTTPS 后端协议不匹配、重定向循环、证书路径混乱、面板或订阅异常。
+原因：接入 443 单入口后，公网 HTTPS 由 Web 反代引擎处理，3x-ui 面板只做本地 HTTP 后端。如果不清空，可能导致 502 Bad Gateway、HTTP/HTTPS 后端协议不匹配、重定向循环、证书路径混乱、面板或订阅异常。
 
 ### 4. 设置面板监听
 
@@ -279,8 +279,8 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 | REALITY 伪装 SNI | `www.microsoft.com` |
 | Nginx 公网监听地址 | `0.0.0.0` |
 | Nginx 公网监听端口 | `443` |
-| Caddy 本地监听地址 | `127.0.0.1` |
-| Caddy 本地监听端口 | `8443` |
+| Web 反代引擎本地监听地址 | `127.0.0.1` |
+| Web 反代引擎本地监听端口 | `8443` |
 | Xray REALITY 本地监听地址 | `127.0.0.1` |
 | Xray REALITY 本地监听端口 | `1443` |
 | 3x-ui 面板监听地址 | `127.0.0.1` |

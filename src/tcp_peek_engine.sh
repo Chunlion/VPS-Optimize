@@ -152,10 +152,9 @@ start_tcp_peek_test_port() {
         "停止 vpso-mux-preflight.service，或继续使用 Nginx Stream / Xray Fallback，不会改动公网 443" \
         "低内存或低磁盘机器会被资源预检查拦截；公网 443 在本步骤不会被替换。" || return 1
     install_vpso_mux_binary || return 1
-    apply_caddy_configs_for_single_443 || return 1
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
-    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    apply_web_proxy_configs_for_single_443 || return 1
+    restart_web_proxy_for_single_443 || return 1
+    tcp_probe_host "$(web_proxy_engine_label) 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
     tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1 || return 1
     run_tcppeek_preflight_service 1 "8444" || return 1
     echo -e "${GREEN}✅ vpso-mux 预检服务已启动在测试端口 8444，公网 443 未改动。${PLAIN}"
@@ -169,12 +168,11 @@ start_tcp_peek_test_port() {
 preflight_tcppeek_before_cutover() {
     echo -e "${CYAN}▶ 正在执行 TCP Peek 8444 安全预检，公网 443 暂不改动...${PLAIN}"
     require_vpso_mux_binary_for_cutover || return 1
-    warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
+    warn_if_public_bind "$(web_proxy_engine_label)" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
-    apply_caddy_configs_for_single_443 || return 1
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
-    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    apply_web_proxy_configs_for_single_443 || return 1
+    restart_web_proxy_for_single_443 || return 1
+    tcp_probe_host "$(web_proxy_engine_label) 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
     tcp_probe_host "Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1 || {
         echo -e "${RED}❌ Xray 本地入站不可达，拒绝切换 TCP Peek。请先在 3x-ui/Xray 中准备本地监听入站。${PLAIN}"
         return 1
@@ -415,6 +413,22 @@ stop_vpso_mux_service_if_public_443() {
     fi
 }
 
+stop_caddy_service_if_public_443() {
+    local listener
+    listener=$(detect_443_listener)
+    listener_info_has_entry "$listener" "caddy" || return 0
+    if ! systemctl stop caddy; then
+        echo -e "${RED}❌ 停止 caddy 失败，公网 443 仍可能被 Caddy 占用。${PLAIN}"
+        return 1
+    fi
+    sleep 1
+    listener=$(detect_443_listener)
+    if listener_info_has_entry "$listener" "caddy"; then
+        echo -e "${RED}❌ caddy 已执行停止，但仍在监听公网 443，拒绝继续切换入口。${PLAIN}"
+        return 1
+    fi
+}
+
 disable_nginx_stream_public_443() {
     local nginx_conf="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
     local listener
@@ -444,6 +458,8 @@ disable_nginx_stream_public_443() {
 stop_public_443_entry_services_for_target() {
     local target_mode="$1"
     target_mode=$(normalize_entry_mode_name "$target_mode") || return 1
+    quarantine_legacy_nginx_https_proxy_configs
+    stop_caddy_service_if_public_443 || return 1
 
     if [[ "$target_mode" != "nginx-stream" ]]; then
         disable_nginx_stream_public_443 || return 1
@@ -540,19 +556,26 @@ assert_nginx_stream_config_loaded() {
 check_entry_mode_dependencies() {
     local mode="$1"
     mode=$(normalize_entry_mode_name "$mode") || { echo -e "${RED}❌ 目标入口模式无效：${mode}${PLAIN}"; return 1; }
+    assert_web_proxy_whitelist_supported "$mode" "${WEB_PROXY_ENGINE:-caddy}" || return 1
 
     case "$mode" in
         "nginx-stream")
             command -v nginx >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Nginx，切换时会沿用现有 Nginx stream 安装逻辑。${PLAIN}"
-            command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
+                command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            fi
             ;;
         "tcp-peek")
             require_vpso_mux_binary_for_cutover || return 1
-            command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
+                command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            fi
             ;;
         "xray-fallback")
             xray_entry_service_name >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 xray/x-ui/3x-ui systemd 服务，拒绝切换。${PLAIN}"; return 1; }
-            command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
+                command -v caddy >/dev/null 2>&1 || echo -e "${YELLOW}未检测到 Caddy，切换时会沿用现有 Caddy 安装逻辑。${PLAIN}"
+            fi
             ;;
     esac
 }
@@ -643,12 +666,13 @@ apply_nginx_stream_mode() {
     local backup_dir="${1:-}"
     install_nginx_stream_stack || return 1
     harden_nginx_public_errors
-    apply_caddy_configs_for_single_443 || return 1
+    apply_web_proxy_configs_for_single_443 || return 1
     cleanup_old_nginx_sni_stream_configs
     write_nginx_sni_stream_config || return 1
     assert_nginx_stream_config_loaded "$NGINX_LISTEN_PORT" || return 1
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
+    if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
+        restart_web_proxy_for_single_443 || return 1
+    fi
     systemctl enable nginx >/dev/null 2>&1 || true
     if ! systemctl restart nginx; then
         print_nginx_stream_failure_context "$NGINX_LISTEN_PORT"
@@ -659,7 +683,7 @@ apply_nginx_stream_mode() {
         return 1
     fi
     probe_tls_sni_certificate "Nginx Stream 面板 SNI" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
-    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    tcp_probe_host "$(web_proxy_engine_label) 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
     if xray_entry_service_name >/dev/null 2>&1; then
         restart_xray_entry_service || echo -e "${YELLOW}⚠️ Xray/3x-ui 服务重启失败；Nginx Stream/Web 入口已恢复，请单独检查 Xray 入站。${PLAIN}"
     fi
@@ -674,11 +698,10 @@ apply_tcppeek_mode() {
     local backup_dir="${1:-}"
     local tmp_config
     require_vpso_mux_binary_for_cutover || return 1
-    warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
+    warn_if_public_bind "$(web_proxy_engine_label)" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
-    apply_caddy_configs_for_single_443 || return 1
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
+    apply_web_proxy_configs_for_single_443 || return 1
+    restart_web_proxy_for_single_443 || return 1
     tmp_config="/etc/vps-optimize/vpso-mux.yaml.tmp.$$"
     write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_config" || return 1
     run_vpso_mux_config_check "$tmp_config" || { quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true; return 1; }
@@ -694,7 +717,7 @@ apply_tcppeek_mode() {
         return 1
     fi
     probe_tls_sni_certificate "TCP Peek 面板 SNI" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
-    tcp_probe_host "Caddy 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    tcp_probe_host "$(web_proxy_engine_label) 本地 TLS" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
     if xray_entry_service_name >/dev/null 2>&1; then
         restart_xray_entry_service || return 1
     fi
@@ -704,12 +727,11 @@ apply_tcppeek_mode() {
 
 apply_xray_fallback_mode() {
     local backup_dir="${1:-}"
-    apply_caddy_configs_for_single_443 || return 1
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy || return 1
+    apply_web_proxy_configs_for_single_443 || return 1
+    restart_web_proxy_for_single_443 || return 1
     restart_xray_entry_service || return 1
     verify_public_443_listener_for_mode "xray-fallback" || return 1
-    tcp_probe_host "Caddy fallback 后端" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
+    tcp_probe_host "$(web_proxy_engine_label) fallback 后端" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
     probe_tls_sni_certificate "Xray Fallback 面板 SNI" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
     write_single_443_engine_state "xray-fallback" "$backup_dir"
 }
@@ -777,7 +799,7 @@ prepare_initial_entry_mode_dependencies() {
             }
             print_xray_fallback_mode_explanation
             confirm_risk_action "首次配置使用 Xray Fallback 模式" \
-                "公网 443 将由已有 Xray 主入站接管，普通 HTTPS fallback 到 Caddy" \
+                "公网 443 将由已有 Xray 主入站接管，普通 HTTPS fallback 到所选 Web 反代引擎" \
                 "返回首次配置并选择 Nginx Stream 模式或 TCP Peek + Splice 模式" \
                 "确认你已经在 Xray/3x-ui 中准备好公网 443 主入站；脚本不会创建或修改 3x-ui/Xray 入站内部配置。" || return 1
             ;;

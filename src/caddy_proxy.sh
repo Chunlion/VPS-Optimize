@@ -206,6 +206,18 @@ nginx_proxy_warn_if_single_entry_enabled() {
     return 0
 }
 
+quarantine_legacy_nginx_https_proxy_configs() {
+    local conf_file moved=0
+    for conf_file in /etc/nginx/conf.d/vps_proxy_*.conf; do
+        [[ -e "$conf_file" ]] || continue
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-proxy-to-443-entry" >/dev/null 2>&1 || true
+        moved=$((moved + 1))
+    done
+    if [[ "$moved" -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️ 已隔离 ${moved} 个旧 Nginx HTTPS 反代配置，避免抢占公网 443。${PLAIN}"
+    fi
+}
+
 nginx_proxy_ensure_certificate() {
     local domain="$1"
     local cert_file="/etc/caddy/certs/${domain}.crt"

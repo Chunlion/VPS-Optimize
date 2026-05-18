@@ -99,8 +99,8 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 |---|---|
 | 只有 3x-ui，没有其他网站 | 直接按 3x-ui + 443 教程部署 |
 | 已有 3x-ui 且自带 HTTPS | 先清空 3x-ui 证书路径，再接入 443 |
-| 已有 Caddy 反代 | 记录旧域名和后端，启用 443 后逐个补录 |
-| 已有 Nginx/Apache 网站 | 先把网站后端改为本地端口，再用 443 单入口的 Web 域名/反代补录 |
+| 已有 Caddy 反代 | 记录旧域名和后端，启用 443 后逐个补录；可继续选择 Caddy，也可切到 Nginx 本地 Web 反代 |
+| 已有 Nginx/Apache 网站 | 先把网站后端改为本地端口，再用 443 单入口的 Web 域名/反代补录；可选择 Caddy 或 Nginx 本地 Web 反代 |
 | 已有订阅工具 Docker 容器，暂不启用 443 单入口 | 保留容器，用 `主菜单 [4 反代]` 选择 Caddy 或 Nginx HTTPS 反代 |
 | 已有订阅工具 Docker 容器，准备启用 443 单入口 | 保留容器，把外部访问改成 443 单入口的 Web 域名/反代 |
 
@@ -128,7 +128,7 @@ Nginx HTTPS 反代会复用现有 `acme.sh + Cloudflare DNS API` 证书流程，
 注意事项：
 
 1. 该流程只适合还没有启用 443 单入口的服务器。
-2. 如果已经启用 443 单入口，Nginx HTTPS 反代会抢占公网 `443`，应改用 `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]`。
+2. 如果已经启用 443 单入口，Nginx HTTPS 反代会抢占公网 `443`，应改用 `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]`，并在该菜单里选择 Caddy 或 Nginx 本地 Web 反代引擎。
 3. 同一个域名只交给 Caddy 或 Nginx 其中一个入口管理，不要重复配置。
 4. 后端仍建议监听 `127.0.0.1:端口`，例如 `127.0.0.1:3000`。域名和端口都是示例值，请替换为你的实际值。
 
@@ -209,7 +209,7 @@ grep -R "tls " /etc/caddy 2>/dev/null
 
 ### 启用 443 后补录
 
-首次配置 443 单入口可能会隔离旧 Caddy 配置，避免旧配置继续抢占公网 `443`。启用后不要再手写抢占 `443` 的旧规则，而是逐个补录：
+首次配置或重新应用 443 单入口可能会隔离旧 Caddy 配置和脚本管理的旧 Nginx HTTPS 反代配置，避免旧配置继续抢占公网 `443`。启用后不要再手写抢占 `443` 的旧规则，而是逐个补录：
 
 ```text
 主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]
@@ -233,7 +233,7 @@ openssl s_client -connect 服务器IP:443 -servername site.example.com </dev/nul
 
 ## 迁移已有 Nginx/Apache 网站
 
-443 单入口模式下，公网 `443` 应由 Nginx stream 统一监听。旧 Nginx server、Apache、面板、Xray 都不应该再直接监听公网 `443`。
+443 单入口模式下，公网 `443` 应由当前入口模式统一监听。旧 Nginx server、Apache、面板、Xray 都不应该再直接监听公网 `443`；如果希望继续用 Nginx 做网站反代，请在 `[19] -> [8]` 切换到 Nginx 本地 Web 反代引擎，而不是保留旧的公网 `443` server。
 
 建议做法：
 
@@ -253,7 +253,7 @@ grep -R "listen" /etc/nginx /etc/apache2 /etc/httpd 2>/dev/null
 
 ## 迁移 Docker 订阅工具
 
-目标是容器后端只在本机或内网监听，公网只走 Caddy/Nginx 反代或 443 单入口。
+目标是容器后端只在本机或内网监听，公网只走 Caddy/Nginx 反代或 443 单入口。启用 443 单入口后，Caddy/Nginx 是可选的本地 Web 反代引擎，不再直接抢公网 `443`。
 
 先看容器端口：
 
@@ -302,9 +302,9 @@ https://sub.example.com:3000/
 
 | 检查项 | 命令或入口 | 期望 |
 |---|---|---|
-| 端口监听 | `ss -lntp` | 公网 `443` 只给 Nginx stream |
+| 端口监听 | `ss -lntp` | 公网 `443` 只给当前入口服务 |
 | Nginx 配置 | `nginx -t` | 通过 |
-| Caddy 配置 | `caddy validate --config /etc/caddy/Caddyfile` | 通过 |
+| Caddy 配置 | `caddy validate --config /etc/caddy/Caddyfile` | 使用 Caddy 作为 Web 反代引擎时通过 |
 | 面板后端 | `curl -I http://127.0.0.1:40000/panel/` | 200/302/401 均可，不能拒绝连接 |
 | 订阅后端 | `curl -I http://127.0.0.1:2096/sub/` | 能连通 |
 | 面板公网 | `curl -I https://panel.example.com/panel/` | HTTPS 正常 |
@@ -348,7 +348,7 @@ https://sub.example.com:3000/
 |---|---|---|
 | 不盘点旧 `443` 占用就直接首次配置 | Nginx/Caddy 端口冲突 | 先 `ss -lntp`，记录旧服务 |
 | 新增网站时重跑首次配置 | 配置被重复改写，排错变复杂 | 后续新增只走 `[8 管理 Web 域名/反代]` |
-| 保留 3x-ui 自带 HTTPS | 重定向循环或 502 | 清空证书路径，让 Caddy 接管 HTTPS |
+| 保留 3x-ui 自带 HTTPS | 重定向循环或 502 | 清空证书路径，让 Web 反代引擎接管 HTTPS |
 | 把后端写成公网域名 | 反代绕路，证书和 Header 混乱 | 后端使用 `127.0.0.1:端口` |
 | Cloudflare 开橙云 | REALITY、证书或 SNI 行为异常 | 先用 DNS only / 灰云跑通 |
-| 没有迁移旧 Caddy 站点 | 旧网站启用 443 后打不开 | 逐个通过 `[8 管理 Web 域名/反代]` 补录 |
+| 没有迁移旧 Caddy/Nginx 站点 | 旧网站启用 443 后打不开 | 逐个通过 `[8 管理 Web 域名/反代]` 补录，并选择需要的 Web 反代引擎 |

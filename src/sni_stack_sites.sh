@@ -3,9 +3,13 @@
 
 list_sni_stack_sites() {
     load_sni_stack_env || return 1
+    local web_engine web_label
+    web_engine=$(current_web_proxy_engine)
+    web_label=$(web_proxy_engine_label "$web_engine")
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}当前 443 单入口网站/反代域名${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "Web 反代引擎：${web_label} (${web_engine}) -> $(web_proxy_backend)"
     echo -e "面板域名：${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     local panel_ranges
     panel_ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
@@ -49,7 +53,10 @@ add_sni_stack_site() {
     fi
 
     echo -e "这个入口适合后续新增网站，例如 SublinkPro、Dockge、博客、订阅管理工具等。"
-    echo -e "${YELLOW}新增域名会走：公网 ${NGINX_LISTEN_PORT} -> Nginx SNI -> Caddy -> 本地后端。${PLAIN}"
+    local web_engine web_label
+    web_engine=$(current_web_proxy_engine)
+    web_label=$(web_proxy_engine_label "$web_engine")
+    echo -e "${YELLOW}新增域名会走：公网 ${NGINX_LISTEN_PORT} -> 443 入口分流 -> ${web_label} -> 本地后端。${PLAIN}"
     echo -e ""
 
     local site_domain site_addr site_port advanced_mode existing idx confirm
@@ -102,7 +109,13 @@ add_sni_stack_site() {
     is_valid_port "$site_port" || { echo -e "${RED}❌ 后端端口无效：${site_port}${PLAIN}"; return 1; }
     warn_if_public_bind "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
 
-    read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
+    if web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "$web_engine"; then
+        read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
+    else
+        echo -e "${YELLOW}当前组合为 xray-fallback + Nginx 本地 Web 反代，无法可靠获取真实客户端源 IP，本次禁止为新域名启用 Web 白名单。${PLAIN}"
+        echo -e "${YELLOW}如需 Web 白名单，请改用 Nginx Stream/TCP Peek 入口模式，或选择 Caddy 作为 Web 反代引擎。${PLAIN}"
+        enable_ip_whitelist="n"
+    fi
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
@@ -116,7 +129,7 @@ add_sni_stack_site() {
     echo -e "${CYAN}即将添加：${site_domain} -> ${site_addr}:${site_port}${PLAIN}"
     [[ -n "${whitelist_ranges:-}" ]] && echo -e "${YELLOW}IP 白名单：${whitelist_ranges}${PLAIN}"
     confirm_risk_action "新增 443 网站/反代域名 ${site_domain}" \
-        "证书、Caddy 站点配置和 Nginx SNI 分流配置" \
+        "证书、Web 反代引擎配置和 443 入口分流配置" \
         "使用 443 单入口备份恢复，或从网站管理菜单删除该域名" \
         "确认域名已解析到当前 VPS，后端端口可从本机访问。" || return 1
 
@@ -130,7 +143,7 @@ add_sni_stack_site() {
     apply_sni_stack_runtime_config || return 1
     echo -e "${GREEN}✅ 已添加网站入口：https://${site_domain}/${PLAIN}"
     echo -e "${YELLOW}提醒：后端服务需要监听 ${site_addr}:${site_port}，浏览器只访问 https://${site_domain}/。${PLAIN}"
-    echo -e "${CYAN}当前 Caddy 后端：reverse_proxy ${site_addr}:${site_port}${PLAIN}"
+    echo -e "${CYAN}当前 Web 反代后端：${web_label} -> ${site_addr}:${site_port}${PLAIN}"
 }
 
 edit_sni_stack_site_backend() {
@@ -173,7 +186,7 @@ edit_sni_stack_site_backend() {
     echo -e ""
     echo -e "${CYAN}即将修改：${domain} -> ${new_addr}:${new_port}${PLAIN}"
     confirm_risk_action "修改 443 网站/反代后端" \
-        "Caddy 反代后端和 Nginx SNI 分流配置" \
+        "Web 反代引擎后端和 443 入口分流配置" \
         "使用 443 单入口备份恢复修改前配置" \
         "确认新后端地址和端口已经在本机监听。" || return 1
 
@@ -181,7 +194,7 @@ edit_sni_stack_site_backend() {
     SITE_BACKEND_PORTS[$idx]="$new_port"
     apply_sni_stack_runtime_config || return 1
     echo -e "${GREEN}✅ 已更新网站后端：https://${domain}/ -> ${new_addr}:${new_port}${PLAIN}"
-    echo -e "${CYAN}当前 Caddy 后端：reverse_proxy ${new_addr}:${new_port}${PLAIN}"
+    echo -e "${CYAN}当前 Web 反代后端：$(web_proxy_engine_label) -> ${new_addr}:${new_port}${PLAIN}"
 }
 
 remove_sni_stack_site() {
@@ -215,7 +228,7 @@ remove_sni_stack_site() {
     idx=$((choice - 1))
     domain="${SITE_DOMAINS[$idx]}"
     confirm_risk_action "从 443 分流中移除 ${domain}" \
-        "该域名的 Caddy 站点和 Nginx SNI 分流规则" \
+        "该域名的 Web 反代引擎配置和 443 入口分流规则" \
         "使用 443 单入口备份恢复，或重新新增该网站/反代域名" \
         "确认该域名不再承载线上面板、订阅或网站。" || return 1
 
@@ -247,6 +260,65 @@ remove_sni_stack_site() {
     else
         echo -e "${GREEN}✅ 已删除 ${domain} 的分流配置，证书文件已保留。${PLAIN}"
     fi
+}
+
+switch_sni_stack_web_proxy_engine() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}切换 443 Web 反代引擎${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+
+    local current_engine current_label choice new_engine new_label entry_mode
+    current_engine=$(current_web_proxy_engine)
+    current_label=$(web_proxy_engine_label "$current_engine")
+    entry_mode="${ENTRY_MODE:-$(get_entry_mode)}"
+
+    echo -e "当前入口模式：${entry_mode}"
+    echo -e "当前 Web 反代引擎：${current_label} (${current_engine})"
+    echo -e "本地 TLS 后端：$(web_proxy_backend)"
+    echo -e "${YELLOW}切换时会按当前域名、证书、后端和白名单重新渲染所选引擎，并隔离另一套 443 本地 Web 反代配置。${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "${GREEN}  1. Caddy 本地 HTTPS 反代${PLAIN}"
+    echo -e "${GREEN}  2. Nginx 本地 HTTPS 反代${PLAIN}"
+    echo -e "${RED}  0. 取消${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    read_trimmed choice "请选择 Web 反代引擎（默认保持当前）: "
+    case "$choice" in
+        ""|0|q|Q)
+            echo -e "${BLUE}已取消切换 Web 反代引擎。${PLAIN}"
+            return 0
+            ;;
+        1) new_engine="caddy" ;;
+        2) new_engine="nginx" ;;
+        *)
+            echo -e "${RED}❌ 无效的 Web 反代引擎选择。${PLAIN}"
+            return 1
+            ;;
+    esac
+
+    new_label=$(web_proxy_engine_label "$new_engine")
+    if [[ "$new_engine" == "$current_engine" ]]; then
+        echo -e "${BLUE}Web 反代引擎未变化，仍为 ${current_label}。${PLAIN}"
+        return 0
+    fi
+
+    if [[ ${#SNI_IP_WHITELIST_DOMAINS[@]} -gt 0 ]] && ! web_proxy_engine_supports_web_whitelist "$entry_mode" "$new_engine"; then
+        echo -e "${RED}❌ 不能切换到 ${new_label}：当前已有 Web 白名单，且 xray-fallback + Nginx 本地反代无法可靠获取真实客户端源 IP。${PLAIN}"
+        echo -e "${YELLOW}请先清除 Web 白名单，或改用 Nginx Stream/TCP Peek 入口模式后再切换。${PLAIN}"
+        return 1
+    fi
+    if ! web_proxy_engine_supports_web_whitelist "$entry_mode" "$new_engine"; then
+        echo -e "${YELLOW}⚠️ 当前入口模式为 xray-fallback，切换到 Nginx 本地反代后将禁止新增 Web 白名单。${PLAIN}"
+    fi
+
+    confirm_risk_action "切换 443 Web 反代引擎为 ${new_label}" \
+        "重新生成 ${new_label} 配置，并隔离旧的 443 本地 Web 反代配置；公网 443 入口模式保持 ${entry_mode}" \
+        "使用 443 单入口备份恢复，或切回 ${current_label} 后重新应用" \
+        "确认本机 ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} 未被其他服务占用，且证书文件仍在 /etc/caddy/certs/。" || return 1
+
+    WEB_PROXY_ENGINE="$new_engine"
+    save_and_offer_reapply_sni_stack
 }
 
 list_sni_stack_tcp_routes() {
@@ -309,14 +381,14 @@ add_sni_stack_tcp_route() {
     is_loopback_listen_addr "$route_addr" || { echo -e "${RED}❌ 为保证安全，TCP/SNI 入站后端只允许 127.0.0.1、localhost 或 ::1。${PLAIN}"; return 1; }
     is_valid_port "$route_port" || { echo -e "${RED}❌ 入站端口无效：${route_port}${PLAIN}"; return 1; }
     if [[ "$route_port" == "$NGINX_LISTEN_PORT" || "$route_port" == "$CADDY_LISTEN_PORT" || "$route_port" == "$PANEL_LISTEN_PORT" || "$route_port" == "$SUB_LISTEN_PORT" ]]; then
-        echo -e "${RED}❌ 入站端口不能复用公网入口、Caddy、面板或订阅服务端口。${PLAIN}"
+        echo -e "${RED}❌ 入站端口不能复用公网入口、Web 反代、面板或订阅服务端口。${PLAIN}"
         return 1
     fi
 
     echo -e ""
     echo -e "${CYAN}即将添加 TCP/SNI 分流：${route_sni}:${NGINX_LISTEN_PORT} -> ${route_addr}:${route_port}${PLAIN}"
     echo -e "${YELLOW}请确认 3x-ui 入站已监听 ${route_addr}:${route_port}，且客户端连接端口使用 ${NGINX_LISTEN_PORT}。${PLAIN}"
-    echo -e "${YELLOW}说明：Web 白名单只保护 Caddy/Web 域名，不会应用到 TCP/SNI 或 Xray 节点流量。${PLAIN}"
+    echo -e "${YELLOW}说明：Web 白名单只保护 Web 域名，不会应用到 TCP/SNI 或 Xray 节点流量。${PLAIN}"
     confirm_risk_action "新增 443 TCP/SNI 入站 ${route_sni}" \
         "Nginx stream SNI 分流规则，会把该 SNI 直通到本地 3x-ui 入站" \
         "使用 443 单入口备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" \

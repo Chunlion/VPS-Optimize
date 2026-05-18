@@ -49,7 +49,7 @@ add_sni_stack_site() {
     fi
 
     echo -e "这个入口适合后续新增网站，例如 SublinkPro、Dockge、博客、订阅管理工具等。"
-    echo -e "${YELLOW}新增域名会走：公网 ${NGINX_LISTEN_PORT} -> Nginx SNI -> Caddy -> 本地后端。${PLAIN}"
+    echo -e "${YELLOW}新增域名会走：公网 ${NGINX_LISTEN_PORT} -> 443 入口分流 -> Web 反代引擎 -> 本地后端。${PLAIN}"
     echo -e ""
 
     local site_domain site_addr site_port advanced_mode existing idx confirm
@@ -116,7 +116,7 @@ add_sni_stack_site() {
     echo -e "${CYAN}即将添加：${site_domain} -> ${site_addr}:${site_port}${PLAIN}"
     [[ -n "${whitelist_ranges:-}" ]] && echo -e "${YELLOW}IP 白名单：${whitelist_ranges}${PLAIN}"
     confirm_risk_action "新增 443 网站/反代域名 ${site_domain}" \
-        "证书、Caddy 站点配置和 Nginx SNI 分流配置" \
+        "证书、Web 反代引擎配置和 443 入口分流配置" \
         "使用 443 单入口备份恢复，或从网站管理菜单删除该域名" \
         "确认域名已解析到当前 VPS，后端端口可从本机访问。" || return 1
 
@@ -130,7 +130,7 @@ add_sni_stack_site() {
     apply_sni_stack_runtime_config || return 1
     echo -e "${GREEN}✅ 已添加网站入口：https://${site_domain}/${PLAIN}"
     echo -e "${YELLOW}提醒：后端服务需要监听 ${site_addr}:${site_port}，浏览器只访问 https://${site_domain}/。${PLAIN}"
-    echo -e "${CYAN}当前 Caddy 后端：reverse_proxy ${site_addr}:${site_port}${PLAIN}"
+    echo -e "${CYAN}当前 Web 反代后端：${site_addr}:${site_port}${PLAIN}"
 }
 
 edit_sni_stack_site_backend() {
@@ -181,7 +181,7 @@ edit_sni_stack_site_backend() {
     SITE_BACKEND_PORTS[$idx]="$new_port"
     apply_sni_stack_runtime_config || return 1
     echo -e "${GREEN}✅ 已更新网站后端：https://${domain}/ -> ${new_addr}:${new_port}${PLAIN}"
-    echo -e "${CYAN}当前 Caddy 后端：reverse_proxy ${new_addr}:${new_port}${PLAIN}"
+    echo -e "${CYAN}当前 Web 反代后端：${new_addr}:${new_port}${PLAIN}"
 }
 
 remove_sni_stack_site() {
@@ -215,7 +215,7 @@ remove_sni_stack_site() {
     idx=$((choice - 1))
     domain="${SITE_DOMAINS[$idx]}"
     confirm_risk_action "从 443 分流中移除 ${domain}" \
-        "该域名的 Caddy 站点和 Nginx SNI 分流规则" \
+        "该域名的 Web 反代引擎配置和 443 入口分流规则" \
         "使用 443 单入口备份恢复，或重新新增该网站/反代域名" \
         "确认该域名不再承载线上面板、订阅或网站。" || return 1
 

@@ -58,13 +58,13 @@ sni_stack_route_name() {
 }
 
 sni_stack_route_summary_for_state() {
-    local caddy_backend xray_backend summary i domain
-    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    local web_backend xray_backend summary i domain
+    web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
-    summary="panel:${PANEL_DOMAIN}->${caddy_backend},reality:${REALITY_SNI}->${xray_backend},default->${xray_backend}"
+    summary="panel:${PANEL_DOMAIN}->${web_backend},reality:${REALITY_SNI}->${xray_backend},default->${xray_backend}"
     for i in "${!SITE_DOMAINS[@]}"; do
         domain="${SITE_DOMAINS[$i]}"
-        [[ -n "$domain" ]] && summary+=",site:${domain}->${caddy_backend}"
+        [[ -n "$domain" ]] && summary+=",site:${domain}->${web_backend}"
     done
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
         domain="${TCP_ROUTE_SNIS[$i]}"
@@ -91,12 +91,13 @@ write_single_443_engine_state() {
     local selected_engine="$1"
     local selected_engine_raw="$1"
     local backup_id="${2:-}"
-    local state_file mux_config mux_service caddy_backend xray_backend routes whitelist_rules
+    local state_file mux_config mux_service web_backend xray_backend routes whitelist_rules web_engine
     selected_engine=$(normalize_entry_mode_name "$selected_engine_raw") || { echo -e "${RED}Invalid engine: ${selected_engine_raw}${PLAIN}"; return 1; }
     state_file=$(single_443_engine_state_path)
     mux_config=$(vpso_mux_config_path)
     mux_service=$(vpso_mux_service_name)
-    caddy_backend=$(format_hostport "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
+    web_engine=$(current_web_proxy_engine)
+    web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
     routes=$(sni_stack_route_summary_for_state)
     whitelist_rules=$(sni_stack_whitelist_summary_for_state)
@@ -107,7 +108,9 @@ write_single_443_engine_state() {
 engine='${selected_engine}'
 listen_addr='${NGINX_LISTEN_ADDR}'
 listen_port='${NGINX_LISTEN_PORT}'
-caddy_backend='${caddy_backend}'
+web_proxy_engine='${web_engine}'
+web_proxy_backend='${web_backend}'
+caddy_backend='${web_backend}'
 xray_backend='${xray_backend}'
 default_backend='${xray_backend}'
 routes='${routes}'

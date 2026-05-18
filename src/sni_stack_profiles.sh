@@ -102,25 +102,27 @@ edit_sni_stack_reality_profile() {
 edit_sni_stack_entry_profile() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}修改 Nginx / Caddy 单入口监听${PLAIN}"
+    echo -e "${BOLD}修改 443 入口 / Web 反代监听${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "${YELLOW}适用于：你要调整公网入口端口、Caddy 本地 TLS 端口，或修正监听地址。普通用户建议保持默认。${PLAIN}"
+    local web_label
+    web_label=$(web_proxy_engine_label)
+    echo -e "${YELLOW}适用于：你要调整公网入口端口、Web 反代本地 TLS 端口，或修正监听地址。普通用户建议保持默认。${PLAIN}"
     echo -e "------------------------------------------------"
     echo -e "当前公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT}"
-    echo -e "当前 Caddy 本地 TLS：${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
+    echo -e "当前 ${web_label} 本地 TLS：${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
     echo -e "------------------------------------------------"
 
     NGINX_LISTEN_ADDR=$(ask_with_default "Nginx 公网监听地址" "$NGINX_LISTEN_ADDR")
     NGINX_LISTEN_PORT=$(ask_with_default "Nginx 公网监听端口" "$NGINX_LISTEN_PORT")
-    CADDY_LISTEN_ADDR=$(ask_with_default "Caddy 本地监听地址" "$CADDY_LISTEN_ADDR")
-    CADDY_LISTEN_PORT=$(ask_with_default "Caddy 本地监听端口" "$CADDY_LISTEN_PORT")
+    CADDY_LISTEN_ADDR=$(ask_with_default "${web_label}监听地址" "$CADDY_LISTEN_ADDR")
+    CADDY_LISTEN_PORT=$(ask_with_default "${web_label}监听端口" "$CADDY_LISTEN_PORT")
 
     is_valid_listen_addr "$NGINX_LISTEN_ADDR" || { echo -e "${RED}❌ Nginx 监听地址无效：${NGINX_LISTEN_ADDR}${PLAIN}"; return 1; }
-    is_valid_listen_addr "$CADDY_LISTEN_ADDR" || { echo -e "${RED}❌ Caddy 监听地址无效：${CADDY_LISTEN_ADDR}${PLAIN}"; return 1; }
+    is_valid_listen_addr "$CADDY_LISTEN_ADDR" || { echo -e "${RED}❌ Web 反代监听地址无效：${CADDY_LISTEN_ADDR}${PLAIN}"; return 1; }
     is_valid_port "$NGINX_LISTEN_PORT" || { echo -e "${RED}❌ Nginx 端口无效：${NGINX_LISTEN_PORT}${PLAIN}"; return 1; }
-    is_valid_port "$CADDY_LISTEN_PORT" || { echo -e "${RED}❌ Caddy 端口无效：${CADDY_LISTEN_PORT}${PLAIN}"; return 1; }
-    warn_if_public_bind "Caddy" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
+    is_valid_port "$CADDY_LISTEN_PORT" || { echo -e "${RED}❌ Web 反代端口无效：${CADDY_LISTEN_PORT}${PLAIN}"; return 1; }
+    warn_if_public_bind "$web_label" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     if [[ "$NGINX_LISTEN_PORT" != "443" ]]; then
         echo -e "${YELLOW}⚠️  Nginx 公网入口不是 443。请确认云安全组、防火墙和客户端地址都同步改了。${PLAIN}"
     fi
@@ -196,7 +198,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 修改面板/订阅端口与路径${PLAIN}"
         echo -e "${GREEN}  2. 修改 REALITY 本地监听 / 伪装 SNI${PLAIN}"
-        echo -e "${GREEN}  3. 修改 Nginx 公网入口 / Caddy 本地 TLS${PLAIN}"
+        echo -e "${GREEN}  3. 修改 Nginx 公网入口 / Web 反代本地 TLS${PLAIN}"
         echo -e "${GREEN}  4. 修改面板域名${PLAIN}"
         echo -e "${GREEN}  5. 重新应用当前保存的配置${PLAIN}"
         echo -e "------------------------------------------------"

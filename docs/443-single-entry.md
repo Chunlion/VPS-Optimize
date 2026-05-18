@@ -9,14 +9,14 @@
 ```text
 公网 443 -> Nginx stream 按 SNI 分流
 
-Web 域名        -> Caddy -> 本机 HTTP 后端
-3x-ui 面板      -> Caddy -> 127.0.0.1:40000
-3x-ui 订阅      -> Caddy -> 127.0.0.1:2096
+Web 域名        -> Caddy/Nginx 本地 Web 反代 -> 本机 HTTP 后端
+3x-ui 面板      -> Caddy/Nginx 本地 Web 反代 -> 127.0.0.1:40000
+3x-ui 订阅      -> Caddy/Nginx 本地 Web 反代 -> 127.0.0.1:2096
 REALITY SNI     -> Xray / 3x-ui REALITY -> 127.0.0.1:1443
 未知 SNI        -> Xray / 3x-ui REALITY -> 127.0.0.1:1443
 ```
 
-这样做的好处是：公网只暴露一个 `443`，公网 HTTPS 由 Caddy 统一处理，证书由 VPS-Optimize 使用 `acme.sh + Cloudflare DNS API` 申请和安装。3x-ui 面板和订阅服务只做本机 HTTP 后端，3x-ui 自带证书不作为最终公网证书方案，避免重复 HTTPS、端口冲突、重定向循环和证书路径混乱。
+这样做的好处是：公网只暴露一个 `443`，Web HTTPS 由你选择的本地 Web 反代引擎（Caddy 或 Nginx）处理，证书由 VPS-Optimize 使用 `acme.sh + Cloudflare DNS API` 申请和安装。3x-ui 面板和订阅服务只做本机 HTTP 后端，3x-ui 自带证书不作为最终公网证书方案，避免重复 HTTPS、端口冲突、重定向循环和证书路径混乱。
 
 ## 示例说明
 
@@ -29,7 +29,7 @@ REALITY SNI     -> Xray / 3x-ui REALITY -> 127.0.0.1:1443
 - `site.example.com` = 示例网站域名
 - `40000` = 示例 3x-ui 面板端口
 - `2096` = 示例订阅端口
-- `8443` = 示例 Caddy 本地 HTTPS 端口
+- `8443` = 示例 Web 反代引擎本地 HTTPS 端口
 - `1443` = 示例 Xray/REALITY 本地端口
 
 实际部署时，请替换成你自己的域名、路径和端口。如果你已经在脚本里填写过端口，以脚本保存的配置为准，不要盲目照抄文档示例。
@@ -41,7 +41,7 @@ REALITY SNI     -> Xray / 3x-ui REALITY -> 127.0.0.1:1443
 | 网站域名 | site.example.com | 请改成你自己的 |
 | 3x-ui 面板端口 | 40000 | 以你面板实际端口为准 |
 | 订阅端口 | 2096 | 以你订阅服务实际端口为准 |
-| Caddy 本地端口 | 8443 | 以脚本当前配置为准 |
+| Web 反代引擎本地端口 | 8443 | 以脚本当前配置为准 |
 | Xray/REALITY 本地端口 | 1443 | 以脚本当前配置为准 |
 | 面板路径 | /panel/ | 以你面板设置为准 |
 | 普通订阅路径 | /sub/ | 以你订阅设置为准 |
@@ -75,20 +75,32 @@ https://panel.example.com:1443/
 | Nginx stream | `0.0.0.0:443` | 默认入口模式，按 SNI 分流 |
 | vpso-mux | `0.0.0.0:443` | TCP Peek + Splice 模式入口，和 Nginx Stream 二选一 |
 | Xray/3x-ui 主入站 | `0.0.0.0:443` | Xray Fallback 模式入口，和前两者二选一 |
-| Caddy | `127.0.0.1:8443` | 签发 Web 证书，反代面板、订阅和网站 |
+| Caddy 或 Nginx 本地 Web 反代 | `127.0.0.1:8443` | 托管 Web 证书，反代面板、订阅和网站 |
 | 3x-ui 面板 | `127.0.0.1:40000` | 本机 HTTP 后端，不使用自带证书作为公网 HTTPS |
-| 3x-ui 订阅 | `127.0.0.1:2096` | 本机 HTTP 后端，由 Caddy 代理公网 HTTPS |
+| 3x-ui 订阅 | `127.0.0.1:2096` | 本机 HTTP 后端，由 Web 反代引擎代理公网 HTTPS |
 | REALITY / Xray 本地入站 | `127.0.0.1:1443` | 在 Nginx Stream 或 TCP Peek 模式下由入口按 SNI 转发 |
 
 核心原则：
 
 1. 公网 `443` 同一时间只给一个入口进程：`nginx`、`vpso-mux` 或 Xray 主入站。
-2. Caddy 负责浏览器 HTTPS，3x-ui 面板和订阅只作为本地 HTTP 后端。
+2. Caddy 或 Nginx 本地 Web 反代负责浏览器 HTTPS，3x-ui 面板和订阅只作为本地 HTTP 后端。
 3. REALITY 的 `dest` / `Target` 和 `serverNames` / `SNI` 写外部真实 HTTPS 站点，不要写自己的面板域名。
 
 ## 3x-ui 三种入口模式配置速查
 
-三种入口模式共享同一套 Web 配置：面板域名、订阅路径、网站反代、Caddy 本地端口、证书和 Web 白名单都一样。区别只是谁监听公网 `443`，以及 3x-ui/Xray 主入站是否需要直接占用公网 `443`。
+三种入口模式共享同一套 Web 配置：面板域名、订阅路径、网站反代、Web 反代引擎、本地 TLS 端口、证书和 Web 白名单都一样。区别只是谁监听公网 `443`，以及 3x-ui/Xray 主入站是否需要直接占用公网 `443`。
+
+### Web 反代引擎选择
+
+首次配置 `[2 首次配置 / 安装 443 单入口]` 时可以选择 Caddy 或 Nginx 作为 443 单入口下的本地 Web 反代引擎。后续也可以从：
+
+```text
+主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [8 切换 Web 反代引擎]
+```
+
+切换时脚本会复用当前域名、证书、后端和 Web 白名单，重新渲染所选引擎配置，并把另一套 443 本地 Web 反代配置隔离起来，避免 Caddy/Nginx 同时处理同一批 443 Web 域名。证书路径仍保持 `/etc/caddy/certs/${domain}.crt|key` 和 `/root/cert/${domain}.crt|key`，不改变证书策略。
+
+如果之前在 `主菜单 [4 反代]` 配过独立 Caddy/Nginx HTTPS 反代，启用或重新应用 443 单入口时，脚本会隔离这些可能抢占公网 `443` 的旧配置。之后新增网站请统一走 `[19] -> [8 管理 Web 域名/反代]`。
 
 ### 三种模式都相同的 3x-ui 设置
 
@@ -139,7 +151,7 @@ Clash/Mihomo 反向代理 URI：https://panel.example.com/clash/
 
 ### 模式 2：TCP Peek + Splice
 
-TCP Peek + Splice 模式下，配置过程和 Nginx Stream 一样：面板、订阅和 Xray 入站仍然监听本机地址，客户端仍然连接公网 `443`。切换 TCP Peek 时复用同一套域名、证书、Caddy 后端、Web 白名单和 Xray SNI 分流记录。
+TCP Peek + Splice 模式下，配置过程和 Nginx Stream 一样：面板、订阅和 Xray 入站仍然监听本机地址，客户端仍然连接公网 `443`。切换 TCP Peek 时复用同一套域名、证书、Web 反代后端、Web 白名单和 Xray SNI 分流记录。
 
 | 项目 | 说明 |
 | --- | --- |
@@ -153,7 +165,7 @@ TCP Peek + Splice 模式下，配置过程和 Nginx Stream 一样：面板、订
 
 TCP Peek 的优点：
 
-1. 配置过程和 Nginx Stream 相同，不需要重新填写 3x-ui、Caddy、证书或 Xray SNI 路由。
+1. 配置过程和 Nginx Stream 相同，不需要重新填写 3x-ui、Web 反代引擎、证书或 Xray SNI 路由。
 2. `MSG_PEEK` 只查看 ClientHello，不消费首包，后端仍收到原始 TLS 握手。
 3. 转发优先使用 splice，减少用户态数据拷贝；不可用时自动回退普通 copy。
 4. `vpso-mux` 有独立状态、日志、配置校验和 8444 预检，方便确认切换前后链路。
@@ -164,13 +176,13 @@ TCP Peek 的优点：
 2. 第一次使用 TCP Peek 前，先运行 `主菜单 [19] -> [16] 查看 TCP Peek + Splice 状态 / 8444 预检`。这个步骤只监听 `8444`，不会替换公网 `443`。
 3. `[16]` 通过后，再运行 `[17] TCP Peek 分流规则校验`，最后用 `[5] 切换到 TCP Peek + Splice 模式`。切换前脚本还会自动再跑一次独立 `8444` 预检，失败就不动公网 `443`。
 4. 如果当前 SSH 会话本身连接在公网入口端口，例如 `443`，脚本会拒绝切换。请改用云厂商 VNC/Serial Console，或先用非入口端口的 SSH 登录。
-5. TCP Peek 切换前，Caddy 本地端口和 Xray/REALITY 本地入站都必须能连通；如果 `127.0.0.1:1443` 这类本地入站没监听，先在 3x-ui 启用对应入站或把脚本保存的端口改成实际值。
+5. TCP Peek 切换前，Web 反代引擎本地端口和 Xray/REALITY 本地入站都必须能连通；如果 `127.0.0.1:1443` 这类本地入站没监听，先在 3x-ui 启用对应入站或把脚本保存的端口改成实际值。
 
-首次配置只需要跑同一套 `[2 首次配置 / 安装 443 单入口]` 向导。等共享配置、证书、Caddy 和 3x-ui 本地端口都跑通后，再按上面的 `[16] -> [17] -> [5]` 流程把公网入口进程切到 TCP Peek。
+首次配置只需要跑同一套 `[2 首次配置 / 安装 443 单入口]` 向导。等共享配置、证书、Web 反代引擎和 3x-ui 本地端口都跑通后，再按上面的 `[16] -> [17] -> [5]` 流程把公网入口进程切到 TCP Peek。
 
 ### 模式 3：Xray Fallback
 
-Xray Fallback 是特殊模式。公网 `443` 由你已经配置好的 3x-ui/Xray 主入站监听，HTTPS 再由这个主入站 fallback 到 Caddy 本地端口。脚本不会替你编辑 3x-ui/Xray 入站内部配置。
+Xray Fallback 是特殊模式。公网 `443` 由你已经配置好的 3x-ui/Xray 主入站监听，HTTPS 再由这个主入站 fallback 到当前 Web 反代引擎本地端口。脚本不会替你编辑 3x-ui/Xray 入站内部配置。
 
 切到 xray-fallback 之前，你需要先在 3x-ui 里准备一个“主入站”：
 
@@ -178,20 +190,20 @@ Xray Fallback 是特殊模式。公网 `443` 由你已经配置好的 3x-ui/Xray
 | --- | --- |
 | 主入站监听地址 | `0.0.0.0`，或面板允许的公网监听方式 |
 | 主入站监听端口 | `443` |
-| fallback / fallback dest / 回落目标 | `127.0.0.1:8443`，端口以脚本里的 Caddy 本地端口为准 |
+| fallback / fallback dest / 回落目标 | `127.0.0.1:8443`，端口以脚本里的 Web 反代引擎本地端口为准 |
 | 客户端连接地址 | `node.example.com` 或服务器公网 IP |
 | 客户端连接端口 | `443` |
 | External Proxy | 如果订阅链接没有输出 `:443`，就设置地址为节点域名或服务器公网 IP，端口为 `443` |
 
-Web 面板和订阅仍然走 Caddy，所以面板证书路径、订阅证书路径仍然必须清空。`panel.example.com` 访问链路应是：
+Web 面板和订阅仍然走当前 Web 反代引擎，所以面板证书路径、订阅证书路径仍然必须清空。`panel.example.com` 访问链路应是：
 
 ```text
-浏览器 -> 公网 443 -> Xray 主入站 fallback -> Caddy 127.0.0.1:8443 -> 3x-ui 面板/订阅
+浏览器 -> 公网 443 -> Xray 主入站 fallback -> Web 反代引擎 127.0.0.1:8443 -> 3x-ui 面板/订阅
 ```
 
 xray-fallback 模式不支持脚本继续把多个 SNI 分流到多个本地 Xray 入站。`Xray 入站管理` 菜单只能查看已有规则和当前主入站候选，不能新增、删除或同步规则。需要多个本地 Xray 入站时，请使用 Nginx Stream 或 TCP Peek + Splice。
 
-如果你的主入站是 REALITY，请确认你使用的 3x-ui/Xray 入站类型确实能把 HTTPS fallback 到 Caddy。本脚本只检查公网 `443` 是否由 Xray 监听、Caddy fallback 后端是否可达，不会替你生成 Xray fallback 规则。
+如果你的主入站是 REALITY，请确认你使用的 3x-ui/Xray 入站类型确实能把 HTTPS fallback 到当前 Web 反代引擎。本脚本只检查公网 `443` 是否由 Xray 监听、Web 反代引擎 fallback 后端是否可达，不会替你生成 Xray fallback 规则。
 
 ### 模式切换时 3x-ui 要不要改
 
@@ -199,7 +211,7 @@ xray-fallback 模式不支持脚本继续把多个 SNI 分流到多个本地 Xra
 | --- | --- |
 | Nginx Stream -> TCP Peek + Splice | 通常不用改 3x-ui。保持面板/订阅/Xray 入站都监听本机地址，客户端端口仍是 `443`。 |
 | TCP Peek + Splice -> Nginx Stream | 通常不用改 3x-ui。切回后公网 `443` 由 Nginx stream 监听。 |
-| Nginx Stream 或 TCP Peek + Splice -> Xray Fallback | 先在 3x-ui 里把一个主入站改为公网 `443`，并配置 fallback 到 Caddy 本地端口，再执行脚本切换。 |
+| Nginx Stream 或 TCP Peek + Splice -> Xray Fallback | 先在 3x-ui 里把一个主入站改为公网 `443`，并配置 fallback 到 Web 反代引擎本地端口，再执行脚本切换。 |
 | Xray Fallback -> Nginx Stream 或 TCP Peek + Splice | 先把 3x-ui/Xray 主入站从公网 `443` 移走，改回 `127.0.0.1:1443` 这类本地端口，或先禁用该公网 443 主入站，再执行脚本切换。 |
 | 重新应用当前模式 | 如果只是重建配置，不需要改 3x-ui；如果你改过面板端口、订阅路径或 Xray 本地端口，先在 `[14 修改 443 共享参数]` 同步脚本保存值。 |
 
@@ -241,15 +253,15 @@ TCP Peek + Splice 切换检查：
 
 `ENTRY_MODE` 的新配置值只写入 `nginx-stream`、`xray-fallback`、`tcp-peek`。如果旧配置里没有 `ENTRY_MODE`，脚本按 `nginx-stream` 读取；如果旧配置或 `/etc/vps-optimize/443-engine.conf` 里还有 `nginx_stream`、`xray_fallback`、`tcp_peek`，脚本会按对应的新值兼容读取，并在状态页提示迁移。下次保存、切换或重新应用入口模式时会写回新命名。
 
-无论哪种模式，都不要让 Caddy、3x-ui 面板端口、订阅端口或额外本地入站直接暴露公网。
+无论哪种模式，都不要让 Web 反代引擎、3x-ui 面板端口、订阅端口或额外本地入站直接暴露公网。
 
 ## Xray 入站管理边界
 
 `Xray 入站管理` 只记录 `SNI -> 本地地址:端口` 分流记录，它不是 3x-ui 入站编辑器。用户需要先在 3x-ui 中创建并启用本地入站，然后再把对应的 SNI、本地监听地址和端口写入脚本。
 
-TCP Peek + Splice 模式：基于 MSG_PEEK 读取 TLS ClientHello 中的 SNI，不消费首包，并根据 SNI 将连接分流到 Caddy 或 Xray 本地后端；转发时优先使用 splice 零拷贝，失败时自动回退普通 copy。实际运行的分流器程序为 vpso-mux。
+TCP Peek + Splice 模式：基于 MSG_PEEK 读取 TLS ClientHello 中的 SNI，不消费首包，并根据 SNI 将连接分流到 Web 反代引擎或 Xray 本地后端；转发时优先使用 splice 零拷贝，失败时自动回退普通 copy。实际运行的分流器程序为 vpso-mux。
 
-Nginx Stream 模式和 TCP Peek + Splice 模式支持根据同一份 Xray 入站分流规则，把多个 SNI 转发到多个本地 Xray 入站。Web 域名仍然转发到 Caddy，Xray 入站不受 Web 白名单影响。
+Nginx Stream 模式和 TCP Peek + Splice 模式支持根据同一份 Xray 入站分流规则，把多个 SNI 转发到多个本地 Xray 入站。Web 域名仍然转发到当前 Web 反代引擎，Xray 入站不受 Web 白名单影响。
 
 Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 `443` 默认由一个 Xray 主入站接管。脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。如需多个本地 Xray 入站分流，请使用 Nginx Stream 模式或 TCP Peek + Splice 模式。
 
@@ -259,26 +271,28 @@ xray-fallback 模式下，`Xray 入站管理` 菜单允许查看规则和当前�
 
 ## 普通 TLS 与 REALITY 的区别
 
-普通 TLS 节点更关注本机证书、Caddy fallback、Host/SNI 是否匹配。例如 VLESS + TLS、Trojan + TLS、VMess + WS + TLS、VLESS + gRPC + TLS 这类节点，排查时应确认节点域名是否由用户控制、本机证书是否覆盖该 SNI、Caddy 是否有匹配 fallback，以及浏览器访问是否返回 200/301/302。
+普通 TLS 节点更关注本机证书、Web fallback、Host/SNI 是否匹配。例如 VLESS + TLS、Trojan + TLS、VMess + WS + TLS、VLESS + gRPC + TLS 这类节点，排查时应确认节点域名是否由用户控制、本机证书是否覆盖该 SNI、Web 反代引擎是否有匹配 fallback，以及浏览器访问是否返回 200/301/302。
 
-REALITY 节点不同。REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定、`serverName` 和 `dest` 是否逻辑一致。不要要求 REALITY `serverName` 加入 Caddy，也不要要求本机证书覆盖 REALITY `serverName`。
+REALITY 节点不同。REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定、`serverName` 和 `dest` 是否逻辑一致。不要要求 REALITY `serverName` 加入 Web 反代引擎，也不要要求本机证书覆盖 REALITY `serverName`。
 
 ## 证书策略
 
 443 单入口继续使用 `acme.sh + Cloudflare DNS API` 签发和安装 Web 域名证书。不使用 Caddy DNS 模块，不需要 `xcaddy`，也不让 Caddy 负责 DNS-01 证书申请。
 
-3x-ui 安装阶段出现的证书选择，只是为了完成 3x-ui 安装流程；它不是 443 单入口最终使用的证书方案。最终架构是：公网 HTTPS 由 Caddy 统一处理，3x-ui 面板和订阅只作为本地 HTTP 后端。
+3x-ui 安装阶段出现的证书选择，只是为了完成 3x-ui 安装流程；它不是 443 单入口最终使用的证书方案。最终架构是：公网 HTTPS 由当前 Web 反代引擎统一处理，3x-ui 面板和订阅只作为本地 HTTP 后端。
 
 ## 域名 IP 白名单
 
-如果只想让固定 IP 访问 3x-ui 面板域名，可以给指定 Web 域名启用 IP 白名单。这个限制是“按域名”生效的：给 `panel.example.com` 加白名单，只会限制这个 Web/Caddy 域名；没有加入白名单的站点域名、Xray 入站、REALITY SNI 和未知 SNI 会继续按原来的 443 分流规则工作。
+如果只想让固定 IP 访问 3x-ui 面板域名，可以给指定 Web 域名启用 IP 白名单。这个限制是“按域名”生效的：给 `panel.example.com` 加白名单，只会限制这个 Web 域名；没有加入白名单的站点域名、Xray 入站、REALITY SNI 和未知 SNI 会继续按原来的 443 分流规则工作。
 
 两种部署方式的实现不同：
 
 | 部署方式 | 使用入口 | 生效位置 | 影响范围 |
 | --- | --- | --- | --- |
 | 未启用 443 单入口，只用 Caddy/Nginx 反代 | 新增时用 `主菜单 [4 反代] -> [1 添加 Caddy 反代]` 或 `[2 添加 Nginx HTTPS 反代]`；已有域名用 `[4] -> [5 域名 IP 白名单]`；直接编辑配置用 `[4] -> [6 查看/编辑已应用配置文件]` | Caddy 当前域名站点块使用 `remote_ip` 匹配；Nginx HTTPS 反代使用 `allow/deny` 匹配 | 只影响当前 Caddy/Nginx Web 域名 |
-| 已启用 443 Nginx stream 单入口 | `主菜单 [19 443 单入口管理中心] -> [9 管理 Web 域名 IP 白名单]` | Nginx stream 层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
+| 已启用 443 Nginx Stream 单入口 | `主菜单 [19 443 单入口管理中心] -> [9 管理 Web 域名 IP 白名单]` | Nginx stream 层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
+| 已启用 443 TCP Peek + Splice 单入口 | `主菜单 [19 443 单入口管理中心] -> [9 管理 Web 域名 IP 白名单]` | vpso-mux 入口层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
+| `xray-fallback` + Nginx 本地 Web 反代 | 不允许新增或覆盖 Web 白名单 | 禁止使用；Xray fallback 到本地 Nginx 后无法可靠获得真实客户端源 IP | 如需白名单，请切到 Nginx Stream/TCP Peek，或选择 Caddy 作为 Web 反代引擎 |
 
 白名单支持单个 IP 和 CIDR，例如：
 
@@ -359,7 +373,7 @@ Zone.DNS.Edit
 是否设置给面板：可以选择是
 ```
 
-上面的值只是示例，请替换成你的实际域名。后面正式接入 443 单入口时，需要把 3x-ui 自带证书路径清空，让 Caddy 接管公网 HTTPS。
+上面的值只是示例，请替换成你的实际域名。后面正式接入 443 单入口时，需要把 3x-ui 自带证书路径清空，让 Web 反代引擎接管公网 HTTPS。
 
 建议自定义这些值，并记下来：
 
@@ -380,7 +394,7 @@ https://panel.example.com:40000/panel/
 
 ### 2. 清空 3x-ui 面板证书
 
-只要你准备接入 VPS-Optimize 的 443 单入口，就应清空 3x-ui 面板和订阅证书路径，让 Caddy 接管公网 HTTPS。
+只要你准备接入 VPS-Optimize 的 443 单入口，就应清空 3x-ui 面板和订阅证书路径，让 Web 反代引擎接管公网 HTTPS。
 
 进入：
 
@@ -417,7 +431,7 @@ http://panel.example.com:40000/panel/
 订阅设置 -> 证书
 ```
 
-同样清空证书路径和私钥路径。接入 443 单入口后，订阅公网 HTTPS 也由 Caddy 统一处理，3x-ui 订阅服务只作为本地 HTTP 后端。
+同样清空证书路径和私钥路径。接入 443 单入口后，订阅公网 HTTPS 也由当前 Web 反代引擎统一处理，3x-ui 订阅服务只作为本地 HTTP 后端。
 
 再设置订阅服务：
 
@@ -498,8 +512,9 @@ node.example.com:443
 | REALITY 伪装 SNI | `www.microsoft.com` 或其他外部真实 HTTPS 站点 |
 | Nginx 公网监听地址 | `0.0.0.0` |
 | Nginx 公网监听端口 | `443` |
-| Caddy 本地监听地址 | `127.0.0.1` |
-| Caddy 本地监听端口 | `8443` |
+| Web 反代引擎 | `Caddy` 或 `Nginx` |
+| Web 反代引擎本地监听地址 | `127.0.0.1` |
+| Web 反代引擎本地监听端口 | `8443` |
 | Xray REALITY 本地监听地址 | `127.0.0.1` |
 | Xray REALITY 本地监听端口 | `1443` |
 | 3x-ui 面板监听地址 | `127.0.0.1` |
@@ -513,14 +528,17 @@ node.example.com:443
 
 面板路径、普通订阅路径、Clash/Mihomo 路径必须和 3x-ui 里完全一致。
 
-脚本每次首次配置、重新应用或增删网站时，都会先创建 SNI stack 备份。若 `nginx -t`、`caddy validate` 或服务重启失败，会尝试回滚，并把异常配置移入隔离目录。
+脚本每次首次配置、重新应用、切换 Web 反代引擎或增删网站时，都会先创建 SNI stack 备份。若 `nginx -t`、`caddy validate` 或服务重启失败，会尝试回滚，并把异常配置移入隔离目录。
 
 常见备份和隔离目录：
 
 ```text
 /etc/vps-optimize/backups/sni-stack_*
 /etc/vps-optimize/quarantine/nginx-sni
+/etc/vps-optimize/quarantine/nginx-sni-web
+/etc/vps-optimize/quarantine/nginx-proxy-to-443-entry
 /etc/vps-optimize/quarantine/caddy-sni
+/etc/vps-optimize/quarantine/caddy-sni-web
 /etc/vps-optimize/quarantine/caddy-certs
 ```
 
@@ -573,10 +591,11 @@ https://panel.example.com/mihomo/
 | 你想做什么 | 入口 |
 | --- | --- |
 | 新增网站或反代域名 | `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]` |
+| 切换 Caddy/Nginx Web 反代引擎 | `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [8 切换 Web 反代引擎]` |
 | 检查 443 链路 | `主菜单 [19 443 单入口管理中心] -> [11 443 链路体检]` |
 | 修改面板/订阅端口与路径 | `主菜单 [19 443 单入口管理中心] -> [14 修改 443 共享参数] -> [1 修改面板/订阅端口与路径]` |
 | 修改 REALITY 本地监听 / 伪装 SNI | `主菜单 [19 443 单入口管理中心] -> [14 修改 443 共享参数] -> [2 修改 REALITY 本地监听 / 伪装 SNI]` |
-| 修改 Nginx / Caddy 监听 | `主菜单 [19 443 单入口管理中心] -> [14 修改 443 共享参数] -> [3 修改 Nginx 公网入口 / Caddy 本地 TLS]` |
+| 修改 Nginx / Web 反代监听 | `主菜单 [19 443 单入口管理中心] -> [14 修改 443 共享参数] -> [3 修改 Nginx 公网入口 / Web 反代本地 TLS]` |
 | 修改面板域名 | `主菜单 [19 443 单入口管理中心] -> [14 修改 443 共享参数] -> [4 修改面板域名]` |
 | 重新应用当前配置 | `主菜单 [19 443 单入口管理中心] -> [14 修改 443 共享参数] -> [5 重新应用当前保存的配置]` |
 | 证书维护 | `主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护]` |
@@ -627,5 +646,5 @@ Nginx stream 监听：0.0.0.0:443
 3x-ui 证书路径没清空就跑 443 分流
 订阅 URI 路径写成 sub 或 /sub
 把客户端 Subscription 填进 443 向导的路径前缀
-让 Caddy、Xray、3x-ui 面板同时抢公网 443
+让 Web 反代引擎、Xray、3x-ui 面板同时抢公网 443
 ```

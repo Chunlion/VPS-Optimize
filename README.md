@@ -139,9 +139,9 @@ cy
 ```text
 公网 443 -> Nginx stream 按 SNI 分流
 
-panel.example.com       -> Caddy -> 3x-ui 面板
-sub.example.com         -> Caddy -> SublinkPro / Sub-Store / 其他 HTTP 后端
-dockge.example.com      -> Caddy -> Dockge
+panel.example.com       -> Caddy/Nginx 本地 Web 反代 -> 3x-ui 面板
+sub.example.com         -> Caddy/Nginx 本地 Web 反代 -> SublinkPro / Sub-Store / 其他 HTTP 后端
+dockge.example.com      -> Caddy/Nginx 本地 Web 反代 -> Dockge
 REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 未知 SNI                -> Xray / 3x-ui REALITY 入站
 ```
@@ -150,9 +150,10 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 
 - 公网 `443` 同一时间只能由一个入口服务监听：`nginx`、`xray` 或 `tcppeek`。
 - 证书继续使用 `acme.sh + Cloudflare DNS API`，不改成 Caddy DNS 模块。
-- Web 白名单只保护 Caddy/Web 域名，不影响 Xray 节点流量。
+- 443 单入口下的 Web 反代引擎可以选择 Caddy 或 Nginx；切换时复用域名、证书、后端和 Web 白名单，并隔离另一套旧配置。
+- Web 白名单只保护 Web 域名，不影响 Xray 节点流量；Nginx Stream/TCP Peek 下会在入口层拦截，`xray-fallback + Nginx 本地 Web 反代` 禁止新增 Web 白名单。
 - Xray 入站管理只记录 `SNI -> 本地地址:端口`，不会编辑 3x-ui 入站。
-- REALITY 的 `serverName` / `dest` 通常是外部真实 HTTPS 目标，不要求写进 Caddy。
+- REALITY 的 `serverName` / `dest` 通常是外部真实 HTTPS 目标，不要求写进 Web 反代引擎。
 
 TCP Peek + Splice 的配置过程和 Nginx Stream 一样；正式切换使用 `[5] 切换到 TCP Peek + Splice 模式`，需要撤销时使用 `[7] 回滚上一次入口模式切换`。
 
@@ -290,8 +291,8 @@ systemctl status sshd --no-pager
 优先检查：
 
 - 3x-ui 面板是否监听 `127.0.0.1:40000`。
-- 3x-ui 面板和订阅证书路径是否已清空，让 Caddy 接管公网 HTTPS。
-- Caddy 是否监听 `127.0.0.1:8443`。
+- 3x-ui 面板和订阅证书路径是否已清空，让 Web 反代引擎接管公网 HTTPS。
+- 当前 Web 反代引擎是否监听 `127.0.0.1:8443`。
 - Nginx stream 是否监听公网 `0.0.0.0:443`。
 - 云安全组是否放行 `443`。
 - 面板域名 DNS 是否解析到当前服务器。
