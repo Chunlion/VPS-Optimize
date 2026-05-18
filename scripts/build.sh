@@ -35,7 +35,11 @@ modules=(
     diagnostics_status.sh
     diagnostics_network.sh
     panel_installers.sh
-    subscription_tools.sh
+    compose_runtime.sh
+    subscription_apps.sh
+    subscription_compose_manage.sh
+    subscription_service_menus.sh
+    dockge_migration.sh
     panel_rescue.sh
     server_maintenance.sh
     updater.sh

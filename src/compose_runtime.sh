@@ -97,7 +97,7 @@ manage_compose_project() {
         echo -e "${CYAN}  4. 查看/编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}"
         echo -e "${YELLOW}  5. 停止并移除容器（保留目录数据）${PLAIN}"
         echo -e "${RED}  6. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}"
-        echo -e "${RED}  0. 返回上级菜单${PLAIN}"
+        echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         read_trimmed choice "👉 请选择操作: "
@@ -157,7 +157,7 @@ manage_compose_project() {
                 fi
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
-            0) return ;;
+            0|q|Q) return ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
     done

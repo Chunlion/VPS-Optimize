@@ -21,7 +21,7 @@ CYAN='\033[1;36m'
 PLAIN='\033[0m'
 BOLD='\033[1m'
 
-SCRIPT_VERSION="v2.1"
+SCRIPT_VERSION="v2.2"
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
 UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
@@ -12420,10 +12420,10 @@ func_ip_sentinel() {
 # ---------------------------------------------------------
 
 # ---------------------------------------------------------
-# Module: subscription_tools.sh
+# Module: compose_runtime.sh
 # ---------------------------------------------------------
 # shellcheck shell=bash
-# Subscription tool containers, compose project operations, Dockge migration, and service menus.
+# Docker Compose runtime helpers and generic compose project management.
 
 install_docker_compose_standalone() {
     local compose_url tmp_file
@@ -12469,6 +12469,130 @@ ensure_docker_compose_ready() {
     fi
 }
 
+find_compose_file() {
+    local dir="$1"
+    local file
+    for file in compose.yaml compose.yml docker-compose.yml docker-compose.yaml; do
+        if [[ -f "${dir}/${file}" ]]; then
+            echo "${dir}/${file}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+is_managed_compose_dir() {
+    local dir="${1%/}"
+    case "$dir" in
+        /opt/sublinkpro|/opt/miaomiaowu|/opt/sub-store|/opt/dockge|/opt/komari)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+manage_compose_project() {
+    local project_name="$1"
+    local project_dir="${2%/}"
+    local data_hint="$3"
+    local compose_file choice yn
+
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}🧭 ${project_name} 管理 / 卸载${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${YELLOW}部署目录：${CYAN}${project_dir}${PLAIN}"
+        echo -e "${YELLOW}数据提示：${CYAN}${data_hint}${PLAIN}"
+        echo -e "------------------------------------------------"
+
+        if [[ ! -d "$project_dir" ]] || ! compose_file=$(find_compose_file "$project_dir"); then
+            echo -e "${YELLOW}未检测到 ${project_name} 的 Compose 部署。${PLAIN}"
+            echo -e "${BLUE}可以先返回上级菜单选择对应安装项。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+            return
+        fi
+
+        echo -e "${GREEN}  1. 查看运行状态${PLAIN}"
+        echo -e "${GREEN}  2. 重启服务${PLAIN}"
+        echo -e "${GREEN}  3. 更新镜像并重建${PLAIN}"
+        echo -e "${CYAN}  4. 查看/编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}"
+        echo -e "${YELLOW}  5. 停止并移除容器（保留目录数据）${PLAIN}"
+        echo -e "${RED}  6. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}"
+        echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        read_trimmed choice "👉 请选择操作: "
+        case "$choice" in
+            1)
+                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" ps)
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            2)
+                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" restart)
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            3)
+                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            4)
+                edit_applied_config_file "$compose_file" "compose" "${project_name} Compose 配置"
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            5)
+                if confirm_risk_action "停止并移除 ${project_name} 容器" \
+                    "Docker Compose 容器运行状态" \
+                    "在 ${project_dir} 中重新执行 compose up -d，或回到管理菜单重建" \
+                    "目录数据会保留，但服务会立即中断。"; then
+                    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                    (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down)
+                    echo -e "${GREEN}✅ 已停止并移除容器，部署目录仍保留：${project_dir}${PLAIN}"
+                else
+                    echo -e "${BLUE}已取消操作。${PLAIN}"
+                fi
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            6)
+                echo -e "${RED}⚠️  高风险：这会停止容器并把 ${project_dir} 移入隔离目录，配置、数据库或本地数据不再原地可用。${PLAIN}"
+                echo -e "${YELLOW}隔离后如需彻底清理，请确认无误后手动处理隔离目录。${PLAIN}"
+                if confirm_risk_action "归档 ${project_name} 部署目录" \
+                    "Docker Compose 容器、部署目录、配置和本地数据位置" \
+                    "从 /opt/.vps-optimize-quarantine 手动移回原路径后重新启动" \
+                    "确认已经备份数据库和配置，且服务可以中断。"; then
+                    if ! is_managed_compose_dir "$project_dir"; then
+                        echo -e "${RED}❌ 安全检查未通过，拒绝归档非脚本托管目录：${project_dir}${PLAIN}"
+                    else
+                        ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                        (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down -v)
+                        if quarantine_path "$project_dir" "/opt/.vps-optimize-quarantine"; then
+                            echo -e "${GREEN}✅ 已归档 ${project_name} 部署目录。${PLAIN}"
+                        else
+                            echo -e "${RED}❌ 归档失败，请手动检查目录：${project_dir}${PLAIN}"
+                        fi
+                    fi
+                else
+                    echo -e "${BLUE}已取消归档。${PLAIN}"
+                fi
+                read -n 1 -s -r -p "按任意键返回..."
+                ;;
+            0|q|Q) return ;;
+            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------
+# Module: subscription_apps.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Subscription and management app installers.
+
 generate_random_secret() {
     if command -v openssl >/dev/null 2>&1; then
         openssl rand -hex 32
@@ -12483,30 +12607,9 @@ func_sublinkpro() {
     echo -e "${BOLD}🔗 安装 SublinkPro (节点订阅转换与管理面板)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     
-    # 1. 检查 Docker 引擎
-    if ! command -v docker >/dev/null 2>&1; then
-        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 基础组件与常用服务] 中安装 Docker。${PLAIN}"
-        read -n 1 -s -r -p "按任意键返回..."
-        return
-    fi
+    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
 
-    # 2. 检查并兼容 Docker Compose
-    local compose_cmd=""
-    if docker compose version >/dev/null 2>&1; then
-        compose_cmd="docker compose"
-    elif command -v docker-compose >/dev/null 2>&1; then
-        compose_cmd="docker-compose"
-    else
-        echo -e "${YELLOW}⚠️ 未检测到 Docker Compose 插件，正在为您静默安装...${PLAIN}"
-        install_docker_compose_standalone || {
-            read -n 1 -s -r -p "按任意键返回..."
-            return
-        }
-        compose_cmd="docker-compose"
-        echo -e "${GREEN}✅ Docker Compose 安装完成。${PLAIN}"
-    fi
-
-    # 3. 部署目录初始化
+    # 部署目录初始化
     local install_dir="/opt/sublinkpro"
     local sublink_bind_addr="127.0.0.1"
     local sublink_port="8000"
@@ -12551,7 +12654,7 @@ services:
 EOF
         
         echo -e "${CYAN}▶ 正在拉取镜像并启动 SublinkPro 容器...${PLAIN}"
-        $compose_cmd up -d
+        $DOCKER_COMPOSE_CMD up -d
         
         local access_host
         access_host="$sublink_bind_addr"
@@ -12750,70 +12853,6 @@ EOF
     read -n 1 -s -r -p "按任意键返回..."
 }
 
-update_compose_project() {
-    local name="$1"
-    local dir="$2"
-
-    if [[ ! -d "$dir" || ! -f "$dir/docker-compose.yml" ]]; then
-        echo -e "${YELLOW}⚠️ 未找到 ${name} 的 Compose 配置：${dir}/docker-compose.yml，已跳过。${PLAIN}"
-        return 1
-    fi
-
-    echo -e "${CYAN}▶ 正在更新 ${name}...${PLAIN}"
-    (
-        cd "$dir" || exit 1
-        $DOCKER_COMPOSE_CMD pull
-        $DOCKER_COMPOSE_CMD up -d
-    )
-}
-
-func_update_subscription_tools() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}${YELLOW}UPD 更新订阅管理工具 (Docker Compose)${PLAIN}"
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}这个菜单只更新订阅管理工具容器，不会更新 3x-ui / Sing-box / Xray。${PLAIN}"
-    echo -e "------------------------------------------------"
-    echo -e "${BOLD}${YELLOW}  1. UPD 更新 SublinkPro${PLAIN}       ${CYAN}(/opt/sublinkpro)${PLAIN}"
-    echo -e "${BOLD}${YELLOW}  2. UPD 更新 妙妙屋订阅管理${PLAIN}     ${CYAN}(/opt/miaomiaowu)${PLAIN}"
-    echo -e "${BOLD}${YELLOW}  3. UPD 更新 Sub-Store${PLAIN}        ${CYAN}(/opt/sub-store)${PLAIN}"
-    echo -e "${BOLD}${YELLOW}  4. UPD 全部更新${PLAIN}"
-    echo -e "------------------------------------------------"
-    echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
-    echo -e "${CYAN}================================================${PLAIN}"
-
-    local choice
-    read_trimmed choice "请选择要更新的项目: "
-    [[ "$choice" == "0" ]] && return
-
-    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
-
-    case "$choice" in
-        1) update_compose_project "SublinkPro" "/opt/sublinkpro" ;;
-        2) update_compose_project "妙妙屋订阅管理" "/opt/miaomiaowu" ;;
-        3) update_compose_project "Sub-Store" "/opt/sub-store" ;;
-        4)
-            update_compose_project "SublinkPro" "/opt/sublinkpro" || true
-            update_compose_project "妙妙屋订阅管理" "/opt/miaomiaowu" || true
-            update_compose_project "Sub-Store" "/opt/sub-store" || true
-            ;;
-        *)
-            echo -e "${RED}❌ 无效选择！${PLAIN}"
-            read -n 1 -s -r -p "按任意键返回..."
-            return
-            ;;
-    esac
-
-    echo -e "------------------------------------------------"
-    echo -e "${GREEN}✅ 更新流程已执行完成。${PLAIN}"
-    local prune_confirm
-    read_trimmed prune_confirm "是否清理无标签旧镜像以释放磁盘空间？(y/n，默认 n): "
-    if is_yes "$prune_confirm"; then
-        docker image prune -f
-    fi
-    read -n 1 -s -r -p "按任意键返回..."
-}
-
 func_dockge() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -13007,123 +13046,81 @@ EOF
     read -n 1 -s -r -p "按任意键返回..."
 }
 
-find_compose_file() {
-    local dir="$1"
-    local file
-    for file in compose.yaml compose.yml docker-compose.yml docker-compose.yaml; do
-        if [[ -f "${dir}/${file}" ]]; then
-            echo "${dir}/${file}"
-            return 0
-        fi
-    done
-    return 1
+# ---------------------------------------------------------
+# Module: subscription_compose_manage.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Managed subscription-tool update workflow.
+
+update_compose_project() {
+    local name="$1"
+    local dir="$2"
+
+    if [[ ! -d "$dir" || ! -f "$dir/docker-compose.yml" ]]; then
+        echo -e "${YELLOW}⚠️ 未找到 ${name} 的 Compose 配置：${dir}/docker-compose.yml，已跳过。${PLAIN}"
+        return 1
+    fi
+
+    echo -e "${CYAN}▶ 正在更新 ${name}...${PLAIN}"
+    (
+        cd "$dir" || exit 1
+        $DOCKER_COMPOSE_CMD pull
+        $DOCKER_COMPOSE_CMD up -d
+    )
 }
 
-is_managed_compose_dir() {
-    local dir="${1%/}"
-    case "$dir" in
-        /opt/sublinkpro|/opt/miaomiaowu|/opt/sub-store|/opt/dockge|/opt/komari)
-            return 0
+func_update_subscription_tools() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}${YELLOW}UPD 更新订阅管理工具 (Docker Compose)${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}这个菜单只更新订阅管理工具容器，不会更新 3x-ui / Sing-box / Xray。${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}${YELLOW}  1. UPD 更新 SublinkPro${PLAIN}       ${CYAN}(/opt/sublinkpro)${PLAIN}"
+    echo -e "${BOLD}${YELLOW}  2. UPD 更新 妙妙屋订阅管理${PLAIN}     ${CYAN}(/opt/miaomiaowu)${PLAIN}"
+    echo -e "${BOLD}${YELLOW}  3. UPD 更新 Sub-Store${PLAIN}        ${CYAN}(/opt/sub-store)${PLAIN}"
+    echo -e "${BOLD}${YELLOW}  4. UPD 全部更新${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    local choice
+    read_trimmed choice "请选择要更新的项目: "
+    [[ "$choice" == "0" || "$choice" == "q" || "$choice" == "Q" ]] && return
+
+    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+
+    case "$choice" in
+        1) update_compose_project "SublinkPro" "/opt/sublinkpro" ;;
+        2) update_compose_project "妙妙屋订阅管理" "/opt/miaomiaowu" ;;
+        3) update_compose_project "Sub-Store" "/opt/sub-store" ;;
+        4)
+            update_compose_project "SublinkPro" "/opt/sublinkpro" || true
+            update_compose_project "妙妙屋订阅管理" "/opt/miaomiaowu" || true
+            update_compose_project "Sub-Store" "/opt/sub-store" || true
             ;;
         *)
-            return 1
-            ;;
-    esac
-}
-
-manage_compose_project() {
-    local project_name="$1"
-    local project_dir="${2%/}"
-    local data_hint="$3"
-    local compose_file choice yn
-
-    while true; do
-        clear
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🧭 ${project_name} 管理 / 卸载${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}部署目录：${CYAN}${project_dir}${PLAIN}"
-        echo -e "${YELLOW}数据提示：${CYAN}${data_hint}${PLAIN}"
-        echo -e "------------------------------------------------"
-
-        if [[ ! -d "$project_dir" ]] || ! compose_file=$(find_compose_file "$project_dir"); then
-            echo -e "${YELLOW}未检测到 ${project_name} 的 Compose 部署。${PLAIN}"
-            echo -e "${BLUE}可以先返回上级菜单选择对应安装项。${PLAIN}"
+            echo -e "${RED}❌ 无效选择！${PLAIN}"
             read -n 1 -s -r -p "按任意键返回..."
             return
-        fi
+            ;;
+    esac
 
-        echo -e "${GREEN}  1. 查看运行状态${PLAIN}"
-        echo -e "${GREEN}  2. 重启服务${PLAIN}"
-        echo -e "${GREEN}  3. 更新镜像并重建${PLAIN}"
-        echo -e "${CYAN}  4. 查看/编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}"
-        echo -e "${YELLOW}  5. 停止并移除容器（保留目录数据）${PLAIN}"
-        echo -e "${RED}  6. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}"
-        echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-
-        read_trimmed choice "👉 请选择操作: "
-        case "$choice" in
-            1)
-                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" ps)
-                read -n 1 -s -r -p "按任意键返回..."
-                ;;
-            2)
-                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" restart)
-                read -n 1 -s -r -p "按任意键返回..."
-                ;;
-            3)
-                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
-                read -n 1 -s -r -p "按任意键返回..."
-                ;;
-            4)
-                edit_applied_config_file "$compose_file" "compose" "${project_name} Compose 配置"
-                read -n 1 -s -r -p "按任意键返回..."
-                ;;
-            5)
-                if confirm_risk_action "停止并移除 ${project_name} 容器" \
-                    "Docker Compose 容器运行状态" \
-                    "在 ${project_dir} 中重新执行 compose up -d，或回到管理菜单重建" \
-                    "目录数据会保留，但服务会立即中断。"; then
-                    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
-                    (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down)
-                    echo -e "${GREEN}✅ 已停止并移除容器，部署目录仍保留：${project_dir}${PLAIN}"
-                else
-                    echo -e "${BLUE}已取消操作。${PLAIN}"
-                fi
-                read -n 1 -s -r -p "按任意键返回..."
-                ;;
-            6)
-                echo -e "${RED}⚠️  高风险：这会停止容器并把 ${project_dir} 移入隔离目录，配置、数据库或本地数据不再原地可用。${PLAIN}"
-                echo -e "${YELLOW}隔离后如需彻底清理，请确认无误后手动处理隔离目录。${PLAIN}"
-                if confirm_risk_action "归档 ${project_name} 部署目录" \
-                    "Docker Compose 容器、部署目录、配置和本地数据位置" \
-                    "从 /opt/.vps-optimize-quarantine 手动移回原路径后重新启动" \
-                    "确认已经备份数据库和配置，且服务可以中断。"; then
-                    if ! is_managed_compose_dir "$project_dir"; then
-                        echo -e "${RED}❌ 安全检查未通过，拒绝归档非脚本托管目录：${project_dir}${PLAIN}"
-                    else
-                        ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
-                        (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down -v)
-                        if quarantine_path "$project_dir" "/opt/.vps-optimize-quarantine"; then
-                            echo -e "${GREEN}✅ 已归档 ${project_name} 部署目录。${PLAIN}"
-                        else
-                            echo -e "${RED}❌ 归档失败，请手动检查目录：${project_dir}${PLAIN}"
-                        fi
-                    fi
-                else
-                    echo -e "${BLUE}已取消归档。${PLAIN}"
-                fi
-                read -n 1 -s -r -p "按任意键返回..."
-                ;;
-            0|q|Q) return ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
-        esac
-    done
+    echo -e "------------------------------------------------"
+    echo -e "${GREEN}✅ 更新流程已执行完成。${PLAIN}"
+    local prune_confirm
+    read_trimmed prune_confirm "是否清理无标签旧镜像以释放磁盘空间？(y/n，默认 n): "
+    if is_yes "$prune_confirm"; then
+        docker image prune -f
+    fi
+    read -n 1 -s -r -p "按任意键返回..."
 }
+
+# ---------------------------------------------------------
+# Module: subscription_service_menus.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Panel, node, subscription-tool, and compose service action menus.
 
 func_manage_sublinkpro() {
     manage_compose_project "SublinkPro" "/opt/sublinkpro" "db / template / logs 会保存在部署目录中"
@@ -13231,6 +13228,12 @@ func_dockge_menu() {
 func_komari_menu() {
     func_service_action_menu "Komari 探针监控" "安装或管理 Docker Compose 部署的 Komari 探针监控面板。" "安装 Komari" func_komari "管理 / 卸载 Komari" func_manage_komari
 }
+
+# ---------------------------------------------------------
+# Module: dockge_migration.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# Dockge migration discovery and migration workflows.
 
 is_dockge_migration_seen() {
     local needle="$1"
@@ -13381,12 +13384,12 @@ func_migrate_compose_to_dockge() {
         echo -e "${YELLOW}⚠️ 未在 /opt 下检测到常见 Compose 项目。${PLAIN}"
     fi
     echo -e "${CYAN}  c. 手动输入项目目录${PLAIN}"
-    echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
+    echo -e "${RED}  0. 返回${PLAIN}"
     echo -e "------------------------------------------------"
 
     read_trimmed choice "请选择要迁移的项目: "
     case "$choice" in
-        0|q|Q) return ;;
+        0) return ;;
         a|A)
             if [[ "${#DOCKGE_MIGRATION_DIRS[@]}" -eq 0 ]]; then
                 echo -e "${YELLOW}⚠️ 没有可自动迁移的项目。${PLAIN}"

@@ -1,14 +1,14 @@
-# 订阅工具接入 Caddy 与 443 单入口
+# 订阅工具接入 Caddy/Nginx 反代与 443 单入口
 
-这篇教程讲的是把 SublinkPro、Sub-Store、妙妙屋订阅管理等订阅工具安全地对外提供 HTTPS 访问。你可以走普通 Caddy 反代，也可以接入已经配置好的 443 单入口。
+这篇教程讲的是把 SublinkPro、Sub-Store、妙妙屋订阅管理等订阅工具安全地对外提供 HTTPS 访问。未启用 443 单入口时，可以走 `主菜单 [4 反代]` 里的 Caddy 或 Nginx HTTPS 反代；已经启用 443 单入口后，应统一走 443 单入口的 Web 域名/反代入口。
 
 推荐选择：
 
 | 当前状态 | 推荐方式 |
 |---|---|
-| 还没有启用 443 单入口，只想先访问订阅工具 | 普通 Caddy 反代 |
+| 还没有启用 443 单入口，只想先访问订阅工具 | `主菜单 [4 反代]`，按现有环境选择 Caddy 或 Nginx HTTPS 反代 |
 | 已经启用 443 单入口 | `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]` 新增反代域名 |
-| 订阅工具只给自己用 | 后端只监听 `127.0.0.1`，外部通过 Caddy 访问 |
+| 订阅工具只给自己用 | 后端只监听 `127.0.0.1`，外部通过 Caddy/Nginx 或 443 单入口访问 |
 | 不确定应该选哪个 | 先跑 `主菜单 [1 运维预检与风险扫描]` 和 `主菜单 [15 服务健康总览]`，确认端口和服务状态 |
 
 ## 适合谁
@@ -38,7 +38,7 @@ DNS 建议：
 |---|---|
 | `sub.example.com` | DNS only / 灰云 |
 | 443 单入口相关域名 | DNS only / 灰云 |
-| 只是普通网站展示 | 可按实际需求决定是否代理，但本教程建议先灰云跑通 |
+| 只是常规网站展示 | 可按实际需求决定是否代理，但本教程建议先灰云跑通 |
 
 ## 预计耗时
 
@@ -46,7 +46,7 @@ DNS 建议：
 |---|---|
 | 预检 | 2-5 分钟 |
 | 安装 Docker 和订阅工具 | 5-20 分钟 |
-| 配置 Caddy 或 443 单入口 | 5-15 分钟 |
+| 配置 Caddy/Nginx 或 443 单入口 | 5-15 分钟 |
 | 验证订阅输出 | 5-10 分钟 |
 | 备份 | 1-3 分钟 |
 
@@ -56,6 +56,7 @@ DNS 建议：
 |---|---|---|
 | Docker/Compose | 新增容器、网络、部署目录 | 容器端口冲突或镜像拉取失败 |
 | Caddy | 新增站点配置、证书、反代规则 | 配置错误会导致 404/502 |
+| Nginx HTTPS 反代 | 未启用 443 单入口时可新增 HTTPS 站点配置 | 配置错误或端口冲突会导致 80/443 访问异常 |
 | Nginx stream | 如果接入 443 单入口，会新增 SNI 分流 | 配置错误可能影响公网 443 |
 | 防火墙 | 建议只暴露入口端口，不暴露后端端口 | 误放行会暴露内部服务 |
 | 备份 | 生成配置备份和隔离目录 | 占用少量磁盘 |
@@ -159,17 +160,24 @@ curl -I http://127.0.0.1:3000/
 
 Docker 防穿透会修改 Docker 网络行为并重启 Docker，属于高风险操作，确认容器不依赖公网直连端口后再继续。
 
-### 5A. 方案一：普通 Caddy 反代
+### 5A. 方案一：未启用 443 单入口时使用 Caddy/Nginx 反代
 
 适合还没启用 443 单入口，只想先用域名访问订阅工具。
 
 进入：
 
 ```text
-主菜单 [4 普通 Caddy 反代] -> [1 添加普通 Caddy 反代]
+主菜单 [4 反代]
 ```
 
-填写示例：
+按当前环境选择：
+
+| 入口 | 适合情况 |
+|---|---|
+| `[1 添加 Caddy 反代]` | 已经使用 Caddy，或希望由 Caddy 直接管理站点反代 |
+| `[2 添加 Nginx HTTPS 反代]` | 未启用 443 单入口，且希望由 Nginx 直接监听公网 80/443 提供 HTTPS |
+
+填写示例，域名和端口都要替换成你的实际值：
 
 | 项目 | 示例 |
 |---|---|
@@ -177,10 +185,30 @@ Docker 防穿透会修改 Docker 网络行为并重启 Docker，属于高风险�
 | 后端端口 | `3000` |
 | 后端协议 | 按工具实际情况，通常 HTTP |
 
-配置后验证：
+如果选择 Nginx HTTPS 反代，脚本会复用现有 `acme.sh + Cloudflare DNS API` 证书流程，证书仍安装到：
+
+```text
+/etc/caddy/certs/sub.example.com.crt
+/etc/caddy/certs/sub.example.com.key
+/root/cert/sub.example.com.crt
+/root/cert/sub.example.com.key
+```
+
+`sub.example.com` 是示例值，请替换成你的实际订阅域名。Nginx HTTPS 反代只适合未启用 443 单入口的场景；如果脚本检测到 443 单入口配置，会拒绝继续，避免 Nginx 抢占公网 `443`。同一个域名也不要同时交给 Caddy 和 Nginx 接管。
+
+如果用 Caddy 反代，配置后验证：
 
 ```bash
 systemctl status caddy --no-pager
+caddy validate --config /etc/caddy/Caddyfile
+curl -I https://sub.example.com/
+```
+
+如果用 Nginx HTTPS 反代，配置后验证：
+
+```bash
+nginx -t
+systemctl status nginx --no-pager
 curl -I https://sub.example.com/
 ```
 
@@ -189,6 +217,7 @@ curl -I https://sub.example.com/
 ```bash
 curl -I http://127.0.0.1:3000/
 journalctl -u caddy -n 80 --no-pager
+journalctl -u nginx -n 80 --no-pager
 ```
 
 如果证书失败，检查 DNS、Cloudflare 代理状态和服务器时间。
@@ -297,11 +326,22 @@ curl -L https://sub.example.com/ -o /tmp/sub-tool-home.html
 
 ## 验证方法
 
-普通 Caddy 反代：
+未启用 443 单入口的 Caddy/Nginx 反代，按实际使用的入口验证。
+
+Caddy：
 
 ```bash
 systemctl status caddy --no-pager
 caddy validate --config /etc/caddy/Caddyfile
+curl -I https://sub.example.com/
+curl -I http://127.0.0.1:3000/
+```
+
+Nginx HTTPS 反代：
+
+```bash
+systemctl status nginx --no-pager
+nginx -t
 curl -I https://sub.example.com/
 curl -I http://127.0.0.1:3000/
 ```
@@ -332,6 +372,7 @@ docker logs --tail=80 容器名
 | 问题 | 处理 |
 |---|---|
 | Caddy 配置错误 | 使用 Caddy 备份恢复，或隔离新站点配置后重载 |
+| Nginx HTTPS 反代配置错误 | 检查 `nginx -t` 输出；脚本创建的 Nginx 反代配置会放在 `/etc/nginx/conf.d/vps_proxy_${domain}.conf` |
 | 443 单入口新增域名失败 | 使用脚本自动备份回滚，或从 `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]` 删除该域名 |
 | 证书失败 | `主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护]` 检查 Token、DNS、重签 |
 | 容器启动失败 | 进入对应工具管理菜单查看状态、重启或重建 |

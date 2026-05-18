@@ -120,7 +120,7 @@ cy
 | 场景 | 教程 |
 |---|---|
 | 部署 3x-ui + REALITY 并接入 443 | [02-3x-ui-reality-443.md](tutorials/02-3x-ui-reality-443.md) |
-| 用 Caddy 接入订阅工具 | [03-subscription-tools-with-caddy.md](tutorials/03-subscription-tools-with-caddy.md) |
+| 用 Caddy/Nginx 反代或 443 单入口接入订阅工具 | [03-subscription-tools-with-caddy.md](tutorials/03-subscription-tools-with-caddy.md) |
 | 已有服务器迁移到 443 单入口 | [existing-server-migration.md](docs/existing-server-migration.md) |
 | 失联、回滚和急救 | [recovery-runbook.md](docs/recovery-runbook.md) |
 
@@ -165,7 +165,7 @@ TCP Peek + Splice 的配置过程和 Nginx Stream 一样；正式切换使用 `[
 
 这里包含 3x-ui、Sing-box、Xray、SublinkPro、妙妙屋、Sub-Store、Dockge、Komari、端口流量监控和 3x-ui 外置增强管理。
 
-订阅工具建议按“本地监听 + Caddy/443 对外”的方式部署。新部署的订阅工具默认优先绑定 `127.0.0.1`，公网 HTTPS 访问再到 `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]` 添加域名。未启用 443 单入口时，也可以在 `主菜单 [4 反代]` 里选择 Caddy 或 Nginx HTTPS 反代；Nginx 反代复用现有 `acme.sh + Cloudflare DNS API` 证书流程，证书仍安装到 `/etc/caddy/certs/${domain}.crt|key` 并软链到 `/root/cert/`。[4 反代] 里的后端 HTTPS 跳过证书校验、域名 IP 白名单、查看/编辑已应用配置和清空反代配置都同时提供 Caddy/Nginx 入口。
+订阅工具建议按“本地监听 + Caddy/Nginx/443 对外”的方式部署。新部署的订阅工具默认优先绑定 `127.0.0.1`。已经启用 443 单入口时，公网 HTTPS 访问到 `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]` 添加域名；未启用 443 单入口时，可以在 `主菜单 [4 反代]` 里选择 Caddy 或 Nginx HTTPS 反代，Nginx 反代会直接监听公网 80/443，不能和 443 单入口同时抢占公网 `443`。Nginx 反代复用现有 `acme.sh + Cloudflare DNS API` 证书流程，证书仍安装到 `/etc/caddy/certs/${domain}.crt|key` 并软链到 `/root/cert/`。[4 反代] 里的后端 HTTPS 跳过证书校验、域名 IP 白名单、查看/编辑已应用配置和清空反代配置都同时提供 Caddy/Nginx 入口。
 
 Docker Compose 项目都有管理入口。停止服务会保留数据；归档目录需要输入 `ARCHIVE` 二次确认，避免误删配置和数据库。
 

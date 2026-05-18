@@ -15,30 +15,9 @@ func_sublinkpro() {
     echo -e "${BOLD}🔗 安装 SublinkPro (节点订阅转换与管理面板)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     
-    # 1. 检查 Docker 引擎
-    if ! command -v docker >/dev/null 2>&1; then
-        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 基础组件与常用服务] 中安装 Docker。${PLAIN}"
-        read -n 1 -s -r -p "按任意键返回..."
-        return
-    fi
+    ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
 
-    # 2. 检查并兼容 Docker Compose
-    local compose_cmd=""
-    if docker compose version >/dev/null 2>&1; then
-        compose_cmd="docker compose"
-    elif command -v docker-compose >/dev/null 2>&1; then
-        compose_cmd="docker-compose"
-    else
-        echo -e "${YELLOW}⚠️ 未检测到 Docker Compose 插件，正在为您静默安装...${PLAIN}"
-        install_docker_compose_standalone || {
-            read -n 1 -s -r -p "按任意键返回..."
-            return
-        }
-        compose_cmd="docker-compose"
-        echo -e "${GREEN}✅ Docker Compose 安装完成。${PLAIN}"
-    fi
-
-    # 3. 部署目录初始化
+    # 部署目录初始化
     local install_dir="/opt/sublinkpro"
     local sublink_bind_addr="127.0.0.1"
     local sublink_port="8000"
@@ -63,7 +42,7 @@ func_sublinkpro() {
     echo -e "------------------------------------------------"
     
     read_trimmed yn "❓ 确认现在开始一键安装吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir"
         cd "$install_dir" || return
 
@@ -83,7 +62,7 @@ services:
 EOF
         
         echo -e "${CYAN}▶ 正在拉取镜像并启动 SublinkPro 容器...${PLAIN}"
-        $compose_cmd up -d
+        $DOCKER_COMPOSE_CMD up -d
         
         local access_host
         access_host="$sublink_bind_addr"
@@ -148,7 +127,7 @@ func_miaomiaowu() {
 
     local yn
     read_trimmed yn "确认现在部署 妙妙屋订阅管理 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir"/{data,subscribes,rule_templates}
         cd "$install_dir" || return
 
@@ -241,7 +220,7 @@ func_substore() {
 
     local yn
     read_trimmed yn "确认现在部署 Sub-Store 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 
@@ -318,7 +297,7 @@ func_dockge() {
 
     local yn
     read_trimmed yn "确认现在部署 Dockge 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir" "$stacks_dir"
         cd "$install_dir" || return
 
@@ -384,7 +363,7 @@ func_komari() {
     warn_if_public_bind "Komari 探针监控面板" "$komari_bind_addr" "$komari_port" || return 1
 
     read_trimmed custom_admin "是否自定义初始管理员账号和密码？(y/n，默认 n): "
-    if [[ "$custom_admin" =~ ^[Yy]$ ]]; then
+    if is_yes "$custom_admin"; then
         while true; do
             read_trimmed admin_username "管理员用户名（默认 admin）: "
             admin_username="${admin_username:-admin}"
@@ -419,7 +398,7 @@ func_komari() {
     fi
     echo -e "------------------------------------------------"
     read_trimmed yn "确认现在部署 Komari 吗？(y/n): "
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
+    if is_yes "$yn"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.2 - 2026-05-17
+
+- 新增 Nginx HTTPS 反代入口，复用现有 `acme.sh + Cloudflare DNS API` 证书流程，并支持后端 HTTPS 跳过证书校验、域名 IP 白名单、查看/编辑已应用配置和清空 Nginx 反代配置。
+- 新增“查看/编辑脚本已应用配置”中心，编辑前自动备份，并按 Caddy、Nginx、SSH、Docker Compose、JSON 和 443 单入口配置类型执行对应校验与应用提示。
+- 新增 Docker Compose 项目配置编辑入口，可在订阅工具等 Compose 管理菜单中查看/编辑 Compose 文件，校验 `docker compose config`，并按需执行 `up -d` 应用修改。
+
 ## v2.1 - 2026-05-15
 
 - 新增 experimental `tcp-peek` 443 单入口引擎：`vpso-mux` 使用 `MSG_PEEK` 解析 TLS ClientHello SNI，优先 `splice` 转发并支持 copy fallback；Nginx stream 仍是默认稳定模式。

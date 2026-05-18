@@ -100,12 +100,37 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 | 只有 3x-ui，没有其他网站 | 直接按 3x-ui + 443 教程部署 |
 | 已有 3x-ui 且自带 HTTPS | 先清空 3x-ui 证书路径，再接入 443 |
 | 已有 Caddy 反代 | 记录旧域名和后端，启用 443 后逐个补录 |
-| 已有 Nginx/Apache 网站 | 先把网站后端改为本地端口，再用 Caddy 反代 |
-| 已有订阅工具 Docker 容器 | 保留容器，只把外部访问改成 Caddy/443 单入口 |
+| 已有 Nginx/Apache 网站 | 先把网站后端改为本地端口，再用 443 单入口的 Web 域名/反代补录 |
+| 已有订阅工具 Docker 容器，暂不启用 443 单入口 | 保留容器，用 `主菜单 [4 反代]` 选择 Caddy 或 Nginx HTTPS 反代 |
+| 已有订阅工具 Docker 容器，准备启用 443 单入口 | 保留容器，把外部访问改成 443 单入口的 Web 域名/反代 |
 
 完整 3x-ui + REALITY + 443 步骤见 [../tutorials/02-3x-ui-reality-443.md](../tutorials/02-3x-ui-reality-443.md)。
 
 订阅工具迁移见 [../tutorials/03-subscription-tools-with-caddy.md](../tutorials/03-subscription-tools-with-caddy.md)。
+
+## 未启用 443 单入口时的 HTTPS 反代过渡
+
+如果你暂时不准备启用 443 单入口，只是想先给订阅工具或网站加 HTTPS 域名，可以走独立反代入口：
+
+```text
+主菜单 [4 反代]
+```
+
+可选流程：
+
+| 入口 | 适合情况 |
+|---|---|
+| `[1 添加 Caddy 反代]` | 已经使用 Caddy，或希望由 Caddy 管理该域名反代 |
+| `[2 添加 Nginx HTTPS 反代]` | 未启用 443 单入口，且希望由 Nginx 直接监听公网 80/443 |
+
+Nginx HTTPS 反代会复用现有 `acme.sh + Cloudflare DNS API` 证书流程，证书仍安装到 `/etc/caddy/certs/${domain}.crt|key` 并软链到 `/root/cert/`。`${domain}` 是占位写法，实际使用时会换成你的真实域名。
+
+注意事项：
+
+1. 该流程只适合还没有启用 443 单入口的服务器。
+2. 如果已经启用 443 单入口，Nginx HTTPS 反代会抢占公网 `443`，应改用 `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]`。
+3. 同一个域名只交给 Caddy 或 Nginx 其中一个入口管理，不要重复配置。
+4. 后端仍建议监听 `127.0.0.1:端口`，例如 `127.0.0.1:3000`。域名和端口都是示例值，请替换为你的实际值。
 
 ## 迁移已有 3x-ui
 
@@ -228,7 +253,7 @@ grep -R "listen" /etc/nginx /etc/apache2 /etc/httpd 2>/dev/null
 
 ## 迁移 Docker 订阅工具
 
-目标是容器后端只在本机或内网监听，公网只走 Caddy/443 单入口。
+目标是容器后端只在本机或内网监听，公网只走 Caddy/Nginx 反代或 443 单入口。
 
 先看容器端口：
 
@@ -245,7 +270,15 @@ ss -lntp | grep -E ':3000|:3001|:3002'
 
 这个操作会影响 Docker 网络行为，执行前确认容器不依赖公网直连端口。
 
-然后新增外部域名：
+如果暂时不启用 443 单入口，进入：
+
+```text
+主菜单 [4 反代]
+```
+
+选择 `[1 添加 Caddy 反代]` 或 `[2 添加 Nginx HTTPS 反代]`，把订阅域名反代到本地后端端口。Nginx HTTPS 反代会申请或复用 `/etc/caddy/certs/${domain}.crt|key` 证书，并由 Nginx 直接监听公网 80/443；该方式不能和 443 单入口同时抢公网 `443`。
+
+如果已经启用或准备启用 443 单入口，则通过 443 单入口新增外部域名：
 
 ```text
 主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]

@@ -97,6 +97,33 @@ case "$source_order" in
         exit 1
         ;;
 esac
+case "$build_order" in
+    *"panel_installers.sh compose_runtime.sh subscription_apps.sh subscription_compose_manage.sh subscription_service_menus.sh dockge_migration.sh panel_rescue.sh"*) ;;
+    *)
+        echo "Compose management modules are not in the expected build order." >&2
+        exit 1
+        ;;
+esac
+assert_file_not_contains scripts/build.sh 'subscription_tools.sh' "Release build must use the split compose/subscription modules directly."
+assert_file_not_contains dist/vps.sh '# Module: subscription_tools.sh' "Release build must not include the legacy subscription_tools compatibility loader."
+assert_file_not_matches src/subscription_tools.sh '^[A-Za-z_][A-Za-z0-9_]*\(\) \{' "subscription_tools.sh must stay a compatibility loader, not reintroduce duplicate implementations."
+for module in compose_runtime.sh subscription_apps.sh subscription_compose_manage.sh subscription_service_menus.sh dockge_migration.sh; do
+    assert_dist_contains "# Module: ${module}" "Release script is missing split compose/subscription module: ${module}"
+done
+for function_name in \
+    install_docker_compose_standalone \
+    ensure_docker_compose_ready \
+    find_compose_file \
+    is_managed_compose_dir \
+    manage_compose_project \
+    func_sublinkpro_menu \
+    func_dockge_menu \
+    func_komari_menu \
+    func_update_subscription_tools \
+    func_migrate_compose_to_dockge
+do
+    assert_function_defined_once dist/vps.sh "$function_name"
+done
 assert_path_absent "src/entry_mode_cutover.sh" "entry_mode_cutover.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
 assert_path_absent "src/tcp_peek_preflight.sh" "tcp_peek_preflight.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
 assert_file_not_contains scripts/build.sh 'entry_mode_cutover.sh' "Stale entry-mode cutover module must not be added to the release build."
@@ -150,6 +177,20 @@ declare -f func_edit_applied_config_center >/dev/null
 declare -f edit_applied_config_file >/dev/null
 declare -f validate_applied_config_kind >/dev/null
 declare -f collect_applied_config_files >/dev/null
+(
+    source src/compose_runtime.sh
+    source src/subscription_apps.sh
+    source src/subscription_compose_manage.sh
+    source src/subscription_service_menus.sh
+    source src/dockge_migration.sh
+    declare -f func_sublinkpro_menu >/dev/null
+    declare -f func_dockge_menu >/dev/null
+    declare -f func_komari_menu >/dev/null
+    declare -f func_update_subscription_tools >/dev/null
+    declare -f func_migrate_compose_to_dockge >/dev/null
+    ensure_docker_compose_ready() { DOCKER_COMPOSE_CMD=true; }
+    validate_applied_config_kind compose /tmp/vps-compose-smoke.yml >/dev/null
+)
 config_edit_tmp_dir=$(mktemp -d /tmp/vps-config-edit-smoke.XXXXXX)
 printf '%s\n' 'node.example.com|127.0.0.1|1443' > "$config_edit_tmp_dir/routes.conf"
 validate_xray_routes_file "$config_edit_tmp_dir/routes.conf"
@@ -633,6 +674,17 @@ assert_file_contains "README.md" '主菜单 [16 配置备份与回滚] -> [5 查
 assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "Config paths doc must list the global applied-config editor."
 assert_file_contains "README.md" '[4 反代] 里的后端 HTTPS 跳过证书校验、域名 IP 白名单、查看/编辑已应用配置和清空反代配置都同时提供 Caddy/Nginx 入口' "README must document Nginx parity in the reverse proxy menu."
 assert_file_contains "docs/443-single-entry.md" '[4] -> [5 域名 IP 白名单]' "443 doc must describe the combined Caddy/Nginx whitelist menu."
+assert_file_contains "README.md" 'Nginx 反代会直接监听公网 80/443' "README must explain the non-single-entry Nginx HTTPS reverse proxy behavior."
+assert_file_contains "tutorials/03-subscription-tools-with-caddy.md" '主菜单 [4 反代]' "Subscription tutorial must point non-single-entry users at the current reverse proxy menu."
+assert_file_contains "tutorials/03-subscription-tools-with-caddy.md" '[2 添加 Nginx HTTPS 反代]' "Subscription tutorial must document the Nginx HTTPS reverse proxy option before 443 single-entry is enabled."
+assert_file_contains "tutorials/03-subscription-tools-with-caddy.md" '主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]' "Subscription tutorial must keep the current 443 single-entry Web reverse proxy path."
+assert_file_contains "docs/existing-server-migration.md" '未启用 443 单入口时的 HTTPS 反代过渡' "Migration doc must include the non-single-entry HTTPS reverse proxy transition flow."
+assert_file_contains "docs/existing-server-migration.md" '[2 添加 Nginx HTTPS 反代]' "Migration doc must document the Nginx HTTPS reverse proxy option before 443 single-entry is enabled."
+for file in README.md docs/existing-server-migration.md tutorials/03-subscription-tools-with-caddy.md; do
+    assert_file_not_contains "$file" '普通 Caddy 反代' "${file} must not use the old ordinary Caddy reverse proxy wording."
+    assert_file_not_contains "$file" '主菜单 [4 普通 Caddy 反代]' "${file} must not point users to the old ordinary Caddy reverse proxy menu."
+    assert_file_not_contains "$file" '添加普通 Caddy' "${file} must not use the old add ordinary Caddy wording."
+done
 assert_file_not_contains 'dist/vps.sh' '普通反代' 'Menu wording should use 反代 without 普通.'
 assert_file_not_contains 'dist/vps.sh' '添加普通 Caddy' 'Caddy menu wording should omit 普通.'
 assert_file_not_contains 'dist/vps.sh' '添加普通 Nginx' 'Nginx menu wording should omit 普通.'

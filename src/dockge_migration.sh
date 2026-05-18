@@ -84,7 +84,7 @@ migrate_compose_project_to_dockge() {
         "确认项目没有绝对路径依赖，且已备份重要数据。" || { echo -e "${BLUE}已取消迁移 ${source_dir}。${PLAIN}"; return 0; }
 
     read_trimmed restart_confirm "是否先停止旧容器并在新目录重新启动？(Y/n): "
-    if [[ "$restart_confirm" =~ ^[Nn]$ ]]; then
+    if is_no "$restart_confirm"; then
         restart_stack="false"
     fi
 

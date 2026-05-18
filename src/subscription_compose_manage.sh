@@ -30,12 +30,12 @@ func_update_subscription_tools() {
     echo -e "${BOLD}${YELLOW}  3. UPD 更新 Sub-Store${PLAIN}        ${CYAN}(/opt/sub-store)${PLAIN}"
     echo -e "${BOLD}${YELLOW}  4. UPD 全部更新${PLAIN}"
     echo -e "------------------------------------------------"
-    echo -e "${RED}  0. 返回${PLAIN}"
+    echo -e "${RED}  0. 返回 / q 返回${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local choice
     read_trimmed choice "请选择要更新的项目: "
-    [[ "$choice" == "0" ]] && return
+    [[ "$choice" == "0" || "$choice" == "q" || "$choice" == "Q" ]] && return
 
     ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
 
@@ -59,7 +59,7 @@ func_update_subscription_tools() {
     echo -e "${GREEN}✅ 更新流程已执行完成。${PLAIN}"
     local prune_confirm
     read_trimmed prune_confirm "是否清理无标签旧镜像以释放磁盘空间？(y/n，默认 n): "
-    if [[ "$prune_confirm" =~ ^[Yy]$ ]]; then
+    if is_yes "$prune_confirm"; then
         docker image prune -f
     fi
     read -n 1 -s -r -p "按任意键返回..."
