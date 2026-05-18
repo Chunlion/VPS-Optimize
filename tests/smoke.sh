@@ -567,6 +567,22 @@ assert_file_contains "docs/443-tcp-peek-engine.md" 'TCP Peek 的主要优点' "T
 assert_file_contains "docs/443-tcp-peek-engine.md" '配置过程和 Nginx Stream 一样' "TCP Peek engine doc must say TCP Peek uses the same configuration flow."
 assert_file_contains "docs/443-tcp-peek-engine.md" '  -> [5] 切换到 TCP Peek + Splice 模式' "TCP Peek engine doc must show the existing cutover entry [5]."
 assert_file_contains "docs/443-tcp-peek-engine.md" '  -> [7] 回滚上一次入口模式切换' "TCP Peek engine doc must point rollback guidance at the broader entry-mode rollback [7]."
+
+single_entry_mode_doc_files=(
+    "README.md"
+    "docs/443-single-entry-troubleshooting.md"
+    "docs/config-paths.md"
+    "tutorials/02-3x-ui-reality-443.md"
+)
+for file in "${single_entry_mode_doc_files[@]}"; do
+    assert_file_not_contains "$file" '公网 `443` 应只由 Nginx stream 监听' "${file} must not describe Nginx stream as the only possible public 443 listener."
+    assert_file_not_contains "$file" '公网 `443` 只应由 Nginx stream 监听' "${file} must not describe Nginx stream as the only possible public 443 listener."
+    assert_file_not_contains "$file" '公网 `443` 只给 Nginx stream' "${file} must not describe Nginx stream as the only possible public 443 listener."
+    assert_file_not_contains "$file" '公网 `443` 只交给 Nginx stream' "${file} must not describe Nginx stream as the only possible public 443 listener."
+done
+assert_file_contains "README.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，按 `nginx-stream` 兼容读取' "README must document ENTRY_MODE fallback compatibility."
+assert_file_contains "docs/config-paths.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本按 `nginx-stream` 兼容读取' "Config paths doc must document ENTRY_MODE fallback compatibility."
+assert_file_contains "docs/443-single-entry-troubleshooting.md" '公网 `443` 只应由当前 `ENTRY_MODE` 对应的单个入口服务监听' "Troubleshooting doc must describe the current entry-mode listener model."
 grep -q 'print_vpso_mux_failure_context' dist/vps.sh
 grep -q 'print_nginx_stream_failure_context' dist/vps.sh
 grep -q 'assert_nginx_stream_config_loaded' dist/vps.sh
@@ -740,6 +756,12 @@ assert_file_contains "README.md" 'Nginx 反代会直接监听公网 80/443' "REA
 subscription_public_hint='公网 HTTPS 访问建议：未启用 443 单入口时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时，请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/subscription_apps.sh" "$subscription_public_hint" "Subscription/Komari installers must explain both non-single-entry and 443 single-entry reverse proxy paths."
 assert_dist_contains "$subscription_public_hint" "Release script must include the current Subscription/Komari public HTTPS guidance."
+panel_public_hint='提示：面板或订阅工具对外访问，未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] 统一管理。'
+assert_file_contains "src/menus.sh" "$panel_public_hint" "Panel/tools menu must explain both non-single-entry and 443 single-entry reverse proxy paths."
+assert_dist_contains "$panel_public_hint" "Release script must include the current panel/tools public HTTPS guidance."
+panel_help_public_hint='5/6/7 管理订阅工具，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
+assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both non-single-entry and 443 single-entry reverse proxy paths."
+assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
 subscription_public_hint_calls=$(grep -Ec '^[[:space:]]+print_public_https_reverse_proxy_hint$' src/subscription_apps.sh || true)
 if [[ "$subscription_public_hint_calls" -lt 8 ]]; then
     echo "Subscription/Komari installers must show the unified public HTTPS guidance before install and after success." >&2
@@ -749,9 +771,13 @@ for stale_hint in \
     '公网 HTTPS 访问建议走 [19] -> [8]' \
     '主菜单 [19] -> [8] 为该本地端口添加 443 反代域名' \
     '公网 HTTPS 可走 Caddy 反代' \
-    '未启用 443 单入口可用 [4] -> [1] Caddy 反代'
+    '未启用 443 单入口可用 [4] -> [1] Caddy 反代' \
+    "提示：面板或订阅工具对外访问，""可用 Caddy 反代；已启用 443 单入口时用 [19] 统一管理。" \
+    "部署后建议用 Caddy 或 443 单入口""对外访问。"
 do
     assert_file_not_contains "src/subscription_apps.sh" "$stale_hint" "Subscription/Komari installers must not use stale public HTTPS guidance: ${stale_hint}"
+    assert_file_not_contains "src/menus.sh" "$stale_hint" "Panel/tools menu must not use stale public HTTPS guidance: ${stale_hint}"
+    assert_file_not_contains "dist/vps.sh" "$stale_hint" "Release script must not use stale public HTTPS guidance: ${stale_hint}"
 done
 assert_file_contains "tutorials/03-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '主菜单 [4 反代]' "Subscription tutorial must point non-single-entry users at the current reverse proxy menu."
 assert_file_contains "tutorials/03-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '[2 添加 Nginx HTTPS 反代]' "Subscription tutorial must document the Nginx HTTPS reverse proxy option before 443 single-entry is enabled."

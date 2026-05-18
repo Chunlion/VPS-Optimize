@@ -32,10 +32,17 @@ systemctl status nginx --no-pager
 systemctl status caddy --no-pager
 ```
 
-正常情况下大致应该是：
+公网 `443` 只应由当前 `ENTRY_MODE` 对应的单个入口服务监听：
 
 ```text
-0.0.0.0:443       nginx
+nginx-stream   -> nginx
+xray-fallback  -> xray / 3x-ui / x-ui 托管的 Xray
+tcp-peek       -> tcppeek / vpso-mux
+```
+
+如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本按 `nginx-stream` 兼容读取。其他本地后端大致应该是：
+
+```text
 127.0.0.1:8443    caddy
 127.0.0.1:1443    x-ui / 3x-ui / xray
 127.0.0.1:40000   x-ui / 3x-ui
@@ -86,12 +93,13 @@ curl -I http://127.0.0.1:40000/panel/
 
 - 访问了内部端口，例如 `:8443`、`:1443`、`:40000`。
 - SNI 没命中 Caddy，流量落到了 REALITY。
-- Nginx stream 没包含面板或网站域名。
+- 当前入口模式的 SNI/Web 域名路由没有包含面板或网站域名；`nginx-stream` 看 Nginx stream 配置，`tcp-peek` 看 `vpso-mux` 配置。
 
 ### 检查命令
 
 ```bash
 grep -n "panel.example.com" /etc/nginx/stream.d/*.conf
+grep -n "panel.example.com" /etc/vps-optimize/vpso-mux.yaml
 ss -lntp | grep -E ':443|:8443|:1443'
 ```
 
@@ -112,7 +120,7 @@ https://panel.example.com:40000/
 ### 解决方法
 
 - 确认访问的是域名的标准 HTTPS 地址，不带内部端口。
-- 确认面板、订阅或网站域名已经写入 Nginx stream 分流配置。
+- 确认面板、订阅或网站域名已经写入当前入口模式使用的 Web/SNI 路由。
 - 重新应用当前保存的 443 配置。
 
 ### 相关菜单入口
@@ -130,8 +138,8 @@ https://panel.example.com:40000/
 
 ### 常见原因
 
-- 公网 `443` 不是 Nginx stream 在监听。
-- Caddy、3x-ui、REALITY 或旧 Nginx server 抢占了公网 `443`。
+- 公网 `443` 不是当前 `ENTRY_MODE` 对应的入口服务在监听。
+- 当前入口模式之外的 Caddy、3x-ui、REALITY 或旧 Nginx server 抢占了公网 `443`。
 - TLS 流量被转发到了不该接收浏览器 HTTPS 的后端。
 
 ### 检查命令
@@ -144,9 +152,9 @@ systemctl status caddy --no-pager
 
 ### 解决方法
 
-- 确认公网 `443` 只由 Nginx stream 监听。
+- 确认公网 `443` 只由当前 `ENTRY_MODE` 对应的单个入口服务监听：`nginx-stream` 对应 `nginx`，`xray-fallback` 对应 Xray 主入站，`tcp-peek` 对应 `tcppeek` / `vpso-mux`。
 - Caddy 使用 `127.0.0.1:8443`。
-- REALITY 使用 `127.0.0.1:1443`。
+- 非 `xray-fallback` 主入站的 REALITY / Xray 本地入站使用 `127.0.0.1:1443` 这类本地监听。
 - 面板和订阅后端只作为本机 HTTP 服务。
 
 ### 相关菜单入口
@@ -478,8 +486,8 @@ Nginx 无法启动，提示 `bind() to 0.0.0.0:443 failed`。
 
 ### 常见原因
 
-- Caddy、Apache、旧 Nginx server 或 3x-ui 仍监听公网 `443`。
-- REALITY 直接监听 `0.0.0.0:443`。
+- 当前入口模式之外的 Caddy、Apache、旧 Nginx server、3x-ui 或 Xray 仍监听公网 `443`。
+- 在 `nginx-stream` / `tcp-peek` 模式下，REALITY 直接监听 `0.0.0.0:443`，没有改成本地监听。
 
 ### 检查命令
 
@@ -491,9 +499,9 @@ systemctl status caddy --no-pager
 
 ### 解决方法
 
-- 让公网 `443` 只交给 Nginx stream。
+- 让公网 `443` 只交给当前 `ENTRY_MODE` 对应的单个入口服务；切到 `nginx-stream` 时是 Nginx stream，切到 `tcp-peek` 时是 `vpso-mux`，切到 `xray-fallback` 时是 Xray 主入站。
 - Caddy 改为 `127.0.0.1:8443`。
-- REALITY 改为 `127.0.0.1:1443`。
+- 非 `xray-fallback` 主入站的 REALITY / Xray 本地入站改为 `127.0.0.1:1443` 这类本地监听。
 
 ### 相关菜单入口
 

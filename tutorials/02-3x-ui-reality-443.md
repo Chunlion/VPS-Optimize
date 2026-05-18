@@ -1,6 +1,6 @@
 # 3x-ui + REALITY + 443 单入口部署
 
-这篇教程讲的是：用 3x-ui 管理节点，让面板、订阅、网站和 REALITY 都通过公网 `443` 工作。核心思路是公网 `443` 只给 Nginx stream，Nginx 按 SNI 分流到 Caddy 或 REALITY，本地后端全部尽量监听 `127.0.0.1`。
+这篇教程讲的是：用 3x-ui 管理节点，让面板、订阅、网站和 REALITY 都通过公网 `443` 工作。核心思路是公网 `443` 只给当前入口模式对应的单个服务：`nginx-stream` 用 Nginx stream 按 SNI 分流，`tcp-peek` 用 `vpso-mux` 按 SNI 分流，`xray-fallback` 用 Xray 主入站接管 443 并 fallback 到本地 Web 反代引擎；本地后端全部尽量监听 `127.0.0.1`。
 
 推荐先读完整 443 教程：
 
@@ -65,7 +65,7 @@ Cloudflare 建议：
 | 项目 | 修改内容 | 风险 |
 |---|---|---|
 | 3x-ui | 面板端口、路径、证书路径、订阅设置、REALITY 入站 | 面板路径或证书设置错会打不开 |
-| Nginx stream | 公网 `443` SNI 分流 | 端口冲突会导致 Nginx 启动失败 |
+| 当前 443 入口服务 | 公网 `443` 单入口接管和分流 | 端口冲突会导致当前入口模式切换或启动失败 |
 | Caddy | 本地 HTTPS 反代和证书 | 配置错会 404/502/证书失败 |
 | Xray/REALITY | 本地监听和伪装 SNI | SNI 写错会连接失败 |
 | 防火墙 | 建议只保留 SSH 和公网 `443` | 误删端口会断连 |
@@ -74,7 +74,10 @@ Cloudflare 建议：
 ## 推荐架构
 
 ```text
-公网 443 -> Nginx stream 按 SNI 分流
+公网 443 -> 当前入口模式对应的单个服务
+  nginx-stream  -> Nginx stream 按 SNI 分流
+  tcp-peek      -> vpso-mux 按 SNI 分流
+  xray-fallback -> Xray 主入站接管 443 并 fallback 到本地 Web 反代引擎
 
 panel.example.com  -> Caddy 127.0.0.1:8443 -> 3x-ui 面板 127.0.0.1:40000
 panel.example.com/sub/ -> Caddy -> 3x-ui 订阅 127.0.0.1:2096
@@ -86,7 +89,7 @@ site.example.com -> Caddy/Nginx 本地 Web 反代 -> 本地网站后端
 
 | 原则 | 说明 |
 |---|---|
-| 公网 `443` 只给 Nginx stream | 避免 Caddy、Xray、面板抢端口 |
+| 公网 `443` 只给当前入口模式对应的单个服务 | 避免 Caddy、Xray、面板和 `vpso-mux` 互相抢端口 |
 | Web 反代引擎默认监听本地 `8443` | 浏览器 HTTPS 由 Caddy 或 Nginx 本地 Web 反代处理 |
 | 3x-ui 面板不使用自带证书作为公网 HTTPS | 面板作为本地 HTTP 后端 |
 | REALITY 使用外部真实 SNI | 不要把 `dest` 写成自己的面板域名 |

@@ -110,7 +110,7 @@ cy
 
 3. 修改 SSH 端口前，先在云厂商安全组放行新端口，并保留一个未断开的 SSH 会话。
 
-4. 启用 443 单入口后，公网 `443` 应只由 Nginx stream 监听。Caddy、3x-ui 面板、REALITY 入站、订阅服务和网站后端默认都应监听 `127.0.0.1`。
+4. 启用 443 单入口后，公网 `443` 只应由当前入口模式对应的单个服务监听：`nginx-stream` 对应 `nginx`，`xray-fallback` 对应 Xray 主入站，`tcp-peek` 对应 `tcppeek` / `vpso-mux`。除 `xray-fallback` 下用户准备的 Xray 主入站外，Caddy、3x-ui 面板、订阅服务、网站后端和额外本地 Xray 入站默认都应监听 `127.0.0.1`。
 
 5. 不建议在没有快照、备份或救援控制台的生产机器上直接运行高风险功能。
 
@@ -137,7 +137,10 @@ cy
 443 单入口用于解决多个服务争抢公网 `443` 的问题。域名和端口都只是示例，使用时换成你的实际值。
 
 ```text
-公网 443 -> Nginx stream 按 SNI 分流
+公网 443 -> 当前入口模式对应的单个服务
+  nginx-stream  -> Nginx stream 按 SNI 分流
+  tcp-peek      -> vpso-mux 按 SNI 分流
+  xray-fallback -> Xray 主入站接管 443 并 fallback 到本地 Web 反代引擎
 
 panel.example.com       -> Caddy/Nginx 本地 Web 反代 -> 3x-ui 面板
 sub.example.com         -> Caddy/Nginx 本地 Web 反代 -> SublinkPro / Sub-Store / 其他 HTTP 后端
@@ -149,6 +152,7 @@ REALITY 伪装 SNI        -> Xray / 3x-ui REALITY 入站
 最重要的规则：
 
 - 公网 `443` 同一时间只能由一个入口服务监听：`nginx`、`xray` 或 `tcppeek`。
+- `ENTRY_MODE` 支持 `nginx-stream`、`xray-fallback`、`tcp-peek`；如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，按 `nginx-stream` 兼容读取。
 - 证书继续使用 `acme.sh + Cloudflare DNS API`，不改成 Caddy DNS 模块。
 - 443 单入口下的 Web 反代引擎可以选择 Caddy 或 Nginx；切换时复用域名、证书、后端和 Web 白名单，并隔离另一套旧配置。
 - Web 白名单只保护 Web 域名，不影响 Xray 节点流量；Nginx Stream/TCP Peek 下会在入口层拦截，`xray-fallback + Nginx 本地 Web 反代` 禁止新增 Web 白名单。
@@ -293,7 +297,7 @@ systemctl status sshd --no-pager
 - 3x-ui 面板是否监听 `127.0.0.1:40000`。
 - 3x-ui 面板和订阅证书路径是否已清空，让 Web 反代引擎接管公网 HTTPS。
 - 当前 Web 反代引擎是否监听 `127.0.0.1:8443`。
-- Nginx stream 是否监听公网 `0.0.0.0:443`。
+- 当前入口模式对应的单个服务是否监听公网 `0.0.0.0:443`：`nginx-stream` 看 `nginx`，`xray-fallback` 看 Xray / 3x-ui / x-ui 托管的 Xray，`tcp-peek` 看 `tcppeek` / `vpso-mux`。
 - 云安全组是否放行 `443`。
 - 面板域名 DNS 是否解析到当前服务器。
 

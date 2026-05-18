@@ -134,7 +134,7 @@ journalctl -u nginx -n 100 --no-pager
 grep -R "listen" /etc/nginx 2>/dev/null
 ```
 
-443 单入口模式下，公网 `443` 只应由 Nginx stream 监听。
+443 单入口模式下，公网 `443` 只应由当前 `ENTRY_MODE` 对应的单个入口服务监听：`nginx-stream` 对应 `nginx`，`xray-fallback` 对应 Xray / 3x-ui / x-ui 托管的 Xray，`tcp-peek` 对应 `tcppeek` / `vpso-mux`。如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本按 `nginx-stream` 兼容读取。
 
 ## Cloudflare Token
 
