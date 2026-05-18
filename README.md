@@ -120,7 +120,7 @@ cy
 | 场景 | 教程 |
 |---|---|
 | 部署 3x-ui + REALITY 并接入 443 | [02-3x-ui-reality-443.md](tutorials/02-3x-ui-reality-443.md) |
-| 用 Caddy/Nginx 反代或 443 单入口接入订阅工具 | [03-subscription-tools-with-caddy.md](tutorials/03-subscription-tools-with-caddy.md) |
+| 用 Caddy/Nginx 反代或 443 单入口接入订阅工具 | [03-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md](tutorials/03-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
 | 已有服务器迁移到 443 单入口 | [existing-server-migration.md](docs/existing-server-migration.md) |
 | 失联、回滚和急救 | [recovery-runbook.md](docs/recovery-runbook.md) |
 

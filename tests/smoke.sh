@@ -107,9 +107,16 @@ esac
 assert_file_not_contains scripts/build.sh 'subscription_tools.sh' "Release build must use the split compose/subscription modules directly."
 assert_file_not_contains dist/vps.sh '# Module: subscription_tools.sh' "Release build must not include the legacy subscription_tools compatibility loader."
 assert_file_not_matches src/subscription_tools.sh '^[A-Za-z_][A-Za-z0-9_]*\(\) \{' "subscription_tools.sh must stay a compatibility loader, not reintroduce duplicate implementations."
+assert_file_contains src/README.md 'compose_runtime.sh`, `subscription_apps.sh`,' "Source README must document the split compose/subscription build order."
+assert_file_contains src/README.md 'subscription_tools.sh` is a compatibility loader only' "Source README must document subscription_tools.sh as compatibility-only."
 for module in compose_runtime.sh subscription_apps.sh subscription_compose_manage.sh subscription_service_menus.sh dockge_migration.sh; do
     assert_dist_contains "# Module: ${module}" "Release script is missing split compose/subscription module: ${module}"
 done
+assert_file_contains ".gitattributes" 'dist/vps.sh.sha256 text eol=lf' "dist checksum must be pinned to LF in Windows workspaces."
+if grep -q $'\r' dist/vps.sh.sha256; then
+    echo "dist/vps.sh.sha256 must use LF line endings." >&2
+    exit 1
+fi
 for function_name in \
     install_docker_compose_standalone \
     ensure_docker_compose_ready \
@@ -482,7 +489,7 @@ docs_menu_files=(
     "docs/existing-server-migration.md"
     "docs/recovery-runbook.md"
     "tutorials/02-3x-ui-reality-443.md"
-    "tutorials/03-subscription-tools-with-caddy.md"
+    "tutorials/03-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md"
 )
 for file in "${docs_menu_files[@]}"; do
     assert_file_not_contains "$file" '主菜单 [18 443 单入口管理中心]' "${file} must not point users to the old main menu [18] 443 entry."
@@ -675,12 +682,28 @@ assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚
 assert_file_contains "README.md" '[4 反代] 里的后端 HTTPS 跳过证书校验、域名 IP 白名单、查看/编辑已应用配置和清空反代配置都同时提供 Caddy/Nginx 入口' "README must document Nginx parity in the reverse proxy menu."
 assert_file_contains "docs/443-single-entry.md" '[4] -> [5 域名 IP 白名单]' "443 doc must describe the combined Caddy/Nginx whitelist menu."
 assert_file_contains "README.md" 'Nginx 反代会直接监听公网 80/443' "README must explain the non-single-entry Nginx HTTPS reverse proxy behavior."
-assert_file_contains "tutorials/03-subscription-tools-with-caddy.md" '主菜单 [4 反代]' "Subscription tutorial must point non-single-entry users at the current reverse proxy menu."
-assert_file_contains "tutorials/03-subscription-tools-with-caddy.md" '[2 添加 Nginx HTTPS 反代]' "Subscription tutorial must document the Nginx HTTPS reverse proxy option before 443 single-entry is enabled."
-assert_file_contains "tutorials/03-subscription-tools-with-caddy.md" '主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]' "Subscription tutorial must keep the current 443 single-entry Web reverse proxy path."
+subscription_public_hint='公网 HTTPS 访问建议：未启用 443 单入口时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时，请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
+assert_file_contains "src/subscription_apps.sh" "$subscription_public_hint" "Subscription/Komari installers must explain both non-single-entry and 443 single-entry reverse proxy paths."
+assert_dist_contains "$subscription_public_hint" "Release script must include the current Subscription/Komari public HTTPS guidance."
+subscription_public_hint_calls=$(grep -Ec '^[[:space:]]+print_public_https_reverse_proxy_hint$' src/subscription_apps.sh || true)
+if [[ "$subscription_public_hint_calls" -lt 8 ]]; then
+    echo "Subscription/Komari installers must show the unified public HTTPS guidance before install and after success." >&2
+    exit 1
+fi
+for stale_hint in \
+    '公网 HTTPS 访问建议走 [19] -> [8]' \
+    '主菜单 [19] -> [8] 为该本地端口添加 443 反代域名' \
+    '公网 HTTPS 可走 Caddy 反代' \
+    '未启用 443 单入口可用 [4] -> [1] Caddy 反代'
+do
+    assert_file_not_contains "src/subscription_apps.sh" "$stale_hint" "Subscription/Komari installers must not use stale public HTTPS guidance: ${stale_hint}"
+done
+assert_file_contains "tutorials/03-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '主菜单 [4 反代]' "Subscription tutorial must point non-single-entry users at the current reverse proxy menu."
+assert_file_contains "tutorials/03-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '[2 添加 Nginx HTTPS 反代]' "Subscription tutorial must document the Nginx HTTPS reverse proxy option before 443 single-entry is enabled."
+assert_file_contains "tutorials/03-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]' "Subscription tutorial must keep the current 443 single-entry Web reverse proxy path."
 assert_file_contains "docs/existing-server-migration.md" '未启用 443 单入口时的 HTTPS 反代过渡' "Migration doc must include the non-single-entry HTTPS reverse proxy transition flow."
 assert_file_contains "docs/existing-server-migration.md" '[2 添加 Nginx HTTPS 反代]' "Migration doc must document the Nginx HTTPS reverse proxy option before 443 single-entry is enabled."
-for file in README.md docs/existing-server-migration.md tutorials/03-subscription-tools-with-caddy.md; do
+for file in README.md docs/existing-server-migration.md tutorials/03-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md; do
     assert_file_not_contains "$file" '普通 Caddy 反代' "${file} must not use the old ordinary Caddy reverse proxy wording."
     assert_file_not_contains "$file" '主菜单 [4 普通 Caddy 反代]' "${file} must not point users to the old ordinary Caddy reverse proxy menu."
     assert_file_not_contains "$file" '添加普通 Caddy' "${file} must not use the old add ordinary Caddy wording."

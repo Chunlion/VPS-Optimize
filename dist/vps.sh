@@ -12601,6 +12601,10 @@ generate_random_secret() {
     fi
 }
 
+print_public_https_reverse_proxy_hint() {
+    echo -e "${YELLOW}公网 HTTPS 访问建议：未启用 443 单入口时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时，请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。${PLAIN}"
+}
+
 func_sublinkpro() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -12627,7 +12631,7 @@ func_sublinkpro() {
 
     echo -e "${YELLOW}💡 SublinkPro 将被安全部署在: ${CYAN}$install_dir${PLAIN}"
     echo -e "${YELLOW}💡 SublinkPro 监听地址将使用: ${CYAN}${sublink_bind_addr}:${sublink_port}${PLAIN}"
-    echo -e "${YELLOW}💡 需要公网 HTTPS 访问时，建议部署后走 [19] -> [8] 添加 443 单入口反代域名。${PLAIN}"
+    print_public_https_reverse_proxy_hint
     echo -e "${YELLOW}账号密码说明：当前安装流程不提供自定义后台账号密码。${PLAIN}"
     echo -e "${YELLOW}默认后台账号：${CYAN}admin${PLAIN} / 默认后台密码：${CYAN}123456${PLAIN}"
     echo -e "${YELLOW}部署完成后请尽快登录后台修改默认密码。${PLAIN}"
@@ -12667,7 +12671,7 @@ EOF
         echo -e "👤 ${BOLD}默认后台账号:${PLAIN} admin"
         echo -e "🔑 ${BOLD}默认后台密码:${PLAIN} 123456"
         echo -e "${YELLOW}⚠️ 当前安装流程未提供自定义账号密码，请登录后尽快修改默认密码。${PLAIN}"
-        echo -e "${YELLOW}公网访问建议：主菜单 [19] -> [8] 为该本地端口添加 443 反代域名。${PLAIN}"
+        print_public_https_reverse_proxy_hint
         echo -e "------------------------------------------------"
         echo -e "${YELLOW}⚠️ 核心防丢提示：${PLAIN}"
         echo -e "系统产生的数据库、模板和日志都已持久化映射在 ${CYAN}$install_dir${PLAIN} 下。"
@@ -12712,7 +12716,8 @@ func_miaomiaowu() {
     echo -e "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}"
     echo -e "${YELLOW}监听地址：${CYAN}${mmw_bind_addr}:${mmw_port}${PLAIN}"
     echo -e "${YELLOW}数据目录：${CYAN}${install_dir}/data、subscribes、rule_templates${PLAIN}"
-    echo -e "${YELLOW}公网 HTTPS 访问建议走 [19] -> [8]，不要直接开放容器端口。${PLAIN}"
+    print_public_https_reverse_proxy_hint
+    echo -e "${YELLOW}不要直接开放容器端口到公网。${PLAIN}"
     echo -e "${YELLOW}账号密码说明：当前安装流程不预设账号密码。${PLAIN}"
     echo -e "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}"
     echo -e "------------------------------------------------"
@@ -12762,7 +12767,7 @@ EOF
         echo -e "本地访问地址：${BOLD}http://${access_host}:${mmw_port}${PLAIN}"
         echo -e "账号密码：${YELLOW}无默认账号密码，首次打开页面创建管理员账号。${PLAIN}"
         echo -e "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}"
-        echo -e "${YELLOW}公网访问建议：主菜单 [19] -> [8] 为该本地端口添加 443 反代域名。${PLAIN}"
+        print_public_https_reverse_proxy_hint
         echo -e "${YELLOW}请定期备份 ${install_dir}/data、subscribes、rule_templates。${PLAIN}"
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
@@ -12805,9 +12810,10 @@ func_substore() {
     echo -e "${YELLOW}Sub-Store 后端：${CYAN}127.0.0.1:${backend_port}${PLAIN}"
     echo -e "${YELLOW}HTTP-META：${CYAN}127.0.0.1:${meta_port}${PLAIN}"
     echo -e "${YELLOW}前端后端路径：${CYAN}${backend_path}${PLAIN}"
-    echo -e "${YELLOW}默认使用 host 网络并绑定 127.0.0.1，如需公网访问建议再接 Caddy/Nginx 反代。${PLAIN}"
+    echo -e "${YELLOW}默认使用 host 网络并绑定 127.0.0.1。${PLAIN}"
+    print_public_https_reverse_proxy_hint
     echo -e "${YELLOW}账号密码说明：当前 Sub-Store 部署不使用登录账号密码。${PLAIN}"
-    echo -e "${YELLOW}请保存随机后端路径；公网访问建议通过反代额外加认证。${PLAIN}"
+    echo -e "${YELLOW}请保存随机后端路径；如对公网开放，请在反代侧额外加认证。${PLAIN}"
     echo -e "------------------------------------------------"
 
     local yn
@@ -12845,6 +12851,7 @@ EOF
         echo -e "HTTP-META 地址：${BOLD}http://127.0.0.1:${meta_port}${PLAIN}"
         echo -e "账号密码：${YELLOW}无默认登录账号密码，请妥善保存上面的随机后端路径。${PLAIN}"
         echo -e "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}"
+        print_public_https_reverse_proxy_hint
         echo -e "${YELLOW}请定期备份 ${install_dir}/data。${PLAIN}"
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
@@ -12930,7 +12937,8 @@ func_komari() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}安装 Komari 探针监控面板 (Docker Compose)${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}Komari 用于服务器探针监控。默认只监听本地地址；公网 HTTPS 可走 Caddy 反代，已启用 443 单入口时走 [19] -> [8]。${PLAIN}"
+    echo -e "${YELLOW}Komari 用于服务器探针监控。默认只监听本地地址。${PLAIN}"
+    print_public_https_reverse_proxy_hint
     echo -e "${YELLOW}如果探针客户端需要直连端口，可把监听地址改为 0.0.0.0，并确认云安全组已放行。${PLAIN}"
     echo -e "------------------------------------------------"
 
@@ -13038,7 +13046,7 @@ EOF
         else
             echo -e "${YELLOW}默认管理员账号请查看日志：${CYAN}$DOCKER_COMPOSE_CMD logs komari${PLAIN}"
         fi
-        echo -e "${YELLOW}如需公网 HTTPS 访问：未启用 443 单入口可用 [4] -> [1] Caddy 反代；已启用 443 单入口请用 [19] -> [8] 添加反代域名。${PLAIN}"
+        print_public_https_reverse_proxy_hint
     else
         echo -e "${BLUE}已安全取消部署。${PLAIN}"
     fi
