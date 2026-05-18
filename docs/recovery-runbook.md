@@ -1,6 +1,6 @@
 # 失联与回滚急救手册
 
-这份手册用于处理已经出问题的情况：SSH 断开、防火墙误封、443 单入口改坏、Caddy/Nginx 起不来、证书失败、面板打不开。它的目标是先恢复可控状态，再排查根因。
+这份手册用于处理已经出问题的情况：SSH 断开、防火墙误封、443 单入口改坏、Nginx 入口或 Caddy/Nginx Web 反代引擎起不来、证书失败、面板打不开。它的目标是先恢复可控状态，再排查根因。
 
 本文菜单路径按“主菜单 [编号 菜单文案] -> [子编号 菜单文案]”格式书写，不把快捷命令写进每条路径。
 
@@ -15,7 +15,7 @@
 | 当前 SSH 还在 | 保留窗口，先创建备份或查看服务状态 |
 | 新 SSH 连不上，但旧窗口还在 | 用旧窗口恢复 SSH、防火墙或云安全组 |
 | 所有 SSH 都断了 | 用云厂商 VNC / 救援控制台登录 |
-| 系统能登录但 443 坏了 | 先体检，再按 Caddy/Nginx/证书分开处理 |
+| 系统能登录但 443 坏了 | 先体检，再按入口服务、Web 反代引擎、证书分开处理 |
 | 系统和服务都混乱 | 优先从脚本备份或云快照恢复 |
 
 ## 能登录时的最小检查
@@ -150,7 +150,7 @@ ss -lntp
 ### 现象
 
 - 面板、订阅或网站都打不开。
-- Nginx 或 Caddy 启动失败。
+- 入口服务或 Web 反代引擎启动失败。
 - 浏览器 404、502、证书错误。
 - REALITY 连不上。
 
@@ -160,6 +160,7 @@ ss -lntp
 ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096'
 systemctl status nginx --no-pager
 systemctl status caddy --no-pager
+systemctl status vpso-mux --no-pager
 nginx -t
 caddy validate --config /etc/caddy/Caddyfile
 ```
@@ -177,18 +178,28 @@ caddy validate --config /etc/caddy/Caddyfile
 | 目标 | 菜单路径 |
 |---|---|
 | 新增或删除网站 | `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]` |
+| 切换 Caddy/Nginx Web 反代引擎 | `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [8 切换 Web 反代引擎]` |
 | 重新生成配置 | `主菜单 [19 443 单入口管理中心] -> [6 重新应用当前入口模式]` |
 | 修改面板/订阅/REALITY 参数 | `主菜单 [19 443 单入口管理中心] -> [14 修改 443 共享参数]` |
-| Caddy 和证书修复 | `主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护]` |
+| Caddy/证书维护 | `主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护]` |
 | 回滚 443 配置 | `主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护] -> [6 回滚 443 单入口配置]` |
+
+### 切换 Caddy/Nginx Web 反代引擎后坏了
+
+脚本管理的 443 配置以 `/etc/vps-optimize/sni-stack.env` 为准。通过 `[19] -> [8] -> [8]` 切换 Web 反代引擎时，会读取已经保存的面板、订阅、网站、证书、白名单和后端参数重建目标引擎配置；不会反向解析手写的 Caddy/Nginx 配置。
+
+如果之前手动改过 `/etc/caddy/conf.d`、`/etc/nginx/conf.d/vps_sni_web_*.conf` 或旧 `[4 反代]` 生成的 `/etc/nginx/conf.d/vps_proxy_*.conf`，先通过 `[8 管理 Web 域名/反代]` 或 `[14 修改 443 共享参数]` 把参数同步到脚本，再切换。切换到 Nginx 本地 Web 反代会隔离脚本管理的 Caddy 443 Web 配置；切换回 Caddy 会隔离脚本管理的 Nginx 本地 Web 配置。重新应用 443 时也会隔离旧 Nginx HTTPS 公网反代配置，避免继续抢公网 `443`。
+
+如果当前是 `ENTRY_MODE=xray-fallback` 且 `WEB_PROXY_ENGINE=nginx`，脚本会禁止新增或覆盖 Web 白名单。原因是 Xray fallback 到本地 Nginx 后，Nginx 不能可靠拿到真实客户端源 IP。如需 Web 白名单，切到 Nginx Stream/TCP Peek 入口层白名单，或选择 Caddy 作为 Web 反代引擎。
 
 ## Nginx 起不来
 
 ### 常见原因
 
-- `443` 已被 Caddy、Apache、旧 Nginx server、3x-ui 或 Xray 占用。
+- `443` 已被 Apache、旧 Nginx server、3x-ui、Xray 或非当前入口服务占用。
 - `/etc/nginx/nginx.conf` 的 `stream` 配置语法错误。
-- 旧配置和 443 单入口配置重复。
+- 旧公网 HTTPS 反代配置和 443 单入口配置重复。
+- 选择 Nginx 作为 Web 反代引擎后，`/etc/nginx/conf.d/vps_sni_web_*.conf` 语法或证书路径异常。
 
 ### 检查
 
@@ -205,33 +216,47 @@ grep -R "listen .*443" /etc/nginx /etc/caddy 2>/dev/null
 
 | 组件 | 应该监听 |
 |---|---|
-| Nginx stream | `0.0.0.0:443` |
-| Caddy | `127.0.0.1:8443` |
-| REALITY | `127.0.0.1:1443` |
+| 443 入口服务 | Nginx Stream、vpso-mux 或 Xray 主入站三选一监听公网 `443` |
+| Web 反代引擎 | Caddy 或 Nginx 监听本地 HTTPS，例如 `127.0.0.1:8443` |
+| REALITY 本地入站 | Nginx Stream/TCP Peek 模式下通常是 `127.0.0.1:1443` |
 | 3x-ui 面板 | `127.0.0.1:40000` |
 
-如果是旧配置抢占，进入：
+如果是旧配置抢占或 Web 反代引擎切换后 Nginx 起不来，先确认：
+
+```bash
+grep -E '^(ENTRY_MODE|WEB_PROXY_ENGINE|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_ADDR|CADDY_LISTEN_PORT)=' /etc/vps-optimize/sni-stack.env 2>/dev/null
+grep -R "listen .*443" /etc/nginx/conf.d /etc/nginx/sites-enabled /etc/caddy 2>/dev/null
+nginx -t
+```
+
+再进入：
 
 ```text
 主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护] -> [15 隔离旧 Caddy 配置]
 主菜单 [19 443 单入口管理中心] -> [6 重新应用当前入口模式]
 ```
 
-## Caddy 起不来或 502
+## Web 反代引擎起不来或 502
 
 ### 常见原因
 
-- Caddy 配置语法错误。
+- 当前 Web 反代引擎配置语法错误。
 - 后端端口没有服务。
 - 反代地址写错。
 - 证书文件缺失或权限不对。
+- Nginx 本地 Web 反代的 server/location 写法或证书路径异常。
 
 ### 检查
 
 ```bash
+grep -E '^(ENTRY_MODE|WEB_PROXY_ENGINE|PANEL_DOMAIN|CADDY_LISTEN_ADDR|CADDY_LISTEN_PORT)=' /etc/vps-optimize/sni-stack.env 2>/dev/null
 caddy validate --config /etc/caddy/Caddyfile
 systemctl status caddy --no-pager
 journalctl -u caddy -n 100 --no-pager
+nginx -t
+systemctl status nginx --no-pager
+journalctl -u nginx -n 100 --no-pager
+ls -l /etc/nginx/conf.d/vps_sni_web_*.conf 2>/dev/null
 curl -I http://127.0.0.1:40000/panel/
 curl -I http://127.0.0.1:2096/sub/
 ```
@@ -241,9 +266,11 @@ curl -I http://127.0.0.1:2096/sub/
 | 问题 | 菜单路径 |
 |---|---|
 | 只是 Caddy 语法或重载问题 | `主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护] -> [12 校验并重载 Caddy]` |
+| Nginx 本地 Web 反代语法或重载问题 | `主菜单 [19 443 单入口管理中心] -> [6 重新应用当前入口模式]` |
+| 需要切换 Caddy/Nginx Web 反代引擎 | `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [8 切换 Web 反代引擎]` |
 | 后端端口或路径写错 | `主菜单 [19 443 单入口管理中心] -> [14 修改 443 共享参数] -> [1 修改面板/订阅端口与路径]` |
 | 证书文件或软链接异常 | `主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护] -> [10 重建 /root/cert 证书软链接]` |
-| 不知道是哪类问题 | `主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护] -> [13 Caddy/证书一键体检]` |
+| 不知道是哪类问题 | `主菜单 [19 443 单入口管理中心] -> [11 443 链路体检]` |
 
 ## 证书失败
 
@@ -253,8 +280,10 @@ curl -I http://127.0.0.1:2096/sub/
 date -Is
 dig +short A panel.example.com @1.1.1.1
 dig +short AAAA panel.example.com @1.1.1.1
-systemctl status caddy --no-pager
+grep -E '^(WEB_PROXY_ENGINE|PANEL_DOMAIN|CADDY_LISTEN_ADDR|CADDY_LISTEN_PORT)=' /etc/vps-optimize/sni-stack.env 2>/dev/null
+systemctl status nginx caddy --no-pager
 journalctl -u caddy -n 100 --no-pager
+journalctl -u nginx -n 100 --no-pager
 ```
 
 Cloudflare Token 至少需要：
@@ -273,6 +302,8 @@ Zone.DNS.Edit
 主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护] -> [9 重新签发某个域名证书]
 主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护] -> [13 Caddy/证书一键体检]
 ```
+
+菜单名称里保留 Caddy 是历史命名；无论 Web 反代引擎选择 Caddy 还是 Nginx，证书仍由 `acme.sh + Cloudflare DNS API` 签发，并继续使用 `/etc/caddy/certs/${domain}.crt|key` 和 `/root/cert/${domain}.crt|key`。
 
 最近的 acme 错误日志可能在：
 
@@ -294,11 +325,11 @@ systemctl status x-ui --no-pager
 
 | 结果 | 判断 |
 |---|---|
-| 本地 HTTP 正常，公网 HTTPS 不通 | 多半是 Nginx/Caddy/证书问题 |
+| 本地 HTTP 正常，公网 HTTPS 不通 | 多半是入口服务、Web 反代引擎或证书问题 |
 | 本地 HTTP 也不通 | 先修 3x-ui 或面板端口 |
 | 重定向循环 | 3x-ui 可能仍开启自带 HTTPS |
-| 404 | 面板路径和 Caddy 路径不一致 |
-| 502 | Caddy 找不到后端 |
+| 404 | 面板路径和 Web 反代引擎路径不一致 |
+| 502 | Web 反代引擎找不到后端 |
 
 常用入口：
 
@@ -345,7 +376,7 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 
 重点确认：
 
-| 项目 | 正确值 |
+| 项目 | 检查重点 |
 |---|---|
 | REALITY 本地监听 | `127.0.0.1:1443` |
 | 客户端端口 | `443` |
@@ -380,7 +411,7 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 
 ### 443 单入口备份
 
-适合只回滚 Nginx/Caddy/443 配置：
+适合只回滚入口服务、Web 反代和 443 配置：
 
 ```text
 主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护] -> [6 回滚 443 单入口配置]
