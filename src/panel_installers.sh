@@ -97,13 +97,6 @@ func_xui_custom_manager() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
-func_singbox() {
-    clear
-    echo -e "${CYAN}👉 正在拉取甬哥的 Sing-box 四合一脚本...${PLAIN}"
-    run_remote_script "安装 Sing-box 甬哥四合一脚本" "https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh"
-    pause_after_external_script "操作结束，按回车键返回菜单..."
-}
-
 func_singbox_233boy() {
     clear
     echo -e "${CYAN}👉 正在拉取 233boy 的 Sing-box 一键脚本...${PLAIN}"

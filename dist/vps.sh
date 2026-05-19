@@ -12718,13 +12718,6 @@ func_xui_custom_manager() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
-func_singbox() {
-    clear
-    echo -e "${CYAN}👉 正在拉取甬哥的 Sing-box 四合一脚本...${PLAIN}"
-    run_remote_script "安装 Sing-box 甬哥四合一脚本" "https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh"
-    pause_after_external_script "操作结束，按回车键返回菜单..."
-}
-
 func_singbox_233boy() {
     clear
     echo -e "${CYAN}👉 正在拉取 233boy 的 Sing-box 一键脚本...${PLAIN}"
@@ -13627,19 +13620,17 @@ func_singbox_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}🧭 Sing-box 管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}可选择不同一键脚本安装，也可进入已安装脚本的管理菜单。${PLAIN}"
+        echo -e "${YELLOW}可安装 Sing-box 一键脚本，也可进入已安装脚本的管理菜单。${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 安装 Sing-box（甬哥四合一脚本）${PLAIN}"
-        echo -e "${GREEN}  2. 安装 Sing-box（233boy 一键脚本）${PLAIN}"
-        echo -e "${GREEN}  3. 管理 / 卸载 Sing-box${PLAIN}"
+        echo -e "${GREEN}  1. 安装 Sing-box（233boy 一键脚本）${PLAIN}"
+        echo -e "${GREEN}  2. 管理 / 卸载 Sing-box${PLAIN}"
         echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         read_trimmed choice "👉 请选择操作: "
 
         case "$choice" in
-            1) func_singbox ;;
-            2) func_singbox_233boy ;;
-            3) func_singbox_manage ;;
+            1) func_singbox_233boy ;;
+            2) func_singbox_manage ;;
             0|q|Q) return ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
