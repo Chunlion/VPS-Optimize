@@ -131,6 +131,13 @@ for function_name in \
 do
     assert_function_defined_once dist/vps.sh "$function_name"
 done
+assert_file_contains scripts/build.sh 'sni_stack_sites.sh' "Release build must use src/sni_stack_sites.sh for 443 Web/SNI site workflows."
+assert_file_contains vps.sh '    sni_stack_sites' "Source checkout entrypoint must load src/sni_stack_sites.sh for 443 Web/SNI site workflows."
+assert_dist_contains '# Module: sni_stack_sites.sh' "Release script must include the active 443 Web/SNI site module."
+assert_path_absent "src/sni_stack_web_sites.sh" "sni_stack_web_sites.sh is a stale shadow implementation; use src/sni_stack_sites.sh."
+assert_file_not_contains scripts/build.sh 'sni_stack_web_sites.sh' "Stale sni_stack_web_sites.sh must not be added to the release build."
+assert_file_not_contains vps.sh 'sni_stack_web_sites' "Source entrypoint must not load the stale sni_stack_web_sites module."
+assert_file_not_contains dist/vps.sh '# Module: sni_stack_web_sites.sh' "Release script must not include the stale sni_stack_web_sites module."
 assert_path_absent "src/entry_mode_cutover.sh" "entry_mode_cutover.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
 assert_path_absent "src/tcp_peek_preflight.sh" "tcp_peek_preflight.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
 assert_file_not_contains scripts/build.sh 'entry_mode_cutover.sh' "Stale entry-mode cutover module must not be added to the release build."
@@ -580,6 +587,9 @@ for file in "${single_entry_mode_doc_files[@]}"; do
     assert_file_not_contains "$file" '公网 `443` 只给 Nginx stream' "${file} must not describe Nginx stream as the only possible public 443 listener."
     assert_file_not_contains "$file" '公网 `443` 只交给 Nginx stream' "${file} must not describe Nginx stream as the only possible public 443 listener."
 done
+assert_file_not_contains "tutorials/02-3x-ui-reality-443.md" '| Nginx 公网监听地址 |' "3x-ui REALITY tutorial must not show Nginx as the fixed public 443 listener."
+assert_file_not_contains "tutorials/02-3x-ui-reality-443.md" '| 公网 `443` | Nginx stream 监听 |' "3x-ui REALITY tutorial must not expect public 443 to always be Nginx stream."
+assert_file_contains "tutorials/02-3x-ui-reality-443.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本只在兼容读取旧配置时按 `nginx-stream` 处理' "3x-ui REALITY tutorial must document ENTRY_MODE fallback compatibility."
 assert_file_contains "README.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，按 `nginx-stream` 兼容读取' "README must document ENTRY_MODE fallback compatibility."
 assert_file_contains "docs/config-paths.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本按 `nginx-stream` 兼容读取' "Config paths doc must document ENTRY_MODE fallback compatibility."
 assert_file_contains "docs/443-single-entry-troubleshooting.md" '公网 `443` 只应由当前 `ENTRY_MODE` 对应的单个入口服务监听' "Troubleshooting doc must describe the current entry-mode listener model."

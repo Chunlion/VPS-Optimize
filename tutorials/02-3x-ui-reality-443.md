@@ -280,8 +280,8 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 |---|---|
 | 面板域名 | `panel.example.com` |
 | REALITY 伪装 SNI | `www.microsoft.com` |
-| Nginx 公网监听地址 | `0.0.0.0` |
-| Nginx 公网监听端口 | `443` |
+| 443 入口模式 | `nginx-stream` / `xray-fallback` / `tcp-peek` |
+| 公网 `443` 监听者 | 由当前入口模式对应的单个入口服务接管 |
 | Web 反代引擎本地监听地址 | `127.0.0.1` |
 | Web 反代引擎本地监听端口 | `8443` |
 | Xray REALITY 本地监听地址 | `127.0.0.1` |
@@ -293,6 +293,8 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 | 3x-ui 订阅端口 | `2096` |
 | 普通订阅路径前缀 | `/sub/` |
 | Clash/Mihomo 路径前缀 | `/clash/` |
+
+如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本只在兼容读取旧配置时按 `nginx-stream` 处理；新配置和后续保存应以实际选择的 `ENTRY_MODE` 为准。
 
 脚本出现高风险确认卡片时，确认以下条件都满足再输入大写 `YES`：
 
@@ -325,7 +327,7 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 
 | 检查项 | 期望 |
 |---|---|
-| 公网 `443` | Nginx stream 监听 |
+| 公网 `443` | 只由当前 `ENTRY_MODE` 对应的单个入口服务监听 |
 | Caddy | `127.0.0.1:8443` |
 | REALITY | `127.0.0.1:1443` |
 | 面板 | `127.0.0.1:40000` |
@@ -353,7 +355,7 @@ REALITY 节点里重点确认：
 | SNI | 外部真实 HTTPS 站点 |
 | flow | 按你的客户端和入站配置一致 |
 
-如果面板打开正常但 REALITY 连不上，优先看 `dest`、`serverNames`、本地监听端口和 Nginx stream 分流。
+如果面板打开正常但 REALITY 连不上，优先看 `dest`、`serverNames`、本地监听端口，以及当前入口模式的 SNI 分流或 Xray fallback 接管是否符合预期。
 
 ### 10. 成功后备份
 
@@ -416,7 +418,7 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 
 | 错误 | 现象 | 处理 |
 |---|---|---|
-| Caddy 也监听公网 `443` | Nginx 启动失败或端口冲突 | Caddy 改 `127.0.0.1:8443` |
+| Web 反代引擎也监听公网 `443` | 当前入口服务启动失败或端口冲突 | Web 反代引擎改为本地监听，例如 `127.0.0.1:8443` |
 | 3x-ui 面板自带 HTTPS 没关 | 重定向循环、证书错误 | 清空面板证书路径并重启 |
 | REALITY 写自己的域名做 SNI | 客户端连接失败 | 改成外部真实 HTTPS 站点 |
 | 订阅路径不带 `/` | 订阅 404 | 统一写 `/sub/`、`/clash/` |
