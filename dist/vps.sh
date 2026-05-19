@@ -9300,7 +9300,7 @@ manage_sni_stack_tcp_routes() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🔀 443 TCP/SNI 本地入站管理${PLAIN}"
+        echo -e "${BOLD}Xray 入站管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：把你已在 3x-ui 配好的本地 TCP 入站，通过不同 SNI 统一接入公网 ${NGINX_LISTEN_PORT}。${PLAIN}"
         echo -e "${YELLOW}本功能不开放新端口，不改 3x-ui 协议；只写 Nginx stream SNI -> 本地端口规则。${PLAIN}"

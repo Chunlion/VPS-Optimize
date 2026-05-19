@@ -66,7 +66,7 @@ Cloudflare 建议：
 |---|---|---|
 | 3x-ui | 面板端口、路径、证书路径、订阅设置、REALITY 入站 | 面板路径或证书设置错会打不开 |
 | 当前 443 入口服务 | 公网 `443` 单入口接管和分流 | 端口冲突会导致当前入口模式切换或启动失败 |
-| Caddy | 本地 HTTPS 反代和证书 | 配置错会 404/502/证书失败 |
+| 当前 Web 反代引擎 | 本地 HTTPS 反代和证书 | 配置错会 404/502/证书失败 |
 | Xray/REALITY | 本地监听和伪装 SNI | SNI 写错会连接失败 |
 | 防火墙 | 建议只保留 SSH 和公网 `443` | 误删端口会断连 |
 | 备份 | 创建 SNI stack 和手动配置备份 | 占用少量磁盘 |
@@ -79,8 +79,8 @@ Cloudflare 建议：
   tcp-peek      -> vpso-mux 按 SNI 分流
   xray-fallback -> Xray 主入站接管 443 并 fallback 到本地 Web 反代引擎
 
-panel.example.com  -> Caddy 127.0.0.1:8443 -> 3x-ui 面板 127.0.0.1:40000
-panel.example.com/sub/ -> Caddy -> 3x-ui 订阅 127.0.0.1:2096
+panel.example.com  -> 当前 Web 反代引擎（Caddy 或 Nginx，例如 127.0.0.1:8443）-> 3x-ui 面板 127.0.0.1:40000
+panel.example.com/sub/ -> 当前 Web 反代引擎（Caddy 或 Nginx）-> 3x-ui 订阅 127.0.0.1:2096
 REALITY SNI / 未知 SNI -> Xray REALITY 127.0.0.1:1443
 site.example.com -> Caddy/Nginx 本地 Web 反代 -> 本地网站后端
 ```
@@ -90,7 +90,7 @@ site.example.com -> Caddy/Nginx 本地 Web 反代 -> 本地网站后端
 | 原则 | 说明 |
 |---|---|
 | 公网 `443` 只给当前入口模式对应的单个服务 | 避免 Caddy、Xray、面板和 `vpso-mux` 互相抢端口 |
-| Web 反代引擎默认监听本地 `8443` | 浏览器 HTTPS 由 Caddy 或 Nginx 本地 Web 反代处理 |
+| Web 反代引擎监听本地 HTTPS 端口 | 浏览器 HTTPS 由 Caddy 或 Nginx 本地 Web 反代处理，`8443` 只是示例值 |
 | 3x-ui 面板不使用自带证书作为公网 HTTPS | 面板作为本地 HTTP 后端 |
 | REALITY 使用外部真实 SNI | 不要把 `dest` 写成自己的面板域名 |
 | 成功后再收紧防火墙 | 先跑通，再只保留必要端口 |
@@ -312,7 +312,7 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 主菜单 [19 443 单入口管理中心] -> [11 443 链路体检]
 ```
 
-体检会检查 Nginx、Caddy、REALITY、面板后端、3x-ui 面板/订阅证书路径残留和安全项。
+体检会检查当前入口服务、Web 反代引擎、REALITY、面板后端、3x-ui 面板/订阅证书路径残留和安全项。
 
 手动补充检查：
 
@@ -328,7 +328,7 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 | 检查项 | 期望 |
 |---|---|
 | 公网 `443` | 只由当前 `ENTRY_MODE` 对应的单个入口服务监听 |
-| Caddy | `127.0.0.1:8443` |
+| Web 反代引擎 | `127.0.0.1:8443`，以脚本当前配置为准 |
 | REALITY | `127.0.0.1:1443` |
 | 面板 | `127.0.0.1:40000` |
 | 订阅 | `127.0.0.1:2096` |
@@ -410,7 +410,7 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 | 面板打不开 | `主菜单 [5 面板、节点与订阅工具] -> [11 面板救砖 / SSL 清理]` 清理面板 SSL，再检查本地端口 |
 | 证书失败 | `主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护]` 检查 Token、DNS、重签证书 |
 | 443 被占用 | `ss -lntp | grep ':443'` 找占用方，再调整为本地监听 |
-| 订阅 404 | 检查 3x-ui 订阅路径和 Caddy 路径是否一致 |
+| 订阅 404 | 检查 3x-ui 订阅路径和当前 Web 反代引擎路径是否一致 |
 | REALITY 失败 | 检查 REALITY 本地监听、SNI、dest 和客户端节点端口 |
 | 配置整体混乱 | `主菜单 [16 配置备份与回滚] -> [3 从备份一键回滚]` 从手动备份回滚 |
 

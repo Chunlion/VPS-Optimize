@@ -2,21 +2,23 @@
 
 遇到面板打不开、订阅 404、证书失败或 REALITY 连接失败时，先看：[443 单入口排错手册](443-single-entry-troubleshooting.md)。
 
-这篇文档教你把 VPS 的公网 `443` 统一接入 VPS-Optimize 的 443 单入口。默认推荐 Nginx Stream，也可以在配置完成后切换到 TCP Peek + Splice 或 Xray Fallback。
+这篇文档教你把 VPS 的公网 `443` 统一接入 VPS-Optimize 的 443 单入口。默认推荐 Nginx Stream，也可以在配置完成后切换到 TCP Peek + Splice 或 Xray Fallback。无论选择哪种入口模式，公网 `443` 同一时间只由当前 `ENTRY_MODE` 对应的单个服务监听。
 
-默认 Nginx Stream 架构是：
+当前 443 单入口链路是：
 
 ```text
-公网 443 -> Nginx stream 按 SNI 分流
+公网 443 -> 当前 ENTRY_MODE 对应的单个入口服务
+  nginx-stream  -> nginx 按 SNI 分流
+  tcp-peek      -> vpso-mux 按 SNI 分流
+  xray-fallback -> Xray 主入站接管 443，并 fallback 普通 HTTPS
 
-Web 域名        -> Caddy/Nginx 本地 Web 反代 -> 本机 HTTP 后端
-3x-ui 面板      -> Caddy/Nginx 本地 Web 反代 -> 127.0.0.1:40000
-3x-ui 订阅      -> Caddy/Nginx 本地 Web 反代 -> 127.0.0.1:2096
-REALITY SNI     -> Xray / 3x-ui REALITY -> 127.0.0.1:1443
-未知 SNI        -> Xray / 3x-ui REALITY -> 127.0.0.1:1443
+普通 HTTPS / Web 域名 -> 当前选择的本地 Web 反代引擎（Caddy 或 Nginx）-> 本机 HTTP 后端
+3x-ui 面板            -> 当前选择的本地 Web 反代引擎 -> 127.0.0.1:40000
+3x-ui 订阅            -> 当前选择的本地 Web 反代引擎 -> 127.0.0.1:2096
+REALITY / Xray SNI    -> 本地 Xray / 3x-ui 入站 -> 127.0.0.1:1443
 ```
 
-这样做的好处是：公网只暴露一个 `443`，Web HTTPS 由你选择的本地 Web 反代引擎（Caddy 或 Nginx）处理，证书由 VPS-Optimize 使用 `acme.sh + Cloudflare DNS API` 申请和安装。3x-ui 面板和订阅服务只做本机 HTTP 后端，3x-ui 自带证书不作为最终公网证书方案，避免重复 HTTPS、端口冲突、重定向循环和证书路径混乱。
+图里的 `127.0.0.1:40000`、`127.0.0.1:2096`、`127.0.0.1:1443` 都只是示例值。这样做的好处是：公网只暴露一个 `443`，普通 HTTPS 落到当前选择的本地 Web 反代引擎（Caddy 或 Nginx），证书由 VPS-Optimize 使用 `acme.sh + Cloudflare DNS API` 申请和安装。3x-ui 面板和订阅服务只做本机 HTTP 后端，3x-ui 自带证书不作为最终公网证书方案，避免重复 HTTPS、端口冲突、重定向循环和证书路径混乱。
 
 ## 示例说明
 
@@ -632,7 +634,7 @@ REALITY 节点：node.example.com:443
 3x-ui 面板监听：127.0.0.1:40000
 3x-ui 订阅监听：127.0.0.1:2096
 REALITY 入站监听：127.0.0.1:1443
-Caddy 监听：127.0.0.1:8443
+Web 反代引擎监听：127.0.0.1:8443（示例，实际以脚本当前配置为准）
 公网 443 入口监听：当前 ENTRY_MODE 对应服务（nginx-stream=nginx；xray-fallback=Xray 主入站；tcp-peek=vpso-mux）
 ```
 
