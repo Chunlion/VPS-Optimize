@@ -57,6 +57,10 @@ func_xpanel_menu() {
     func_service_action_menu "3x-ui / x-ui 面板" "安装或进入官方菜单进行配置、更新、重置、卸载。" "安装 3x-ui 面板" func_xpanel "管理 / 卸载 3x-ui 面板" func_xpanel_manage
 }
 
+func_sui_menu() {
+    func_service_action_menu "S-UI 面板" "安装或进入 S-UI 官方菜单进行配置、更新、卸载。" "安装 S-UI 面板" func_sui_panel "管理 / 卸载 S-UI 面板" func_sui_manage
+}
+
 func_singbox_menu() {
     local choice
 

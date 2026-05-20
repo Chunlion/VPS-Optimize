@@ -50,7 +50,7 @@ add_xray_sni_route() {
     echo -e "${BOLD}添加 Xray 入站分流规则${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "${YELLOW}本菜单只记录 SNI -> 本地地址:端口，不会创建、删除或修改 3x-ui/Xray 入站。${PLAIN}"
+    echo -e "${YELLOW}本菜单只记录 SNI -> 本地地址:端口；用于当前支持的单入口模式渲染分流规则，不会创建、删除或修改 3x-ui/Xray 入站内部配置。${PLAIN}"
     echo -e "------------------------------------------------"
 
     local route_sni route_addr route_port existing idx
@@ -249,7 +249,7 @@ manage_xray_inbound_routes() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}Xray 入站管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}只管理 SNI -> 本地地址:端口 分流记录，不编辑 3x-ui/Xray 入站内部配置。${PLAIN}"
+        echo -e "${YELLOW}只管理 SNI -> 本地地址:端口 分流记录，用于当前支持的单入口模式渲染分流规则；不编辑 3x-ui/Xray 入站内部配置。${PLAIN}"
         echo -e "配置文件：$(xray_sni_routes_path)"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 查看入站分流规则${PLAIN}"
@@ -283,8 +283,8 @@ manage_sni_stack_tcp_routes() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}Xray 入站管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：把你已在 3x-ui 配好的本地 TCP 入站，通过不同 SNI 统一接入公网 ${NGINX_LISTEN_PORT}。${PLAIN}"
-        echo -e "${YELLOW}本功能不开放新端口，不改 3x-ui 协议；只写 Nginx stream SNI -> 本地端口规则。${PLAIN}"
+        echo -e "${YELLOW}用途：记录你已在 3x-ui/Xray 配好的本地入站：SNI -> 本地地址:端口。${PLAIN}"
+        echo -e "${YELLOW}这些记录用于当前支持的单入口模式渲染分流规则；脚本不开放新端口，不改 3x-ui/Xray 入站内部配置。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 查看当前 TCP/SNI 入站${PLAIN}"
         echo -e "${GREEN}  2. 新增 TCP/SNI 入站${PLAIN}"

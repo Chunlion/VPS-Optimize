@@ -149,7 +149,7 @@ Clash/Mihomo 反向代理 URI：https://panel.example.com/clash/
 主菜单 [19 443 单入口管理中心] -> [10 Xray 入站管理]
 ```
 
-只记录 `SNI -> 127.0.0.1:端口`。脚本不会创建、删除或修改 3x-ui 入站内部配置。
+只记录 `SNI -> 本地地址:端口`，用于当前支持的单入口模式渲染分流规则。脚本不会创建、删除或修改 3x-ui/Xray 入站内部配置。
 
 ### 模式 2：TCP Peek + Splice
 
@@ -259,7 +259,7 @@ TCP Peek + Splice 切换检查：
 
 ## Xray 入站管理边界
 
-`Xray 入站管理` 只记录 `SNI -> 本地地址:端口` 分流记录，它不是 3x-ui 入站编辑器。用户需要先在 3x-ui 中创建并启用本地入站，然后再把对应的 SNI、本地监听地址和端口写入脚本。
+`Xray 入站管理` 只记录 `SNI -> 本地地址:端口` 分流记录，用于当前支持的单入口模式渲染分流规则，它不是 3x-ui/Xray 入站编辑器。用户需要先在 3x-ui/Xray 中创建并启用本地入站，然后再把对应的 SNI、本地监听地址和端口写入脚本。
 
 TCP Peek + Splice 模式：基于 MSG_PEEK 读取 TLS ClientHello 中的 SNI，不消费首包，并根据 SNI 将连接分流到 Web 反代引擎或 Xray 本地后端；转发时优先使用 splice 零拷贝，失败时自动回退普通 copy。实际运行的分流器程序为 vpso-mux。
 

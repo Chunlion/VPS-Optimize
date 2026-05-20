@@ -6,7 +6,7 @@ show_main_help() {
     echo "1/2 适合新机器先体检和初始化。"
     echo "3   基础组件与常用服务；安装 Docker、Python、WARP 和常用工具。"
     echo "4   反代（Caddy/Nginx）；适合未接入 443 单入口的网站/面板反代。"
-    echo "5   管理 3x-ui、Sing-box、Xray 和订阅工具。"
+    echo "5   管理 3x-ui、S-UI、Sing-box、Xray 和订阅工具。"
     echo "6   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
     echo "8   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
     echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
@@ -31,8 +31,9 @@ show_beginner_help() {
 show_panel_help() {
     echo -e "${CYAN}VPS-Optimize > 面板、节点与订阅工具 > 帮助${PLAIN}"
     echo "1 管理 3x-ui / x-ui，适合安装、进入官方菜单、修复面板。"
+    echo "2 管理 S-UI，适合安装、进入官方菜单或卸载。"
     echo "3/4 分别管理 Sing-box 和 Xray。"
-    echo "5/6/7 管理订阅工具，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。"
+    echo "5/6/7/8 管理订阅工具和 Dockge，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。"
     echo "11 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
     echo "14 端口实际流量监控，只看已监控端口实际跑过的流量。"
     echo "16 3x-ui 外置增强管理，适合自定义重置日期、校准已用流量、备份恢复和查看日志。"
@@ -140,24 +141,25 @@ func_panel_deploy_menu() {
         print_breadcrumb "面板、节点与订阅工具"
         echo -e "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：管理 3x-ui、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
+        echo -e "${YELLOW}用途：管理 3x-ui、S-UI、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
         echo -e "${YELLOW}提示：面板或订阅工具对外访问，未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] 统一管理。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 管理 3x-ui 面板${PLAIN}       ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  2. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  3. 管理 Xray${PLAIN}             ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  4. 管理 SublinkPro${PLAIN}       ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  5. 管理 妙妙屋订阅管理${PLAIN}     ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  6. 管理 Sub-Store${PLAIN}        ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  7. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${BOLD}${YELLOW}  8. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
-        echo -e "${GREEN}  9. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
-        echo -e "${GREEN} 10. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
-        echo -e "${GREEN} 11. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
-        echo -e "${GREEN} 12. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
-        echo -e "${GREEN} 13. 端口实际流量监控${PLAIN}      ${YELLOW}(只看已监控端口实际流量)${PLAIN}"
-        echo -e "${GREEN} 14. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
-        echo -e "${GREEN} 15. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
+        echo -e "${GREEN}  2. 管理 S-UI 面板${PLAIN}        ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  3. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  4. 管理 Xray${PLAIN}             ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  5. 管理 SublinkPro${PLAIN}       ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  6. 管理 妙妙屋订阅管理${PLAIN}     ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  7. 管理 Sub-Store${PLAIN}        ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  8. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${BOLD}${YELLOW}  9. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
+        echo -e "${GREEN} 10. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
+        echo -e "${GREEN} 11. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
+        echo -e "${GREEN} 12. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
+        echo -e "${GREEN} 13. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
+        echo -e "${GREEN} 14. 端口实际流量监控${PLAIN}      ${YELLOW}(只看已监控端口实际流量)${PLAIN}"
+        echo -e "${GREEN} 15. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
+        echo -e "${GREEN} 16. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -167,20 +169,21 @@ func_panel_deploy_menu() {
         read_trimmed pd_choice "👉 请选择操作: "
         case $pd_choice in
             1) func_xpanel_menu ;;
-            2) func_singbox_menu ;;
-            3) func_xray_menu ;;
-            4) func_sublinkpro_menu ;;
-            5) func_miaomiaowu_menu ;;
-            6) func_substore_menu ;;
-            7) func_dockge_menu ;;
-            8) func_update_subscription_tools ;;
-            9) func_migrate_compose_to_dockge ;;
-            10) func_rescue_panel ;;
-            11) func_dns_unlock ;;
-            12) func_ip_sentinel ;;
-            13) func_port_dog ;;
-            14) func_komari_menu ;;
-            15) func_xui_custom_manager ;;
+            2) func_sui_menu ;;
+            3) func_singbox_menu ;;
+            4) func_xray_menu ;;
+            5) func_sublinkpro_menu ;;
+            6) func_miaomiaowu_menu ;;
+            7) func_substore_menu ;;
+            8) func_dockge_menu ;;
+            9) func_update_subscription_tools ;;
+            10) func_migrate_compose_to_dockge ;;
+            11) func_rescue_panel ;;
+            12) func_dns_unlock ;;
+            13) func_ip_sentinel ;;
+            14) func_port_dog ;;
+            15) func_komari_menu ;;
+            16) func_xui_custom_manager ;;
             xcm|XCM|xui-custom|外置|外置增强|外置管理) func_xui_custom_manager ;;
             "?"|help) show_panel_help; pause_return ;;
             0|q|Q) break ;;

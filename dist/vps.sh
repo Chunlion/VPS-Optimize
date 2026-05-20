@@ -7112,11 +7112,14 @@ sni_stack_health_check_enhanced() {
 }
 
 check_sni_stack_subscription_hint() {
+    local web_label
+
     clear
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}🔎 订阅链接与 External Proxy 检查提示${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
+    web_label=$(web_proxy_engine_label)
     echo -e "请在 3x-ui 的 REALITY 入站里开启 External Proxy，并确保："
     echo -e "  类型：相同"
     echo -e "  地址：你的节点域名或服务器 IP"
@@ -7129,7 +7132,7 @@ check_sni_stack_subscription_hint() {
     echo -e "订阅公网入口应为："
     echo -e "  普通订阅：      https://${PANEL_DOMAIN}${SUB_URI_PATH}"
     echo -e "  Clash/Mihomo：  https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
-    echo -e "${YELLOW}不要把公网订阅地址写成 :${SUB_LISTEN_PORT}，该端口只给 Caddy 在本机访问。${PLAIN}"
+    echo -e "${YELLOW}不要把公网订阅地址写成 :${SUB_LISTEN_PORT}；该端口只给当前本地 Web 反代引擎（${web_label}）访问，不应写成公网订阅入口。${PLAIN}"
     echo -e ""
     echo -e "${YELLOW}如果链接里还是 :${XRAY_LISTEN_PORT}，说明 3x-ui 订阅仍在输出本地入站端口，请回到入站设置检查 External Proxy。${PLAIN}"
 }
@@ -9069,7 +9072,7 @@ add_xray_sni_route() {
     echo -e "${BOLD}添加 Xray 入站分流规则${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "${YELLOW}本菜单只记录 SNI -> 本地地址:端口，不会创建、删除或修改 3x-ui/Xray 入站。${PLAIN}"
+    echo -e "${YELLOW}本菜单只记录 SNI -> 本地地址:端口；用于当前支持的单入口模式渲染分流规则，不会创建、删除或修改 3x-ui/Xray 入站内部配置。${PLAIN}"
     echo -e "------------------------------------------------"
 
     local route_sni route_addr route_port existing idx
@@ -9268,7 +9271,7 @@ manage_xray_inbound_routes() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}Xray 入站管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}只管理 SNI -> 本地地址:端口 分流记录，不编辑 3x-ui/Xray 入站内部配置。${PLAIN}"
+        echo -e "${YELLOW}只管理 SNI -> 本地地址:端口 分流记录，用于当前支持的单入口模式渲染分流规则；不编辑 3x-ui/Xray 入站内部配置。${PLAIN}"
         echo -e "配置文件：$(xray_sni_routes_path)"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 查看入站分流规则${PLAIN}"
@@ -9302,8 +9305,8 @@ manage_sni_stack_tcp_routes() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}Xray 入站管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：把你已在 3x-ui 配好的本地 TCP 入站，通过不同 SNI 统一接入公网 ${NGINX_LISTEN_PORT}。${PLAIN}"
-        echo -e "${YELLOW}本功能不开放新端口，不改 3x-ui 协议；只写 Nginx stream SNI -> 本地端口规则。${PLAIN}"
+        echo -e "${YELLOW}用途：记录你已在 3x-ui/Xray 配好的本地入站：SNI -> 本地地址:端口。${PLAIN}"
+        echo -e "${YELLOW}这些记录用于当前支持的单入口模式渲染分流规则；脚本不开放新端口，不改 3x-ui/Xray 入站内部配置。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 查看当前 TCP/SNI 入站${PLAIN}"
         echo -e "${GREEN}  2. 新增 TCP/SNI 入站${PLAIN}"
@@ -12718,6 +12721,48 @@ func_xui_custom_manager() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
+func_sui_panel() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}安装 S-UI 面板${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}账号密码说明：本入口会运行 S-UI 官方安装器。${PLAIN}"
+    echo -e "${YELLOW}管理员账号、密码和面板访问参数由官方安装器设置或在安装结束时输出。${PLAIN}"
+    echo -e "${YELLOW}请留意安装结束输出并及时保存；后续也可通过 s-ui 官方菜单修改。${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "${CYAN}👉 正在拉取 alireza0 的 S-UI 官方安装脚本...${PLAIN}"
+    run_remote_script "安装 S-UI 面板" "https://raw.githubusercontent.com/alireza0/s-ui/master/install.sh"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
+}
+
+func_sui_manage() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧭 S-UI 管理 / 卸载${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}用途：进入 S-UI 官方管理菜单，执行配置查看、账号管理、更新或卸载等操作。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    if ! command -v s-ui >/dev/null 2>&1; then
+        echo -e "${YELLOW}未检测到 s-ui 命令，当前机器可能尚未安装 S-UI。${PLAIN}"
+        local yn
+        read_trimmed yn "是否现在安装 S-UI？(y/n): "
+        if is_yes "$yn"; then
+            func_sui_panel
+        else
+            echo -e "${BLUE}已取消操作。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+        fi
+        return
+    fi
+
+    echo -e "${GREEN}即将打开 S-UI 官方管理菜单。${PLAIN}"
+    echo -e "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}"
+    echo -e "------------------------------------------------"
+    s-ui
+    pause_after_external_script "操作结束，按回车键返回菜单..."
+}
+
 func_singbox_233boy() {
     clear
     echo -e "${CYAN}👉 正在拉取 233boy 的 Sing-box 一键脚本...${PLAIN}"
@@ -13610,6 +13655,10 @@ func_service_action_menu() {
 
 func_xpanel_menu() {
     func_service_action_menu "3x-ui / x-ui 面板" "安装或进入官方菜单进行配置、更新、重置、卸载。" "安装 3x-ui 面板" func_xpanel "管理 / 卸载 3x-ui 面板" func_xpanel_manage
+}
+
+func_sui_menu() {
+    func_service_action_menu "S-UI 面板" "安装或进入 S-UI 官方菜单进行配置、更新、卸载。" "安装 S-UI 面板" func_sui_panel "管理 / 卸载 S-UI 面板" func_sui_manage
 }
 
 func_singbox_menu() {
@@ -15733,7 +15782,7 @@ show_main_help() {
     echo "1/2 适合新机器先体检和初始化。"
     echo "3   基础组件与常用服务；安装 Docker、Python、WARP 和常用工具。"
     echo "4   反代（Caddy/Nginx）；适合未接入 443 单入口的网站/面板反代。"
-    echo "5   管理 3x-ui、Sing-box、Xray 和订阅工具。"
+    echo "5   管理 3x-ui、S-UI、Sing-box、Xray 和订阅工具。"
     echo "6   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
     echo "8   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
     echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
@@ -15758,8 +15807,9 @@ show_beginner_help() {
 show_panel_help() {
     echo -e "${CYAN}VPS-Optimize > 面板、节点与订阅工具 > 帮助${PLAIN}"
     echo "1 管理 3x-ui / x-ui，适合安装、进入官方菜单、修复面板。"
+    echo "2 管理 S-UI，适合安装、进入官方菜单或卸载。"
     echo "3/4 分别管理 Sing-box 和 Xray。"
-    echo "5/6/7 管理订阅工具，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。"
+    echo "5/6/7/8 管理订阅工具和 Dockge，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。"
     echo "11 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
     echo "14 端口实际流量监控，只看已监控端口实际跑过的流量。"
     echo "16 3x-ui 外置增强管理，适合自定义重置日期、校准已用流量、备份恢复和查看日志。"
@@ -15867,24 +15917,25 @@ func_panel_deploy_menu() {
         print_breadcrumb "面板、节点与订阅工具"
         echo -e "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：管理 3x-ui、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
+        echo -e "${YELLOW}用途：管理 3x-ui、S-UI、Sing-box、Xray、订阅工具、Dockge、Komari 和节点辅助工具。${PLAIN}"
         echo -e "${YELLOW}提示：面板或订阅工具对外访问，未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] 统一管理。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 管理 3x-ui 面板${PLAIN}       ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  2. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  3. 管理 Xray${PLAIN}             ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  4. 管理 SublinkPro${PLAIN}       ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  5. 管理 妙妙屋订阅管理${PLAIN}     ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  6. 管理 Sub-Store${PLAIN}        ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  7. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${BOLD}${YELLOW}  8. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
-        echo -e "${GREEN}  9. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
-        echo -e "${GREEN} 10. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
-        echo -e "${GREEN} 11. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
-        echo -e "${GREEN} 12. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
-        echo -e "${GREEN} 13. 端口实际流量监控${PLAIN}      ${YELLOW}(只看已监控端口实际流量)${PLAIN}"
-        echo -e "${GREEN} 14. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
-        echo -e "${GREEN} 15. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
+        echo -e "${GREEN}  2. 管理 S-UI 面板${PLAIN}        ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  3. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  4. 管理 Xray${PLAIN}             ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  5. 管理 SublinkPro${PLAIN}       ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  6. 管理 妙妙屋订阅管理${PLAIN}     ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  7. 管理 Sub-Store${PLAIN}        ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  8. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${BOLD}${YELLOW}  9. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
+        echo -e "${GREEN} 10. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
+        echo -e "${GREEN} 11. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
+        echo -e "${GREEN} 12. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
+        echo -e "${GREEN} 13. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
+        echo -e "${GREEN} 14. 端口实际流量监控${PLAIN}      ${YELLOW}(只看已监控端口实际流量)${PLAIN}"
+        echo -e "${GREEN} 15. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
+        echo -e "${GREEN} 16. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -15894,20 +15945,21 @@ func_panel_deploy_menu() {
         read_trimmed pd_choice "👉 请选择操作: "
         case $pd_choice in
             1) func_xpanel_menu ;;
-            2) func_singbox_menu ;;
-            3) func_xray_menu ;;
-            4) func_sublinkpro_menu ;;
-            5) func_miaomiaowu_menu ;;
-            6) func_substore_menu ;;
-            7) func_dockge_menu ;;
-            8) func_update_subscription_tools ;;
-            9) func_migrate_compose_to_dockge ;;
-            10) func_rescue_panel ;;
-            11) func_dns_unlock ;;
-            12) func_ip_sentinel ;;
-            13) func_port_dog ;;
-            14) func_komari_menu ;;
-            15) func_xui_custom_manager ;;
+            2) func_sui_menu ;;
+            3) func_singbox_menu ;;
+            4) func_xray_menu ;;
+            5) func_sublinkpro_menu ;;
+            6) func_miaomiaowu_menu ;;
+            7) func_substore_menu ;;
+            8) func_dockge_menu ;;
+            9) func_update_subscription_tools ;;
+            10) func_migrate_compose_to_dockge ;;
+            11) func_rescue_panel ;;
+            12) func_dns_unlock ;;
+            13) func_ip_sentinel ;;
+            14) func_port_dog ;;
+            15) func_komari_menu ;;
+            16) func_xui_custom_manager ;;
             xcm|XCM|xui-custom|外置|外置增强|外置管理) func_xui_custom_manager ;;
             "?"|help) show_panel_help; pause_return ;;
             0|q|Q) break ;;

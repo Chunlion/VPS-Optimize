@@ -19,7 +19,7 @@
 | --- | --- |
 | 新机器初始化 | 预检系统、安装常用工具、设置时区、开启基础 BBR |
 | 安全加固 | SSH 加固、公钥登录、Fail2ban、防火墙规则管理 |
-| 面板与订阅 | 3x-ui、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari |
+| 面板与订阅 | 3x-ui、S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari |
 | 网络与诊断 | 内核优化、测速、443 链路测试、流量达量关机、端口排查、服务健康总览 |
 | 443 单入口 | Web / 节点入口统一走公网 `443`，按 SNI 分流到面板、订阅、网站和 REALITY，并支持按域名设置 IP 白名单 |
 | 备份回滚 | 重要配置备份、列表查看、恢复、隔离归档，以及脚本已应用配置的安全查看/编辑 |
@@ -168,7 +168,7 @@ TCP Peek + Splice 的配置过程和 Nginx Stream 一样；正式切换使用 `[
 
 节点和订阅相关入口集中在 `主菜单 [5 面板、节点与订阅工具]`。
 
-这里包含 3x-ui、Sing-box、Xray、SublinkPro、妙妙屋、Sub-Store、Dockge、Komari、端口流量监控和 3x-ui 外置增强管理。
+这里包含 3x-ui、S-UI、Sing-box、Xray、SublinkPro、妙妙屋、Sub-Store、Dockge、Komari、端口流量监控和 3x-ui 外置增强管理。
 
 订阅工具建议按“本地监听 + Caddy/Nginx/443 对外”的方式部署。新部署的订阅工具默认优先绑定 `127.0.0.1`。已经启用 443 单入口时，公网 HTTPS 访问到 `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]` 添加域名；未启用 443 单入口时，可以在 `主菜单 [4 反代]` 里选择 Caddy 或 Nginx HTTPS 反代，Nginx 反代会直接监听公网 80/443，不能和 443 单入口同时抢占公网 `443`。Nginx 反代复用现有 `acme.sh + Cloudflare DNS API` 证书流程，证书仍安装到 `/etc/caddy/certs/${domain}.crt|key` 并软链到 `/root/cert/`。[4 反代] 里的后端 HTTPS 跳过证书校验、域名 IP 白名单、查看/编辑已应用配置和清空反代配置都同时提供 Caddy/Nginx 入口。
 

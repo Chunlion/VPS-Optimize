@@ -97,6 +97,48 @@ func_xui_custom_manager() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
+func_sui_panel() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}安装 S-UI 面板${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}账号密码说明：本入口会运行 S-UI 官方安装器。${PLAIN}"
+    echo -e "${YELLOW}管理员账号、密码和面板访问参数由官方安装器设置或在安装结束时输出。${PLAIN}"
+    echo -e "${YELLOW}请留意安装结束输出并及时保存；后续也可通过 s-ui 官方菜单修改。${PLAIN}"
+    echo -e "------------------------------------------------"
+    echo -e "${CYAN}👉 正在拉取 alireza0 的 S-UI 官方安装脚本...${PLAIN}"
+    run_remote_script "安装 S-UI 面板" "https://raw.githubusercontent.com/alireza0/s-ui/master/install.sh"
+    pause_after_external_script "操作结束，按回车键返回菜单..."
+}
+
+func_sui_manage() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}🧭 S-UI 管理 / 卸载${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${YELLOW}用途：进入 S-UI 官方管理菜单，执行配置查看、账号管理、更新或卸载等操作。${PLAIN}"
+    echo -e "------------------------------------------------"
+
+    if ! command -v s-ui >/dev/null 2>&1; then
+        echo -e "${YELLOW}未检测到 s-ui 命令，当前机器可能尚未安装 S-UI。${PLAIN}"
+        local yn
+        read_trimmed yn "是否现在安装 S-UI？(y/n): "
+        if is_yes "$yn"; then
+            func_sui_panel
+        else
+            echo -e "${BLUE}已取消操作。${PLAIN}"
+            read -n 1 -s -r -p "按任意键返回..."
+        fi
+        return
+    fi
+
+    echo -e "${GREEN}即将打开 S-UI 官方管理菜单。${PLAIN}"
+    echo -e "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}"
+    echo -e "------------------------------------------------"
+    s-ui
+    pause_after_external_script "操作结束，按回车键返回菜单..."
+}
+
 func_singbox_233boy() {
     clear
     echo -e "${CYAN}👉 正在拉取 233boy 的 Sing-box 一键脚本...${PLAIN}"

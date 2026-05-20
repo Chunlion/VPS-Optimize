@@ -249,11 +249,14 @@ sni_stack_health_check_enhanced() {
 }
 
 check_sni_stack_subscription_hint() {
+    local web_label
+
     clear
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${BOLD}🔎 订阅链接与 External Proxy 检查提示${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
+    web_label=$(web_proxy_engine_label)
     echo -e "请在 3x-ui 的 REALITY 入站里开启 External Proxy，并确保："
     echo -e "  类型：相同"
     echo -e "  地址：你的节点域名或服务器 IP"
@@ -266,7 +269,7 @@ check_sni_stack_subscription_hint() {
     echo -e "订阅公网入口应为："
     echo -e "  普通订阅：      https://${PANEL_DOMAIN}${SUB_URI_PATH}"
     echo -e "  Clash/Mihomo：  https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
-    echo -e "${YELLOW}不要把公网订阅地址写成 :${SUB_LISTEN_PORT}，该端口只给 Caddy 在本机访问。${PLAIN}"
+    echo -e "${YELLOW}不要把公网订阅地址写成 :${SUB_LISTEN_PORT}；该端口只给当前本地 Web 反代引擎（${web_label}）访问，不应写成公网订阅入口。${PLAIN}"
     echo -e ""
     echo -e "${YELLOW}如果链接里还是 :${XRAY_LISTEN_PORT}，说明 3x-ui 订阅仍在输出本地入站端口，请回到入站设置检查 External Proxy。${PLAIN}"
 }

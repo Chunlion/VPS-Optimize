@@ -417,10 +417,14 @@ grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh
 grep -q 'single_443_current_engine' dist/vps.sh
 assert_file_contains "src/xray_sni_routes.sh" 'Xray 入站管理' "Xray inbound menu must use the current menu name."
 assert_file_not_contains "src/xray_sni_routes.sh" '443 TCP/SNI 本地入站管理' "Xray inbound menu must not use the old TCP/SNI title."
+assert_file_contains "src/xray_sni_routes.sh" '用于当前支持的单入口模式渲染分流规则' "Xray inbound menu must describe route records as entry-mode render input."
+assert_file_not_contains "src/xray_sni_routes.sh" '只写 Nginx stream SNI -> 本地端口规则' "Xray inbound menu must not describe route records as nginx-stream-only."
 assert_file_contains "src/xray_route_state.sh" 'fallback 普通 HTTPS 到所选 Web 反代引擎' "xray-fallback explanation must mention the selected Web reverse proxy engine."
 assert_file_not_contains "src/xray_route_state.sh" 'fallback 普通 HTTPS 到 Caddy' "xray-fallback explanation must not hard-code Caddy."
 assert_dist_contains 'Xray 入站管理' 'Release script must include the current Xray inbound menu name.'
 assert_file_not_contains "dist/vps.sh" '443 TCP/SNI 本地入站管理' "Release script must not use the old TCP/SNI title."
+assert_dist_contains '用于当前支持的单入口模式渲染分流规则' 'Release script must describe Xray inbound records as entry-mode render input.'
+assert_file_not_contains "dist/vps.sh" '只写 Nginx stream SNI -> 本地端口规则' "Release script must not describe Xray inbound records as nginx-stream-only."
 assert_dist_contains 'fallback 普通 HTTPS 到所选 Web 反代引擎' 'Release script must describe xray-fallback as using the selected Web reverse proxy engine.'
 assert_file_not_contains "dist/vps.sh" 'fallback 普通 HTTPS 到 Caddy' "Release script must not hard-code Caddy in xray-fallback explanation."
 for function_name in \
@@ -660,14 +664,9 @@ grep -Fq '安装 3x-ui / x-ui 面板（v2.9.4）' dist/vps.sh
 grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh' dist/vps.sh
 grep -Fq 'install_args=("v2.9.4")' dist/vps.sh
 grep -Fq 'v2.9.4 属于 2.x 老流程' dist/vps.sh
-if grep -Fq 'raw.githubusercontent.com/alireza0/s-ui/master/install.sh' dist/vps.sh; then
-    echo "S-UI installer URL must not be present in the release script." >&2
-    exit 1
-fi
-if grep -Fq 'S-UI' dist/vps.sh; then
-    echo "S-UI menu text must not be present in the release script." >&2
-    exit 1
-fi
+grep -Fq '管理 S-UI 面板' dist/vps.sh
+grep -Fq '安装 S-UI 面板' dist/vps.sh
+grep -Fq 'https://raw.githubusercontent.com/alireza0/s-ui/master/install.sh' dist/vps.sh
 if grep -q 'x-ui\[$(service_status_compact x-ui)\]' dist/vps.sh; then
     echo "Health overview must not show x-ui as a separate installed product." >&2
     exit 1
@@ -784,9 +783,14 @@ assert_dist_contains "$subscription_public_hint" "Release script must include th
 panel_public_hint='提示：面板或订阅工具对外访问，未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] 统一管理。'
 assert_file_contains "src/menus.sh" "$panel_public_hint" "Panel/tools menu must explain both non-single-entry and 443 single-entry reverse proxy paths."
 assert_dist_contains "$panel_public_hint" "Release script must include the current panel/tools public HTTPS guidance."
-panel_help_public_hint='5/6/7 管理订阅工具，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
+panel_help_public_hint='5/6/7/8 管理订阅工具和 Dockge，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both non-single-entry and 443 single-entry reverse proxy paths."
 assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
+subscription_internal_port_hint='该端口只给当前本地 Web 反代引擎（${web_label}）访问，不应写成公网订阅入口。'
+assert_file_contains "src/sni_stack_health.sh" "$subscription_internal_port_hint" "Subscription hint must describe the internal subscription port as current Web reverse proxy engine-only."
+assert_dist_contains "$subscription_internal_port_hint" "Release script must include the current Web reverse proxy engine subscription-port hint."
+assert_file_not_contains "src/sni_stack_health.sh" '该端口只给 Caddy 在本机访问' "Subscription hint must not hard-code Caddy as the only local Web reverse proxy engine."
+assert_file_not_contains "dist/vps.sh" '该端口只给 Caddy 在本机访问' "Release script must not hard-code Caddy in the subscription-port hint."
 subscription_public_hint_calls=$(grep -Ec '^[[:space:]]+print_public_https_reverse_proxy_hint$' src/subscription_apps.sh || true)
 if [[ "$subscription_public_hint_calls" -lt 8 ]]; then
     echo "Subscription/Komari installers must show the unified public HTTPS guidance before install and after success." >&2
