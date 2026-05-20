@@ -19,7 +19,7 @@ Build order is intentional. Foundational helpers are loaded first, then focused 
 7. `runtime.sh`
    Root/runtime guard.
 8. Feature modules
-   `system_core.sh`, `caddy_certificates.sh`, `caddy_proxy.sh`, `environment.sh`, `caddy_legacy.sh`,
+   `system_core.sh`, `firewall.sh`, `caddy_certificates.sh`, `caddy_proxy.sh`, `environment.sh`, `caddy_legacy.sh`,
    `sni_stack_*.sh`, `vpso_mux_state.sh`, `vpso_mux_config.sh`, `vpso_mux_install.sh`,
    `tcp_peek_engine.sh`, `xray_sni_routes.sh`, `caddy_maintenance.sh`,
    `ssh_security.sh`, `docker_manage.sh`, `kernel_tuning.sh`, `diagnostics_*.sh`,
@@ -46,6 +46,7 @@ Rules for new code:
 
 - Put reusable shell primitives in `common.sh`, `ui.sh`, `input.sh`, `validate.sh`, `rollback.sh`, or `backup.sh`.
 - Put feature-specific flows in the nearest focused feature module.
+- Put firewall allow/delete/view/connlimit workflows in `firewall.sh`; keep UFW/firewalld port allow rules separate from raw iptables/ip6tables connlimit rules.
 - Keep `main.sh` as a tiny bootstrap so the generated release script still starts from the same menu.
 - Do not make the release script source `src/*.sh` at runtime; regenerate `dist/vps.sh` with `scripts/build.sh`.
 - Keep menu numbers stable for backward compatibility; prefer adding aliases or moving display groups over renumbering existing entries.

@@ -81,6 +81,12 @@ assert_file_contains scripts/build.sh 'vpso_mux_state.sh   # vpso-mux paths, eng
 assert_file_contains scripts/build.sh 'vpso_mux_config.sh  # vpso-mux YAML rendering'
 assert_file_contains scripts/build.sh 'vpso_mux_install.sh # vpso-mux binary/systemd helpers'
 assert_file_contains scripts/build.sh 'tcp_peek_engine.sh  # TCP Peek preflight and entry-mode switching'
+assert_file_contains scripts/build.sh 'firewall.sh  # firewall allow/delete/connlimit workflows'
+assert_file_contains vps.sh '    firewall'
+assert_dist_contains '# Module: firewall.sh' "Release script must include src/firewall.sh."
+assert_dist_contains 'func_port_connlimit_menu' "Release script is missing the port connlimit menu."
+assert_dist_contains 'VPSO_CONN_LIMIT_PORT_' "Release script is missing the connlimit rule marker."
+assert_function_defined_once dist/vps.sh func_firewall_manage
 build_order=$(awk '/^[[:space:]]+[a-z0-9_]+\.sh/{print $1}' scripts/build.sh | tr '\n' ' ')
 case "$build_order" in
     *"sni_stack_config.sh vpso_mux_state.sh vpso_mux_config.sh vpso_mux_install.sh tcp_peek_engine.sh sni_stack_health.sh"*) ;;

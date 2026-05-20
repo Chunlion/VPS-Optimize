@@ -8,7 +8,7 @@ show_main_help() {
     echo "4   反代（Caddy/Nginx）；适合未接入 443 单入口的网站/面板反代。"
     echo "5   管理 3x-ui、S-UI、Sing-box、Xray 和订阅工具。"
     echo "6   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
-    echo "8   管理系统防火墙；改 SSH、防火墙前先确认云安全组。"
+    echo "8   管理系统防火墙；支持端口放行、删除和每来源 IP 连接数限制。"
     echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
     echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
     echo "16  备份与回滚，高风险操作前建议先跑。"
@@ -355,7 +355,7 @@ main_menu() {
         echo -e "  ${GREEN}n.${PLAIN} 新手向导              ${YELLOW}(只显示核心路径)${PLAIN}"
         echo -e "  ${GREEN}?.${PLAIN} 当前菜单帮助          ${YELLOW}(解释关键入口)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        
+
         echo -e " ${BOLD}${BLUE}▶ ① 推荐流程：新机器先跑这里${PLAIN}"
         echo -e "  ${GREEN}1.${PLAIN} 运维预检与风险扫描    ${YELLOW}(部署前先看端口/系统/服务状态)${PLAIN}"
         echo -e "  ${GREEN}2.${PLAIN} 基础环境初始化        ${YELLOW}(工具/时区/系统更新/基础 BBR)${PLAIN}"
@@ -366,7 +366,7 @@ main_menu() {
         echo -e " ${BOLD}${BLUE}▶ ② 安全与访问控制${PLAIN}"
         echo -e "  ${GREEN}6.${PLAIN} SSH 安全中心          ${YELLOW}(端口/公钥/密钥登录模式)${PLAIN}"
         echo -e "  ${GREEN}7.${PLAIN} Fail2ban 防爆破       ${YELLOW}(自动封禁 SSH 爆破 IP)${PLAIN}"
-        echo -e "  ${GREEN}8.${PLAIN} 防火墙规则管理        ${YELLOW}(放行/删除/查看/关闭)${PLAIN}"
+        echo -e "  ${GREEN}8.${PLAIN} 防火墙规则管理        ${YELLOW}(放行/删除/查看/关闭/连接数限制)${PLAIN}"
         echo -e "  ${GREEN}9.${PLAIN} 系统开关与清理        ${YELLOW}(IPv6/IPv4优先/Ping/主机名/清理)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ③ 网络性能与容器${PLAIN}"
@@ -387,11 +387,11 @@ main_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${RED} 0.${PLAIN} 退出面板"
         echo -e "${CYAN}================================================${PLAIN}"
-        
+
         local choice
         read_trimmed choice "👉 请输入数字或快捷词选择功能: "
         choice=$(normalize_main_choice "$choice")
-        
+
         case $choice in
             n|N|newbie|guide|新手|向导) func_beginner_menu ;;
             "?"|help|帮助) show_main_help; echo ""; pause_return ;;
@@ -416,9 +416,9 @@ main_menu() {
             18) func_reboot_server ;;
             19) func_sni_stack_quick_menu ;;
             0) exit 0 ;;
-            *) 
+            *)
                 echo -e "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}"
-                sleep 1 
+                sleep 1
                 ;;
         esac
     done

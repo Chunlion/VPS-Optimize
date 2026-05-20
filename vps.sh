@@ -15,6 +15,7 @@ MODULES=(
     backup
     runtime
     system_core
+    firewall
     caddy_certificates
     caddy_proxy
     environment

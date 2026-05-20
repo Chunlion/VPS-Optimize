@@ -13,6 +13,7 @@ modules=(
     backup.sh   # backup center and backup helper functions
     runtime.sh  # root/runtime guard
     system_core.sh
+    firewall.sh  # firewall allow/delete/connlimit workflows
     caddy_certificates.sh
     caddy_proxy.sh
     environment.sh
