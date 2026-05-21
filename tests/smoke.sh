@@ -87,9 +87,17 @@ assert_dist_contains '# Module: firewall.sh' "Release script must include src/fi
 assert_dist_contains 'func_port_connlimit_menu' "Release script is missing the port connlimit menu."
 assert_dist_contains 'VPSO_CONN_LIMIT_PORT_' "Release script is missing the connlimit rule marker."
 assert_dist_contains 'func_save_port_connlimit_persistence' "Release script is missing the connlimit persistence save action."
+assert_dist_contains 'auto_save_port_connlimit_persistence_after_change "添加规则"' "Adding connlimit rules must trigger automatic persistence refresh."
+assert_dist_contains 'auto_save_port_connlimit_persistence_after_change "删除规则"' "Deleting connlimit rules must trigger automatic persistence refresh."
 assert_dist_contains 'netfilter-persistent save' "Release script must use the existing netfilter-persistent save path for connlimit persistence."
 assert_dist_contains '/etc/iptables/rules.v4' "Release script must verify the IPv4 persistent rules file."
+assert_dist_contains '/etc/sysconfig/iptables' "Release script must support the existing RHEL iptables-services persistence file."
+assert_dist_contains 'iptables-save' "Release script must support RHEL iptables-save persistence when iptables-services is present."
+assert_dist_contains '当前 connlimit 规则只在本次运行期生效' "Release script must clearly warn when connlimit persistence is unavailable."
 assert_file_contains README.md '主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [5 保存/检查重启持久化]' "README must document the connlimit persistence save/check path."
+assert_file_contains README.md '添加或删除 connlimit 规则后，脚本会自动尝试刷新持久化快照' "README must document automatic connlimit persistence refresh after changes."
+assert_file_contains docs/recovery-runbook.md '端口并发连接限制误封' "Recovery runbook must include connlimit lockout guidance."
+assert_file_contains docs/recovery-runbook.md '不要批量清空 INPUT 链' "Recovery runbook must warn against broad firewall cleanup for connlimit recovery."
 assert_function_defined_once dist/vps.sh func_firewall_manage
 build_order=$(awk '/^[[:space:]]+[a-z0-9_]+\.sh/{print $1}' scripts/build.sh | tr '\n' ' ')
 case "$build_order" in

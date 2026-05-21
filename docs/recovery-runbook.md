@@ -145,6 +145,29 @@ ss -lntp
 
 不要删除当前 SSH 端口。关闭防火墙、删除规则都属于高风险操作，脚本会要求输入大写 `YES`。
 
+### 端口并发连接限制误封
+
+`主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制]` 写入的是额外 `iptables` / `ip6tables` connlimit 限制规则，不等同于 UFW/firewalld 的端口放行规则。它会按公网端口限制每来源 IP 的 TCP 并发连接数；如果限制公网 `443` 且启用了 443 单入口，只能限制整个公网 `443`，不能精准到某个 Xray/3x-ui 入站、SNI、UUID 或用户。
+
+还能进菜单时，优先走：
+
+```text
+主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [3 查看当前连接数限制规则]
+主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [2 删除端口并发连接限制]
+主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [5 保存/检查重启持久化]
+```
+
+脚本删除规则后会自动尝试刷新持久化快照；`[5]` 用来确认保存文件是否已经同步。如果系统没有 `netfilter-persistent`、`iptables-persistent` 或 RHEL 系列已有的 `iptables-services` 持久化路径，菜单会提示当前 connlimit 规则只在本次运行期生效。
+
+菜单进不去时，用 VNC / 救援控制台查看脚本规则标记：
+
+```bash
+iptables -S INPUT | grep 'VPSO_CONN_LIMIT_PORT_'
+ip6tables -S INPUT | grep 'VPSO_CONN_LIMIT_PORT_'
+```
+
+只删除确认属于本脚本、且端口和连接数匹配的单条规则。做法是复制输出里的那一整条 `-A INPUT ... VPSO_CONN_LIMIT_PORT_端口 ...`，把开头的 `-A INPUT` 改成 `-D INPUT` 后执行；IPv6 规则同理用 `ip6tables`。不要批量清空 INPUT 链，也不要把 UFW/firewalld 放行规则和 connlimit 限制规则混在一起处理。
+
 ## 443 单入口改坏
 
 ### 现象

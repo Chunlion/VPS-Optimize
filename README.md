@@ -106,7 +106,7 @@ cy
    sudo -i
    ```
 
-2. 云厂商安全组和系统防火墙是两层东西。脚本能管理系统里的 `ufw` / `firewalld`，但不能替你打开阿里云、甲骨文、AWS、Azure 等网页后台安全组。`主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制]` 会额外写入 `iptables` / `ip6tables` connlimit 规则，用于按公网端口限制每来源 IP 的 TCP 并发连接数；它不是端口放行规则，运行时规则也不自动等于重启后保留。需要重启恢复时，进入 `主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [5 保存/检查重启持久化]`，脚本会检测并调用已有 `netfilter-persistent` / `iptables-persistent` 能力，保存后检查 `/etc/iptables/rules.v4` / `rules.v6` 中是否存在 `VPSO_CONN_LIMIT_PORT_` 标记；未检测到持久化能力或保存失败时会明确提示。
+2. 云厂商安全组和系统防火墙是两层东西。脚本能管理系统里的 `ufw` / `firewalld`，但不能替你打开阿里云、甲骨文、AWS、Azure 等网页后台安全组。`主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制]` 会额外写入 `iptables` / `ip6tables` connlimit 规则，用于按公网端口限制每来源 IP 的 TCP 并发连接数；它不是 UFW/firewalld 端口放行规则。添加或删除 connlimit 规则后，脚本会自动尝试刷新持久化快照；`主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [5 保存/检查重启持久化]` 用于查看状态或失败后重试。Debian/Ubuntu 优先使用已有 `netfilter-persistent` / `iptables-persistent`；RHEL/Rocky/Alma/CentOS Stream 只在检测到已有 `iptables-services` 路径（如 `iptables.service` 或 `/etc/sysconfig/iptables`）时写入。未检测到可靠持久化能力或保存失败时，脚本会明确提示当前规则只在本次运行期生效。
 
 3. 修改 SSH 端口前，先在云厂商安全组放行新端口，并保留一个未断开的 SSH 会话。
 
