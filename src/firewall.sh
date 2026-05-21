@@ -37,6 +37,134 @@ try_load_connlimit_module() {
     fi
 }
 
+port_connlimit_runtime_rule_count() {
+    local cmd="$1"
+    local count
+
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        printf '0'
+        return 0
+    fi
+
+    count=$("$cmd" -S INPUT 2>/dev/null | grep -Fc 'VPSO_CONN_LIMIT_PORT_' || true)
+    printf '%s' "${count:-0}"
+}
+
+port_connlimit_persisted_rule_count() {
+    local file="$1"
+    local count
+
+    if [[ ! -f "$file" ]]; then
+        printf '0'
+        return 0
+    fi
+
+    count=$(grep -Fc 'VPSO_CONN_LIMIT_PORT_' "$file" 2>/dev/null || true)
+    printf '%s' "${count:-0}"
+}
+
+print_port_connlimit_persistence_status() {
+    local v4_runtime v6_runtime v4_saved v6_saved
+    local v4_file="/etc/iptables/rules.v4"
+    local v6_file="/etc/iptables/rules.v6"
+
+    v4_runtime=$(port_connlimit_runtime_rule_count iptables)
+    v6_runtime=$(port_connlimit_runtime_rule_count ip6tables)
+    v4_saved=$(port_connlimit_persisted_rule_count "$v4_file")
+    v6_saved=$(port_connlimit_persisted_rule_count "$v6_file")
+
+    echo -e "${CYAN}持久化检查：${PLAIN}"
+    echo "  运行时规则：IPv4 ${v4_runtime} 条，IPv6 ${v6_runtime} 条。"
+    echo "  保存文件：${v4_file} 中 ${v4_saved} 条，${v6_file} 中 ${v6_saved} 条。"
+
+    if command -v netfilter-persistent >/dev/null 2>&1; then
+        echo -e "${GREEN}  已检测到 netfilter-persistent，可用本菜单 [5] 保存并验证重启恢复文件。${PLAIN}"
+    elif command -v dpkg-query >/dev/null 2>&1 && dpkg-query -W -f='${Status}' iptables-persistent 2>/dev/null | grep -q 'install ok installed'; then
+        echo -e "${YELLOW}  已检测到 iptables-persistent 包，但未检测到 netfilter-persistent 命令；请确认 /usr/sbin 是否在 PATH。${PLAIN}"
+    else
+        echo -e "${YELLOW}  未检测到 netfilter-persistent / iptables-persistent 保存能力，当前规则可能只在本次运行期间有效。${PLAIN}"
+    fi
+
+    if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files netfilter-persistent.service --no-legend 2>/dev/null | grep -q .; then
+        local enabled active
+        enabled=$(systemctl is-enabled netfilter-persistent 2>/dev/null || true)
+        active=$(systemctl is-active netfilter-persistent 2>/dev/null || true)
+        echo "  开机恢复服务：netfilter-persistent enabled=${enabled:-unknown}, active=${active:-unknown}。"
+    fi
+
+    if (( v4_runtime > 0 && v4_saved == 0 )) || (( v6_runtime > 0 && v6_saved == 0 )); then
+        echo -e "${YELLOW}  提示：检测到运行时 connlimit 规则尚未出现在保存文件中，重启后可能丢失。${PLAIN}"
+    elif (( v4_runtime + v6_runtime == 0 && v4_saved + v6_saved > 0 )); then
+        echo -e "${YELLOW}  提示：运行时没有脚本规则，但保存文件里仍有旧标记；如不更新快照，重启后可能恢复旧规则。${PLAIN}"
+    elif (( v4_runtime + v6_runtime > 0 )); then
+        echo -e "${GREEN}  已在保存文件中检测到脚本规则标记，重启恢复取决于 netfilter-persistent 服务是否启用。${PLAIN}"
+    else
+        echo -e "${BLUE}  当前没有检测到脚本添加的运行时 connlimit 规则。${PLAIN}"
+    fi
+}
+
+enable_port_connlimit_persistence_service() {
+    if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files netfilter-persistent.service --no-legend 2>/dev/null | grep -q .; then
+        if systemctl enable netfilter-persistent >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ 已确认 netfilter-persistent 开机恢复服务启用。${PLAIN}"
+        else
+            echo -e "${YELLOW}⚠️ 未能启用 netfilter-persistent 服务；规则文件已保存，但开机恢复状态需要手动确认。${PLAIN}"
+        fi
+    fi
+}
+
+save_port_connlimit_persistence() {
+    local output
+    local v4_runtime v6_runtime v4_saved v6_saved
+
+    if ! command -v netfilter-persistent >/dev/null 2>&1; then
+        echo -e "${RED}❌ 未检测到 netfilter-persistent，无法保存 connlimit 规则用于重启恢复。${PLAIN}"
+        if is_debian; then
+            echo -e "${YELLOW}可先安装 Debian/Ubuntu 的 iptables-persistent / netfilter-persistent，再回到本菜单执行 [5]。${PLAIN}"
+        else
+            echo -e "${YELLOW}当前系统未提供本脚本可验证的 iptables 持久化保存路径；请使用发行版自己的防火墙持久化机制。${PLAIN}"
+        fi
+        return 1
+    fi
+
+    if output=$(netfilter-persistent save 2>&1); then
+        echo -e "${GREEN}✅ 已执行 netfilter-persistent save，当前 iptables/ip6tables 快照已写入持久化文件。${PLAIN}"
+    else
+        echo -e "${RED}❌ netfilter-persistent save 执行失败：${output}${PLAIN}"
+        echo -e "${YELLOW}本次不会假装已保存；当前 connlimit 规则仍可能只在运行时有效。${PLAIN}"
+        return 1
+    fi
+
+    enable_port_connlimit_persistence_service
+    print_port_connlimit_persistence_status
+
+    v4_runtime=$(port_connlimit_runtime_rule_count iptables)
+    v6_runtime=$(port_connlimit_runtime_rule_count ip6tables)
+    v4_saved=$(port_connlimit_persisted_rule_count /etc/iptables/rules.v4)
+    v6_saved=$(port_connlimit_persisted_rule_count /etc/iptables/rules.v6)
+
+    if (( v4_runtime > 0 && v4_saved == 0 )) || (( v6_runtime > 0 && v6_saved == 0 )); then
+        echo -e "${RED}❌ 保存后仍未在 /etc/iptables/rules.v4 或 rules.v6 中检测到脚本规则标记，请不要认为重启后一定会恢复。${PLAIN}"
+        return 1
+    fi
+
+    return 0
+}
+
+func_save_port_connlimit_persistence() {
+    print_port_connlimit_persistence_status
+    echo ""
+    confirm_risk_action "保存端口并发连接限制持久化快照" \
+        "调用 netfilter-persistent save 保存当前 iptables/ip6tables 快照到 /etc/iptables/rules.v4 和 rules.v6" \
+        "重新添加或删除 connlimit 规则后再次执行本操作更新快照；保存失败时按提示处理，不要默认重启后仍存在" \
+        "本操作不清空运行时规则，不改写 UFW/firewalld 放行配置；但会更新 netfilter-persistent 使用的规则文件。" || {
+        echo -e "${BLUE}已取消保存端口并发连接限制持久化快照。${PLAIN}"
+        return 0
+    }
+
+    save_port_connlimit_persistence
+}
+
 port_connlimit_loopback_only_listener() {
     local port="$1"
     command -v ss >/dev/null 2>&1 || return 1
@@ -63,7 +191,7 @@ print_port_connlimit_scope_notice() {
 
     echo -e "${YELLOW}说明：本功能写入的是额外 iptables/ip6tables connlimit 规则，不等同于 UFW/firewalld 的端口放行规则。${PLAIN}"
     echo -e "${YELLOW}默认按“每个来源 IP”限制 TCP 并发连接数，不做全局总连接数限制。${PLAIN}"
-    echo -e "${YELLOW}规则是否重启后保留取决于系统已有 iptables 持久化机制；本功能不额外改写 UFW/firewalld 放行配置。${PLAIN}"
+    echo -e "${YELLOW}规则不会自动等于重启保留；可回到本菜单 [5] 检测并保存到 netfilter-persistent / iptables-persistent。${PLAIN}"
 
     if [[ "$port" == "443" ]]; then
         echo -e "${RED}⚠️ 443 强提醒：如果当前启用了 443 单入口/端口复用，本限制会作用于整个公网 443。${PLAIN}"
@@ -199,6 +327,9 @@ func_add_port_connlimit_rule() {
     if is_yes "$apply_ipv6"; then
         run_port_connlimit_rule_action ip6tables add "$port" "$limit" 128 "IPv6" || rc=1
     fi
+    if [[ "$rc" -eq 0 ]]; then
+        echo -e "${YELLOW}提示：本次只修改当前运行时规则；如需重启后保留，请使用本菜单 [5] 保存/检查重启持久化。${PLAIN}"
+    fi
     return "$rc"
 }
 
@@ -228,6 +359,9 @@ func_delete_port_connlimit_rule() {
     run_port_connlimit_rule_action iptables delete "$port" "$limit" 32 "IPv4" || rc=1
     if ! is_no "$delete_ipv6"; then
         run_port_connlimit_rule_action ip6tables delete "$port" "$limit" 128 "IPv6" || rc=1
+    fi
+    if [[ "$rc" -eq 0 ]]; then
+        echo -e "${YELLOW}提示：如果之前保存过持久化快照，请使用本菜单 [5] 重新保存，否则旧快照重启后可能恢复旧规则。${PLAIN}"
     fi
     return "$rc"
 }
@@ -267,6 +401,8 @@ func_show_port_connlimit_rules() {
         echo -e "${BLUE}当前没有检测到本脚本添加的 connlimit 规则。${PLAIN}"
     fi
     echo -e "${YELLOW}提示：这些规则是连接数限制，不等同于 UFW/firewalld 的端口放行规则。${PLAIN}"
+    echo ""
+    print_port_connlimit_persistence_status
 }
 
 func_show_port_current_connections() {
@@ -314,7 +450,7 @@ show_firewall_menu_help() {
     echo "防火墙菜单用于放行、删除、查看或关闭系统防火墙规则。删除规则和关闭防火墙都必须输入 yes 确认，大小写均可。"
     echo "端口并发连接限制用于按公网端口限制每来源 IP 的 TCP 并发连接数，IPv4 使用 iptables connlimit，IPv6 使用 ip6tables connlimit。"
     echo "该限制是额外连接数限制规则，不等同于 UFW/firewalld 的端口放行规则；两者可能并存。"
-    echo "规则是否重启后保留取决于系统已有 iptables 持久化机制，本功能不额外改写 UFW/firewalld 放行配置。"
+    echo "规则不会自动等于重启保留；端口并发连接限制菜单的 [5] 会检测 netfilter-persistent / iptables-persistent，并在用户确认后保存与验证。"
     echo "如果限制公网 443 且当前启用了 443 单入口/端口复用，限制粒度只能是整个公网 443，不能精准到某个入站、SNI、UUID 或用户。"
 }
 
@@ -327,12 +463,13 @@ func_port_connlimit_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：按公网端口限制每来源 IP 的 TCP 并发连接数。${PLAIN}"
         echo -e "${YELLOW}说明：这是额外 connlimit 规则，不等同于 UFW/firewalld 放行规则。${PLAIN}"
-        echo -e "${YELLOW}持久化：是否重启后保留取决于系统已有 iptables 持久化机制。${PLAIN}"
+        echo -e "${YELLOW}持久化：运行时规则不会自动等于重启保留；用 [5] 检测/保存。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 添加端口并发连接限制${PLAIN}"
         echo -e "${GREEN}  2. 删除端口并发连接限制${PLAIN}"
         echo -e "${GREEN}  3. 查看当前连接数限制规则${PLAIN}"
         echo -e "${GREEN}  4. 查看某端口当前连接情况${PLAIN}"
+        echo -e "${GREEN}  5. 保存/检查重启持久化${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  0. 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -344,6 +481,7 @@ func_port_connlimit_menu() {
             2) func_delete_port_connlimit_rule; pause_return ;;
             3) func_show_port_connlimit_rules; pause_return ;;
             4) func_show_port_current_connections; pause_return ;;
+            5) func_save_port_connlimit_persistence; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
         esac

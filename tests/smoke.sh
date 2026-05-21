@@ -86,6 +86,10 @@ assert_file_contains vps.sh '    firewall'
 assert_dist_contains '# Module: firewall.sh' "Release script must include src/firewall.sh."
 assert_dist_contains 'func_port_connlimit_menu' "Release script is missing the port connlimit menu."
 assert_dist_contains 'VPSO_CONN_LIMIT_PORT_' "Release script is missing the connlimit rule marker."
+assert_dist_contains 'func_save_port_connlimit_persistence' "Release script is missing the connlimit persistence save action."
+assert_dist_contains 'netfilter-persistent save' "Release script must use the existing netfilter-persistent save path for connlimit persistence."
+assert_dist_contains '/etc/iptables/rules.v4' "Release script must verify the IPv4 persistent rules file."
+assert_file_contains README.md '主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [5 保存/检查重启持久化]' "README must document the connlimit persistence save/check path."
 assert_function_defined_once dist/vps.sh func_firewall_manage
 build_order=$(awk '/^[[:space:]]+[a-z0-9_]+\.sh/{print $1}' scripts/build.sh | tr '\n' ' ')
 case "$build_order" in
