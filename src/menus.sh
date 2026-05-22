@@ -86,6 +86,7 @@ show_net_kernel_help() {
 show_health_help() {
     echo -e "${CYAN}VPS-Optimize > 诊断/健康检查 > 帮助${PLAIN}"
     echo "健康总览会检查关键服务、监听端口和证书摘要。"
+    echo "如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。"
     echo "系统硬件探针会附带 443、Caddy、3x-ui、订阅工具和 Docker 场景概览。"
     echo "生成反馈诊断信息用于提交 GitHub Issue，会尽量避免输出 Token、私钥和敏感密钥。"
 }

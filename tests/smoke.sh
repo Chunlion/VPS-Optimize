@@ -98,6 +98,7 @@ assert_dist_contains 'print_port_connlimit_health_summary' "Health overview must
 assert_dist_contains 'connlimit 持久化摘要' "Health overview must expose connlimit persistence status."
 assert_dist_contains '运行时/保存文件' "Health overview must show runtime/persistent connlimit consistency."
 assert_dist_contains '重启风险提示' "Health overview must show connlimit reboot risk hints."
+assert_file_contains src/menus.sh '如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。' "Health help must mention the connlimit persistence summary."
 assert_file_contains README.md '主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [5 保存/检查重启持久化]' "README must document the connlimit persistence save/check path."
 assert_file_contains README.md '添加或删除 connlimit 规则后，脚本会自动尝试刷新持久化快照' "README must document automatic connlimit persistence refresh after changes."
 assert_file_contains docs/recovery-runbook.md '端口并发连接限制误封' "Recovery runbook must include connlimit lockout guidance."
