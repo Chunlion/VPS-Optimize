@@ -2540,6 +2540,114 @@ port_connlimit_saved_rule_count_for_family() {
     port_connlimit_persisted_rule_count "$file"
 }
 
+port_connlimit_runtime_rule_fingerprints_for_family() {
+    local family="$1"
+    local cmd="$2"
+
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    "$cmd" -S INPUT 2>/dev/null | grep -F 'VPSO_CONN_LIMIT_PORT_' | sed "s/^/${family}:/" || true
+}
+
+port_connlimit_saved_rule_fingerprints_for_file() {
+    local family="$1"
+    local file="$2"
+
+    [[ -f "$file" ]] || return 0
+    grep -F 'VPSO_CONN_LIMIT_PORT_' "$file" 2>/dev/null | sed "s/^/${family}:/" || true
+}
+
+port_connlimit_runtime_rule_fingerprints() {
+    {
+        port_connlimit_runtime_rule_fingerprints_for_family "IPv4" iptables
+        port_connlimit_runtime_rule_fingerprints_for_family "IPv6" ip6tables
+    } | sort -u
+}
+
+port_connlimit_saved_rule_fingerprints_for_backend() {
+    local backend="$1"
+    local v4_file v6_file
+
+    v4_file=$(port_connlimit_saved_file_for_family 4 "$backend" 2>/dev/null || true)
+    v6_file=$(port_connlimit_saved_file_for_family 6 "$backend" 2>/dev/null || true)
+    {
+        [[ -n "$v4_file" ]] && port_connlimit_saved_rule_fingerprints_for_file "IPv4" "$v4_file"
+        [[ -n "$v6_file" ]] && port_connlimit_saved_rule_fingerprints_for_file "IPv6" "$v6_file"
+    } | sort -u
+}
+
+port_connlimit_known_saved_rule_fingerprints() {
+    {
+        port_connlimit_saved_rule_fingerprints_for_file "IPv4" /etc/iptables/rules.v4
+        port_connlimit_saved_rule_fingerprints_for_file "IPv6" /etc/iptables/rules.v6
+        port_connlimit_saved_rule_fingerprints_for_file "IPv4" /etc/sysconfig/iptables
+        port_connlimit_saved_rule_fingerprints_for_file "IPv6" /etc/sysconfig/ip6tables
+    } | sort -u
+}
+
+port_connlimit_fingerprint_count() {
+    local data="$1"
+
+    if [[ -z "$data" ]]; then
+        printf '0'
+    else
+        printf '%s\n' "$data" | grep -c .
+    fi
+}
+
+print_port_connlimit_health_summary() {
+    local backend runtime_rules saved_rules known_saved_rules
+    local runtime_count saved_count known_saved_count backend_label consistency risk
+
+    backend=$(port_connlimit_persistence_backend)
+    runtime_rules=$(port_connlimit_runtime_rule_fingerprints)
+    saved_rules=$(port_connlimit_saved_rule_fingerprints_for_backend "$backend")
+    known_saved_rules=$(port_connlimit_known_saved_rule_fingerprints)
+    runtime_count=$(port_connlimit_fingerprint_count "$runtime_rules")
+    saved_count=$(port_connlimit_fingerprint_count "$saved_rules")
+    known_saved_count=$(port_connlimit_fingerprint_count "$known_saved_rules")
+
+    case "$backend" in
+        netfilter-persistent) backend_label="${GREEN}netfilter-persistent${PLAIN}" ;;
+        rhel-iptables-services) backend_label="${GREEN}rhel-iptables-services${PLAIN}" ;;
+        *) backend_label="${YELLOW}未检测到可用后端${PLAIN}" ;;
+    esac
+
+    if [[ "$backend" == "none" ]]; then
+        consistency="${YELLOW}未检测（无可用持久化后端）${PLAIN}"
+    elif [[ "$runtime_rules" == "$saved_rules" ]]; then
+        consistency="${GREEN}一致${PLAIN}"
+    else
+        consistency="${YELLOW}不一致${PLAIN}"
+    fi
+
+    if [[ "$backend" == "none" && "$runtime_count" -gt 0 ]]; then
+        risk="${YELLOW}存在：运行时规则未接入可用持久化后端，重启后可能丢失或恢复旧快照。${PLAIN}"
+    elif [[ "$backend" == "none" && "$known_saved_count" -gt 0 ]]; then
+        risk="${YELLOW}存在：发现保存文件里仍有脚本规则标记，但当前无可用后端，重启恢复行为需手动确认。${PLAIN}"
+    elif [[ "$backend" != "none" && "$runtime_count" -gt 0 && "$saved_count" -eq 0 ]]; then
+        risk="${YELLOW}存在：运行时规则尚未出现在当前保存文件中，重启后可能丢失。${PLAIN}"
+    elif [[ "$backend" != "none" && "$runtime_count" -eq 0 && "$saved_count" -gt 0 ]]; then
+        risk="${YELLOW}存在：运行时没有脚本规则，但保存文件仍有旧标记，重启后可能恢复旧规则。${PLAIN}"
+    elif [[ "$backend" != "none" && "$runtime_rules" != "$saved_rules" ]]; then
+        risk="${YELLOW}存在：运行时规则与保存文件不同，建议到 [8] -> [6] -> [5] 重新保存/检查。${PLAIN}"
+    else
+        risk="${GREEN}未发现明显丢失/旧快照风险${PLAIN}"
+    fi
+
+    echo -e "${CYAN}🔒 connlimit 持久化摘要${PLAIN}"
+    if [[ "$runtime_count" -gt 0 ]]; then
+        echo -e "脚本规则状态       : [ ${GREEN}存在${PLAIN} ]  运行时: ${CYAN}${runtime_count}${PLAIN} 条"
+    else
+        echo -e "脚本规则状态       : [ ${BLUE}未检测到运行时规则${PLAIN} ]"
+    fi
+    echo -e "可用持久化后端     : [ $backend_label ]"
+    echo -e "运行时/保存文件    : [ $consistency ]  保存文件: ${CYAN}${saved_count}${PLAIN} 条"
+    echo -e "重启风险提示       : [ $risk ]"
+}
+
 print_port_connlimit_persistence_unavailable() {
     echo -e "${YELLOW}⚠️ 未检测到本脚本可可靠调用的 connlimit 持久化保存能力。${PLAIN}"
     if is_debian; then
@@ -15348,6 +15456,10 @@ func_health_dashboard() {
     echo -e "------------------------------------------------"
     print_project_runtime_overview
     echo -e "------------------------------------------------"
+    if declare -F print_port_connlimit_health_summary >/dev/null; then
+        print_port_connlimit_health_summary
+        echo -e "------------------------------------------------"
+    fi
 
     echo -e "${CYAN}🔌 当前监听端口 Top 12${PLAIN}"
     ss -tuln 2>/dev/null | grep -E 'LISTEN|UNCONN' | awk '{print $5}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | sort -nu | head -n 12 | tr '\n' ' '

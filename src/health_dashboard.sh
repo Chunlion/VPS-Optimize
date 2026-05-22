@@ -72,6 +72,10 @@ func_health_dashboard() {
     echo -e "------------------------------------------------"
     print_project_runtime_overview
     echo -e "------------------------------------------------"
+    if declare -F print_port_connlimit_health_summary >/dev/null; then
+        print_port_connlimit_health_summary
+        echo -e "------------------------------------------------"
+    fi
 
     echo -e "${CYAN}🔌 当前监听端口 Top 12${PLAIN}"
     ss -tuln 2>/dev/null | grep -E 'LISTEN|UNCONN' | awk '{print $5}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | sort -nu | head -n 12 | tr '\n' ' '

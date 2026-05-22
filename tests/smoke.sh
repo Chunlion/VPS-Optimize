@@ -94,6 +94,10 @@ assert_dist_contains '/etc/iptables/rules.v4' "Release script must verify the IP
 assert_dist_contains '/etc/sysconfig/iptables' "Release script must support the existing RHEL iptables-services persistence file."
 assert_dist_contains 'iptables-save' "Release script must support RHEL iptables-save persistence when iptables-services is present."
 assert_dist_contains '当前 connlimit 规则只在本次运行期生效' "Release script must clearly warn when connlimit persistence is unavailable."
+assert_dist_contains 'print_port_connlimit_health_summary' "Health overview must include the connlimit persistence summary."
+assert_dist_contains 'connlimit 持久化摘要' "Health overview must expose connlimit persistence status."
+assert_dist_contains '运行时/保存文件' "Health overview must show runtime/persistent connlimit consistency."
+assert_dist_contains '重启风险提示' "Health overview must show connlimit reboot risk hints."
 assert_file_contains README.md '主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [5 保存/检查重启持久化]' "README must document the connlimit persistence save/check path."
 assert_file_contains README.md '添加或删除 connlimit 规则后，脚本会自动尝试刷新持久化快照' "README must document automatic connlimit persistence refresh after changes."
 assert_file_contains docs/recovery-runbook.md '端口并发连接限制误封' "Recovery runbook must include connlimit lockout guidance."
@@ -242,6 +246,106 @@ rmdir "$config_edit_tmp_dir"
 APT_UPDATED=1
 apt_update_once
 [[ "$APT_UPDATED" == "1" ]]
+
+(
+    source src/common.sh
+    source src/firewall.sh
+
+    OS=rocky
+    OS_LIKE="rhel fedora"
+    SMOKE_HAVE_NETFILTER=0
+    SMOKE_HAVE_IPV4_SAVE=1
+    SMOKE_HAVE_IPV6_SAVE=1
+    SMOKE_RUNTIME_V4=0
+    SMOKE_RUNTIME_V6=0
+    SMOKE_SAVED_V4=0
+    SMOKE_SAVED_V6=0
+
+    dpkg-query() { return 1; }
+    systemctl() {
+        case "$1" in
+            is-enabled) printf '%s\n' "enabled" ;;
+            is-active) printf '%s\n' "active" ;;
+            *) return 0 ;;
+        esac
+    }
+    port_connlimit_command_path() {
+        case "$1" in
+            netfilter-persistent) [[ "$SMOKE_HAVE_NETFILTER" == "1" ]] && printf '%s\n' "/mock/sbin/netfilter-persistent" ;;
+            iptables-save) [[ "$SMOKE_HAVE_IPV4_SAVE" == "1" ]] && printf '%s\n' "/mock/sbin/iptables-save" ;;
+            ip6tables-save) [[ "$SMOKE_HAVE_IPV6_SAVE" == "1" ]] && printf '%s\n' "/mock/sbin/ip6tables-save" ;;
+            iptables) printf '%s\n' "/mock/sbin/iptables" ;;
+            ip6tables) printf '%s\n' "/mock/sbin/ip6tables" ;;
+            *) return 1 ;;
+        esac
+    }
+    port_connlimit_systemd_unit_exists() {
+        [[ "$1" == "iptables" || "$1" == "ip6tables" ]]
+    }
+    port_connlimit_runtime_rule_count() {
+        case "$1" in
+            iptables) printf '%s' "$SMOKE_RUNTIME_V4" ;;
+            ip6tables) printf '%s' "$SMOKE_RUNTIME_V6" ;;
+            *) printf '0' ;;
+        esac
+    }
+    port_connlimit_persisted_rule_count() {
+        case "$1" in
+            /etc/sysconfig/iptables) printf '%s' "$SMOKE_SAVED_V4" ;;
+            /etc/sysconfig/ip6tables) printf '%s' "$SMOKE_SAVED_V6" ;;
+            *) printf '0' ;;
+        esac
+    }
+
+    [[ "$(port_connlimit_persistence_backend)" == "rhel-iptables-services" ]]
+    [[ "$(port_connlimit_saved_file_for_family 4)" == "/etc/sysconfig/iptables" ]]
+    [[ "$(port_connlimit_saved_file_for_family 6)" == "/etc/sysconfig/ip6tables" ]]
+
+    SMOKE_HAVE_IPV4_SAVE=0
+    [[ "$(port_connlimit_persistence_backend)" == "none" ]]
+    SMOKE_HAVE_IPV4_SAVE=1
+
+    connlimit_save_capture=$(mktemp /tmp/vps-rhel-connlimit-save-smoke.XXXXXX)
+    save_rhel_port_connlimit_family() {
+        printf '%s|%s|%s\n' "$1" "$2" "$3" >>"$connlimit_save_capture"
+        return 0
+    }
+    enable_port_connlimit_persistence_service() { :; }
+    save_rhel_port_connlimit_persistence >/dev/null
+    grep -Fq '/mock/sbin/iptables-save|/etc/sysconfig/iptables|IPv4' "$connlimit_save_capture"
+    grep -Fq '/mock/sbin/ip6tables-save|/etc/sysconfig/ip6tables|IPv6' "$connlimit_save_capture"
+    rm -f "$connlimit_save_capture"
+
+    SMOKE_RUNTIME_V4=1
+    SMOKE_RUNTIME_V6=0
+    SMOKE_SAVED_V4=0
+    SMOKE_SAVED_V6=0
+    connlimit_status_output=$(print_port_connlimit_persistence_status 2>&1)
+    grep -Fq '已检测到 RHEL 系列已有 iptables-services 持久化路径' <<<"$connlimit_status_output"
+    grep -Fq '检测到运行时 connlimit 规则尚未出现在当前可用的保存文件中' <<<"$connlimit_status_output"
+
+    SMOKE_RUNTIME_V4=0
+    SMOKE_RUNTIME_V6=0
+    SMOKE_SAVED_V4=1
+    SMOKE_SAVED_V6=0
+    connlimit_status_output=$(print_port_connlimit_persistence_status 2>&1)
+    grep -Fq '运行时没有脚本规则，但保存文件里仍有旧标记' <<<"$connlimit_status_output"
+
+    port_connlimit_runtime_rule_fingerprints() {
+        printf '%s\n' 'IPv4:-A INPUT -p tcp --dport 443 -m comment --comment VPSO_CONN_LIMIT_PORT_443 -j REJECT'
+    }
+    port_connlimit_saved_rule_fingerprints_for_backend() {
+        printf '%s\n' 'IPv4:-A INPUT -p tcp --dport 8443 -m comment --comment VPSO_CONN_LIMIT_PORT_8443 -j REJECT'
+    }
+    port_connlimit_known_saved_rule_fingerprints() {
+        port_connlimit_saved_rule_fingerprints_for_backend "$1"
+    }
+    connlimit_health_output=$(print_port_connlimit_health_summary 2>&1)
+    grep -Fq '运行时/保存文件' <<<"$connlimit_health_output"
+    grep -Fq '不一致' <<<"$connlimit_health_output"
+    grep -Fq '运行时规则与保存文件不同' <<<"$connlimit_health_output"
+)
+
 [[ "$(nginx_stream_listen_directives "127.0.0.1" "443")" == "    listen 127.0.0.1:443;" ]]
 [[ "$(nginx_stream_listen_directives "0.0.0.0" "443" | grep -c '^    listen ')" == "2" ]]
 [[ "$(nginx_stream_listen_directives "::1" "443")" == "    listen [::1]:443;" ]]
