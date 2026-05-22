@@ -106,6 +106,38 @@ print_xray_route_health_list() {
     done
 }
 
+print_443_health_connlimit_scope_notice() {
+    local marker runtime_rules saved_rules rules locations source_count
+
+    echo -e "------------------------------------------------"
+    echo -e "${BOLD}端口并发连接限制${PLAIN}"
+
+    if ! declare -F port_connlimit_comment >/dev/null || ! declare -F port_connlimit_runtime_rule_fingerprints >/dev/null || ! declare -F port_connlimit_known_saved_rule_fingerprints >/dev/null; then
+        echo -e "${BLUE}未接入 connlimit 检测 helper，跳过端口并发连接限制检查。${PLAIN}"
+        return 0
+    fi
+
+    marker=$(port_connlimit_comment 443)
+    runtime_rules=$(port_connlimit_runtime_rule_fingerprints | grep -F "$marker" || true)
+    saved_rules=$(port_connlimit_known_saved_rule_fingerprints | grep -F "$marker" || true)
+    rules=$(printf '%s\n%s\n' "$runtime_rules" "$saved_rules" | grep -F "$marker" || true)
+
+    if [[ -z "$rules" ]]; then
+        echo -e "${BLUE}未检测到本脚本添加的公网 443 connlimit 规则。${PLAIN}"
+        return 0
+    fi
+
+    locations=""
+    [[ -n "$runtime_rules" ]] && locations="运行时"
+    [[ -n "$saved_rules" ]] && locations="${locations:+${locations},}持久化文件"
+    source_count=$(printf '%s\n' "$rules" | grep -c . || true)
+
+    echo -e "${YELLOW}检测到本脚本添加的公网 443 connlimit 规则：${marker}${PLAIN}"
+    echo -e "检测位置：${locations:-未知}；匹配条数：${source_count}"
+    echo -e "${RED}影响范围：该限制只能作用于整个公网 443 入口，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。${PLAIN}"
+    echo -e "${YELLOW}如果某个节点、订阅或网站被误伤，请到 [8 防火墙规则管理] -> [6 端口并发连接限制] 查看或删除公网 443 的 connlimit 规则。${PLAIN}"
+}
+
 sni_stack_health_check_enhanced() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -153,6 +185,7 @@ sni_stack_health_check_enhanced() {
     else
         echo -e "vpso-mux 分流器 systemd：${YELLOW}未找到 ${mux_service}${PLAIN}"
     fi
+    print_443_health_connlimit_scope_notice
 
     echo -e "------------------------------------------------"
     echo -e "${BOLD}本地监听${PLAIN}"
