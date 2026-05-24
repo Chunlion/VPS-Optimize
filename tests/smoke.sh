@@ -104,6 +104,10 @@ assert_dist_contains '影响范围：该限制只能作用于整个公网 443 �
 assert_file_contains src/menus.sh '如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。' "Health help must mention the connlimit persistence summary."
 assert_file_contains README.md '主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [5 保存/检查重启持久化]' "README must document the connlimit persistence save/check path."
 assert_file_contains README.md '添加或删除 connlimit 规则后，脚本会自动尝试刷新持久化快照' "README must document automatic connlimit persistence refresh after changes."
+assert_file_contains docs/443-single-entry-troubleshooting.md '端口并发连接限制误伤' "443 troubleshooting doc must include connlimit false-positive guidance."
+assert_file_contains docs/443-single-entry-troubleshooting.md '如果公网 `443` 存在本脚本添加的 connlimit 规则，它只能作用于整个公网 `443`，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "443 troubleshooting doc must explain public 443 connlimit scope."
+assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [19 443 单入口管理中心] -> [11 443 链路体检]' "443 troubleshooting doc must point users to the 443 health check."
+assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制]' "443 troubleshooting doc must point users to the connlimit menu."
 assert_file_contains docs/recovery-runbook.md '端口并发连接限制误封' "Recovery runbook must include connlimit lockout guidance."
 assert_file_contains docs/recovery-runbook.md '不要批量清空 INPUT 链' "Recovery runbook must warn against broad firewall cleanup for connlimit recovery."
 assert_function_defined_once dist/vps.sh func_firewall_manage
