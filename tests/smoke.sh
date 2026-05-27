@@ -812,14 +812,17 @@ grep -q 'traffic_guard_write_state_baseline' dist/vps.sh
 grep -q 'traffic_guard_baseline_direction_offsets' dist/vps.sh
 grep -q 'OFFSET_RX_BYTES' dist/vps.sh
 grep -q 'direction_usage_at_last_check' dist/vps.sh
+grep -q 'traffic_guard_sys_class_net' dist/vps.sh
 grep -q 'boot_started_after_cycle_start' dist/vps.sh
 grep -q 'cycle floor applied on ${IFACE}' dist/vps.sh
 grep -q 'traffic_guard_live_usage_from_state' dist/vps.sh
 grep -q 'repair_traffic_guard_timer' dist/vps.sh
 grep -q '最近检查超时' dist/vps.sh
-grep -q '已用 .*实时估算' dist/vps.sh
+grep -q '本周期已用 .*实时估算' dist/vps.sh
+grep -q '网卡原始计数 .*不等于本周期已用' dist/vps.sh
+grep -q '保护触发只看“本周期已用”' dist/vps.sh
 grep -Fq 'OFFSET_RX_BYTES=$(( ${previous_direction_usage[0]:-0} + CURRENT_RX ))' dist/vps.sh
-grep -q '本次重新配置默认按当前网卡累计估算' dist/vps.sh
+grep -q '本次重新配置默认按当前网卡原始计数估算' dist/vps.sh
 grep -q 'traffic_guard_gb_to_bytes_zero_ok' dist/vps.sh
 grep -q 'traffic_guard_cycle_date_for_month' dist/vps.sh
 grep -q 'cycle_date_for_month' dist/vps.sh
@@ -828,6 +831,7 @@ grep -q 'guard_exit()' dist/vps.sh
 grep -q 'checker exited unexpectedly rc=' dist/vps.sh
 grep -q 'reset_traffic_guard_failed_state' dist/vps.sh
 grep -q 'systemctl reset-failed vps-traffic-guard.service vps-traffic-guard.timer' dist/vps.sh
+grep -q 'poweroff command accepted' dist/vps.sh
 grep -q 'poweroff command failed; will retry on next timer run' dist/vps.sh
 if grep -q '重置日只支持 1-28' dist/vps.sh; then
     echo "Traffic guard reset day must support 1-31." >&2
@@ -844,6 +848,7 @@ traffic_guard_accounting_regression() {
     # shellcheck disable=SC1091
     source src/traffic_guard.sh
     local offsets usage_rx usage_tx usage
+    local tmp fake_sys fake_proc fake_bin fake_calls guard config state_dir log_file iface current_cycle
 
     mapfile -t offsets < <(traffic_guard_baseline_direction_offsets max 1000 100 1000)
     usage_rx=$(( offsets[0] + 0 ))
@@ -860,6 +865,165 @@ traffic_guard_accounting_regression() {
         echo "total-mode traffic guard offsets must preserve the configured initial usage; got ${usage}." >&2
         exit 1
     fi
+
+    tmp=$(mktemp -d /tmp/vps-traffic-guard-smoke.XXXXXX)
+    fake_sys="${tmp}/sys-class-net"
+    fake_proc="${tmp}/uptime"
+    fake_bin="${tmp}/bin"
+    fake_calls="${tmp}/poweroff-calls.log"
+    guard="${tmp}/checker"
+    config="${tmp}/traffic-guard.conf"
+    state_dir="${tmp}/state"
+    log_file="${tmp}/traffic-guard.log"
+    iface="eth-smoke0"
+    printf '999999999 0\n' > "$fake_proc"
+    mkdir -p "$fake_bin"
+    awk "/cat > \"\\\$TRAFFIC_GUARD_CHECKER\" <<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" src/traffic_guard.sh > "$guard"
+    chmod +x "$guard"
+    current_cycle=$(traffic_guard_current_cycle_key 1)
+
+    traffic_guard_write_fake_iface() {
+        local sys_dir="$1" test_iface="$2" rx="$3" tx="$4"
+        mkdir -p "${sys_dir}/${test_iface}/statistics"
+        printf 'up\n' > "${sys_dir}/${test_iface}/operstate"
+        printf '%s\n' "$rx" > "${sys_dir}/${test_iface}/statistics/rx_bytes"
+        printf '%s\n' "$tx" > "${sys_dir}/${test_iface}/statistics/tx_bytes"
+    }
+
+    traffic_guard_write_smoke_config() {
+        local action="${1:-log}" limit_bytes="${2:-1000000000}" initial_bytes="${3:-0}"
+        cat > "$config" <<EOF
+ENABLED='1'
+IFACE='${iface}'
+MODE='tx'
+LIMIT_GB='1'
+LIMIT_BYTES='${limit_bytes}'
+CYCLE_DAY='1'
+WARN_PERCENT='90'
+ACTION='${action}'
+INITIAL_USED_GB='0'
+INITIAL_USED_BYTES='${initial_bytes}'
+CHECK_INTERVAL='60'
+EOF
+    }
+
+    traffic_guard_run_smoke_checker() {
+        VPSO_TRAFFIC_GUARD_CONFIG="$config" \
+        VPSO_TRAFFIC_GUARD_STATE_DIR="$state_dir" \
+        VPSO_TRAFFIC_GUARD_LOG="$log_file" \
+        VPSO_TRAFFIC_GUARD_SYS_CLASS_NET="$fake_sys" \
+        VPSO_TRAFFIC_GUARD_PROC_UPTIME="$fake_proc" \
+        "$guard"
+    }
+
+    TRAFFIC_GUARD_STATE_DIR="$state_dir"
+    VPSO_TRAFFIC_GUARD_SYS_CLASS_NET="$fake_sys"
+    VPSO_TRAFFIC_GUARD_PROC_UPTIME="$fake_proc"
+
+    traffic_guard_write_fake_iface "$fake_sys" "$iface" 100000 9000000
+    traffic_guard_write_state_baseline "$iface" 1 1000 tx
+    traffic_guard_write_fake_iface "$fake_sys" "$iface" 100000 9000500
+    traffic_guard_write_smoke_config log 1000000000 1000
+    traffic_guard_run_smoke_checker
+    # shellcheck disable=SC1090
+    source "${state_dir}/state"
+    if [[ "${LAST_USAGE:-}" != "1500" ]]; then
+        echo "Traffic guard first baseline must preserve manual initial usage plus post-baseline delta; got ${LAST_USAGE:-unset}." >&2
+        exit 1
+    fi
+
+    traffic_guard_write_fake_iface "$fake_sys" "$iface" 1200 3400
+    mkdir -p "$state_dir"
+    cat > "${state_dir}/state" <<EOF
+CYCLE_KEY='2000-01-01'
+STATE_IFACE='${iface}'
+STATE_MODE='tx'
+BASE_RX='100'
+BASE_TX='200'
+OFFSET_RX_BYTES='0'
+OFFSET_TX_BYTES='0'
+OFFSET_BYTES='0'
+WARN_SENT='1'
+TRIPPED='1'
+LAST_RX='1000'
+LAST_TX='3000'
+LAST_USAGE='2800'
+LAST_CHECKED_AT='2000-01-01T00:00:00+00:00'
+EOF
+    traffic_guard_write_smoke_config log 1000000000 0
+    traffic_guard_run_smoke_checker
+    # shellcheck disable=SC1090
+    source "${state_dir}/state"
+    if [[ "${CYCLE_KEY:-}" != "$current_cycle" || "${BASE_TX:-}" != "3400" || "${LAST_USAGE:-}" != "0" || "${WARN_SENT:-}" != "0" || "${TRIPPED:-}" != "0" ]]; then
+        echo "Traffic guard must reset baseline cleanly across billing cycles; cycle=${CYCLE_KEY:-unset} base_tx=${BASE_TX:-unset} usage=${LAST_USAGE:-unset}." >&2
+        exit 1
+    fi
+
+    traffic_guard_write_fake_iface "$fake_sys" "$iface" 10 100
+    cat > "${state_dir}/state" <<EOF
+CYCLE_KEY='${current_cycle}'
+STATE_IFACE='${iface}'
+STATE_MODE='tx'
+BASE_RX='1000'
+BASE_TX='10000'
+OFFSET_RX_BYTES='0'
+OFFSET_TX_BYTES='200'
+OFFSET_BYTES='200'
+WARN_SENT='0'
+TRIPPED='0'
+LAST_RX='1500'
+LAST_TX='12000'
+LAST_USAGE='2200'
+LAST_CHECKED_AT='${current_cycle}T00:00:00+00:00'
+EOF
+    traffic_guard_write_smoke_config log 1000000000 0
+    traffic_guard_run_smoke_checker
+    # shellcheck disable=SC1090
+    source "${state_dir}/state"
+    if [[ "${BASE_TX:-}" != "100" || "${OFFSET_TX_BYTES:-}" != "2300" || "${LAST_USAGE:-}" != "2300" ]]; then
+        echo "Traffic guard must preserve usage after counter reset/wrap; base_tx=${BASE_TX:-unset} offset_tx=${OFFSET_TX_BYTES:-unset} usage=${LAST_USAGE:-unset}." >&2
+        exit 1
+    fi
+
+    for cmd in systemctl poweroff shutdown sync logger; do
+        cat > "${fake_bin}/${cmd}" <<EOF
+#!/usr/bin/env bash
+case "\${0##*/}" in
+    sync|logger) exit 0 ;;
+    *) printf '%s %s\n' "\${0##*/}" "\$*" >> "${fake_calls}"; exit 1 ;;
+esac
+EOF
+        chmod +x "${fake_bin}/${cmd}"
+    done
+    traffic_guard_write_fake_iface "$fake_sys" "$iface" 0 2000
+    cat > "${state_dir}/state" <<EOF
+CYCLE_KEY='${current_cycle}'
+STATE_IFACE='${iface}'
+STATE_MODE='tx'
+BASE_RX='0'
+BASE_TX='0'
+OFFSET_RX_BYTES='0'
+OFFSET_TX_BYTES='0'
+OFFSET_BYTES='0'
+WARN_SENT='0'
+TRIPPED='0'
+LAST_RX='0'
+LAST_TX='0'
+LAST_USAGE='0'
+LAST_CHECKED_AT='${current_cycle}T00:00:00+00:00'
+EOF
+    traffic_guard_write_smoke_config poweroff 1000 0
+    PATH="${fake_bin}:$PATH" traffic_guard_run_smoke_checker
+    # shellcheck disable=SC1090
+    source "${state_dir}/state"
+    if [[ "${LAST_USAGE:-}" != "2000" || "${TRIPPED:-}" != "0" ]]; then
+        echo "Traffic guard poweroff failure must keep retry state honest; usage=${LAST_USAGE:-unset} tripped=${TRIPPED:-unset}." >&2
+        exit 1
+    fi
+    grep -q 'poweroff command failed; will retry on next timer run' "$log_file"
+    grep -q '^systemctl poweroff$' "$fake_calls"
+    grep -q '^poweroff $' "$fake_calls"
+    grep -q '^shutdown -h now$' "$fake_calls"
 }
 traffic_guard_accounting_regression
 

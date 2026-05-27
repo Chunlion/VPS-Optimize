@@ -15732,6 +15732,10 @@ traffic_guard_bytes_to_gb() {
     awk -v b="$bytes" 'BEGIN { printf "%.2f", b / 1024 / 1024 / 1024 }'
 }
 
+traffic_guard_sys_class_net() {
+    printf '%s' "${VPSO_TRAFFIC_GUARD_SYS_CLASS_NET:-${TRAFFIC_GUARD_SYS_CLASS_NET:-/sys/class/net}}"
+}
+
 traffic_guard_iface_is_physical_candidate() {
     local iface="$1"
     case "$iface" in
@@ -15743,8 +15747,9 @@ traffic_guard_iface_is_physical_candidate() {
 }
 
 traffic_guard_best_active_iface() {
-    local path iface oper rx tx score best_iface="" best_score=-1
-    for path in /sys/class/net/*; do
+    local sys_net path iface oper rx tx score best_iface="" best_score=-1
+    sys_net=$(traffic_guard_sys_class_net)
+    for path in "${sys_net}"/*; do
         [[ -e "$path" ]] || continue
         iface="${path##*/}"
         traffic_guard_valid_iface "$iface" || continue
@@ -15787,8 +15792,10 @@ traffic_guard_detect_iface() {
 
 traffic_guard_valid_iface() {
     local iface="$1"
+    local sys_net
     [[ -n "$iface" && "$iface" != *"/"* && "$iface" != *".."* ]] || return 1
-    [[ -r "/sys/class/net/${iface}/statistics/rx_bytes" && -r "/sys/class/net/${iface}/statistics/tx_bytes" ]]
+    sys_net=$(traffic_guard_sys_class_net)
+    [[ -r "${sys_net}/${iface}/statistics/rx_bytes" && -r "${sys_net}/${iface}/statistics/tx_bytes" ]]
 }
 
 traffic_guard_mode_label() {
@@ -15837,9 +15844,24 @@ traffic_guard_current_cycle_key() {
     fi
 }
 
+traffic_guard_boot_started_after_cycle_start() {
+    local cycle_key="$1"
+    local proc_uptime="${VPSO_TRAFFIC_GUARD_PROC_UPTIME:-/proc/uptime}"
+    local cycle_epoch now_epoch uptime_raw uptime_seconds boot_epoch
+    cycle_epoch=$(date -d "${cycle_key} 00:00:00" +%s 2>/dev/null) || return 1
+    read -r uptime_raw _ < "$proc_uptime" 2>/dev/null || return 1
+    uptime_seconds="${uptime_raw%%.*}"
+    [[ "$uptime_seconds" =~ ^[0-9]+$ ]] || return 1
+    now_epoch=$(date +%s 2>/dev/null) || return 1
+    boot_epoch=$(( now_epoch - uptime_seconds ))
+    (( boot_epoch >= cycle_epoch ))
+}
+
 traffic_guard_read_stats() {
     local iface="$1"
-    cat "/sys/class/net/${iface}/statistics/rx_bytes" "/sys/class/net/${iface}/statistics/tx_bytes" 2>/dev/null
+    local sys_net
+    sys_net=$(traffic_guard_sys_class_net)
+    cat "${sys_net}/${iface}/statistics/rx_bytes" "${sys_net}/${iface}/statistics/tx_bytes" 2>/dev/null
 }
 
 traffic_guard_mode_usage_bytes() {
@@ -15993,10 +16015,12 @@ install_traffic_guard_checker() {
     cat > "$TRAFFIC_GUARD_CHECKER" <<'GUARD_SCRIPT'
 set -u
 
-CONFIG="/etc/vps-optimize/traffic-guard.conf"
-STATE_DIR="/var/lib/vps-optimize/traffic-guard"
+CONFIG="${VPSO_TRAFFIC_GUARD_CONFIG:-/etc/vps-optimize/traffic-guard.conf}"
+STATE_DIR="${VPSO_TRAFFIC_GUARD_STATE_DIR:-/var/lib/vps-optimize/traffic-guard}"
 STATE_FILE="${STATE_DIR}/state"
-LOG_FILE="/var/log/vps-traffic-guard.log"
+LOG_FILE="${VPSO_TRAFFIC_GUARD_LOG:-/var/log/vps-traffic-guard.log}"
+SYS_CLASS_NET="${VPSO_TRAFFIC_GUARD_SYS_CLASS_NET:-/sys/class/net}"
+PROC_UPTIME="${VPSO_TRAFFIC_GUARD_PROC_UPTIME:-/proc/uptime}"
 
 log_msg() {
     local msg="$1"
@@ -16161,7 +16185,7 @@ direction_usage_at_last_check() {
 boot_started_after_cycle_start() {
     local cycle_epoch now_epoch uptime_raw uptime_seconds boot_epoch
     cycle_epoch=$(date -d "${CYCLE_KEY} 00:00:00" +%s 2>/dev/null) || return 1
-    read -r uptime_raw _ < /proc/uptime 2>/dev/null || return 1
+    read -r uptime_raw _ < "$PROC_UPTIME" 2>/dev/null || return 1
     uptime_seconds="${uptime_raw%%.*}"
     [[ "$uptime_seconds" =~ ^[0-9]+$ ]] || return 1
     now_epoch=$(date +%s 2>/dev/null) || return 1
@@ -16204,7 +16228,7 @@ WARN_PERCENT="${WARN_PERCENT:-90}"
 ACTION="${ACTION:-poweroff}"
 INITIAL_USED_BYTES="${INITIAL_USED_BYTES:-0}"
 
-[[ -n "$IFACE" && -r "/sys/class/net/${IFACE}/statistics/rx_bytes" && -r "/sys/class/net/${IFACE}/statistics/tx_bytes" ]] || {
+[[ -n "$IFACE" && -r "${SYS_CLASS_NET}/${IFACE}/statistics/rx_bytes" && -r "${SYS_CLASS_NET}/${IFACE}/statistics/tx_bytes" ]] || {
     log_msg "interface ${IFACE:-empty} is not readable, skip"
     exit 0
 }
@@ -16212,8 +16236,8 @@ INITIAL_USED_BYTES="${INITIAL_USED_BYTES:-0}"
 [[ "$WARN_PERCENT" =~ ^[0-9]+$ ]] || WARN_PERCENT=90
 (( WARN_PERCENT >= 1 && WARN_PERCENT <= 99 )) || WARN_PERCENT=90
 
-CURRENT_RX=$(cat "/sys/class/net/${IFACE}/statistics/rx_bytes" 2>/dev/null || echo 0)
-CURRENT_TX=$(cat "/sys/class/net/${IFACE}/statistics/tx_bytes" 2>/dev/null || echo 0)
+CURRENT_RX=$(cat "${SYS_CLASS_NET}/${IFACE}/statistics/rx_bytes" 2>/dev/null || echo 0)
+CURRENT_TX=$(cat "${SYS_CLASS_NET}/${IFACE}/statistics/tx_bytes" 2>/dev/null || echo 0)
 [[ "$CURRENT_RX" =~ ^[0-9]+$ ]] || CURRENT_RX=0
 [[ "$CURRENT_TX" =~ ^[0-9]+$ ]] || CURRENT_TX=0
 CYCLE_NOW=$(current_cycle_key "$CYCLE_DAY")
@@ -16299,25 +16323,6 @@ USAGE_TX_BYTES=$(( OFFSET_TX_BYTES + DELTA_TX ))
 OFFSET_BYTES=$(mode_usage_bytes "$MODE" "$OFFSET_RX_BYTES" "$OFFSET_TX_BYTES")
 USAGE_BYTES=$(mode_usage_bytes "$MODE" "$USAGE_RX_BYTES" "$USAGE_TX_BYTES")
 
-if boot_started_after_cycle_start; then
-    FLOOR_APPLIED=0
-    if (( CURRENT_RX > USAGE_RX_BYTES )); then
-        USAGE_RX_BYTES="$CURRENT_RX"
-        FLOOR_APPLIED=1
-    fi
-    if (( CURRENT_TX > USAGE_TX_BYTES )); then
-        USAGE_TX_BYTES="$CURRENT_TX"
-        FLOOR_APPLIED=1
-    fi
-    if (( FLOOR_APPLIED == 1 )); then
-        OFFSET_RX_BYTES=$(( USAGE_RX_BYTES - DELTA_RX ))
-        OFFSET_TX_BYTES=$(( USAGE_TX_BYTES - DELTA_TX ))
-        OFFSET_BYTES=$(mode_usage_bytes "$MODE" "$OFFSET_RX_BYTES" "$OFFSET_TX_BYTES")
-        USAGE_BYTES=$(mode_usage_bytes "$MODE" "$USAGE_RX_BYTES" "$USAGE_TX_BYTES")
-        log_msg "cycle floor applied on ${IFACE}, boot is inside ${CYCLE_KEY}, usage=${USAGE_BYTES}, rx=${USAGE_RX_BYTES}, tx=${USAGE_TX_BYTES}"
-    fi
-fi
-
 if [[ "$TRIPPED" != "1" ]] && (( USAGE_BYTES * 100 >= LIMIT_BYTES * WARN_PERCENT )) && (( USAGE_BYTES < LIMIT_BYTES )) && [[ "$WARN_SENT" != "1" ]]; then
     WARN_SENT=1
     save_state
@@ -16335,7 +16340,13 @@ if (( USAGE_BYTES >= LIMIT_BYTES )); then
             ;;
         poweroff|*)
             sync
-            systemctl poweroff >/dev/null 2>&1 || poweroff >/dev/null 2>&1 || shutdown -h now >/dev/null 2>&1 || log_msg "poweroff command failed; will retry on next timer run"
+            if systemctl poweroff >/dev/null 2>&1 || poweroff >/dev/null 2>&1 || shutdown -h now >/dev/null 2>&1; then
+                log_msg "poweroff command accepted"
+            else
+                TRIPPED=0
+                save_state
+                log_msg "poweroff command failed; will retry on next timer run"
+            fi
             ;;
     esac
 fi
@@ -16500,9 +16511,18 @@ traffic_guard_live_usage_from_state() {
     # shellcheck disable=SC1090
     . "$state_file"
     cycle_now=$(traffic_guard_current_cycle_key "${CYCLE_DAY:-1}")
-    if [[ "${STATE_IFACE:-$IFACE}" != "$IFACE" || "${STATE_MODE:-$mode}" != "$mode" || "${CYCLE_KEY:-}" != "$cycle_now" ]]; then
+    if [[ "${STATE_IFACE:-$IFACE}" != "$IFACE" || "${STATE_MODE:-$mode}" != "$mode" ]]; then
         usage=$(traffic_guard_mode_usage_bytes "$mode" "$current_rx" "$current_tx")
         printf '%s %s %s\n' "$usage" "$current_rx" "$current_tx"
+        return 0
+    fi
+    if [[ "${CYCLE_KEY:-}" != "$cycle_now" ]]; then
+        if traffic_guard_boot_started_after_cycle_start "$cycle_now"; then
+            usage=$(traffic_guard_mode_usage_bytes "$mode" "$current_rx" "$current_tx")
+            printf '%s %s %s\n' "$usage" "$current_rx" "$current_tx"
+        else
+            printf '0 0 0\n'
+        fi
         return 0
     fi
 
@@ -16581,19 +16601,20 @@ show_traffic_guard_status() {
     echo -e "计费模式 : ${CYAN}$(traffic_guard_mode_label "${MODE:-tx}")${PLAIN}"
     echo -e "本周期   : ${CYAN}${cycle_key}${PLAIN} 起，配置为每月 ${CYCLE_DAY:-1} 日重置（短月份按最后一天）"
     echo -e "阈值     : ${YELLOW}${LIMIT_GB:-未知}GB${PLAIN} ($(traffic_guard_human_bytes "$limit"))"
-    echo -e "已用     : ${GREEN}$(traffic_guard_human_bytes "$usage")${PLAIN} / ${pct}%（实时估算）"
+    echo -e "本周期已用 : ${GREEN}$(traffic_guard_human_bytes "$usage")${PLAIN} / ${pct}%（按基线和初始已用实时估算）"
     if [[ "$state_usage" =~ ^[0-9]+$ && "$state_usage" != "$usage" ]]; then
         echo -e "状态记录 : ${YELLOW}$(traffic_guard_human_bytes "$state_usage")${PLAIN}（上次检查写入）"
     fi
     if [[ "$live_rx" =~ ^[0-9]+$ && "$live_tx" =~ ^[0-9]+$ ]]; then
-        echo -e "方向累计 : RX ${CYAN}$(traffic_guard_human_bytes "$live_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$live_tx")${PLAIN}（本周期实时估算）"
+        echo -e "本周期方向 : RX ${CYAN}$(traffic_guard_human_bytes "$live_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$live_tx")${PLAIN}（已减基线并包含初始已用）"
     fi
     echo -e "预警线   : ${WARN_PERCENT:-90}%  动作: ${ACTION:-poweroff}"
     if traffic_guard_valid_iface "${IFACE:-}"; then
         mapfile -t current_stats < <(traffic_guard_read_stats "$IFACE")
         current_rx="${current_stats[0]:-0}"
         current_tx="${current_stats[1]:-0}"
-        echo -e "网卡计数 : RX ${CYAN}$(traffic_guard_human_bytes "$current_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$current_tx")${PLAIN}（自开机累计）"
+        echo -e "网卡原始计数 : RX ${CYAN}$(traffic_guard_human_bytes "$current_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$current_tx")${PLAIN}（自开机累计，不等于本周期已用）"
+        echo -e "${BLUE}说明：保护触发只看“本周期已用”；原始计数只用于计算差量，开机久时可能明显更大。${PLAIN}"
     fi
     echo -e "配置文件 : ${CYAN}${TRAFFIC_GUARD_CONFIG}${PLAIN}"
     echo -e "日志文件 : ${CYAN}${TRAFFIC_GUARD_LOG}${PLAIN}"
@@ -16636,8 +16657,8 @@ configure_traffic_guard() {
     current_rx="${current_stats[0]:-0}"
     current_tx="${current_stats[1]:-0}"
     echo -e "${GREEN}✅ 已选择网卡：${iface}${PLAIN}"
-    echo -e "当前网卡自开机累计：RX ${CYAN}$(traffic_guard_human_bytes "$current_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$current_tx")${PLAIN}"
-    echo -e "${YELLOW}说明：系统只能读取本机网卡计数；云厂商账单口径可能不同，请优先参考云后台并留余量。${PLAIN}"
+    echo -e "当前网卡原始计数（自开机累计，仅用于建立基线）：RX ${CYAN}$(traffic_guard_human_bytes "$current_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$current_tx")${PLAIN}"
+    echo -e "${YELLOW}说明：系统只能读取本机网卡计数；配置后会从当前计数建立基线，云厂商账单口径可能不同，请优先参考云后台并留余量。${PLAIN}"
 
     while true; do
         limit_gb=$(ask_with_default "本周期流量阈值 GB（建议填套餐的 80%-95%）" "900")
@@ -16675,9 +16696,9 @@ configure_traffic_guard() {
     existing_used_bytes=$(traffic_guard_existing_state_usage "$iface" "$mode" "$cycle_day" 2>/dev/null || true)
     if [[ "$existing_used_bytes" =~ ^[0-9]+$ && "$existing_used_bytes" != "$detected_used_bytes" ]]; then
         echo -e "检测到已有保护状态已用：${YELLOW}$(traffic_guard_human_bytes "$existing_used_bytes")${PLAIN}"
-        echo -e "${YELLOW}本次重新配置默认按当前网卡累计估算，启用后会重置基线，避免旧状态误导。${PLAIN}"
+        echo -e "${YELLOW}本次重新配置默认按当前网卡原始计数估算，启用后会重置基线，避免旧状态误导。${PLAIN}"
     fi
-    echo -e "按当前网卡自开机累计和计费模式估算已用：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}（默认可直接回车）"
+    echo -e "默认初始已用按当前网卡原始计数和计费模式估算：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}（默认可直接回车）"
     echo -e "${YELLOW}如果云厂商后台显示不同，请手动覆盖这里的 GB 数值。${PLAIN}"
     while true; do
         initial_used_gb=$(ask_with_default "本周期已用流量 GB" "$detected_used_gb")
@@ -16712,7 +16733,7 @@ configure_traffic_guard() {
 
     echo -e "------------------------------------------------"
     echo -e "网卡：${CYAN}${iface}${PLAIN}"
-    echo -e "阈值：${YELLOW}${limit_gb}GB${PLAIN}，本周期已用抵扣：${initial_used_gb}GB"
+    echo -e "阈值：${YELLOW}${limit_gb}GB${PLAIN}，本周期初始已用：${initial_used_gb}GB"
     echo -e "模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}"
     echo -e "周期：每月 ${cycle_day} 日重置（短月份按最后一天）；检查间隔：${interval}s；预警：${warn_percent}%"
     echo -e "动作：${RED}${action}${PLAIN}"
@@ -16770,7 +16791,7 @@ reset_traffic_guard_baseline() {
     }
     detected_used_bytes=$(traffic_guard_detect_initial_used_bytes "$iface" "$mode" "$cycle_day")
     detected_used_gb=$(traffic_guard_bytes_to_gb "$detected_used_bytes")
-    echo -e "按当前网卡和计费模式估算已用：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}"
+    echo -e "默认初始已用按当前网卡原始计数和计费模式估算：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}"
     initial_used_gb=$(ask_with_default "重置后本周期已用流量 GB" "$detected_used_gb")
     if ! initial_used_bytes=$(traffic_guard_gb_to_bytes_zero_ok "$initial_used_gb" 2>/dev/null); then
         echo -e "${RED}❌ 已用流量无效。${PLAIN}"
@@ -16778,7 +16799,7 @@ reset_traffic_guard_baseline() {
         return 1
     fi
     confirm_risk_action "重置流量保护基线" \
-        "本周期统计会从当前网卡计数重新开始，已用抵扣设置为 ${initial_used_gb}GB。" \
+        "本周期统计会从当前网卡计数重新开始，初始已用设置为 ${initial_used_gb}GB。" \
         "重新进入本菜单再次重置基线，或参考云厂商后台手动修正已用流量。" \
         "请只在账单周期开始、刚配置完成或确认云厂商统计后执行。" || return 1
 
