@@ -5,6 +5,7 @@
 - 新增 Nginx HTTPS 反代入口，复用现有 `acme.sh + Cloudflare DNS API` 证书流程，并支持后端 HTTPS 跳过证书校验、域名 IP 白名单、查看/编辑已应用配置和清空 Nginx 反代配置。
 - 新增“查看/编辑脚本已应用配置”中心，编辑前自动备份，并按 Caddy、Nginx、SSH、Docker Compose、JSON 和 443 单入口配置类型执行对应校验与应用提示。
 - 新增 Docker Compose 项目配置编辑入口，可在订阅工具等 Compose 管理菜单中查看/编辑 Compose 文件，校验 `docker compose config`，并按需执行 `up -d` 应用修改。
+- 修复流量达量关机保护在“任一方向达量”模式下遇到网卡计数清零后只保存单个累计值、可能误算 RX/TX 方向用量的问题；网卡计数清零时会保留旧累计并计入当前网卡计数，timer 增加启动后定时触发兜底，状态页改为显示实时估算、本周期 RX/TX 方向累计和最近检查超时提示，并新增 timer 修复入口。
 
 ## v2.1 - 2026-05-15
 

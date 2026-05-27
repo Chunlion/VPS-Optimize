@@ -805,9 +805,20 @@ grep -q 'print_auto_update_notice' dist/vps.sh
 grep -q 'func_traffic_guard_menu' dist/vps.sh
 grep -q 'install_traffic_guard_checker' dist/vps.sh
 grep -q 'vps-traffic-guard.timer' dist/vps.sh
+grep -q 'OnActiveSec=${interval}s' dist/vps.sh
 grep -q 'TRAFFIC_GUARD_CONFIG=' dist/vps.sh
 grep -q 'traffic_guard_detect_initial_used_bytes' dist/vps.sh
 grep -q 'traffic_guard_write_state_baseline' dist/vps.sh
+grep -q 'traffic_guard_baseline_direction_offsets' dist/vps.sh
+grep -q 'OFFSET_RX_BYTES' dist/vps.sh
+grep -q 'direction_usage_at_last_check' dist/vps.sh
+grep -q 'boot_started_after_cycle_start' dist/vps.sh
+grep -q 'cycle floor applied on ${IFACE}' dist/vps.sh
+grep -q 'traffic_guard_live_usage_from_state' dist/vps.sh
+grep -q 'repair_traffic_guard_timer' dist/vps.sh
+grep -q '最近检查超时' dist/vps.sh
+grep -q '已用 .*实时估算' dist/vps.sh
+grep -Fq 'OFFSET_RX_BYTES=$(( ${previous_direction_usage[0]:-0} + CURRENT_RX ))' dist/vps.sh
 grep -q '本次重新配置默认按当前网卡累计估算' dist/vps.sh
 grep -q 'traffic_guard_gb_to_bytes_zero_ok' dist/vps.sh
 grep -q 'traffic_guard_cycle_date_for_month' dist/vps.sh
@@ -822,12 +833,36 @@ if grep -q '重置日只支持 1-28' dist/vps.sh; then
     echo "Traffic guard reset day must support 1-31." >&2
     exit 1
 fi
-grep -q 'counter reset detected on ${IFACE}, baseline reset and preserved' dist/vps.sh
+grep -q 'counter reset detected on ${IFACE}, baseline reset and preserved current counters' dist/vps.sh
 grep -q 'traffic|quota|bill|流量|达量|账单) echo "10"' dist/vps.sh
 if grep -q '20\..*流量达量关机保护' dist/vps.sh; then
     echo "Traffic guard must stay in the network submenu, not the main menu." >&2
     exit 1
 fi
+
+traffic_guard_accounting_regression() {
+    # shellcheck disable=SC1091
+    source src/traffic_guard.sh
+    local offsets usage_rx usage_tx usage
+
+    mapfile -t offsets < <(traffic_guard_baseline_direction_offsets max 1000 100 1000)
+    usage_rx=$(( offsets[0] + 0 ))
+    usage_tx=$(( offsets[1] + 900 ))
+    usage=$(traffic_guard_mode_usage_bytes max "$usage_rx" "$usage_tx")
+    if [[ "$usage" != "1000" ]]; then
+        echo "max-mode traffic guard must keep RX/TX directional offsets after counter reset; got ${usage}." >&2
+        exit 1
+    fi
+
+    mapfile -t offsets < <(traffic_guard_baseline_direction_offsets total 800 200 1000)
+    usage=$(traffic_guard_mode_usage_bytes total "${offsets[0]}" "${offsets[1]}")
+    if [[ "$usage" != "1000" ]]; then
+        echo "total-mode traffic guard offsets must preserve the configured initial usage; got ${usage}." >&2
+        exit 1
+    fi
+}
+traffic_guard_accounting_regression
+
 grep -q 'curl_rc=' dist/vps.sh
 if grep -q 'HTTP ${code}${PLAIN}' dist/vps.sh && grep -q '|| echo "000"' dist/vps.sh; then
     echo "443 curl probe must not concatenate fallback HTTP 000 values." >&2

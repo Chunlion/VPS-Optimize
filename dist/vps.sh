@@ -13186,15 +13186,25 @@ print_project_runtime_overview() {
     fi
 
     if [[ -r "$TRAFFIC_GUARD_CONFIG" ]]; then
-        local guard_usage guard_limit guard_timer guard_pct
+        local guard_usage guard_limit guard_timer guard_pct guard_live guard_rx guard_tx guard_age guard_stale_threshold guard_note
         # shellcheck disable=SC1090
         . "$TRAFFIC_GUARD_CONFIG"
-        guard_usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
+        if read -r guard_live guard_rx guard_tx < <(traffic_guard_live_usage_from_state 2>/dev/null); then
+            guard_usage="$guard_live"
+        else
+            guard_usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
+        fi
         guard_limit="${LIMIT_BYTES:-0}"
         guard_timer=$(systemctl is-active vps-traffic-guard.timer 2>/dev/null || echo "inactive")
+        guard_note=""
+        guard_age=$(traffic_guard_state_age_seconds 2>/dev/null || echo "")
+        guard_stale_threshold=$(traffic_guard_stale_threshold_seconds)
+        if [[ "$guard_age" =~ ^[0-9]+$ && "$guard_age" -gt "$guard_stale_threshold" ]]; then
+            guard_note="，最近检查超时"
+        fi
         if [[ "$guard_limit" =~ ^[0-9]+$ && "$guard_limit" -gt 0 ]]; then
             guard_pct=$(awk -v u="$guard_usage" -v l="$guard_limit" 'BEGIN { printf "%.2f", (u/l)*100 }')
-            echo -e "流量保护 : timer ${guard_timer}，$(traffic_guard_mode_label "${MODE:-tx}") 已用 $(traffic_guard_human_bytes "$guard_usage") / $(traffic_guard_human_bytes "$guard_limit") (${guard_pct}%)"
+            echo -e "流量保护 : timer ${guard_timer}，$(traffic_guard_mode_label "${MODE:-tx}") 实时估算 $(traffic_guard_human_bytes "$guard_usage") / $(traffic_guard_human_bytes "$guard_limit") (${guard_pct}%)${guard_note}"
         else
             echo -e "流量保护 : timer ${guard_timer}，配置需检查"
         fi
@@ -15848,6 +15858,67 @@ traffic_guard_mode_usage_bytes() {
     esac
 }
 
+traffic_guard_scale_offset_bytes() {
+    local total="${1:-0}"
+    local part="${2:-0}"
+    local whole="${3:-0}"
+    awk -v total="$total" -v part="$part" -v whole="$whole" 'BEGIN {
+        if (total !~ /^[0-9]+$/ || part !~ /^[0-9]+$/ || whole !~ /^[0-9]+$/ || whole <= 0) {
+            print 0;
+            exit;
+        }
+        printf "%.0f", total * part / whole;
+    }'
+}
+
+traffic_guard_baseline_direction_offsets() {
+    local mode="$1"
+    local rx="${2:-0}"
+    local tx="${3:-0}"
+    local initial="${4:-0}"
+    local rx_offset=0 tx_offset=0 current_total
+
+    [[ "$rx" =~ ^[0-9]+$ ]] || rx=0
+    [[ "$tx" =~ ^[0-9]+$ ]] || tx=0
+    [[ "$initial" =~ ^[0-9]+$ ]] || initial=0
+
+    case "$mode" in
+        rx)
+            rx_offset="$initial"
+            ;;
+        total)
+            current_total=$(( rx + tx ))
+            if (( current_total > 0 )); then
+                rx_offset=$(traffic_guard_scale_offset_bytes "$initial" "$rx" "$current_total")
+                tx_offset=$(awk -v total="$initial" -v rx_offset="$rx_offset" 'BEGIN {
+                    v = total - rx_offset;
+                    if (v < 0) v = 0;
+                    printf "%.0f", v;
+                }')
+            else
+                rx_offset="$initial"
+            fi
+            ;;
+        max)
+            if (( rx >= tx && rx > 0 )); then
+                rx_offset="$initial"
+                tx_offset=$(traffic_guard_scale_offset_bytes "$initial" "$tx" "$rx")
+            elif (( tx > 0 )); then
+                tx_offset="$initial"
+                rx_offset=$(traffic_guard_scale_offset_bytes "$initial" "$rx" "$tx")
+            else
+                rx_offset="$initial"
+                tx_offset="$initial"
+            fi
+            ;;
+        tx|*)
+            tx_offset="$initial"
+            ;;
+    esac
+
+    printf '%s\n%s\n' "$rx_offset" "$tx_offset"
+}
+
 traffic_guard_existing_state_usage() {
     local iface="$1"
     local mode="$2"
@@ -15882,27 +15953,36 @@ traffic_guard_write_state_baseline() {
     local iface="$1"
     local cycle_day="$2"
     local initial_used_bytes="${3:-0}"
-    local current_stats current_rx current_tx cycle_key state_file
+    local mode="${4:-${MODE:-tx}}"
+    local current_stats current_rx current_tx cycle_key state_file offset_stats offset_rx offset_tx offset_bytes
 
     [[ "$initial_used_bytes" =~ ^[0-9]+$ ]] || initial_used_bytes=0
     traffic_guard_valid_iface "$iface" || return 1
     mapfile -t current_stats < <(traffic_guard_read_stats "$iface")
     current_rx="${current_stats[0]:-0}"
     current_tx="${current_stats[1]:-0}"
+    mapfile -t offset_stats < <(traffic_guard_baseline_direction_offsets "$mode" "$current_rx" "$current_tx" "$initial_used_bytes")
+    offset_rx="${offset_stats[0]:-0}"
+    offset_tx="${offset_stats[1]:-0}"
+    offset_bytes=$(traffic_guard_mode_usage_bytes "$mode" "$offset_rx" "$offset_tx")
     cycle_key=$(traffic_guard_current_cycle_key "$cycle_day")
     mkdir -p "$TRAFFIC_GUARD_STATE_DIR" || return 1
     chmod 700 "$TRAFFIC_GUARD_STATE_DIR" 2>/dev/null || true
     state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
     {
         echo "CYCLE_KEY='${cycle_key}'"
+        echo "STATE_IFACE='${iface}'"
+        echo "STATE_MODE='${mode}'"
         echo "BASE_RX='${current_rx}'"
         echo "BASE_TX='${current_tx}'"
-        echo "OFFSET_BYTES='${initial_used_bytes}'"
+        echo "OFFSET_RX_BYTES='${offset_rx}'"
+        echo "OFFSET_TX_BYTES='${offset_tx}'"
+        echo "OFFSET_BYTES='${offset_bytes}'"
         echo "WARN_SENT='0'"
         echo "TRIPPED='0'"
         echo "LAST_RX='${current_rx}'"
         echo "LAST_TX='${current_tx}'"
-        echo "LAST_USAGE='${initial_used_bytes}'"
+        echo "LAST_USAGE='${offset_bytes}'"
         echo "LAST_CHECKED_AT='$(date -Is 2>/dev/null || date)'"
     } > "$state_file"
     chmod 600 "$state_file" 2>/dev/null || true
@@ -15970,13 +16050,136 @@ current_cycle_key() {
     fi
 }
 
+mode_usage_bytes() {
+    local mode="$1"
+    local rx="${2:-0}"
+    local tx="${3:-0}"
+    [[ "$rx" =~ ^[0-9]+$ ]] || rx=0
+    [[ "$tx" =~ ^[0-9]+$ ]] || tx=0
+    case "$mode" in
+        rx) printf '%s' "$rx" ;;
+        total) printf '%s' "$(( rx + tx ))" ;;
+        max)
+            if (( rx > tx )); then printf '%s' "$rx"; else printf '%s' "$tx"; fi
+            ;;
+        tx|*) printf '%s' "$tx" ;;
+    esac
+}
+
+scale_offset_bytes() {
+    local total="${1:-0}"
+    local part="${2:-0}"
+    local whole="${3:-0}"
+    awk -v total="$total" -v part="$part" -v whole="$whole" 'BEGIN {
+        if (total !~ /^[0-9]+$/ || part !~ /^[0-9]+$/ || whole !~ /^[0-9]+$/ || whole <= 0) {
+            print 0;
+            exit;
+        }
+        printf "%.0f", total * part / whole;
+    }'
+}
+
+baseline_direction_offsets() {
+    local mode="$1"
+    local rx="${2:-0}"
+    local tx="${3:-0}"
+    local initial="${4:-0}"
+    local rx_offset=0 tx_offset=0 current_total
+
+    [[ "$rx" =~ ^[0-9]+$ ]] || rx=0
+    [[ "$tx" =~ ^[0-9]+$ ]] || tx=0
+    [[ "$initial" =~ ^[0-9]+$ ]] || initial=0
+
+    case "$mode" in
+        rx)
+            rx_offset="$initial"
+            ;;
+        total)
+            current_total=$(( rx + tx ))
+            if (( current_total > 0 )); then
+                rx_offset=$(scale_offset_bytes "$initial" "$rx" "$current_total")
+                tx_offset=$(awk -v total="$initial" -v rx_offset="$rx_offset" 'BEGIN {
+                    v = total - rx_offset;
+                    if (v < 0) v = 0;
+                    printf "%.0f", v;
+                }')
+            else
+                rx_offset="$initial"
+            fi
+            ;;
+        max)
+            if (( rx >= tx && rx > 0 )); then
+                rx_offset="$initial"
+                tx_offset=$(scale_offset_bytes "$initial" "$tx" "$rx")
+            elif (( tx > 0 )); then
+                tx_offset="$initial"
+                rx_offset=$(scale_offset_bytes "$initial" "$rx" "$tx")
+            else
+                rx_offset="$initial"
+                tx_offset="$initial"
+            fi
+            ;;
+        tx|*)
+            tx_offset="$initial"
+            ;;
+    esac
+
+    printf '%s\n%s\n' "$rx_offset" "$tx_offset"
+}
+
+ensure_direction_offsets() {
+    local legacy_offset offset_stats
+    if [[ "${OFFSET_RX_BYTES:-}" =~ ^[0-9]+$ && "${OFFSET_TX_BYTES:-}" =~ ^[0-9]+$ ]]; then
+        return 0
+    fi
+    legacy_offset="${OFFSET_BYTES:-${LAST_USAGE:-0}}"
+    [[ "$legacy_offset" =~ ^[0-9]+$ ]] || legacy_offset=0
+    mapfile -t offset_stats < <(baseline_direction_offsets "$MODE" "${BASE_RX:-0}" "${BASE_TX:-0}" "$legacy_offset")
+    OFFSET_RX_BYTES="${offset_stats[0]:-0}"
+    OFFSET_TX_BYTES="${offset_stats[1]:-0}"
+    OFFSET_BYTES=$(mode_usage_bytes "$MODE" "$OFFSET_RX_BYTES" "$OFFSET_TX_BYTES")
+    log_msg "migrated legacy scalar offset on ${IFACE}, mode=${MODE}, offset_rx=${OFFSET_RX_BYTES}, offset_tx=${OFFSET_TX_BYTES}"
+}
+
+direction_usage_at_last_check() {
+    local last_rx="${LAST_RX:-${BASE_RX:-0}}"
+    local last_tx="${LAST_TX:-${BASE_TX:-0}}"
+    local delta_rx=0 delta_tx=0 usage_rx usage_tx
+    [[ "$last_rx" =~ ^[0-9]+$ ]] || last_rx="${BASE_RX:-0}"
+    [[ "$last_tx" =~ ^[0-9]+$ ]] || last_tx="${BASE_TX:-0}"
+    if [[ "${BASE_RX:-0}" =~ ^[0-9]+$ ]] && (( last_rx >= BASE_RX )); then
+        delta_rx=$(( last_rx - BASE_RX ))
+    fi
+    if [[ "${BASE_TX:-0}" =~ ^[0-9]+$ ]] && (( last_tx >= BASE_TX )); then
+        delta_tx=$(( last_tx - BASE_TX ))
+    fi
+    usage_rx=$(( ${OFFSET_RX_BYTES:-0} + delta_rx ))
+    usage_tx=$(( ${OFFSET_TX_BYTES:-0} + delta_tx ))
+    printf '%s\n%s\n' "$usage_rx" "$usage_tx"
+}
+
+boot_started_after_cycle_start() {
+    local cycle_epoch now_epoch uptime_raw uptime_seconds boot_epoch
+    cycle_epoch=$(date -d "${CYCLE_KEY} 00:00:00" +%s 2>/dev/null) || return 1
+    read -r uptime_raw _ < /proc/uptime 2>/dev/null || return 1
+    uptime_seconds="${uptime_raw%%.*}"
+    [[ "$uptime_seconds" =~ ^[0-9]+$ ]] || return 1
+    now_epoch=$(date +%s 2>/dev/null) || return 1
+    boot_epoch=$(( now_epoch - uptime_seconds ))
+    (( boot_epoch >= cycle_epoch ))
+}
+
 save_state() {
     mkdir -p "$STATE_DIR" || exit 1
     chmod 700 "$STATE_DIR" 2>/dev/null || true
     {
         echo "CYCLE_KEY='${CYCLE_KEY:-}'"
+        echo "STATE_IFACE='${IFACE:-}'"
+        echo "STATE_MODE='${MODE:-tx}'"
         echo "BASE_RX='${BASE_RX:-0}'"
         echo "BASE_TX='${BASE_TX:-0}'"
+        echo "OFFSET_RX_BYTES='${OFFSET_RX_BYTES:-0}'"
+        echo "OFFSET_TX_BYTES='${OFFSET_TX_BYTES:-0}'"
         echo "OFFSET_BYTES='${OFFSET_BYTES:-0}'"
         echo "WARN_SENT='${WARN_SENT:-0}'"
         echo "TRIPPED='${TRIPPED:-0}'"
@@ -16011,6 +16214,8 @@ INITIAL_USED_BYTES="${INITIAL_USED_BYTES:-0}"
 
 CURRENT_RX=$(cat "/sys/class/net/${IFACE}/statistics/rx_bytes" 2>/dev/null || echo 0)
 CURRENT_TX=$(cat "/sys/class/net/${IFACE}/statistics/tx_bytes" 2>/dev/null || echo 0)
+[[ "$CURRENT_RX" =~ ^[0-9]+$ ]] || CURRENT_RX=0
+[[ "$CURRENT_TX" =~ ^[0-9]+$ ]] || CURRENT_TX=0
 CYCLE_NOW=$(current_cycle_key "$CYCLE_DAY")
 
 STATE_EXISTS=0
@@ -16020,54 +16225,98 @@ if [[ -r "$STATE_FILE" ]]; then
     . "$STATE_FILE"
 fi
 
+if [[ "$STATE_EXISTS" -eq 1 ]]; then
+    if [[ -n "${STATE_IFACE:-}" && "${STATE_IFACE:-}" != "$IFACE" ]]; then
+        log_msg "state interface ${STATE_IFACE} does not match ${IFACE}; reinitialize baseline"
+        STATE_EXISTS=0
+        CYCLE_KEY=""
+    elif [[ -n "${STATE_MODE:-}" && "${STATE_MODE:-}" != "$MODE" ]]; then
+        log_msg "state mode ${STATE_MODE} does not match ${MODE}; reinitialize baseline"
+        STATE_EXISTS=0
+        CYCLE_KEY=""
+    fi
+fi
+
 if [[ "${CYCLE_KEY:-}" != "$CYCLE_NOW" ]]; then
+    offset_stats=()
     CYCLE_KEY="$CYCLE_NOW"
     BASE_RX="$CURRENT_RX"
     BASE_TX="$CURRENT_TX"
     if [[ "$STATE_EXISTS" -eq 0 ]]; then
-        OFFSET_BYTES="${INITIAL_USED_BYTES:-0}"
+        mapfile -t offset_stats < <(baseline_direction_offsets "$MODE" "$CURRENT_RX" "$CURRENT_TX" "${INITIAL_USED_BYTES:-0}")
+        OFFSET_RX_BYTES="${offset_stats[0]:-0}"
+        OFFSET_TX_BYTES="${offset_stats[1]:-0}"
     else
-        OFFSET_BYTES=0
+        OFFSET_RX_BYTES=0
+        OFFSET_TX_BYTES=0
+    fi
+    OFFSET_BYTES=$(mode_usage_bytes "$MODE" "$OFFSET_RX_BYTES" "$OFFSET_TX_BYTES")
+    if boot_started_after_cycle_start; then
+        if (( CURRENT_RX > OFFSET_RX_BYTES )); then
+            OFFSET_RX_BYTES="$CURRENT_RX"
+        fi
+        if (( CURRENT_TX > OFFSET_TX_BYTES )); then
+            OFFSET_TX_BYTES="$CURRENT_TX"
+        fi
+        OFFSET_BYTES=$(mode_usage_bytes "$MODE" "$OFFSET_RX_BYTES" "$OFFSET_TX_BYTES")
+        log_msg "cycle floor applied on ${IFACE}, boot is inside ${CYCLE_KEY}, usage=${OFFSET_BYTES}, rx=${OFFSET_RX_BYTES}, tx=${OFFSET_TX_BYTES}"
     fi
     WARN_SENT=0
     TRIPPED=0
     USAGE_BYTES="$OFFSET_BYTES"
     save_state
-    log_msg "new cycle ${CYCLE_KEY}, baseline reset on ${IFACE}, initial used ${OFFSET_BYTES} bytes"
+    log_msg "new cycle ${CYCLE_KEY}, baseline reset on ${IFACE}, initial used ${OFFSET_BYTES} bytes, offset_rx=${OFFSET_RX_BYTES}, offset_tx=${OFFSET_TX_BYTES}"
     exit 0
 fi
 
 BASE_RX="${BASE_RX:-$CURRENT_RX}"
 BASE_TX="${BASE_TX:-$CURRENT_TX}"
-OFFSET_BYTES="${OFFSET_BYTES:-0}"
+[[ "$BASE_RX" =~ ^[0-9]+$ ]] || BASE_RX="$CURRENT_RX"
+[[ "$BASE_TX" =~ ^[0-9]+$ ]] || BASE_TX="$CURRENT_TX"
 WARN_SENT="${WARN_SENT:-0}"
 TRIPPED="${TRIPPED:-0}"
+ensure_direction_offsets
 
 if (( CURRENT_RX < BASE_RX || CURRENT_TX < BASE_TX )); then
-    PREVIOUS_USAGE="${LAST_USAGE:-${OFFSET_BYTES:-0}}"
-    [[ "$PREVIOUS_USAGE" =~ ^[0-9]+$ ]] || PREVIOUS_USAGE=0
+    mapfile -t previous_direction_usage < <(direction_usage_at_last_check)
+    OFFSET_RX_BYTES=$(( ${previous_direction_usage[0]:-0} + CURRENT_RX ))
+    OFFSET_TX_BYTES=$(( ${previous_direction_usage[1]:-0} + CURRENT_TX ))
+    OFFSET_BYTES=$(mode_usage_bytes "$MODE" "$OFFSET_RX_BYTES" "$OFFSET_TX_BYTES")
     BASE_RX="$CURRENT_RX"
     BASE_TX="$CURRENT_TX"
-    OFFSET_BYTES="$PREVIOUS_USAGE"
     WARN_SENT=0
     TRIPPED=0
     USAGE_BYTES="$OFFSET_BYTES"
     save_state
-    log_msg "counter reset detected on ${IFACE}, baseline reset and preserved ${OFFSET_BYTES} bytes"
+    log_msg "counter reset detected on ${IFACE}, baseline reset and preserved current counters, usage=${OFFSET_BYTES}, offset_rx=${OFFSET_RX_BYTES}, offset_tx=${OFFSET_TX_BYTES}"
     exit 0
 fi
 
 DELTA_RX=$(( CURRENT_RX - BASE_RX ))
 DELTA_TX=$(( CURRENT_TX - BASE_TX ))
-case "$MODE" in
-    rx) USAGE_BYTES="$DELTA_RX" ;;
-    total) USAGE_BYTES=$(( DELTA_RX + DELTA_TX )) ;;
-    max)
-        if (( DELTA_RX > DELTA_TX )); then USAGE_BYTES="$DELTA_RX"; else USAGE_BYTES="$DELTA_TX"; fi
-        ;;
-    tx|*) USAGE_BYTES="$DELTA_TX" ;;
-esac
-USAGE_BYTES=$(( USAGE_BYTES + OFFSET_BYTES ))
+USAGE_RX_BYTES=$(( OFFSET_RX_BYTES + DELTA_RX ))
+USAGE_TX_BYTES=$(( OFFSET_TX_BYTES + DELTA_TX ))
+OFFSET_BYTES=$(mode_usage_bytes "$MODE" "$OFFSET_RX_BYTES" "$OFFSET_TX_BYTES")
+USAGE_BYTES=$(mode_usage_bytes "$MODE" "$USAGE_RX_BYTES" "$USAGE_TX_BYTES")
+
+if boot_started_after_cycle_start; then
+    FLOOR_APPLIED=0
+    if (( CURRENT_RX > USAGE_RX_BYTES )); then
+        USAGE_RX_BYTES="$CURRENT_RX"
+        FLOOR_APPLIED=1
+    fi
+    if (( CURRENT_TX > USAGE_TX_BYTES )); then
+        USAGE_TX_BYTES="$CURRENT_TX"
+        FLOOR_APPLIED=1
+    fi
+    if (( FLOOR_APPLIED == 1 )); then
+        OFFSET_RX_BYTES=$(( USAGE_RX_BYTES - DELTA_RX ))
+        OFFSET_TX_BYTES=$(( USAGE_TX_BYTES - DELTA_TX ))
+        OFFSET_BYTES=$(mode_usage_bytes "$MODE" "$OFFSET_RX_BYTES" "$OFFSET_TX_BYTES")
+        USAGE_BYTES=$(mode_usage_bytes "$MODE" "$USAGE_RX_BYTES" "$USAGE_TX_BYTES")
+        log_msg "cycle floor applied on ${IFACE}, boot is inside ${CYCLE_KEY}, usage=${USAGE_BYTES}, rx=${USAGE_RX_BYTES}, tx=${USAGE_TX_BYTES}"
+    fi
+fi
 
 if [[ "$TRIPPED" != "1" ]] && (( USAGE_BYTES * 100 >= LIMIT_BYTES * WARN_PERCENT )) && (( USAGE_BYTES < LIMIT_BYTES )) && [[ "$WARN_SENT" != "1" ]]; then
     WARN_SENT=1
@@ -16122,6 +16371,7 @@ Description=Run VPS-Optimize traffic quota guard periodically
 
 [Timer]
 OnBootSec=1min
+OnActiveSec=${interval}s
 OnUnitActiveSec=${interval}s
 AccuracySec=10s
 Persistent=true
@@ -16181,6 +16431,118 @@ traffic_guard_usage_from_state() {
     printf '%s' "${LAST_USAGE:-0}"
 }
 
+traffic_guard_direction_usage_from_state() {
+    local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    local base_rx base_tx last_rx last_tx offset_rx offset_tx delta_rx=0 delta_tx=0
+    [[ -r "$state_file" ]] || return 1
+    # shellcheck disable=SC1090
+    . "$state_file"
+    base_rx="${BASE_RX:-0}"
+    base_tx="${BASE_TX:-0}"
+    last_rx="${LAST_RX:-$base_rx}"
+    last_tx="${LAST_TX:-$base_tx}"
+    offset_rx="${OFFSET_RX_BYTES:-}"
+    offset_tx="${OFFSET_TX_BYTES:-}"
+    [[ "$base_rx" =~ ^[0-9]+$ && "$base_tx" =~ ^[0-9]+$ ]] || return 1
+    [[ "$last_rx" =~ ^[0-9]+$ && "$last_tx" =~ ^[0-9]+$ ]] || return 1
+    [[ "$offset_rx" =~ ^[0-9]+$ && "$offset_tx" =~ ^[0-9]+$ ]] || return 1
+    if (( last_rx >= base_rx )); then
+        delta_rx=$(( last_rx - base_rx ))
+    fi
+    if (( last_tx >= base_tx )); then
+        delta_tx=$(( last_tx - base_tx ))
+    fi
+    printf '%s %s\n' "$(( offset_rx + delta_rx ))" "$(( offset_tx + delta_tx ))"
+}
+
+traffic_guard_state_last_checked_at() {
+    local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    [[ -r "$state_file" ]] || return 1
+    grep -m1 '^LAST_CHECKED_AT=' "$state_file" | cut -d= -f2- | sed "s/^'//;s/'$//"
+}
+
+traffic_guard_state_age_seconds() {
+    local checked_at checked_epoch now_epoch
+    checked_at=$(traffic_guard_state_last_checked_at) || return 1
+    checked_epoch=$(date -d "$checked_at" +%s 2>/dev/null) || return 1
+    now_epoch=$(date +%s 2>/dev/null) || return 1
+    (( now_epoch >= checked_epoch )) || return 1
+    printf '%s' "$(( now_epoch - checked_epoch ))"
+}
+
+traffic_guard_stale_threshold_seconds() {
+    local interval="${CHECK_INTERVAL:-60}"
+    [[ "$interval" =~ ^[0-9]+$ ]] || interval=60
+    (( interval >= 30 )) || interval=60
+    local threshold=$(( interval * 3 ))
+    (( threshold < 300 )) && threshold=300
+    printf '%s' "$threshold"
+}
+
+traffic_guard_live_usage_from_state() {
+    local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    local current_stats current_rx current_tx base_rx base_tx offset_rx offset_tx
+    local last_rx last_tx delta_rx=0 delta_tx=0 usage_rx usage_tx usage mode cycle_now
+    mode="${MODE:-tx}"
+    traffic_guard_valid_iface "${IFACE:-}" || return 1
+    mapfile -t current_stats < <(traffic_guard_read_stats "$IFACE")
+    current_rx="${current_stats[0]:-0}"
+    current_tx="${current_stats[1]:-0}"
+    [[ "$current_rx" =~ ^[0-9]+$ ]] || current_rx=0
+    [[ "$current_tx" =~ ^[0-9]+$ ]] || current_tx=0
+
+    if [[ ! -r "$state_file" ]]; then
+        usage=$(traffic_guard_mode_usage_bytes "$mode" "$current_rx" "$current_tx")
+        printf '%s %s %s\n' "$usage" "$current_rx" "$current_tx"
+        return 0
+    fi
+
+    # shellcheck disable=SC1090
+    . "$state_file"
+    cycle_now=$(traffic_guard_current_cycle_key "${CYCLE_DAY:-1}")
+    if [[ "${STATE_IFACE:-$IFACE}" != "$IFACE" || "${STATE_MODE:-$mode}" != "$mode" || "${CYCLE_KEY:-}" != "$cycle_now" ]]; then
+        usage=$(traffic_guard_mode_usage_bytes "$mode" "$current_rx" "$current_tx")
+        printf '%s %s %s\n' "$usage" "$current_rx" "$current_tx"
+        return 0
+    fi
+
+    base_rx="${BASE_RX:-$current_rx}"
+    base_tx="${BASE_TX:-$current_tx}"
+    offset_rx="${OFFSET_RX_BYTES:-}"
+    offset_tx="${OFFSET_TX_BYTES:-}"
+    if [[ ! "$offset_rx" =~ ^[0-9]+$ || ! "$offset_tx" =~ ^[0-9]+$ ]]; then
+        local legacy_offset offset_stats
+        legacy_offset="${OFFSET_BYTES:-${LAST_USAGE:-0}}"
+        [[ "$legacy_offset" =~ ^[0-9]+$ ]] || legacy_offset=0
+        mapfile -t offset_stats < <(traffic_guard_baseline_direction_offsets "$mode" "$base_rx" "$base_tx" "$legacy_offset")
+        offset_rx="${offset_stats[0]:-0}"
+        offset_tx="${offset_stats[1]:-0}"
+    fi
+
+    if [[ "$base_rx" =~ ^[0-9]+$ && "$base_tx" =~ ^[0-9]+$ ]] && (( current_rx >= base_rx && current_tx >= base_tx )); then
+        delta_rx=$(( current_rx - base_rx ))
+        delta_tx=$(( current_tx - base_tx ))
+        usage_rx=$(( offset_rx + delta_rx ))
+        usage_tx=$(( offset_tx + delta_tx ))
+    else
+        last_rx="${LAST_RX:-$base_rx}"
+        last_tx="${LAST_TX:-$base_tx}"
+        [[ "$last_rx" =~ ^[0-9]+$ ]] || last_rx="$base_rx"
+        [[ "$last_tx" =~ ^[0-9]+$ ]] || last_tx="$base_tx"
+        if [[ "$base_rx" =~ ^[0-9]+$ && "$last_rx" =~ ^[0-9]+$ ]] && (( last_rx >= base_rx )); then
+            delta_rx=$(( last_rx - base_rx ))
+        fi
+        if [[ "$base_tx" =~ ^[0-9]+$ && "$last_tx" =~ ^[0-9]+$ ]] && (( last_tx >= base_tx )); then
+            delta_tx=$(( last_tx - base_tx ))
+        fi
+        usage_rx=$(( offset_rx + delta_rx + current_rx ))
+        usage_tx=$(( offset_tx + delta_tx + current_tx ))
+    fi
+
+    usage=$(traffic_guard_mode_usage_bytes "$mode" "$usage_rx" "$usage_tx")
+    printf '%s %s %s\n' "$usage" "$usage_rx" "$usage_tx"
+}
+
 show_traffic_guard_status() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -16195,9 +16557,17 @@ show_traffic_guard_status() {
     fi
 
     local timer_state service_state usage limit pct cycle_key state_file current_stats current_rx current_tx
+    local live_usage live_rx live_tx state_usage state_age stale_threshold last_checked
     timer_state=$(systemctl is-active vps-traffic-guard.timer 2>/dev/null || echo "inactive")
     service_state=$(systemctl is-enabled vps-traffic-guard.timer 2>/dev/null || echo "disabled")
-    usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
+    state_usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
+    if read -r live_usage live_rx live_tx < <(traffic_guard_live_usage_from_state 2>/dev/null); then
+        usage="$live_usage"
+    else
+        usage="$state_usage"
+        live_rx=""
+        live_tx=""
+    fi
     limit="${LIMIT_BYTES:-0}"
     if [[ "$limit" =~ ^[0-9]+$ && "$limit" -gt 0 ]]; then
         pct=$(awk -v u="$usage" -v l="$limit" 'BEGIN { printf "%.2f", (u/l)*100 }')
@@ -16211,7 +16581,13 @@ show_traffic_guard_status() {
     echo -e "计费模式 : ${CYAN}$(traffic_guard_mode_label "${MODE:-tx}")${PLAIN}"
     echo -e "本周期   : ${CYAN}${cycle_key}${PLAIN} 起，配置为每月 ${CYCLE_DAY:-1} 日重置（短月份按最后一天）"
     echo -e "阈值     : ${YELLOW}${LIMIT_GB:-未知}GB${PLAIN} ($(traffic_guard_human_bytes "$limit"))"
-    echo -e "已用     : ${GREEN}$(traffic_guard_human_bytes "$usage")${PLAIN} / ${pct}%"
+    echo -e "已用     : ${GREEN}$(traffic_guard_human_bytes "$usage")${PLAIN} / ${pct}%（实时估算）"
+    if [[ "$state_usage" =~ ^[0-9]+$ && "$state_usage" != "$usage" ]]; then
+        echo -e "状态记录 : ${YELLOW}$(traffic_guard_human_bytes "$state_usage")${PLAIN}（上次检查写入）"
+    fi
+    if [[ "$live_rx" =~ ^[0-9]+$ && "$live_tx" =~ ^[0-9]+$ ]]; then
+        echo -e "方向累计 : RX ${CYAN}$(traffic_guard_human_bytes "$live_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$live_tx")${PLAIN}（本周期实时估算）"
+    fi
     echo -e "预警线   : ${WARN_PERCENT:-90}%  动作: ${ACTION:-poweroff}"
     if traffic_guard_valid_iface "${IFACE:-}"; then
         mapfile -t current_stats < <(traffic_guard_read_stats "$IFACE")
@@ -16224,9 +16600,13 @@ show_traffic_guard_status() {
 
     state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
     if [[ -r "$state_file" ]]; then
-        local last_checked
-        last_checked=$(grep -m1 '^LAST_CHECKED_AT=' "$state_file" | cut -d= -f2- | sed "s/^'//;s/'$//")
+        last_checked=$(traffic_guard_state_last_checked_at 2>/dev/null || echo "未知")
         echo -e "最近检查 : ${CYAN}${last_checked}${PLAIN}"
+        state_age=$(traffic_guard_state_age_seconds 2>/dev/null || echo "")
+        stale_threshold=$(traffic_guard_stale_threshold_seconds)
+        if [[ "$state_age" =~ ^[0-9]+$ && "$state_age" -gt "$stale_threshold" ]]; then
+            echo -e "${RED}异常提示 : 最近检查已超过 ${state_age}s，timer 显示 active 也不能代表检查器真的在刷新。请先查看日志，必要时用本菜单 [6] 修复 timer。${PLAIN}"
+        fi
     else
         echo -e "${YELLOW}尚未生成状态文件，timer 首次运行后会自动初始化基线。${PLAIN}"
     fi
@@ -16354,7 +16734,7 @@ configure_traffic_guard() {
         pause_return
         return 1
     }
-    traffic_guard_write_state_baseline "$iface" "$cycle_day" "$initial_used_bytes" || {
+    traffic_guard_write_state_baseline "$iface" "$cycle_day" "$initial_used_bytes" "$mode" || {
         echo -e "${RED}❌ 写入流量保护基线失败。${PLAIN}"
         pause_return
         return 1
@@ -16402,13 +16782,55 @@ reset_traffic_guard_baseline() {
         "重新进入本菜单再次重置基线，或参考云厂商后台手动修正已用流量。" \
         "请只在账单周期开始、刚配置完成或确认云厂商统计后执行。" || return 1
 
-    traffic_guard_write_state_baseline "$iface" "$cycle_day" "$initial_used_bytes" || {
+    traffic_guard_write_state_baseline "$iface" "$cycle_day" "$initial_used_bytes" "$mode" || {
         echo -e "${RED}❌ 写入流量保护基线失败。${PLAIN}"
         pause_return
         return 1
     }
     echo -e "${GREEN}✅ 已重置 ${iface} 的流量统计基线。${PLAIN}"
     echo -e "当前模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}；本周期已用：$(traffic_guard_human_bytes "$initial_used_bytes")"
+    pause_return
+}
+
+repair_traffic_guard_timer() {
+    local interval
+    load_traffic_guard_config || {
+        echo -e "${YELLOW}尚未配置流量达量关机保护。${PLAIN}"
+        pause_return
+        return 1
+    }
+    interval="${CHECK_INTERVAL:-60}"
+    if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( 10#$interval < 30 )); then
+        interval=60
+    fi
+
+    if [[ "${ACTION:-poweroff}" == "poweroff" ]]; then
+        confirm_danger "修复流量保护自动检查 timer" \
+            "会重新安装 vps-traffic-guard-check 和 systemd timer，恢复后会按 ${interval}s 周期检查。" \
+            "如果当前实时估算已经达到阈值，下一次检查可能会执行 systemctl poweroff。" \
+            "请先确认云厂商后台流量、阈值和当前 SSH/控制台救援方式。" || return 1
+    else
+        confirm_risk_action "修复流量保护自动检查 timer" \
+            "会重新安装 vps-traffic-guard-check 和 systemd timer，恢复后会按 ${interval}s 周期检查。" \
+            "当前动作是 ${ACTION:-log}，达到阈值时只按配置动作执行。" \
+            "修复后请回到状态页确认最近检查时间开始刷新。" || return 1
+    fi
+
+    install_traffic_guard_checker || {
+        echo -e "${RED}❌ 安装检查脚本失败。${PLAIN}"
+        pause_return
+        return 1
+    }
+    install_traffic_guard_units "$interval" || {
+        echo -e "${RED}❌ 启用 systemd timer 失败，请检查 systemd 状态。${PLAIN}"
+        pause_return
+        return 1
+    }
+    systemctl restart vps-traffic-guard.timer >/dev/null 2>&1 || true
+    reset_traffic_guard_failed_state
+    echo -e "${GREEN}✅ 已重装并重启 vps-traffic-guard.timer。${PLAIN}"
+    echo -e "${YELLOW}请等待一个检查周期后回到 [2] 查看最近检查时间；也可以查看 [5] 日志。${PLAIN}"
+    systemctl list-timers --all vps-traffic-guard.timer --no-pager 2>/dev/null || true
     pause_return
 }
 
@@ -16447,6 +16869,7 @@ func_traffic_guard_menu() {
         echo -e "${GREEN}  3. 重置本周期统计基线${PLAIN}"
         echo -e "${YELLOW}  4. 停用保护${PLAIN}"
         echo -e "${GREEN}  5. 查看最近日志${PLAIN}"
+        echo -e "${GREEN}  6. 修复/重装自动检查 timer${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -16463,6 +16886,7 @@ func_traffic_guard_menu() {
                 tail -n 30 "$TRAFFIC_GUARD_LOG" 2>/dev/null || echo "暂无日志"
                 pause_return
                 ;;
+            6) repair_traffic_guard_timer ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac

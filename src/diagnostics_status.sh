@@ -113,15 +113,25 @@ print_project_runtime_overview() {
     fi
 
     if [[ -r "$TRAFFIC_GUARD_CONFIG" ]]; then
-        local guard_usage guard_limit guard_timer guard_pct
+        local guard_usage guard_limit guard_timer guard_pct guard_live guard_rx guard_tx guard_age guard_stale_threshold guard_note
         # shellcheck disable=SC1090
         . "$TRAFFIC_GUARD_CONFIG"
-        guard_usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
+        if read -r guard_live guard_rx guard_tx < <(traffic_guard_live_usage_from_state 2>/dev/null); then
+            guard_usage="$guard_live"
+        else
+            guard_usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
+        fi
         guard_limit="${LIMIT_BYTES:-0}"
         guard_timer=$(systemctl is-active vps-traffic-guard.timer 2>/dev/null || echo "inactive")
+        guard_note=""
+        guard_age=$(traffic_guard_state_age_seconds 2>/dev/null || echo "")
+        guard_stale_threshold=$(traffic_guard_stale_threshold_seconds)
+        if [[ "$guard_age" =~ ^[0-9]+$ && "$guard_age" -gt "$guard_stale_threshold" ]]; then
+            guard_note="，最近检查超时"
+        fi
         if [[ "$guard_limit" =~ ^[0-9]+$ && "$guard_limit" -gt 0 ]]; then
             guard_pct=$(awk -v u="$guard_usage" -v l="$guard_limit" 'BEGIN { printf "%.2f", (u/l)*100 }')
-            echo -e "流量保护 : timer ${guard_timer}，$(traffic_guard_mode_label "${MODE:-tx}") 已用 $(traffic_guard_human_bytes "$guard_usage") / $(traffic_guard_human_bytes "$guard_limit") (${guard_pct}%)"
+            echo -e "流量保护 : timer ${guard_timer}，$(traffic_guard_mode_label "${MODE:-tx}") 实时估算 $(traffic_guard_human_bytes "$guard_usage") / $(traffic_guard_human_bytes "$guard_limit") (${guard_pct}%)${guard_note}"
         else
             echo -e "流量保护 : timer ${guard_timer}，配置需检查"
         fi
