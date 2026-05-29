@@ -869,6 +869,115 @@ traffic_guard_live_usage_from_state() {
     printf '%s %s %s\n' "$usage" "$usage_rx" "$usage_tx"
 }
 
+traffic_guard_recent_log_summary() {
+    local lines="${1:-5}"
+
+    [[ "$lines" =~ ^[0-9]+$ ]] || lines=5
+    (( lines > 0 )) || lines=5
+
+    if [[ ! -r "$TRAFFIC_GUARD_LOG" ]]; then
+        echo "暂无日志"
+        return 0
+    fi
+
+    if declare -F redact_sensitive_output >/dev/null; then
+        tail -n "$lines" "$TRAFFIC_GUARD_LOG" 2>/dev/null | redact_sensitive_output
+    else
+        tail -n "$lines" "$TRAFFIC_GUARD_LOG" 2>/dev/null
+    fi
+}
+
+print_traffic_guard_diagnostic_summary() {
+    local log_lines="${1:-5}"
+    local show_unconfigured="${2:-yes}"
+    local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    local timer_active timer_enabled has_config has_state has_log usage source_usage live_rx live_tx
+    local limit pct mode_label state_age stale_threshold last_checked state_status config_status log_status
+    local ENABLED IFACE MODE LIMIT_GB LIMIT_BYTES CYCLE_DAY WARN_PERCENT ACTION INITIAL_USED_GB INITIAL_USED_BYTES CHECK_INTERVAL
+
+    [[ "$log_lines" =~ ^[0-9]+$ ]] || log_lines=5
+    (( log_lines >= 0 )) || log_lines=5
+
+    timer_active=$(systemctl is-active vps-traffic-guard.timer 2>/dev/null || true)
+    timer_enabled=$(systemctl is-enabled vps-traffic-guard.timer 2>/dev/null || true)
+    timer_active=${timer_active:-inactive}
+    timer_enabled=${timer_enabled:-disabled}
+    [[ -r "$TRAFFIC_GUARD_CONFIG" ]] && has_config="yes" || has_config="no"
+    [[ -r "$state_file" ]] && has_state="yes" || has_state="no"
+    [[ -r "$TRAFFIC_GUARD_LOG" ]] && has_log="yes" || has_log="no"
+
+    if [[ "$has_config" == "no" && "$has_state" == "no" && "$has_log" == "no" && "$timer_active" != "active" && "$timer_enabled" == "disabled" ]]; then
+        [[ "$show_unconfigured" == "yes" ]] && echo "流量达量关机保护摘要: 未配置"
+        return 0
+    fi
+
+    echo "流量达量关机保护摘要:"
+    echo "- timer: vps-traffic-guard.timer active=${timer_active}; enabled=${timer_enabled}"
+    config_status="不可读或不存在"
+    state_status="不可读或不存在"
+    log_status="不可读或不存在"
+    [[ "$has_config" == "yes" ]] && config_status="存在"
+    [[ "$has_state" == "yes" ]] && state_status="存在"
+    [[ "$has_log" == "yes" ]] && log_status="存在"
+    echo "- 配置文件: ${TRAFFIC_GUARD_CONFIG} (${config_status})"
+    echo "- 状态文件: ${state_file} (${state_status})"
+    echo "- 日志文件: ${TRAFFIC_GUARD_LOG} (${log_status})"
+
+    if [[ "$has_config" != "yes" ]]; then
+        echo "- 当前配置: 未配置或不可读"
+    else
+        # shellcheck disable=SC1090
+        . "$TRAFFIC_GUARD_CONFIG"
+        limit="${LIMIT_BYTES:-0}"
+        if read -r usage live_rx live_tx < <(traffic_guard_live_usage_from_state 2>/dev/null); then
+            source_usage="实时估算"
+        else
+            usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
+            live_rx=""
+            live_tx=""
+            source_usage="上次状态"
+        fi
+        [[ "$usage" =~ ^[0-9]+$ ]] || usage=0
+        [[ "$limit" =~ ^[0-9]+$ ]] || limit=0
+        if (( limit > 0 )); then
+            pct=$(awk -v u="$usage" -v l="$limit" 'BEGIN { printf "%.2f", (u/l)*100 }')
+            mode_label=$(traffic_guard_mode_label "${MODE:-tx}")
+            echo "- 当前配置: ENABLED=${ENABLED:-0}; 模式=${mode_label}; 动作=${ACTION:-poweroff}; 检查间隔=${CHECK_INTERVAL:-60}s"
+            echo "- ${source_usage}: $(traffic_guard_human_bytes "$usage") / $(traffic_guard_human_bytes "$limit") (${pct}%)"
+        else
+            echo "- 当前配置: ENABLED=${ENABLED:-0}; 模式=$(traffic_guard_mode_label "${MODE:-tx}"); 阈值未设置或无效"
+        fi
+        if [[ "$live_rx" =~ ^[0-9]+$ && "$live_tx" =~ ^[0-9]+$ ]]; then
+            echo "- 方向估算: RX $(traffic_guard_human_bytes "$live_rx") / TX $(traffic_guard_human_bytes "$live_tx")"
+        fi
+    fi
+
+    if [[ "$has_state" == "yes" ]]; then
+        last_checked=$(traffic_guard_state_last_checked_at 2>/dev/null || echo "未知")
+        state_age=$(traffic_guard_state_age_seconds 2>/dev/null || echo "")
+        stale_threshold=$(traffic_guard_stale_threshold_seconds)
+        if [[ "$state_age" =~ ^[0-9]+$ ]]; then
+            echo "- 最近检查: ${last_checked} (${state_age}s 前; 超时阈值 ${stale_threshold}s)"
+            if (( state_age > stale_threshold )); then
+                if [[ "$timer_active" == "active" ]]; then
+                    echo "- 异常提示: 最近检查超时，timer active 但状态文件已超过 ${state_age}s 未刷新，请查看日志或使用菜单 [10] -> [7] -> [6] 修复 timer"
+                else
+                    echo "- 异常提示: 最近检查超时，状态文件已超过 ${state_age}s 未刷新，timer 当前为 ${timer_active}"
+                fi
+            fi
+        else
+            echo "- 最近检查: ${last_checked}"
+        fi
+    else
+        echo "- 最近检查: 状态文件尚未生成"
+    fi
+
+    if (( log_lines > 0 )); then
+        echo "- 最近 vps-traffic-guard 日志:"
+        traffic_guard_recent_log_summary "$log_lines" | sed 's/^/  /'
+    fi
+}
+
 show_traffic_guard_status() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"

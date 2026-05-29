@@ -291,6 +291,71 @@ recent_journal_for_issue() {
     fi
 }
 
+print_443_issue_connlimit_summary() {
+    local marker runtime_rules saved_rules rules locations rule_count
+
+    if ! declare -F port_connlimit_comment >/dev/null || ! declare -F port_connlimit_runtime_rule_fingerprints >/dev/null || ! declare -F port_connlimit_known_saved_rule_fingerprints >/dev/null; then
+        echo "- 443 connlimit: 未接入检测 helper"
+        return 0
+    fi
+
+    marker=$(port_connlimit_comment 443)
+    runtime_rules=$(port_connlimit_runtime_rule_fingerprints | grep -F "$marker" || true)
+    saved_rules=$(port_connlimit_known_saved_rule_fingerprints | grep -F "$marker" || true)
+    rules=$(printf '%s\n%s\n' "$runtime_rules" "$saved_rules" | grep -F "$marker" || true)
+
+    if [[ -z "$rules" ]]; then
+        echo "- 443 connlimit: 未检测到本脚本添加的公网 443 规则"
+        return 0
+    fi
+
+    locations=""
+    [[ -n "$runtime_rules" ]] && locations="运行时"
+    [[ -n "$saved_rules" ]] && locations="${locations:+${locations},}持久化文件"
+    rule_count=$(printf '%s\n' "$rules" | grep -c . || true)
+
+    echo "- 443 connlimit: 检测到本脚本添加的公网 443 connlimit 规则 (${marker})"
+    echo "  位置: ${locations:-未知}; 匹配条数: ${rule_count}"
+    echo "  提示: 该规则影响整个公网 443 入口，不能精确到某个 SNI、Xray/3x-ui 入站、UUID 或用户"
+}
+
+print_443_single_entry_issue_summary() {
+    local env_file="/etc/vps-optimize/sni-stack.env"
+    local web_backend web_label xray_backend panel_backend sub_backend listener_consistency
+
+    echo "443 单入口摘要:"
+    if ! load_sni_stack_env >/dev/null 2>&1; then
+        detect_current_entry_status
+        echo "- 配置文件: 未检测到 ${env_file}"
+        echo "- ENTRY_MODE: ${ENTRY_STATUS_MODE:-not-configured}"
+        echo "- 公网 443 监听归属: ${ENTRY_STATUS_LISTENER_DISPLAY:-未知} (${ENTRY_STATUS_LISTENER_PROCESS:-unknown})"
+        print_443_issue_connlimit_summary
+        return 0
+    fi
+
+    detect_current_entry_status
+    web_backend=$(web_proxy_backend)
+    web_label=$(web_proxy_engine_label)
+    xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
+    panel_backend=$(format_hostport "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT")
+    sub_backend=$(format_hostport "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT")
+    if [[ "$ENTRY_STATUS_CONSISTENT" == "yes" ]]; then
+        listener_consistency="一致"
+    else
+        listener_consistency="不一致"
+    fi
+
+    echo "- 配置文件: ${env_file}"
+    echo "- ENTRY_MODE: ${ENTRY_STATUS_MODE}"
+    echo "- 公网 443 监听归属: ${ENTRY_STATUS_LISTENER_DISPLAY} (${ENTRY_STATUS_LISTENER_PROCESS}); 与 ENTRY_MODE ${listener_consistency}"
+    echo "- Caddy/Web 本地后端: ${web_label} ${web_backend}"
+    echo "- Xray 本地后端: ${xray_backend}"
+    echo "- 面板路径: https://${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${panel_backend}"
+    echo "- 订阅路径: 普通 ${SUB_URI_PATH}, Clash/Mihomo ${CLASH_URI_PATH} -> ${sub_backend}"
+    echo "- 扩展路由: Web ${#SITE_DOMAINS[@]} 个, TCP/SNI ${#TCP_ROUTE_SNIS[@]} 个, Xray 入站 ${#XRAY_SNI_ROUTE_SNIS[@]} 个"
+    print_443_issue_connlimit_summary
+}
+
 generate_issue_diagnostics() {
     local os_desc kernel arch now script_path firewall_status latest_backups log_path
     os_desc="未知"
@@ -327,6 +392,12 @@ generate_issue_diagnostics() {
     echo "脚本路径: ${script_path}"
     echo "当前时间: ${now}"
     echo ""
+    print_443_single_entry_issue_summary
+    echo ""
+    if declare -F print_traffic_guard_diagnostic_summary >/dev/null; then
+        print_traffic_guard_diagnostic_summary 5 yes
+        echo ""
+    fi
     echo "关键服务状态:"
     for svc in nginx caddy docker xray sing-box; do
         echo "- ${svc}: $(service_state_for_issue "$svc")"

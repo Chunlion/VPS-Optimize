@@ -21,7 +21,7 @@ CYAN='\033[1;36m'
 PLAIN='\033[0m'
 BOLD='\033[1m'
 
-SCRIPT_VERSION="v2.2"
+SCRIPT_VERSION="v2.3"
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
 UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
@@ -13185,29 +13185,8 @@ print_project_runtime_overview() {
         echo -e "Docker   : 运行容器 ${running_containers:-0} 个，公网映射 ${public_binds:-0} 条"
     fi
 
-    if [[ -r "$TRAFFIC_GUARD_CONFIG" ]]; then
-        local guard_usage guard_limit guard_timer guard_pct guard_live guard_rx guard_tx guard_age guard_stale_threshold guard_note
-        # shellcheck disable=SC1090
-        . "$TRAFFIC_GUARD_CONFIG"
-        if read -r guard_live guard_rx guard_tx < <(traffic_guard_live_usage_from_state 2>/dev/null); then
-            guard_usage="$guard_live"
-        else
-            guard_usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
-        fi
-        guard_limit="${LIMIT_BYTES:-0}"
-        guard_timer=$(systemctl is-active vps-traffic-guard.timer 2>/dev/null || echo "inactive")
-        guard_note=""
-        guard_age=$(traffic_guard_state_age_seconds 2>/dev/null || echo "")
-        guard_stale_threshold=$(traffic_guard_stale_threshold_seconds)
-        if [[ "$guard_age" =~ ^[0-9]+$ && "$guard_age" -gt "$guard_stale_threshold" ]]; then
-            guard_note="，最近检查超时"
-        fi
-        if [[ "$guard_limit" =~ ^[0-9]+$ && "$guard_limit" -gt 0 ]]; then
-            guard_pct=$(awk -v u="$guard_usage" -v l="$guard_limit" 'BEGIN { printf "%.2f", (u/l)*100 }')
-            echo -e "流量保护 : timer ${guard_timer}，$(traffic_guard_mode_label "${MODE:-tx}") 实时估算 $(traffic_guard_human_bytes "$guard_usage") / $(traffic_guard_human_bytes "$guard_limit") (${guard_pct}%)${guard_note}"
-        else
-            echo -e "流量保护 : timer ${guard_timer}，配置需检查"
-        fi
+    if declare -F print_traffic_guard_diagnostic_summary >/dev/null; then
+        print_traffic_guard_diagnostic_summary 3 no
     fi
 }
 
@@ -15357,6 +15336,71 @@ recent_journal_for_issue() {
     fi
 }
 
+print_443_issue_connlimit_summary() {
+    local marker runtime_rules saved_rules rules locations rule_count
+
+    if ! declare -F port_connlimit_comment >/dev/null || ! declare -F port_connlimit_runtime_rule_fingerprints >/dev/null || ! declare -F port_connlimit_known_saved_rule_fingerprints >/dev/null; then
+        echo "- 443 connlimit: 未接入检测 helper"
+        return 0
+    fi
+
+    marker=$(port_connlimit_comment 443)
+    runtime_rules=$(port_connlimit_runtime_rule_fingerprints | grep -F "$marker" || true)
+    saved_rules=$(port_connlimit_known_saved_rule_fingerprints | grep -F "$marker" || true)
+    rules=$(printf '%s\n%s\n' "$runtime_rules" "$saved_rules" | grep -F "$marker" || true)
+
+    if [[ -z "$rules" ]]; then
+        echo "- 443 connlimit: 未检测到本脚本添加的公网 443 规则"
+        return 0
+    fi
+
+    locations=""
+    [[ -n "$runtime_rules" ]] && locations="运行时"
+    [[ -n "$saved_rules" ]] && locations="${locations:+${locations},}持久化文件"
+    rule_count=$(printf '%s\n' "$rules" | grep -c . || true)
+
+    echo "- 443 connlimit: 检测到本脚本添加的公网 443 connlimit 规则 (${marker})"
+    echo "  位置: ${locations:-未知}; 匹配条数: ${rule_count}"
+    echo "  提示: 该规则影响整个公网 443 入口，不能精确到某个 SNI、Xray/3x-ui 入站、UUID 或用户"
+}
+
+print_443_single_entry_issue_summary() {
+    local env_file="/etc/vps-optimize/sni-stack.env"
+    local web_backend web_label xray_backend panel_backend sub_backend listener_consistency
+
+    echo "443 单入口摘要:"
+    if ! load_sni_stack_env >/dev/null 2>&1; then
+        detect_current_entry_status
+        echo "- 配置文件: 未检测到 ${env_file}"
+        echo "- ENTRY_MODE: ${ENTRY_STATUS_MODE:-not-configured}"
+        echo "- 公网 443 监听归属: ${ENTRY_STATUS_LISTENER_DISPLAY:-未知} (${ENTRY_STATUS_LISTENER_PROCESS:-unknown})"
+        print_443_issue_connlimit_summary
+        return 0
+    fi
+
+    detect_current_entry_status
+    web_backend=$(web_proxy_backend)
+    web_label=$(web_proxy_engine_label)
+    xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
+    panel_backend=$(format_hostport "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT")
+    sub_backend=$(format_hostport "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT")
+    if [[ "$ENTRY_STATUS_CONSISTENT" == "yes" ]]; then
+        listener_consistency="一致"
+    else
+        listener_consistency="不一致"
+    fi
+
+    echo "- 配置文件: ${env_file}"
+    echo "- ENTRY_MODE: ${ENTRY_STATUS_MODE}"
+    echo "- 公网 443 监听归属: ${ENTRY_STATUS_LISTENER_DISPLAY} (${ENTRY_STATUS_LISTENER_PROCESS}); 与 ENTRY_MODE ${listener_consistency}"
+    echo "- Caddy/Web 本地后端: ${web_label} ${web_backend}"
+    echo "- Xray 本地后端: ${xray_backend}"
+    echo "- 面板路径: https://${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${panel_backend}"
+    echo "- 订阅路径: 普通 ${SUB_URI_PATH}, Clash/Mihomo ${CLASH_URI_PATH} -> ${sub_backend}"
+    echo "- 扩展路由: Web ${#SITE_DOMAINS[@]} 个, TCP/SNI ${#TCP_ROUTE_SNIS[@]} 个, Xray 入站 ${#XRAY_SNI_ROUTE_SNIS[@]} 个"
+    print_443_issue_connlimit_summary
+}
+
 generate_issue_diagnostics() {
     local os_desc kernel arch now script_path firewall_status latest_backups log_path
     os_desc="未知"
@@ -15393,6 +15437,12 @@ generate_issue_diagnostics() {
     echo "脚本路径: ${script_path}"
     echo "当前时间: ${now}"
     echo ""
+    print_443_single_entry_issue_summary
+    echo ""
+    if declare -F print_traffic_guard_diagnostic_summary >/dev/null; then
+        print_traffic_guard_diagnostic_summary 5 yes
+        echo ""
+    fi
     echo "关键服务状态:"
     for svc in nginx caddy docker xray sing-box; do
         echo "- ${svc}: $(service_state_for_issue "$svc")"
@@ -16561,6 +16611,115 @@ traffic_guard_live_usage_from_state() {
 
     usage=$(traffic_guard_mode_usage_bytes "$mode" "$usage_rx" "$usage_tx")
     printf '%s %s %s\n' "$usage" "$usage_rx" "$usage_tx"
+}
+
+traffic_guard_recent_log_summary() {
+    local lines="${1:-5}"
+
+    [[ "$lines" =~ ^[0-9]+$ ]] || lines=5
+    (( lines > 0 )) || lines=5
+
+    if [[ ! -r "$TRAFFIC_GUARD_LOG" ]]; then
+        echo "暂无日志"
+        return 0
+    fi
+
+    if declare -F redact_sensitive_output >/dev/null; then
+        tail -n "$lines" "$TRAFFIC_GUARD_LOG" 2>/dev/null | redact_sensitive_output
+    else
+        tail -n "$lines" "$TRAFFIC_GUARD_LOG" 2>/dev/null
+    fi
+}
+
+print_traffic_guard_diagnostic_summary() {
+    local log_lines="${1:-5}"
+    local show_unconfigured="${2:-yes}"
+    local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+    local timer_active timer_enabled has_config has_state has_log usage source_usage live_rx live_tx
+    local limit pct mode_label state_age stale_threshold last_checked state_status config_status log_status
+    local ENABLED IFACE MODE LIMIT_GB LIMIT_BYTES CYCLE_DAY WARN_PERCENT ACTION INITIAL_USED_GB INITIAL_USED_BYTES CHECK_INTERVAL
+
+    [[ "$log_lines" =~ ^[0-9]+$ ]] || log_lines=5
+    (( log_lines >= 0 )) || log_lines=5
+
+    timer_active=$(systemctl is-active vps-traffic-guard.timer 2>/dev/null || true)
+    timer_enabled=$(systemctl is-enabled vps-traffic-guard.timer 2>/dev/null || true)
+    timer_active=${timer_active:-inactive}
+    timer_enabled=${timer_enabled:-disabled}
+    [[ -r "$TRAFFIC_GUARD_CONFIG" ]] && has_config="yes" || has_config="no"
+    [[ -r "$state_file" ]] && has_state="yes" || has_state="no"
+    [[ -r "$TRAFFIC_GUARD_LOG" ]] && has_log="yes" || has_log="no"
+
+    if [[ "$has_config" == "no" && "$has_state" == "no" && "$has_log" == "no" && "$timer_active" != "active" && "$timer_enabled" == "disabled" ]]; then
+        [[ "$show_unconfigured" == "yes" ]] && echo "流量达量关机保护摘要: 未配置"
+        return 0
+    fi
+
+    echo "流量达量关机保护摘要:"
+    echo "- timer: vps-traffic-guard.timer active=${timer_active}; enabled=${timer_enabled}"
+    config_status="不可读或不存在"
+    state_status="不可读或不存在"
+    log_status="不可读或不存在"
+    [[ "$has_config" == "yes" ]] && config_status="存在"
+    [[ "$has_state" == "yes" ]] && state_status="存在"
+    [[ "$has_log" == "yes" ]] && log_status="存在"
+    echo "- 配置文件: ${TRAFFIC_GUARD_CONFIG} (${config_status})"
+    echo "- 状态文件: ${state_file} (${state_status})"
+    echo "- 日志文件: ${TRAFFIC_GUARD_LOG} (${log_status})"
+
+    if [[ "$has_config" != "yes" ]]; then
+        echo "- 当前配置: 未配置或不可读"
+    else
+        # shellcheck disable=SC1090
+        . "$TRAFFIC_GUARD_CONFIG"
+        limit="${LIMIT_BYTES:-0}"
+        if read -r usage live_rx live_tx < <(traffic_guard_live_usage_from_state 2>/dev/null); then
+            source_usage="实时估算"
+        else
+            usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
+            live_rx=""
+            live_tx=""
+            source_usage="上次状态"
+        fi
+        [[ "$usage" =~ ^[0-9]+$ ]] || usage=0
+        [[ "$limit" =~ ^[0-9]+$ ]] || limit=0
+        if (( limit > 0 )); then
+            pct=$(awk -v u="$usage" -v l="$limit" 'BEGIN { printf "%.2f", (u/l)*100 }')
+            mode_label=$(traffic_guard_mode_label "${MODE:-tx}")
+            echo "- 当前配置: ENABLED=${ENABLED:-0}; 模式=${mode_label}; 动作=${ACTION:-poweroff}; 检查间隔=${CHECK_INTERVAL:-60}s"
+            echo "- ${source_usage}: $(traffic_guard_human_bytes "$usage") / $(traffic_guard_human_bytes "$limit") (${pct}%)"
+        else
+            echo "- 当前配置: ENABLED=${ENABLED:-0}; 模式=$(traffic_guard_mode_label "${MODE:-tx}"); 阈值未设置或无效"
+        fi
+        if [[ "$live_rx" =~ ^[0-9]+$ && "$live_tx" =~ ^[0-9]+$ ]]; then
+            echo "- 方向估算: RX $(traffic_guard_human_bytes "$live_rx") / TX $(traffic_guard_human_bytes "$live_tx")"
+        fi
+    fi
+
+    if [[ "$has_state" == "yes" ]]; then
+        last_checked=$(traffic_guard_state_last_checked_at 2>/dev/null || echo "未知")
+        state_age=$(traffic_guard_state_age_seconds 2>/dev/null || echo "")
+        stale_threshold=$(traffic_guard_stale_threshold_seconds)
+        if [[ "$state_age" =~ ^[0-9]+$ ]]; then
+            echo "- 最近检查: ${last_checked} (${state_age}s 前; 超时阈值 ${stale_threshold}s)"
+            if (( state_age > stale_threshold )); then
+                if [[ "$timer_active" == "active" ]]; then
+                    echo "- 异常提示: 最近检查超时，timer active 但状态文件已超过 ${state_age}s 未刷新，请查看日志或使用菜单 [10] -> [7] -> [6] 修复 timer"
+                else
+                    echo "- 异常提示: 最近检查超时，状态文件已超过 ${state_age}s 未刷新，timer 当前为 ${timer_active}"
+                fi
+            fi
+        else
+            echo "- 最近检查: ${last_checked}"
+        fi
+    else
+        echo "- 最近检查: 状态文件尚未生成"
+    fi
+
+    if (( log_lines > 0 )); then
+        echo "- 最近 vps-traffic-guard 日志:"
+        traffic_guard_recent_log_summary "$log_lines" | sed 's/^/  /'
+    fi
 }
 
 show_traffic_guard_status() {

@@ -99,7 +99,11 @@ assert_dist_contains 'connlimit 持久化摘要' "Health overview must expose co
 assert_dist_contains '运行时/保存文件' "Health overview must show runtime/persistent connlimit consistency."
 assert_dist_contains '重启风险提示' "Health overview must show connlimit reboot risk hints."
 assert_dist_contains 'print_443_health_connlimit_scope_notice' "443 health check must include connlimit scope diagnostics."
+assert_dist_contains 'print_443_single_entry_issue_summary' "Issue diagnostics must include a compact 443 single-entry summary."
+assert_dist_contains 'print_443_issue_connlimit_summary' "Issue diagnostics must include compact public 443 connlimit diagnostics."
 assert_file_contains src/sni_stack_health.sh '影响范围：该限制只能作用于整个公网 443 入口，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "443 health check must explain connlimit scope precisely."
+assert_file_contains src/preflight.sh '443 单入口摘要:' "Issue diagnostics must label the compact 443 single-entry summary."
+assert_file_contains src/preflight.sh '443 connlimit: 检测到本脚本添加的公网 443 connlimit 规则' "Issue diagnostics must warn when script-owned public 443 connlimit rules exist."
 assert_dist_contains '影响范围：该限制只能作用于整个公网 443 入口，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "Release script must include the 443 connlimit scope warning."
 assert_file_contains src/menus.sh '如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。' "Health help must mention the connlimit persistence summary."
 assert_file_contains README.md '主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [5 保存/检查重启持久化]' "README must document the connlimit persistence save/check path."
@@ -352,6 +356,62 @@ apt_update_once
     grep -Fq '运行时/保存文件' <<<"$connlimit_health_output"
     grep -Fq '不一致' <<<"$connlimit_health_output"
     grep -Fq '运行时规则与保存文件不同' <<<"$connlimit_health_output"
+)
+
+(
+    source src/common.sh
+    source src/ui.sh
+    source src/input.sh
+    source src/validate.sh
+    source src/diagnostics_status.sh
+    source src/firewall.sh
+    source src/sni_stack_config.sh
+    source src/preflight.sh
+
+    load_sni_stack_env() {
+        ENTRY_MODE=tcp-peek
+        WEB_PROXY_ENGINE=nginx
+        NGINX_LISTEN_PORT=443
+        CADDY_LISTEN_ADDR=127.0.0.1
+        CADDY_LISTEN_PORT=8443
+        XRAY_LISTEN_ADDR=127.0.0.1
+        XRAY_LISTEN_PORT=1443
+        PANEL_DOMAIN=panel.example.com
+        PANEL_WEB_PATH=/panel/
+        PANEL_LISTEN_ADDR=127.0.0.1
+        PANEL_LISTEN_PORT=40000
+        SUB_URI_PATH=/sub/
+        CLASH_URI_PATH=/clash/
+        SUB_LISTEN_ADDR=127.0.0.1
+        SUB_LISTEN_PORT=2096
+        SITE_DOMAINS=(site.example.com)
+        TCP_ROUTE_SNIS=(tcp.example.com)
+        XRAY_SNI_ROUTE_SNIS=(node.example.com)
+        return 0
+    }
+    detect_current_entry_status() {
+        ENTRY_STATUS_MODE="$ENTRY_MODE"
+        ENTRY_STATUS_LISTENER_DISPLAY="TCP Peek + Splice 模式 (vpso-mux 分流器)"
+        ENTRY_STATUS_LISTENER_PROCESS="tcppeek"
+        ENTRY_STATUS_CONSISTENT="yes"
+    }
+    port_connlimit_runtime_rule_fingerprints() {
+        printf '%s\n' 'IPv4:-A INPUT -p tcp --dport 443 -m comment --comment VPSO_CONN_LIMIT_PORT_443 -j REJECT'
+    }
+    port_connlimit_known_saved_rule_fingerprints() {
+        printf '%s\n' 'IPv4:-A INPUT -p tcp --dport 443 -m comment --comment VPSO_CONN_LIMIT_PORT_443 -j REJECT'
+    }
+
+    issue_443_output=$(print_443_single_entry_issue_summary 2>&1)
+    grep -Fq 'ENTRY_MODE: tcp-peek' <<<"$issue_443_output"
+    grep -Fq '公网 443 监听归属: TCP Peek + Splice 模式 (vpso-mux 分流器) (tcppeek); 与 ENTRY_MODE 一致' <<<"$issue_443_output"
+    grep -Fq 'Caddy/Web 本地后端: Nginx 本地 HTTPS 反代 127.0.0.1:8443' <<<"$issue_443_output"
+    grep -Fq 'Xray 本地后端: 127.0.0.1:1443' <<<"$issue_443_output"
+    grep -Fq '面板路径: https://panel.example.com/panel/ -> 127.0.0.1:40000' <<<"$issue_443_output"
+    grep -Fq '订阅路径: 普通 /sub/, Clash/Mihomo /clash/ -> 127.0.0.1:2096' <<<"$issue_443_output"
+    grep -Fq '扩展路由: Web 1 个, TCP/SNI 1 个, Xray 入站 1 个' <<<"$issue_443_output"
+    grep -Fq '443 connlimit: 检测到本脚本添加的公网 443 connlimit 规则 (VPSO_CONN_LIMIT_PORT_443)' <<<"$issue_443_output"
+    grep -Fq '不能精确到某个 SNI' <<<"$issue_443_output"
 )
 
 [[ "$(nginx_stream_listen_directives "127.0.0.1" "443")" == "    listen 127.0.0.1:443;" ]]
@@ -816,6 +876,10 @@ grep -q 'traffic_guard_sys_class_net' dist/vps.sh
 grep -q 'boot_started_after_cycle_start' dist/vps.sh
 grep -q 'cycle floor applied on ${IFACE}' dist/vps.sh
 grep -q 'traffic_guard_live_usage_from_state' dist/vps.sh
+grep -q 'print_traffic_guard_diagnostic_summary' dist/vps.sh
+grep -q 'traffic_guard_recent_log_summary' dist/vps.sh
+grep -q 'timer active 但状态文件已超过' dist/vps.sh
+grep -q '最近 vps-traffic-guard 日志' dist/vps.sh
 grep -q 'repair_traffic_guard_timer' dist/vps.sh
 grep -q '最近检查超时' dist/vps.sh
 grep -q '本周期已用 .*实时估算' dist/vps.sh
@@ -839,10 +903,82 @@ if grep -q '重置日只支持 1-28' dist/vps.sh; then
 fi
 grep -q 'counter reset detected on ${IFACE}, baseline reset and preserved current counters' dist/vps.sh
 grep -q 'traffic|quota|bill|流量|达量|账单) echo "10"' dist/vps.sh
+traffic_guard_menu_path='主菜单 [10 网络与内核优化] -> [7 流量达量关机保护]'
+assert_file_contains CHANGELOG.md "$traffic_guard_menu_path" "CHANGELOG must document the current traffic guard menu path."
+assert_file_contains README.md "$traffic_guard_menu_path" "README must document the current traffic guard menu path."
+assert_file_contains src/menus.sh '10 -> 7  流量达量关机保护' "Menu help must keep traffic guard under network/kernel option 10 -> 7."
+assert_file_not_contains CHANGELOG.md '[9 网络与内核优化] -> [7]' "CHANGELOG must not keep the stale traffic guard menu path."
 if grep -q '20\..*流量达量关机保护' dist/vps.sh; then
     echo "Traffic guard must stay in the network submenu, not the main menu." >&2
     exit 1
 fi
+
+(
+    source src/traffic_guard.sh
+    tmp=$(mktemp -d /tmp/vps-traffic-guard-diag-smoke.XXXXXX)
+    fake_sys="${tmp}/sys-class-net"
+    config="${tmp}/traffic-guard.conf"
+    state_dir="${tmp}/state"
+    log_file="${tmp}/traffic-guard.log"
+    iface="eth-diag0"
+    current_cycle=$(traffic_guard_current_cycle_key 1)
+    TRAFFIC_GUARD_CONFIG="$config"
+    TRAFFIC_GUARD_STATE_DIR="$state_dir"
+    TRAFFIC_GUARD_LOG="$log_file"
+    VPSO_TRAFFIC_GUARD_SYS_CLASS_NET="$fake_sys"
+    mkdir -p "${fake_sys}/${iface}/statistics" "$state_dir"
+    printf 'up\n' > "${fake_sys}/${iface}/operstate"
+    printf '1700\n' > "${fake_sys}/${iface}/statistics/rx_bytes"
+    printf '2600\n' > "${fake_sys}/${iface}/statistics/tx_bytes"
+    cat > "$config" <<EOF
+ENABLED='1'
+IFACE='${iface}'
+MODE='total'
+LIMIT_GB='0.00001'
+LIMIT_BYTES='10000'
+CYCLE_DAY='1'
+WARN_PERCENT='90'
+ACTION='log'
+INITIAL_USED_GB='0'
+INITIAL_USED_BYTES='0'
+CHECK_INTERVAL='60'
+EOF
+    cat > "${state_dir}/state" <<EOF
+CYCLE_KEY='${current_cycle}'
+STATE_IFACE='${iface}'
+STATE_MODE='total'
+BASE_RX='1000'
+BASE_TX='2000'
+OFFSET_RX_BYTES='100'
+OFFSET_TX_BYTES='200'
+OFFSET_BYTES='300'
+WARN_SENT='0'
+TRIPPED='0'
+LAST_RX='1500'
+LAST_TX='2400'
+LAST_USAGE='900'
+LAST_CHECKED_AT='2000-01-01T00:00:00+00:00'
+EOF
+    printf '%s\n' 'old line' 'quota reached 900/10000 bytes on eth-diag0, mode=total, action=log' > "$log_file"
+    systemctl() {
+        case "$1" in
+            is-active) [[ "$2" == "vps-traffic-guard.timer" ]] && printf '%s\n' "active" ;;
+            is-enabled) [[ "$2" == "vps-traffic-guard.timer" ]] && printf '%s\n' "enabled" ;;
+            *) return 1 ;;
+        esac
+    }
+    traffic_guard_diag_output=$(print_traffic_guard_diagnostic_summary 2 yes 2>&1)
+    grep -Fq 'timer: vps-traffic-guard.timer active=active; enabled=enabled' <<<"$traffic_guard_diag_output"
+    grep -Fq "配置文件: ${config} (存在)" <<<"$traffic_guard_diag_output"
+    grep -Fq "状态文件: ${state_dir}/state (存在)" <<<"$traffic_guard_diag_output"
+    grep -Fq "日志文件: ${log_file} (存在)" <<<"$traffic_guard_diag_output"
+    grep -Fq '模式=出入总量 RX+TX' <<<"$traffic_guard_diag_output"
+    grep -Fq '实时估算:' <<<"$traffic_guard_diag_output"
+    grep -Fq '方向估算: RX' <<<"$traffic_guard_diag_output"
+    grep -Fq 'timer active 但状态文件已超过' <<<"$traffic_guard_diag_output"
+    grep -Fq '最近 vps-traffic-guard 日志:' <<<"$traffic_guard_diag_output"
+    grep -Fq 'quota reached 900/10000 bytes on eth-diag0' <<<"$traffic_guard_diag_output"
+)
 
 traffic_guard_accounting_regression() {
     # shellcheck disable=SC1091
