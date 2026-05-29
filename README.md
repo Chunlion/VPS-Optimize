@@ -1,8 +1,8 @@
 # 🚀 VPS-Optimize
 
 ![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&logoColor=white)
-![License](https://img.shields.io/github/license/Chunlion/VPS-Optimize)
-![Release](https://img.shields.io/github/v/release/Chunlion/VPS-Optimize?display_name=tag&sort=semver)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/badge/Release-latest-blue.svg)](https://github.com/Chunlion/VPS-Optimize/releases/latest)
 ![Stars](https://img.shields.io/github/stars/Chunlion/VPS-Optimize?style=social)
 
 一个 `cy` 命令，完成 VPS 初始化、安全加固、面板部署、443 单入口、订阅工具和故障排查。
