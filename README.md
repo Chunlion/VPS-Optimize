@@ -1,7 +1,7 @@
 # 🚀 VPS-Optimize
 
 ![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&logoColor=white)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/badge/Release-latest-blue.svg)](https://github.com/Chunlion/VPS-Optimize/releases/latest)
 ![Stars](https://img.shields.io/github/stars/Chunlion/VPS-Optimize?style=social)
 
@@ -340,4 +340,4 @@ curl -I https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh
 
 ## 📜 开源协议
 
-本项目使用 [MIT License](LICENSE)。
+本项目使用 [GNU General Public License v3.0](LICENSE)。
