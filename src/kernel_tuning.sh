@@ -8,6 +8,111 @@ func_bbr_manage() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
+sysctl_tune_split_line() {
+    local line="$1"
+    line="${line//$'\r'/}"
+    printf '%s\n' "$line" | awk '
+        {
+            gsub(/;/, "\n")
+            parts_count = split($0, parts, /\n/)
+            for (part_idx = 1; part_idx <= parts_count; part_idx++) {
+                rest = parts[part_idx]
+                sub(/^[[:space:]]+/, "", rest)
+                sub(/[[:space:]]+$/, "", rest)
+                sub(/^(sudo[[:space:]]+)?sysctl[[:space:]]+(-w[[:space:]]+)?/, "", rest)
+                while (match(rest, /[[:space:]]+((sudo[[:space:]]+)?sysctl[[:space:]]+(-w[[:space:]]+)?[A-Za-z0-9_.-]+[[:space:]]*=|[A-Za-z0-9_.-]+[[:space:]]*=)/)) {
+                    before = substr(rest, 1, RSTART - 1)
+                    if (before ~ /[^[:space:]]/) print before
+                    rest = substr(rest, RSTART + 1)
+                    sub(/^(sudo[[:space:]]+)?sysctl[[:space:]]+(-w[[:space:]]+)?/, "", rest)
+                }
+                if (rest ~ /[^[:space:]]/) print rest
+            }
+        }
+    '
+}
+
+sysctl_tune_normalize_record() {
+    local candidate="$1" key value
+    candidate="$(trim_input "$candidate")"
+    [[ -z "$candidate" ]] && return 1
+
+    if [[ "$candidate" =~ ^(sudo[[:space:]]+)?sysctl[[:space:]]+(-w[[:space:]]+)?(.+)$ ]]; then
+        candidate="$(trim_input "${BASH_REMATCH[3]}")"
+    fi
+
+    if [[ "$candidate" =~ ^([A-Za-z0-9_.-]+)[[:space:]]*=[[:space:]]*(.+)$ ]]; then
+        key="${BASH_REMATCH[1]}"
+        value="$(trim_input "${BASH_REMATCH[2]}")"
+        [[ -z "$value" ]] && return 2
+        printf '%s = %s\n' "$key" "$value"
+        return 0
+    fi
+
+    return 2
+}
+
+sysctl_tune_check_supported_file() {
+    local conf_file="$1"
+    local line key item_no=0 output
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="$(trim_input "$line")"
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
+        item_no=$((item_no + 1))
+        if [[ "$line" =~ ^([A-Za-z0-9_.-]+)[[:space:]]*= ]]; then
+            key="${BASH_REMATCH[1]}"
+        else
+            echo -e "${RED}❌ 第 ${item_no} 项语法错误: $line${PLAIN}"
+            return 1
+        fi
+        if ! output=$(sysctl -n "$key" 2>&1); then
+            echo -e "${RED}❌ 第 ${item_no} 项当前内核不支持: $key${PLAIN}"
+            [[ -n "$output" ]] && echo -e "${YELLOW}sysctl 输出：${output}${PLAIN}"
+            return 1
+        fi
+    done < "$conf_file"
+    return 0
+}
+
+sysctl_tune_apply_file() {
+    local conf_file="$1"
+    local line key value item_no=0 output
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="$(trim_input "$line")"
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
+        item_no=$((item_no + 1))
+        if [[ "$line" =~ ^([A-Za-z0-9_.-]+)[[:space:]]*=[[:space:]]*(.+)$ ]]; then
+            key="${BASH_REMATCH[1]}"
+            value="$(trim_input "${BASH_REMATCH[2]}")"
+        else
+            echo -e "${RED}❌ 第 ${item_no} 项语法错误: $line${PLAIN}"
+            return 1
+        fi
+        if ! output=$(sysctl -w "$key=$value" 2>&1); then
+            echo -e "${RED}❌ 第 ${item_no} 项应用失败: ${key} = ${value}${PLAIN}"
+            if [[ "$output" == *"cannot stat"* || "$output" == *"No such file"* ]]; then
+                echo -e "${YELLOW}原因：当前内核不支持该参数。${PLAIN}"
+            else
+                echo -e "${YELLOW}原因：当前内核拒绝该值或参数值语法错误。${PLAIN}"
+            fi
+            [[ -n "$output" ]] && echo -e "${YELLOW}sysctl 输出：${output}${PLAIN}"
+            return 1
+        fi
+    done < "$conf_file"
+    return 0
+}
+
+sysctl_tune_restore_previous_config() {
+    local backup_f="$1"
+    local temp_f="$2"
+    if [[ -f "$backup_f" ]]; then
+        mv "$backup_f" "$temp_f"
+        sysctl -p "$temp_f" >/dev/null 2>&1
+    else
+        rm -f "$temp_f"
+    fi
+}
+
 # ---------------------------------------------------------
 # 7. 动态 TCP 调优 (修复版：放宽正则以兼容多值与特殊符号)
 # ---------------------------------------------------------
@@ -35,45 +140,60 @@ func_tcp_tune() {
     echo -e "${YELLOW}💡 粘贴完成后，请按下【回车键】，然后输入 ${RED}EOF${YELLOW} 并再次回车保存：${PLAIN}"
     
     local has_content=false
+    local parse_failed=false
     while IFS= read -r line; do
         # 极简清洗：去除回车符和前后多余空格
-        line=$(echo "$line" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+        line="$(trim_input "$line")"
         
         # 结束符匹配（忽略大小写）
         if [[ "${line,,}" == "eof" ]]; then
             break
         fi
         
-        # 【核心修复】：放宽等号右侧的值校验，允许包含空格(如 tcp_rmem) 和特殊符号(如 %)
-        if [[ -z "$line" || "$line" =~ ^# || "$line" =~ ^[a-zA-Z0-9_.-]+[[:space:]]*=[[:space:]]*.+$ ]]; then
+        if [[ -z "$line" || "$line" =~ ^# ]]; then
             echo "$line" >> "$temp_f"
-            # 标记确实写入了有效参数，而不是只敲了几个回车
-            [[ -n "$line" && ! "$line" =~ ^# ]] && has_content=true
-        else
-            echo -e "${RED}⚠️ 已自动过滤非法参数行: $line${PLAIN}"
+            continue
         fi
+
+        local candidate record status
+        while IFS= read -r candidate; do
+            record=$(sysctl_tune_normalize_record "$candidate")
+            status=$?
+            case "$status" in
+                0)
+                    echo "$record" >> "$temp_f"
+                    has_content=true
+                    ;;
+                1)
+                    ;;
+                *)
+                    echo -e "${RED}❌ 参数语法错误，已停止应用: $candidate${PLAIN}"
+                    echo -e "${YELLOW}格式应为: net.ipv4.tcp_xxx = value${PLAIN}"
+                    parse_failed=true
+                    ;;
+            esac
+        done < <(sysctl_tune_split_line "$line")
     done
     
-    if $has_content; then
+    if $parse_failed; then
+        echo -e "${YELLOW}正在触发安全回滚...${PLAIN}"
+        sysctl_tune_restore_previous_config "$backup_f" "$temp_f"
+        echo -e "${BLUE}✅ 已恢复系统原 TCP 配置文件。${PLAIN}"
+    elif $has_content; then
         echo -e "${CYAN}▶ 正在校验并应用新 TCP 参数...${PLAIN}"
         # 验证新配置是否被内核完全接受
-        if sysctl -p "$temp_f" >/dev/null 2>&1; then
+        if sysctl_tune_check_supported_file "$temp_f" && sysctl_tune_apply_file "$temp_f"; then
             echo -e "${GREEN}✅ 动态 TCP 调优参数应用成功！网络吞吐量已提升。${PLAIN}"
             rm -f "$backup_f" # 成功则删除备份
         else
             echo -e "${RED}❌ 致命错误：您粘贴的部分参数当前内核不支持或语法错误！${PLAIN}"
             echo -e "${YELLOW}正在触发安全回滚...${PLAIN}"
-            if [[ -f "$backup_f" ]]; then
-                mv "$backup_f" "$temp_f"
-                sysctl -p "$temp_f" >/dev/null 2>&1
-            else
-                rm -f "$temp_f"
-            fi
+            sysctl_tune_restore_previous_config "$backup_f" "$temp_f"
             echo -e "${BLUE}✅ 已恢复系统原 TCP 状态，未造成任何破坏。${PLAIN}"
         fi
     else
         echo -e "${YELLOW}⚠️ 未检测到有效的 TCP 调优参数，操作已取消。${PLAIN}"
-        if [[ -f "$backup_f" ]]; then mv "$backup_f" "$temp_f"; else rm -f "$temp_f"; fi
+        sysctl_tune_restore_previous_config "$backup_f" "$temp_f"
     fi
     
     read -n 1 -s -r -p "按任意键继续..."

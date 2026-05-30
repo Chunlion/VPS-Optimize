@@ -221,6 +221,27 @@ if is_yes "no"; then
     exit 1
 fi
 [[ "$(normalize_domain_input " HTTPS://Panel.Example.COM:443/path ")" == "panel.example.com" ]]
+(
+    source src/kernel_tuning.sh
+    mapfile -t tcp_tune_records < <(
+        while IFS= read -r tcp_tune_candidate; do
+            tcp_tune_record=$(sysctl_tune_normalize_record "$tcp_tune_candidate")
+            tcp_tune_status=$?
+            case "$tcp_tune_status" in
+                0) printf '%s\n' "$tcp_tune_record" ;;
+                1) ;;
+                *) exit 2 ;;
+            esac
+        done < <(sysctl_tune_split_line 'net.ipv4.tcp_fin_timeout = 15 net.ipv4.tcp_rmem = 4096 87380 67108864; sysctl -w net.core.default_qdisc=fq')
+    )
+    [[ "${#tcp_tune_records[@]}" -eq 3 ]]
+    [[ "${tcp_tune_records[0]}" == "net.ipv4.tcp_fin_timeout = 15" ]]
+    [[ "${tcp_tune_records[1]}" == "net.ipv4.tcp_rmem = 4096 87380 67108864" ]]
+    [[ "${tcp_tune_records[2]}" == "net.core.default_qdisc = fq" ]]
+    tcp_tune_bad_status=0
+    sysctl_tune_normalize_record 'net.ipv4.tcp_fin_timeout 15' >/dev/null || tcp_tune_bad_status=$?
+    [[ "$tcp_tune_bad_status" == "2" ]]
+)
 declare -f func_edit_applied_config_center >/dev/null
 declare -f edit_applied_config_file >/dev/null
 declare -f validate_applied_config_kind >/dev/null
