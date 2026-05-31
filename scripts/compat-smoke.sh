@@ -26,6 +26,14 @@ assert_function_once() {
     fi
 }
 
+assert_function_loaded() {
+    local function_name="$1"
+    if ! declare -F "$function_name" >/dev/null 2>&1; then
+        echo "${function_name} must be loadable during compatibility smoke." >&2
+        exit 1
+    fi
+}
+
 bash scripts/build.sh >/dev/null
 bash -n scripts/build.sh scripts/selfcheck.sh scripts/compat-smoke.sh
 bash -n vps.sh dist/vps.sh dog.sh xui-custom-manager.sh
@@ -60,5 +68,64 @@ assert_file_contains dist/vps.sh '/var/log/vps-traffic-guard.log'
 assert_file_contains dist/vps.sh 'backend_retry_attempts'
 assert_file_contains dist/vps.sh '日志容量摘要'
 assert_file_contains dist/vps.sh '配置与状态文件权限体检'
+
+compat_tmp_dir=$(mktemp -d /tmp/vps-compat-smoke.XXXXXX)
+cleanup_compat_tmp() {
+    [[ -n "${compat_tmp_dir:-}" && -d "$compat_tmp_dir" ]] || return 0
+    rm -f "$compat_tmp_dir/missing.log"
+    rm -f "$compat_tmp_dir/missing.log.1"
+    rm -f "$compat_tmp_dir/empty.log"
+    rm -f "$compat_tmp_dir/empty.log.1"
+    rm -f "$compat_tmp_dir/small.log"
+    rm -f "$compat_tmp_dir/small.log.1"
+    rm -f "$compat_tmp_dir/large.log"
+    rm -f "$compat_tmp_dir/large.log.1"
+    rm -f "$compat_tmp_dir/large.log.2"
+    rm -f "$compat_tmp_dir/large.log.3"
+    rmdir "$compat_tmp_dir" 2>/dev/null || true
+}
+trap cleanup_compat_tmp EXIT
+
+source src/common.sh
+source src/ui.sh
+
+for function_name in render_menu dispatch_menu_choice rotate_log_file format_bytes; do
+    assert_function_loaded "$function_name"
+done
+
+compat_menu_handler_called=0
+compat_menu_handler() {
+    compat_menu_handler_called=1
+}
+COMPAT_MENU_ITEMS=(
+    "1|Compat check|No-op handler|compat_menu_handler|"
+)
+render_output=$(render_menu COMPAT_MENU_ITEMS)
+[[ "$render_output" == *"Compat check"* ]]
+if dispatch_menu_choice "invalid" COMPAT_MENU_ITEMS; then
+    echo "dispatch_menu_choice must reject invalid input without dispatching." >&2
+    exit 1
+fi
+[[ "$compat_menu_handler_called" == "0" ]]
+
+rotate_log_file "$compat_tmp_dir/missing.log" 1 3
+touch "$compat_tmp_dir/empty.log"
+rotate_log_file "$compat_tmp_dir/empty.log" 1 3
+[[ -f "$compat_tmp_dir/empty.log" ]]
+[[ ! -e "$compat_tmp_dir/empty.log.1" ]]
+
+printf 'abc' > "$compat_tmp_dir/small.log"
+rotate_log_file "$compat_tmp_dir/small.log" 10 3
+[[ -f "$compat_tmp_dir/small.log" ]]
+[[ ! -e "$compat_tmp_dir/small.log.1" ]]
+
+printf 'abcdef' > "$compat_tmp_dir/large.log"
+rotate_log_file "$compat_tmp_dir/large.log" 4 3
+[[ ! -e "$compat_tmp_dir/large.log" ]]
+[[ -f "$compat_tmp_dir/large.log.1" ]]
+
+[[ -n "$(format_bytes 0)" ]]
+[[ -n "$(format_bytes 1024)" ]]
+[[ -n "$(format_bytes 1048576)" ]]
 
 echo "Compatibility smoke passed."
