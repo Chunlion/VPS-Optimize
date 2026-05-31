@@ -31,6 +31,8 @@ print_log_capacity_summary() {
     print_log_capacity_group "/var/log/vpso-mux*" "/var/log/vpso-mux*"
     print_log_capacity_group "/var/log/vps-traffic-guard.log" "/var/log/vps-traffic-guard.log*"
     echo "- Bash 日志默认超过 $(format_bytes "$VPSO_DEFAULT_LOG_MAX_BYTES") 后保留 ${VPSO_DEFAULT_LOG_ROTATE_KEEP} 份轮转副本；systemd journal 仍按系统策略输出。"
+    echo "- 本页只汇总容量；不会轮转或重开已经被长期进程打开的日志 fd。"
+    echo "- daemon 直写文件时，请配合 systemd/journal、服务重载/重启，或可重开文件的日志实现。"
 }
 
 vpso_permission_mode() {

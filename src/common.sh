@@ -68,6 +68,9 @@ format_bytes() {
     }'
 }
 
+# Lightweight path-based rotation for logs that shell helpers append by name.
+# It intentionally does not create a fresh file after mv; daemons that keep an
+# open fd need journald, a reload/restart, or log code that can reopen files.
 rotate_log_file() {
     local log_file="$1"
     local max_bytes="${2:-$VPSO_DEFAULT_LOG_MAX_BYTES}"
