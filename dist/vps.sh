@@ -223,6 +223,27 @@ ensure_minimal_system_compat() {
     update-ca-certificates >/dev/null 2>&1 || update-ca-trust >/dev/null 2>&1 || true
 }
 
+is_vps_optimize_generated_script() {
+    local file="$1"
+    [[ -f "$file" ]] || return 1
+    grep -Fq "Project:  VPS Optimize" "$file" || return 1
+    grep -Fq "Generated: scripts/build.sh" "$file" || return 1
+    grep -Fq "VPS 全能控制面板" "$file" || return 1
+    grep -Fq "main_menu" "$file" || return 1
+}
+
+copy_shortcut_candidate() {
+    local source_file="$1"
+    local target_file="$2"
+    local label="$3"
+
+    if ! is_vps_optimize_generated_script "$source_file"; then
+        echo -e "${YELLOW}⚠️ ${label} 未通过 VPS-Optimize 发布脚本标识校验，已拒绝注册快捷指令。${PLAIN}"
+        return 1
+    fi
+    cp "$source_file" "$target_file" 2>/dev/null
+}
+
 create_shortcut() {
     local script_path="/usr/local/bin/cy"
     local release_path
@@ -231,13 +252,13 @@ create_shortcut() {
         if ! download_remote_script "$UPDATE_URL" "$script_path" 2>/dev/null; then
             release_path="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/dist/vps.sh"
             if [[ -f "$release_path" ]]; then
-                cp "$release_path" "$script_path" 2>/dev/null || {
+                copy_shortcut_candidate "$release_path" "$script_path" "本地 dist/vps.sh" || {
                     echo -e "${YELLOW}⚠️ 快捷指令本地注册失败，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
                     return
                 }
             # 若远端拉取失败，且检测到 $0 确实是本地存在的物理文件，才允许复制
             elif [[ -f "$0" ]]; then
-                cp "$(readlink -f "$0")" "$script_path" 2>/dev/null || {
+                copy_shortcut_candidate "$(readlink -f "$0")" "$script_path" "当前脚本 \$0" || {
                     echo -e "${YELLOW}⚠️ 快捷指令本地注册失败，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
                     return
                 }
