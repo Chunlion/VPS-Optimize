@@ -918,10 +918,14 @@ grep -q 'cycle floor applied on ${IFACE}' dist/vps.sh
 grep -q 'traffic_guard_live_usage_from_state' dist/vps.sh
 grep -q 'print_traffic_guard_diagnostic_summary' dist/vps.sh
 grep -q 'traffic_guard_recent_log_summary' dist/vps.sh
+grep -q 'traffic_guard_run_checker_once' dist/vps.sh
+grep -q 'sync_traffic_guard_now' dist/vps.sh
 grep -q 'timer active 但状态文件已超过' dist/vps.sh
 grep -q '最近 vps-traffic-guard 日志' dist/vps.sh
 grep -q 'repair_traffic_guard_timer' dist/vps.sh
 grep -q '最近检查超时' dist/vps.sh
+grep -q '立即同步/验证检查器' dist/vps.sh
+grep -Fq 'ExecStart=/usr/bin/env bash ${TRAFFIC_GUARD_CHECKER}' dist/vps.sh
 grep -q '本周期已用 .*实时估算' dist/vps.sh
 grep -q '网卡原始计数 .*不等于本周期已用' dist/vps.sh
 grep -q '保护触发只看“本周期已用”' dist/vps.sh

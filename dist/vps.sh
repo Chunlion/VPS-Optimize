@@ -16809,6 +16809,70 @@ reset_traffic_guard_failed_state() {
     systemctl reset-failed vps-traffic-guard.service vps-traffic-guard.timer >/dev/null 2>&1 || true
 }
 
+traffic_guard_state_epoch() {
+    local checked_at
+    checked_at=$(traffic_guard_state_last_checked_at 2>/dev/null) || { echo 0; return 0; }
+    date -d "$checked_at" +%s 2>/dev/null || echo 0
+}
+
+traffic_guard_print_timer_failure_context() {
+    echo -e "${YELLOW}▶ Traffic Guard 检查器/Timer 诊断上下文${PLAIN}"
+    echo -e "checker : ${TRAFFIC_GUARD_CHECKER}"
+    ls -l "$TRAFFIC_GUARD_CHECKER" 2>/dev/null || true
+    echo -e "config  : ${TRAFFIC_GUARD_CONFIG}"
+    ls -l "$TRAFFIC_GUARD_CONFIG" 2>/dev/null || true
+    echo -e "state   : ${TRAFFIC_GUARD_STATE_DIR}/state"
+    ls -l "${TRAFFIC_GUARD_STATE_DIR}/state" 2>/dev/null || true
+    echo -e "${YELLOW}▶ systemd timer:${PLAIN}"
+    systemctl status vps-traffic-guard.timer --no-pager -l 2>/dev/null || true
+    systemctl list-timers --all vps-traffic-guard.timer --no-pager 2>/dev/null || true
+    echo -e "${YELLOW}▶ systemd service:${PLAIN}"
+    systemctl status vps-traffic-guard.service --no-pager -l 2>/dev/null || true
+    echo -e "${YELLOW}▶ 最近 journal:${PLAIN}"
+    journalctl -u vps-traffic-guard.service -u vps-traffic-guard.timer -n 80 --no-pager 2>/dev/null || true
+    echo -e "${YELLOW}▶ 最近脚本日志:${PLAIN}"
+    traffic_guard_recent_log_summary 20
+}
+
+traffic_guard_run_checker_once() {
+    local before_epoch after_epoch age rc=0 runner
+    before_epoch=$(traffic_guard_state_epoch)
+    runner="direct"
+
+    if [[ ! -x "$TRAFFIC_GUARD_CHECKER" ]]; then
+        echo -e "${RED}❌ 检查器不存在或不可执行：${TRAFFIC_GUARD_CHECKER}${PLAIN}"
+        return 1
+    fi
+
+    reset_traffic_guard_failed_state
+    if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files vps-traffic-guard.service --no-legend >/dev/null 2>&1; then
+        runner="systemd"
+        systemctl start vps-traffic-guard.service >/dev/null 2>&1 || rc=$?
+    else
+        "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || rc=$?
+    fi
+    reset_traffic_guard_failed_state
+
+    if (( rc != 0 )); then
+        echo -e "${RED}❌ 已尝试通过 ${runner} 运行检查器，但执行失败 rc=${rc}。${PLAIN}"
+        return 1
+    fi
+
+    after_epoch=$(traffic_guard_state_epoch)
+    age=$(traffic_guard_state_age_seconds 2>/dev/null || echo "")
+    if [[ "$age" =~ ^[0-9]+$ && "$age" -le 120 ]]; then
+        echo -e "${GREEN}✅ 检查器已立即运行，状态文件已刷新。${PLAIN}"
+        return 0
+    fi
+    if [[ "$after_epoch" =~ ^[0-9]+$ && "$before_epoch" =~ ^[0-9]+$ && "$after_epoch" -gt "$before_epoch" ]]; then
+        echo -e "${GREEN}✅ 检查器已立即运行，状态时间已推进。${PLAIN}"
+        return 0
+    fi
+
+    echo -e "${RED}❌ 检查器执行结束但状态文件没有刷新。${PLAIN}"
+    return 1
+}
+
 install_traffic_guard_units() {
     local interval="$1"
     [[ "$interval" =~ ^[0-9]+$ ]] || interval=60
@@ -16817,11 +16881,16 @@ install_traffic_guard_units() {
     cat > /etc/systemd/system/vps-traffic-guard.service <<EOF
 [Unit]
 Description=VPS-Optimize traffic quota guard
+Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=${TRAFFIC_GUARD_CHECKER}
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/env bash ${TRAFFIC_GUARD_CHECKER}
+TimeoutStartSec=30
+StandardOutput=journal
+StandardError=journal
 EOF
 
     cat > /etc/systemd/system/vps-traffic-guard.timer <<EOF
@@ -16834,6 +16903,7 @@ OnActiveSec=${interval}s
 OnUnitActiveSec=${interval}s
 AccuracySec=10s
 Persistent=true
+Unit=vps-traffic-guard.service
 
 [Install]
 WantedBy=timers.target
@@ -17183,11 +17253,39 @@ show_traffic_guard_status() {
         state_age=$(traffic_guard_state_age_seconds 2>/dev/null || echo "")
         stale_threshold=$(traffic_guard_stale_threshold_seconds)
         if [[ "$state_age" =~ ^[0-9]+$ && "$state_age" -gt "$stale_threshold" ]]; then
-            echo -e "${RED}异常提示 : 最近检查已超过 ${state_age}s，timer 显示 active 也不能代表检查器真的在刷新。请先查看日志，必要时用本菜单 [6] 修复 timer。${PLAIN}"
+            echo -e "${RED}异常提示 : 最近检查已超过 ${state_age}s，timer 显示 active 也不能代表检查器真的在刷新。请用本菜单 [7] 立即同步/验证；如失败再用 [6] 重装 timer。${PLAIN}"
         fi
     else
         echo -e "${YELLOW}尚未生成状态文件，timer 首次运行后会自动初始化基线。${PLAIN}"
     fi
+}
+
+sync_traffic_guard_now() {
+    load_traffic_guard_config || {
+        echo -e "${YELLOW}尚未配置流量达量关机保护。${PLAIN}"
+        pause_return
+        return 1
+    }
+
+    if [[ "${ACTION:-poweroff}" == "poweroff" ]]; then
+        confirm_danger "立即运行一次流量保护检查器" \
+            "会立刻读取 ${IFACE:-当前网卡} 流量并刷新 ${TRAFFIC_GUARD_STATE_DIR}/state；如果已经超过阈值，会按当前配置执行 poweroff。" \
+            "如只是 timer 未刷新，可在同步失败后查看诊断上下文并重新修复 timer；如阈值配置错误，请先停用或重设基线。" \
+            "当前低于阈值时这是最直接的同步方式；接近阈值时请先确认云厂商后台流量。" || return 1
+    else
+        confirm_risk_action "立即运行一次流量保护检查器" \
+            "会立刻读取 ${IFACE:-当前网卡} 流量并刷新 ${TRAFFIC_GUARD_STATE_DIR}/state。" \
+            "同步失败时查看诊断上下文，或重新修复 timer。" \
+            "当前 ACTION=${ACTION:-log}，达到阈值时只按配置动作执行。" || return 1
+    fi
+
+    echo -e "${CYAN}▶ 正在立即运行 vps-traffic-guard-check 并验证状态刷新...${PLAIN}"
+    if traffic_guard_run_checker_once; then
+        show_traffic_guard_status
+        return 0
+    fi
+    traffic_guard_print_timer_failure_context
+    return 1
 }
 
 configure_traffic_guard() {
@@ -17407,7 +17505,16 @@ repair_traffic_guard_timer() {
     systemctl restart vps-traffic-guard.timer >/dev/null 2>&1 || true
     reset_traffic_guard_failed_state
     echo -e "${GREEN}✅ 已重装并重启 vps-traffic-guard.timer。${PLAIN}"
-    echo -e "${YELLOW}请等待一个检查周期后回到 [2] 查看最近检查时间；也可以查看 [5] 日志。${PLAIN}"
+    echo -e "${CYAN}▶ 正在立即运行一次检查器，验证状态文件是否刷新...${PLAIN}"
+    if traffic_guard_run_checker_once; then
+        echo -e "${GREEN}✅ 已重装 timer，并确认检查器可以刷新状态。${PLAIN}"
+    else
+        echo -e "${RED}❌ timer 已重装，但检查器仍未刷新状态。下面是可直接排查的上下文：${PLAIN}"
+        traffic_guard_print_timer_failure_context
+        pause_return
+        return 1
+    fi
+    echo -e "${YELLOW}后续可回到 [2] 查看状态；如果再次过期，用 [7] 可立即验证检查器。${PLAIN}"
     systemctl list-timers --all vps-traffic-guard.timer --no-pager 2>/dev/null || true
     pause_return
 }
@@ -17448,6 +17555,7 @@ func_traffic_guard_menu() {
         echo -e "${YELLOW}  4. 停用保护${PLAIN}"
         echo -e "${GREEN}  5. 查看最近日志${PLAIN}"
         echo -e "${GREEN}  6. 修复/重装自动检查 timer${PLAIN}"
+        echo -e "${GREEN}  7. 立即同步/验证检查器${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -17465,6 +17573,7 @@ func_traffic_guard_menu() {
                 pause_return
                 ;;
             6) repair_traffic_guard_timer ;;
+            7) sync_traffic_guard_now; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
