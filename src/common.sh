@@ -91,44 +91,81 @@ rotate_log_file() {
     mv -f "$log_file" "${log_file}.1" 2>/dev/null || true
 }
 
+pkg_log_file() {
+    local action="${1:-pkg}"
+    local log_dir="/var/log/vps-optimize"
+
+    if mkdir -p "$log_dir" 2>/dev/null && [[ -w "$log_dir" ]]; then
+        mktemp "${log_dir}/pkg-${action}.XXXXXX.log"
+    else
+        mktemp "/tmp/vps-optimize-pkg-${action}.XXXXXX.log"
+    fi
+}
+
+print_pkg_failure_log() {
+    local action="$1"
+    local log_file="$2"
+    shift 2
+    echo -e "${RED}❌ 软件包${action}失败: $*${PLAIN}"
+    echo -e "${YELLOW}日志: ${log_file}${PLAIN}"
+    if [[ -s "$log_file" ]]; then
+        echo -e "${YELLOW}最近 20 行:${PLAIN}"
+        tail -n 20 "$log_file" 2>/dev/null || true
+    else
+        echo -e "${YELLOW}日志为空，可能是包管理器未能启动或当前系统不支持该操作。${PLAIN}"
+    fi
+}
+
 install_pkg() {
     local pkgs=("$@")
-    local rc=0
+    local rc=0 log_file
     [[ ${#pkgs[@]} -gt 0 ]] || return 0
+    log_file=$(pkg_log_file install) || return 1
     if is_debian; then
         # 使用 apt-get 代替 apt，消除 "stable CLI interface" 警告 
         export DEBIAN_FRONTEND=noninteractive
-        apt_update_once || true
-        apt-get install -y -qq "${pkgs[@]}" >/dev/null 2>&1
+        apt_update_once >>"$log_file" 2>&1 || true
+        apt-get install -y -qq "${pkgs[@]}" >>"$log_file" 2>&1
         rc=$?
         unset DEBIAN_FRONTEND
     elif is_redhat; then
         if command -v dnf >/dev/null 2>&1; then
-            dnf install -y -q "${pkgs[@]}" >/dev/null 2>&1
+            dnf install -y -q "${pkgs[@]}" >>"$log_file" 2>&1
         else
-            yum install -y -q "${pkgs[@]}" >/dev/null 2>&1
+            yum install -y -q "${pkgs[@]}" >>"$log_file" 2>&1
         fi
         rc=$?
+    fi
+    if [[ "$rc" -eq 0 ]]; then
+        rm -f "$log_file"
+    else
+        print_pkg_failure_log "安装" "$log_file" "${pkgs[@]}"
     fi
     return "$rc"
 }
 
 remove_pkg() {
     local pkgs=("$@")
-    local rc=0
+    local rc=0 log_file
     [[ ${#pkgs[@]} -gt 0 ]] || return 0
+    log_file=$(pkg_log_file remove) || return 1
     if is_debian; then
         export DEBIAN_FRONTEND=noninteractive
-        apt-get purge -y -qq "${pkgs[@]}" >/dev/null 2>&1
+        apt-get purge -y -qq "${pkgs[@]}" >>"$log_file" 2>&1
         rc=$?
         unset DEBIAN_FRONTEND
     elif is_redhat; then
         if command -v dnf >/dev/null 2>&1; then
-            dnf remove -y -q "${pkgs[@]}" >/dev/null 2>&1
+            dnf remove -y -q "${pkgs[@]}" >>"$log_file" 2>&1
         else
-            yum remove -y -q "${pkgs[@]}" >/dev/null 2>&1
+            yum remove -y -q "${pkgs[@]}" >>"$log_file" 2>&1
         fi
         rc=$?
+    fi
+    if [[ "$rc" -eq 0 ]]; then
+        rm -f "$log_file"
+    else
+        print_pkg_failure_log "移除" "$log_file" "${pkgs[@]}"
     fi
     return "$rc"
 }
