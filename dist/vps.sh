@@ -31,6 +31,8 @@ TRAFFIC_GUARD_STATE_DIR="/var/lib/vps-optimize/traffic-guard"
 TRAFFIC_GUARD_LOG="/var/log/vps-traffic-guard.log"
 DNS_OPTIMIZE_BACKUP_DIR="/etc/vps-optimize/backups/dns"
 DNS_OPTIMIZE_RESOLVED_DROPIN="/etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf"
+VPSO_DEFAULT_LOG_MAX_BYTES=$((5 * 1024 * 1024))
+VPSO_DEFAULT_LOG_ROTATE_KEEP=3
 
 if [[ -f /etc/os-release ]]; then
     # shellcheck disable=SC1091
@@ -55,6 +57,50 @@ is_redhat() {
 apt_update_once() {
     [[ "$APT_UPDATED" == "1" ]] && return 0
     apt-get update -qq >/dev/null 2>&1 && APT_UPDATED=1
+}
+
+file_size_bytes() {
+    local file="$1"
+    local size
+    [[ -e "$file" ]] || { echo 0; return 0; }
+    size=$(wc -c < "$file" 2>/dev/null | awk '{print $1}')
+    [[ "$size" =~ ^[0-9]+$ ]] || size=0
+    echo "$size"
+}
+
+format_bytes() {
+    local bytes="${1:-0}"
+    [[ "$bytes" =~ ^[0-9]+$ ]] || bytes=0
+    awk -v b="$bytes" 'BEGIN {
+        split("B KiB MiB GiB TiB", u, " ")
+        i = 1
+        while (b >= 1024 && i < 5) { b = b / 1024; i++ }
+        if (i == 1) printf "%d %s", b, u[i]
+        else printf "%.2f %s", b, u[i]
+    }'
+}
+
+rotate_log_file() {
+    local log_file="$1"
+    local max_bytes="${2:-$VPSO_DEFAULT_LOG_MAX_BYTES}"
+    local keep="${3:-$VPSO_DEFAULT_LOG_ROTATE_KEEP}"
+    local size i old_path new_path
+
+    [[ -n "$log_file" && -f "$log_file" ]] || return 0
+    [[ "$max_bytes" =~ ^[0-9]+$ ]] || max_bytes="$VPSO_DEFAULT_LOG_MAX_BYTES"
+    [[ "$keep" =~ ^[0-9]+$ ]] || keep="$VPSO_DEFAULT_LOG_ROTATE_KEEP"
+    (( max_bytes > 0 && keep > 0 )) || return 0
+
+    size=$(file_size_bytes "$log_file")
+    (( size >= max_bytes )) || return 0
+
+    rm -f "${log_file}.${keep}" 2>/dev/null || true
+    for ((i = keep - 1; i >= 1; i--)); do
+        old_path="${log_file}.${i}"
+        new_path="${log_file}.$((i + 1))"
+        [[ -e "$old_path" ]] && mv -f "$old_path" "$new_path" 2>/dev/null || true
+    done
+    mv -f "$log_file" "${log_file}.1" 2>/dev/null || true
 }
 
 install_pkg() {
@@ -260,11 +306,23 @@ run_remote_script() {
     local desc="$1"
     local url="$2"
     shift 2
-    local tmp_file rc
+    local tmp_file rc confirm
     echo -e "${CYAN}▶ ${desc}${PLAIN}"
     echo -e "${YELLOW}脚本来源：${url}${PLAIN}"
     if [[ "$url" != https://* ]]; then
         echo -e "${YELLOW}⚠️ 该来源不是 HTTPS，将按脚本内置地址继续下载执行。${PLAIN}"
+    fi
+
+    if [[ "${VPSO_REMOTE_SCRIPT_CONFIRM:-1}" != "0" ]]; then
+        if declare -F confirm_risk_action >/dev/null 2>&1; then
+            confirm_risk_action "$desc" \
+                "下载并执行远程脚本：${url}" \
+                "取消执行，或根据远程脚本自身备份/卸载方式恢复；必要时使用 VPS 快照或救援模式回滚" \
+                "确认脚本来源可信，并保持当前 SSH 会话不要断开。" || return 1
+        else
+            read -r -p "继续请输入 yes，直接回车取消（大小写均可）: " confirm
+            [[ "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]] || return 1
+        fi
     fi
 
     tmp_file=$(mktemp /tmp/vps-remote.XXXXXX.sh) || {
@@ -343,22 +401,25 @@ confirm_danger() {
     local impact="$2"
     local rollback="$3"
     local advice="${4:-}"
+    local snapshot_advice="${5:-建议先创建 VPS 快照，或确认云厂商快照/救援控制台可用。}"
     local confirm
     echo -e "${RED}⚠️ 高风险操作：${title}${PLAIN}"
     echo ""
-    echo -e "${YELLOW}即将修改：${PLAIN}"
+    echo -e "${YELLOW}操作名称：${PLAIN}${title}"
+    echo -e "${YELLOW}将修改的内容：${PLAIN}"
     echo -e "- ${impact}"
     echo ""
     echo -e "${YELLOW}可能风险：${PLAIN}"
     echo "- 操作失败可能导致 SSH、面板、反代、证书、容器或网络服务短暂不可用。"
     echo "- 如果云厂商安全组、防火墙、监听地址或证书配置不匹配，可能导致远程访问中断。"
     echo ""
-    echo -e "${BLUE}回滚方式：${PLAIN}"
+    echo -e "${BLUE}出错恢复方式：${PLAIN}"
     echo -e "- ${rollback}"
     echo "- 使用当前未断开的 SSH 会话恢复配置。"
     echo "- 使用云厂商控制台、VNC 或救援模式恢复。"
     echo "- 使用备份与回滚入口恢复已纳入备份的配置。"
     echo ""
+    echo -e "${CYAN}是否建议先做快照：${PLAIN}${snapshot_advice}"
     echo -e "${CYAN}建议：${PLAIN}"
     echo "- 已创建 VPS 快照。"
     echo "- 已确认云厂商安全组和系统防火墙规则。"
@@ -371,6 +432,36 @@ confirm_danger() {
 
 confirm_risk_action() {
     confirm_danger "$@"
+}
+
+render_menu() {
+    local items_name="$1"
+    local -n menu_items="$items_name"
+    local item number title description handler risk
+
+    for item in "${menu_items[@]}"; do
+        IFS='|' read -r number title description handler risk <<< "$item"
+        echo -e "${GREEN}  ${number}. ${title}${PLAIN}   ${YELLOW}(${description})${PLAIN}"
+    done
+}
+
+dispatch_menu_choice() {
+    local choice="$1"
+    local items_name="$2"
+    local -n menu_items="$items_name"
+    local item number title description handler risk
+
+    for item in "${menu_items[@]}"; do
+        IFS='|' read -r number title description handler risk <<< "$item"
+        if [[ "$choice" == "$number" ]]; then
+            if [[ -n "$risk" ]] && declare -F confirm_menu_risk >/dev/null; then
+                confirm_menu_risk "$risk" || return 0
+            fi
+            "$handler"
+            return 0
+        fi
+    done
+    return 1
 }
 
 # ---------------------------------------------------------
@@ -1402,8 +1493,10 @@ reload_applied_config_kind() {
             fi
             ;;
         vpso-mux)
-            read_trimmed confirm "vpso-mux 配置已校验，是否现在重启 vpso-mux？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "重启 vpso-mux" \
+                "TCP Peek/vpso-mux 分流器运行进程" \
+                "使用当前未断开的 SSH 会话恢复 ${target_file}.bak_*，或回到 443 单入口菜单重新应用/回滚入口模式" \
+                "确认公网 443 当前入口模式和本机后端端口都正常。"; then
                 restart_named_service_if_available vpso-mux
             else
                 echo -e "${YELLOW}⚠️ vpso-mux 未重启，修改尚未生效。${PLAIN}"
@@ -1424,8 +1517,10 @@ reload_applied_config_kind() {
             fi
             ;;
         traffic-guard)
-            read_trimmed confirm "Traffic Guard 配置已校验，是否现在重启 timer 使其按新配置运行？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "重启 Traffic Guard timer" \
+                "vps-traffic-guard.timer 和流量阈值检查周期" \
+                "重新编辑 ${target_file} 或从 ${target_file}.bak_* 恢复；必要时停用 vps-traffic-guard.timer" \
+                "如果 ACTION=poweroff，请确认阈值、账单周期和云厂商救援方式。"; then
                 systemctl daemon-reload >/dev/null 2>&1 || true
                 systemctl restart vps-traffic-guard.timer >/dev/null 2>&1
             else
@@ -1440,32 +1535,40 @@ reload_applied_config_kind() {
             fi
             ;;
         dns)
-            read_trimmed confirm "DNS 配置已保存，是否现在重启 systemd-resolved？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "重启 systemd-resolved" \
+                "系统 DNS 解析服务和 resolved drop-in 配置" \
+                "恢复 ${target_file}.bak_*，或重新进入 DNS 更改优化菜单切换回原配置" \
+                "确认当前 SSH 会话保持连接，必要时可用 IP 直连排障。"; then
                 restart_named_service_if_available systemd-resolved
             else
                 echo -e "${BLUE}DNS 配置已保存，未重启 systemd-resolved。${PLAIN}"
             fi
             ;;
         sysctl)
-            read_trimmed confirm "sysctl 配置已保存，是否现在执行 sysctl --system 应用？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "应用 sysctl 配置" \
+                "当前内核运行中的 sysctl 参数" \
+                "恢复 ${target_file}.bak_* 后重新执行 sysctl --system，或手动回退异常参数" \
+                "确认参数来源可信；错误网络参数可能影响远程连接。"; then
                 sysctl --system >/dev/null
             else
                 echo -e "${YELLOW}⚠️ sysctl 修改尚未应用到当前内核。${PLAIN}"
             fi
             ;;
         fail2ban)
-            read_trimmed confirm "Fail2ban 配置已校验，是否现在重启 fail2ban？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "重启 fail2ban" \
+                "Fail2ban 服务和登录防护规则" \
+                "恢复 ${target_file}.bak_* 后重启 fail2ban，或临时停用异常 jail" \
+                "确认当前 SSH 来源不会被新规则误封。"; then
                 restart_named_service_if_available fail2ban
             else
                 echo -e "${YELLOW}⚠️ Fail2ban 未重启，修改尚未生效。${PLAIN}"
             fi
             ;;
         xui-json)
-            read_trimmed confirm "x-ui config.json 已校验，是否现在重启 x-ui/3x-ui？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "重启 x-ui/3x-ui" \
+                "x-ui/3x-ui 面板进程和 config.json 运行配置" \
+                "恢复 ${target_file}.bak_* 后重启面板，或用官方 x-ui/3x-ui 命令进入管理菜单修复" \
+                "确认面板端口、证书路径和 443 单入口设置匹配。"; then
                 restart_named_service_if_available x-ui
                 restart_named_service_if_available 3x-ui
             else
@@ -6434,6 +6537,9 @@ print(f"当前连接数：{value('active_connections')}")
 print(f"连接总数：{value('total_connections')}")
 print(f"拒绝连接数：{value('rejected_connections')}")
 print(f"后端拨号错误：{value('backend_dial_errors')}")
+print(f"后端重试尝试：{value('backend_retry_attempts')}")
+print(f"后端重试成功：{value('backend_retry_success')}")
+print(f"后端重试失败：{value('backend_retry_failed')}")
 print(f"splice 成功次数：{value('splice_success')}")
 print(f"copy fallback 次数：{value('copy_fallback')}")
 print(f"白名单拦截次数：{value('whitelist_blocked')}")
@@ -6444,9 +6550,9 @@ print(f"客户端->后端字节：{value('bytes_client_to_backend')}")
 print(f"后端->客户端字节：{value('bytes_backend_to_client')}")
 
 route_hits = data.get("route_hits") or {}
-print("按 route 命中次数：")
+print("按 route 命中次数 Top 10：")
 if route_hits:
-    for name, count in sorted(route_hits.items(), key=lambda item: (-int(item[1]), item[0])):
+    for name, count in sorted(route_hits.items(), key=lambda item: (-int(item[1]), item[0]))[:10]:
         print(f"  - {name}: {count}")
 else:
     print("  - 暂无")
@@ -6536,6 +6642,10 @@ write_vpso_mux_config_from_sni_stack() {
         echo "  idle: $(yaml_quote "300s")"
         echo "  shutdown: $(yaml_quote "10s")"
         echo ""
+        echo "backend_retry:"
+        echo "  count: 0"
+        echo "  delay: $(yaml_quote "200ms")"
+        echo ""
         echo "splice:"
         echo "  enabled: true"
         echo "  pipe_size: 1048576"
@@ -6586,6 +6696,8 @@ write_vpso_mux_config_from_sni_stack() {
 logging:
   level: $(yaml_quote "info")
   format: $(yaml_quote "json")
+  max_size_bytes: 5242880
+  max_backups: 3
 EOF
     chmod 600 "$output_file" 2>/dev/null || true
 }
@@ -15598,6 +15710,138 @@ generate_issue_diagnostics() {
 # shellcheck shell=bash
 # Service health dashboard and runtime issue summaries.
 
+print_log_capacity_group() {
+    local label="$1"
+    local pattern="$2"
+    local count=0 total=0 largest_size=0 largest_file="" file size
+
+    while IFS= read -r file; do
+        [[ -f "$file" ]] || continue
+        size=$(file_size_bytes "$file")
+        count=$((count + 1))
+        total=$((total + size))
+        if (( size > largest_size )); then
+            largest_size="$size"
+            largest_file="$file"
+        fi
+    done < <(compgen -G "$pattern" 2>/dev/null | sort || true)
+
+    if (( count == 0 )); then
+        echo "- ${label}: 未发现日志文件"
+        return 0
+    fi
+
+    echo "- ${label}: ${count} 个文件，总量 $(format_bytes "$total")；最大 $(format_bytes "$largest_size") ${largest_file}"
+}
+
+print_log_capacity_summary() {
+    echo -e "${CYAN}🧾 日志容量摘要${PLAIN}"
+    print_log_capacity_group "/var/log/vps-optimize/*" "/var/log/vps-optimize/*"
+    print_log_capacity_group "/var/log/vpso-mux*" "/var/log/vpso-mux*"
+    print_log_capacity_group "/var/log/vps-traffic-guard.log" "/var/log/vps-traffic-guard.log*"
+    echo "- Bash 日志默认超过 $(format_bytes "$VPSO_DEFAULT_LOG_MAX_BYTES") 后保留 ${VPSO_DEFAULT_LOG_ROTATE_KEEP} 份轮转副本；systemd journal 仍按系统策略输出。"
+}
+
+vpso_permission_mode() {
+    local file="$1"
+    stat -c '%a' "$file" 2>/dev/null || echo "?"
+}
+
+vpso_permission_recommendation() {
+    local file="$1"
+    local lower
+    lower=$(printf '%s' "$file" | tr '[:upper:]' '[:lower:]')
+
+    if [[ -x "$file" && ! -d "$file" ]]; then
+        printf '755|可执行文件'
+    elif [[ "$lower" == *.json ]]; then
+        printf '644/640|普通状态 JSON'
+    elif [[ "$lower" =~ (token|secret|private|key|subscription|subscribe|whitelist|sni-stack|xray|caddy|vpso-mux) ]]; then
+        printf '600|可能包含 token、secret、私钥、订阅源或白名单'
+    elif [[ "$file" == /etc/vps-optimize/*.conf || "$file" == /etc/vps-optimize/*.yaml ]]; then
+        printf '600|配置文件'
+    elif [[ "$file" == /var/log/* ]]; then
+        printf '640/644|日志文件'
+    else
+        printf '644/640|普通状态文件'
+    fi
+}
+
+vpso_permission_matches() {
+    local mode="$1"
+    local expected="$2"
+    case "$expected" in
+        600) [[ "$mode" == "600" ]] ;;
+        755) [[ "$mode" == "755" ]] ;;
+        640/644) [[ "$mode" == "640" || "$mode" == "644" ]] ;;
+        644/640) [[ "$mode" == "644" || "$mode" == "640" ]] ;;
+        *) return 0 ;;
+    esac
+}
+
+vpso_permission_fix_mode() {
+    local expected="$1"
+    case "$expected" in
+        600|755) printf '%s' "$expected" ;;
+        640/644|644/640) printf '640' ;;
+        *) printf '' ;;
+    esac
+}
+
+collect_vpso_permission_files() {
+    local pattern
+    for pattern in \
+        "/etc/vps-optimize/*.conf" \
+        "/etc/vps-optimize/*.yaml" \
+        "/var/lib/vps-optimize/*" \
+        "/var/log/vps-optimize/*"; do
+        compgen -G "$pattern" 2>/dev/null || true
+    done | sort -u
+}
+
+check_vpso_file_permissions() {
+    local action="${1:-check}"
+    local checked=0 warnings=0 fixed=0 file mode rec expected reason target_mode
+
+    if [[ "$action" == "fix" ]]; then
+        confirm_risk_action "修复 VPS-Optimize 文件权限" \
+            "/etc/vps-optimize、/var/lib/vps-optimize、/var/log/vps-optimize 下权限过宽或不符合建议的文件" \
+            "如某个服务因此无法读取文件，可根据本页输出手动 chmod 回原权限，或从备份恢复配置文件" \
+            "修复前建议确认当前服务状态；本操作不会批量删除文件。" || return 1
+    fi
+
+    echo -e "${CYAN}🔒 配置与状态文件权限体检${PLAIN}"
+    while IFS= read -r file; do
+        [[ -e "$file" && ! -d "$file" ]] || continue
+        checked=$((checked + 1))
+        mode=$(vpso_permission_mode "$file")
+        rec=$(vpso_permission_recommendation "$file")
+        expected="${rec%%|*}"
+        reason="${rec#*|}"
+        if vpso_permission_matches "$mode" "$expected"; then
+            echo "- OK   ${file} mode=${mode} (${reason}; 建议 ${expected})"
+            continue
+        fi
+        warnings=$((warnings + 1))
+        echo "- WARN ${file} mode=${mode} (${reason}; 建议 ${expected})"
+        if [[ "$action" == "fix" ]]; then
+            target_mode=$(vpso_permission_fix_mode "$expected")
+            if [[ -n "$target_mode" ]] && chmod "$target_mode" "$file" 2>/dev/null; then
+                fixed=$((fixed + 1))
+                echo "       已修复为 ${target_mode}"
+            else
+                echo "       未能自动修复，请手动检查权限。"
+            fi
+        fi
+    done < <(collect_vpso_permission_files)
+
+    if (( checked == 0 )); then
+        echo "- 未发现待检查文件。"
+    else
+        echo "- 已检查 ${checked} 个文件；发现 ${warnings} 个需要关注；本次修复 ${fixed} 个。"
+    fi
+}
+
 func_health_dashboard() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -15669,6 +15913,8 @@ func_health_dashboard() {
     echo -e "------------------------------------------------"
     print_project_runtime_overview
     echo -e "------------------------------------------------"
+    print_log_capacity_summary
+    echo -e "------------------------------------------------"
     if declare -F print_port_connlimit_health_summary >/dev/null; then
         print_port_connlimit_health_summary
         echo -e "------------------------------------------------"
@@ -15707,12 +15953,14 @@ func_health_dashboard() {
 
     echo -e "------------------------------------------------"
     echo -e "${YELLOW}💡 若失败单元 > 0，可执行: systemctl --failed 查看详情。${PLAIN}"
-    echo -e "${CYAN}输入 d 生成反馈诊断信息，输入 ? 查看帮助，其他任意键返回。${PLAIN}"
+    echo -e "${CYAN}输入 d 生成反馈诊断信息，输入 p 查看权限体检，输入 P 修复权限，输入 ? 查看帮助，其他任意键返回。${PLAIN}"
     local health_choice
     read -n 1 -s -r health_choice
     echo ""
     case "$health_choice" in
         d|D) generate_issue_diagnostics; pause_return ;;
+        p) check_vpso_file_permissions; pause_return ;;
+        P) check_vpso_file_permissions fix; pause_return ;;
         "?") show_health_help; pause_return ;;
     esac
 }
@@ -16191,10 +16439,40 @@ STATE_FILE="${STATE_DIR}/state"
 LOG_FILE="${VPSO_TRAFFIC_GUARD_LOG:-/var/log/vps-traffic-guard.log}"
 SYS_CLASS_NET="${VPSO_TRAFFIC_GUARD_SYS_CLASS_NET:-/sys/class/net}"
 PROC_UPTIME="${VPSO_TRAFFIC_GUARD_PROC_UPTIME:-/proc/uptime}"
+LOG_MAX_BYTES="${VPSO_TRAFFIC_GUARD_LOG_MAX_BYTES:-5242880}"
+LOG_ROTATE_KEEP="${VPSO_TRAFFIC_GUARD_LOG_ROTATE_KEEP:-3}"
+
+log_file_size_bytes() {
+    local size
+    [[ -f "$LOG_FILE" ]] || { echo 0; return 0; }
+    size=$(wc -c < "$LOG_FILE" 2>/dev/null | awk '{print $1}')
+    [[ "$size" =~ ^[0-9]+$ ]] || size=0
+    echo "$size"
+}
+
+traffic_guard_rotate_log_file() {
+    local size i old_path new_path
+    [[ "$LOG_MAX_BYTES" =~ ^[0-9]+$ ]] || LOG_MAX_BYTES=5242880
+    [[ "$LOG_ROTATE_KEEP" =~ ^[0-9]+$ ]] || LOG_ROTATE_KEEP=3
+    (( LOG_MAX_BYTES > 0 && LOG_ROTATE_KEEP > 0 )) || return 0
+    [[ -f "$LOG_FILE" ]] || return 0
+
+    size=$(log_file_size_bytes)
+    (( size >= LOG_MAX_BYTES )) || return 0
+
+    rm -f "${LOG_FILE}.${LOG_ROTATE_KEEP}" 2>/dev/null || true
+    for ((i = LOG_ROTATE_KEEP - 1; i >= 1; i--)); do
+        old_path="${LOG_FILE}.${i}"
+        new_path="${LOG_FILE}.$((i + 1))"
+        [[ -e "$old_path" ]] && mv -f "$old_path" "$new_path" 2>/dev/null || true
+    done
+    mv -f "$LOG_FILE" "${LOG_FILE}.1" 2>/dev/null || true
+}
 
 log_msg() {
     local msg="$1"
     mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    traffic_guard_rotate_log_file
     printf '%s %s\n' "$(date -Is 2>/dev/null || date)" "$msg" >> "$LOG_FILE" 2>/dev/null || true
     logger -t vps-traffic-guard "$msg" 2>/dev/null || true
 }
@@ -17450,8 +17728,45 @@ show_health_help() {
     echo -e "${CYAN}VPS-Optimize > 诊断/健康检查 > 帮助${PLAIN}"
     echo "健康总览会检查关键服务、监听端口和证书摘要。"
     echo "如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。"
+    echo "健康总览会显示日志容量摘要；输入 p 可做配置、状态和日志文件权限体检，输入 P 可确认后修复。"
     echo "系统硬件探针会附带 443、Caddy、3x-ui、订阅工具和 Docker 场景概览。"
     echo "生成反馈诊断信息用于提交 GitHub Issue，会尽量避免输出 Token、私钥和敏感密钥。"
+}
+
+NET_KERNEL_MENU_ITEMS=(
+    "1|BBR / 拥塞控制管理|调用 ylx2016 多内核调优脚本|func_bbr_manage|net_bbr"
+    "2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune"
+    "3|ZRAM / Swap 内存调优|按内存分档优化小鸡|func_zram_swap|"
+    "4|安装/切换优化内核|Cloud/KVM 稳定推荐 / XanMod 高级可选|func_install_kernel|net_kernel_install"
+    "5|清理旧内核|释放磁盘空间，谨慎操作|func_clean_kernel|"
+    "6|DNS 更改优化|国内/国外/自定义，IPv4+IPv6|func_dns_optimize|"
+    "7|流量达量关机保护|防刷流量 / 防超额账单|func_traffic_guard_menu|"
+    "8|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|"
+)
+
+confirm_menu_risk() {
+    local risk="$1"
+    case "$risk" in
+        net_bbr)
+            confirm_risk_action "BBR / 拥塞控制管理" \
+                "内核网络模块、拥塞控制和 TCP 参数" \
+                "从快照恢复，或重新进入本菜单切换回原配置" \
+                "外部调优脚本可能安装/切换内核，请确认救援控制台可用。"
+            ;;
+        net_tcp_tune)
+            confirm_risk_action "动态 TCP 参数调优" \
+                "sysctl TCP 参数和网络栈配置" \
+                "恢复 /etc/sysctl.d 中的备份配置，或手动回退参数" \
+                "确认参数来源可信，错误参数可能影响网络连接。"
+            ;;
+        net_kernel_install)
+            confirm_risk_action "安装/切换优化内核" \
+                "内核包、引导配置和 GRUB 菜单" \
+                "从云厂商控制台选择旧内核启动，或使用救援模式恢复" \
+                "确认已创建快照，且当前 VPS 不是 OpenVZ 老系统。"
+            ;;
+        *) return 0 ;;
+    esac
 }
 
 
@@ -17464,14 +17779,7 @@ func_net_kernel_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：调整网络栈、内存压缩和内核；涉及内核安装/清理前建议先做快照。${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. BBR / 拥塞控制管理${PLAIN}   ${YELLOW}(调用 ylx2016 多内核调优脚本)${PLAIN}"
-        echo -e "${GREEN}  2. 动态 TCP 参数调优${PLAIN}    ${YELLOW}(粘贴 Omnitt 参数并自动校验)${PLAIN}"
-        echo -e "${GREEN}  3. ZRAM / Swap 内存调优${PLAIN} ${YELLOW}(按内存分档优化小鸡)${PLAIN}"
-        echo -e "${GREEN}  4. 安装/切换优化内核${PLAIN}   ${YELLOW}(Cloud/KVM 稳定推荐 / XanMod 高级可选)${PLAIN}"
-        echo -e "${GREEN}  5. 清理旧内核${PLAIN}           ${YELLOW}(释放磁盘空间，谨慎操作)${PLAIN}"
-        echo -e "${GREEN}  6. DNS 更改优化${PLAIN}         ${YELLOW}(国内/国外/自定义，IPv4+IPv6)${PLAIN}"
-        echo -e "${GREEN}  7. 流量达量关机保护${PLAIN}     ${YELLOW}(防刷流量 / 防超额账单)${PLAIN}"
-        echo -e "${GREEN}  8. 网卡管理工具${PLAIN}         ${YELLOW}(网卡/路由/DNS/MTU/DHCP)${PLAIN}"
+        render_menu NET_KERNEL_MENU_ITEMS
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -17480,17 +17788,9 @@ func_net_kernel_menu() {
         local nk_choice
         read_trimmed nk_choice "👉 请选择操作: "
         case $nk_choice in
-            1) confirm_risk_action "BBR / 拥塞控制管理" "内核网络模块、拥塞控制和 TCP 参数" "从快照恢复，或重新进入本菜单切换回原配置" "外部调优脚本可能安装/切换内核，请确认救援控制台可用。" && func_bbr_manage ;;
-            2) confirm_risk_action "动态 TCP 参数调优" "sysctl TCP 参数和网络栈配置" "恢复 /etc/sysctl.d 中的备份配置，或手动回退参数" "确认参数来源可信，错误参数可能影响网络连接。" && func_tcp_tune ;;
-            3) func_zram_swap ;;
-            4) confirm_risk_action "安装/切换优化内核" "内核包、引导配置和 GRUB 菜单" "从云厂商控制台选择旧内核启动，或使用救援模式恢复" "确认已创建快照，且当前 VPS 不是 OpenVZ 老系统。" && func_install_kernel ;;
-            5) func_clean_kernel ;;
-            6) func_dns_optimize ;;
-            7) func_traffic_guard_menu ;;
-            8) func_network_interface_manage ;;
             "?"|help) show_net_kernel_help; pause_return ;;
             0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+            *) dispatch_menu_choice "$nk_choice" NET_KERNEL_MENU_ITEMS || { echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1; } ;;
         esac
     done
 }

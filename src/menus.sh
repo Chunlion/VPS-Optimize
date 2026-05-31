@@ -87,8 +87,45 @@ show_health_help() {
     echo -e "${CYAN}VPS-Optimize > 诊断/健康检查 > 帮助${PLAIN}"
     echo "健康总览会检查关键服务、监听端口和证书摘要。"
     echo "如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。"
+    echo "健康总览会显示日志容量摘要；输入 p 可做配置、状态和日志文件权限体检，输入 P 可确认后修复。"
     echo "系统硬件探针会附带 443、Caddy、3x-ui、订阅工具和 Docker 场景概览。"
     echo "生成反馈诊断信息用于提交 GitHub Issue，会尽量避免输出 Token、私钥和敏感密钥。"
+}
+
+NET_KERNEL_MENU_ITEMS=(
+    "1|BBR / 拥塞控制管理|调用 ylx2016 多内核调优脚本|func_bbr_manage|net_bbr"
+    "2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune"
+    "3|ZRAM / Swap 内存调优|按内存分档优化小鸡|func_zram_swap|"
+    "4|安装/切换优化内核|Cloud/KVM 稳定推荐 / XanMod 高级可选|func_install_kernel|net_kernel_install"
+    "5|清理旧内核|释放磁盘空间，谨慎操作|func_clean_kernel|"
+    "6|DNS 更改优化|国内/国外/自定义，IPv4+IPv6|func_dns_optimize|"
+    "7|流量达量关机保护|防刷流量 / 防超额账单|func_traffic_guard_menu|"
+    "8|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|"
+)
+
+confirm_menu_risk() {
+    local risk="$1"
+    case "$risk" in
+        net_bbr)
+            confirm_risk_action "BBR / 拥塞控制管理" \
+                "内核网络模块、拥塞控制和 TCP 参数" \
+                "从快照恢复，或重新进入本菜单切换回原配置" \
+                "外部调优脚本可能安装/切换内核，请确认救援控制台可用。"
+            ;;
+        net_tcp_tune)
+            confirm_risk_action "动态 TCP 参数调优" \
+                "sysctl TCP 参数和网络栈配置" \
+                "恢复 /etc/sysctl.d 中的备份配置，或手动回退参数" \
+                "确认参数来源可信，错误参数可能影响网络连接。"
+            ;;
+        net_kernel_install)
+            confirm_risk_action "安装/切换优化内核" \
+                "内核包、引导配置和 GRUB 菜单" \
+                "从云厂商控制台选择旧内核启动，或使用救援模式恢复" \
+                "确认已创建快照，且当前 VPS 不是 OpenVZ 老系统。"
+            ;;
+        *) return 0 ;;
+    esac
 }
 
 
@@ -101,14 +138,7 @@ func_net_kernel_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：调整网络栈、内存压缩和内核；涉及内核安装/清理前建议先做快照。${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. BBR / 拥塞控制管理${PLAIN}   ${YELLOW}(调用 ylx2016 多内核调优脚本)${PLAIN}"
-        echo -e "${GREEN}  2. 动态 TCP 参数调优${PLAIN}    ${YELLOW}(粘贴 Omnitt 参数并自动校验)${PLAIN}"
-        echo -e "${GREEN}  3. ZRAM / Swap 内存调优${PLAIN} ${YELLOW}(按内存分档优化小鸡)${PLAIN}"
-        echo -e "${GREEN}  4. 安装/切换优化内核${PLAIN}   ${YELLOW}(Cloud/KVM 稳定推荐 / XanMod 高级可选)${PLAIN}"
-        echo -e "${GREEN}  5. 清理旧内核${PLAIN}           ${YELLOW}(释放磁盘空间，谨慎操作)${PLAIN}"
-        echo -e "${GREEN}  6. DNS 更改优化${PLAIN}         ${YELLOW}(国内/国外/自定义，IPv4+IPv6)${PLAIN}"
-        echo -e "${GREEN}  7. 流量达量关机保护${PLAIN}     ${YELLOW}(防刷流量 / 防超额账单)${PLAIN}"
-        echo -e "${GREEN}  8. 网卡管理工具${PLAIN}         ${YELLOW}(网卡/路由/DNS/MTU/DHCP)${PLAIN}"
+        render_menu NET_KERNEL_MENU_ITEMS
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -117,17 +147,9 @@ func_net_kernel_menu() {
         local nk_choice
         read_trimmed nk_choice "👉 请选择操作: "
         case $nk_choice in
-            1) confirm_risk_action "BBR / 拥塞控制管理" "内核网络模块、拥塞控制和 TCP 参数" "从快照恢复，或重新进入本菜单切换回原配置" "外部调优脚本可能安装/切换内核，请确认救援控制台可用。" && func_bbr_manage ;;
-            2) confirm_risk_action "动态 TCP 参数调优" "sysctl TCP 参数和网络栈配置" "恢复 /etc/sysctl.d 中的备份配置，或手动回退参数" "确认参数来源可信，错误参数可能影响网络连接。" && func_tcp_tune ;;
-            3) func_zram_swap ;;
-            4) confirm_risk_action "安装/切换优化内核" "内核包、引导配置和 GRUB 菜单" "从云厂商控制台选择旧内核启动，或使用救援模式恢复" "确认已创建快照，且当前 VPS 不是 OpenVZ 老系统。" && func_install_kernel ;;
-            5) func_clean_kernel ;;
-            6) func_dns_optimize ;;
-            7) func_traffic_guard_menu ;;
-            8) func_network_interface_manage ;;
             "?"|help) show_net_kernel_help; pause_return ;;
             0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+            *) dispatch_menu_choice "$nk_choice" NET_KERNEL_MENU_ITEMS || { echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1; } ;;
         esac
     done
 }

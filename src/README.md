@@ -67,3 +67,8 @@ Minimum verification after editing any `src/*.sh` module:
 4. `bash tests/smoke.sh`
 
 `tests/smoke.sh` is the reusable release gate: it rebuilds `dist/vps.sh`, checks shell syntax, runs `GOTOOLCHAIN=local go test ./...` for `vpso-mux`, and asserts key 443/TCP Peek release menu wiring.
+
+Developer self-check entrypoints:
+
+- `bash scripts/selfcheck.sh` rebuilds `dist/vps.sh`, runs Bash syntax checks, ShellCheck when available, `go test ./...`, `go vet ./...`, and release marker checks.
+- `bash scripts/compat-smoke.sh` runs static/semistatic compatibility checks for source modules, key menu numbers, fallback helpers, and generated release markers without installing software or changing system configuration.

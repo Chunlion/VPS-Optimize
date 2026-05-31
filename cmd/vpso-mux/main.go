@@ -41,6 +41,9 @@ type runtimeStatus struct {
 	TotalConnections     uint64            `json:"total_connections"`
 	RejectedConnections  uint64            `json:"rejected_connections"`
 	BackendDialErrors    uint64            `json:"backend_dial_errors"`
+	BackendRetryAttempts uint64            `json:"backend_retry_attempts"`
+	BackendRetrySuccess  uint64            `json:"backend_retry_success"`
+	BackendRetryFailed   uint64            `json:"backend_retry_failed"`
 	RouteHits            map[string]uint64 `json:"route_hits"`
 	SpliceSuccess        uint64            `json:"splice_success"`
 	CopyFallback         uint64            `json:"copy_fallback"`
@@ -67,6 +70,14 @@ type statusTracker struct {
 	data  runtimeStatus
 	dirty bool
 }
+
+type backendRetryStats struct {
+	attempts uint64
+	success  bool
+	failed   bool
+}
+
+type backendDialFunc func(network, address string, timeout time.Duration) (net.Conn, error)
 
 type connectionLimiter struct {
 	sem chan struct{}
@@ -132,7 +143,12 @@ func run(cfg *mux.Config) error {
 	if err != nil {
 		return err
 	}
-	logger := mux.NewLogger()
+	logger := mux.NewLogger(mux.LoggerOptions{
+		File:         cfg.Logging.File,
+		MaxSizeBytes: cfg.Logging.MaxSizeBytes,
+		MaxBackups:   cfg.Logging.MaxBackups,
+	})
+	defer logger.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	status := newStatusTracker(cfg.Listen.TCP, cfg.Limits.MaxConnections)
 	limiter := newConnectionLimiter(cfg.Limits.MaxConnections)
@@ -337,6 +353,22 @@ func (s *statusTracker) RecordConnection(match mux.Match, sni, transferMode stri
 	s.markDirtyLocked()
 }
 
+func (s *statusTracker) RecordBackendRetryStats(stats backendRetryStats) {
+	if s == nil || stats.attempts == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data.BackendRetryAttempts += stats.attempts
+	if stats.success {
+		s.data.BackendRetrySuccess++
+	}
+	if stats.failed {
+		s.data.BackendRetryFailed++
+	}
+	s.markDirtyLocked()
+}
+
 func (s *statusTracker) RecordError(message string) {
 	if s == nil {
 		return
@@ -494,7 +526,8 @@ func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *m
 		peekErrorForStatus = true
 	}
 
-	backend, err := net.DialTimeout("tcp", match.Backend, d.Dial)
+	backend, retryStats, err := dialBackendWithRetry(match.Backend, d.Dial, cfg.BackendRetry.Count, d.BackendRetryDelay, net.DialTimeout)
+	status.RecordBackendRetryStats(retryStats)
 	if err != nil {
 		event.Error = err.Error()
 		logger.Emit("error", event)
@@ -523,6 +556,32 @@ func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *m
 	}
 	logger.Emit("info", event)
 	status.RecordConnection(match, sni, mode, cfg.Splice.Enabled && cfg.Splice.FallbackToCopy, bytesClientToBackend, bytesBackendToClient, false, peekErrorForStatus, statusErr)
+}
+
+func dialBackendWithRetry(backend string, dialTimeout time.Duration, retryCount int, retryDelay time.Duration, dial backendDialFunc) (net.Conn, backendRetryStats, error) {
+	var stats backendRetryStats
+	if dial == nil {
+		dial = net.DialTimeout
+	}
+	conn, err := dial("tcp", backend, dialTimeout)
+	if err == nil {
+		return conn, stats, nil
+	}
+	for i := 0; i < retryCount; i++ {
+		stats.attempts++
+		if retryDelay > 0 {
+			time.Sleep(retryDelay)
+		}
+		conn, err = dial("tcp", backend, dialTimeout)
+		if err == nil {
+			stats.success = true
+			return conn, stats, nil
+		}
+	}
+	if stats.attempts > 0 {
+		stats.failed = true
+	}
+	return nil, stats, err
 }
 
 func remoteIP(addr net.Addr) string {

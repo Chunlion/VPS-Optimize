@@ -371,8 +371,10 @@ reload_applied_config_kind() {
             fi
             ;;
         vpso-mux)
-            read_trimmed confirm "vpso-mux 配置已校验，是否现在重启 vpso-mux？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "重启 vpso-mux" \
+                "TCP Peek/vpso-mux 分流器运行进程" \
+                "使用当前未断开的 SSH 会话恢复 ${target_file}.bak_*，或回到 443 单入口菜单重新应用/回滚入口模式" \
+                "确认公网 443 当前入口模式和本机后端端口都正常。"; then
                 restart_named_service_if_available vpso-mux
             else
                 echo -e "${YELLOW}⚠️ vpso-mux 未重启，修改尚未生效。${PLAIN}"
@@ -393,8 +395,10 @@ reload_applied_config_kind() {
             fi
             ;;
         traffic-guard)
-            read_trimmed confirm "Traffic Guard 配置已校验，是否现在重启 timer 使其按新配置运行？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "重启 Traffic Guard timer" \
+                "vps-traffic-guard.timer 和流量阈值检查周期" \
+                "重新编辑 ${target_file} 或从 ${target_file}.bak_* 恢复；必要时停用 vps-traffic-guard.timer" \
+                "如果 ACTION=poweroff，请确认阈值、账单周期和云厂商救援方式。"; then
                 systemctl daemon-reload >/dev/null 2>&1 || true
                 systemctl restart vps-traffic-guard.timer >/dev/null 2>&1
             else
@@ -409,32 +413,40 @@ reload_applied_config_kind() {
             fi
             ;;
         dns)
-            read_trimmed confirm "DNS 配置已保存，是否现在重启 systemd-resolved？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "重启 systemd-resolved" \
+                "系统 DNS 解析服务和 resolved drop-in 配置" \
+                "恢复 ${target_file}.bak_*，或重新进入 DNS 更改优化菜单切换回原配置" \
+                "确认当前 SSH 会话保持连接，必要时可用 IP 直连排障。"; then
                 restart_named_service_if_available systemd-resolved
             else
                 echo -e "${BLUE}DNS 配置已保存，未重启 systemd-resolved。${PLAIN}"
             fi
             ;;
         sysctl)
-            read_trimmed confirm "sysctl 配置已保存，是否现在执行 sysctl --system 应用？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "应用 sysctl 配置" \
+                "当前内核运行中的 sysctl 参数" \
+                "恢复 ${target_file}.bak_* 后重新执行 sysctl --system，或手动回退异常参数" \
+                "确认参数来源可信；错误网络参数可能影响远程连接。"; then
                 sysctl --system >/dev/null
             else
                 echo -e "${YELLOW}⚠️ sysctl 修改尚未应用到当前内核。${PLAIN}"
             fi
             ;;
         fail2ban)
-            read_trimmed confirm "Fail2ban 配置已校验，是否现在重启 fail2ban？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "重启 fail2ban" \
+                "Fail2ban 服务和登录防护规则" \
+                "恢复 ${target_file}.bak_* 后重启 fail2ban，或临时停用异常 jail" \
+                "确认当前 SSH 来源不会被新规则误封。"; then
                 restart_named_service_if_available fail2ban
             else
                 echo -e "${YELLOW}⚠️ Fail2ban 未重启，修改尚未生效。${PLAIN}"
             fi
             ;;
         xui-json)
-            read_trimmed confirm "x-ui config.json 已校验，是否现在重启 x-ui/3x-ui？(y/n，默认 n): "
-            if is_yes "$confirm"; then
+            if confirm_risk_action "重启 x-ui/3x-ui" \
+                "x-ui/3x-ui 面板进程和 config.json 运行配置" \
+                "恢复 ${target_file}.bak_* 后重启面板，或用官方 x-ui/3x-ui 命令进入管理菜单修复" \
+                "确认面板端口、证书路径和 443 单入口设置匹配。"; then
                 restart_named_service_if_available x-ui
                 restart_named_service_if_available 3x-ui
             else

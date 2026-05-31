@@ -19,6 +19,8 @@ TRAFFIC_GUARD_STATE_DIR="/var/lib/vps-optimize/traffic-guard"
 TRAFFIC_GUARD_LOG="/var/log/vps-traffic-guard.log"
 DNS_OPTIMIZE_BACKUP_DIR="/etc/vps-optimize/backups/dns"
 DNS_OPTIMIZE_RESOLVED_DROPIN="/etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf"
+VPSO_DEFAULT_LOG_MAX_BYTES=$((5 * 1024 * 1024))
+VPSO_DEFAULT_LOG_ROTATE_KEEP=3
 
 if [[ -f /etc/os-release ]]; then
     # shellcheck disable=SC1091
@@ -43,6 +45,50 @@ is_redhat() {
 apt_update_once() {
     [[ "$APT_UPDATED" == "1" ]] && return 0
     apt-get update -qq >/dev/null 2>&1 && APT_UPDATED=1
+}
+
+file_size_bytes() {
+    local file="$1"
+    local size
+    [[ -e "$file" ]] || { echo 0; return 0; }
+    size=$(wc -c < "$file" 2>/dev/null | awk '{print $1}')
+    [[ "$size" =~ ^[0-9]+$ ]] || size=0
+    echo "$size"
+}
+
+format_bytes() {
+    local bytes="${1:-0}"
+    [[ "$bytes" =~ ^[0-9]+$ ]] || bytes=0
+    awk -v b="$bytes" 'BEGIN {
+        split("B KiB MiB GiB TiB", u, " ")
+        i = 1
+        while (b >= 1024 && i < 5) { b = b / 1024; i++ }
+        if (i == 1) printf "%d %s", b, u[i]
+        else printf "%.2f %s", b, u[i]
+    }'
+}
+
+rotate_log_file() {
+    local log_file="$1"
+    local max_bytes="${2:-$VPSO_DEFAULT_LOG_MAX_BYTES}"
+    local keep="${3:-$VPSO_DEFAULT_LOG_ROTATE_KEEP}"
+    local size i old_path new_path
+
+    [[ -n "$log_file" && -f "$log_file" ]] || return 0
+    [[ "$max_bytes" =~ ^[0-9]+$ ]] || max_bytes="$VPSO_DEFAULT_LOG_MAX_BYTES"
+    [[ "$keep" =~ ^[0-9]+$ ]] || keep="$VPSO_DEFAULT_LOG_ROTATE_KEEP"
+    (( max_bytes > 0 && keep > 0 )) || return 0
+
+    size=$(file_size_bytes "$log_file")
+    (( size >= max_bytes )) || return 0
+
+    rm -f "${log_file}.${keep}" 2>/dev/null || true
+    for ((i = keep - 1; i >= 1; i--)); do
+        old_path="${log_file}.${i}"
+        new_path="${log_file}.$((i + 1))"
+        [[ -e "$old_path" ]] && mv -f "$old_path" "$new_path" 2>/dev/null || true
+    done
+    mv -f "$log_file" "${log_file}.1" 2>/dev/null || true
 }
 
 install_pkg() {
@@ -248,11 +294,23 @@ run_remote_script() {
     local desc="$1"
     local url="$2"
     shift 2
-    local tmp_file rc
+    local tmp_file rc confirm
     echo -e "${CYAN}▶ ${desc}${PLAIN}"
     echo -e "${YELLOW}脚本来源：${url}${PLAIN}"
     if [[ "$url" != https://* ]]; then
         echo -e "${YELLOW}⚠️ 该来源不是 HTTPS，将按脚本内置地址继续下载执行。${PLAIN}"
+    fi
+
+    if [[ "${VPSO_REMOTE_SCRIPT_CONFIRM:-1}" != "0" ]]; then
+        if declare -F confirm_risk_action >/dev/null 2>&1; then
+            confirm_risk_action "$desc" \
+                "下载并执行远程脚本：${url}" \
+                "取消执行，或根据远程脚本自身备份/卸载方式恢复；必要时使用 VPS 快照或救援模式回滚" \
+                "确认脚本来源可信，并保持当前 SSH 会话不要断开。" || return 1
+        else
+            read -r -p "继续请输入 yes，直接回车取消（大小写均可）: " confirm
+            [[ "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]] || return 1
+        fi
     fi
 
     tmp_file=$(mktemp /tmp/vps-remote.XXXXXX.sh) || {

@@ -20,6 +20,10 @@ type Config struct {
 		Idle     string `yaml:"idle"`
 		Shutdown string `yaml:"shutdown"`
 	} `yaml:"timeouts"`
+	BackendRetry struct {
+		Count int    `yaml:"count"`
+		Delay string `yaml:"delay"`
+	} `yaml:"backend_retry"`
 	Splice struct {
 		Enabled        bool `yaml:"enabled"`
 		PipeSize       int  `yaml:"pipe_size"`
@@ -31,18 +35,22 @@ type Config struct {
 	DefaultBackend string  `yaml:"default_backend"`
 	Routes         []Route `yaml:"routes"`
 	Logging        struct {
-		Level  string `yaml:"level"`
-		Format string `yaml:"format"`
+		Level        string `yaml:"level"`
+		Format       string `yaml:"format"`
+		File         string `yaml:"file"`
+		MaxSizeBytes int64  `yaml:"max_size_bytes"`
+		MaxBackups   int    `yaml:"max_backups"`
 	} `yaml:"logging"`
 
 	routeIndex *routeIndex
 }
 
 type Durations struct {
-	Peek     time.Duration
-	Dial     time.Duration
-	Idle     time.Duration
-	Shutdown time.Duration
+	Peek              time.Duration
+	Dial              time.Duration
+	Idle              time.Duration
+	Shutdown          time.Duration
+	BackendRetryDelay time.Duration
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -63,12 +71,16 @@ func DefaultConfig() *Config {
 	cfg.Timeouts.Dial = "5s"
 	cfg.Timeouts.Idle = "300s"
 	cfg.Timeouts.Shutdown = "10s"
+	cfg.BackendRetry.Count = 0
+	cfg.BackendRetry.Delay = "200ms"
 	cfg.Splice.Enabled = true
 	cfg.Splice.PipeSize = 1048576
 	cfg.Splice.FallbackToCopy = true
 	cfg.Limits.MaxConnections = 4096
 	cfg.Logging.Level = "info"
 	cfg.Logging.Format = "json"
+	cfg.Logging.MaxSizeBytes = 5 * 1024 * 1024
+	cfg.Logging.MaxBackups = 3
 	return cfg
 }
 
@@ -86,6 +98,9 @@ func (c *Config) Durations() (Durations, error) {
 	}
 	if out.Shutdown, err = parseDurationDefault(c.Timeouts.Shutdown, 10*time.Second); err != nil {
 		return out, fmt.Errorf("timeouts.shutdown: %w", err)
+	}
+	if out.BackendRetryDelay, err = parseDurationDefault(c.BackendRetry.Delay, 200*time.Millisecond); err != nil {
+		return out, fmt.Errorf("backend_retry.delay: %w", err)
 	}
 	return out, nil
 }
@@ -121,6 +136,15 @@ func ValidateConfig(c *Config) ([]string, error) {
 	}
 	if c.Limits.MaxConnections < 0 {
 		return warnings, fmt.Errorf("limits.max_connections must be >= 0")
+	}
+	if c.BackendRetry.Count < 0 {
+		return warnings, fmt.Errorf("backend_retry.count must be >= 0")
+	}
+	if c.Logging.MaxSizeBytes < 0 {
+		return warnings, fmt.Errorf("logging.max_size_bytes must be >= 0")
+	}
+	if c.Logging.MaxBackups < 0 {
+		return warnings, fmt.Errorf("logging.max_backups must be >= 0")
 	}
 
 	seen := map[string]string{}

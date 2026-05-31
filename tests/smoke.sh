@@ -67,6 +67,8 @@ assert_function_defined_once() {
 }
 
 bash -n scripts/build.sh
+bash -n scripts/selfcheck.sh
+bash -n scripts/compat-smoke.sh
 bash -n vps.sh
 bash -n dist/vps.sh
 for module in src/*.sh; do
@@ -82,7 +84,19 @@ assert_file_contains scripts/build.sh 'vpso_mux_config.sh  # vpso-mux YAML rende
 assert_file_contains scripts/build.sh 'vpso_mux_install.sh # vpso-mux binary/systemd helpers'
 assert_file_contains scripts/build.sh 'tcp_peek_engine.sh  # TCP Peek preflight and entry-mode switching'
 assert_file_contains scripts/build.sh 'firewall.sh  # firewall allow/delete/connlimit workflows'
+assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/selfcheck.sh' "CI must call the shared selfcheck entrypoint."
+assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/compat-smoke.sh' "CI must call the compatibility smoke entrypoint."
 assert_file_contains vps.sh '    firewall'
+assert_dist_contains 'rotate_log_file' "Release script must include the shared log rotation helper."
+assert_dist_contains 'print_log_capacity_summary' "Health overview must include log capacity summary."
+assert_dist_contains 'check_vpso_file_permissions' "Health overview must expose file permission checks."
+assert_dist_contains 'NET_KERNEL_MENU_ITEMS=(' "Network/kernel menu must use the declarative pilot table."
+assert_dist_contains 'dispatch_menu_choice "$nk_choice" NET_KERNEL_MENU_ITEMS' "Network/kernel menu must dispatch through the menu helper pilot."
+assert_dist_contains 'backend_retry_attempts' "vpso-mux status must expose backend retry attempts."
+assert_dist_contains 'backend_retry:' "vpso-mux generated config must include explicit default retry settings."
+assert_dist_contains 'max_size_bytes: 5242880' "vpso-mux generated config must include default file-log rotation size."
+assert_file_contains internal/mux/config.go 'BackendRetry struct' "vpso-mux config must include optional backend retry defaults."
+assert_file_contains cmd/vpso-mux/main_linux_test.go 'TestDialBackendWithRetrySuccess' "vpso-mux backend retry behavior must have tests."
 assert_dist_contains '# Module: firewall.sh' "Release script must include src/firewall.sh."
 assert_dist_contains 'func_port_connlimit_menu' "Release script is missing the port connlimit menu."
 assert_dist_contains 'VPSO_CONN_LIMIT_PORT_' "Release script is missing the connlimit rule marker."
@@ -584,7 +598,7 @@ apt_update_once
 remote_tmp_dir=$(mktemp -d /tmp/vps-remote-smoke.XXXXXX)
 remote_script="$remote_tmp_dir/remote.sh"
 printf '%s\n' '#!/usr/bin/env bash' 'echo remote-run-ok' > "$remote_script"
-remote_output=$(run_remote_script "smoke remote script" "file://$remote_script")
+remote_output=$(VPSO_REMOTE_SCRIPT_CONFIRM=0 run_remote_script "smoke remote script" "file://$remote_script")
 [[ "$remote_output" == *"remote-run-ok"* ]]
 rm -f "$remote_script"
 rmdir "$remote_tmp_dir"
@@ -1324,7 +1338,7 @@ if grep -q '18) func_sni_stack_quick_menu' dist/vps.sh; then
     exit 1
 fi
 grep -q '7) func_hosts_manage' dist/vps.sh
-grep -q '8) func_network_interface_manage' dist/vps.sh
+grep -q '8|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|' dist/vps.sh
 grep -Fq "SCRIPT_VERSION=\"${vps_smoke_script_version}\"" dist/vps.sh
 grep -q 'SCRIPT_UPDATE_CACHE=' dist/vps.sh
 grep -q 'Compatibility marker: VPS 全能控制面板' dist/vps.sh

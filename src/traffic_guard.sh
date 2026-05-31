@@ -327,10 +327,40 @@ STATE_FILE="${STATE_DIR}/state"
 LOG_FILE="${VPSO_TRAFFIC_GUARD_LOG:-/var/log/vps-traffic-guard.log}"
 SYS_CLASS_NET="${VPSO_TRAFFIC_GUARD_SYS_CLASS_NET:-/sys/class/net}"
 PROC_UPTIME="${VPSO_TRAFFIC_GUARD_PROC_UPTIME:-/proc/uptime}"
+LOG_MAX_BYTES="${VPSO_TRAFFIC_GUARD_LOG_MAX_BYTES:-5242880}"
+LOG_ROTATE_KEEP="${VPSO_TRAFFIC_GUARD_LOG_ROTATE_KEEP:-3}"
+
+log_file_size_bytes() {
+    local size
+    [[ -f "$LOG_FILE" ]] || { echo 0; return 0; }
+    size=$(wc -c < "$LOG_FILE" 2>/dev/null | awk '{print $1}')
+    [[ "$size" =~ ^[0-9]+$ ]] || size=0
+    echo "$size"
+}
+
+traffic_guard_rotate_log_file() {
+    local size i old_path new_path
+    [[ "$LOG_MAX_BYTES" =~ ^[0-9]+$ ]] || LOG_MAX_BYTES=5242880
+    [[ "$LOG_ROTATE_KEEP" =~ ^[0-9]+$ ]] || LOG_ROTATE_KEEP=3
+    (( LOG_MAX_BYTES > 0 && LOG_ROTATE_KEEP > 0 )) || return 0
+    [[ -f "$LOG_FILE" ]] || return 0
+
+    size=$(log_file_size_bytes)
+    (( size >= LOG_MAX_BYTES )) || return 0
+
+    rm -f "${LOG_FILE}.${LOG_ROTATE_KEEP}" 2>/dev/null || true
+    for ((i = LOG_ROTATE_KEEP - 1; i >= 1; i--)); do
+        old_path="${LOG_FILE}.${i}"
+        new_path="${LOG_FILE}.$((i + 1))"
+        [[ -e "$old_path" ]] && mv -f "$old_path" "$new_path" 2>/dev/null || true
+    done
+    mv -f "$LOG_FILE" "${LOG_FILE}.1" 2>/dev/null || true
+}
 
 log_msg() {
     local msg="$1"
     mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    traffic_guard_rotate_log_file
     printf '%s %s\n' "$(date -Is 2>/dev/null || date)" "$msg" >> "$LOG_FILE" 2>/dev/null || true
     logger -t vps-traffic-guard "$msg" 2>/dev/null || true
 }

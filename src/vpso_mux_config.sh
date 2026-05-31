@@ -48,6 +48,10 @@ write_vpso_mux_config_from_sni_stack() {
         echo "  idle: $(yaml_quote "300s")"
         echo "  shutdown: $(yaml_quote "10s")"
         echo ""
+        echo "backend_retry:"
+        echo "  count: 0"
+        echo "  delay: $(yaml_quote "200ms")"
+        echo ""
         echo "splice:"
         echo "  enabled: true"
         echo "  pipe_size: 1048576"
@@ -98,6 +102,8 @@ write_vpso_mux_config_from_sni_stack() {
 logging:
   level: $(yaml_quote "info")
   format: $(yaml_quote "json")
+  max_size_bytes: 5242880
+  max_backups: 3
 EOF
     chmod 600 "$output_file" 2>/dev/null || true
 }
