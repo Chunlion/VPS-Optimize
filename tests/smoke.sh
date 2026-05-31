@@ -598,7 +598,13 @@ apt_update_once
 remote_tmp_dir=$(mktemp -d /tmp/vps-remote-smoke.XXXXXX)
 remote_script="$remote_tmp_dir/remote.sh"
 printf '%s\n' '#!/usr/bin/env bash' 'echo remote-run-ok' > "$remote_script"
-remote_output=$(VPSO_REMOTE_SCRIPT_CONFIRM=0 run_remote_script "smoke remote script" "file://$remote_script")
+[[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh")" == *"VPS-Optimize"* ]]
+if is_trusted_remote_script_url "https://example.com/not-built-in.sh" >/dev/null; then
+    echo "Unexpected trusted remote script URL." >&2
+    exit 1
+fi
+remote_output=$(run_remote_script "smoke remote script" "file://$remote_script" <<< $'yes\n')
+[[ "$remote_output" == *"非内置可信来源"* ]]
 [[ "$remote_output" == *"remote-run-ok"* ]]
 rm -f "$remote_script"
 rmdir "$remote_tmp_dir"

@@ -348,18 +348,78 @@ verify_file_sha256() {
     echo -e "${GREEN}✅ sha256 校验通过。${PLAIN}"
 }
 
+is_trusted_remote_script_url() {
+    local url="$1"
+    case "$url" in
+        "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh"|\
+        "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh")
+            echo "VPS-Optimize 项目维护脚本"
+            return 0
+            ;;
+        "https://get.docker.com")
+            echo "Docker 官方安装脚本"
+            return 0
+            ;;
+        "https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"|\
+        "https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh")
+            echo "3x-ui 官方安装脚本"
+            return 0
+            ;;
+        "https://raw.githubusercontent.com/alireza0/s-ui/master/install.sh")
+            echo "S-UI 官方安装脚本"
+            return 0
+            ;;
+        "https://github.com/233boy/sing-box/raw/main/install.sh"|\
+        "https://github.com/233boy/Xray/raw/main/install.sh")
+            echo "233boy 官方安装脚本"
+            return 0
+            ;;
+        "https://yabs.sh"|\
+        "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh"|\
+        "https://about.superbench.pro"|\
+        "https://bench.sh"|\
+        "https://check.unlock.media"|\
+        "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh"|\
+        "https://IP.Check.Place"|\
+        "https://run.NodeQuality.com"|\
+        "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh"|\
+        "https://raw.githubusercontent.com/zhouh047/realm-oneclick-install/main/realm.sh"|\
+        "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh"|\
+        "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh"|\
+        "https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh"|\
+        "https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh"|\
+        "https://git.io/aria2.sh"|\
+        "http://v7.hostcli.com/install/install-ubuntu_6.0.sh"|\
+        "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh"|\
+        "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh"|\
+        "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh"|\
+        "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"|\
+        "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh")
+            echo "项目内置硬编码外部脚本源"
+            return 0
+            ;;
+    esac
+    return 1
+}
+
 run_remote_script() {
     local desc="$1"
     local url="$2"
     shift 2
-    local tmp_file rc confirm
+    local tmp_file rc confirm trusted_source
     echo -e "${CYAN}▶ ${desc}${PLAIN}"
     echo -e "${YELLOW}脚本来源：${url}${PLAIN}"
+    if trusted_source=$(is_trusted_remote_script_url "$url"); then
+        echo -e "${GREEN}内置可信来源：${trusted_source}${PLAIN}"
+    else
+        trusted_source=""
+        echo -e "${RED}⚠️ 非内置可信来源：该 URL 不在 VPS-Optimize 内置远程脚本白名单内。${PLAIN}"
+    fi
     if [[ "$url" != https://* ]]; then
         echo -e "${YELLOW}⚠️ 该来源不是 HTTPS，将按脚本内置地址继续下载执行。${PLAIN}"
     fi
 
-    if [[ "${VPSO_REMOTE_SCRIPT_CONFIRM:-1}" != "0" ]]; then
+    if [[ -z "$trusted_source" || "${VPSO_REMOTE_SCRIPT_CONFIRM:-1}" != "0" ]]; then
         if declare -F confirm_risk_action >/dev/null 2>&1; then
             confirm_risk_action "$desc" \
                 "下载并执行远程脚本：${url}" \
