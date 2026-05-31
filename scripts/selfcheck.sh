@@ -19,6 +19,10 @@ echo "==> shellcheck"
 if command -v shellcheck >/dev/null 2>&1; then
     shellcheck -S error vps.sh src/*.sh scripts/*.sh dist/vps.sh dog.sh xui-custom-manager.sh
 else
+    if [[ "${CI:-}" == "true" ]]; then
+        echo "shellcheck not found; CI must install shellcheck before running selfcheck." >&2
+        exit 1
+    fi
     echo "shellcheck not found; skipped locally. CI installs shellcheck before running selfcheck."
 fi
 
