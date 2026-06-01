@@ -5,6 +5,111 @@ trap 'echo "golden-render failed at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+fail_golden_assertion() {
+    echo "$1" >&2
+    return 1
+}
+
+assert_contains() {
+    local file="$1"
+    local needle="$2"
+    grep -Fq "$needle" "$file" || fail_golden_assertion "Missing expected text in $file: $needle"
+}
+
+assert_not_contains() {
+    local file="$1"
+    local needle="$2"
+    ! grep -Fq "$needle" "$file" || fail_golden_assertion "Unexpected text in $file: $needle"
+}
+
+assert_grep_count() {
+    local file="$1"
+    local pattern="$2"
+    local expected="$3"
+    local actual
+    actual=$(grep -Ec "$pattern" "$file" || true)
+    [[ "$actual" == "$expected" ]] || fail_golden_assertion "Expected $expected matches for $pattern in $file, got $actual"
+}
+
+route_block() {
+    local file="$1"
+    local route_name="$2"
+    awk -v marker="  - name: '${route_name}'" '
+        $0 == marker {in_route=1; print; next}
+        in_route && /^  - name: / {exit}
+        in_route {print}
+    ' "$file"
+}
+
+assert_route() {
+    local file="$1"
+    local route_name="$2"
+    local sni="$3"
+    local backend="$4"
+    local block range
+    block=$(route_block "$file" "$route_name")
+    [[ -n "$block" ]] || fail_golden_assertion "Missing route: $route_name"
+    grep -Fq "      - '${sni}'" <<<"$block" || fail_golden_assertion "Route $route_name must match SNI $sni."
+    grep -Fq "    backend: '${backend}'" <<<"$block" || fail_golden_assertion "Route $route_name must use backend $backend."
+    if [[ "$#" -gt 4 ]]; then
+        grep -Fq "    whitelist:" <<<"$block" || fail_golden_assertion "Route $route_name must carry Web whitelist rules."
+        for range in "${@:5}"; do
+            grep -Fq "      - '${range}'" <<<"$block" || fail_golden_assertion "Route $route_name must carry Web whitelist entry $range."
+        done
+    else
+        ! grep -Fq "    whitelist:" <<<"$block" || fail_golden_assertion "Route $route_name must not receive Web whitelist rules."
+    fi
+}
+
+assert_nginx_single_entry_web_render() {
+    local file="$1"
+    local needle
+    assert_grep_count "$file" '^server \{' 2
+    for needle in \
+        "listen 127.0.0.1:8443 ssl http2;" \
+        "server_name panel.example.com;" \
+        "ssl_certificate /etc/caddy/certs/panel.example.com.crt;" \
+        "location ^~ /sub/ {" \
+        "location ^~ /clash/ {" \
+        "proxy_set_header X-Forwarded-Port 443;" \
+        "proxy_pass http://127.0.0.1:2096;" \
+        "proxy_pass http://127.0.0.1:40000;" \
+        "server_name site.example.com;" \
+        "ssl_certificate /etc/caddy/certs/site.example.com.crt;" \
+        "proxy_pass http://127.0.0.1:3000;"; do
+        assert_contains "$file" "$needle"
+    done
+    for needle in "listen 443 ssl" "listen 0.0.0.0:443" "listen [::]:443" "server_name tcp.example.com;" "server_name node.example.com;"; do
+        assert_not_contains "$file" "$needle"
+    done
+}
+
+assert_nginx_reverse_proxy_render() {
+    local file="$1"
+    local needle
+    for needle in \
+        "server_name proxy.example.com;" \
+        "# vps-optimize-ip-whitelist-start" \
+        "allow 198.51.100.10;" \
+        "allow 2001:db8::/32;" \
+        "deny all;" \
+        "# vps-optimize-ip-whitelist-end" \
+        "proxy_pass http://127.0.0.1:40000;"; do
+        assert_contains "$file" "$needle"
+    done
+}
+
+assert_vpso_mux_render() {
+    local file="$1"
+    assert_contains "$file" "    - '0.0.0.0:443'"
+    assert_contains "$file" "default_backend: '127.0.0.1:1443'"
+    assert_route "$file" "panel" "panel.example.com" "127.0.0.1:8443" "198.51.100.10" "2001:db8::/32"
+    assert_route "$file" "site_site_example_com" "site.example.com" "127.0.0.1:8443" "203.0.113.5"
+    assert_route "$file" "tcp_tcp_example_com" "tcp.example.com" "127.0.0.1:2443"
+    assert_route "$file" "xray_node_example_com" "node.example.com" "127.0.0.1:3443"
+    assert_route "$file" "reality" "reality.example.com" "127.0.0.1:1443"
+}
+
 tmp_dir=$(mktemp -d /tmp/vps-golden-render.XXXXXX)
 cleanup_golden_tmp() {
     [[ -n "${tmp_dir:-}" && -d "$tmp_dir" ]] || return 0
@@ -63,5 +168,9 @@ write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_dir/vpso-mux.yam
 diff -u tests/golden/nginx-single-entry-web.expected "$tmp_dir/nginx-single-entry-web.conf"
 diff -u tests/golden/nginx-reverse-proxy.expected "$tmp_dir/nginx-reverse-proxy.conf"
 diff -u tests/golden/vpso-mux.yaml.expected "$tmp_dir/vpso-mux.yaml"
+
+assert_nginx_single_entry_web_render "$tmp_dir/nginx-single-entry-web.conf"
+assert_nginx_reverse_proxy_render "$tmp_dir/nginx-reverse-proxy.conf"
+assert_vpso_mux_render "$tmp_dir/vpso-mux.yaml"
 
 echo "Golden render tests passed."
