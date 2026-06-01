@@ -60,7 +60,7 @@ jobs:
             apt-get update
             apt-get install -y --no-install-recommends bash ca-certificates git grep sed gawk coreutils diffutils findutils procps
           elif command -v dnf >/dev/null 2>&1; then
-            dnf install -y bash ca-certificates git grep sed gawk coreutils diffutils findutils procps-ng
+            dnf install -y bash ca-certificates git grep sed gawk diffutils findutils procps-ng
           else
             echo "Unsupported CI container package manager." >&2
             exit 1
