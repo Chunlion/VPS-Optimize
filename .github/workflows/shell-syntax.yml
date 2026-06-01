@@ -36,3 +36,55 @@ jobs:
       - name: Run compatibility smoke
         run: |
           bash scripts/compat-smoke.sh
+
+  container-compat:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - debian:11
+          - debian:12
+          - ubuntu:20.04
+          - ubuntu:22.04
+          - ubuntu:24.04
+          - rockylinux:9
+          - almalinux:9
+    container:
+      image: ${{ matrix.image }}
+      options: --user root
+    steps:
+      - name: Install container test dependencies
+        run: |
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update
+            apt-get install -y --no-install-recommends bash ca-certificates git grep sed gawk coreutils diffutils findutils procps
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y bash ca-certificates git grep sed gawk coreutils diffutils findutils procps-ng
+          else
+            echo "Unsupported CI container package manager." >&2
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and syntax checks
+        run: |
+          bash scripts/build.sh
+          bash -n vps.sh dist/vps.sh
+          bash -n src/*.sh scripts/*.sh tests/*.sh
+
+      - name: Run container-compatible smoke tests
+        env:
+          VPSO_CI_CONTAINER: "1"
+        run: |
+          bash tests/smoke.sh
+
+      - name: Run compatibility smoke
+        run: |
+          bash scripts/compat-smoke.sh
+
+      - name: Run golden render tests
+        run: |
+          bash tests/golden-render.sh

@@ -150,6 +150,10 @@ install_pkg() {
             yum install -y -q "${pkgs[@]}" >>"$log_file" 2>&1
         fi
         rc=$?
+    else
+        echo -e "${RED}❌ 当前系统暂不支持自动安装软件包：OS=${OS:-unknown} ID_LIKE=${OS_LIKE:-unknown}${PLAIN}"
+        rm -f "$log_file"
+        return 1
     fi
     if [[ "$rc" -eq 0 ]]; then
         rm -f "$log_file"
@@ -176,6 +180,10 @@ remove_pkg() {
             yum remove -y -q "${pkgs[@]}" >>"$log_file" 2>&1
         fi
         rc=$?
+    else
+        echo -e "${RED}❌ 当前系统暂不支持自动卸载软件包：OS=${OS:-unknown} ID_LIKE=${OS_LIKE:-unknown}${PLAIN}"
+        rm -f "$log_file"
+        return 1
     fi
     if [[ "$rc" -eq 0 ]]; then
         rm -f "$log_file"
@@ -860,7 +868,10 @@ is_valid_ipv4_cidr() {
     local ip prefix a b c d octet
     ip="${value%%/*}"
     prefix=""
-    [[ "$value" == */* ]] && prefix="${value##*/}"
+    if [[ "$value" == */* ]]; then
+        prefix="${value##*/}"
+        [[ -n "$prefix" ]] || return 1
+    fi
 
     [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
     IFS='.' read -r a b c d <<< "$ip"
@@ -876,23 +887,66 @@ is_valid_ipv4_cidr() {
 
 is_valid_ipv6_cidr() {
     local value="$1"
-    local ip prefix
+    local ip prefix remainder double_colon_count segment_count segment
+    local -a ipv6_segments
+    [[ -n "$value" ]] || return 1
     ip="${value%%/*}"
     prefix=""
-    [[ "$value" == */* ]] && prefix="${value##*/}"
+    if [[ "$value" == */* ]]; then
+        prefix="${value##*/}"
+        [[ -n "$prefix" ]] || return 1
+    fi
 
+    [[ -n "$ip" ]] || return 1
     [[ "$ip" == *:* ]] || return 1
     [[ "$ip" =~ ^[0-9a-fA-F:]+$ ]] || return 1
     [[ "$ip" != *:::* ]] || return 1
+    remainder="$ip"
+    double_colon_count=0
+    while [[ "$remainder" == *"::"* ]]; do
+        ((double_colon_count += 1))
+        remainder="${remainder#*::}"
+    done
+    (( double_colon_count <= 1 )) || return 1
+
+    segment_count=0
+    IFS=':' read -ra ipv6_segments <<< "$ip"
+    for segment in "${ipv6_segments[@]}"; do
+        [[ -z "$segment" ]] && continue
+        ((segment_count += 1))
+        ((${#segment} <= 4)) || return 1
+    done
+    if (( double_colon_count == 0 )); then
+        (( segment_count == 8 )) || return 1
+    else
+        (( segment_count < 8 )) || return 1
+    fi
     if [[ -n "$prefix" ]]; then
         [[ "$prefix" =~ ^[0-9]+$ ]] || return 1
         (( 10#$prefix >= 0 && 10#$prefix <= 128 )) || return 1
     fi
 }
 
+validate_ip_cidr_python() {
+    local value="$1"
+    python3 - "$value" <<'PY'
+import ipaddress
+import sys
+
+try:
+    ipaddress.ip_network(sys.argv[1], strict=False)
+except ValueError:
+    sys.exit(1)
+PY
+}
+
 is_valid_ip_cidr() {
     local value="$1"
     [[ -n "$value" && "$value" != *";"* && "$value" != *"{"* && "$value" != *"}"* ]] || return 1
+    if command -v python3 >/dev/null 2>&1; then
+        validate_ip_cidr_python "$value"
+        return $?
+    fi
     is_valid_ipv4_cidr "$value" || is_valid_ipv6_cidr "$value"
 }
 
@@ -2125,10 +2179,12 @@ func_backup_center() {
 # Runtime privilege guard shared by source and generated release scripts.
 
 # --- Runtime guard ---
-if [[ $EUID -ne 0 ]]; then
-    echo -e "${RED}❌ 错误：请以 root 用户身份运行本脚本！${PLAIN}"
-    exit 1
-fi
+ensure_runtime_root() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}❌ 错误：请以 root 用户身份运行本脚本！${PLAIN}"
+        exit 1
+    fi
+}
 
 # ---------------------------------------------------------
 # Module: system_core.sh
@@ -4136,6 +4192,12 @@ nginx_proxy_whitelist_ranges_from_conf() {
     ' "$conf_file" | paste -sd' ' -
 }
 
+nginx_proxy_ipv6_enabled() {
+    local if_inet6="${VPSO_PROC_NET_IF_INET6:-/proc/net/if_inet6}"
+    local disable_ipv6="${VPSO_PROC_SYS_DISABLE_IPV6:-/proc/sys/net/ipv6/conf/all/disable_ipv6}"
+    [[ -s "$if_inet6" && "$(cat "$disable_ipv6" 2>/dev/null || echo 1)" != "1" ]]
+}
+
 nginx_proxy_domain_exists() {
     local domain="$1"
     [[ -e "$(nginx_proxy_conf_path "$domain")" ]] && return 0
@@ -4216,7 +4278,7 @@ write_nginx_reverse_proxy_conf() {
     proxy_ssl_verify off;"
     fi
     ip_whitelist_block=$(nginx_ip_whitelist_block "$ip_whitelist_ranges")
-    if [[ -s /proc/net/if_inet6 && "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null || echo 1)" != "1" ]]; then
+    if nginx_proxy_ipv6_enabled; then
         listen_80_ipv6="    listen [::]:80;"
         listen_443_ipv6="    listen [::]:443 ssl http2;"
     fi
@@ -18409,6 +18471,11 @@ main_menu() {
 # shellcheck shell=bash
 # Main bootstrap. Feature implementation lives in the focused src/*.sh modules.
 
-# --- ???? ---
-main_menu
+# --- Main entrypoint ---
+main() {
+    ensure_runtime_root
+    main_menu "$@"
+}
+
+main "$@"
 

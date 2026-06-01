@@ -9,11 +9,14 @@ echo "==> build release artifact"
 bash scripts/build.sh
 
 echo "==> bash syntax"
-bash -n scripts/build.sh scripts/selfcheck.sh scripts/compat-smoke.sh
+bash -n scripts/build.sh scripts/selfcheck.sh scripts/compat-smoke.sh tests/golden-render.sh
 bash -n vps.sh dist/vps.sh dog.sh xui-custom-manager.sh
 for module in src/*.sh; do
     bash -n "$module"
 done
+
+echo "==> golden render"
+bash tests/golden-render.sh
 
 echo "==> shellcheck"
 if command -v shellcheck >/dev/null 2>&1; then

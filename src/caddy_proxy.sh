@@ -195,6 +195,12 @@ nginx_proxy_whitelist_ranges_from_conf() {
     ' "$conf_file" | paste -sd' ' -
 }
 
+nginx_proxy_ipv6_enabled() {
+    local if_inet6="${VPSO_PROC_NET_IF_INET6:-/proc/net/if_inet6}"
+    local disable_ipv6="${VPSO_PROC_SYS_DISABLE_IPV6:-/proc/sys/net/ipv6/conf/all/disable_ipv6}"
+    [[ -s "$if_inet6" && "$(cat "$disable_ipv6" 2>/dev/null || echo 1)" != "1" ]]
+}
+
 nginx_proxy_domain_exists() {
     local domain="$1"
     [[ -e "$(nginx_proxy_conf_path "$domain")" ]] && return 0
@@ -275,7 +281,7 @@ write_nginx_reverse_proxy_conf() {
     proxy_ssl_verify off;"
     fi
     ip_whitelist_block=$(nginx_ip_whitelist_block "$ip_whitelist_ranges")
-    if [[ -s /proc/net/if_inet6 && "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null || echo 1)" != "1" ]]; then
+    if nginx_proxy_ipv6_enabled; then
         listen_80_ipv6="    listen [::]:80;"
         listen_443_ipv6="    listen [::]:443 ssl http2;"
     fi

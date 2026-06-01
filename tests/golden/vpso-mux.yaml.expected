@@ -1,0 +1,56 @@
+listen:
+  tcp:
+    - '0.0.0.0:443'
+
+timeouts:
+  peek: '3s'
+  dial: '5s'
+  idle: '300s'
+  shutdown: '10s'
+
+backend_retry:
+  count: 0
+  delay: '200ms'
+
+splice:
+  enabled: true
+  pipe_size: 1048576
+  fallback_to_copy: true
+
+limits:
+  max_connections: 4096
+
+default_backend: '127.0.0.1:1443'
+
+routes:
+  - name: 'panel'
+    sni:
+      - 'panel.example.com'
+    backend: '127.0.0.1:8443'
+    whitelist:
+      - '198.51.100.10'
+      - '2001:db8::/32'
+  - name: 'site_site_example_com'
+    sni:
+      - 'site.example.com'
+    backend: '127.0.0.1:8443'
+    whitelist:
+      - '203.0.113.5'
+  - name: 'tcp_tcp_example_com'
+    sni:
+      - 'tcp.example.com'
+    backend: '127.0.0.1:2443'
+  - name: 'xray_node_example_com'
+    sni:
+      - 'node.example.com'
+    backend: '127.0.0.1:3443'
+  - name: 'reality'
+    sni:
+      - 'reality.example.com'
+    backend: '127.0.0.1:1443'
+
+logging:
+  level: 'info'
+  format: 'json'
+  max_size_bytes: 5242880
+  max_backups: 3

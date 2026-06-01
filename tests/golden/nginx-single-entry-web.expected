@@ -1,0 +1,86 @@
+# Managed by VPS-Optimize 443 single-entry. Local HTTPS Web proxy only.
+server {
+    listen 127.0.0.1:8443 ssl http2;
+    server_name panel.example.com;
+
+    ssl_certificate /etc/caddy/certs/panel.example.com.crt;
+    ssl_certificate_key /etc/caddy/certs/panel.example.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    gzip on;
+
+    location = /sub {
+        return 308 /sub/;
+    }
+
+    location ^~ /sub/ {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 443;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $vps_proxy_connection_upgrade;
+        proxy_set_header Range $http_range;
+        proxy_set_header If-Range $http_if_range;
+        proxy_pass http://127.0.0.1:2096;
+    }
+
+    location = /clash {
+        return 308 /clash/;
+    }
+
+    location ^~ /clash/ {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 443;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $vps_proxy_connection_upgrade;
+        proxy_set_header Range $http_range;
+        proxy_set_header If-Range $http_if_range;
+        proxy_pass http://127.0.0.1:2096;
+    }
+
+    location / {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 443;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $vps_proxy_connection_upgrade;
+        proxy_set_header Range $http_range;
+        proxy_set_header If-Range $http_if_range;
+        proxy_pass http://127.0.0.1:40000;
+    }
+}
+
+server {
+    listen 127.0.0.1:8443 ssl http2;
+    server_name site.example.com;
+
+    ssl_certificate /etc/caddy/certs/site.example.com.crt;
+    ssl_certificate_key /etc/caddy/certs/site.example.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    gzip on;
+
+    location / {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 443;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $vps_proxy_connection_upgrade;
+        proxy_set_header Range $http_range;
+        proxy_set_header If-Range $http_if_range;
+        proxy_pass http://127.0.0.1:3000;
+    }
+}

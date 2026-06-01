@@ -188,7 +188,10 @@ is_valid_ipv4_cidr() {
     local ip prefix a b c d octet
     ip="${value%%/*}"
     prefix=""
-    [[ "$value" == */* ]] && prefix="${value##*/}"
+    if [[ "$value" == */* ]]; then
+        prefix="${value##*/}"
+        [[ -n "$prefix" ]] || return 1
+    fi
 
     [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
     IFS='.' read -r a b c d <<< "$ip"
@@ -204,23 +207,66 @@ is_valid_ipv4_cidr() {
 
 is_valid_ipv6_cidr() {
     local value="$1"
-    local ip prefix
+    local ip prefix remainder double_colon_count segment_count segment
+    local -a ipv6_segments
+    [[ -n "$value" ]] || return 1
     ip="${value%%/*}"
     prefix=""
-    [[ "$value" == */* ]] && prefix="${value##*/}"
+    if [[ "$value" == */* ]]; then
+        prefix="${value##*/}"
+        [[ -n "$prefix" ]] || return 1
+    fi
 
+    [[ -n "$ip" ]] || return 1
     [[ "$ip" == *:* ]] || return 1
     [[ "$ip" =~ ^[0-9a-fA-F:]+$ ]] || return 1
     [[ "$ip" != *:::* ]] || return 1
+    remainder="$ip"
+    double_colon_count=0
+    while [[ "$remainder" == *"::"* ]]; do
+        ((double_colon_count += 1))
+        remainder="${remainder#*::}"
+    done
+    (( double_colon_count <= 1 )) || return 1
+
+    segment_count=0
+    IFS=':' read -ra ipv6_segments <<< "$ip"
+    for segment in "${ipv6_segments[@]}"; do
+        [[ -z "$segment" ]] && continue
+        ((segment_count += 1))
+        ((${#segment} <= 4)) || return 1
+    done
+    if (( double_colon_count == 0 )); then
+        (( segment_count == 8 )) || return 1
+    else
+        (( segment_count < 8 )) || return 1
+    fi
     if [[ -n "$prefix" ]]; then
         [[ "$prefix" =~ ^[0-9]+$ ]] || return 1
         (( 10#$prefix >= 0 && 10#$prefix <= 128 )) || return 1
     fi
 }
 
+validate_ip_cidr_python() {
+    local value="$1"
+    python3 - "$value" <<'PY'
+import ipaddress
+import sys
+
+try:
+    ipaddress.ip_network(sys.argv[1], strict=False)
+except ValueError:
+    sys.exit(1)
+PY
+}
+
 is_valid_ip_cidr() {
     local value="$1"
     [[ -n "$value" && "$value" != *";"* && "$value" != *"{"* && "$value" != *"}"* ]] || return 1
+    if command -v python3 >/dev/null 2>&1; then
+        validate_ip_cidr_python "$value"
+        return $?
+    fi
     is_valid_ipv4_cidr "$value" || is_valid_ipv6_cidr "$value"
 }
 

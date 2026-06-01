@@ -15,6 +15,24 @@ assert_file_contains() {
     fi
 }
 
+module_list_entries() {
+    awk '
+        {
+            sub(/#.*/, "")
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+            if ($0 != "") print
+        }
+    ' scripts/modules.list
+}
+
+assert_module_list_contains() {
+    local module="$1"
+    if ! module_list_entries | grep -Fxq "$module"; then
+        echo "scripts/modules.list is missing required module: ${module}" >&2
+        exit 1
+    fi
+}
+
 assert_traffic_guard_checker_shebang() {
     local first_line
     first_line=$(awk '/TRAFFIC_GUARD_CHECKER.*GUARD_SCRIPT/ { getline; print; exit }' src/traffic_guard.sh)
@@ -51,6 +69,8 @@ for module in src/*.sh; do
 done
 
 assert_function_once dist/vps.sh main_menu
+assert_function_once dist/vps.sh ensure_runtime_root
+assert_function_once dist/vps.sh main
 assert_function_once dist/vps.sh func_net_kernel_menu
 assert_function_once dist/vps.sh func_health_dashboard
 assert_function_once dist/vps.sh render_menu
@@ -71,6 +91,18 @@ assert_file_contains src/common.sh 'command -v curl' "Remote downloads must keep
 assert_file_contains src/common.sh 'command -v wget' "Remote downloads must keep wget fallback detection."
 assert_file_contains src/common.sh 'install_pkg curl wget' "Remote download helper must still try to install missing download tools."
 assert_file_contains src/common.sh 'confirm_risk_action "$desc"' "Remote script execution must use the unified risk prompt when available."
+
+[[ -f scripts/modules.list ]]
+assert_file_contains scripts/build.sh 'scripts/modules.list' "Release build must read the shared module list."
+assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read the shared module list."
+for module in \
+    common runtime firewall sni_stack_config vpso_mux_state vpso_mux_config \
+    vpso_mux_install tcp_peek_engine sni_stack_health compose_runtime \
+    subscription_apps subscription_compose_manage subscription_service_menus \
+    dockge_migration menus main; do
+    assert_module_list_contains "$module"
+    assert_file_contains dist/vps.sh "# Module: ${module}.sh" "Release script is missing key module: ${module}.sh"
+done
 
 assert_traffic_guard_checker_shebang
 assert_file_contains src/traffic_guard.sh 'ExecStart=/usr/bin/env bash ${TRAFFIC_GUARD_CHECKER}' "Traffic Guard systemd service must keep bash-based ExecStart."

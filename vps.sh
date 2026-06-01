@@ -6,50 +6,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RELEASE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
-MODULES=(
-    common
-    ui
-    input
-    validate
-    rollback
-    backup
-    runtime
-    system_core
-    firewall
-    caddy_certificates
-    caddy_proxy
-    environment
-    caddy_legacy
-    sni_stack_config
-    vpso_mux_state
-    vpso_mux_config
-    vpso_mux_install
-    tcp_peek_engine
-    sni_stack_health
-    sni_stack_profiles
-    sni_stack_install
-    sni_stack_sites
-    xray_sni_routes
-    sni_stack_menus
-    caddy_maintenance
-    ssh_security
-    docker_manage
-    kernel_tuning
-    diagnostics_status
-    diagnostics_network
-    panel_installers
-    subscription_tools
-    panel_rescue
-    server_maintenance
-    updater
-    preflight
-    health_dashboard
-    dns_optimize
-    traffic_guard
-    network_interface
-    menus
-    main
-)
+MODULE_LIST="$SCRIPT_DIR/scripts/modules.list"
+MODULES=()
 
 download_release_script() {
     local output_file="$1"
@@ -99,7 +57,34 @@ switch_to_release_script() {
     exec bash "$tmp_file" "$@"
 }
 
+load_source_modules() {
+    local raw module
+    MODULES=()
+    [[ -f "$MODULE_LIST" ]] || {
+        echo "Missing module list: scripts/modules.list" >&2
+        return 1
+    }
+    while IFS= read -r raw || [[ -n "$raw" ]]; do
+        module="${raw%%#*}"
+        module="${module#"${module%%[![:space:]]*}"}"
+        module="${module%"${module##*[![:space:]]}"}"
+        [[ -n "$module" ]] || continue
+        if [[ "$module" == *.sh ]]; then
+            echo "Invalid module list entry, omit .sh: ${module}" >&2
+            return 1
+        fi
+        MODULES+=("$module")
+    done < "$MODULE_LIST"
+    [[ ${#MODULES[@]} -gt 0 ]] || {
+        echo "Module list is empty: scripts/modules.list" >&2
+        return 1
+    }
+}
+
 missing_module=0
+if ! load_source_modules; then
+    missing_module=1
+fi
 for module in "${MODULES[@]}"; do
     if [[ ! -f "$SCRIPT_DIR/src/${module}.sh" ]]; then
         echo "Missing source module: src/${module}.sh" >&2

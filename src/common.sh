@@ -138,6 +138,10 @@ install_pkg() {
             yum install -y -q "${pkgs[@]}" >>"$log_file" 2>&1
         fi
         rc=$?
+    else
+        echo -e "${RED}❌ 当前系统暂不支持自动安装软件包：OS=${OS:-unknown} ID_LIKE=${OS_LIKE:-unknown}${PLAIN}"
+        rm -f "$log_file"
+        return 1
     fi
     if [[ "$rc" -eq 0 ]]; then
         rm -f "$log_file"
@@ -164,6 +168,10 @@ remove_pkg() {
             yum remove -y -q "${pkgs[@]}" >>"$log_file" 2>&1
         fi
         rc=$?
+    else
+        echo -e "${RED}❌ 当前系统暂不支持自动卸载软件包：OS=${OS:-unknown} ID_LIKE=${OS_LIKE:-unknown}${PLAIN}"
+        rm -f "$log_file"
+        return 1
     fi
     if [[ "$rc" -eq 0 ]]; then
         rm -f "$log_file"

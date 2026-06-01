@@ -31,7 +31,7 @@ Build order is intentional. Foundational helpers are loaded first, then focused 
 9. `menus.sh`
    Help text plus top-level and second-level menu wiring.
 10. `main.sh`
-   Bootstrap only; calls `main_menu`.
+   Bootstrap only; defines `main`, checks runtime privileges, then calls `main_menu`.
 
 Compose/subscription build ownership:
 
@@ -47,7 +47,7 @@ Rules for new code:
 - Put reusable shell primitives in `common.sh`, `ui.sh`, `input.sh`, `validate.sh`, `rollback.sh`, or `backup.sh`.
 - Put feature-specific flows in the nearest focused feature module.
 - Put firewall allow/delete/view/connlimit workflows in `firewall.sh`; keep UFW/firewalld port allow rules separate from raw iptables/ip6tables connlimit rules and their netfilter-persistent save/check path.
-- Keep `main.sh` as a tiny bootstrap so the generated release script still starts from the same menu.
+- Keep `main.sh` as a tiny bootstrap so the generated release script still checks runtime privileges before starting the same menu.
 - Do not make the release script source `src/*.sh` at runtime; regenerate `dist/vps.sh` with `scripts/build.sh`.
 - Keep menu numbers stable for backward compatibility; prefer adding aliases or moving display groups over renumbering existing entries.
 

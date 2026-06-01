@@ -66,6 +66,40 @@ assert_function_defined_once() {
     fi
 }
 
+assert_function_body_contains() {
+    local file="$1"
+    local function_name="$2"
+    local needle="$3"
+    local message="${4:-${function_name} in ${file} must contain: ${needle}}"
+    if ! awk -v fn="$function_name" -v needle="$needle" '
+        $0 ~ "^" fn "\\(\\) \\{" { in_fn = 1 }
+        in_fn && index($0, needle) { found = 1 }
+        in_fn && $0 == "}" { exit }
+        END { exit found ? 0 : 1 }
+    ' "$file"; then
+        echo "$message" >&2
+        exit 1
+    fi
+}
+
+module_list_entries() {
+    awk '
+        {
+            sub(/#.*/, "")
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+            if ($0 != "") print
+        }
+    ' scripts/modules.list
+}
+
+assert_module_list_contains() {
+    local module="$1"
+    if ! module_list_entries | grep -Fxq "$module"; then
+        echo "scripts/modules.list is missing required module: ${module}" >&2
+        exit 1
+    fi
+}
+
 bash -n scripts/build.sh
 bash -n scripts/selfcheck.sh
 bash -n scripts/compat-smoke.sh
@@ -76,17 +110,25 @@ for module in src/*.sh; do
 done
 bash -n dog.sh
 bash -n xui-custom-manager.sh
-grep -q 'modules=(' scripts/build.sh
-grep -q 'runtime.sh  # root/runtime guard' scripts/build.sh
-grep -q 'main.sh     # bootstrap into menu wiring' scripts/build.sh
-assert_file_contains scripts/build.sh 'vpso_mux_state.sh   # vpso-mux paths, engine state, and runtime status'
-assert_file_contains scripts/build.sh 'vpso_mux_config.sh  # vpso-mux YAML rendering'
-assert_file_contains scripts/build.sh 'vpso_mux_install.sh # vpso-mux binary/systemd helpers'
-assert_file_contains scripts/build.sh 'tcp_peek_engine.sh  # TCP Peek preflight and entry-mode switching'
-assert_file_contains scripts/build.sh 'firewall.sh  # firewall allow/delete/connlimit workflows'
+[[ -f scripts/modules.list ]]
+for module in \
+    common runtime firewall sni_stack_config vpso_mux_state vpso_mux_config \
+    vpso_mux_install tcp_peek_engine sni_stack_health compose_runtime \
+    subscription_apps subscription_compose_manage subscription_service_menus \
+    dockge_migration menus main; do
+    assert_module_list_contains "$module"
+    assert_dist_contains "# Module: ${module}.sh" "Release script is missing key module: ${module}.sh"
+done
+assert_file_contains scripts/build.sh 'scripts/modules.list' "Release build must read the shared module list."
 assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/selfcheck.sh' "CI must call the shared selfcheck entrypoint."
 assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/compat-smoke.sh' "CI must call the compatibility smoke entrypoint."
-assert_file_contains vps.sh '    firewall'
+assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read the shared module list."
+assert_dist_contains 'ensure_runtime_root()' "Release script must include the runtime root guard function."
+assert_dist_contains 'main()' "Release script must include the bootstrap main function."
+assert_function_defined_once dist/vps.sh ensure_runtime_root
+assert_function_defined_once dist/vps.sh main
+assert_function_body_contains dist/vps.sh main 'ensure_runtime_root' "main must check root before entering the menu."
+assert_function_body_contains dist/vps.sh main 'main_menu' "main must enter the top-level menu."
 assert_dist_contains 'rotate_log_file' "Release script must include the shared log rotation helper."
 assert_dist_contains 'print_log_capacity_summary' "Health overview must include log capacity summary."
 assert_dist_contains 'check_vpso_file_permissions' "Health overview must expose file permission checks."
@@ -134,30 +176,25 @@ assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [8 防�
 assert_file_contains docs/recovery-runbook.md '端口并发连接限制误封' "Recovery runbook must include connlimit lockout guidance."
 assert_file_contains docs/recovery-runbook.md '不要批量清空 INPUT 链' "Recovery runbook must warn against broad firewall cleanup for connlimit recovery."
 assert_function_defined_once dist/vps.sh func_firewall_manage
-build_order=$(awk '/^[[:space:]]+[a-z0-9_]+\.sh/{print $1}' scripts/build.sh | tr '\n' ' ')
-case "$build_order" in
-    *"sni_stack_config.sh vpso_mux_state.sh vpso_mux_config.sh vpso_mux_install.sh tcp_peek_engine.sh sni_stack_health.sh"*) ;;
+module_order=$(module_list_entries | tr '\n' ' ')
+case "$module_order" in
+    *"sni_stack_config vpso_mux_state vpso_mux_config vpso_mux_install tcp_peek_engine sni_stack_health"*) ;;
     *)
         echo "vpso-mux/TCP Peek modules are not in the expected build order." >&2
         exit 1
         ;;
 esac
-source_order=$(awk '/^[[:space:]]+[a-z0-9_]+$/{print $1}' vps.sh | tr '\n' ' ')
-case "$source_order" in
-    *"sni_stack_config vpso_mux_state vpso_mux_config vpso_mux_install tcp_peek_engine sni_stack_health"*) ;;
-    *)
-        echo "Source checkout entrypoint vps.sh is not aligned with the vpso-mux/TCP Peek build order." >&2
-        exit 1
-        ;;
-esac
-case "$build_order" in
-    *"panel_installers.sh compose_runtime.sh subscription_apps.sh subscription_compose_manage.sh subscription_service_menus.sh dockge_migration.sh panel_rescue.sh"*) ;;
+case "$module_order" in
+    *"panel_installers compose_runtime subscription_apps subscription_compose_manage subscription_service_menus dockge_migration panel_rescue"*) ;;
     *)
         echo "Compose management modules are not in the expected build order." >&2
         exit 1
         ;;
 esac
-assert_file_not_contains scripts/build.sh 'subscription_tools.sh' "Release build must use the split compose/subscription modules directly."
+if module_list_entries | grep -Fxq 'subscription_tools'; then
+    echo "Release build must use the split compose/subscription modules directly." >&2
+    exit 1
+fi
 assert_file_not_contains dist/vps.sh '# Module: subscription_tools.sh' "Release build must not include the legacy subscription_tools compatibility loader."
 assert_file_not_matches src/subscription_tools.sh '^[A-Za-z_][A-Za-z0-9_]*\(\) \{' "subscription_tools.sh must stay a compatibility loader, not reintroduce duplicate implementations."
 assert_file_contains src/README.md 'compose_runtime.sh`, `subscription_apps.sh`,' "Source README must document the split compose/subscription build order."
@@ -184,30 +221,41 @@ for function_name in \
 do
     assert_function_defined_once dist/vps.sh "$function_name"
 done
-assert_file_contains scripts/build.sh 'sni_stack_sites.sh' "Release build must use src/sni_stack_sites.sh for 443 Web/SNI site workflows."
-assert_file_contains vps.sh '    sni_stack_sites' "Source checkout entrypoint must load src/sni_stack_sites.sh for 443 Web/SNI site workflows."
+assert_module_list_contains sni_stack_sites
 assert_dist_contains '# Module: sni_stack_sites.sh' "Release script must include the active 443 Web/SNI site module."
 assert_path_absent "src/sni_stack_web_sites.sh" "sni_stack_web_sites.sh is a stale shadow implementation; use src/sni_stack_sites.sh."
-assert_file_not_contains scripts/build.sh 'sni_stack_web_sites.sh' "Stale sni_stack_web_sites.sh must not be added to the release build."
-assert_file_not_contains vps.sh 'sni_stack_web_sites' "Source entrypoint must not load the stale sni_stack_web_sites module."
+if module_list_entries | grep -Fxq 'sni_stack_web_sites'; then
+    echo "Stale sni_stack_web_sites.sh must not be added to the release build." >&2
+    exit 1
+fi
 assert_file_not_contains dist/vps.sh '# Module: sni_stack_web_sites.sh' "Release script must not include the stale sni_stack_web_sites module."
 assert_path_absent "src/entry_mode_cutover.sh" "entry_mode_cutover.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
 assert_path_absent "src/tcp_peek_preflight.sh" "tcp_peek_preflight.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
-assert_file_not_contains scripts/build.sh 'entry_mode_cutover.sh' "Stale entry-mode cutover module must not be added to the release build."
-assert_file_not_contains scripts/build.sh 'tcp_peek_preflight.sh' "Stale TCP Peek preflight module must not be added to the release build."
-assert_file_not_contains vps.sh 'entry_mode_cutover' "Source entrypoint must not load the stale entry-mode cutover module."
-assert_file_not_contains vps.sh 'tcp_peek_preflight' "Source entrypoint must not load the stale TCP Peek preflight module."
+if module_list_entries | grep -Fxq 'entry_mode_cutover'; then
+    echo "Stale entry-mode cutover module must not be added to the release build." >&2
+    exit 1
+fi
+if module_list_entries | grep -Fxq 'tcp_peek_preflight'; then
+    echo "Stale TCP Peek preflight module must not be added to the release build." >&2
+    exit 1
+fi
 assert_file_contains src/README.md '443/TCP Peek ownership:' "Source README must document 443/TCP Peek module ownership."
 assert_file_contains src/README.md 'Do not reintroduce split shadow modules' "Source README must warn against stale split 443/TCP Peek modules."
 if command -v go >/dev/null 2>&1; then
     GO_BIN=go
 elif command -v go.exe >/dev/null 2>&1; then
     GO_BIN=go.exe
+elif [[ "${VPSO_CI_CONTAINER:-0}" == "1" ]]; then
+    GO_BIN=""
 else
     echo "Go is required for vpso-mux release validation." >&2
     exit 1
 fi
-GOTOOLCHAIN=local "$GO_BIN" test ./...
+if [[ -n "${GO_BIN:-}" ]]; then
+    GOTOOLCHAIN=local "$GO_BIN" test ./...
+else
+    echo "Go not found; skipped Go smoke validation in VPSO_CI_CONTAINER mode."
+fi
 
 dangerous_patterns='rm -rf|rm -r[[:space:]]|wget .*[&][&]|curl .*\|[[:space:]]*gpg|\|[[:space:]]*bash|bash[[:space:]]*<'
 if grep -En "$dangerous_patterns" dist/vps.sh dog.sh; then
@@ -217,11 +265,72 @@ fi
 
 source src/common.sh
 vps_smoke_script_version="$SCRIPT_VERSION"
+(
+    OS=unknown
+    OS_LIKE=unknown
+    if install_pkg somepkg >/tmp/vps-smoke-install-unknown.out 2>&1; then
+        echo "install_pkg must fail on unknown OS." >&2
+        exit 1
+    fi
+    grep -Fq '当前系统暂不支持自动安装软件包' /tmp/vps-smoke-install-unknown.out
+    rm -f /tmp/vps-smoke-install-unknown.out
+
+    if remove_pkg somepkg >/tmp/vps-smoke-remove-unknown.out 2>&1; then
+        echo "remove_pkg must fail on unknown OS." >&2
+        exit 1
+    fi
+    grep -Fq '当前系统暂不支持自动卸载软件包' /tmp/vps-smoke-remove-unknown.out
+    rm -f /tmp/vps-smoke-remove-unknown.out
+)
 source src/ui.sh
 source src/input.sh
 source src/validate.sh
 source src/rollback.sh
 source src/backup.sh
+
+assert_ip_cidr_valid() {
+    local value="$1"
+    if ! is_valid_ip_cidr "$value"; then
+        echo "Expected valid IP/CIDR: ${value}" >&2
+        exit 1
+    fi
+}
+
+assert_ip_cidr_invalid() {
+    local value="$1"
+    if is_valid_ip_cidr "$value"; then
+        echo "Expected invalid IP/CIDR: ${value}" >&2
+        exit 1
+    fi
+}
+
+for cidr_value in 1.2.3.4 1.2.3.0/24 2001:db8::1 2001:db8::/32 ::1; do
+    assert_ip_cidr_valid "$cidr_value"
+done
+for cidr_value in 999.1.1.1 1.2.3.4/33 2001:::1 2001:db8::1::2 2001:db8::/129 zzzz::1; do
+    assert_ip_cidr_invalid "$cidr_value"
+done
+(
+    command() {
+        if [[ "$1" == "-v" && "${2:-}" == "python3" ]]; then
+            return 1
+        fi
+        builtin command "$@"
+    }
+    assert_ip_cidr_valid 2001:db8::1
+    assert_ip_cidr_valid 2001:db8::/32
+    assert_ip_cidr_invalid 2001:::1
+    assert_ip_cidr_invalid 2001:db8::1::2
+    assert_ip_cidr_invalid 2001:db8::/129
+    assert_ip_cidr_invalid zzzz::1
+)
+declare -a ip_whitelist_smoke=()
+normalize_ip_whitelist_input '2001:db8::1,2001:db8::/32,::1' ip_whitelist_smoke
+[[ "${#ip_whitelist_smoke[@]}" -eq 3 ]]
+if normalize_ip_whitelist_input '2001:::1' ip_whitelist_smoke >/dev/null 2>&1; then
+    echo "normalize_ip_whitelist_input must reject invalid IPv6 input." >&2
+    exit 1
+fi
 
 [[ "$(trim_input "  q  ")" == "q" ]]
 [[ "$(normalize_menu_choice_input "  q  ")" == "0" ]]
@@ -646,8 +755,8 @@ source <(sed -n '1,/^show_port_list()/p' dog.sh | sed '$d')
 declare -f sanitize_nftables_config >/dev/null
 declare -f update_telegram_config >/dev/null
 
-grep -q 'MODULES=(' vps.sh
-grep -q 'src/${module}.sh' vps.sh
+assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read scripts/modules.list."
+assert_file_contains vps.sh 'src/${module}.sh' "Source checkout entrypoint must source modules from src."
 grep -q 'VPS 全能控制面板' vps.sh
 grep -q 'RELEASE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"' vps.sh
 if grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' dist/vps.sh; then
