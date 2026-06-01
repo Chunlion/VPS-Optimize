@@ -32,6 +32,38 @@ is_valid_domain() {
     echo "$domain" | grep -Eq '^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
 }
 
+print_domain_validation_error() {
+    local label="${1:-域名}"
+    local raw="${2:-}"
+    local normalized="${3:-}"
+    local trimmed display_value
+
+    [[ -z "$normalized" && -n "$raw" ]] && normalized=$(normalize_domain_input "$raw")
+    display_value="${normalized:-（空）}"
+    echo -e "${RED}❌ ${label}格式无效：${display_value}${PLAIN}"
+    echo -e "${YELLOW}提示：请只粘贴纯域名，例如 panel.example.com；不要带协议、路径、端口或中文/全角标点。${PLAIN}"
+
+    if [[ -z "$raw" ]]; then
+        echo -e "${YELLOW}脚本规范化后用于校验的值：${display_value}${PLAIN}"
+        return 0
+    fi
+
+    trimmed=$(trim_input "$raw")
+    if [[ "$trimmed" != "$raw" || "$raw" =~ [[:space:]] ]]; then
+        echo -e "${YELLOW}检测到空白字符：请确认没有复制到换行、制表符、不可见空格或多余空格。${PLAIN}"
+    fi
+    if [[ "$trimmed" =~ ^[Hh][Tt][Tt][Pp][Ss]?:// || "$trimmed" == *"://"* || "$trimmed" == */* || "$trimmed" == *\?* || "$trimmed" == *#* || "$trimmed" == *:* ]]; then
+        echo -e "${YELLOW}检测到类似 URL 的内容：请去掉 http(s)://、路径、查询参数、#片段或 :端口。${PLAIN}"
+    fi
+    if printf '%s' "$trimmed" | grep -q '[：，。／、；？＃＠　]'; then
+        echo -e "${YELLOW}检测到中文/全角标点：请改成英文半角的 . , / : 等字符；域名里的点必须是英文句点。${PLAIN}"
+    fi
+    if printf '%s' "$trimmed" | LC_ALL=C grep -q '[^ -~]'; then
+        echo -e "${YELLOW}检测到非 ASCII 字符：可能包含零宽空格、全角字符或复制来源带入的隐藏字符。${PLAIN}"
+    fi
+    echo -e "${YELLOW}脚本规范化后用于校验的值：${display_value}${PLAIN}"
+}
+
 normalize_path_prefix() {
     local path
     path="$(trim_input "$1")"

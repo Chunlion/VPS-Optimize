@@ -425,10 +425,10 @@ run_remote_script() {
     echo -e "${CYAN}▶ ${desc}${PLAIN}"
     echo -e "${YELLOW}脚本来源：${url}${PLAIN}"
     if trusted_source=$(is_trusted_remote_script_url "$url"); then
-        echo -e "${GREEN}内置可信来源：${trusted_source}${PLAIN}"
+        echo -e "${GREEN}内置已知来源：${trusted_source}${PLAIN}"
     else
         trusted_source=""
-        echo -e "${RED}⚠️ 非内置可信来源：该 URL 不在 VPS-Optimize 内置远程脚本白名单内。${PLAIN}"
+        echo -e "${RED}⚠️ 非内置已知来源：该 URL 不在 VPS-Optimize 内置远程脚本白名单内。${PLAIN}"
     fi
     if [[ "$url" != https://* ]]; then
         echo -e "${YELLOW}⚠️ 该来源不是 HTTPS，将按脚本内置地址继续下载执行。${PLAIN}"
@@ -702,6 +702,38 @@ is_valid_hostname() {
 is_valid_domain() {
     local domain="$1"
     echo "$domain" | grep -Eq '^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+}
+
+print_domain_validation_error() {
+    local label="${1:-域名}"
+    local raw="${2:-}"
+    local normalized="${3:-}"
+    local trimmed display_value
+
+    [[ -z "$normalized" && -n "$raw" ]] && normalized=$(normalize_domain_input "$raw")
+    display_value="${normalized:-（空）}"
+    echo -e "${RED}❌ ${label}格式无效：${display_value}${PLAIN}"
+    echo -e "${YELLOW}提示：请只粘贴纯域名，例如 panel.example.com；不要带协议、路径、端口或中文/全角标点。${PLAIN}"
+
+    if [[ -z "$raw" ]]; then
+        echo -e "${YELLOW}脚本规范化后用于校验的值：${display_value}${PLAIN}"
+        return 0
+    fi
+
+    trimmed=$(trim_input "$raw")
+    if [[ "$trimmed" != "$raw" || "$raw" =~ [[:space:]] ]]; then
+        echo -e "${YELLOW}检测到空白字符：请确认没有复制到换行、制表符、不可见空格或多余空格。${PLAIN}"
+    fi
+    if [[ "$trimmed" =~ ^[Hh][Tt][Tt][Pp][Ss]?:// || "$trimmed" == *"://"* || "$trimmed" == */* || "$trimmed" == *\?* || "$trimmed" == *#* || "$trimmed" == *:* ]]; then
+        echo -e "${YELLOW}检测到类似 URL 的内容：请去掉 http(s)://、路径、查询参数、#片段或 :端口。${PLAIN}"
+    fi
+    if printf '%s' "$trimmed" | grep -q '[：，。／、；？＃＠　]'; then
+        echo -e "${YELLOW}检测到中文/全角标点：请改成英文半角的 . , / : 等字符；域名里的点必须是英文句点。${PLAIN}"
+    fi
+    if printf '%s' "$trimmed" | LC_ALL=C grep -q '[^ -~]'; then
+        echo -e "${YELLOW}检测到非 ASCII 字符：可能包含零宽空格、全角字符或复制来源带入的隐藏字符。${PLAIN}"
+    fi
+    echo -e "${YELLOW}脚本规范化后用于校验的值：${display_value}${PLAIN}"
 }
 
 normalize_path_prefix() {
@@ -3921,13 +3953,17 @@ func_caddy_add_reverse_proxy() {
         return 1
     fi
 
-    local domain port is_https
-    read_trimmed domain "请输入解析后的域名 (如 panel.site.com): "
+    local domain domain_input port is_https
+    read_trimmed domain_input "请输入解析后的域名 (如 panel.site.com): "
     read_trimmed port "请输入面板本地映射端口 (如 40000): "
-    domain=$(normalize_domain_input "$domain")
+    domain=$(normalize_domain_input "$domain_input")
 
-    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
-        echo -e "${RED}❌ 域名或端口格式错误！域名不要带 http(s)://、路径或端口，端口必须是 1-65535。${PLAIN}"
+    if ! is_valid_domain "$domain"; then
+        print_domain_validation_error "域名" "$domain_input" "$domain"
+        return 1
+    fi
+    if ! is_valid_port "$port"; then
+        echo -e "${RED}❌ 端口格式错误：${port}，端口必须是 1-65535。${PLAIN}"
         return 1
     fi
 
@@ -4222,14 +4258,18 @@ EOF
 func_nginx_add_reverse_proxy() {
     echo -e "${CYAN}▶ 正在配置 Nginx HTTPS 反代...${PLAIN}"
     nginx_proxy_warn_if_single_entry_enabled || return 1
-    local domain port is_https conf_file enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
+    local domain domain_input port is_https conf_file enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
-    read_trimmed domain "请输入解析后的域名 (如 panel.example.com): "
+    read_trimmed domain_input "请输入解析后的域名 (如 panel.example.com): "
     read_trimmed port "请输入本地后端端口 (如 40000): "
-    domain=$(normalize_domain_input "$domain")
+    domain=$(normalize_domain_input "$domain_input")
 
-    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
-        echo -e "${RED}❌ 域名或端口格式错误；域名不要带 http(s)://、路径或端口，端口必须是 1-65535。${PLAIN}"
+    if ! is_valid_domain "$domain"; then
+        print_domain_validation_error "域名" "$domain_input" "$domain"
+        return 1
+    fi
+    if ! is_valid_port "$port"; then
+        echo -e "${RED}❌ 端口格式错误：${port}，端口必须是 1-65535。${PLAIN}"
         return 1
     fi
 
@@ -4294,12 +4334,16 @@ func_nginx_add_insecure() {
     echo -e "${CYAN}================================================${PLAIN}"
     nginx_proxy_warn_if_single_entry_enabled || return 1
 
-    local domain port conf_file backup_file ip_whitelist_ranges
-    read_trimmed domain "请输入要设置的域名 (如 panel.example.com): "
+    local domain domain_input port conf_file backup_file ip_whitelist_ranges
+    read_trimmed domain_input "请输入要设置的域名 (如 panel.example.com): "
     read_trimmed port "请输入 HTTPS 后端本地端口 (如 40000): "
-    domain=$(normalize_domain_input "$domain")
-    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
-        echo -e "${RED}❌ 域名或端口格式错误。${PLAIN}"
+    domain=$(normalize_domain_input "$domain_input")
+    if ! is_valid_domain "$domain"; then
+        print_domain_validation_error "域名" "$domain_input" "$domain"
+        return 1
+    fi
+    if ! is_valid_port "$port"; then
+        echo -e "${RED}❌ 端口格式错误：${port}，端口必须是 1-65535。${PLAIN}"
         return 1
     fi
 
@@ -4364,11 +4408,11 @@ func_nginx_manage_ip_whitelist() {
     echo -e "${YELLOW}如果该域名已接入 443 单入口，请用 [19] -> [9]，不要在 Nginx HTTP 层限制。${PLAIN}"
     echo -e "------------------------------------------------"
 
-    local domain conf_file action backup_file
-    read_trimmed domain "请输入要管理的域名 (如 panel.example.com): "
-    domain=$(normalize_domain_input "$domain")
+    local domain domain_input conf_file action backup_file
+    read_trimmed domain_input "请输入要管理的域名 (如 panel.example.com): "
+    domain=$(normalize_domain_input "$domain_input")
     if ! is_valid_domain "$domain"; then
-        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+        print_domain_validation_error "域名" "$domain_input" "$domain"
         return 1
     fi
     conf_file=$(nginx_proxy_conf_path "$domain")
@@ -4897,15 +4941,15 @@ EOF
     local summary_file="/root/cert/caddy_cf_manifest.txt"
 
     while true; do
-        local domain backend_port continue_add
-        read_trimmed domain "👉 请输入域名 (回车结束添加): "
-        domain=$(normalize_domain_input "$domain")
+        local domain domain_input backend_port continue_add
+        read_trimmed domain_input "👉 请输入域名 (回车结束添加): "
+        domain=$(normalize_domain_input "$domain_input")
         if [[ -z "$domain" ]]; then
             break
         fi
 
         if ! is_valid_domain "$domain"; then
-            echo -e "${RED}❌ 域名格式无效：$domain${PLAIN}"
+            print_domain_validation_error "域名" "$domain_input" "$domain"
             ((fail_count++))
             continue
         fi
@@ -8315,13 +8359,15 @@ edit_sni_stack_reality_profile() {
     echo -e "当前 REALITY SNI：${REALITY_SNI}"
     echo -e "------------------------------------------------"
 
+    local reality_sni_input
     XRAY_LISTEN_ADDR=$(ask_with_default "Xray/3x-ui REALITY 本地监听地址" "$XRAY_LISTEN_ADDR")
     XRAY_LISTEN_PORT=$(ask_with_default "Xray/3x-ui REALITY 本地监听端口" "$XRAY_LISTEN_PORT")
-    REALITY_SNI=$(normalize_domain_input "$(ask_with_default "REALITY 伪装 SNI" "$REALITY_SNI")")
+    reality_sni_input=$(ask_with_default "REALITY 伪装 SNI" "$REALITY_SNI")
+    REALITY_SNI=$(normalize_domain_input "$reality_sni_input")
 
     is_valid_listen_addr "$XRAY_LISTEN_ADDR" || { echo -e "${RED}❌ REALITY 监听地址无效：${XRAY_LISTEN_ADDR}${PLAIN}"; return 1; }
     is_valid_port "$XRAY_LISTEN_PORT" || { echo -e "${RED}❌ REALITY 端口无效：${XRAY_LISTEN_PORT}${PLAIN}"; return 1; }
-    is_valid_domain "$REALITY_SNI" || { echo -e "${RED}❌ REALITY SNI 无效：${REALITY_SNI}${PLAIN}"; return 1; }
+    is_valid_domain "$REALITY_SNI" || { print_domain_validation_error "REALITY SNI" "$reality_sni_input" "$REALITY_SNI"; return 1; }
     [[ "$REALITY_SNI" == "$PANEL_DOMAIN" ]] && { echo -e "${RED}❌ REALITY SNI 不能写面板域名。${PLAIN}"; return 1; }
     local existing
     for existing in "${SITE_DOMAINS[@]}" "${TCP_ROUTE_SNIS[@]}" "${XRAY_SNI_ROUTE_SNIS[@]}"; do
@@ -8383,13 +8429,14 @@ edit_sni_stack_panel_domain_profile() {
         return 1
     fi
 
-    local old_domain new_domain existing confirm old_conf
+    local old_domain new_domain new_domain_input existing confirm old_conf
     old_domain="$PANEL_DOMAIN"
     echo -e "当前面板域名：${old_domain}"
     echo -e "${YELLOW}修改前请先把新域名解析到当前 VPS，并确认 Cloudflare Token 有该 zone 权限。${PLAIN}"
-    new_domain=$(normalize_domain_input "$(ask_with_default "新的面板域名" "$PANEL_DOMAIN")")
+    new_domain_input=$(ask_with_default "新的面板域名" "$PANEL_DOMAIN")
+    new_domain=$(normalize_domain_input "$new_domain_input")
     [[ "$new_domain" == "$old_domain" ]] && { echo -e "${BLUE}面板域名未变化。${PLAIN}"; return 0; }
-    is_valid_domain "$new_domain" || { echo -e "${RED}❌ 面板域名无效：${new_domain}${PLAIN}"; return 1; }
+    is_valid_domain "$new_domain" || { print_domain_validation_error "面板域名" "$new_domain_input" "$new_domain"; return 1; }
     [[ "$new_domain" == "$REALITY_SNI" ]] && { echo -e "${RED}❌ 面板域名不能和 REALITY SNI 相同。${PLAIN}"; return 1; }
     for existing in "${SITE_DOMAINS[@]}"; do
         [[ "$new_domain" == "$existing" ]] && { echo -e "${RED}❌ 面板域名不能和网站/反代域名相同。${PLAIN}"; return 1; }
@@ -8498,7 +8545,9 @@ collect_sni_stack_config() {
     print_xui_single_443_detected_defaults
     echo -e "------------------------------------------------"
 
-    read_trimmed PANEL_DOMAIN "面板域名（必填，例如 panel.example.com）: "
+    local panel_domain_input reality_sni_input
+    read_trimmed panel_domain_input "面板域名（必填，例如 panel.example.com）: "
+    PANEL_DOMAIN="$panel_domain_input"
     local web_engine_choice
     WEB_PROXY_ENGINE="caddy"
     echo -e "${CYAN}请选择 443 单入口 Web 反代引擎：${PLAIN}"
@@ -8519,11 +8568,14 @@ collect_sni_stack_config() {
     SNI_IP_WHITELIST_DOMAINS=()
     SNI_IP_WHITELIST_RANGES=()
     local site_domains_input
+    local -a site_domain_raw_inputs=()
     site_domains_input=$(ask_with_default "网站/反代域名（可选，多个用英文逗号分隔，例如 site1.example.com,site2.example.com）" "")
     split_csv_to_array "$site_domains_input" SITE_DOMAINS
+    site_domain_raw_inputs=("${SITE_DOMAINS[@]}")
     echo -e "${YELLOW}REALITY 伪装 SNI 请填写外部真实 HTTPS 站点域名，不要填写面板域名或节点域名。${PLAIN}"
     echo -e "${YELLOW}模板示例：your-reality-sni.example.com（请替换成你自己选择的真实站点）${PLAIN}"
-    read_trimmed REALITY_SNI "REALITY 伪装 SNI（必填）: "
+    read_trimmed reality_sni_input "REALITY 伪装 SNI（必填）: "
+    REALITY_SNI="$reality_sni_input"
     NGINX_LISTEN_ADDR=$(ask_with_default "Nginx 公网监听地址" "0.0.0.0")
     NGINX_LISTEN_PORT=$(ask_with_default "Nginx 公网监听端口" "443")
 
@@ -8603,22 +8655,23 @@ collect_sni_stack_config() {
     echo -e "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}"
     read_secret_trimmed CF_TOKEN "CF Token: "
 
-    PANEL_DOMAIN=$(normalize_domain_input "$PANEL_DOMAIN")
-    REALITY_SNI=$(normalize_domain_input "$REALITY_SNI")
+    PANEL_DOMAIN=$(normalize_domain_input "$panel_domain_input")
+    REALITY_SNI=$(normalize_domain_input "$reality_sni_input")
     local site_idx
     for site_idx in "${!SITE_DOMAINS[@]}"; do
         SITE_DOMAINS[$site_idx]=$(normalize_domain_input "${SITE_DOMAINS[$site_idx]}")
     done
 
-    if ! is_valid_domain "$PANEL_DOMAIN"; then echo -e "${RED}❌ 面板域名无效。${PLAIN}"; return 1; fi
-    if ! is_valid_domain "$REALITY_SNI"; then echo -e "${RED}❌ REALITY SNI 无效。${PLAIN}"; return 1; fi
+    if ! is_valid_domain "$PANEL_DOMAIN"; then print_domain_validation_error "面板域名" "$panel_domain_input" "$PANEL_DOMAIN"; return 1; fi
+    if ! is_valid_domain "$REALITY_SNI"; then print_domain_validation_error "REALITY SNI" "$reality_sni_input" "$REALITY_SNI"; return 1; fi
     check_domain_dns_sanity "$PANEL_DOMAIN" "面板域名" "prompt" || return 1
     check_domain_dns_sanity "$REALITY_SNI" "REALITY SNI" "prompt" || return 1
     local site_domain seen_domains
     seen_domains=" ${PANEL_DOMAIN} ${REALITY_SNI} "
-    for site_domain in "${SITE_DOMAINS[@]}"; do
+    for site_idx in "${!SITE_DOMAINS[@]}"; do
+        site_domain="${SITE_DOMAINS[$site_idx]}"
         [[ -z "$site_domain" ]] && continue
-        if ! is_valid_domain "$site_domain"; then echo -e "${RED}❌ 网站/反代域名无效：${site_domain}${PLAIN}"; return 1; fi
+        if ! is_valid_domain "$site_domain"; then print_domain_validation_error "网站/反代域名" "${site_domain_raw_inputs[$site_idx]:-$site_domain}" "$site_domain"; return 1; fi
         if [[ "$site_domain" == "$PANEL_DOMAIN" || "$site_domain" == "$REALITY_SNI" || "$seen_domains" == *" ${site_domain} "* ]]; then
             echo -e "${RED}❌ 面板域名、网站/反代域名、REALITY SNI 不能相同：${site_domain}${PLAIN}"
             return 1
@@ -9643,18 +9696,18 @@ add_sni_stack_site() {
     echo -e "${YELLOW}新增域名会走：公网 ${NGINX_LISTEN_PORT} -> 443 入口分流 -> ${web_label} -> 本地后端。${PLAIN}"
     echo -e ""
 
-    local site_domain site_addr site_port advanced_mode existing idx confirm
+    local site_domain site_domain_input site_addr site_port advanced_mode existing idx confirm
     local enable_ip_whitelist whitelist_input whitelist_ranges current_client_ip
     local -a whitelist_array=()
-    read_trimmed site_domain "请输入新网站/反代域名（例如 sub.example.com）: "
-    site_domain=$(normalize_domain_input "$site_domain")
+    read_trimmed site_domain_input "请输入新网站/反代域名（例如 sub.example.com）: "
+    site_domain=$(normalize_domain_input "$site_domain_input")
     if [[ -z "$site_domain" || "$site_domain" == "0" ]]; then
         echo -e "${BLUE}已取消新增网站/反代域名。${PLAIN}"
         return 0
     fi
 
     if ! is_valid_domain "$site_domain"; then
-        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+        print_domain_validation_error "域名" "$site_domain_input" "$site_domain"
         return 1
     fi
     if [[ "$site_domain" == "$PANEL_DOMAIN" || "$site_domain" == "$REALITY_SNI" ]]; then
@@ -9938,14 +9991,14 @@ add_sni_stack_tcp_route() {
     echo -e "${YELLOW}安全边界：后端只允许 127.0.0.1/localhost/::1，不会开放新公网端口。${PLAIN}"
     echo -e "------------------------------------------------"
 
-    local route_sni route_addr route_port existing idx
-    read_trimmed route_sni "请输入用于分流的新 SNI/域名（例如 relay.example.com）: "
-    route_sni=$(normalize_domain_input "$route_sni")
+    local route_sni route_sni_input route_addr route_port existing idx
+    read_trimmed route_sni_input "请输入用于分流的新 SNI/域名（例如 relay.example.com）: "
+    route_sni=$(normalize_domain_input "$route_sni_input")
     if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
         echo -e "${BLUE}已取消新增 TCP/SNI 入站。${PLAIN}"
         return 0
     fi
-    is_valid_domain "$route_sni" || { echo -e "${RED}❌ SNI/域名格式无效。${PLAIN}"; return 1; }
+    is_valid_domain "$route_sni" || { print_domain_validation_error "SNI/域名" "$route_sni_input" "$route_sni"; return 1; }
     if [[ "$route_sni" == "$PANEL_DOMAIN" || "$route_sni" == "$REALITY_SNI" ]]; then
         echo -e "${RED}❌ TCP/SNI 入站域名不能和面板域名或 REALITY SNI 相同。${PLAIN}"
         return 1
@@ -9998,7 +10051,7 @@ edit_sni_stack_tcp_route() {
         return 0
     fi
 
-    local i num choice idx old_sni new_sni new_addr new_port existing
+    local i num choice idx old_sni new_sni new_sni_input new_addr new_port existing
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
         num=$((i + 1))
         echo -e "${GREEN}${num}.${PLAIN} ${TCP_ROUTE_SNIS[$i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$i]}:${TCP_ROUTE_PORTS[$i]}"
@@ -10016,12 +10069,13 @@ edit_sni_stack_tcp_route() {
 
     idx=$((choice - 1))
     old_sni="${TCP_ROUTE_SNIS[$idx]}"
-    new_sni=$(normalize_domain_input "$(ask_with_default "SNI/域名" "$old_sni")")
+    new_sni_input=$(ask_with_default "SNI/域名" "$old_sni")
+    new_sni=$(normalize_domain_input "$new_sni_input")
     new_addr=$(ask_with_default "本地监听地址（只允许本地）" "${TCP_ROUTE_ADDRS[$idx]}")
     new_addr=$(normalize_loopback_addr "$new_addr")
     new_port=$(ask_with_default "本地监听端口" "${TCP_ROUTE_PORTS[$idx]}")
 
-    is_valid_domain "$new_sni" || { echo -e "${RED}❌ SNI/域名格式无效。${PLAIN}"; return 1; }
+    is_valid_domain "$new_sni" || { print_domain_validation_error "SNI/域名" "$new_sni_input" "$new_sni"; return 1; }
     if [[ "$new_sni" == "$PANEL_DOMAIN" || "$new_sni" == "$REALITY_SNI" ]]; then
         echo -e "${RED}❌ TCP/SNI 入站域名不能和面板域名或 REALITY SNI 相同。${PLAIN}"
         return 1
@@ -10167,14 +10221,14 @@ add_xray_sni_route() {
     echo -e "${YELLOW}本菜单只记录 SNI -> 本地地址:端口；用于当前支持的单入口模式渲染分流规则，不会创建、删除或修改 3x-ui/Xray 入站内部配置。${PLAIN}"
     echo -e "------------------------------------------------"
 
-    local route_sni route_addr route_port existing idx
-    read_trimmed route_sni "SNI/域名: "
-    route_sni=$(normalize_domain_input "$route_sni")
+    local route_sni route_sni_input route_addr route_port existing idx
+    read_trimmed route_sni_input "SNI/域名: "
+    route_sni=$(normalize_domain_input "$route_sni_input")
     if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
         echo -e "${BLUE}已取消添加。${PLAIN}"
         return 0
     fi
-    is_valid_domain "$route_sni" || { echo -e "${RED}❌ SNI/域名格式无效。${PLAIN}"; return 1; }
+    is_valid_domain "$route_sni" || { print_domain_validation_error "SNI/域名" "$route_sni_input" "$route_sni"; return 1; }
     if [[ "$route_sni" == "$PANEL_DOMAIN" || "$route_sni" == "$REALITY_SNI" ]]; then
         echo -e "${RED}❌ Xray 入站域名不能和面板域名或 REALITY SNI 相同。${PLAIN}"
         return 1
@@ -11057,14 +11111,14 @@ func_caddy_cf_maintenance_menu() {
                 ;;
 
             3)
-                local domain
+                local domain domain_input
                 local acme_bin="/root/.acme.sh/acme.sh"
                 local cf_env_file="/root/.config/vps-panel/cloudflare.env"
 
-                read_trimmed domain "👉 请输入要重签的域名: "
-                domain=$(normalize_domain_input "$domain")
+                read_trimmed domain_input "👉 请输入要重签的域名: "
+                domain=$(normalize_domain_input "$domain_input")
                 if ! is_valid_domain "$domain"; then
-                    echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+                    print_domain_validation_error "域名" "$domain_input" "$domain"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -11123,7 +11177,7 @@ func_caddy_cf_maintenance_menu() {
                 ;;
 
             4)
-                local link_mode domain
+                local link_mode domain domain_input
                 mkdir -p /root/cert
                 read_trimmed link_mode "❓ 重建全部链接还是单域名？(all/one): "
 
@@ -11142,10 +11196,10 @@ func_caddy_cf_maintenance_menu() {
                     generate_caddy_cf_manifest
                     echo -e "${GREEN}✅ 已重建 ${relink_count} 个域名的证书软链接。${PLAIN}"
                 else
-                    read_trimmed domain "👉 请输入域名: "
-                    domain=$(normalize_domain_input "$domain")
+                    read_trimmed domain_input "👉 请输入域名: "
+                    domain=$(normalize_domain_input "$domain_input")
                     if ! is_valid_domain "$domain"; then
-                        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+                        print_domain_validation_error "域名" "$domain_input" "$domain"
                         read -n 1 -s -r -p "按任意键继续..."
                         continue
                     fi
@@ -11161,11 +11215,11 @@ func_caddy_cf_maintenance_menu() {
                 ;;
 
             5)
-                local domain purge_acme
-                read_trimmed domain "👉 请输入要隔离的域名: "
-                domain=$(normalize_domain_input "$domain")
+                local domain domain_input purge_acme
+                read_trimmed domain_input "👉 请输入要隔离的域名: "
+                domain=$(normalize_domain_input "$domain_input")
                 if ! is_valid_domain "$domain"; then
-                    echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+                    print_domain_validation_error "域名" "$domain_input" "$domain"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -11409,11 +11463,11 @@ func_caddy_manage_ip_whitelist() {
         return
     fi
 
-    local domain conf_file first_site_line action backup_file
-    read_trimmed domain "请输入要管理的域名 (如 panel.example.com): "
-    domain=$(normalize_domain_input "$domain")
+    local domain domain_input conf_file first_site_line action backup_file
+    read_trimmed domain_input "请输入要管理的域名 (如 panel.example.com): "
+    domain=$(normalize_domain_input "$domain_input")
     if ! is_valid_domain "$domain"; then
-        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+        print_domain_validation_error "域名" "$domain_input" "$domain"
         read -n 1 -s -r -p "按任意键继续..."
         return
     fi
@@ -11515,15 +11569,17 @@ func_caddy_delete_cert() {
     echo -e "${YELLOW}功能介绍：该脚本将彻底清理指定域名的证书与配置，确保服务器环境干净。${PLAIN}"
     echo -e "------------------------------------------------"
     
-    read_trimmed domain "👉 请输入要强杀清理的精准域名 (如 panel.site.com): "
-    domain=$(normalize_domain_input "$domain")
+    local domain domain_input
+    read_trimmed domain_input "👉 请输入要强杀清理的精准域名 (如 panel.site.com): "
+    domain=$(normalize_domain_input "$domain_input")
     if [[ -z "$domain" ]]; then
         echo -e "${RED}❌ 域名不能为空！${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
     if ! is_valid_domain "$domain"; then
-        echo -e "${RED}❌ 域名格式无效，已取消清理。${PLAIN}"
+        print_domain_validation_error "域名" "$domain_input" "$domain"
+        echo -e "${RED}❌ 已取消清理。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -11622,16 +11678,21 @@ func_caddy_add_insecure() {
         return
     fi
     
-    local domain
+    local domain domain_input
     local port
     local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
-    read_trimmed domain "👉 请输入解析后的域名 (如 panel.site.com): "
+    read_trimmed domain_input "👉 请输入解析后的域名 (如 panel.site.com): "
     read_trimmed port "👉 请输入面板 HTTPS 本地映射端口 (如 40000): "
-    domain=$(normalize_domain_input "$domain")
+    domain=$(normalize_domain_input "$domain_input")
     
-    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
-        echo -e "${RED}❌ 域名为空或端口格式错误！已取消操作。${PLAIN}"
+    if ! is_valid_domain "$domain"; then
+        print_domain_validation_error "域名" "$domain_input" "$domain"
+        read -n 1 -s -r -p "按任意键继续..."
+        return
+    fi
+    if ! is_valid_port "$port"; then
+        echo -e "${RED}❌ 端口格式错误：${port}，端口必须是 1-65535。已取消操作。${PLAIN}"
         read -n 1 -s -r -p "按任意键继续..."
         return
     fi
@@ -16552,6 +16613,7 @@ traffic_guard_write_state_baseline() {
 }
 
 install_traffic_guard_checker() {
+    local first_line write_rc
     mkdir -p "$(dirname "$TRAFFIC_GUARD_CHECKER")" "$TRAFFIC_GUARD_STATE_DIR" "$(dirname "$TRAFFIC_GUARD_CONFIG")" || return 1
     cat > "$TRAFFIC_GUARD_CHECKER" <<'GUARD_SCRIPT'
 set -u
@@ -16925,7 +16987,28 @@ fi
 save_state
 exit 0
 GUARD_SCRIPT
-    chmod 700 "$TRAFFIC_GUARD_CHECKER" || return 1
+    write_rc=$?
+    if (( write_rc != 0 )); then
+        echo -e "${RED}❌ Traffic Guard 检查器写入失败：无法写入 ${TRAFFIC_GUARD_CHECKER}${PLAIN}"
+        return 1
+    fi
+    IFS= read -r first_line < "$TRAFFIC_GUARD_CHECKER" || first_line=""
+    if [[ "${first_line%$'\r'}" != "#!/usr/bin/env bash" ]]; then
+        echo -e "${RED}❌ Traffic Guard 检查器写入失败：首行必须是 #!/usr/bin/env bash。${PLAIN}"
+        return 1
+    fi
+    if LC_ALL=C grep -q $'\r' "$TRAFFIC_GUARD_CHECKER"; then
+        echo -e "${RED}❌ Traffic Guard 检查器写入失败：检测到 CRLF/回车字符。${PLAIN}"
+        return 1
+    fi
+    if ! bash -n "$TRAFFIC_GUARD_CHECKER"; then
+        echo -e "${RED}❌ Traffic Guard 检查器写入失败：Bash 语法检查未通过。${PLAIN}"
+        return 1
+    fi
+    if ! chmod 700 "$TRAFFIC_GUARD_CHECKER"; then
+        echo -e "${RED}❌ Traffic Guard 检查器权限设置失败：无法 chmod 700 ${TRAFFIC_GUARD_CHECKER}${PLAIN}"
+        return 1
+    fi
 }
 
 reset_traffic_guard_failed_state() {
@@ -16972,7 +17055,7 @@ traffic_guard_run_checker_once() {
         runner="systemd"
         systemctl start vps-traffic-guard.service >/dev/null 2>&1 || rc=$?
     else
-        "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || rc=$?
+        /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || rc=$?
     fi
     reset_traffic_guard_failed_state
 
@@ -17544,7 +17627,7 @@ configure_traffic_guard() {
         return 1
     }
 
-    "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || true
+    /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || true
     reset_traffic_guard_failed_state
     echo -e "${GREEN}✅ 流量达量关机保护已启用。${PLAIN}"
     echo -e "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}"

@@ -59,18 +59,18 @@ add_sni_stack_site() {
     echo -e "${YELLOW}新增域名会走：公网 ${NGINX_LISTEN_PORT} -> 443 入口分流 -> ${web_label} -> 本地后端。${PLAIN}"
     echo -e ""
 
-    local site_domain site_addr site_port advanced_mode existing idx confirm
+    local site_domain site_domain_input site_addr site_port advanced_mode existing idx confirm
     local enable_ip_whitelist whitelist_input whitelist_ranges current_client_ip
     local -a whitelist_array=()
-    read_trimmed site_domain "请输入新网站/反代域名（例如 sub.example.com）: "
-    site_domain=$(normalize_domain_input "$site_domain")
+    read_trimmed site_domain_input "请输入新网站/反代域名（例如 sub.example.com）: "
+    site_domain=$(normalize_domain_input "$site_domain_input")
     if [[ -z "$site_domain" || "$site_domain" == "0" ]]; then
         echo -e "${BLUE}已取消新增网站/反代域名。${PLAIN}"
         return 0
     fi
 
     if ! is_valid_domain "$site_domain"; then
-        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+        print_domain_validation_error "域名" "$site_domain_input" "$site_domain"
         return 1
     fi
     if [[ "$site_domain" == "$PANEL_DOMAIN" || "$site_domain" == "$REALITY_SNI" ]]; then
@@ -354,14 +354,14 @@ add_sni_stack_tcp_route() {
     echo -e "${YELLOW}安全边界：后端只允许 127.0.0.1/localhost/::1，不会开放新公网端口。${PLAIN}"
     echo -e "------------------------------------------------"
 
-    local route_sni route_addr route_port existing idx
-    read_trimmed route_sni "请输入用于分流的新 SNI/域名（例如 relay.example.com）: "
-    route_sni=$(normalize_domain_input "$route_sni")
+    local route_sni route_sni_input route_addr route_port existing idx
+    read_trimmed route_sni_input "请输入用于分流的新 SNI/域名（例如 relay.example.com）: "
+    route_sni=$(normalize_domain_input "$route_sni_input")
     if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
         echo -e "${BLUE}已取消新增 TCP/SNI 入站。${PLAIN}"
         return 0
     fi
-    is_valid_domain "$route_sni" || { echo -e "${RED}❌ SNI/域名格式无效。${PLAIN}"; return 1; }
+    is_valid_domain "$route_sni" || { print_domain_validation_error "SNI/域名" "$route_sni_input" "$route_sni"; return 1; }
     if [[ "$route_sni" == "$PANEL_DOMAIN" || "$route_sni" == "$REALITY_SNI" ]]; then
         echo -e "${RED}❌ TCP/SNI 入站域名不能和面板域名或 REALITY SNI 相同。${PLAIN}"
         return 1
@@ -414,7 +414,7 @@ edit_sni_stack_tcp_route() {
         return 0
     fi
 
-    local i num choice idx old_sni new_sni new_addr new_port existing
+    local i num choice idx old_sni new_sni new_sni_input new_addr new_port existing
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
         num=$((i + 1))
         echo -e "${GREEN}${num}.${PLAIN} ${TCP_ROUTE_SNIS[$i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$i]}:${TCP_ROUTE_PORTS[$i]}"
@@ -432,12 +432,13 @@ edit_sni_stack_tcp_route() {
 
     idx=$((choice - 1))
     old_sni="${TCP_ROUTE_SNIS[$idx]}"
-    new_sni=$(normalize_domain_input "$(ask_with_default "SNI/域名" "$old_sni")")
+    new_sni_input=$(ask_with_default "SNI/域名" "$old_sni")
+    new_sni=$(normalize_domain_input "$new_sni_input")
     new_addr=$(ask_with_default "本地监听地址（只允许本地）" "${TCP_ROUTE_ADDRS[$idx]}")
     new_addr=$(normalize_loopback_addr "$new_addr")
     new_port=$(ask_with_default "本地监听端口" "${TCP_ROUTE_PORTS[$idx]}")
 
-    is_valid_domain "$new_sni" || { echo -e "${RED}❌ SNI/域名格式无效。${PLAIN}"; return 1; }
+    is_valid_domain "$new_sni" || { print_domain_validation_error "SNI/域名" "$new_sni_input" "$new_sni"; return 1; }
     if [[ "$new_sni" == "$PANEL_DOMAIN" || "$new_sni" == "$REALITY_SNI" ]]; then
         echo -e "${RED}❌ TCP/SNI 入站域名不能和面板域名或 REALITY SNI 相同。${PLAIN}"
         return 1

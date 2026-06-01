@@ -81,13 +81,15 @@ edit_sni_stack_reality_profile() {
     echo -e "当前 REALITY SNI：${REALITY_SNI}"
     echo -e "------------------------------------------------"
 
+    local reality_sni_input
     XRAY_LISTEN_ADDR=$(ask_with_default "Xray/3x-ui REALITY 本地监听地址" "$XRAY_LISTEN_ADDR")
     XRAY_LISTEN_PORT=$(ask_with_default "Xray/3x-ui REALITY 本地监听端口" "$XRAY_LISTEN_PORT")
-    REALITY_SNI=$(normalize_domain_input "$(ask_with_default "REALITY 伪装 SNI" "$REALITY_SNI")")
+    reality_sni_input=$(ask_with_default "REALITY 伪装 SNI" "$REALITY_SNI")
+    REALITY_SNI=$(normalize_domain_input "$reality_sni_input")
 
     is_valid_listen_addr "$XRAY_LISTEN_ADDR" || { echo -e "${RED}❌ REALITY 监听地址无效：${XRAY_LISTEN_ADDR}${PLAIN}"; return 1; }
     is_valid_port "$XRAY_LISTEN_PORT" || { echo -e "${RED}❌ REALITY 端口无效：${XRAY_LISTEN_PORT}${PLAIN}"; return 1; }
-    is_valid_domain "$REALITY_SNI" || { echo -e "${RED}❌ REALITY SNI 无效：${REALITY_SNI}${PLAIN}"; return 1; }
+    is_valid_domain "$REALITY_SNI" || { print_domain_validation_error "REALITY SNI" "$reality_sni_input" "$REALITY_SNI"; return 1; }
     [[ "$REALITY_SNI" == "$PANEL_DOMAIN" ]] && { echo -e "${RED}❌ REALITY SNI 不能写面板域名。${PLAIN}"; return 1; }
     local existing
     for existing in "${SITE_DOMAINS[@]}" "${TCP_ROUTE_SNIS[@]}" "${XRAY_SNI_ROUTE_SNIS[@]}"; do
@@ -149,13 +151,14 @@ edit_sni_stack_panel_domain_profile() {
         return 1
     fi
 
-    local old_domain new_domain existing confirm old_conf
+    local old_domain new_domain new_domain_input existing confirm old_conf
     old_domain="$PANEL_DOMAIN"
     echo -e "当前面板域名：${old_domain}"
     echo -e "${YELLOW}修改前请先把新域名解析到当前 VPS，并确认 Cloudflare Token 有该 zone 权限。${PLAIN}"
-    new_domain=$(normalize_domain_input "$(ask_with_default "新的面板域名" "$PANEL_DOMAIN")")
+    new_domain_input=$(ask_with_default "新的面板域名" "$PANEL_DOMAIN")
+    new_domain=$(normalize_domain_input "$new_domain_input")
     [[ "$new_domain" == "$old_domain" ]] && { echo -e "${BLUE}面板域名未变化。${PLAIN}"; return 0; }
-    is_valid_domain "$new_domain" || { echo -e "${RED}❌ 面板域名无效：${new_domain}${PLAIN}"; return 1; }
+    is_valid_domain "$new_domain" || { print_domain_validation_error "面板域名" "$new_domain_input" "$new_domain"; return 1; }
     [[ "$new_domain" == "$REALITY_SNI" ]] && { echo -e "${RED}❌ 面板域名不能和 REALITY SNI 相同。${PLAIN}"; return 1; }
     for existing in "${SITE_DOMAINS[@]}"; do
         [[ "$new_domain" == "$existing" ]] && { echo -e "${RED}❌ 面板域名不能和网站/反代域名相同。${PLAIN}"; return 1; }

@@ -316,6 +316,7 @@ traffic_guard_write_state_baseline() {
 }
 
 install_traffic_guard_checker() {
+    local first_line write_rc
     mkdir -p "$(dirname "$TRAFFIC_GUARD_CHECKER")" "$TRAFFIC_GUARD_STATE_DIR" "$(dirname "$TRAFFIC_GUARD_CONFIG")" || return 1
     cat > "$TRAFFIC_GUARD_CHECKER" <<'GUARD_SCRIPT'
 #!/usr/bin/env bash
@@ -690,7 +691,28 @@ fi
 save_state
 exit 0
 GUARD_SCRIPT
-    chmod 700 "$TRAFFIC_GUARD_CHECKER" || return 1
+    write_rc=$?
+    if (( write_rc != 0 )); then
+        echo -e "${RED}❌ Traffic Guard 检查器写入失败：无法写入 ${TRAFFIC_GUARD_CHECKER}${PLAIN}"
+        return 1
+    fi
+    IFS= read -r first_line < "$TRAFFIC_GUARD_CHECKER" || first_line=""
+    if [[ "${first_line%$'\r'}" != "#!/usr/bin/env bash" ]]; then
+        echo -e "${RED}❌ Traffic Guard 检查器写入失败：首行必须是 #!/usr/bin/env bash。${PLAIN}"
+        return 1
+    fi
+    if LC_ALL=C grep -q $'\r' "$TRAFFIC_GUARD_CHECKER"; then
+        echo -e "${RED}❌ Traffic Guard 检查器写入失败：检测到 CRLF/回车字符。${PLAIN}"
+        return 1
+    fi
+    if ! bash -n "$TRAFFIC_GUARD_CHECKER"; then
+        echo -e "${RED}❌ Traffic Guard 检查器写入失败：Bash 语法检查未通过。${PLAIN}"
+        return 1
+    fi
+    if ! chmod 700 "$TRAFFIC_GUARD_CHECKER"; then
+        echo -e "${RED}❌ Traffic Guard 检查器权限设置失败：无法 chmod 700 ${TRAFFIC_GUARD_CHECKER}${PLAIN}"
+        return 1
+    fi
 }
 
 reset_traffic_guard_failed_state() {
@@ -737,7 +759,7 @@ traffic_guard_run_checker_once() {
         runner="systemd"
         systemctl start vps-traffic-guard.service >/dev/null 2>&1 || rc=$?
     else
-        "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || rc=$?
+        /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || rc=$?
     fi
     reset_traffic_guard_failed_state
 
@@ -1309,7 +1331,7 @@ configure_traffic_guard() {
         return 1
     }
 
-    "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || true
+    /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || true
     reset_traffic_guard_failed_state
     echo -e "${GREEN}✅ 流量达量关机保护已启用。${PLAIN}"
     echo -e "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}"

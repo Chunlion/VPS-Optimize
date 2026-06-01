@@ -30,7 +30,9 @@ collect_sni_stack_config() {
     print_xui_single_443_detected_defaults
     echo -e "------------------------------------------------"
 
-    read_trimmed PANEL_DOMAIN "面板域名（必填，例如 panel.example.com）: "
+    local panel_domain_input reality_sni_input
+    read_trimmed panel_domain_input "面板域名（必填，例如 panel.example.com）: "
+    PANEL_DOMAIN="$panel_domain_input"
     local web_engine_choice
     WEB_PROXY_ENGINE="caddy"
     echo -e "${CYAN}请选择 443 单入口 Web 反代引擎：${PLAIN}"
@@ -51,11 +53,14 @@ collect_sni_stack_config() {
     SNI_IP_WHITELIST_DOMAINS=()
     SNI_IP_WHITELIST_RANGES=()
     local site_domains_input
+    local -a site_domain_raw_inputs=()
     site_domains_input=$(ask_with_default "网站/反代域名（可选，多个用英文逗号分隔，例如 site1.example.com,site2.example.com）" "")
     split_csv_to_array "$site_domains_input" SITE_DOMAINS
+    site_domain_raw_inputs=("${SITE_DOMAINS[@]}")
     echo -e "${YELLOW}REALITY 伪装 SNI 请填写外部真实 HTTPS 站点域名，不要填写面板域名或节点域名。${PLAIN}"
     echo -e "${YELLOW}模板示例：your-reality-sni.example.com（请替换成你自己选择的真实站点）${PLAIN}"
-    read_trimmed REALITY_SNI "REALITY 伪装 SNI（必填）: "
+    read_trimmed reality_sni_input "REALITY 伪装 SNI（必填）: "
+    REALITY_SNI="$reality_sni_input"
     NGINX_LISTEN_ADDR=$(ask_with_default "Nginx 公网监听地址" "0.0.0.0")
     NGINX_LISTEN_PORT=$(ask_with_default "Nginx 公网监听端口" "443")
 
@@ -135,22 +140,23 @@ collect_sni_stack_config() {
     echo -e "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}"
     read_secret_trimmed CF_TOKEN "CF Token: "
 
-    PANEL_DOMAIN=$(normalize_domain_input "$PANEL_DOMAIN")
-    REALITY_SNI=$(normalize_domain_input "$REALITY_SNI")
+    PANEL_DOMAIN=$(normalize_domain_input "$panel_domain_input")
+    REALITY_SNI=$(normalize_domain_input "$reality_sni_input")
     local site_idx
     for site_idx in "${!SITE_DOMAINS[@]}"; do
         SITE_DOMAINS[$site_idx]=$(normalize_domain_input "${SITE_DOMAINS[$site_idx]}")
     done
 
-    if ! is_valid_domain "$PANEL_DOMAIN"; then echo -e "${RED}❌ 面板域名无效。${PLAIN}"; return 1; fi
-    if ! is_valid_domain "$REALITY_SNI"; then echo -e "${RED}❌ REALITY SNI 无效。${PLAIN}"; return 1; fi
+    if ! is_valid_domain "$PANEL_DOMAIN"; then print_domain_validation_error "面板域名" "$panel_domain_input" "$PANEL_DOMAIN"; return 1; fi
+    if ! is_valid_domain "$REALITY_SNI"; then print_domain_validation_error "REALITY SNI" "$reality_sni_input" "$REALITY_SNI"; return 1; fi
     check_domain_dns_sanity "$PANEL_DOMAIN" "面板域名" "prompt" || return 1
     check_domain_dns_sanity "$REALITY_SNI" "REALITY SNI" "prompt" || return 1
     local site_domain seen_domains
     seen_domains=" ${PANEL_DOMAIN} ${REALITY_SNI} "
-    for site_domain in "${SITE_DOMAINS[@]}"; do
+    for site_idx in "${!SITE_DOMAINS[@]}"; do
+        site_domain="${SITE_DOMAINS[$site_idx]}"
         [[ -z "$site_domain" ]] && continue
-        if ! is_valid_domain "$site_domain"; then echo -e "${RED}❌ 网站/反代域名无效：${site_domain}${PLAIN}"; return 1; fi
+        if ! is_valid_domain "$site_domain"; then print_domain_validation_error "网站/反代域名" "${site_domain_raw_inputs[$site_idx]:-$site_domain}" "$site_domain"; return 1; fi
         if [[ "$site_domain" == "$PANEL_DOMAIN" || "$site_domain" == "$REALITY_SNI" || "$seen_domains" == *" ${site_domain} "* ]]; then
             echo -e "${RED}❌ 面板域名、网站/反代域名、REALITY SNI 不能相同：${site_domain}${PLAIN}"
             return 1

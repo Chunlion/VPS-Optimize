@@ -15,6 +15,15 @@ assert_file_contains() {
     fi
 }
 
+assert_traffic_guard_checker_shebang() {
+    local first_line
+    first_line=$(awk '/TRAFFIC_GUARD_CHECKER.*GUARD_SCRIPT/ { getline; print; exit }' src/traffic_guard.sh)
+    if [[ "$first_line" != "#!/usr/bin/env bash" ]]; then
+        echo "Traffic Guard checker template must start with #!/usr/bin/env bash." >&2
+        exit 1
+    fi
+}
+
 assert_function_once() {
     local file="$1"
     local function_name="$2"
@@ -62,6 +71,12 @@ assert_file_contains src/common.sh 'command -v curl' "Remote downloads must keep
 assert_file_contains src/common.sh 'command -v wget' "Remote downloads must keep wget fallback detection."
 assert_file_contains src/common.sh 'install_pkg curl wget' "Remote download helper must still try to install missing download tools."
 assert_file_contains src/common.sh 'confirm_risk_action "$desc"' "Remote script execution must use the unified risk prompt when available."
+
+assert_traffic_guard_checker_shebang
+assert_file_contains src/traffic_guard.sh 'ExecStart=/usr/bin/env bash ${TRAFFIC_GUARD_CHECKER}' "Traffic Guard systemd service must keep bash-based ExecStart."
+assert_file_contains src/traffic_guard.sh 'bash -n "$TRAFFIC_GUARD_CHECKER"' "Traffic Guard checker install must validate Bash syntax."
+assert_file_contains src/traffic_guard.sh "grep -q \$'\\r' \"\$TRAFFIC_GUARD_CHECKER\"" "Traffic Guard checker install must reject CRLF."
+assert_file_contains src/traffic_guard.sh '/usr/bin/env bash "$TRAFFIC_GUARD_CHECKER"' "Traffic Guard direct fallback must invoke checker through bash."
 
 assert_file_contains dist/vps.sh '/var/lib/vps-optimize/vpso-mux/status.json'
 assert_file_contains dist/vps.sh '/var/log/vps-traffic-guard.log'

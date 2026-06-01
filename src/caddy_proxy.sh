@@ -12,13 +12,17 @@ func_caddy_add_reverse_proxy() {
         return 1
     fi
 
-    local domain port is_https
-    read_trimmed domain "请输入解析后的域名 (如 panel.site.com): "
+    local domain domain_input port is_https
+    read_trimmed domain_input "请输入解析后的域名 (如 panel.site.com): "
     read_trimmed port "请输入面板本地映射端口 (如 40000): "
-    domain=$(normalize_domain_input "$domain")
+    domain=$(normalize_domain_input "$domain_input")
 
-    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
-        echo -e "${RED}❌ 域名或端口格式错误！域名不要带 http(s)://、路径或端口，端口必须是 1-65535。${PLAIN}"
+    if ! is_valid_domain "$domain"; then
+        print_domain_validation_error "域名" "$domain_input" "$domain"
+        return 1
+    fi
+    if ! is_valid_port "$port"; then
+        echo -e "${RED}❌ 端口格式错误：${port}，端口必须是 1-65535。${PLAIN}"
         return 1
     fi
 
@@ -313,14 +317,18 @@ EOF
 func_nginx_add_reverse_proxy() {
     echo -e "${CYAN}▶ 正在配置 Nginx HTTPS 反代...${PLAIN}"
     nginx_proxy_warn_if_single_entry_enabled || return 1
-    local domain port is_https conf_file enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
+    local domain domain_input port is_https conf_file enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
-    read_trimmed domain "请输入解析后的域名 (如 panel.example.com): "
+    read_trimmed domain_input "请输入解析后的域名 (如 panel.example.com): "
     read_trimmed port "请输入本地后端端口 (如 40000): "
-    domain=$(normalize_domain_input "$domain")
+    domain=$(normalize_domain_input "$domain_input")
 
-    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
-        echo -e "${RED}❌ 域名或端口格式错误；域名不要带 http(s)://、路径或端口，端口必须是 1-65535。${PLAIN}"
+    if ! is_valid_domain "$domain"; then
+        print_domain_validation_error "域名" "$domain_input" "$domain"
+        return 1
+    fi
+    if ! is_valid_port "$port"; then
+        echo -e "${RED}❌ 端口格式错误：${port}，端口必须是 1-65535。${PLAIN}"
         return 1
     fi
 
@@ -385,12 +393,16 @@ func_nginx_add_insecure() {
     echo -e "${CYAN}================================================${PLAIN}"
     nginx_proxy_warn_if_single_entry_enabled || return 1
 
-    local domain port conf_file backup_file ip_whitelist_ranges
-    read_trimmed domain "请输入要设置的域名 (如 panel.example.com): "
+    local domain domain_input port conf_file backup_file ip_whitelist_ranges
+    read_trimmed domain_input "请输入要设置的域名 (如 panel.example.com): "
     read_trimmed port "请输入 HTTPS 后端本地端口 (如 40000): "
-    domain=$(normalize_domain_input "$domain")
-    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
-        echo -e "${RED}❌ 域名或端口格式错误。${PLAIN}"
+    domain=$(normalize_domain_input "$domain_input")
+    if ! is_valid_domain "$domain"; then
+        print_domain_validation_error "域名" "$domain_input" "$domain"
+        return 1
+    fi
+    if ! is_valid_port "$port"; then
+        echo -e "${RED}❌ 端口格式错误：${port}，端口必须是 1-65535。${PLAIN}"
         return 1
     fi
 
@@ -455,11 +467,11 @@ func_nginx_manage_ip_whitelist() {
     echo -e "${YELLOW}如果该域名已接入 443 单入口，请用 [19] -> [9]，不要在 Nginx HTTP 层限制。${PLAIN}"
     echo -e "------------------------------------------------"
 
-    local domain conf_file action backup_file
-    read_trimmed domain "请输入要管理的域名 (如 panel.example.com): "
-    domain=$(normalize_domain_input "$domain")
+    local domain domain_input conf_file action backup_file
+    read_trimmed domain_input "请输入要管理的域名 (如 panel.example.com): "
+    domain=$(normalize_domain_input "$domain_input")
     if ! is_valid_domain "$domain"; then
-        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+        print_domain_validation_error "域名" "$domain_input" "$domain"
         return 1
     fi
     conf_file=$(nginx_proxy_conf_path "$domain")

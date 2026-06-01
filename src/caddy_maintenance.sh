@@ -468,14 +468,14 @@ func_caddy_cf_maintenance_menu() {
                 ;;
 
             3)
-                local domain
+                local domain domain_input
                 local acme_bin="/root/.acme.sh/acme.sh"
                 local cf_env_file="/root/.config/vps-panel/cloudflare.env"
 
-                read_trimmed domain "👉 请输入要重签的域名: "
-                domain=$(normalize_domain_input "$domain")
+                read_trimmed domain_input "👉 请输入要重签的域名: "
+                domain=$(normalize_domain_input "$domain_input")
                 if ! is_valid_domain "$domain"; then
-                    echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+                    print_domain_validation_error "域名" "$domain_input" "$domain"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -534,7 +534,7 @@ func_caddy_cf_maintenance_menu() {
                 ;;
 
             4)
-                local link_mode domain
+                local link_mode domain domain_input
                 mkdir -p /root/cert
                 read_trimmed link_mode "❓ 重建全部链接还是单域名？(all/one): "
 
@@ -553,10 +553,10 @@ func_caddy_cf_maintenance_menu() {
                     generate_caddy_cf_manifest
                     echo -e "${GREEN}✅ 已重建 ${relink_count} 个域名的证书软链接。${PLAIN}"
                 else
-                    read_trimmed domain "👉 请输入域名: "
-                    domain=$(normalize_domain_input "$domain")
+                    read_trimmed domain_input "👉 请输入域名: "
+                    domain=$(normalize_domain_input "$domain_input")
                     if ! is_valid_domain "$domain"; then
-                        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+                        print_domain_validation_error "域名" "$domain_input" "$domain"
                         read -n 1 -s -r -p "按任意键继续..."
                         continue
                     fi
@@ -572,11 +572,11 @@ func_caddy_cf_maintenance_menu() {
                 ;;
 
             5)
-                local domain purge_acme
-                read_trimmed domain "👉 请输入要隔离的域名: "
-                domain=$(normalize_domain_input "$domain")
+                local domain domain_input purge_acme
+                read_trimmed domain_input "👉 请输入要隔离的域名: "
+                domain=$(normalize_domain_input "$domain_input")
                 if ! is_valid_domain "$domain"; then
-                    echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+                    print_domain_validation_error "域名" "$domain_input" "$domain"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -820,11 +820,11 @@ func_caddy_manage_ip_whitelist() {
         return
     fi
 
-    local domain conf_file first_site_line action backup_file
-    read_trimmed domain "请输入要管理的域名 (如 panel.example.com): "
-    domain=$(normalize_domain_input "$domain")
+    local domain domain_input conf_file first_site_line action backup_file
+    read_trimmed domain_input "请输入要管理的域名 (如 panel.example.com): "
+    domain=$(normalize_domain_input "$domain_input")
     if ! is_valid_domain "$domain"; then
-        echo -e "${RED}❌ 域名格式无效。${PLAIN}"
+        print_domain_validation_error "域名" "$domain_input" "$domain"
         read -n 1 -s -r -p "按任意键继续..."
         return
     fi
@@ -926,15 +926,17 @@ func_caddy_delete_cert() {
     echo -e "${YELLOW}功能介绍：该脚本将彻底清理指定域名的证书与配置，确保服务器环境干净。${PLAIN}"
     echo -e "------------------------------------------------"
     
-    read_trimmed domain "👉 请输入要强杀清理的精准域名 (如 panel.site.com): "
-    domain=$(normalize_domain_input "$domain")
+    local domain domain_input
+    read_trimmed domain_input "👉 请输入要强杀清理的精准域名 (如 panel.site.com): "
+    domain=$(normalize_domain_input "$domain_input")
     if [[ -z "$domain" ]]; then
         echo -e "${RED}❌ 域名不能为空！${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
     if ! is_valid_domain "$domain"; then
-        echo -e "${RED}❌ 域名格式无效，已取消清理。${PLAIN}"
+        print_domain_validation_error "域名" "$domain_input" "$domain"
+        echo -e "${RED}❌ 已取消清理。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi
@@ -1033,16 +1035,21 @@ func_caddy_add_insecure() {
         return
     fi
     
-    local domain
+    local domain domain_input
     local port
     local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
-    read_trimmed domain "👉 请输入解析后的域名 (如 panel.site.com): "
+    read_trimmed domain_input "👉 请输入解析后的域名 (如 panel.site.com): "
     read_trimmed port "👉 请输入面板 HTTPS 本地映射端口 (如 40000): "
-    domain=$(normalize_domain_input "$domain")
+    domain=$(normalize_domain_input "$domain_input")
     
-    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
-        echo -e "${RED}❌ 域名为空或端口格式错误！已取消操作。${PLAIN}"
+    if ! is_valid_domain "$domain"; then
+        print_domain_validation_error "域名" "$domain_input" "$domain"
+        read -n 1 -s -r -p "按任意键继续..."
+        return
+    fi
+    if ! is_valid_port "$port"; then
+        echo -e "${RED}❌ 端口格式错误：${port}，端口必须是 1-65535。已取消操作。${PLAIN}"
         read -n 1 -s -r -p "按任意键继续..."
         return
     fi

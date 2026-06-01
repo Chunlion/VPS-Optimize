@@ -240,6 +240,17 @@ if is_yes "no"; then
     exit 1
 fi
 [[ "$(normalize_domain_input " HTTPS://Panel.Example.COM:443/path ")" == "panel.example.com" ]]
+bad_domain_raw="https：//Ml。Cuty0039。Dpdns。Org/path"
+bad_domain_normalized=$(normalize_domain_input "$bad_domain_raw")
+if is_valid_domain "$bad_domain_normalized"; then
+    echo "Full-width pasted domain must remain invalid." >&2
+    exit 1
+fi
+bad_domain_output=$(print_domain_validation_error "测试域名" "$bad_domain_raw" "$bad_domain_normalized")
+[[ "$bad_domain_output" == *"测试域名格式无效"* ]]
+[[ "$bad_domain_output" == *"中文/全角标点"* ]]
+[[ "$bad_domain_output" == *"类似 URL"* ]]
+[[ "$bad_domain_output" == *"脚本规范化后用于校验的值"* ]]
 (
     source src/kernel_tuning.sh
     mapfile -t tcp_tune_records < <(
@@ -604,7 +615,7 @@ if is_trusted_remote_script_url "https://example.com/not-built-in.sh" >/dev/null
     exit 1
 fi
 remote_output=$(run_remote_script "smoke remote script" "file://$remote_script" <<< $'yes\n')
-[[ "$remote_output" == *"非内置可信来源"* ]]
+[[ "$remote_output" == *"非内置已知来源"* ]]
 [[ "$remote_output" == *"remote-run-ok"* ]]
 rm -f "$remote_script"
 rmdir "$remote_tmp_dir"

@@ -413,10 +413,10 @@ run_remote_script() {
     echo -e "${CYAN}▶ ${desc}${PLAIN}"
     echo -e "${YELLOW}脚本来源：${url}${PLAIN}"
     if trusted_source=$(is_trusted_remote_script_url "$url"); then
-        echo -e "${GREEN}内置可信来源：${trusted_source}${PLAIN}"
+        echo -e "${GREEN}内置已知来源：${trusted_source}${PLAIN}"
     else
         trusted_source=""
-        echo -e "${RED}⚠️ 非内置可信来源：该 URL 不在 VPS-Optimize 内置远程脚本白名单内。${PLAIN}"
+        echo -e "${RED}⚠️ 非内置已知来源：该 URL 不在 VPS-Optimize 内置远程脚本白名单内。${PLAIN}"
     fi
     if [[ "$url" != https://* ]]; then
         echo -e "${YELLOW}⚠️ 该来源不是 HTTPS，将按脚本内置地址继续下载执行。${PLAIN}"

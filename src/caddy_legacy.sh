@@ -102,15 +102,15 @@ EOF
     local summary_file="/root/cert/caddy_cf_manifest.txt"
 
     while true; do
-        local domain backend_port continue_add
-        read_trimmed domain "👉 请输入域名 (回车结束添加): "
-        domain=$(normalize_domain_input "$domain")
+        local domain domain_input backend_port continue_add
+        read_trimmed domain_input "👉 请输入域名 (回车结束添加): "
+        domain=$(normalize_domain_input "$domain_input")
         if [[ -z "$domain" ]]; then
             break
         fi
 
         if ! is_valid_domain "$domain"; then
-            echo -e "${RED}❌ 域名格式无效：$domain${PLAIN}"
+            print_domain_validation_error "域名" "$domain_input" "$domain"
             ((fail_count++))
             continue
         fi

@@ -53,14 +53,14 @@ add_xray_sni_route() {
     echo -e "${YELLOW}本菜单只记录 SNI -> 本地地址:端口；用于当前支持的单入口模式渲染分流规则，不会创建、删除或修改 3x-ui/Xray 入站内部配置。${PLAIN}"
     echo -e "------------------------------------------------"
 
-    local route_sni route_addr route_port existing idx
-    read_trimmed route_sni "SNI/域名: "
-    route_sni=$(normalize_domain_input "$route_sni")
+    local route_sni route_sni_input route_addr route_port existing idx
+    read_trimmed route_sni_input "SNI/域名: "
+    route_sni=$(normalize_domain_input "$route_sni_input")
     if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
         echo -e "${BLUE}已取消添加。${PLAIN}"
         return 0
     fi
-    is_valid_domain "$route_sni" || { echo -e "${RED}❌ SNI/域名格式无效。${PLAIN}"; return 1; }
+    is_valid_domain "$route_sni" || { print_domain_validation_error "SNI/域名" "$route_sni_input" "$route_sni"; return 1; }
     if [[ "$route_sni" == "$PANEL_DOMAIN" || "$route_sni" == "$REALITY_SNI" ]]; then
         echo -e "${RED}❌ Xray 入站域名不能和面板域名或 REALITY SNI 相同。${PLAIN}"
         return 1
