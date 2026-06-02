@@ -137,7 +137,7 @@ validate_module_list_sync
         printf '%s\n' '# ---------------------------------------------------------'
         printf '# Module: %s\n' "$module"
         printf '%s\n' '# ---------------------------------------------------------'
-        sed '/^#!\/usr\/bin\/env bash$/d' "$repo_root/src/$module"
+        sed '1{/^#!\/usr\/bin\/env bash$/d;}' "$repo_root/src/$module"
         printf '%s\n' ''
     done
 } > "$out_file"

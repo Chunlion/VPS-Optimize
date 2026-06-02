@@ -120,6 +120,7 @@ for module in \
     assert_dist_contains "# Module: ${module}.sh" "Release script is missing key module: ${module}.sh"
 done
 assert_file_contains scripts/build.sh 'scripts/modules.list' "Release build must read the shared module list."
+assert_file_contains scripts/build.sh "sed '1{/^#!\\/usr\\/bin\\/env bash$/d;}'" "Release build must only strip module-level shebangs, not embedded script templates."
 assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/selfcheck.sh' "CI must call the shared selfcheck entrypoint."
 assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/compat-smoke.sh' "CI must call the compatibility smoke entrypoint."
 assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read the shared module list."
@@ -1357,7 +1358,9 @@ if grep -q 'HTTP ${code}${PLAIN}' dist/vps.sh && grep -q '|| echo "000"' dist/vp
     echo "443 curl probe must not concatenate fallback HTTP 000 values." >&2
     exit 1
 fi
-awk "/<<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" dist/vps.sh | bash -n
+traffic_guard_dist_checker_template=$(awk "/<<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" dist/vps.sh)
+head -n 1 <<<"$traffic_guard_dist_checker_template" | grep -Fq '#!/usr/bin/env bash'
+bash -n <<<"$traffic_guard_dist_checker_template"
 grep -q 'func_health_dashboard' dist/vps.sh
 grep -q 'func_backup_center' dist/vps.sh
 grep -q 'func_edit_applied_config_center' dist/vps.sh

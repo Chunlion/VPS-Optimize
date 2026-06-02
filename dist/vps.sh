@@ -16723,6 +16723,7 @@ install_traffic_guard_checker() {
         return 1
     }
     cat > "$tmp_checker" <<'GUARD_SCRIPT'
+#!/usr/bin/env bash
 set -u
 
 CONFIG="${VPSO_TRAFFIC_GUARD_CONFIG:-/etc/vps-optimize/traffic-guard.conf}"
