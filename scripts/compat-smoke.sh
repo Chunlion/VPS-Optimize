@@ -35,7 +35,7 @@ assert_module_list_contains() {
 
 assert_traffic_guard_checker_shebang() {
     local first_line
-    first_line=$(awk '/TRAFFIC_GUARD_CHECKER.*GUARD_SCRIPT/ { getline; print; exit }' src/traffic_guard.sh)
+    first_line=$(awk "/<<'GUARD_SCRIPT'/ { getline; print; exit }" src/traffic_guard.sh)
     if [[ "$first_line" != "#!/usr/bin/env bash" ]]; then
         echo "Traffic Guard checker template must start with #!/usr/bin/env bash." >&2
         exit 1
@@ -106,8 +106,9 @@ done
 
 assert_traffic_guard_checker_shebang
 assert_file_contains src/traffic_guard.sh 'ExecStart=/usr/bin/env bash ${TRAFFIC_GUARD_CHECKER}' "Traffic Guard systemd service must keep bash-based ExecStart."
-assert_file_contains src/traffic_guard.sh 'bash -n "$TRAFFIC_GUARD_CHECKER"' "Traffic Guard checker install must validate Bash syntax."
-assert_file_contains src/traffic_guard.sh "grep -q \$'\\r' \"\$TRAFFIC_GUARD_CHECKER\"" "Traffic Guard checker install must reject CRLF."
+assert_file_contains src/traffic_guard.sh 'bash -n "$tmp_checker"' "Traffic Guard checker install must validate Bash syntax before replacing the live checker."
+assert_file_contains src/traffic_guard.sh "grep -q \$'\\r' \"\$tmp_checker\"" "Traffic Guard checker install must reject CRLF before replacing the live checker."
+assert_file_contains src/traffic_guard.sh 'mv -f "$tmp_checker" "$TRAFFIC_GUARD_CHECKER"' "Traffic Guard checker install must atomically replace the live checker after validation."
 assert_file_contains src/traffic_guard.sh '/usr/bin/env bash "$TRAFFIC_GUARD_CHECKER"' "Traffic Guard direct fallback must invoke checker through bash."
 
 assert_file_contains dist/vps.sh '/var/lib/vps-optimize/vpso-mux/status.json'
