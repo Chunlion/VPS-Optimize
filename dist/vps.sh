@@ -12129,13 +12129,12 @@ ssh_apply_auth_mode() {
     fi
     case "$mode" in
         key_only) label="仅密钥登录（禁用密码）" ;;
-        key_preferred) label="密钥优先（保留密码）" ;;
-        password) label="恢复密码登录" ;;
+        key_preferred|password) label="密钥 + 密码登录（保留/恢复密码）" ;;
         *) return 1 ;;
     esac
     confirm_risk_action "切换 SSH 登录模式：${label}" \
         "/etc/ssh/sshd_config 与 /etc/ssh/sshd_config.d 登录认证配置" \
-        "使用本菜单恢复密码登录，或从自动备份恢复 /etc/ssh/sshd_config 与对应子配置备份" \
+        "使用本菜单的“密钥 + 密码登录”恢复密码登录，或从自动备份恢复 /etc/ssh/sshd_config 与对应子配置备份" \
         "会同步处理 50-cloud-init.conf 等云镜像子配置；切到仅密钥登录前，必须先确认新 SSH 窗口能用私钥登录。" || return 1
 
     timestamp=$(date +%s)
@@ -12250,10 +12249,9 @@ func_ssh_login_mode_menu() {
         echo -e "PasswordAuthentication    : ${CYAN}$(ssh_effective_setting PasswordAuthentication || echo 未知)${PLAIN}"
         echo -e "KbdInteractiveAuthentication: ${CYAN}$(ssh_effective_setting KbdInteractiveAuthentication || echo 未知)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 为用户添加 SSH 公钥${PLAIN}"
-        echo -e "${GREEN}  2. 密钥优先，保留密码登录${PLAIN}"
+        echo -e "${GREEN}  1. 添加/更新用户 SSH 公钥（不改登录方式）${PLAIN}"
+        echo -e "${GREEN}  2. 密钥 + 密码登录（保留/恢复密码）${PLAIN}"
         echo -e "${RED}  3. 仅密钥登录，禁用密码登录${PLAIN}"
-        echo -e "${YELLOW}  4. 恢复密码登录${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -12279,7 +12277,6 @@ func_ssh_login_mode_menu() {
                 ssh_apply_auth_mode key_only
                 pause_return
                 ;;
-            4) ssh_apply_auth_mode password; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
@@ -12294,7 +12291,7 @@ func_ssh_security_menu() {
         echo -e "${BOLD}🛡️ SSH 安全中心${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${GREEN}  1. 修改 SSH 端口${PLAIN}             ${YELLOW}(防失联校验和回滚)${PLAIN}"
-        echo -e "${GREEN}  2. 用户密钥登录模式${PLAIN}         ${YELLOW}(添加公钥 / 禁用或恢复密码登录)${PLAIN}"
+        echo -e "${GREEN}  2. 用户密钥登录模式${PLAIN}         ${YELLOW}(添加公钥 / 切换密钥或密码登录)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -12573,11 +12570,11 @@ func_add_ssh_key() {
     user=$(ssh_choose_user) || { read -n 1 -s -r -p "按任意键继续..."; return; }
     if ssh_add_public_key_for_user "$user"; then
         echo -e "${GREEN}✅ 公钥添加完成。请立刻新开一个 SSH 窗口测试私钥登录。${PLAIN}"
-        read_trimmed enable_mode "是否同时写入“密钥优先，保留密码登录”模式？(y/N): "
+        read_trimmed enable_mode "是否同时写入“密钥 + 密码登录（保留/恢复密码）”模式？(y/N): "
         if is_yes "$enable_mode"; then
             ssh_apply_auth_mode key_preferred || true
         fi
-        echo -e "${YELLOW}确认私钥登录 100% 成功后，可进入 [5 SSH 安全中心] -> [2 用户密钥登录模式] 禁用密码登录。${PLAIN}"
+        echo -e "${YELLOW}确认私钥登录 100% 成功后，可进入 [6 SSH 安全中心] -> [2 用户密钥登录模式] 禁用密码登录。${PLAIN}"
     fi
     read -n 1 -s -r -p "按任意键继续..."
 }
@@ -16674,10 +16671,58 @@ traffic_guard_write_state_baseline() {
     chmod 600 "$state_file" 2>/dev/null || true
 }
 
+traffic_guard_admin_log() {
+    local msg="$1"
+    mkdir -p "$(dirname "$TRAFFIC_GUARD_LOG")" 2>/dev/null || true
+    printf '%s %s\n' "$(date -Is 2>/dev/null || date)" "$msg" >> "$TRAFFIC_GUARD_LOG" 2>/dev/null || true
+    logger -t vps-traffic-guard "$msg" 2>/dev/null || true
+}
+
+traffic_guard_checker_first_line_hex() {
+    local file="$1"
+    [[ -r "$file" ]] || return 1
+    head -n 1 "$file" 2>/dev/null | LC_ALL=C od -An -tx1 | awk '{$1=$1; print}'
+}
+
+traffic_guard_normalize_generated_checker() {
+    local file="$1"
+    local tmp
+    tmp=$(mktemp "${file}.normalize.XXXXXX") || return 1
+    if ! LC_ALL=C sed '1s/^\xef\xbb\xbf//' "$file" | tr -d '\r' > "$tmp"; then
+        rm -f "$tmp" 2>/dev/null || true
+        return 1
+    fi
+    if ! cmp -s "$file" "$tmp"; then
+        cat "$tmp" > "$file" || {
+            rm -f "$tmp" 2>/dev/null || true
+            return 1
+        }
+        traffic_guard_admin_log "normalized generated checker header/line endings: ${file}"
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+}
+
+traffic_guard_report_checker_install_failure() {
+    local reason="$1"
+    local file="${2:-$TRAFFIC_GUARD_CHECKER}"
+    local first_line_hex
+    first_line_hex=$(traffic_guard_checker_first_line_hex "$file" 2>/dev/null || echo "unreadable")
+    echo -e "${RED}❌ Traffic Guard 检查器写入失败：${reason}${PLAIN}"
+    echo -e "${YELLOW}检查器路径：${TRAFFIC_GUARD_CHECKER}${PLAIN}"
+    echo -e "${YELLOW}待检查文件：${file}${PLAIN}"
+    echo -e "${YELLOW}首行实际字节：${first_line_hex:-empty}${PLAIN}"
+    echo -e "${YELLOW}日志路径：${TRAFFIC_GUARD_LOG}${PLAIN}"
+    traffic_guard_admin_log "checker install failed: ${reason}; file=${file}; first_line_hex=${first_line_hex:-empty}"
+}
+
 install_traffic_guard_checker() {
-    local first_line write_rc
+    local first_line write_rc tmp_checker
     mkdir -p "$(dirname "$TRAFFIC_GUARD_CHECKER")" "$TRAFFIC_GUARD_STATE_DIR" "$(dirname "$TRAFFIC_GUARD_CONFIG")" || return 1
-    cat > "$TRAFFIC_GUARD_CHECKER" <<'GUARD_SCRIPT'
+    tmp_checker=$(mktemp "${TRAFFIC_GUARD_CHECKER}.tmp.XXXXXX") || {
+        traffic_guard_report_checker_install_failure "无法创建临时检查器文件" "$TRAFFIC_GUARD_CHECKER"
+        return 1
+    }
+    cat > "$tmp_checker" <<'GUARD_SCRIPT'
 set -u
 
 CONFIG="${VPSO_TRAFFIC_GUARD_CONFIG:-/etc/vps-optimize/traffic-guard.conf}"
@@ -17051,26 +17096,36 @@ exit 0
 GUARD_SCRIPT
     write_rc=$?
     if (( write_rc != 0 )); then
-        echo -e "${RED}❌ Traffic Guard 检查器写入失败：无法写入 ${TRAFFIC_GUARD_CHECKER}${PLAIN}"
+        traffic_guard_report_checker_install_failure "无法写入临时检查器文件" "$tmp_checker"
+        rm -f "$tmp_checker" 2>/dev/null || true
         return 1
     fi
-    IFS= read -r first_line < "$TRAFFIC_GUARD_CHECKER" || first_line=""
+    if ! traffic_guard_normalize_generated_checker "$tmp_checker"; then
+        traffic_guard_report_checker_install_failure "无法规范化检查器换行或文件头" "$tmp_checker"
+        return 1
+    fi
+    IFS= read -r first_line < "$tmp_checker" || first_line=""
     if [[ "${first_line%$'\r'}" != "#!/usr/bin/env bash" ]]; then
-        echo -e "${RED}❌ Traffic Guard 检查器写入失败：首行必须是 #!/usr/bin/env bash。${PLAIN}"
+        traffic_guard_report_checker_install_failure "首行必须是 #!/usr/bin/env bash" "$tmp_checker"
         return 1
     fi
-    if LC_ALL=C grep -q $'\r' "$TRAFFIC_GUARD_CHECKER"; then
-        echo -e "${RED}❌ Traffic Guard 检查器写入失败：检测到 CRLF/回车字符。${PLAIN}"
+    if LC_ALL=C grep -q $'\r' "$tmp_checker"; then
+        traffic_guard_report_checker_install_failure "检测到 CRLF/回车字符" "$tmp_checker"
         return 1
     fi
-    if ! bash -n "$TRAFFIC_GUARD_CHECKER"; then
-        echo -e "${RED}❌ Traffic Guard 检查器写入失败：Bash 语法检查未通过。${PLAIN}"
+    if ! bash -n "$tmp_checker"; then
+        traffic_guard_report_checker_install_failure "Bash 语法检查未通过" "$tmp_checker"
         return 1
     fi
-    if ! chmod 700 "$TRAFFIC_GUARD_CHECKER"; then
-        echo -e "${RED}❌ Traffic Guard 检查器权限设置失败：无法 chmod 700 ${TRAFFIC_GUARD_CHECKER}${PLAIN}"
+    if ! chmod 700 "$tmp_checker"; then
+        traffic_guard_report_checker_install_failure "权限设置失败：无法 chmod 700" "$tmp_checker"
         return 1
     fi
+    if ! mv -f "$tmp_checker" "$TRAFFIC_GUARD_CHECKER"; then
+        traffic_guard_report_checker_install_failure "无法替换 ${TRAFFIC_GUARD_CHECKER}" "$tmp_checker"
+        return 1
+    fi
+    traffic_guard_admin_log "checker installed: ${TRAFFIC_GUARD_CHECKER}"
 }
 
 reset_traffic_guard_failed_state() {

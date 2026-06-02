@@ -219,13 +219,12 @@ ssh_apply_auth_mode() {
     fi
     case "$mode" in
         key_only) label="仅密钥登录（禁用密码）" ;;
-        key_preferred) label="密钥优先（保留密码）" ;;
-        password) label="恢复密码登录" ;;
+        key_preferred|password) label="密钥 + 密码登录（保留/恢复密码）" ;;
         *) return 1 ;;
     esac
     confirm_risk_action "切换 SSH 登录模式：${label}" \
         "/etc/ssh/sshd_config 与 /etc/ssh/sshd_config.d 登录认证配置" \
-        "使用本菜单恢复密码登录，或从自动备份恢复 /etc/ssh/sshd_config 与对应子配置备份" \
+        "使用本菜单的“密钥 + 密码登录”恢复密码登录，或从自动备份恢复 /etc/ssh/sshd_config 与对应子配置备份" \
         "会同步处理 50-cloud-init.conf 等云镜像子配置；切到仅密钥登录前，必须先确认新 SSH 窗口能用私钥登录。" || return 1
 
     timestamp=$(date +%s)

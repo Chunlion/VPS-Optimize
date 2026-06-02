@@ -1044,6 +1044,10 @@ grep -q 'cycle floor applied on ${IFACE}' dist/vps.sh
 grep -q 'traffic_guard_live_usage_from_state' dist/vps.sh
 grep -q 'print_traffic_guard_diagnostic_summary' dist/vps.sh
 grep -q 'traffic_guard_recent_log_summary' dist/vps.sh
+grep -q 'traffic_guard_admin_log' dist/vps.sh
+grep -q 'traffic_guard_normalize_generated_checker' dist/vps.sh
+grep -q '首行实际字节' dist/vps.sh
+grep -q 'checker install failed:' dist/vps.sh
 grep -q 'traffic_guard_run_checker_once' dist/vps.sh
 grep -q 'sync_traffic_guard_now' dist/vps.sh
 grep -q 'timer active 但状态文件已超过' dist/vps.sh
@@ -1150,6 +1154,21 @@ EOF
     grep -Fq 'quota reached 900/10000 bytes on eth-diag0' <<<"$traffic_guard_diag_output"
 )
 
+(
+    source src/traffic_guard.sh
+    tmp=$(mktemp -d /tmp/vps-traffic-guard-install-smoke.XXXXXX)
+    TRAFFIC_GUARD_CHECKER="${tmp}/vps-traffic-guard-check"
+    TRAFFIC_GUARD_CONFIG="${tmp}/traffic-guard.conf"
+    TRAFFIC_GUARD_STATE_DIR="${tmp}/state"
+    TRAFFIC_GUARD_LOG="${tmp}/traffic-guard.log"
+
+    install_traffic_guard_checker
+    head -n 1 "$TRAFFIC_GUARD_CHECKER" | grep -Fq '#!/usr/bin/env bash'
+    bash -n "$TRAFFIC_GUARD_CHECKER"
+    [[ -x "$TRAFFIC_GUARD_CHECKER" ]]
+    grep -Fq "checker installed: ${TRAFFIC_GUARD_CHECKER}" "$TRAFFIC_GUARD_LOG"
+)
+
 traffic_guard_accounting_regression() {
     # shellcheck disable=SC1091
     source src/traffic_guard.sh
@@ -1184,7 +1203,7 @@ traffic_guard_accounting_regression() {
     iface="eth-smoke0"
     printf '999999999 0\n' > "$fake_proc"
     mkdir -p "$fake_bin"
-    awk "/cat > \"\\\$TRAFFIC_GUARD_CHECKER\" <<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" src/traffic_guard.sh > "$guard"
+    awk "/<<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" src/traffic_guard.sh > "$guard"
     chmod +x "$guard"
     current_cycle=$(traffic_guard_current_cycle_key 1)
 
@@ -1351,6 +1370,12 @@ grep -q 'hosts_add_or_update_entry' dist/vps.sh
 grep -q 'func_ssh_security_menu' dist/vps.sh
 grep -q 'func_ssh_login_mode_menu' dist/vps.sh
 grep -q 'ssh_apply_auth_mode' dist/vps.sh
+grep -q '密钥 + 密码登录（保留/恢复密码）' dist/vps.sh
+grep -q '添加/更新用户 SSH 公钥（不改登录方式）' dist/vps.sh
+if grep -Fq '4. 恢复密码登录' dist/vps.sh || grep -Fq '4) ssh_apply_auth_mode password' dist/vps.sh; then
+    echo "SSH key login menu must not keep duplicate password-recovery entry." >&2
+    exit 1
+fi
 grep -q 'ssh_prepare_runtime_dir' dist/vps.sh
 grep -q 'ssh_write_sshd_port_dropin' dist/vps.sh
 grep -q 'ssh_write_auth_dropin' dist/vps.sh

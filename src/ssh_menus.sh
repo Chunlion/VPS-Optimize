@@ -12,10 +12,9 @@ func_ssh_login_mode_menu() {
         echo -e "PasswordAuthentication    : ${CYAN}$(ssh_effective_setting PasswordAuthentication || echo 未知)${PLAIN}"
         echo -e "KbdInteractiveAuthentication: ${CYAN}$(ssh_effective_setting KbdInteractiveAuthentication || echo 未知)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 为用户添加 SSH 公钥${PLAIN}"
-        echo -e "${GREEN}  2. 密钥优先，保留密码登录${PLAIN}"
+        echo -e "${GREEN}  1. 添加/更新用户 SSH 公钥（不改登录方式）${PLAIN}"
+        echo -e "${GREEN}  2. 密钥 + 密码登录（保留/恢复密码）${PLAIN}"
         echo -e "${RED}  3. 仅密钥登录，禁用密码登录${PLAIN}"
-        echo -e "${YELLOW}  4. 恢复密码登录${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -41,7 +40,6 @@ func_ssh_login_mode_menu() {
                 ssh_apply_auth_mode key_only
                 pause_return
                 ;;
-            4) ssh_apply_auth_mode password; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
@@ -56,7 +54,7 @@ func_ssh_security_menu() {
         echo -e "${BOLD}🛡️ SSH 安全中心${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${GREEN}  1. 修改 SSH 端口${PLAIN}             ${YELLOW}(防失联校验和回滚)${PLAIN}"
-        echo -e "${GREEN}  2. 用户密钥登录模式${PLAIN}         ${YELLOW}(添加公钥 / 禁用或恢复密码登录)${PLAIN}"
+        echo -e "${GREEN}  2. 用户密钥登录模式${PLAIN}         ${YELLOW}(添加公钥 / 切换密钥或密码登录)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -244,11 +242,11 @@ func_add_ssh_key() {
     user=$(ssh_choose_user) || { read -n 1 -s -r -p "按任意键继续..."; return; }
     if ssh_add_public_key_for_user "$user"; then
         echo -e "${GREEN}✅ 公钥添加完成。请立刻新开一个 SSH 窗口测试私钥登录。${PLAIN}"
-        read_trimmed enable_mode "是否同时写入“密钥优先，保留密码登录”模式？(y/N): "
+        read_trimmed enable_mode "是否同时写入“密钥 + 密码登录（保留/恢复密码）”模式？(y/N): "
         if [[ "$enable_mode" =~ ^[Yy]$ ]]; then
             ssh_apply_auth_mode key_preferred || true
         fi
-        echo -e "${YELLOW}确认私钥登录 100% 成功后，可进入 [5 SSH 安全中心] -> [2 用户密钥登录模式] 禁用密码登录。${PLAIN}"
+        echo -e "${YELLOW}确认私钥登录 100% 成功后，可进入 [6 SSH 安全中心] -> [2 用户密钥登录模式] 禁用密码登录。${PLAIN}"
     fi
     read -n 1 -s -r -p "按任意键继续..."
 }
