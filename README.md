@@ -69,7 +69,7 @@ cy
 
 面板预览：
 
-![VPS-Optimize 面板预览](https://i.mji.rip/2026/05/23/3aba13ed9f79eb8a253e939ebbf13ffc.png)
+![VPS-Optimize 面板预览](https://i.mji.rip/2026/06/03/50e5eac2e83fbf7ef15240e3fa8c693a.png)
 
 <a id="docs"></a>
 ## 🗂️ 文档导航
@@ -82,6 +82,8 @@ cy
 | [docs/existing-server-migration.md](docs/existing-server-migration.md) | 已有 3x-ui、Caddy/Nginx、网站或订阅工具，需要迁移 |
 | [docs/recovery-runbook.md](docs/recovery-runbook.md) | SSH 失联、防火墙误封、443 改坏、服务起不来 |
 | [docs/config-paths.md](docs/config-paths.md) | 真正排错时查配置、证书、备份路径 |
+| [docs/dog.md](docs/dog.md) | 端口流量狗 dog.sh 使用说明 |
+| [docs/xui-custom-manager.md](docs/xui-custom-manager.md) | 3x-ui 外置增强管理说明 |
 
 <a id="pre-run-checklist"></a>
 ## ✅ 运行前检查清单
@@ -206,7 +208,7 @@ wget -qO xui-custom-manager.sh https://raw.githubusercontent.com/Chunlion/VPS-Op
 首次打开后会自动注册 `xcm` 快捷命令。`xcm` 是手动入口，会优先拉取最新版；systemd timer 只调用本地稳定执行器 `/usr/local/bin/xui-custom-manager.sh --reset-check`。
 在 VPS-Optimize 主菜单也可以直接输入 `xcm` 或 `外置` 进入这个工具。
 
-详细说明请看：[README_xui_custom_manager.md](README_xui_custom_manager.md)。
+详细说明请看：[3x-ui 外置增强管理说明](docs/xui-custom-manager.md)。
 
 ### 端口流量狗
 
@@ -224,7 +226,7 @@ wget -qO dog.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog
 dog
 ```
 
-进入管理菜单。详细说明请看：[README_dog.md](README_dog.md)。
+进入管理菜单。详细说明请看：[端口流量狗 dog.sh 使用说明](docs/dog.md)。
 
 流量达量关机保护不单独成文档，入口在 `主菜单 [10 网络与内核优化] -> [7 流量达量关机保护]`。状态页的“本周期已用”按所选计费模式、基线和初始已用做实时估算；“网卡原始计数”只是系统自开机累计，开机久时可能远大于本周期已用，不应直接当作账单周期用量。如果最近检查时间超时，可在同一菜单使用“修复/重装自动检查 timer”；检查器安装或修复失败时会显示待检查文件、实际首行字节和日志路径，并写入 `/var/log/vps-traffic-guard.log`；达量后若关机命令未被系统接受，下一次 timer 会继续重试。云厂商后台仍是最终账单参考。
 
