@@ -53,14 +53,6 @@ wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dis
 `dist/vps.sh` 是由 `scripts/build.sh` 从 `src/*.sh` 生成的单文件发布版；仓库根目录的 `vps.sh` 是源码入口，用于本地开发和调试。
 发布版已经内置全部模块，运行各项功能时不会再按模块拉取脚本；源码入口只适合完整克隆仓库后运行。
 
-本地验证时，Windows PowerShell 里不要直接运行 Bash 脚本；统一使用 WSL 入口：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\selfcheck.ps1
-```
-
-这个入口会通过 WSL 执行 build、`bash -n`、compat smoke、`tests/smoke.sh` 和 `scripts/selfcheck.sh`，并把失败退出码传回 PowerShell。在 WSL/Linux shell 里可以继续直接运行 `bash scripts/selfcheck.sh`。
-
 首次运行后会注册全局快捷命令，以后直接输入：
 
 ```bash
