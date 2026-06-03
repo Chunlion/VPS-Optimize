@@ -104,9 +104,9 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 | 已有订阅工具 Docker 容器，暂不启用 443 单入口 | 保留容器，用 `主菜单 [4 反代]` 选择 Caddy 或 Nginx HTTPS 反代 |
 | 已有订阅工具 Docker 容器，准备启用 443 单入口 | 保留容器，把外部访问改成 443 单入口的 Web 域名/反代 |
 
-完整 3x-ui + REALITY + 443 步骤见 [../tutorials/02-3x-ui-reality-443.md](../tutorials/02-3x-ui-reality-443.md)。
+完整 3x-ui + REALITY + 443 步骤见 [../tutorials/01-3x-ui-reality-443.md](../tutorials/01-3x-ui-reality-443.md)。
 
-订阅工具迁移见 [../tutorials/03-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md](../tutorials/03-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。
+订阅工具迁移见 [../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。
 
 ## 未启用 443 单入口时的 HTTPS 反代过渡
 

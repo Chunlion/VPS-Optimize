@@ -220,7 +220,7 @@ tail -n 100 /var/log/xui-custom-manager.log 2>/dev/null
 主菜单 [5 面板、节点与订阅工具] -> [16 3x-ui 外置增强管理]
 ```
 
-详细说明见 [../README_xui_custom_manager.md](../README_xui_custom_manager.md)。
+详细说明见 [xui-custom-manager.md](xui-custom-manager.md)。
 
 ## Docker 和订阅工具
 
@@ -289,7 +289,7 @@ nft list ruleset 2>/dev/null | grep -i port_traffic_monitor || true
 主菜单 [5 面板、节点与订阅工具] -> [14 端口流量监控]
 ```
 
-详细说明见 [../README_dog.md](../README_dog.md)。
+详细说明见 [dog.md](dog.md)。
 
 ## SSH、防火墙、Fail2ban
 
