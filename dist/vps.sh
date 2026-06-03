@@ -16715,11 +16715,24 @@ traffic_guard_report_checker_install_failure() {
     traffic_guard_admin_log "checker install failed: ${reason}; file=${file}; first_line_hex=${first_line_hex:-empty}"
 }
 
-install_traffic_guard_checker() {
+traffic_guard_mark_checker_install_failure() {
+    local kind="$1"
+    local reason="$2"
+    local file="${3:-$TRAFFIC_GUARD_CHECKER}"
+    TRAFFIC_GUARD_CHECKER_INSTALL_FAILURE_KIND="$kind"
+    TRAFFIC_GUARD_CHECKER_INSTALL_FAILURE_FILE="$file"
+    traffic_guard_report_checker_install_failure "$reason" "$file"
+}
+
+traffic_guard_checker_install_failure_is_generated() {
+    [[ "${TRAFFIC_GUARD_CHECKER_INSTALL_FAILURE_KIND:-}" == "generated-content" ]]
+}
+
+traffic_guard_install_checker_once() {
     local first_line write_rc tmp_checker
     mkdir -p "$(dirname "$TRAFFIC_GUARD_CHECKER")" "$TRAFFIC_GUARD_STATE_DIR" "$(dirname "$TRAFFIC_GUARD_CONFIG")" || return 1
     tmp_checker=$(mktemp "${TRAFFIC_GUARD_CHECKER}.tmp.XXXXXX") || {
-        traffic_guard_report_checker_install_failure "无法创建临时检查器文件" "$TRAFFIC_GUARD_CHECKER"
+        traffic_guard_mark_checker_install_failure "io" "无法创建临时检查器文件" "$TRAFFIC_GUARD_CHECKER"
         return 1
     }
     cat > "$tmp_checker" <<'GUARD_SCRIPT'
@@ -17097,36 +17110,54 @@ exit 0
 GUARD_SCRIPT
     write_rc=$?
     if (( write_rc != 0 )); then
-        traffic_guard_report_checker_install_failure "无法写入临时检查器文件" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "io" "无法写入临时检查器文件" "$tmp_checker"
         rm -f "$tmp_checker" 2>/dev/null || true
         return 1
     fi
     if ! traffic_guard_normalize_generated_checker "$tmp_checker"; then
-        traffic_guard_report_checker_install_failure "无法规范化检查器换行或文件头" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "generated-content" "无法规范化检查器换行或文件头" "$tmp_checker"
         return 1
     fi
     IFS= read -r first_line < "$tmp_checker" || first_line=""
     if [[ "${first_line%$'\r'}" != "#!/usr/bin/env bash" ]]; then
-        traffic_guard_report_checker_install_failure "首行必须是 #!/usr/bin/env bash" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "generated-content" "首行必须是 #!/usr/bin/env bash" "$tmp_checker"
         return 1
     fi
     if LC_ALL=C grep -q $'\r' "$tmp_checker"; then
-        traffic_guard_report_checker_install_failure "检测到 CRLF/回车字符" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "generated-content" "检测到 CRLF/回车字符" "$tmp_checker"
         return 1
     fi
     if ! bash -n "$tmp_checker"; then
-        traffic_guard_report_checker_install_failure "Bash 语法检查未通过" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "generated-content" "Bash 语法检查未通过" "$tmp_checker"
         return 1
     fi
     if ! chmod 700 "$tmp_checker"; then
-        traffic_guard_report_checker_install_failure "权限设置失败：无法 chmod 700" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "io" "权限设置失败：无法 chmod 700" "$tmp_checker"
         return 1
     fi
     if ! mv -f "$tmp_checker" "$TRAFFIC_GUARD_CHECKER"; then
-        traffic_guard_report_checker_install_failure "无法替换 ${TRAFFIC_GUARD_CHECKER}" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "io" "无法替换 ${TRAFFIC_GUARD_CHECKER}" "$tmp_checker"
         return 1
     fi
     traffic_guard_admin_log "checker installed: ${TRAFFIC_GUARD_CHECKER}"
+}
+
+install_traffic_guard_checker() {
+    local attempt
+    for attempt in 1 2; do
+        TRAFFIC_GUARD_CHECKER_INSTALL_FAILURE_KIND=""
+        TRAFFIC_GUARD_CHECKER_INSTALL_FAILURE_FILE=""
+        if traffic_guard_install_checker_once; then
+            return 0
+        fi
+        if [[ "$attempt" == "1" ]] && traffic_guard_checker_install_failure_is_generated; then
+            echo -e "${YELLOW}⚠️ 检查器生成内容异常，正在安全重装一次...${PLAIN}"
+            traffic_guard_admin_log "retry checker install once after generated content validation failure"
+            continue
+        fi
+        return 1
+    done
+    return 1
 }
 
 reset_traffic_guard_failed_state() {
@@ -17156,6 +17187,13 @@ traffic_guard_print_timer_failure_context() {
     journalctl -u vps-traffic-guard.service -u vps-traffic-guard.timer -n 80 --no-pager 2>/dev/null || true
     echo -e "${YELLOW}▶ 最近脚本日志:${PLAIN}"
     traffic_guard_recent_log_summary 20
+}
+
+traffic_guard_install_checker_or_report() {
+    install_traffic_guard_checker && return 0
+    echo -e "${RED}❌ 安装检查脚本失败。下面是可直接排查的上下文：${PLAIN}"
+    traffic_guard_print_timer_failure_context
+    return 1
 }
 
 traffic_guard_run_checker_once() {
@@ -17729,8 +17767,7 @@ configure_traffic_guard() {
         pause_return
         return 1
     }
-    install_traffic_guard_checker || {
-        echo -e "${RED}❌ 安装检查脚本失败。${PLAIN}"
+    traffic_guard_install_checker_or_report || {
         pause_return
         return 1
     }

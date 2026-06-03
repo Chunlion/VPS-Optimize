@@ -112,9 +112,15 @@ assert_file_contains src/traffic_guard.sh 'bash -n "$tmp_checker"' "Traffic Guar
 assert_file_contains src/traffic_guard.sh "grep -q \$'\\r' \"\$tmp_checker\"" "Traffic Guard checker install must reject CRLF before replacing the live checker."
 assert_file_contains src/traffic_guard.sh 'mv -f "$tmp_checker" "$TRAFFIC_GUARD_CHECKER"' "Traffic Guard checker install must atomically replace the live checker after validation."
 assert_file_contains src/traffic_guard.sh '/usr/bin/env bash "$TRAFFIC_GUARD_CHECKER"' "Traffic Guard direct fallback must invoke checker through bash."
+assert_file_contains src/traffic_guard.sh 'traffic_guard_install_checker_once' "Traffic Guard checker install must keep a single-attempt helper for safe retry handling."
+assert_file_contains src/traffic_guard.sh 'generated-content' "Traffic Guard checker install must classify generated-content validation failures."
+assert_file_contains src/traffic_guard.sh 'retry checker install once after generated content validation failure' "Traffic Guard checker install must retry generated-content validation failures once."
+assert_file_contains src/traffic_guard.sh 'traffic_guard_install_checker_or_report' "Traffic Guard first configuration failure path must print direct diagnostics."
 
 assert_file_contains dist/vps.sh '/var/lib/vps-optimize/vpso-mux/status.json'
 assert_file_contains dist/vps.sh '/var/log/vps-traffic-guard.log'
+assert_file_contains dist/vps.sh 'traffic_guard_install_checker_once'
+assert_file_contains dist/vps.sh 'traffic_guard_install_checker_or_report'
 assert_file_contains dist/vps.sh 'backend_retry_attempts'
 assert_file_contains dist/vps.sh '日志容量摘要'
 assert_file_contains dist/vps.sh '配置与状态文件权限体检'

@@ -1047,6 +1047,9 @@ grep -q 'print_traffic_guard_diagnostic_summary' dist/vps.sh
 grep -q 'traffic_guard_recent_log_summary' dist/vps.sh
 grep -q 'traffic_guard_admin_log' dist/vps.sh
 grep -q 'traffic_guard_normalize_generated_checker' dist/vps.sh
+grep -q 'traffic_guard_install_checker_once' dist/vps.sh
+grep -q 'traffic_guard_install_checker_or_report' dist/vps.sh
+grep -q 'retry checker install once after generated content validation failure' dist/vps.sh
 grep -q '首行实际字节' dist/vps.sh
 grep -q 'checker install failed:' dist/vps.sh
 grep -q 'traffic_guard_run_checker_once' dist/vps.sh
@@ -1168,6 +1171,87 @@ EOF
     bash -n "$TRAFFIC_GUARD_CHECKER"
     [[ -x "$TRAFFIC_GUARD_CHECKER" ]]
     grep -Fq "checker installed: ${TRAFFIC_GUARD_CHECKER}" "$TRAFFIC_GUARD_LOG"
+)
+
+traffic_guard_install_failure_regression() {
+    local case_name="$1"
+    local expected_reason="$2"
+    (
+        # shellcheck disable=SC1091
+        source src/traffic_guard.sh
+        tmp=$(mktemp -d /tmp/vps-traffic-guard-install-fail-smoke.XXXXXX)
+        TRAFFIC_GUARD_CHECKER="${tmp}/vps-traffic-guard-check"
+        TRAFFIC_GUARD_CONFIG="${tmp}/traffic-guard.conf"
+        TRAFFIC_GUARD_STATE_DIR="${tmp}/state"
+        TRAFFIC_GUARD_LOG="${tmp}/traffic-guard.log"
+        printf '%s\n' '#!/usr/bin/env bash' 'printf "stable-live-checker\n"' > "$TRAFFIC_GUARD_CHECKER"
+        chmod 700 "$TRAFFIC_GUARD_CHECKER"
+
+        case "$case_name" in
+            shebang)
+                traffic_guard_normalize_generated_checker() {
+                    sed -i '1c#!/bin/sh' "$1"
+                }
+                ;;
+            crlf)
+                traffic_guard_normalize_generated_checker() {
+                    printf '\r' >> "$1"
+                }
+                ;;
+            syntax)
+                traffic_guard_normalize_generated_checker() {
+                    printf '\nif (\n' >> "$1"
+                }
+                ;;
+            *)
+                echo "Unknown Traffic Guard install failure case: ${case_name}" >&2
+                exit 1
+                ;;
+        esac
+
+        if output=$(install_traffic_guard_checker 2>&1); then
+            echo "Traffic Guard ${case_name} install smoke must fail." >&2
+            exit 1
+        fi
+        grep -Fq "$expected_reason" <<<"$output"
+        grep -Fq "首行实际字节" <<<"$output"
+        grep -Fq "检查器生成内容异常，正在安全重装一次" <<<"$output"
+        retry_count=$(grep -Fc "retry checker install once after generated content validation failure" "$TRAFFIC_GUARD_LOG" || true)
+        [[ "$retry_count" == "1" ]]
+        head -n 1 "$TRAFFIC_GUARD_CHECKER" | grep -Fq '#!/usr/bin/env bash'
+        grep -Fq 'stable-live-checker' "$TRAFFIC_GUARD_CHECKER"
+        bash -n "$TRAFFIC_GUARD_CHECKER"
+    )
+}
+
+traffic_guard_install_failure_regression shebang '首行必须是 #!/usr/bin/env bash'
+traffic_guard_install_failure_regression crlf '检测到 CRLF/回车字符'
+traffic_guard_install_failure_regression syntax 'Bash 语法检查未通过'
+
+(
+    # shellcheck disable=SC1091
+    source src/traffic_guard.sh
+    tmp=$(mktemp -d /tmp/vps-traffic-guard-report-smoke.XXXXXX)
+    TRAFFIC_GUARD_CHECKER="${tmp}/vps-traffic-guard-check"
+    TRAFFIC_GUARD_CONFIG="${tmp}/traffic-guard.conf"
+    TRAFFIC_GUARD_STATE_DIR="${tmp}/state"
+    TRAFFIC_GUARD_LOG="${tmp}/traffic-guard.log"
+    install_traffic_guard_checker() {
+        return 1
+    }
+    systemctl() {
+        printf 'fake systemctl %s\n' "$*"
+    }
+    journalctl() {
+        printf 'fake journal\n'
+    }
+    if output=$(traffic_guard_install_checker_or_report 2>&1); then
+        echo "Traffic Guard install report helper must fail when checker install fails." >&2
+        exit 1
+    fi
+    grep -Fq "安装检查脚本失败。下面是可直接排查的上下文" <<<"$output"
+    grep -Fq "Traffic Guard 检查器/Timer 诊断上下文" <<<"$output"
+    grep -Fq "checker : ${TRAFFIC_GUARD_CHECKER}" <<<"$output"
 )
 
 traffic_guard_accounting_regression() {
