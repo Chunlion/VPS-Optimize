@@ -17853,8 +17853,7 @@ repair_traffic_guard_timer() {
             "修复后请回到状态页确认最近检查时间开始刷新。" || return 1
     fi
 
-    install_traffic_guard_checker || {
-        echo -e "${RED}❌ 安装检查脚本失败。${PLAIN}"
+    traffic_guard_install_checker_or_report || {
         pause_return
         return 1
     }

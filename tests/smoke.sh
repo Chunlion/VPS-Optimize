@@ -1254,6 +1254,130 @@ traffic_guard_install_failure_regression syntax 'Bash 语法检查未通过'
     grep -Fq "checker : ${TRAFFIC_GUARD_CHECKER}" <<<"$output"
 )
 
+traffic_guard_checker_menu_path_regression() {
+    (
+        # shellcheck disable=SC1091
+        source src/traffic_guard.sh
+        local tmp state_file old_checked call_log systemctl_calls output sync_output fail_output install_fail_output last_checked
+
+        tmp=$(mktemp -d /tmp/vps-traffic-guard-menu-smoke.XXXXXX)
+        TRAFFIC_GUARD_CHECKER="${tmp}/vps-traffic-guard-check"
+        TRAFFIC_GUARD_CONFIG="${tmp}/traffic-guard.conf"
+        TRAFFIC_GUARD_STATE_DIR="${tmp}/state"
+        TRAFFIC_GUARD_LOG="${tmp}/traffic-guard.log"
+        state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
+        old_checked='2000-01-01T00:00:00+00:00'
+        call_log="${tmp}/calls.log"
+        systemctl_calls="${tmp}/systemctl.log"
+
+        traffic_guard_write_stale_menu_state() {
+            mkdir -p "$TRAFFIC_GUARD_STATE_DIR"
+            cat > "$state_file" <<EOF
+LAST_CHECKED_AT='${old_checked}'
+EOF
+        }
+
+        traffic_guard_write_refreshing_checker() {
+            mkdir -p "$(dirname "$TRAFFIC_GUARD_CHECKER")"
+            cat > "$TRAFFIC_GUARD_CHECKER" <<EOF
+#!/usr/bin/env bash
+mkdir -p '${TRAFFIC_GUARD_STATE_DIR}'
+cat > '${state_file}' <<STATE
+LAST_CHECKED_AT='\$(date -Is 2>/dev/null || date)'
+STATE
+EOF
+            chmod +x "$TRAFFIC_GUARD_CHECKER"
+        }
+
+        traffic_guard_write_noop_checker() {
+            mkdir -p "$(dirname "$TRAFFIC_GUARD_CHECKER")"
+            printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$TRAFFIC_GUARD_CHECKER"
+            chmod +x "$TRAFFIC_GUARD_CHECKER"
+        }
+
+        load_traffic_guard_config() {
+            ACTION='log'
+            IFACE='eth-menu0'
+            CHECK_INTERVAL='45'
+            return 0
+        }
+        confirm_risk_action() { return 0; }
+        confirm_danger() { return 0; }
+        pause_return() { :; }
+        show_traffic_guard_status() { printf '%s\n' 'STATUS_SHOWN'; }
+        journalctl() { printf '%s\n' 'fake journal'; }
+        systemctl() {
+            printf '%s\n' "$*" >> "$systemctl_calls"
+            case "$1" in
+                list-unit-files) return 1 ;;
+                *) return 0 ;;
+            esac
+        }
+
+        traffic_guard_write_stale_menu_state
+        install_traffic_guard_checker() {
+            printf '%s\n' 'install-checker' >> "$call_log"
+            traffic_guard_write_refreshing_checker
+        }
+        install_traffic_guard_units() {
+            printf 'install-units %s\n' "$1" >> "$call_log"
+            [[ "$1" == "45" ]]
+        }
+        output=$(repair_traffic_guard_timer 2>&1)
+        grep -Fxq 'install-checker' "$call_log"
+        grep -Fxq 'install-units 45' "$call_log"
+        grep -Fq 'restart vps-traffic-guard.timer' "$systemctl_calls"
+        last_checked=$(traffic_guard_state_last_checked_at)
+        if [[ "$last_checked" == "$old_checked" ]]; then
+            echo "Traffic Guard timer repair must immediately run the checker and refresh state." >&2
+            exit 1
+        fi
+
+        traffic_guard_write_stale_menu_state
+        traffic_guard_write_refreshing_checker
+        sync_output=$(sync_traffic_guard_now 2>&1)
+        grep -Fq 'STATUS_SHOWN' <<<"$sync_output"
+        last_checked=$(traffic_guard_state_last_checked_at)
+        if [[ "$last_checked" == "$old_checked" ]]; then
+            echo "Traffic Guard immediate sync must refresh state before showing status." >&2
+            exit 1
+        fi
+
+        traffic_guard_write_stale_menu_state
+        install_traffic_guard_checker() {
+            traffic_guard_write_noop_checker
+        }
+        install_traffic_guard_units() {
+            return 0
+        }
+        if fail_output=$(repair_traffic_guard_timer 2>&1); then
+            echo "Traffic Guard timer repair must fail when the checker does not refresh state." >&2
+            exit 1
+        fi
+        grep -Fq "checker : ${TRAFFIC_GUARD_CHECKER}" <<<"$fail_output"
+        grep -Fq "state   : ${state_file}" <<<"$fail_output"
+
+        traffic_guard_write_stale_menu_state
+        traffic_guard_write_noop_checker
+        if fail_output=$(sync_traffic_guard_now 2>&1); then
+            echo "Traffic Guard immediate sync must fail when the checker does not refresh state." >&2
+            exit 1
+        fi
+        grep -Fq "checker : ${TRAFFIC_GUARD_CHECKER}" <<<"$fail_output"
+        grep -Fq "state   : ${state_file}" <<<"$fail_output"
+
+        install_traffic_guard_checker() {
+            return 1
+        }
+        if install_fail_output=$(repair_traffic_guard_timer 2>&1); then
+            echo "Traffic Guard timer repair must fail when checker reinstall fails." >&2
+            exit 1
+        fi
+        grep -Fq "checker : ${TRAFFIC_GUARD_CHECKER}" <<<"$install_fail_output"
+    )
+}
+traffic_guard_checker_menu_path_regression
+
 traffic_guard_accounting_regression() {
     # shellcheck disable=SC1091
     source src/traffic_guard.sh
