@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 out_dir="$repo_root/dist"
 out_file="$out_dir/vps.sh"
 modules_list="$repo_root/scripts/modules.list"
+traffic_guard_checker_validator="$repo_root/scripts/validate-traffic-guard-checker.sh"
 modules=()
 known_non_release_modules=$(cat <<'EOF'
 caddy_cert_tools
@@ -144,6 +145,7 @@ validate_module_list_sync
 
 chmod +x "$out_file"
 bash -n "$out_file"
+bash "$traffic_guard_checker_validator" "$repo_root/src/traffic_guard.sh" "$out_file"
 if command -v sha256sum >/dev/null 2>&1; then
     (cd "$out_dir" && sha256sum "$(basename "$out_file")" > "$(basename "$out_file").sha256")
 elif command -v shasum >/dev/null 2>&1; then

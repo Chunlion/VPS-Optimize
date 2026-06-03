@@ -33,16 +33,6 @@ assert_module_list_contains() {
     fi
 }
 
-assert_traffic_guard_checker_shebang() {
-    local file="$1"
-    local first_line
-    first_line=$(awk "/<<'GUARD_SCRIPT'/ { getline; print; exit }" "$file")
-    if [[ "$first_line" != "#!/usr/bin/env bash" ]]; then
-        echo "Traffic Guard checker template in ${file} must start with #!/usr/bin/env bash." >&2
-        exit 1
-    fi
-}
-
 assert_function_once() {
     local file="$1"
     local function_name="$2"
@@ -63,7 +53,8 @@ assert_function_loaded() {
 }
 
 bash scripts/build.sh >/dev/null
-bash -n scripts/build.sh scripts/selfcheck.sh scripts/compat-smoke.sh
+bash -n scripts/build.sh scripts/selfcheck.sh scripts/compat-smoke.sh scripts/validate-traffic-guard-checker.sh
+bash scripts/validate-traffic-guard-checker.sh
 bash -n vps.sh dist/vps.sh dog.sh xui-custom-manager.sh
 for module in src/*.sh; do
     bash -n "$module"
@@ -105,8 +96,7 @@ for module in \
     assert_file_contains dist/vps.sh "# Module: ${module}.sh" "Release script is missing key module: ${module}.sh"
 done
 
-assert_traffic_guard_checker_shebang src/traffic_guard.sh
-assert_traffic_guard_checker_shebang dist/vps.sh
+assert_file_contains scripts/build.sh 'validate-traffic-guard-checker.sh' "Release build must validate embedded Traffic Guard checker templates before writing checksums."
 assert_file_contains src/traffic_guard.sh 'ExecStart=/usr/bin/env bash ${TRAFFIC_GUARD_CHECKER}' "Traffic Guard systemd service must keep bash-based ExecStart."
 assert_file_contains src/traffic_guard.sh 'bash -n "$tmp_checker"' "Traffic Guard checker install must validate Bash syntax before replacing the live checker."
 assert_file_contains src/traffic_guard.sh "grep -q \$'\\r' \"\$tmp_checker\"" "Traffic Guard checker install must reject CRLF before replacing the live checker."
