@@ -107,6 +107,22 @@ assert_file_contains src/traffic_guard.sh 'generated-content' "Traffic Guard che
 assert_file_contains src/traffic_guard.sh 'retry checker install once after generated content validation failure' "Traffic Guard checker install must retry generated-content validation failures once."
 assert_file_contains src/traffic_guard.sh 'traffic_guard_install_checker_or_report' "Traffic Guard first configuration failure path must print direct diagnostics."
 
+assert_file_contains xui-custom-manager.sh 'XUI_VERIFIED_VERSION="2.9.4"' "xui-custom-manager must declare the only verified 3x-ui version."
+assert_file_contains xui-custom-manager.sh 'require_verified_xui_for_write' "xui-custom-manager must keep a write gate for unverified 3x-ui versions."
+assert_file_contains xui-custom-manager.sh 'require_verified_xui_for_write || return 1' "xui-custom-manager write paths must call the verified-version gate."
+assert_file_contains xui-custom-manager.sh 'require_verified_xui_for_write || {' "xui-custom-manager traffic calibration writes must call the verified-version gate."
+assert_file_contains xui-custom-manager.sh 'XUI_WRITE_ALLOWED="$xui_write_allowed"' "xui-custom-manager custom reset UI must pass verified write state into the embedded UI."
+assert_file_contains xui-custom-manager.sh 'bash -n "$TMP_FILE"' "xcm wrapper must syntax-check downloaded scripts before updating cache."
+assert_file_contains xui-custom-manager.sh 'validate_manager_script_source "$self_path"' "install_local_runner must validate the source script before installing."
+assert_file_contains xui-custom-manager.sh 'ExecStart=/usr/bin/env bash $LOCAL_RUNNER --reset-check' "xui custom reset service must keep bash-based ExecStart."
+assert_file_contains xui-custom-manager.sh 'TimeoutStartSec=120' "xui custom reset service must set TimeoutStartSec."
+assert_file_contains xui-custom-manager.sh '--self-test' "xui-custom-manager must expose a non-destructive self-test mode."
+
+assert_file_contains dog.sh '当前统计来自 nftables counter' "dog.sh must explain the nftables counter traffic accounting source."
+assert_file_contains dog.sh 'input/output/forward 流量' "dog.sh must explain that monitored-port input/output/forward traffic is counted."
+assert_file_contains dog.sh 'show_statistics_health_check' "dog.sh must keep the statistics health check function."
+assert_file_contains dog.sh '快照增量' "dog.sh daily reports must explain snapshot-increment accounting."
+
 assert_file_contains dist/vps.sh '/var/lib/vps-optimize/vpso-mux/status.json'
 assert_file_contains dist/vps.sh '/var/log/vps-traffic-guard.log'
 assert_file_contains dist/vps.sh 'traffic_guard_install_checker_once'

@@ -7,6 +7,7 @@ BACKUP_DIR="${BACKUP_DIR:-/root/x-ui-backups}"
 XUI_DB="${XUI_DB:-/etc/x-ui/x-ui.db}"
 XUI_ETC_DIR="${XUI_ETC_DIR:-/etc/x-ui}"
 XUI_PROGRAM_DIR="${XUI_PROGRAM_DIR:-/usr/local/x-ui}"
+XUI_VERIFIED_VERSION="2.9.4"
 LOG_FILE="${LOG_FILE:-/var/log/xui-custom-manager.log}"
 RESET_STATE="${RESET_STATE:-/var/lib/xui-custom-manager/reset-state.json}"
 RESET_SERVICE="${RESET_SERVICE:-/etc/systemd/system/xui-custom-reset.service}"
@@ -24,6 +25,7 @@ PLAIN='\033[0m'
 
 RUN_CHECK=0
 DRY_RUN=0
+SELF_TEST=0
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -33,8 +35,11 @@ while [ "$#" -gt 0 ]; do
         --dry-run)
             DRY_RUN=1
             ;;
+        --self-test)
+            SELF_TEST=1
+            ;;
         -h|--help)
-            echo "用法：$0 [--reset-check] [--dry-run]"
+            echo "用法：$0 [--reset-check] [--dry-run] [--self-test]"
             exit 0
             ;;
         *)
@@ -45,7 +50,7 @@ while [ "$#" -gt 0 ]; do
     shift
 done
 
-if [ "$(id -u)" -ne 0 ]; then
+if [ "$(id -u)" -ne 0 ] && [ "$SELF_TEST" -ne 1 ]; then
     echo "请用 root 用户运行。"
     exit 1
 fi
@@ -58,10 +63,12 @@ fi
 LOCAL_RUNNER="/usr/local/bin/xui-custom-manager.sh"
 XCM_PATH="/usr/local/bin/xcm"
 
-mkdir -p "$(dirname "$LOG_FILE")"
-touch "$LOG_FILE"
+if [ "$SELF_TEST" -ne 1 ]; then
+    mkdir -p "$(dirname "$LOG_FILE")"
+    touch "$LOG_FILE"
+fi
 
-if { [ "$RUN_CHECK" -eq 1 ] || [ "$DRY_RUN" -eq 1 ]; } && [ ! -t 1 ]; then
+if { [ "$RUN_CHECK" -eq 1 ] || [ "$DRY_RUN" -eq 1 ]; } && [ "$SELF_TEST" -ne 1 ] && [ ! -t 1 ]; then
     exec > >(tee -a "$LOG_FILE") 2>&1
     echo "===== $(date '+%F %T') reset-check 执行 ====="
 fi
@@ -124,6 +131,101 @@ ensure_dirs() {
     chmod 700 "$(dirname "$RESET_STATE")"
 }
 
+detect_xui_version() {
+    local command_line output version
+    local -a parts
+    local commands=(
+        "x-ui version"
+        "x-ui -v"
+        "/usr/local/x-ui/x-ui version"
+        "/usr/local/x-ui/x-ui -v"
+    )
+
+    for command_line in "${commands[@]}"; do
+        read -r -a parts <<< "$command_line"
+        output="$("${parts[@]}" 2>&1 || true)"
+        version="$(printf '%s\n' "$output" | grep -Eo 'v?[0-9]+([.][0-9]+){2,3}' | head -n 1 | sed 's/^v//')"
+        if [ -n "$version" ]; then
+            echo "$version"
+            return 0
+        fi
+    done
+
+    echo "unknown"
+}
+
+xui_version_is_verified() {
+    [ "$(detect_xui_version)" = "$XUI_VERIFIED_VERSION" ]
+}
+
+print_xui_version_warning() {
+    local detected_version="${1:-}"
+    detected_version="${detected_version:-$(detect_xui_version)}"
+    echo -e "${YELLOW}兼容性提示：当前仅适配并验证 3x-ui v${XUI_VERIFIED_VERSION}。${PLAIN}"
+    echo -e "${YELLOW}当前检测版本：${detected_version}；已验证版本：${XUI_VERIFIED_VERSION}。${PLAIN}"
+    echo -e "${YELLOW}其它版本未适配，只允许备份、查看、预览和自检，不允许写库或启用自动重置。${PLAIN}"
+}
+
+check_xui_db_schema_readonly() {
+    if [ ! -f "$XUI_DB" ]; then
+        echo "数据库不存在：$XUI_DB" >&2
+        return 1
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "缺少 python3，无法执行只读 schema 兼容检查。" >&2
+        return 1
+    fi
+
+    XUI_DB="$XUI_DB" python3 <<'PY'
+import os
+import sqlite3
+import sys
+
+db_path = os.environ["XUI_DB"]
+required = {
+    "inbounds": {"id", "remark", "port", "up", "down", "total", "traffic_reset", "last_traffic_reset_time"},
+    "client_traffics": {"id", "inbound_id", "email", "up", "down", "total", "enable"},
+}
+
+try:
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+except Exception as exc:
+    print(f"只读打开数据库失败：{exc}", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    missing = []
+    for table, columns in required.items():
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        existing = {row[1] for row in rows}
+        if not existing:
+            missing.append(f"{table}.*")
+            continue
+        for column in sorted(columns - existing):
+            missing.append(f"{table}.{column}")
+    if missing:
+        print("数据库字段兼容检查失败，缺少：" + ", ".join(missing), file=sys.stderr)
+        sys.exit(1)
+finally:
+    conn.close()
+PY
+}
+
+require_verified_xui_for_write() {
+    local detected_version
+    detected_version="$(detect_xui_version)"
+    if [ "$detected_version" != "$XUI_VERIFIED_VERSION" ]; then
+        print_xui_version_warning "$detected_version"
+        echo -e "${RED}错误：当前 3x-ui 版本未适配，仅 3x-ui v${XUI_VERIFIED_VERSION} 已验证，已禁止写库/启用 timer。${PLAIN}"
+        return 1
+    fi
+    if ! check_xui_db_schema_readonly; then
+        print_xui_version_warning "$detected_version"
+        echo -e "${RED}错误：无法确认数据库字段兼容，已禁止写库/启用 timer。${PLAIN}"
+        return 1
+    fi
+}
+
 install_runtime_deps() {
     local missing=()
 
@@ -139,10 +241,24 @@ install_runtime_deps() {
         return 1
     fi
 
+    local apt_log_dir apt_log
+    if [ -d /var/log ] && [ -w /var/log ]; then
+        apt_log_dir="/var/log"
+    else
+        apt_log_dir="/tmp"
+    fi
+    apt_log="$(mktemp "${apt_log_dir}/xui-custom-manager-apt-XXXXXX.log")"
+
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq
-    apt-get install -y "${missing[@]}"
+    if ! apt-get update -qq >"$apt_log" 2>&1 || ! apt-get install -y "${missing[@]}" >>"$apt_log" 2>&1; then
+        unset DEBIAN_FRONTEND
+        echo "错误：自动安装依赖失败，日志：$apt_log"
+        echo "最后 20 行："
+        tail -n 20 "$apt_log" 2>/dev/null || true
+        return 1
+    fi
     unset DEBIAN_FRONTEND
+    rm -f "$apt_log"
 }
 
 timer_active_status() {
@@ -194,13 +310,24 @@ TMP_FILE="$(mktemp)"
 
 mkdir -p "$CACHE_DIR"
 
-if command -v curl >/dev/null 2>&1 && curl -fsSL --connect-timeout 10 --retry 2 "$URL" -o "$TMP_FILE"; then
+validate_downloaded_manager() {
+    if ! bash -n "$TMP_FILE"; then
+        echo "警告：新下载的 xui-custom-manager.sh 语法检查失败，保留旧缓存。"
+        return 1
+    fi
+    if ! grep -Eq 'xui-custom-manager|CONFIG_PROFILE' "$TMP_FILE"; then
+        echo "警告：新下载的 xui-custom-manager.sh 缺少关键标识，保留旧缓存。"
+        return 1
+    fi
+}
+
+if command -v curl >/dev/null 2>&1 && curl -fsSL --connect-timeout 10 --retry 2 "$URL" -o "$TMP_FILE" && validate_downloaded_manager; then
     install -m 755 "$TMP_FILE" "$CACHE_FILE"
     rm -f "$TMP_FILE"
     exec bash "$CACHE_FILE" "$@"
 fi
 
-if command -v wget >/dev/null 2>&1 && wget -qO "$TMP_FILE" --timeout=10 --tries=2 "$URL"; then
+if command -v wget >/dev/null 2>&1 && wget -qO "$TMP_FILE" --timeout=10 --tries=2 "$URL" && validate_downloaded_manager; then
     install -m 755 "$TMP_FILE" "$CACHE_FILE"
     rm -f "$TMP_FILE"
     exec bash "$CACHE_FILE" "$@"
@@ -221,6 +348,29 @@ EOF
     chmod 755 "$XCM_PATH"
 }
 
+validate_manager_script_source() {
+    local source_file="$1"
+    local first_line
+
+    if [ ! -r "$source_file" ]; then
+        echo "错误：源脚本不可读：$source_file"
+        return 1
+    fi
+    IFS= read -r first_line < "$source_file" || first_line=""
+    if [ "$first_line" != "#!/usr/bin/env bash" ]; then
+        echo "错误：拒绝安装本地 runner，源脚本首行必须是 #!/usr/bin/env bash。"
+        return 1
+    fi
+    if ! bash -n "$source_file"; then
+        echo "错误：拒绝安装本地 runner，源脚本 bash -n 未通过。"
+        return 1
+    fi
+    if ! grep -Eq 'xui-custom-manager|CONFIG_PROFILE' "$source_file"; then
+        echo "错误：拒绝安装本地 runner，源脚本缺少 xui-custom-manager 关键标识。"
+        return 1
+    fi
+}
+
 install_local_runner() {
     local self_path
     self_path="$(readlink -f "${BASH_SOURCE[0]}")"
@@ -231,10 +381,12 @@ install_local_runner() {
         return 0
     fi
 
+    validate_manager_script_source "$self_path" || return 1
     install -m 755 "$self_path" "$LOCAL_RUNNER"
 }
 
 ensure_reset_timer_installed() {
+    require_verified_xui_for_write || return 1
     install_local_runner
 
     cat > "$RESET_SERVICE" <<EOF
@@ -245,6 +397,9 @@ After=network.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/env bash $LOCAL_RUNNER --reset-check
+TimeoutStartSec=120
+StandardOutput=journal
+StandardError=journal
 EOF
 
     cat > "$RESET_TIMER" <<'EOF'
@@ -394,6 +549,8 @@ restore_backup() {
             return 0
         }
 
+        require_verified_xui_for_write || return 1
+
         echo "恢复前备份当前状态..."
         backup_all || return 1
 
@@ -466,6 +623,11 @@ run_custom_reset_ui() {
     install_runtime_deps
     need_tty || return 1
 
+    local xui_write_allowed=0
+    if xui_version_is_verified && check_xui_db_schema_readonly >/dev/null 2>&1; then
+        xui_write_allowed=1
+    fi
+
     local tmp_py
     tmp_py="$(mktemp --suffix=.py)"
     trap 'rm -f "$tmp_py"' RETURN
@@ -480,12 +642,25 @@ from pathlib import Path
 
 db_path = os.environ.get("XUI_DB", "/etc/x-ui/x-ui.db")
 config_path = Path(os.environ.get("CONFIG_FILE", "/etc/xui-custom-reset.json"))
+write_allowed = os.environ.get("XUI_WRITE_ALLOWED") == "1"
+verified_version = os.environ.get("XUI_VERIFIED_VERSION", "2.9.4")
 
 def clear_screen():
     print("\033c", end="")
 
 def pause():
     input("\n按回车返回菜单...")
+
+def print_write_blocked():
+    print(f"错误：当前版本未适配，仅 3x-ui v{verified_version} 已验证。")
+    print("其它版本只允许备份、查看、预览和自检，不允许修改配置、写库或启用自动重置。")
+
+def require_config_write():
+    if write_allowed:
+        return True
+    print_write_blocked()
+    pause()
+    return False
 
 def valid_day(value):
     try:
@@ -541,6 +716,9 @@ def load_config():
         sys.exit(1)
 
 def save_config(data):
+    if not write_allowed:
+        print_write_blocked()
+        return False
     data = normalize_config(data)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = config_path.with_name(config_path.name + f".tmp.{os.getpid()}")
@@ -549,6 +727,7 @@ def save_config(data):
         f.write("\n")
     os.replace(tmp_path, config_path)
     os.chmod(config_path, 0o600)
+    return True
 
 def input_choice(prompt, valid_choices):
     while True:
@@ -651,6 +830,8 @@ def manage_clients(inbound_id, inbound_cfg):
             return
 
         email = clients_for_inbound[int(choice) - 1]["email"] or ""
+        if not require_config_write():
+            continue
         day = ask_day("输入 1-31 设置该客户端日期，输入 0 删除单独日期：", allow_zero=True)
         inbound_cfg.setdefault("clients", {})
         if day == 0:
@@ -670,7 +851,8 @@ def manage_inbound(inbound):
     cfg.setdefault("reset_inbound", True)
     cfg.setdefault("reset_clients_without_custom_day", False)
     cfg.setdefault("clients", {})
-    save_config(config)
+    if write_allowed:
+        save_config(config)
 
     while True:
         clear_screen()
@@ -701,6 +883,8 @@ def manage_inbound(inbound):
         choice = input_choice("👉 请选择操作: ", {"0", "q", "Q", "1", "2", "3", "4", "5"})
         if choice in {"0", "q", "Q"}:
             return
+        if choice in {"1", "2", "3", "4"} and not require_config_write():
+            continue
         if choice == "1":
             cfg["enabled"] = not cfg.get("enabled", False)
         elif choice == "2":
@@ -754,6 +938,10 @@ while True:
     print(f"默认日期：每月 {config.get('default_day', 1)} 号")
     print(f"自动检查：{'已启用' if timer_status() else '未启用'}")
     print()
+    if not write_allowed:
+        print(f"兼容性：当前仅适配并验证 3x-ui v{verified_version}。")
+        print("当前只允许查看配置和预览，不允许修改配置或启用自动重置。")
+        print()
     print("提示：请在 3x-ui 面板里关闭对应入站的原生 monthly 重置。")
     print("如果只是想看本次会影响谁，选 [4]，会先预览，输入 YES 才会执行。")
     print("------------------------------------------------")
@@ -770,10 +958,14 @@ while True:
     if choice in {"0", "q", "Q"}:
         sys.exit(0)
     if choice == "1":
+        if not require_config_write():
+            continue
         config["enabled"] = not config.get("enabled", False)
         save_config(config)
         sys.exit(200 if config["enabled"] else 201)
     if choice == "2":
+        if not require_config_write():
+            continue
         config["default_day"] = ask_day("请输入默认日期 (1-31)：")
         save_config(config)
     elif choice == "3":
@@ -785,7 +977,7 @@ while True:
 PY
 
     set +e
-    XUI_DB="$XUI_DB" CONFIG_FILE="$CONFIG_FILE" python3 "$tmp_py" </dev/tty
+    XUI_DB="$XUI_DB" CONFIG_FILE="$CONFIG_FILE" XUI_WRITE_ALLOWED="$xui_write_allowed" XUI_VERIFIED_VERSION="$XUI_VERIFIED_VERSION" python3 "$tmp_py" </dev/tty
     local ret=$?
     rm -f "$tmp_py"
     trap - RETURN
@@ -1109,6 +1301,13 @@ PY
         return 0
     fi
 
+    require_verified_xui_for_write || {
+        rm -f "$writes_file"
+        pause
+        trap - RETURN
+        return 1
+    }
+
     echo "正在备份数据库..."
     local db_backup
     db_backup="$(backup_database)" || {
@@ -1179,6 +1378,9 @@ PY
 run_reset_engine() {
     install_runtime_deps
     ensure_dirs
+    if [ "$DRY_RUN" -ne 1 ]; then
+        require_verified_xui_for_write || return 1
+    fi
 
     XUI_DB="$XUI_DB" \
     CONFIG_FILE="$CONFIG_FILE" \
@@ -1825,6 +2027,8 @@ PY
 print_health_report() {
     install_runtime_deps
 
+    print_xui_version_warning
+
     echo "x-ui 服务："
     if systemctl is-active --quiet x-ui 2>/dev/null; then
         echo -e "  ${GREEN}运行中${PLAIN}"
@@ -1841,6 +2045,12 @@ print_health_report() {
             echo -e "  ${GREEN}完整性：ok${PLAIN}"
         else
             echo -e "  ${RED}完整性异常：$integrity${PLAIN}"
+        fi
+        local schema_result
+        if schema_result="$(check_xui_db_schema_readonly 2>&1)"; then
+            echo -e "  ${GREEN}字段兼容：ok${PLAIN}"
+        else
+            echo -e "  ${RED}字段兼容异常：$schema_result${PLAIN}"
         fi
     else
         echo -e "  ${RED}缺失：$XUI_DB${PLAIN}"
@@ -1903,6 +2113,140 @@ print_health_report() {
 
     echo "预览模式："
     echo "  可在“自定义流量重置日期 -> 预览并手动执行一次重置检查”预览本次计划。"
+}
+
+run_self_test() {
+    local failures=0
+    local self_path detected_version
+
+    self_path="$(readlink -f "${BASH_SOURCE[0]}")"
+
+    selftest_pass() {
+        echo "PASS: $*"
+    }
+    selftest_fail() {
+        echo "FAIL: $*"
+        failures=$((failures + 1))
+    }
+    selftest_warn() {
+        echo "WARN: $*"
+    }
+
+    echo "xui-custom-manager self-test"
+    echo "========================================"
+
+    if bash -n "$self_path"; then
+        selftest_pass "当前脚本 bash -n 通过"
+    else
+        selftest_fail "当前脚本 bash -n 未通过"
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        selftest_pass "python3 存在：$(command -v python3)"
+    else
+        selftest_fail "python3 不存在"
+    fi
+
+    if command -v sqlite3 >/dev/null 2>&1; then
+        selftest_pass "sqlite3 存在：$(command -v sqlite3)"
+    else
+        selftest_fail "sqlite3 不存在"
+    fi
+
+    detected_version="$(detect_xui_version)"
+    echo "检测到的 3x-ui 版本：$detected_version"
+    echo "已验证版本：$XUI_VERIFIED_VERSION"
+    if [ "$detected_version" = "$XUI_VERIFIED_VERSION" ]; then
+        selftest_pass "3x-ui 版本已验证"
+    else
+        selftest_fail "写库功能不可用：当前 3x-ui 版本未适配，仅 3x-ui v${XUI_VERIFIED_VERSION} 已验证"
+    fi
+
+    if [ -f "$CONFIG_FILE" ]; then
+        if command -v python3 >/dev/null 2>&1 && CONFIG_FILE="$CONFIG_FILE" python3 <<'PY'
+import json
+import os
+
+with open(os.environ["CONFIG_FILE"], "r", encoding="utf-8") as f:
+    json.load(f)
+PY
+        then
+            selftest_pass "配置文件 JSON 可解析：$CONFIG_FILE"
+        else
+            selftest_fail "配置文件 JSON 解析失败：$CONFIG_FILE"
+        fi
+    else
+        selftest_warn "配置文件不存在，跳过 JSON 检查：$CONFIG_FILE"
+    fi
+
+    if [ -f "$XUI_DB" ]; then
+        if command -v python3 >/dev/null 2>&1 && XUI_DB="$XUI_DB" python3 <<'PY'
+import os
+import sqlite3
+import sys
+
+db_path = os.environ["XUI_DB"]
+conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+try:
+    result = conn.execute("PRAGMA integrity_check;").fetchone()[0]
+    print(result)
+    if result != "ok":
+        sys.exit(1)
+finally:
+    conn.close()
+PY
+        then
+            selftest_pass "数据库只读 integrity_check 可执行：$XUI_DB"
+        else
+            selftest_fail "数据库只读 integrity_check 失败：$XUI_DB"
+        fi
+
+        if check_xui_db_schema_readonly; then
+            selftest_pass "数据库关键字段兼容"
+        else
+            selftest_fail "数据库关键字段不兼容"
+        fi
+    else
+        selftest_warn "数据库不存在，跳过只读 integrity/schema 检查：$XUI_DB"
+    fi
+
+    if [ -e "$LOCAL_RUNNER" ]; then
+        if [ -x "$LOCAL_RUNNER" ]; then
+            selftest_pass "LOCAL_RUNNER 可执行：$LOCAL_RUNNER"
+        else
+            selftest_fail "LOCAL_RUNNER 存在但不可执行：$LOCAL_RUNNER"
+        fi
+        if bash -n "$LOCAL_RUNNER"; then
+            selftest_pass "LOCAL_RUNNER bash -n 通过"
+        else
+            selftest_fail "LOCAL_RUNNER bash -n 未通过"
+        fi
+    else
+        selftest_warn "LOCAL_RUNNER 不存在：$LOCAL_RUNNER"
+    fi
+
+    if [ -e "$XCM_PATH" ]; then
+        if [ -x "$XCM_PATH" ]; then
+            selftest_pass "XCM_PATH 可执行：$XCM_PATH"
+        else
+            selftest_fail "XCM_PATH 存在但不可执行：$XCM_PATH"
+        fi
+        if bash -n "$XCM_PATH"; then
+            selftest_pass "XCM_PATH bash -n 通过"
+        else
+            selftest_fail "XCM_PATH bash -n 未通过"
+        fi
+    else
+        selftest_warn "XCM_PATH 不存在：$XCM_PATH"
+    fi
+
+    echo "========================================"
+    if [ "$failures" -eq 0 ]; then
+        echo "PASS"
+        return 0
+    fi
+    echo "FAIL: $failures 项失败"
+    return 1
 }
 
 health_check() {
@@ -2064,6 +2408,7 @@ main_menu() {
         echo -e "${BOLD}🧭 3x-ui 外置增强管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：补充 3x-ui 面板缺失能力，例如自定义重置、校准已用流量、备份恢复和健康检查。${PLAIN}"
+        print_xui_version_warning
         echo -e "${YELLOW}提示：不知道选哪个时输入 ? 查看“我要做什么”索引；写库前会自动备份。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "配置：$CONFIG_FILE"
@@ -2124,7 +2469,9 @@ main_menu() {
     done
 }
 
-if [ "$RUN_CHECK" -eq 1 ] || [ "$DRY_RUN" -eq 1 ]; then
+if [ "$SELF_TEST" -eq 1 ]; then
+    run_self_test
+elif [ "$RUN_CHECK" -eq 1 ] || [ "$DRY_RUN" -eq 1 ]; then
     run_reset_engine
 else
     require_interactive_menu || exit 1

@@ -89,6 +89,8 @@ normalize_main_choice() {
         uninstall|remove|卸载) echo "6" ;;
         tg|telegram|通知) echo "7" ;;
         report|trend|日报|趋势) echo "8" ;;
+        detail|details|d|明细|详细) echo "detail" ;;
+        health|check|diag|diagnose|h|诊断|健康检查) echo "health" ;;
         *) echo "$choice" ;;
     esac
 }
@@ -375,6 +377,16 @@ format_bytes() {
 
 get_beijing_time() { TZ='Asia/Shanghai' date "$@"; }
 
+print_traffic_scope_notice() {
+    echo -e "${YELLOW}统计口径：当前统计来自 nftables counter。${NC}"
+    echo -e "${YELLOW}范围：被监控端口匹配到的 TCP/UDP input/output/forward 流量，不等同于 VPS 商家账单流量。${NC}"
+    echo -e "${YELLOW}日报：按定时快照增量统计，可能存在小时级跨日误差。${NC}"
+}
+
+print_daily_snapshot_notice() {
+    echo -e "${YELLOW}提示：日报由定时快照增量计算，跨日边界可能存在快照间隔误差。${NC}"
+}
+
 # 优化1：增加文件锁，防止高并发导致配置脏读/损坏
 update_config() {
     local jq_expression="$1"
@@ -657,6 +669,128 @@ get_port_actual_usage() {
     calculate_total_traffic "$input_bytes" "$output_bytes"
 }
 
+print_json_file_health() {
+    local label="$1"
+    local file="$2"
+    local __problems_var="$3"
+    local problems
+
+    problems=${!__problems_var}
+    if [ ! -f "$file" ]; then
+        echo -e "  ${RED}${label}: 缺失：$file${NC}"
+        problems=$((problems + 1))
+    elif jq -e '.' "$file" >/dev/null 2>&1; then
+        echo -e "  ${GREEN}${label}: JSON 有效：$file${NC}"
+    else
+        echo -e "  ${RED}${label}: JSON 无效：$file${NC}"
+        problems=$((problems + 1))
+    fi
+    printf -v "$__problems_var" '%s' "$problems"
+}
+
+show_statistics_health_check() {
+    local problems=0
+    local table_name
+    local family
+    local active_ports=()
+
+    echo -e "${BLUE}=== 统计健康检查 ===${NC}"
+    print_traffic_scope_notice
+    echo
+
+    if ! command -v nft >/dev/null 2>&1; then
+        echo -e "${RED}nft 命令不存在，无法检查 nftables counter 和规则。${NC}"
+        problems=$((problems + 1))
+    fi
+    if ! command -v jq >/dev/null 2>&1; then
+        echo -e "${RED}jq 命令不存在，无法检查 JSON 状态文件。${NC}"
+        problems=$((problems + 1))
+    fi
+
+    table_name=$(jq -r '.nftables.table_name // "port_traffic_monitor"' "$CONFIG_FILE" 2>/dev/null || echo "port_traffic_monitor")
+    family=$(jq -r '.nftables.family // "inet"' "$CONFIG_FILE" 2>/dev/null || echo "inet")
+
+    mapfile -t active_ports < <(get_active_ports 2>/dev/null || true)
+    echo "nftables: family=$family table=$table_name"
+    if [ ${#active_ports[@]} -eq 0 ]; then
+        echo -e "  ${YELLOW}暂无监控端口。${NC}"
+    elif command -v nft >/dev/null 2>&1; then
+        local input_chain output_chain forward_chain
+        input_chain=$(nft list chain "$family" "$table_name" input 2>/dev/null || true)
+        output_chain=$(nft list chain "$family" "$table_name" output 2>/dev/null || true)
+        forward_chain=$(nft list chain "$family" "$table_name" forward 2>/dev/null || true)
+
+        for port in "${active_ports[@]}"; do
+            local port_safe counter_in counter_out
+            port_safe=$(echo "$port" | tr '-' '_')
+            counter_in="port_${port_safe}_in"
+            counter_out="port_${port_safe}_out"
+            echo "端口 $port:"
+
+            if nft list counter "$family" "$table_name" "$counter_in" >/dev/null 2>&1; then
+                echo -e "  ${GREEN}counter $counter_in: 存在${NC}"
+            else
+                echo -e "  ${RED}counter $counter_in: 缺失${NC}"
+                problems=$((problems + 1))
+            fi
+            if nft list counter "$family" "$table_name" "$counter_out" >/dev/null 2>&1; then
+                echo -e "  ${GREEN}counter $counter_out: 存在${NC}"
+            else
+                echo -e "  ${RED}counter $counter_out: 缺失${NC}"
+                problems=$((problems + 1))
+            fi
+
+            if grep -Fq "counter name \"$counter_in\"" <<< "$input_chain"; then
+                echo -e "  ${GREEN}input 链 $counter_in 规则: 存在${NC}"
+            else
+                echo -e "  ${RED}input 链 $counter_in 规则: 缺失${NC}"
+                problems=$((problems + 1))
+            fi
+            if grep -Fq "counter name \"$counter_out\"" <<< "$output_chain"; then
+                echo -e "  ${GREEN}output 链 $counter_out 规则: 存在${NC}"
+            else
+                echo -e "  ${RED}output 链 $counter_out 规则: 缺失${NC}"
+                problems=$((problems + 1))
+            fi
+            if grep -Fq "counter name \"$counter_in\"" <<< "$forward_chain" && grep -Fq "counter name \"$counter_out\"" <<< "$forward_chain"; then
+                echo -e "  ${GREEN}forward 链 $counter_in/$counter_out 规则: 存在${NC}"
+            else
+                echo -e "  ${RED}forward 链 $counter_in/$counter_out 规则: 缺失${NC}"
+                problems=$((problems + 1))
+            fi
+        done
+    fi
+
+    echo
+    echo "日报状态文件:"
+    print_json_file_health "DAILY_USAGE_FILE" "$DAILY_USAGE_FILE" problems
+    print_json_file_health "DAILY_SNAPSHOT_STATE_FILE" "$DAILY_SNAPSHOT_STATE_FILE" problems
+
+    echo
+    echo "实时计数备份:"
+    if [ -f "$TRAFFIC_DATA_FILE" ]; then
+        if jq -e '.' "$TRAFFIC_DATA_FILE" >/dev/null 2>&1; then
+            local last_backup
+            last_backup=$(jq -r '[.. | objects | .backup_time? // empty] | max // empty' "$TRAFFIC_DATA_FILE" 2>/dev/null || true)
+            [ -z "$last_backup" ] && last_backup=$(stat -c '%y' "$TRAFFIC_DATA_FILE" 2>/dev/null | cut -d'.' -f1 || true)
+            echo -e "  ${GREEN}TRAFFIC_DATA_FILE: 存在，最后保存时间：${last_backup:-未知}${NC}"
+        else
+            echo -e "  ${RED}TRAFFIC_DATA_FILE: 存在但 JSON 无效：$TRAFFIC_DATA_FILE${NC}"
+            problems=$((problems + 1))
+        fi
+    else
+        echo -e "  ${YELLOW}TRAFFIC_DATA_FILE: 不存在，通常表示当前没有待恢复的退出快照。${NC}"
+    fi
+
+    echo
+    if [ "$problems" -eq 0 ]; then
+        echo -e "${GREEN}统计健康检查完成，未发现明显异常。${NC}"
+    else
+        echo -e "${YELLOW}统计健康检查发现 $problems 项异常；本检查不会自动修复。${NC}"
+        echo -e "${YELLOW}如需修复 nftables counter 或链规则，请重新应用监控规则。${NC}"
+    fi
+}
+
 get_port_status_label() {
     local port=$1
     local port_config=$(jq -r ".ports.\"$port\"" "$CONFIG_FILE" 2>/dev/null)
@@ -933,6 +1067,7 @@ show_daily_report_for_day() {
     local total_actual=$(jq -r --arg day "$day_key" '.days[$day].total_raw // .days[$day].total_actual // 0' "$DAILY_USAGE_FILE")
 
     echo -e "${BLUE}=== $day_key 日报 ===${NC}"
+    print_daily_snapshot_notice
     echo -e "实际端口流量: ${GREEN}$(format_bytes "$total_actual")${NC}"
     echo "────────────────────────────────────────────────────────"
 
@@ -953,6 +1088,7 @@ show_recent_7_days_trend() {
     local sum_actual=0
 
     echo -e "${BLUE}=== 近7日趋势报表 ===${NC}"
+    print_daily_snapshot_notice
     echo "日期 | 实际端口流量"
     echo "────────────────────────────────────────────────────────"
 
@@ -969,6 +1105,8 @@ show_recent_7_days_trend() {
 
 manage_daily_usage_reports() {
     echo -e "${BLUE}=== 流量日报与趋势报表 ===${NC}"
+    print_traffic_scope_notice
+    echo "────────────────────────────────────────────────────────"
     echo "1. 立即采集快照"
     echo "2. 查看昨日报表"
     echo "3. 查看近7日趋势"
@@ -1039,6 +1177,8 @@ format_port_list() {
 
         if [ "$format_type" = "display" ]; then
             echo -e "端口:${GREEN}$port${NC} | 实际流量:${GREEN}$total_formatted${NC} | ${YELLOW}$status_label${NC}"
+        elif [ "$format_type" = "display_detail" ]; then
+            echo -e "端口:${GREEN}$port${NC} | input:${GREEN}$(format_bytes "$input_bytes")${NC} | output:${GREEN}$(format_bytes "$output_bytes")${NC} | total:${GREEN}$total_formatted${NC} | ${YELLOW}$status_label${NC}"
         elif [ "$format_type" = "markdown" ]; then
             result+="> 端口:**${port}** | 实际流量:**${total_formatted}** | ${status_label}\n"
         else
@@ -1048,6 +1188,23 @@ format_port_list() {
     if [ "$format_type" = "message" ] || [ "$format_type" = "markdown" ]; then
         echo -e "$result"
     fi
+}
+
+show_detailed_port_usage() {
+    clear
+    local active_ports=($(get_active_ports))
+
+    echo -e "${BLUE}=== 端口流量详细视图 ===${NC}"
+    print_traffic_scope_notice
+    echo "────────────────────────────────────────────────────────"
+    if [ ${#active_ports[@]} -gt 0 ]; then
+        format_port_list "display_detail"
+    else
+        echo -e "${YELLOW}暂无监控端口${NC}"
+    fi
+    echo "────────────────────────────────────────────────────────"
+    read -r -p "按回车返回主菜单..."
+    show_main_menu
 }
 
 show_main_menu() {
@@ -1061,6 +1218,7 @@ show_main_menu() {
     echo -e "${GREEN}项目地址：https://github.com/Chunlion/VPS-Optimize 作者修改了部分代码 | 快捷命令: dog${NC}"
     echo -e "${YELLOW}用途：按端口统计流量、设置配额/限速、日报趋势和 Telegram 查询。${NC}"
     echo -e "${YELLOW}快捷输入：add 添加端口，limit 配额/限速，tg 通知，report 报表，u 更新，q 退出。${NC}"
+    echo -e "${YELLOW}快捷诊断：detail 查看 input/output 明细，health 执行统计健康检查。${NC}"
     echo
     echo -e "${GREEN}状态: 监控中${NC} | ${BLUE}守护端口: ${port_count}个${NC}"
     echo -e "${YELLOW}实际端口总流量: $port_actual_total${NC}"
@@ -1091,8 +1249,15 @@ show_main_menu() {
         6) uninstall_script ;;
         7) manage_notifications ;;
         8|9) manage_daily_usage_reports ;;
+        detail) show_detailed_port_usage ;;
+        health)
+            show_statistics_health_check
+            echo
+            read -r -p "按回车返回主菜单..."
+            show_main_menu
+            ;;
         0) exit 0 ;;
-        *) echo -e "${RED}无效选择，请输入0-8${NC}"; sleep 1; show_main_menu ;;
+        *) echo -e "${RED}无效选择，请输入0-8或快捷词${NC}"; sleep 1; show_main_menu ;;
     esac
 }
 
