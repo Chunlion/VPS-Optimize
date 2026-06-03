@@ -3,8 +3,11 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"log"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -65,5 +68,35 @@ func TestDialBackendWithRetryFailure(t *testing.T) {
 	}
 	if stats.attempts != 2 || stats.success || !stats.failed {
 		t.Fatalf("stats = %+v, want two failed retries", stats)
+	}
+}
+
+func TestStatusWriteFailureIsRateLimitedAndNonFatal(t *testing.T) {
+	status := newStatusTracker([]string{"127.0.0.1:443"}, 10)
+	status.path = t.TempDir()
+	status.dirty = true
+
+	var logs bytes.Buffer
+	oldOutput := log.Writer()
+	oldFlags := log.Flags()
+	log.SetOutput(&logs)
+	log.SetFlags(0)
+	defer func() {
+		log.SetOutput(oldOutput)
+		log.SetFlags(oldFlags)
+	}()
+
+	status.Write()
+	status.Flush()
+
+	output := logs.String()
+	if count := strings.Count(output, "failed to write status json"); count != 1 {
+		t.Fatalf("status write error log count = %d, want 1; logs: %s", count, output)
+	}
+	if !strings.Contains(output, status.path) {
+		t.Fatalf("status write error log missing path %q: %s", status.path, output)
+	}
+	if !status.dirty {
+		t.Fatalf("status should remain dirty after write failure")
 	}
 }

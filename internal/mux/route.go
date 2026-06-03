@@ -3,6 +3,7 @@ package mux
 import (
 	"net/netip"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -114,6 +115,9 @@ func buildRouteIndex(routes []Route) *routeIndex {
 			idx.exact[item] = route
 		}
 	}
+	sort.SliceStable(idx.wildcard, func(i, j int) bool {
+		return len(idx.wildcard[i].suffix) > len(idx.wildcard[j].suffix)
+	})
 	return idx
 }
 

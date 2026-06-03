@@ -79,3 +79,58 @@ func TestValidateConfigRejectsNegativeBackendRetryCount(t *testing.T) {
 		t.Fatalf("error = %v, want backend_retry.count validation error", err)
 	}
 }
+
+func TestValidateConfigRejectsDuplicateRouteName(t *testing.T) {
+	cfg := validConfigForValidation()
+	cfg.Routes = []Route{
+		{Name: "panel", SNI: []string{"panel.example.com"}, Backend: "127.0.0.1:8443"},
+		{Name: "panel", SNI: []string{"sub.example.com"}, Backend: "127.0.0.1:9443"},
+	}
+
+	_, err := ValidateConfig(cfg)
+	if err == nil || !strings.Contains(err.Error(), "duplicate route name") {
+		t.Fatalf("error = %v, want duplicate route name validation error", err)
+	}
+}
+
+func TestValidateConfigLoggingEnumDefaults(t *testing.T) {
+	cfg := validConfigForValidation()
+	cfg.Logging.Level = ""
+	cfg.Logging.Format = ""
+
+	if _, err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("ValidateConfig: %v", err)
+	}
+	if cfg.Logging.Level != "info" {
+		t.Fatalf("logging.level = %q, want info", cfg.Logging.Level)
+	}
+	if cfg.Logging.Format != "json" {
+		t.Fatalf("logging.format = %q, want json", cfg.Logging.Format)
+	}
+}
+
+func TestValidateConfigRejectsInvalidLoggingEnums(t *testing.T) {
+	cfg := validConfigForValidation()
+	cfg.Logging.Level = "trace"
+	if _, err := ValidateConfig(cfg); err == nil || !strings.Contains(err.Error(), "logging.level") {
+		t.Fatalf("error = %v, want logging.level validation error", err)
+	}
+
+	cfg = validConfigForValidation()
+	cfg.Logging.Format = "yaml"
+	if _, err := ValidateConfig(cfg); err == nil || !strings.Contains(err.Error(), "logging.format") {
+		t.Fatalf("error = %v, want logging.format validation error", err)
+	}
+}
+
+func validConfigForValidation() *Config {
+	cfg := DefaultConfig()
+	cfg.Listen.TCP = []string{"127.0.0.1:443"}
+	cfg.DefaultBackend = "127.0.0.1:1443"
+	cfg.Routes = []Route{{
+		Name:    "panel",
+		SNI:     []string{"panel.example.com"},
+		Backend: "127.0.0.1:8443",
+	}}
+	return cfg
+}

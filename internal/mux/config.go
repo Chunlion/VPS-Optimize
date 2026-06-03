@@ -146,14 +146,25 @@ func ValidateConfig(c *Config) ([]string, error) {
 	if c.Logging.MaxBackups < 0 {
 		return warnings, fmt.Errorf("logging.max_backups must be >= 0")
 	}
+	if err := normalizeEnumDefault(&c.Logging.Level, "info", map[string]struct{}{"debug": {}, "info": {}, "warn": {}, "error": {}}); err != nil {
+		return warnings, fmt.Errorf("logging.level: %w", err)
+	}
+	if err := normalizeEnumDefault(&c.Logging.Format, "json", map[string]struct{}{"json": {}, "text": {}}); err != nil {
+		return warnings, fmt.Errorf("logging.format: %w", err)
+	}
 
 	seen := map[string]string{}
+	routeNames := map[string]int{}
 	for i := range c.Routes {
 		route := &c.Routes[i]
 		route.Name = strings.TrimSpace(route.Name)
 		if route.Name == "" {
 			return warnings, fmt.Errorf("routes[%d].name must not be empty", i)
 		}
+		if prev, ok := routeNames[route.Name]; ok {
+			return warnings, fmt.Errorf("duplicate route name %q in routes[%d] and routes[%d]", route.Name, prev, i)
+		}
+		routeNames[route.Name] = i
 		if err := validateBackendAddress(route.Backend); err != nil {
 			return warnings, fmt.Errorf("routes[%d].backend: %w", i, err)
 		}
@@ -185,6 +196,19 @@ func ValidateConfig(c *Config) ([]string, error) {
 	}
 	c.routeIndex = buildRouteIndex(c.Routes)
 	return warnings, nil
+}
+
+func normalizeEnumDefault(value *string, fallback string, allowed map[string]struct{}) error {
+	normalized := strings.ToLower(strings.TrimSpace(*value))
+	if normalized == "" {
+		*value = fallback
+		return nil
+	}
+	if _, ok := allowed[normalized]; !ok {
+		return fmt.Errorf("invalid value %q", *value)
+	}
+	*value = normalized
+	return nil
 }
 
 func validateBackendAddress(addr string) error {

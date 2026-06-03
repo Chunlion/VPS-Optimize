@@ -25,10 +25,11 @@ import (
 )
 
 const (
-	initialPeekSize  = 4096
-	maxPeekSize      = 16 * 1024
-	statusJSONPath   = "/var/lib/vps-optimize/vpso-mux/status.json"
-	statusFlushEvery = 2 * time.Second
+	initialPeekSize          = 4096
+	maxPeekSize              = 16 * 1024
+	statusJSONPath           = "/var/lib/vps-optimize/vpso-mux/status.json"
+	statusFlushEvery         = 2 * time.Second
+	statusWriteErrorLogEvery = 60 * time.Second
 )
 
 var errPeekTimeout = errors.New("peek timeout before complete ClientHello")
@@ -65,10 +66,11 @@ type statusError struct {
 }
 
 type statusTracker struct {
-	mu    sync.Mutex
-	path  string
-	data  runtimeStatus
-	dirty bool
+	mu                sync.Mutex
+	path              string
+	data              runtimeStatus
+	dirty             bool
+	lastWriteErrorLog time.Time
 }
 
 type backendRetryStats struct {
@@ -238,9 +240,15 @@ func (s *statusTracker) Start(ctx context.Context, interval time.Duration, wg *s
 }
 
 func (s *statusTracker) Write() {
+	if s == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.writeLocked()
+	if err := s.writeLocked(); err != nil {
+		s.logWriteErrorLocked(err)
+		return
+	}
 	s.dirty = false
 }
 
@@ -253,7 +261,10 @@ func (s *statusTracker) Flush() {
 	if !s.dirty {
 		return
 	}
-	s.writeLocked()
+	if err := s.writeLocked(); err != nil {
+		s.logWriteErrorLocked(err)
+		return
+	}
 	s.dirty = false
 }
 
@@ -394,22 +405,22 @@ func (s *statusTracker) addErrorLocked(message, sni, routeName string) {
 	}
 }
 
-func (s *statusTracker) writeLocked() {
+func (s *statusTracker) writeLocked() error {
 	if s == nil || s.path == "" {
-		return
+		return nil
 	}
 	s.data.UpdatedAt = time.Now().Format(time.RFC3339)
 	payload, err := json.MarshalIndent(s.data, "", "  ")
 	if err != nil {
-		return
+		return fmt.Errorf("marshal status: %w", err)
 	}
 	dir := filepath.Dir(s.path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return
+		return fmt.Errorf("create status directory %s: %w", dir, err)
 	}
 	tmp, err := os.CreateTemp(dir, "status.*.tmp")
 	if err != nil {
-		return
+		return fmt.Errorf("create temporary status file in %s: %w", dir, err)
 	}
 	tmpName := tmp.Name()
 	if _, err = tmp.Write(payload); err == nil {
@@ -426,7 +437,21 @@ func (s *statusTracker) writeLocked() {
 	}
 	if err != nil {
 		_ = os.Remove(tmpName)
+		return fmt.Errorf("write status file %s: %w", s.path, err)
 	}
+	return nil
+}
+
+func (s *statusTracker) logWriteErrorLocked(err error) {
+	if err == nil {
+		return
+	}
+	now := time.Now()
+	if !s.lastWriteErrorLog.IsZero() && now.Sub(s.lastWriteErrorLog) < statusWriteErrorLogEvery {
+		return
+	}
+	s.lastWriteErrorLog = now
+	log.Printf(`{"level":"error","message":"failed to write status json","path":%q,"error":%q}`, s.path, err.Error())
 }
 
 func acceptLoop(ctx context.Context, ln net.Listener, cfg *mux.Config, d mux.Durations, logger *mux.Logger, status *statusTracker, limiter *connectionLimiter, wg *sync.WaitGroup) {

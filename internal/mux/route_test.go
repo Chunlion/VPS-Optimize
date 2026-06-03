@@ -57,6 +57,29 @@ func TestRouteIndexExactMatchWinsOverWildcard(t *testing.T) {
 	}
 }
 
+func TestRouteIndexWildcardSpecificSuffixWins(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Listen.TCP = []string{"127.0.0.1:443"}
+	cfg.DefaultBackend = "127.0.0.1:1443"
+	cfg.Routes = []Route{
+		{Name: "example", SNI: []string{"*.example.com"}, Backend: "127.0.0.1:8443"},
+		{Name: "sub-example", SNI: []string{"*.sub.example.com"}, Backend: "127.0.0.1:9443"},
+	}
+	if _, err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("ValidateConfig: %v", err)
+	}
+	if cfg.routeIndex == nil || len(cfg.routeIndex.wildcard) != 2 {
+		t.Fatalf("unexpected wildcard index: %+v", cfg.routeIndex)
+	}
+	if cfg.routeIndex.wildcard[0].route.Name != "sub-example" {
+		t.Fatalf("first wildcard route = %q, want sub-example", cfg.routeIndex.wildcard[0].route.Name)
+	}
+	match := MatchRoute(cfg, "api.sub.example.com", netip.MustParseAddr("203.0.113.8"))
+	if match.RouteName != "sub-example" || match.Backend != "127.0.0.1:9443" {
+		t.Fatalf("unexpected match: %+v", match)
+	}
+}
+
 func TestWhitelistIPv4IPv6AndCIDR(t *testing.T) {
 	rules := []string{"1.2.3.4", "2001:db8::/32", "10.0.0.0/8"}
 	cases := []string{"1.2.3.4", "2001:db8::1", "10.20.30.40"}
