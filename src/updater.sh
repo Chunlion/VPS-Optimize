@@ -104,10 +104,10 @@ print_auto_update_notice() {
     latest="${result#*|}"
     case "$status" in
         available)
-            echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可无缝更新发布版。"
+            echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
             ;;
         current)
-            echo -e " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，未发现更高的发布版。"
+            echo -e " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，未发现更高版本。"
             ;;
     esac
 }

@@ -249,7 +249,7 @@ copy_shortcut_candidate() {
     local label="$3"
 
     if ! is_vps_optimize_generated_script "$source_file"; then
-        echo -e "${YELLOW}⚠️ ${label} 未通过 VPS-Optimize 发布脚本标识校验，已拒绝注册快捷指令。${PLAIN}"
+        echo -e "${YELLOW}⚠️ ${label} 未通过 VPS-Optimize 脚本标识校验，已拒绝注册快捷指令。${PLAIN}"
         return 1
     fi
     cp "$source_file" "$target_file" 2>/dev/null
@@ -263,7 +263,7 @@ create_shortcut() {
         if ! download_remote_script "$UPDATE_URL" "$script_path" 2>/dev/null; then
             release_path="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/dist/vps.sh"
             if [[ -f "$release_path" ]]; then
-                copy_shortcut_candidate "$release_path" "$script_path" "本地 dist/vps.sh" || {
+                copy_shortcut_candidate "$release_path" "$script_path" "本地脚本" || {
                     echo -e "${YELLOW}⚠️ 快捷指令本地注册失败，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
                     return
                 }
@@ -2176,7 +2176,7 @@ func_backup_center() {
 # Module: runtime.sh
 # ---------------------------------------------------------
 # shellcheck shell=bash
-# Runtime privilege guard shared by source and generated release scripts.
+# Runtime privilege guard used before starting the menu.
 
 # --- Runtime guard ---
 ensure_runtime_root() {
@@ -15466,10 +15466,10 @@ print_auto_update_notice() {
     latest="${result#*|}"
     case "$status" in
         available)
-            echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可无缝更新发布版。"
+            echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
             ;;
         current)
-            echo -e " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，未发现更高的发布版。"
+            echo -e " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，未发现更高版本。"
             ;;
     esac
 }

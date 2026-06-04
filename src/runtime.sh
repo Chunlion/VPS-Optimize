@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Runtime privilege guard shared by source and generated release scripts.
+# Runtime privilege guard used before starting the menu.
 
 # --- Runtime guard ---
 ensure_runtime_root() {
