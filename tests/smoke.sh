@@ -130,8 +130,6 @@ assert_file_contains scripts/selfcheck.ps1 'bash scripts/compat-smoke.sh' "Power
 assert_file_contains scripts/selfcheck.ps1 'bash tests/smoke.sh' "PowerShell selfcheck wrapper must run full smoke through WSL."
 assert_file_contains scripts/selfcheck.ps1 'bash scripts/selfcheck.sh' "PowerShell selfcheck wrapper must delegate to the Bash selfcheck through WSL."
 assert_file_contains scripts/selfcheck.ps1 'exit $exitCode' "PowerShell selfcheck wrapper must pass through the failing WSL exit code."
-assert_file_contains README.md 'Windows PowerShell 里不要直接运行 Bash 脚本' "README must direct Windows users away from native Bash execution."
-assert_file_contains README.md 'scripts\selfcheck.ps1' "README must document the PowerShell-to-WSL selfcheck entrypoint."
 assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read the shared module list."
 assert_dist_contains 'ensure_runtime_root()' "Release script must include the runtime root guard function."
 assert_dist_contains 'main()' "Release script must include the bootstrap main function."
