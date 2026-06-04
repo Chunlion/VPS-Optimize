@@ -40,6 +40,14 @@ routes:
     sni:
       - 'tcp.example.com'
     backend: '127.0.0.1:2443'
+  - name: 'tcp_api_example_com'
+    sni:
+      - 'api.example.com'
+    backend: '127.0.0.1:2444'
+  - name: 'tcp__example_com'
+    sni:
+      - '*.example.com'
+    backend: '127.0.0.1:2445'
   - name: 'xray_node_example_com'
     sni:
       - 'node.example.com'

@@ -978,6 +978,21 @@ assert_file_contains "tutorials/01-3x-ui-reality-443.md" '如果 `/etc/vps-optim
 assert_file_contains "README.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，按 `nginx-stream` 兼容读取' "README must document ENTRY_MODE fallback compatibility."
 assert_file_contains "docs/config-paths.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本按 `nginx-stream` 兼容读取' "Config paths doc must document ENTRY_MODE fallback compatibility."
 assert_file_contains "docs/443-single-entry-troubleshooting.md" '公网 `443` 只应由当前 `ENTRY_MODE` 对应的单个入口服务监听' "Troubleshooting doc must describe the current entry-mode listener model."
+assert_file_contains "docs/dog.md" '不是商家账单级统计' "dog.sh docs must not imply bill-grade traffic accounting accuracy."
+assert_file_contains "docs/dog.md" '不建议用它和 VPS 商家面板做精确对账' "dog.sh docs must steer users away from bill-grade reconciliation."
+assert_file_contains "docs/dog.md" '商家后台仍应作为账单参考' "dog.sh docs must keep provider billing as the final reference."
+assert_file_not_contains "docs/dog.md" '账单级准确' "dog.sh docs must not claim bill-grade accuracy."
+assert_file_not_contains "docs/dog.md" '可作为账单依据' "dog.sh docs must not present dog.sh data as billing evidence."
+assert_file_not_contains "docs/dog.md" '可替代商家账单' "dog.sh docs must not present dog.sh data as a provider-bill replacement."
+
+assert_file_contains "docs/xui-custom-manager.md" '当前仅适配并验证 3x-ui v2.9.4' "xui-custom-manager docs must state only 3x-ui v2.9.4 is verified."
+assert_file_contains "docs/xui-custom-manager.md" '不适配版本不应执行写库功能' "xui-custom-manager docs must block write operations on unverified versions."
+assert_file_contains "docs/xui-custom-manager.md" '不要在非 3x-ui v2.9.4 上强行写库' "xui-custom-manager docs must keep write operations limited to 3x-ui v2.9.4."
+assert_file_contains "docs/xui-custom-manager.md" '不要把未验证版本当作兼容版本使用' "xui-custom-manager docs must not imply unverified 3x-ui versions may work."
+assert_file_not_contains "docs/xui-custom-manager.md" '未验证版本可能可用' "xui-custom-manager docs must not imply unverified 3x-ui versions may work."
+assert_file_not_contains "docs/xui-custom-manager.md" '其它版本也可能兼容' "xui-custom-manager docs must not imply other 3x-ui versions may work."
+assert_file_not_contains "docs/xui-custom-manager.md" '其它版本可尝试写库' "xui-custom-manager docs must not permit write trials on other 3x-ui versions."
+
 grep -q 'print_vpso_mux_failure_context' dist/vps.sh
 grep -q 'print_nginx_stream_failure_context' dist/vps.sh
 grep -q 'assert_nginx_stream_config_loaded' dist/vps.sh

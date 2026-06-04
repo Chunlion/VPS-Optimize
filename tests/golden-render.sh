@@ -61,6 +61,18 @@ assert_route() {
     fi
 }
 
+assert_route_before() {
+    local file="$1"
+    local first_route="$2"
+    local second_route="$3"
+    local first_line second_line
+    first_line=$(grep -nF "  - name: '${first_route}'" "$file" | head -n 1 | cut -d: -f1)
+    second_line=$(grep -nF "  - name: '${second_route}'" "$file" | head -n 1 | cut -d: -f1)
+    [[ -n "$first_line" ]] || fail_golden_assertion "Missing route: $first_route"
+    [[ -n "$second_line" ]] || fail_golden_assertion "Missing route: $second_route"
+    (( first_line < second_line )) || fail_golden_assertion "Route $first_route must render before broader route $second_route."
+}
+
 assert_nginx_single_entry_web_render() {
     local file="$1"
     local needle
@@ -106,6 +118,10 @@ assert_vpso_mux_render() {
     assert_route "$file" "panel" "panel.example.com" "127.0.0.1:8443" "198.51.100.10" "2001:db8::/32"
     assert_route "$file" "site_site_example_com" "site.example.com" "127.0.0.1:8443" "203.0.113.5"
     assert_route "$file" "tcp_tcp_example_com" "tcp.example.com" "127.0.0.1:2443"
+    assert_route "$file" "tcp_api_example_com" "api.example.com" "127.0.0.1:2444"
+    assert_route "$file" "tcp__example_com" "*.example.com" "127.0.0.1:2445"
+    assert_route_before "$file" "panel" "tcp__example_com"
+    assert_route_before "$file" "tcp_api_example_com" "tcp__example_com"
     assert_route "$file" "xray_node_example_com" "node.example.com" "127.0.0.1:3443"
     assert_route "$file" "reality" "reality.example.com" "127.0.0.1:1443"
 }
@@ -147,9 +163,9 @@ SITE_BACKEND_PORTS=(3000)
 XRAY_LISTEN_ADDR=127.0.0.1
 XRAY_LISTEN_PORT=1443
 REALITY_SNI=reality.example.com
-TCP_ROUTE_SNIS=(tcp.example.com)
-TCP_ROUTE_ADDRS=(127.0.0.1)
-TCP_ROUTE_PORTS=(2443)
+TCP_ROUTE_SNIS=(tcp.example.com api.example.com "*.example.com")
+TCP_ROUTE_ADDRS=(127.0.0.1 127.0.0.1 127.0.0.1)
+TCP_ROUTE_PORTS=(2443 2444 2445)
 XRAY_SNI_ROUTE_SNIS=(node.example.com)
 XRAY_SNI_ROUTE_ADDRS=(127.0.0.1)
 XRAY_SNI_ROUTE_PORTS=(3443)
