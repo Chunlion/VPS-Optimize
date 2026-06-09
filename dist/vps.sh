@@ -8351,7 +8351,7 @@ save_and_offer_reapply_sni_stack() {
     fi
     save_sni_stack_env
     echo -e "${GREEN}✅ 已保存新的 443 单入口运行参数。${PLAIN}"
-    echo -e "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的端口或路径。${PLAIN}"
+    echo -e "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的域名、端口或路径。${PLAIN}"
     read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？输入 yes 继续，直接回车取消（大小写均可）: "
     if is_yes "$yn"; then
         if ! reapply_sni_stack_from_env --yes; then
@@ -8365,6 +8365,78 @@ save_and_offer_reapply_sni_stack() {
         echo -e "${YELLOW}稍后可执行 [19] -> [6] 重新应用上次配置。${PLAIN}"
         [[ -n "$env_backup" ]] && echo -e "${CYAN}参数修改前备份已保留：${env_backup}${PLAIN}"
     fi
+}
+
+restart_xui_panel_services_after_setting_update() {
+    local service_name restarted=0
+    for service_name in x-ui 3x-ui x-panel; do
+        if systemctl list-unit-files "${service_name}.service" --no-legend 2>/dev/null | grep -q . || systemctl status "$service_name" >/dev/null 2>&1; then
+            if systemctl restart "$service_name" >/dev/null 2>&1; then
+                restarted=1
+            else
+                echo -e "${YELLOW}⚠️ ${service_name} 重启失败，请稍后手动重启面板服务。${PLAIN}"
+            fi
+        fi
+    done
+    [[ "$restarted" -eq 1 ]] && echo -e "${GREEN}✅ 已重启 3x-ui/x-ui 面板服务，使域名设置生效。${PLAIN}"
+}
+
+update_xui_panel_domain_settings_for_single_443() {
+    local old_domain="$1"
+    local new_domain="$2"
+    local db_path table_name backup_dir backup_file sql
+    local checked=0 updated=0 failed=0 timestamp
+
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        echo -e "${CYAN}▶ 正在安装 sqlite3，用于同步 3x-ui 面板域名设置...${PLAIN}"
+        install_pkg sqlite3 sqlite >/dev/null 2>&1 || true
+    fi
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ 未检测到 sqlite3，跳过自动同步 3x-ui 面板域名设置。${PLAIN}"
+        return 0
+    fi
+
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    while IFS= read -r db_path; do
+        [[ -f "$db_path" ]] || continue
+        table_name=$(sqlite3 "$db_path" "select name from sqlite_master where type='table' and name in ('settings','setting') order by case name when 'settings' then 0 else 1 end limit 1;" 2>/dev/null || true)
+        [[ "$table_name" == "settings" || "$table_name" == "setting" ]] || continue
+        checked=1
+
+        backup_dir="/root/x-ui-backups"
+        mkdir -p "$backup_dir"
+        backup_file="${backup_dir}/x-ui.db.panel_domain_${timestamp}.bak"
+        if ! sqlite3 "$db_path" ".backup '${backup_file}'" >/dev/null 2>&1; then
+            echo -e "${YELLOW}⚠️ 备份 3x-ui 数据库失败，跳过自动同步：${db_path}${PLAIN}"
+            failed=1
+            continue
+        fi
+
+        sql="
+update ${table_name} set value='${new_domain}' where lower(key) in ('webdomain','subdomain');
+update ${table_name} set value='https://${new_domain}${SUB_URI_PATH}' where lower(key)='suburi';
+update ${table_name} set value='https://${new_domain}${CLASH_URI_PATH}' where lower(key)='subclashuri';
+update ${table_name} set value=replace(replace(value,'https://${old_domain}','https://${new_domain}'),'http://${old_domain}','https://${new_domain}') where lower(key)='subjsonuri' and value like '%${old_domain}%';
+"
+        if sqlite3 "$db_path" "$sql" >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ 已同步 3x-ui 面板/订阅域名设置：${db_path}${PLAIN}"
+            echo -e "${CYAN}数据库备份：${backup_file}${PLAIN}"
+            updated=1
+        else
+            echo -e "${YELLOW}⚠️ 同步 3x-ui 面板域名设置失败：${db_path}${PLAIN}"
+            failed=1
+        fi
+    done < <(find_xui_database_candidates)
+
+    [[ "$updated" -eq 1 ]] && restart_xui_panel_services_after_setting_update
+    if [[ "$failed" -eq 1 ]]; then
+        echo -e "${RED}❌ 3x-ui 面板域名设置未完整同步，已停止修改 443 面板域名。${PLAIN}"
+        return 1
+    fi
+    if [[ "$checked" -eq 0 ]]; then
+        echo -e "${YELLOW}⚠️ 未找到 3x-ui 数据库，跳过 3x-ui 面板内部域名同步。${PLAIN}"
+    fi
+    return 0
 }
 
 edit_sni_stack_panel_subscription_profile() {
@@ -8516,6 +8588,7 @@ edit_sni_stack_panel_domain_profile() {
         "确认新域名 DNS 已解析到当前 VPS，且 Token 有该 zone 权限。" || return 1
 
     issue_and_install_cert_for_domain "$new_domain" "$CF_Token" || return 1
+    update_xui_panel_domain_settings_for_single_443 "$old_domain" "$new_domain" || return 1
     old_conf="/etc/caddy/conf.d/${old_domain}.caddy"
     [[ -f "$old_conf" ]] && quarantine_path "$old_conf" "/etc/caddy/conf.d_quarantine" >/dev/null 2>&1 || true
     PANEL_DOMAIN="$new_domain"
@@ -8529,7 +8602,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}🧭 修改 443 分流参数${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：后续修改面板端口/路径、订阅端口/路径、REALITY SNI、入口端口时使用。${PLAIN}"
+        echo -e "${YELLOW}用途：后续修改面板域名、面板端口/路径、订阅端口/路径、REALITY SNI、入口端口时使用。${PLAIN}"
         echo -e "${YELLOW}新增网站请走 [19] -> [8]，不用重跑首次配置。${PLAIN}"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
@@ -10677,6 +10750,7 @@ manage_sni_stack_sites() {
         echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"
         echo -e "${GREEN}  7. 443 单入口链路体检${PLAIN}"
         echo -e "${GREEN}  8. 切换 Web 反代引擎${PLAIN}       ${YELLOW}(Caddy / Nginx 本地反代)${PLAIN}"
+        echo -e "${GREEN}  9. 修改面板域名${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -10692,6 +10766,7 @@ manage_sni_stack_sites() {
             6) reapply_sni_stack_from_env ;;
             7) sni_stack_health_check ;;
             8) switch_sni_stack_web_proxy_engine ;;
+            9) edit_sni_stack_panel_domain_profile ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
         esac
@@ -18162,7 +18237,7 @@ show_sni_help() {
     echo "10 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。"
     echo "11 链路体检：排查 ENTRY_MODE、监听、证书、Web 和 Xray 分流。"
     echo "12 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
-    echo "13/14/15 维护项：证书、共享参数和订阅 External Proxy 提示。"
+    echo "13/14/15 维护项：证书、共享参数和订阅 External Proxy 提示；共享参数可修改面板域名。"
     echo "16 查看 TCP Peek + Splice 状态 / 8444 预检：展示 status.json 统计；预检只监听 8444，不改公网 443。"
     echo "17 TCP Peek 分流规则校验：只检查配置，不重启入口。"
     echo "18 查看 TCP Peek + Splice 日志：查看 vpso-mux 分流器日志。"
@@ -18353,7 +18428,7 @@ func_sni_stack_quick_menu() {
         echo -e "${GREEN} 11. 443 链路体检${PLAIN}              ${YELLOW}(ENTRY_MODE/监听/证书/Web/Xray 分流)${PLAIN}"
         echo -e "${CYAN} 12. 443 网络访问测试${PLAIN}          ${YELLOW}(DNS/TCP/TLS/面板/订阅路径)${PLAIN}"
         echo -e "${CYAN} 13. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
-        echo -e "${CYAN} 14. 修改 443 共享参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
+        echo -e "${CYAN} 14. 修改 443 共享参数${PLAIN}         ${YELLOW}(面板域名、面板/订阅/REALITY/入口端口与路径)${PLAIN}"
         echo -e "${CYAN} 15. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}"
         echo -e "${CYAN} 16. 查看 TCP Peek + Splice 状态 / 8444 预检${PLAIN} ${YELLOW}(不改公网 443)${PLAIN}"
         echo -e "${CYAN} 17. TCP Peek 分流规则校验${PLAIN} ${YELLOW}(只检查配置，不重启入口)${PLAIN}"
