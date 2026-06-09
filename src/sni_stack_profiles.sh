@@ -73,7 +73,8 @@ update_xui_panel_domain_settings_for_single_443() {
         fi
 
         sql="
-update ${table_name} set value='${new_domain}' where lower(key) in ('webdomain','subdomain');
+update ${table_name} set value='' where lower(key)='webdomain';
+update ${table_name} set value='${new_domain}' where lower(key)='subdomain';
 update ${table_name} set value='https://${new_domain}${SUB_URI_PATH}' where lower(key)='suburi';
 update ${table_name} set value='https://${new_domain}${CLASH_URI_PATH}' where lower(key)='subclashuri';
 update ${table_name} set value=replace(replace(value,'https://${old_domain}','https://${new_domain}'),'http://${old_domain}','https://${new_domain}') where lower(key)='subjsonuri' and value like '%${old_domain}%';
