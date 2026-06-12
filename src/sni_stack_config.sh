@@ -904,6 +904,7 @@ normalize_site_stack_arrays() {
     local i default_port
     default_port=3000
     for i in "${!SITE_DOMAINS[@]}"; do
+        SITE_DOMAINS[$i]=$(normalize_domain_input "${SITE_DOMAINS[$i]}")
         SITE_BACKEND_ADDRS[$i]="${SITE_BACKEND_ADDRS[$i]:-127.0.0.1}"
         if [[ -z "${SITE_BACKEND_PORTS[$i]:-}" ]]; then
             if [[ "$i" -eq 0 && -n "${SITE_BACKEND_PORT:-}" ]]; then
@@ -912,6 +913,8 @@ normalize_site_stack_arrays() {
                 SITE_BACKEND_PORTS[$i]="$default_port"
             fi
         fi
+        SITE_BACKEND_ADDRS[$i]=$(normalize_loopback_addr "$(normalize_ip_input "${SITE_BACKEND_ADDRS[$i]}")")
+        SITE_BACKEND_PORTS[$i]=$(normalize_port_input "${SITE_BACKEND_PORTS[$i]}")
         default_port=$((default_port + 1))
     done
 
@@ -937,8 +940,8 @@ normalize_tcp_route_arrays() {
 
     for i in "${!raw_snis[@]}"; do
         sni=$(normalize_domain_input "${raw_snis[$i]}")
-        addr=$(normalize_loopback_addr "${raw_addrs[$i]:-127.0.0.1}")
-        port="${raw_ports[$i]:-8443}"
+        addr=$(normalize_loopback_addr "$(normalize_ip_input "${raw_addrs[$i]:-127.0.0.1}")")
+        port=$(normalize_port_input "${raw_ports[$i]:-8443}")
         if is_valid_domain "$sni" && is_loopback_listen_addr "$addr" && is_valid_port "$port"; then
             clean_snis+=("$sni")
             clean_addrs+=("$addr")

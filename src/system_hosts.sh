@@ -105,11 +105,13 @@ hosts_normalize_names() {
     local -n out_array=$2
     local item normalized seen=" "
     raw="${raw//，/,}"
+    raw="${raw//、/,}"
+    raw="${raw//；/,}"
     raw="${raw//;/,}"
     raw="${raw//,/ }"
     out_array=()
     for item in $raw; do
-        normalized=$(echo "$(trim_input "$item")" | tr '[:upper:]' '[:lower:]')
+        normalized=$(normalize_domain_input "$item")
         [[ -z "$normalized" ]] && continue
         if ! is_valid_hostname "$normalized"; then
             echo -e "${RED}❌ 主机名/域名格式无效：${normalized}${PLAIN}"

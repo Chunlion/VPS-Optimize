@@ -333,22 +333,66 @@ done
     assert_ip_cidr_invalid zzzz::1
 )
 declare -a ip_whitelist_smoke=()
-normalize_ip_whitelist_input '2001:db8::1,2001:db8::/32,::1' ip_whitelist_smoke
-[[ "${#ip_whitelist_smoke[@]}" -eq 3 ]]
+normalize_ip_whitelist_input '２００１:DB8::１，2001:db8::/32、[2001:DB8::2]/128;::1 ２００１:db8::１' ip_whitelist_smoke
+[[ "${#ip_whitelist_smoke[@]}" -eq 4 ]]
+[[ "${ip_whitelist_smoke[0]}" == "2001:db8::1" ]]
+[[ "${ip_whitelist_smoke[2]}" == "2001:db8::2/128" ]]
 if normalize_ip_whitelist_input '2001:::1' ip_whitelist_smoke >/dev/null 2>&1; then
     echo "normalize_ip_whitelist_input must reject invalid IPv6 input." >&2
     exit 1
 fi
 
+declare -a split_smoke=()
+split_csv_to_array $'Site1.Example.com site2.example.com，site3.example.com、site4.example.com;site5.example.com\nsite6.example.com' split_smoke
+[[ "${#split_smoke[@]}" -eq 6 ]]
+[[ "${split_smoke[0]}" == "site1.example.com" ]]
+[[ "${split_smoke[5]}" == "site6.example.com" ]]
+
 [[ "$(trim_input "  q  ")" == "q" ]]
 [[ "$(normalize_menu_choice_input "  q  ")" == "0" ]]
 [[ "$(normalize_menu_choice_input " 返回 ")" == "0" ]]
+[[ "$(normalize_menu_choice_input " １ ")" == "1" ]]
+[[ "$(normalize_menu_choice_input "１０、")" == "10" ]]
+[[ "$(normalize_menu_choice_input "2)")" == "2" ]]
 choice=""
 read_trimmed choice "" <<< " 返回 "
 [[ "$choice" == "0" ]]
 choice=""
 read_trimmed choice "" <<< " Q "
 [[ "$choice" == "0" ]]
+action=""
+read_trimmed action "" <<< "back"
+[[ "$action" == "0" ]]
+c=""
+read_trimmed c "" <<< "３．"
+[[ "$c" == "3" ]]
+t=""
+read_trimmed t "" <<< "退出"
+[[ "$t" == "0" ]]
+mode_choice=""
+read_trimmed mode_choice "" <<< "back"
+[[ "$mode_choice" == "back" ]]
+action_choice=""
+read_trimmed action_choice "" <<< "返回"
+[[ "$action_choice" == "返回" ]]
+port=""
+read_trimmed port "" <<< "https://panel.example.com:４００００/path"
+[[ "$port" == "40000" ]]
+p_choice=""
+read_trimmed p_choice "" <<< "４４３）"
+[[ "$p_choice" == "443" ]]
+final_p=""
+read_trimmed final_p "" <<< "１００２２"
+[[ "$final_p" == "10022" ]]
+ip=""
+read_trimmed ip "" <<< "https://[2001:DB8::1]:443/path"
+[[ "$ip" == "2001:db8::1" ]]
+ip_whitelist_input=""
+read_trimmed ip_whitelist_input "" <<< "1.1.1.1 2.2.2.2/32"
+[[ "$ip_whitelist_input" == "1.1.1.1 2.2.2.2/32" ]]
+[[ "$(ask_with_default "后端端口" "3000" <<< "https://site.example.com:８４４３/path")" == "8443" ]]
+[[ "$(ask_with_default "本地监听地址" "127.0.0.1" <<< "https://[::1]:443/path")" == "::1" ]]
+[[ "$(ask_with_default "普通订阅路径前缀（不带端口）" "/sub/" <<< "/sub/")" == "/sub/" ]]
 is_yes "yes"
 is_yes "YES"
 is_yes "YeS"
@@ -357,10 +401,35 @@ if is_yes "no"; then
     exit 1
 fi
 [[ "$(normalize_domain_input " HTTPS://Panel.Example.COM:443/path ")" == "panel.example.com" ]]
-bad_domain_raw="https：//Ml。Cuty0039。Dpdns。Org/path"
+[[ "$(normalize_domain_input " HTTPS：//Panel。Example。COM:４４３/path?x=1#frag ")" == "panel.example.com" ]]
+[[ "$(normalize_domain_input "panel.example.com.")" == "panel.example.com" ]]
+[[ "$(normalize_ip_input "１．２．３．４:443")" == "1.2.3.4" ]]
+[[ "$(normalize_ip_input "https://[2001:DB8::1]:443/path")" == "2001:db8::1" ]]
+[[ "$(normalize_port_input "https://panel.example.com:４４３/path")" == "443" ]]
+is_valid_port "https://panel.example.com:４４３/path"
+[[ "$(normalize_port_rule_input "８０，４４３；1000：1002、2000-2001")" == "80,443,1000-1002,2000-2001" ]]
+[[ "$(dns_normalize_servers 4 "１．１．１．１，8.8.8.8 9.9.9.9")" == "1.1.1.1 8.8.8.8 9.9.9.9" ]]
+[[ "$(dns_normalize_servers 6 "[2001:4860:4860::8888]、2001:4860:4860::8844")" == "2001:4860:4860::8888 2001:4860:4860::8844" ]]
+(
+    source src/system_core.sh
+    declare -a host_names_smoke=()
+    hosts_normalize_names 'Panel。Example。COM、node.example.com;vps01 panel.example.com' host_names_smoke
+    [[ "${#host_names_smoke[@]}" -eq 3 ]]
+    [[ "${host_names_smoke[0]}" == "panel.example.com" ]]
+    [[ "${host_names_smoke[2]}" == "vps01" ]]
+)
+(
+    source src/system_hosts.sh
+    declare -a host_names_smoke=()
+    hosts_normalize_names 'Panel。Example。COM、node.example.com;vps01 panel.example.com' host_names_smoke
+    [[ "${#host_names_smoke[@]}" -eq 3 ]]
+    [[ "${host_names_smoke[0]}" == "panel.example.com" ]]
+    [[ "${host_names_smoke[2]}" == "vps01" ]]
+)
+bad_domain_raw="https：//例子。测试/path"
 bad_domain_normalized=$(normalize_domain_input "$bad_domain_raw")
 if is_valid_domain "$bad_domain_normalized"; then
-    echo "Full-width pasted domain must remain invalid." >&2
+    echo "Non-ASCII pasted domain must remain invalid." >&2
     exit 1
 fi
 bad_domain_output=$(print_domain_validation_error "测试域名" "$bad_domain_raw" "$bad_domain_normalized")

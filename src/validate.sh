@@ -4,12 +4,27 @@
 normalize_domain_input() {
     local domain
     domain="$(trim_input "$1")"
+    if declare -F normalize_ascii_digits >/dev/null 2>&1; then
+        domain="$(normalize_ascii_digits "$domain")"
+    fi
+    domain="${domain//。/.}"
+    domain="${domain//．/.}"
+    domain="${domain//｡/.}"
+    domain="${domain//：/:}"
+    domain=$(printf '%s' "$domain" | sed 's#／#/#g')
     domain=$(echo "$domain" | tr '[:upper:]' '[:lower:]')
     domain="${domain#http://}"
     domain="${domain#https://}"
+    domain="${domain%%\?*}"
+    domain="${domain%%？*}"
+    domain="${domain%%#*}"
+    domain="${domain%%＃*}"
     domain="${domain%%/*}"
     domain="${domain%%:*}"
     domain=$(echo "$domain" | tr -d '[:space:]')
+    while [[ "$domain" == *. ]]; do
+        domain="${domain%.}"
+    done
     printf '%s' "$domain"
 }
 
@@ -270,19 +285,62 @@ is_valid_ip_cidr() {
     is_valid_ipv4_cidr "$value" || is_valid_ipv6_cidr "$value"
 }
 
+normalize_ip_input() {
+    local value
+    value="$(trim_input "$1")"
+    if declare -F normalize_ascii_digits >/dev/null 2>&1; then
+        value="$(normalize_ascii_digits "$value")"
+    fi
+    value="${value//。/.}"
+    value="${value//．/.}"
+    value="${value//｡/.}"
+    value="${value//：/:}"
+    value=$(printf '%s' "$value" | sed 's#／#/#g')
+    value=$(echo "$value" | tr '[:upper:]' '[:lower:]')
+    value="${value#http://}"
+    value="${value#https://}"
+    value="${value%%\?*}"
+    value="${value%%？*}"
+    value="${value%%#*}"
+    value="${value%%＃*}"
+    value="${value%%/*}"
+    value=$(echo "$value" | tr -d '[:space:]')
+    if [[ "$value" =~ ^\[(.+)\](:[0-9]+)?$ ]]; then
+        value="${BASH_REMATCH[1]}"
+    elif [[ "$value" =~ ^(([0-9]{1,3}\.){3}[0-9]{1,3}):[0-9]+$ ]]; then
+        value="${BASH_REMATCH[1]}"
+    fi
+    printf '%s' "$value"
+}
+
 normalize_ip_whitelist_input() {
     local input="$1"
     local -n out_array=$2
     local item normalized seen
-    input="${input//，/,}"
+    if declare -F normalize_ascii_digits >/dev/null 2>&1; then
+        input="$(normalize_ascii_digits "$input")"
+    fi
+    input="${input//。/.}"
+    input="${input//．/.}"
+    input="${input//｡/.}"
+    input="${input//：/:}"
+    input=$(printf '%s' "$input" | sed 's#／#/#g')
+    input="${input//，/ }"
+    input="${input//、/ }"
+    input="${input//；/ }"
     input="${input//;/ }"
+    input="${input//|/ }"
     input="${input//,/ }"
     input="${input//$'\r'/ }"
     input="${input//$'\n'/ }"
+    input="${input//$'\t'/ }"
     out_array=()
     seen=" "
     for item in $input; do
         normalized=$(echo "$(trim_input "$item")" | tr '[:upper:]' '[:lower:]')
+        if [[ "$normalized" =~ ^\[(.+)\](/.+)?$ ]]; then
+            normalized="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+        fi
         [[ -z "$normalized" ]] && continue
         if ! is_valid_ip_cidr "$normalized"; then
             echo -e "${RED}❌ IP/CIDR 格式无效：${normalized}${PLAIN}"
@@ -296,8 +354,40 @@ normalize_ip_whitelist_input() {
     [[ ${#out_array[@]} -gt 0 ]]
 }
 
+normalize_port_input() {
+    local value port_candidate
+    value="$(trim_input "$1")"
+    if declare -F normalize_ascii_digits >/dev/null 2>&1; then
+        value="$(normalize_ascii_digits "$value")"
+    fi
+    value="${value//：/:}"
+    value=$(echo "$value" | tr '[:upper:]' '[:lower:]')
+    value="${value#http://}"
+    value="${value#https://}"
+    value="${value%%\?*}"
+    value="${value%%？*}"
+    value="${value%%#*}"
+    value="${value%%＃*}"
+    value="${value%%/*}"
+    value=$(echo "$value" | tr -d '[:space:]')
+    value="${value%)}"
+    value="${value%）}"
+    value="${value%.}"
+    value="${value%．}"
+    value="${value%,}"
+    value="${value%，}"
+    value="${value%;}"
+    value="${value%；}"
+    if [[ "$value" == *:* ]]; then
+        port_candidate="${value##*:}"
+        [[ "$port_candidate" =~ ^[0-9]+$ ]] && value="$port_candidate"
+    fi
+    printf '%s' "$value"
+}
+
 is_valid_port() {
-    local port="$1"
+    local port
+    port="$(normalize_port_input "$1")"
     [[ "$port" =~ ^[0-9]+$ ]] && (( 10#$port >= 1 && 10#$port <= 65535 ))
 }
 
@@ -332,7 +422,13 @@ normalize_loopback_addr() {
 
 normalize_port_rule_input() {
     local value="$1"
+    if declare -F normalize_ascii_digits >/dev/null 2>&1; then
+        value="$(normalize_ascii_digits "$value")"
+    fi
     value="${value//，/,}"
+    value="${value//、/,}"
+    value="${value//；/,}"
+    value="${value//;/,}"
     value="${value//：/:}"
     value="${value//－/-}"
     value="${value//—/-}"
@@ -454,14 +550,29 @@ dns_normalize_servers() {
     local items=()
     local result=()
 
+    if declare -F normalize_ascii_digits >/dev/null 2>&1; then
+        raw="$(normalize_ascii_digits "$raw")"
+    fi
+    raw="${raw//。/.}"
+    raw="${raw//．/.}"
+    raw="${raw//｡/.}"
+    raw="${raw//：/:}"
+    raw=$(printf '%s' "$raw" | sed 's#／#/#g')
     raw="${raw//，/,}"
+    raw="${raw//、/,}"
+    raw="${raw//；/,}"
     raw="${raw//;/,}"
+    raw="${raw//$'\r'/,}"
+    raw="${raw//$'\n'/,}"
     raw="${raw// /,}"
     raw="${raw//$'\t'/,}"
     IFS=',' read -ra items <<< "$raw"
 
     for item in "${items[@]}"; do
         item="$(trim_input "$item")"
+        if [[ "$item" =~ ^\[(.+)\]$ ]]; then
+            item="${BASH_REMATCH[1]}"
+        fi
         [[ -z "$item" ]] && continue
         if [[ "$family" == "4" ]]; then
             dns_is_valid_ipv4 "$item" || return 1
