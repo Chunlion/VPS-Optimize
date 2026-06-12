@@ -29,14 +29,6 @@ jobs:
         run: |
           bash scripts/selfcheck.sh
 
-      - name: Run smoke tests
-        run: |
-          bash tests/smoke.sh
-
-      - name: Run compatibility smoke
-        run: |
-          bash scripts/compat-smoke.sh
-
   container-compat:
     runs-on: ubuntu-latest
     strategy:

@@ -123,11 +123,11 @@ assert_file_contains scripts/build.sh 'scripts/modules.list' "Release build must
 assert_file_contains scripts/build.sh "sed '1{/^#!\\/usr\\/bin\\/env bash$/d;}'" "Release build must only strip module-level shebangs, not embedded script templates."
 assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/selfcheck.sh' "CI must call the shared selfcheck entrypoint."
 assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/compat-smoke.sh' "CI must call the compatibility smoke entrypoint."
+assert_file_contains scripts/selfcheck.sh 'tests/smoke.sh' "Bash selfcheck must syntax-check the full smoke gate."
+assert_file_contains scripts/selfcheck.sh 'bash tests/golden-render.sh' "Bash selfcheck must run golden render validation."
+assert_file_contains scripts/selfcheck.sh 'bash scripts/compat-smoke.sh' "Bash selfcheck must run compatibility smoke validation."
+assert_file_contains scripts/selfcheck.sh 'bash tests/smoke.sh' "Bash selfcheck must run full smoke validation."
 assert_file_contains scripts/selfcheck.ps1 'wsl.exe' "PowerShell selfcheck wrapper must execute validation through WSL."
-assert_file_contains scripts/selfcheck.ps1 'bash -n' "PowerShell selfcheck wrapper must include Bash syntax validation."
-assert_file_contains scripts/selfcheck.ps1 'bash scripts/build.sh' "PowerShell selfcheck wrapper must build through WSL."
-assert_file_contains scripts/selfcheck.ps1 'bash scripts/compat-smoke.sh' "PowerShell selfcheck wrapper must run compat smoke through WSL."
-assert_file_contains scripts/selfcheck.ps1 'bash tests/smoke.sh' "PowerShell selfcheck wrapper must run full smoke through WSL."
 assert_file_contains scripts/selfcheck.ps1 'bash scripts/selfcheck.sh' "PowerShell selfcheck wrapper must delegate to the Bash selfcheck through WSL."
 assert_file_contains scripts/selfcheck.ps1 'exit $exitCode' "PowerShell selfcheck wrapper must pass through the failing WSL exit code."
 assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read the shared module list."
@@ -586,6 +586,120 @@ apt_update_once
 [[ "$(nginx_stream_listen_directives "0.0.0.0" "443" | grep -c '^    listen ')" == "2" ]]
 [[ "$(nginx_stream_listen_directives "::1" "443")" == "    listen [::1]:443;" ]]
 [[ "$(xui_cert_setting_key_sql_list)" == *"subcertfile"* ]]
+assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_panel_domain_profile 'update_xui_panel_domain_settings_for_single_443 "$old_domain" "$new_domain"' "Panel domain changes must sync 3x-ui domain settings."
+
+if command -v python3 >/dev/null 2>&1; then
+    (
+        source src/common.sh
+        source src/sni_stack_profiles.sh
+        xui_domain_smoke_tmp=$(mktemp -d /tmp/vps-xui-domain-smoke.XXXXXX)
+        command mkdir -p "$xui_domain_smoke_tmp/bin" "$xui_domain_smoke_tmp/backups"
+        xui_domain_db="$xui_domain_smoke_tmp/x-ui.db"
+        cat > "$xui_domain_smoke_tmp/bin/sqlite3" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+db_path="$1"
+shift
+sql="$1"
+python3 - "$db_path" "$sql" <<'PY'
+import os
+import re
+import shutil
+import sqlite3
+import sys
+
+db_path = sys.argv[1]
+sql = sys.argv[2]
+if sql.startswith(".backup"):
+    match = re.search(r"\.backup\s+'([^']+)'", sql)
+    if not match:
+        sys.exit(1)
+    backup_path = match.group(1)
+    backup_root = os.environ.get("SMOKE_XUI_BACKUP_ROOT")
+    if backup_root and backup_path.startswith("/root/x-ui-backups/"):
+        backup_path = os.path.join(backup_root, os.path.basename(backup_path))
+    os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+    shutil.copyfile(db_path, backup_path)
+    sys.exit(0)
+
+conn = sqlite3.connect(db_path)
+try:
+    if sql.lstrip().lower().startswith("select name from sqlite_master"):
+        row = conn.execute(sql).fetchone()
+        if row and row[0] is not None:
+            print(row[0])
+    else:
+        conn.executescript(sql)
+        conn.commit()
+finally:
+    conn.close()
+PY
+EOF
+        chmod +x "$xui_domain_smoke_tmp/bin/sqlite3"
+        python3 - "$xui_domain_db" <<'PY'
+import sqlite3
+import sys
+
+conn = sqlite3.connect(sys.argv[1])
+conn.execute("create table settings (key text primary key, value text)")
+rows = [
+    ("webDomain", "old.panel.example.com"),
+    ("subDomain", "old.panel.example.com"),
+    ("subURI", "https://old.panel.example.com/old-sub/"),
+    ("subClashURI", "https://old.panel.example.com/old-clash/"),
+    ("subJsonURI", "http://old.panel.example.com/json/sub?token=1"),
+    ("otherSetting", "https://old.panel.example.com/unchanged"),
+]
+conn.executemany("insert into settings values (?, ?)", rows)
+conn.commit()
+conn.close()
+PY
+        find_xui_database_candidates() {
+            printf '%s\n' "$xui_domain_db"
+        }
+        restart_xui_panel_services_after_setting_update() {
+            xui_domain_smoke_restarted=1
+        }
+        mkdir() {
+            if [[ "$#" -eq 2 && "$1" == "-p" && "$2" == "/root/x-ui-backups" ]]; then
+                command mkdir -p "$xui_domain_smoke_tmp/backups"
+                return 0
+            fi
+            command mkdir "$@"
+        }
+        SUB_URI_PATH=/sub/
+        CLASH_URI_PATH=/clash/
+        xui_domain_smoke_restarted=0
+        PATH="$xui_domain_smoke_tmp/bin:$PATH" \
+        SMOKE_XUI_BACKUP_ROOT="$xui_domain_smoke_tmp/backups" \
+            update_xui_panel_domain_settings_for_single_443 old.panel.example.com new.panel.example.com >/dev/null
+        xui_domain_values=$(python3 - "$xui_domain_db" <<'PY'
+import sqlite3
+import sys
+
+conn = sqlite3.connect(sys.argv[1])
+for key, value in conn.execute("select key, value from settings order by key"):
+    print(f"{key}={value}")
+conn.close()
+PY
+)
+        grep -Fxq 'webDomain=' <<<"$xui_domain_values"
+        grep -Fxq 'subDomain=new.panel.example.com' <<<"$xui_domain_values"
+        grep -Fxq 'subURI=https://new.panel.example.com/sub/' <<<"$xui_domain_values"
+        grep -Fxq 'subClashURI=https://new.panel.example.com/clash/' <<<"$xui_domain_values"
+        grep -Fxq 'subJsonURI=https://new.panel.example.com/json/sub?token=1' <<<"$xui_domain_values"
+        grep -Fxq 'otherSetting=https://old.panel.example.com/unchanged' <<<"$xui_domain_values"
+        [[ "$xui_domain_smoke_restarted" == "1" ]]
+        xui_domain_backup=$(find "$xui_domain_smoke_tmp/backups" -type f -name 'x-ui.db.panel_domain_*.bak' | head -n1)
+        [[ -n "$xui_domain_backup" && -f "$xui_domain_backup" ]]
+        rm -f "$xui_domain_backup"
+        rm -f "$xui_domain_smoke_tmp/bin/sqlite3"
+        rm -f "$xui_domain_db"
+        rmdir "$xui_domain_smoke_tmp/backups"
+        rmdir "$xui_domain_smoke_tmp/bin"
+        rmdir "$xui_domain_smoke_tmp"
+    )
+fi
 
 (
     source src/caddy_proxy.sh

@@ -9,7 +9,7 @@ echo "==> build release artifact"
 bash scripts/build.sh
 
 echo "==> bash syntax"
-bash -n scripts/build.sh scripts/selfcheck.sh scripts/compat-smoke.sh scripts/validate-traffic-guard-checker.sh tests/golden-render.sh
+bash -n scripts/build.sh scripts/selfcheck.sh scripts/compat-smoke.sh scripts/validate-traffic-guard-checker.sh tests/golden-render.sh tests/smoke.sh
 bash -n vps.sh dist/vps.sh dog.sh xui-custom-manager.sh
 for module in src/*.sh; do
     bash -n "$module"
@@ -43,6 +43,12 @@ GOTOOLCHAIN=local "$GO_BIN" test ./...
 
 echo "==> go vet"
 GOTOOLCHAIN=local "$GO_BIN" vet ./...
+
+echo "==> compat smoke"
+bash scripts/compat-smoke.sh
+
+echo "==> full smoke"
+bash tests/smoke.sh
 
 echo "==> dist artifact checks"
 git diff --check -- dist/vps.sh dist/vps.sh.sha256
