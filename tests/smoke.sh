@@ -354,6 +354,8 @@ split_csv_to_array $'Site1.Example.com site2.example.com，site3.example.com、s
 [[ "$(normalize_menu_choice_input " １ ")" == "1" ]]
 [[ "$(normalize_menu_choice_input "１０、")" == "10" ]]
 [[ "$(normalize_menu_choice_input "2)")" == "2" ]]
+[[ "$(LC_ALL=C normalize_menu_choice_input "１０、")" == "10" ]]
+[[ "$(LC_ALL=C normalize_menu_choice_input "３．")" == "3" ]]
 choice=""
 read_trimmed choice "" <<< " 返回 "
 [[ "$choice" == "0" ]]

@@ -628,8 +628,11 @@ normalize_menu_choice_input() {
     local value lower
     value="$(normalize_ascii_digits "$(trim_input "$1")")"
     case "$value" in
-        [0-9].|[0-9]\)|[0-9]、|[0-9]．|[0-9]）) value="${value%?}" ;;
-        [0-9][0-9].|[0-9][0-9]\)|[0-9][0-9]、|[0-9][0-9]．|[0-9][0-9]）) value="${value%?}" ;;
+        [0-9].|[0-9][0-9].) value="${value%.}" ;;
+        [0-9]\)|[0-9][0-9]\)) value="${value%)}" ;;
+        [0-9]、|[0-9][0-9]、) value="${value%、}" ;;
+        [0-9]．|[0-9][0-9]．) value="${value%．}" ;;
+        [0-9]）|[0-9][0-9]）) value="${value%）}" ;;
     esac
     lower=$(echo "$value" | tr '[:upper:]' '[:lower:]')
     case "$lower" in
