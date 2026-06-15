@@ -293,8 +293,8 @@ REALITY 节点不同。REALITY 更关注外部目标站点是否真实可访问�
 | 部署方式 | 使用入口 | 生效位置 | 影响范围 |
 | --- | --- | --- | --- |
 | 未启用 443 单入口，只用 Caddy/Nginx 反代 | 新增时用 `主菜单 [4 反代] -> [1 添加 Caddy 反代]` 或 `[2 添加 Nginx HTTPS 反代]`；已有域名用 `[4] -> [5 域名 IP 白名单]`；直接编辑配置用 `[4] -> [6 查看/编辑已应用配置文件]` | Caddy 当前域名站点块使用 `remote_ip` 匹配；Nginx HTTPS 反代使用 `allow/deny` 匹配 | 只影响当前 Caddy/Nginx Web 域名 |
-| 已启用 443 Nginx Stream 单入口 | `主菜单 [19 443 单入口管理中心] -> [9 管理 Web 域名 IP 白名单]` | Nginx stream 入口层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
-| 已启用 443 TCP Peek + Splice 单入口 | `主菜单 [19 443 单入口管理中心] -> [9 管理 Web 域名 IP 白名单]` | vpso-mux 入口层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
+| 已启用 443 Nginx Stream 单入口 | `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]` | Nginx stream 入口层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
+| 已启用 443 TCP Peek + Splice 单入口 | `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]` | vpso-mux 入口层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
 | `xray-fallback` + Nginx 本地 Web 反代 | 不允许新增或覆盖 Web 白名单 | 禁止使用；Xray fallback 到本地 Nginx 后无法可靠获得真实客户端源 IP | 如需白名单，请切到 Nginx Stream/TCP Peek，或选择 Caddy 作为 Web 反代引擎 |
 
 白名单支持单个 IP 和 CIDR，例如：

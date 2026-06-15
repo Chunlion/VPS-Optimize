@@ -470,7 +470,7 @@ func_nginx_manage_ip_whitelist() {
     echo -e "${BOLD}🔐 Nginx 域名 IP 白名单${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}适用于未启用 443 单入口、由 Nginx HTTPS 反代直接对外服务的域名。${PLAIN}"
-    echo -e "${YELLOW}如果该域名已接入 443 单入口，请用 [19] -> [9]，不要在 Nginx HTTP 层限制。${PLAIN}"
+    echo -e "${YELLOW}如果该域名已接入 443 单入口，请用主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]，不要在 Nginx HTTP 层限制。${PLAIN}"
     echo -e "------------------------------------------------"
 
     local domain domain_input conf_file action backup_file
