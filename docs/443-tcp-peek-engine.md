@@ -15,7 +15,7 @@
 - 使用 Nginx Stream 或 TCP Peek 时，Web 白名单在入口层按 `SNI + 源 IP` 生效；`xray-fallback + Nginx 本地 Web 反代` 不允许新增或覆盖 Web 白名单。
 - 只有一个服务可以监听公网 `443`：`nginx`、`xray` 或 `vpso-mux`。
 - 如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，按 `nginx-stream` 兼容处理。
-- `ENTRY_MODE` 和 `/etc/vps-optimize/443-engine.conf` 的 `engine` 统一写入 `nginx-stream`、`xray-fallback`、`tcp-peek`。旧版本写过的 `nginx_stream`、`xray_fallback`、`tcp_peek` 只作为读取兼容别名保留；脚本状态页会提示，下次保存、切换或重新应用时会写回新命名。
+- `ENTRY_MODE` 和 `/etc/vps-optimize/443-engine.conf` 的 `engine` 统一写入 `nginx-stream`、`xray-fallback`、`tcp-peek`。旧版本写过的 `nginx_stream`、`xray_fallback`、`tcp_peek` 只作为读取兼容别名保留；单个简单赋值会自动改写为新命名，无法安全改写时状态页会继续提示。
 
 常用菜单路径：
 

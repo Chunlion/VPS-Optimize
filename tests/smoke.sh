@@ -123,6 +123,11 @@ assert_file_contains scripts/build.sh 'scripts/modules.list' "Release build must
 assert_file_contains scripts/build.sh "sed '1{/^#!\\/usr\\/bin\\/env bash$/d;}'" "Release build must only strip module-level shebangs, not embedded script templates."
 assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/selfcheck.sh' "CI must call the shared selfcheck entrypoint."
 assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/compat-smoke.sh' "CI must call the compatibility smoke entrypoint."
+assert_file_contains .github/workflows/shell-syntax.yml 'windows-selfcheck-wrapper' "CI must include a lightweight Windows selfcheck.ps1 wrapper validation job."
+assert_file_contains .github/workflows/shell-syntax.yml 'runs-on: windows-latest' "Windows wrapper validation must run on a Windows runner."
+assert_file_contains .github/workflows/shell-syntax.yml '[System.Management.Automation.Language.Parser]::ParseFile' "Windows wrapper validation must parse scripts/selfcheck.ps1 without running the full selfcheck."
+assert_file_contains .github/workflows/shell-syntax.yml 'scripts/selfcheck.ps1 is missing required WSL delegation contract' "Windows wrapper validation must enforce the WSL delegation contract."
+assert_file_contains .github/workflows/shell-syntax.yml 'must delegate to scripts/selfcheck.sh instead of inlining' "Windows wrapper validation must reject duplicate inline Linux checks."
 assert_file_contains scripts/selfcheck.sh 'tests/smoke.sh' "Bash selfcheck must syntax-check the full smoke gate."
 assert_file_contains scripts/selfcheck.sh 'bash tests/golden-render.sh' "Bash selfcheck must run golden render validation."
 assert_file_contains scripts/selfcheck.sh 'bash scripts/compat-smoke.sh' "Bash selfcheck must run compatibility smoke validation."
@@ -844,19 +849,29 @@ fi
     source src/tcp_peek_engine.sh
     entry_mode_tmp_dir=$(mktemp -d /tmp/vps-entry-mode-smoke.XXXXXX)
     single_443_engine_state_path() { printf '%s\n' "$entry_mode_tmp_dir/443-engine.conf"; }
-    get_entry_mode() { printf '%s' "${SMOKE_ENTRY_MODE:-nginx-stream}"; }
+    sni_stack_env_path() { printf '%s\n' "$entry_mode_tmp_dir/sni-stack.env"; }
 
     [[ "$(normalize_entry_mode_name "nginx_stream")" == "nginx-stream" ]]
     [[ "$(normalize_entry_mode_name "xray_fallback")" == "xray-fallback" ]]
     [[ "$(normalize_entry_mode_name "tcp_peek")" == "tcp-peek" ]]
     [[ "$(entry_mode_engine_name "tcp_peek")" == "tcp-peek" ]]
 
-    SMOKE_ENTRY_MODE="tcp-peek"
+    printf '%s\n' "ENTRY_MODE='tcp_peek'" > "$(sni_stack_env_path)"
+    [[ "$(get_entry_mode)" == "tcp-peek" ]]
+    grep -Fq "ENTRY_MODE='tcp-peek'" "$(sni_stack_env_path)"
     [[ "$(single_443_current_engine)" == "tcp-peek" ]]
+
+    printf '%s\n' "ENTRY_MODE='nginx_stream'" "ENTRY_MODE='tcp_peek'" > "$(sni_stack_env_path)"
+    [[ "$(get_entry_mode)" == "tcp-peek" ]]
+    grep -Fq "ENTRY_MODE='nginx_stream'" "$(sni_stack_env_path)"
+    printf '%s\n' "ENTRY_MODE='tcp-peek'" > "$(sni_stack_env_path)"
+
     printf '%s\n' "engine='tcp_peek'" > "$(single_443_engine_state_path)"
     [[ "$(single_443_current_engine)" == "tcp-peek" ]]
+    grep -Fq "engine='tcp-peek'" "$(single_443_engine_state_path)"
     printf '%s\n' "engine='nginx_stream'" > "$(single_443_engine_state_path)"
     [[ "$(single_443_current_engine)" == "nginx-stream" ]]
+    grep -Fq "engine='nginx-stream'" "$(single_443_engine_state_path)"
     printf '%s\n' "engine='xray-fallback'" > "$(single_443_engine_state_path)"
     [[ "$(single_443_current_engine)" == "xray-fallback" ]]
 
@@ -867,6 +882,7 @@ fi
     grep -Fq '已选择 443 入口模式：nginx-stream' "$initial_entry_output"
 
     rm -f "$(single_443_engine_state_path)"
+    rm -f "$(sni_stack_env_path)"
     rm -f "$initial_entry_output"
     rmdir "$entry_mode_tmp_dir"
 )

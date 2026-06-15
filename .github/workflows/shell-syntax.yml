@@ -29,6 +29,53 @@ jobs:
         run: |
           bash scripts/selfcheck.sh
 
+  windows-selfcheck-wrapper:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate selfcheck.ps1 wrapper
+        shell: pwsh
+        run: |
+          $path = (Resolve-Path "scripts/selfcheck.ps1").Path
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+          $script = Get-Content -Raw -Path $path
+          $required = @(
+            'Get-Command wsl.exe',
+            'wslpath -a -u',
+            'bash scripts/selfcheck.sh',
+            'exit $exitCode'
+          )
+          foreach ($needle in $required) {
+            if (-not $script.Contains($needle)) {
+              Write-Error "scripts/selfcheck.ps1 is missing required WSL delegation contract: $needle"
+              exit 1
+            }
+          }
+
+          $forbiddenInlineChecks = @(
+            'bash scripts/build.sh',
+            'bash scripts/compat-smoke.sh',
+            'bash tests/smoke.sh',
+            'bash tests/golden-render.sh',
+            'go test ./...',
+            'go vet ./...'
+          )
+          foreach ($needle in $forbiddenInlineChecks) {
+            if ($script.Contains($needle)) {
+              Write-Error "scripts/selfcheck.ps1 must delegate to scripts/selfcheck.sh instead of inlining: $needle"
+              exit 1
+            }
+          }
+
   container-compat:
     runs-on: ubuntu-latest
     strategy:

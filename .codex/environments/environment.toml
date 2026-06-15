@@ -15,18 +15,14 @@ go version
 shellcheck --version | head -n 1 || true
 
 echo "==> baseline checks"
-bash scripts/build.sh
 bash scripts/selfcheck.sh
-bash scripts/compat-smoke.sh
-go test ./...
-go vet ./...
 git diff --check
 '''
 
 [setup.win32]
 script = '''
 $wslPath = wsl wslpath -u "$env:CODEX_WORKTREE_PATH"
-wsl bash -lc "cd '$wslPath' && pwd && git status --short && bash scripts/build.sh && bash scripts/selfcheck.sh && bash scripts/compat-smoke.sh && go test ./... && go vet ./... && git diff --check"
+wsl bash -lc "cd '$wslPath' && pwd && git status --short && bash scripts/selfcheck.sh && git diff --check"
 '''
 
 [cleanup]

@@ -1,9 +1,42 @@
 # shellcheck shell=bash
 # 443 entry mode state, listener detection, and compatibility helpers.
 
+sni_stack_env_path() {
+    echo "/etc/vps-optimize/sni-stack.env"
+}
+
+canonical_legacy_entry_mode_name() {
+    case "$1" in
+        "nginx_stream") echo "nginx-stream" ;;
+        "xray_fallback") echo "xray-fallback" ;;
+        "tcp_peek") echo "tcp-peek" ;;
+        *) return 1 ;;
+    esac
+}
+
+rewrite_legacy_entry_mode_assignment() {
+    local file="$1"
+    local key="$2"
+    local legacy_value="$3"
+    local canonical_value assignment_count
+
+    canonical_value=$(canonical_legacy_entry_mode_name "$legacy_value" 2>/dev/null) || return 1
+    [[ -f "$file" && -w "$file" ]] || return 1
+
+    assignment_count=$(grep -Ec "^[[:space:]]*${key}[[:space:]]*=" "$file" 2>/dev/null || true)
+    [[ "$assignment_count" == "1" ]] || return 1
+    grep -Eq "^[[:space:]]*${key}[[:space:]]*=[[:space:]]*('${legacy_value}'|\"${legacy_value}\"|${legacy_value})[[:space:]]*$" "$file" 2>/dev/null || return 1
+
+    sed -i -E \
+        -e "s|^([[:space:]]*${key}[[:space:]]*=[[:space:]]*)'${legacy_value}'[[:space:]]*$|\\1'${canonical_value}'|" \
+        -e "s|^([[:space:]]*${key}[[:space:]]*=[[:space:]]*)\"${legacy_value}\"[[:space:]]*$|\\1\"${canonical_value}\"|" \
+        -e "s|^([[:space:]]*${key}[[:space:]]*=[[:space:]]*)${legacy_value}[[:space:]]*$|\\1${canonical_value}|" \
+        "$file"
+}
+
 get_entry_mode() {
-    local env_file="/etc/vps-optimize/sni-stack.env"
-    local mode=""
+    local env_file mode=""
+    env_file=$(sni_stack_env_path)
 
     if [[ ! -f "$env_file" ]]; then
         echo "not-configured"
@@ -19,12 +52,15 @@ get_entry_mode() {
 
     case "$mode" in
         ""|"nginx-stream"|"nginx_stream")
+            rewrite_legacy_entry_mode_assignment "$env_file" "ENTRY_MODE" "$mode" 2>/dev/null || true
             echo "nginx-stream"
             ;;
         "xray-fallback"|"xray_fallback")
+            rewrite_legacy_entry_mode_assignment "$env_file" "ENTRY_MODE" "$mode" 2>/dev/null || true
             echo "xray-fallback"
             ;;
         "tcp-peek"|"tcp_peek")
+            rewrite_legacy_entry_mode_assignment "$env_file" "ENTRY_MODE" "$mode" 2>/dev/null || true
             echo "tcp-peek"
             ;;
         *)
@@ -34,8 +70,9 @@ get_entry_mode() {
 }
 
 print_entry_mode_compat_notice() {
-    local env_file="/etc/vps-optimize/sni-stack.env"
+    local env_file
     local state_file env_mode state_engine normalized
+    env_file=$(sni_stack_env_path)
     state_file=$(single_443_engine_state_path 2>/dev/null || echo "/etc/vps-optimize/443-engine.conf")
 
     if [[ -f "$env_file" ]]; then
@@ -51,7 +88,9 @@ print_entry_mode_compat_notice() {
             case "$env_mode" in
                 "nginx_stream"|"xray_fallback"|"tcp_peek")
                     normalized=$(normalize_entry_mode_name "$env_mode" 2>/dev/null || echo "nginx-stream")
-                    echo -e "${YELLOW}兼容提示：检测到旧 ENTRY_MODE='${env_mode}'，当前按 '${normalized}' 读取；下次保存会写入新命名。${PLAIN}"
+                    if ! rewrite_legacy_entry_mode_assignment "$env_file" "ENTRY_MODE" "$env_mode" 2>/dev/null; then
+                        echo -e "${YELLOW}兼容提示：检测到旧 ENTRY_MODE='${env_mode}'，当前按 '${normalized}' 读取；下次保存会写入新命名。${PLAIN}"
+                    fi
                     ;;
             esac
         fi
@@ -67,7 +106,9 @@ print_entry_mode_compat_notice() {
         case "$state_engine" in
             "nginx_stream"|"xray_fallback"|"tcp_peek")
                 normalized=$(normalize_entry_mode_name "$state_engine" 2>/dev/null || echo "nginx-stream")
-                echo -e "${YELLOW}兼容提示：检测到旧 engine='${state_engine}'，当前按 '${normalized}' 读取；下次切换/重新应用会写入新命名。${PLAIN}"
+                if ! rewrite_legacy_entry_mode_assignment "$state_file" "engine" "$state_engine" 2>/dev/null; then
+                    echo -e "${YELLOW}兼容提示：检测到旧 engine='${state_engine}'，当前按 '${normalized}' 读取；下次切换/重新应用会写入新命名。${PLAIN}"
+                fi
                 ;;
         esac
     fi
@@ -75,7 +116,8 @@ print_entry_mode_compat_notice() {
 
 set_entry_mode() {
     local mode="$1"
-    local env_file="/etc/vps-optimize/sni-stack.env"
+    local env_file
+    env_file=$(sni_stack_env_path)
 
     case "$mode" in
         "nginx_stream") mode="nginx-stream" ;;
@@ -91,7 +133,7 @@ set_entry_mode() {
             ;;
     esac
 
-    mkdir -p /etc/vps-optimize
+    mkdir -p "$(dirname "$env_file")"
     if [[ -f "$env_file" ]] && grep -q '^ENTRY_MODE=' "$env_file" 2>/dev/null; then
         sed -i "s|^ENTRY_MODE=.*|ENTRY_MODE='${mode}'|" "$env_file"
     else
@@ -211,8 +253,9 @@ listener_info_has_entry() {
 }
 
 detect_current_entry_status() {
-    local env_file="/etc/vps-optimize/sni-stack.env"
+    local env_file
     local listener_info expected_listener xui_svc xui_status
+    env_file=$(sni_stack_env_path)
 
     ENTRY_STATUS_MODE=$(get_entry_mode)
     ENTRY_STATUS_CADDY_ADDR="not-configured"

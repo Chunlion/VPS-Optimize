@@ -36,6 +36,9 @@ single_443_current_engine() {
         if [[ -n "$raw_engine" ]]; then
             normalized=$(normalize_entry_mode_name "$raw_engine" 2>/dev/null || true)
             if [[ -n "$normalized" ]]; then
+                if declare -F rewrite_legacy_entry_mode_assignment >/dev/null 2>&1; then
+                    rewrite_legacy_entry_mode_assignment "$state_file" "engine" "$raw_engine" 2>/dev/null || true
+                fi
                 printf '%s' "$normalized"
             else
                 printf 'invalid:%s' "$raw_engine"
