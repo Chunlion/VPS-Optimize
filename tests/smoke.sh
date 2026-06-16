@@ -157,6 +157,7 @@ assert_file_contains scripts/selfcheck-ps1-contract.ps1 '[System.Management.Auto
 assert_file_contains scripts/selfcheck-ps1-contract.ps1 'VPSO_WSL_EXE' "PowerShell contract test must mock WSL instead of running the real Linux selfcheck."
 assert_file_contains scripts/selfcheck-ps1-contract.ps1 "cd '/mnt/c/Users/O'\\''Brian/VPS-Optimize'" "PowerShell contract test must verify Bash path quoting."
 assert_file_contains scripts/selfcheck-ps1-contract.ps1 'exit code 37' "PowerShell contract test must verify WSL bash exit-code passthrough."
+assert_file_contains scripts/selfcheck-ps1-contract.ps1 'exit 0' "PowerShell contract test must explicitly return success after mocked failure checks."
 assert_file_contains scripts/selfcheck.sh 'tests/smoke.sh' "Bash selfcheck must syntax-check the full smoke gate."
 assert_file_contains scripts/selfcheck.sh 'bash tests/golden-render.sh' "Bash selfcheck must run golden render validation."
 assert_file_contains scripts/selfcheck.sh 'bash scripts/compat-smoke.sh' "Bash selfcheck must run compatibility smoke validation."

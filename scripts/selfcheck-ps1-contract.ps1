@@ -98,3 +98,4 @@ finally {
 }
 
 Write-Host "selfcheck.ps1 WSL contract passed."
+exit 0
