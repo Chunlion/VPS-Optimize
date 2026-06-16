@@ -54,6 +54,7 @@ Rules for new code:
 - `vpso_mux_state.sh` owns vpso-mux paths, 443 engine state, and runtime status display.
 - `vpso_mux_config.sh` owns vpso-mux YAML rendering.
 - `vpso_mux_install.sh` owns vpso-mux build, install, systemd, and failure-context helpers.
+- `sni_stack_config.sh` owns entry-mode state compatibility helpers; `entry_mode_state.sh` is not part of the release build.
 - `tcp_peek_engine.sh` owns TCP Peek preflight plus entry-mode preview, cutover, rollback, and reapply workflows.
 - Do not reintroduce split shadow modules such as `entry_mode_cutover.sh` or `tcp_peek_preflight.sh`; they are not part of `scripts/build.sh` and would create stale implementations.
 

@@ -252,11 +252,11 @@ func_sni_stack_quick_menu() {
         echo -e "${YELLOW}说明：三种 443 入口不是三套独立安装器；[2] 建立共享配置，[3]/[4]/[5] 负责检查依赖、生成目标配置并切换入口。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
-        echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q/back/返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local sni_choice
-        read_trimmed sni_choice "👉 请选择操作: "
+        read_trimmed sni_choice "👉 请输入菜单编号或 ?: "
         case "$sni_choice" in
             1) show_current_entry_status ;;
             2) func_caddy_cf_reality_wizard ;;
@@ -276,9 +276,9 @@ func_sni_stack_quick_menu() {
             16) start_tcp_peek_test_port ;;
             17) tcp_peek_dry_run_config ;;
             18) view_vpso_mux_logs ;;
-            "?"|help) show_sni_help; pause_return ;;
-            0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+            "?"|help) show_sni_help; pause_return; continue ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}"; sleep 1 ;;
         esac
         echo ""
         read -n 1 -s -r -p "按任意键继续..."

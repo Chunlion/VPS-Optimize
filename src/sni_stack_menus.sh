@@ -20,11 +20,12 @@ manage_sni_stack_sites() {
         echo -e "${GREEN}  8. 切换 Web 反代引擎${PLAIN}       ${YELLOW}(Caddy / Nginx 本地反代)${PLAIN}"
         echo -e "${GREEN}  9. 修改面板域名${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
+        echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q/back/返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "👉 请选择操作: "
+        read_trimmed choice "👉 请输入菜单编号或 ?: "
         case "$choice" in
             1) list_sni_stack_sites ;;
             2) add_sni_stack_site ;;
@@ -35,8 +36,9 @@ manage_sni_stack_sites() {
             7) sni_stack_health_check ;;
             8) switch_sni_stack_web_proxy_engine ;;
             9) edit_sni_stack_panel_domain_profile ;;
-            0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
+            "?"|help) show_sni_help; pause_return; continue ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" ;;
         esac
         echo ""
         read -n 1 -s -r -p "按任意键继续..."

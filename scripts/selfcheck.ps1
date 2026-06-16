@@ -2,13 +2,14 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$wslCommand = if ([string]::IsNullOrWhiteSpace($env:VPSO_WSL_EXE)) { "wsl.exe" } else { $env:VPSO_WSL_EXE }
 
-if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+if (-not (Get-Command $wslCommand -ErrorAction SilentlyContinue)) {
     Write-Host "wsl.exe not found. Run this validation from Windows with WSL installed." -ForegroundColor Red
     exit 1
 }
 
-$wslRepoRoot = (& wsl.exe -e wslpath -a -u $repoRoot 2>$null)
+$wslRepoRoot = (& $wslCommand -e wslpath -a -u $repoRoot 2>$null)
 $wslPathExitCode = $LASTEXITCODE
 if ($wslPathExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($wslRepoRoot)) {
     Write-Host "Failed to convert repository path to a WSL path: $repoRoot" -ForegroundColor Red
@@ -30,7 +31,7 @@ function Invoke-WslBash {
     Write-Host "==> $Label (WSL)"
     $quotedRepoRoot = ConvertTo-BashLiteral $script:wslRepoRoot
     $bashCommand = "set -euo pipefail; cd $quotedRepoRoot; $Command"
-    & wsl.exe -e bash -lc $bashCommand
+    & $script:wslCommand -e bash -lc $bashCommand
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
         Write-Host "WSL validation step failed: $Label (exit $exitCode)" -ForegroundColor Red

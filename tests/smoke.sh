@@ -82,6 +82,33 @@ assert_function_body_contains() {
     fi
 }
 
+function_body_from_file() {
+    local file="$1"
+    local function_name="$2"
+    awk -v fn="$function_name" '
+        $0 ~ "^" fn "\\(\\) \\{" { in_fn = 1 }
+        in_fn { print }
+        in_fn && $0 == "}" { exit }
+    ' "$file"
+}
+
+assert_shadow_function_matches_release_owner() {
+    local shadow_file="$1"
+    local owner_file="$2"
+    local function_name="$3"
+    local shadow_body owner_body
+    shadow_body=$(function_body_from_file "$shadow_file" "$function_name")
+    owner_body=$(function_body_from_file "$owner_file" "$function_name")
+    if [[ -z "$shadow_body" || -z "$owner_body" ]]; then
+        echo "${function_name} must exist in both ${shadow_file} and release owner ${owner_file}." >&2
+        exit 1
+    fi
+    if [[ "$shadow_body" != "$owner_body" ]]; then
+        echo "${function_name} in ${shadow_file} must match release owner ${owner_file}; edit the built module first." >&2
+        exit 1
+    fi
+}
+
 module_list_entries() {
     awk '
         {
@@ -125,14 +152,17 @@ assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/selfcheck.
 assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/compat-smoke.sh' "CI must call the compatibility smoke entrypoint."
 assert_file_contains .github/workflows/shell-syntax.yml 'windows-selfcheck-wrapper' "CI must include a lightweight Windows selfcheck.ps1 wrapper validation job."
 assert_file_contains .github/workflows/shell-syntax.yml 'runs-on: windows-latest' "Windows wrapper validation must run on a Windows runner."
-assert_file_contains .github/workflows/shell-syntax.yml '[System.Management.Automation.Language.Parser]::ParseFile' "Windows wrapper validation must parse scripts/selfcheck.ps1 without running the full selfcheck."
-assert_file_contains .github/workflows/shell-syntax.yml 'scripts/selfcheck.ps1 is missing required WSL delegation contract' "Windows wrapper validation must enforce the WSL delegation contract."
-assert_file_contains .github/workflows/shell-syntax.yml 'must delegate to scripts/selfcheck.sh instead of inlining' "Windows wrapper validation must reject duplicate inline Linux checks."
+assert_file_contains .github/workflows/shell-syntax.yml './scripts/selfcheck-ps1-contract.ps1' "Windows wrapper validation must run the focused selfcheck.ps1 contract test."
+assert_file_contains scripts/selfcheck-ps1-contract.ps1 '[System.Management.Automation.Language.Parser]::ParseFile' "PowerShell contract test must parse scripts/selfcheck.ps1."
+assert_file_contains scripts/selfcheck-ps1-contract.ps1 'VPSO_WSL_EXE' "PowerShell contract test must mock WSL instead of running the real Linux selfcheck."
+assert_file_contains scripts/selfcheck-ps1-contract.ps1 "cd '/mnt/c/Users/O'\\''Brian/VPS-Optimize'" "PowerShell contract test must verify Bash path quoting."
+assert_file_contains scripts/selfcheck-ps1-contract.ps1 'exit code 37' "PowerShell contract test must verify WSL bash exit-code passthrough."
 assert_file_contains scripts/selfcheck.sh 'tests/smoke.sh' "Bash selfcheck must syntax-check the full smoke gate."
 assert_file_contains scripts/selfcheck.sh 'bash tests/golden-render.sh' "Bash selfcheck must run golden render validation."
 assert_file_contains scripts/selfcheck.sh 'bash scripts/compat-smoke.sh' "Bash selfcheck must run compatibility smoke validation."
 assert_file_contains scripts/selfcheck.sh 'bash tests/smoke.sh' "Bash selfcheck must run full smoke validation."
 assert_file_contains scripts/selfcheck.ps1 'wsl.exe' "PowerShell selfcheck wrapper must execute validation through WSL."
+assert_file_contains scripts/selfcheck.ps1 'VPSO_WSL_EXE' "PowerShell selfcheck wrapper must support a mockable WSL command for CI contract tests."
 assert_file_contains scripts/selfcheck.ps1 'bash scripts/selfcheck.sh' "PowerShell selfcheck wrapper must delegate to the Bash selfcheck through WSL."
 assert_file_contains scripts/selfcheck.ps1 'exit $exitCode' "PowerShell selfcheck wrapper must pass through the failing WSL exit code."
 assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read the shared module list."
@@ -244,6 +274,10 @@ fi
 assert_file_not_contains dist/vps.sh '# Module: sni_stack_web_sites.sh' "Release script must not include the stale sni_stack_web_sites module."
 assert_path_absent "src/entry_mode_cutover.sh" "entry_mode_cutover.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
 assert_path_absent "src/tcp_peek_preflight.sh" "tcp_peek_preflight.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
+if module_list_entries | grep -Fxq 'entry_mode_state'; then
+    echo "entry_mode_state.sh is a non-release shadow; entry-mode fixes must land in src/sni_stack_config.sh." >&2
+    exit 1
+fi
 if module_list_entries | grep -Fxq 'entry_mode_cutover'; then
     echo "Stale entry-mode cutover module must not be added to the release build." >&2
     exit 1
@@ -252,8 +286,47 @@ if module_list_entries | grep -Fxq 'tcp_peek_preflight'; then
     echo "Stale TCP Peek preflight module must not be added to the release build." >&2
     exit 1
 fi
+assert_file_not_contains dist/vps.sh '# Module: entry_mode_state.sh' "Release script must not include non-release entry_mode_state.sh."
+expected_entry_mode_shadow_functions=$(cat <<'ENTRY_MODE_SHADOW_FUNCTIONS'
+canonical_legacy_entry_mode_name
+entry_mode_expected_listener
+get_entry_mode
+print_entry_mode_compat_notice
+rewrite_legacy_entry_mode_assignment
+set_entry_mode
+sni_stack_env_path
+ENTRY_MODE_SHADOW_FUNCTIONS
+)
+actual_entry_mode_shadow_functions=$(grep -E '^[A-Za-z_][A-Za-z0-9_]*\(\) \{' src/entry_mode_state.sh \
+    | sed 's/().*//' \
+    | grep -E '(^get_entry_mode$|entry_mode|legacy|sni_stack_env_path|compat|rewrite|canonical)' \
+    | sort)
+if ! diff -u <(printf '%s\n' "$expected_entry_mode_shadow_functions" | sort) <(printf '%s\n' "$actual_entry_mode_shadow_functions") >/dev/null; then
+    echo "src/entry_mode_state.sh contains unexpected release-owned entry-mode helpers; edit src/sni_stack_config.sh instead." >&2
+    diff -u <(printf '%s\n' "$expected_entry_mode_shadow_functions" | sort) <(printf '%s\n' "$actual_entry_mode_shadow_functions") >&2 || true
+    exit 1
+fi
+while IFS= read -r function_name; do
+    [[ -n "$function_name" ]] || continue
+    assert_shadow_function_matches_release_owner "src/entry_mode_state.sh" "src/sni_stack_config.sh" "$function_name"
+    assert_dist_contains "${function_name}()" "Release script must include entry-mode helper ${function_name} from built modules."
+done <<< "$expected_entry_mode_shadow_functions"
 assert_file_contains src/README.md '443/TCP Peek ownership:' "Source README must document 443/TCP Peek module ownership."
 assert_file_contains src/README.md 'Do not reintroduce split shadow modules' "Source README must warn against stale split 443/TCP Peek modules."
+assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites 'read_trimmed choice "👉 请输入菜单编号或 ?: "' "443 Web/SNI submenu must prompt for a menu number or help."
+assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile 'read_trimmed choice "👉 请输入菜单编号或 ?: "' "443 shared-parameter submenu must prompt for a menu number or help."
+assert_function_body_contains src/menus.sh func_sni_stack_quick_menu 'read_trimmed sni_choice "👉 请输入菜单编号或 ?: "' "443 single-entry menu must prompt for a menu number or help."
+assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '"?"|help) show_sni_help; pause_return; continue ;;' "443 Web/SNI submenu must accept ? help."
+assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '"?"|help) show_sni_help; pause_return; continue ;;' "443 shared-parameter submenu must accept ? help."
+assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '"?"|help) show_sni_help; pause_return; continue ;;' "443 single-entry menu must accept ? help."
+assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '0) break ;;' "443 Web/SNI submenu must rely on normalized back words."
+assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '0) break ;;' "443 shared-parameter submenu must rely on normalized back words."
+assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '0) break ;;' "443 single-entry menu must rely on normalized back words."
+assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites 'q/back/返回' "443 Web/SNI submenu must advertise common back words."
+assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile 'q/back/返回' "443 shared-parameter submenu must advertise common back words."
+assert_function_body_contains src/menus.sh func_sni_stack_quick_menu 'q/back/返回' "443 single-entry menu must advertise common back words."
+assert_dist_contains '请输入菜单编号或 ?' "Release script must include hardened 443 menu prompts."
+assert_dist_contains '❌ 无效选择，请输入菜单编号或 ?。' "Release script must include hardened 443 invalid-choice guidance."
 if command -v go >/dev/null 2>&1; then
     GO_BIN=go
 elif command -v go.exe >/dev/null 2>&1; then

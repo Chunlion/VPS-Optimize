@@ -8847,19 +8847,21 @@ edit_sni_stack_runtime_profile() {
         echo -e "${GREEN}  4. 修改面板域名${PLAIN}"
         echo -e "${GREEN}  5. 重新应用当前保存的配置${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
+        echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q/back/返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "👉 请选择要修改的配置: "
+        read_trimmed choice "👉 请输入菜单编号或 ?: "
         case "$choice" in
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;
             3) edit_sni_stack_entry_profile ;;
             4) edit_sni_stack_panel_domain_profile ;;
             5) reapply_sni_stack_from_env ;;
-            0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择。${PLAIN}"; sleep 1 ;;
+            "?"|help) show_sni_help; pause_return; continue ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}"; sleep 1 ;;
         esac
         echo ""
         read -n 1 -s -r -p "按任意键继续..."
@@ -10981,11 +10983,12 @@ manage_sni_stack_sites() {
         echo -e "${GREEN}  8. 切换 Web 反代引擎${PLAIN}       ${YELLOW}(Caddy / Nginx 本地反代)${PLAIN}"
         echo -e "${GREEN}  9. 修改面板域名${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
+        echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q/back/返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "👉 请选择操作: "
+        read_trimmed choice "👉 请输入菜单编号或 ?: "
         case "$choice" in
             1) list_sni_stack_sites ;;
             2) add_sni_stack_site ;;
@@ -10996,8 +10999,9 @@ manage_sni_stack_sites() {
             7) sni_stack_health_check ;;
             8) switch_sni_stack_web_proxy_engine ;;
             9) edit_sni_stack_panel_domain_profile ;;
-            0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}" ;;
+            "?"|help) show_sni_help; pause_return; continue ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" ;;
         esac
         echo ""
         read -n 1 -s -r -p "按任意键继续..."
@@ -18666,11 +18670,11 @@ func_sni_stack_quick_menu() {
         echo -e "${YELLOW}说明：三种 443 入口不是三套独立安装器；[2] 建立共享配置，[3]/[4]/[5] 负责检查依赖、生成目标配置并切换入口。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
-        echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 返回主菜单 / q/back/返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local sni_choice
-        read_trimmed sni_choice "👉 请选择操作: "
+        read_trimmed sni_choice "👉 请输入菜单编号或 ?: "
         case "$sni_choice" in
             1) show_current_entry_status ;;
             2) func_caddy_cf_reality_wizard ;;
@@ -18690,9 +18694,9 @@ func_sni_stack_quick_menu() {
             16) start_tcp_peek_test_port ;;
             17) tcp_peek_dry_run_config ;;
             18) view_vpso_mux_logs ;;
-            "?"|help) show_sni_help; pause_return ;;
-            0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+            "?"|help) show_sni_help; pause_return; continue ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}"; sleep 1 ;;
         esac
         echo ""
         read -n 1 -s -r -p "按任意键继续..."

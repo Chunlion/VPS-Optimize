@@ -279,19 +279,21 @@ edit_sni_stack_runtime_profile() {
         echo -e "${GREEN}  4. 修改面板域名${PLAIN}"
         echo -e "${GREEN}  5. 重新应用当前保存的配置${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
+        echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
+        echo -e "${RED}  0. 返回上一级 / q/back/返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "👉 请选择要修改的配置: "
+        read_trimmed choice "👉 请输入菜单编号或 ?: "
         case "$choice" in
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;
             3) edit_sni_stack_entry_profile ;;
             4) edit_sni_stack_panel_domain_profile ;;
             5) reapply_sni_stack_from_env ;;
-            0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择。${PLAIN}"; sleep 1 ;;
+            "?"|help) show_sni_help; pause_return; continue ;;
+            0) break ;;
+            *) echo -e "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}"; sleep 1 ;;
         esac
         echo ""
         read -n 1 -s -r -p "按任意键继续..."
