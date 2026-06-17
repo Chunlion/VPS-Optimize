@@ -107,7 +107,7 @@ assert_file_contains src/traffic_guard.sh 'generated-content' "Traffic Guard che
 assert_file_contains src/traffic_guard.sh 'retry checker install once after generated content validation failure' "Traffic Guard checker install must retry generated-content validation failures once."
 assert_file_contains src/traffic_guard.sh 'traffic_guard_install_checker_or_report' "Traffic Guard first configuration failure path must print direct diagnostics."
 
-assert_file_contains xui-custom-manager.sh 'XUI_VERIFIED_VERSION="2.9.4"' "xui-custom-manager must declare the only verified 3x-ui version."
+assert_file_contains xui-custom-manager.sh 'XUI_VERIFIED_VERSIONS="${XUI_VERIFIED_VERSIONS:-2.9.4 3.3.1}"' "xui-custom-manager must declare the adapted 3x-ui versions."
 assert_file_contains xui-custom-manager.sh 'require_verified_xui_for_write' "xui-custom-manager must keep a write gate for unverified 3x-ui versions."
 assert_file_contains xui-custom-manager.sh 'require_verified_xui_for_write || return 1' "xui-custom-manager write paths must call the verified-version gate."
 assert_file_contains xui-custom-manager.sh 'require_verified_xui_for_write || {' "xui-custom-manager traffic calibration writes must call the verified-version gate."

@@ -1259,9 +1259,9 @@ assert_file_not_contains "docs/dog.md" '账单级准确' "dog.sh docs must not c
 assert_file_not_contains "docs/dog.md" '可作为账单依据' "dog.sh docs must not present dog.sh data as billing evidence."
 assert_file_not_contains "docs/dog.md" '可替代商家账单' "dog.sh docs must not present dog.sh data as a provider-bill replacement."
 
-assert_file_contains "docs/xui-custom-manager.md" '当前仅适配并验证 3x-ui v2.9.4' "xui-custom-manager docs must state only 3x-ui v2.9.4 is verified."
+assert_file_contains "docs/xui-custom-manager.md" '当前适配并验证 3x-ui v2.9.4 和 v3.3.1' "xui-custom-manager docs must state the adapted 3x-ui versions."
 assert_file_contains "docs/xui-custom-manager.md" '不适配版本不应执行写库功能' "xui-custom-manager docs must block write operations on unverified versions."
-assert_file_contains "docs/xui-custom-manager.md" '不要在非 3x-ui v2.9.4 上强行写库' "xui-custom-manager docs must keep write operations limited to 3x-ui v2.9.4."
+assert_file_contains "docs/xui-custom-manager.md" '不要在不适配的 3x-ui 版本上强行写库' "xui-custom-manager docs must keep write operations limited to adapted 3x-ui versions."
 assert_file_contains "docs/xui-custom-manager.md" '不要把未验证版本当作兼容版本使用' "xui-custom-manager docs must not imply unverified 3x-ui versions may work."
 assert_file_not_contains "docs/xui-custom-manager.md" '未验证版本可能可用' "xui-custom-manager docs must not imply unverified 3x-ui versions may work."
 assert_file_not_contains "docs/xui-custom-manager.md" '其它版本也可能兼容' "xui-custom-manager docs must not imply other 3x-ui versions may work."

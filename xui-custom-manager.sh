@@ -7,7 +7,8 @@ BACKUP_DIR="${BACKUP_DIR:-/root/x-ui-backups}"
 XUI_DB="${XUI_DB:-/etc/x-ui/x-ui.db}"
 XUI_ETC_DIR="${XUI_ETC_DIR:-/etc/x-ui}"
 XUI_PROGRAM_DIR="${XUI_PROGRAM_DIR:-/usr/local/x-ui}"
-XUI_VERIFIED_VERSION="2.9.4"
+XUI_VERIFIED_VERSIONS="${XUI_VERIFIED_VERSIONS:-2.9.4 3.3.1}"
+XUI_LATEST_VERIFIED_VERSION="3.3.1"
 LOG_FILE="${LOG_FILE:-/var/log/xui-custom-manager.log}"
 RESET_STATE="${RESET_STATE:-/var/lib/xui-custom-manager/reset-state.json}"
 RESET_SERVICE="${RESET_SERVICE:-/etc/systemd/system/xui-custom-reset.service}"
@@ -20,6 +21,9 @@ GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 CYAN='\033[1;36m'
+MAGENTA='\033[1;35m'
+WHITE='\033[1;37m'
+DIM='\033[2m'
 BOLD='\033[1m'
 PLAIN='\033[0m'
 
@@ -154,16 +158,41 @@ detect_xui_version() {
     echo "unknown"
 }
 
+format_verified_versions() {
+    local version output=""
+    for version in $XUI_VERIFIED_VERSIONS; do
+        if [ -z "$output" ]; then
+            output="v${version}"
+        else
+            output="${output}, v${version}"
+        fi
+    done
+    echo "$output"
+}
+
 xui_version_is_verified() {
-    [ "$(detect_xui_version)" = "$XUI_VERIFIED_VERSION" ]
+    local detected_version="${1:-}"
+    local version
+    detected_version="${detected_version:-$(detect_xui_version)}"
+    for version in $XUI_VERIFIED_VERSIONS; do
+        if [ "$detected_version" = "$version" ]; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 print_xui_version_warning() {
     local detected_version="${1:-}"
+    local verified_versions
     detected_version="${detected_version:-$(detect_xui_version)}"
-    echo -e "${YELLOW}兼容性提示：当前仅适配并验证 3x-ui v${XUI_VERIFIED_VERSION}。${PLAIN}"
-    echo -e "${YELLOW}当前检测版本：${detected_version}；已验证版本：${XUI_VERIFIED_VERSION}。${PLAIN}"
-    echo -e "${YELLOW}其它版本未适配，只允许备份、查看、预览和自检，不允许写库或启用自动重置。${PLAIN}"
+    verified_versions="$(format_verified_versions)"
+    if xui_version_is_verified "$detected_version"; then
+        echo -e "${GREEN}兼容性：当前 3x-ui v${detected_version} 已在适配列表内，写库前仍会校验数据库字段。${PLAIN}"
+    else
+        echo -e "${YELLOW}兼容性提示：当前 3x-ui v${detected_version} 不在适配列表内。${PLAIN}"
+        echo -e "${YELLOW}已适配版本：${verified_versions}。其它版本只允许备份、查看、预览和自检，不允许写库或启用自动重置。${PLAIN}"
+    fi
 }
 
 check_xui_db_schema_readonly() {
@@ -186,6 +215,10 @@ required = {
     "inbounds": {"id", "remark", "port", "up", "down", "total", "traffic_reset", "last_traffic_reset_time"},
     "client_traffics": {"id", "inbound_id", "email", "up", "down", "total", "enable"},
 }
+optional_relation = {
+    "clients": {"id", "email"},
+    "client_inbounds": {"client_id", "inbound_id"},
+}
 
 try:
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
@@ -195,14 +228,26 @@ except Exception as exc:
 
 try:
     missing = []
-    for table, columns in required.items():
+    def table_columns(table):
         rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
-        existing = {row[1] for row in rows}
+        return {row[1] for row in rows}
+
+    for table, columns in required.items():
+        existing = table_columns(table)
         if not existing:
             missing.append(f"{table}.*")
             continue
         for column in sorted(columns - existing):
             missing.append(f"{table}.{column}")
+    relation_tables_found = any(table_columns(table) for table in optional_relation)
+    if relation_tables_found:
+        for table, columns in optional_relation.items():
+            existing = table_columns(table)
+            if not existing:
+                missing.append(f"{table}.*")
+                continue
+            for column in sorted(columns - existing):
+                missing.append(f"{table}.{column}")
     if missing:
         print("数据库字段兼容检查失败，缺少：" + ", ".join(missing), file=sys.stderr)
         sys.exit(1)
@@ -214,9 +259,9 @@ PY
 require_verified_xui_for_write() {
     local detected_version
     detected_version="$(detect_xui_version)"
-    if [ "$detected_version" != "$XUI_VERIFIED_VERSION" ]; then
+    if ! xui_version_is_verified "$detected_version"; then
         print_xui_version_warning "$detected_version"
-        echo -e "${RED}错误：当前 3x-ui 版本未适配，仅 3x-ui v${XUI_VERIFIED_VERSION} 已验证，已禁止写库/启用 timer。${PLAIN}"
+        echo -e "${RED}错误：当前 3x-ui 版本未适配，已禁止写库/启用 timer。${PLAIN}"
         return 1
     fi
     if ! check_xui_db_schema_readonly; then
@@ -624,7 +669,9 @@ run_custom_reset_ui() {
     need_tty || return 1
 
     local xui_write_allowed=0
-    if xui_version_is_verified && check_xui_db_schema_readonly >/dev/null 2>&1; then
+    local detected_version
+    detected_version="$(detect_xui_version)"
+    if xui_version_is_verified "$detected_version" && check_xui_db_schema_readonly >/dev/null 2>&1; then
         xui_write_allowed=1
     fi
 
@@ -643,7 +690,40 @@ from pathlib import Path
 db_path = os.environ.get("XUI_DB", "/etc/x-ui/x-ui.db")
 config_path = Path(os.environ.get("CONFIG_FILE", "/etc/xui-custom-reset.json"))
 write_allowed = os.environ.get("XUI_WRITE_ALLOWED") == "1"
-verified_version = os.environ.get("XUI_VERIFIED_VERSION", "2.9.4")
+verified_versions = os.environ.get("XUI_VERIFIED_VERSIONS", "2.9.4 3.3.1")
+detected_version = os.environ.get("XUI_DETECTED_VERSION", "unknown")
+
+ANSI = {
+    "red": "\033[0;31m",
+    "green": "\033[1;32m",
+    "yellow": "\033[1;33m",
+    "blue": "\033[1;34m",
+    "magenta": "\033[1;35m",
+    "cyan": "\033[1;36m",
+    "white": "\033[1;37m",
+    "bold": "\033[1m",
+    "plain": "\033[0m",
+}
+
+def paint(text, color):
+    return f"{ANSI[color]}{text}{ANSI['plain']}"
+
+def title(text):
+    print(paint("================================================", "cyan"))
+    print(paint(text, "bold"))
+    print(paint("================================================", "cyan"))
+
+def separator():
+    print(paint("------------------------------------------------", "blue"))
+
+def menu_line(number, label, hint=""):
+    line = f" {paint(str(number) + '.', 'cyan')} {paint(label, 'green')}"
+    if hint:
+        line += f" {paint(hint, 'yellow')}"
+    print(line)
+
+def status_value(enabled, enabled_text="开启", disabled_text="关闭"):
+    return paint(enabled_text, "green") if enabled else paint(disabled_text, "red")
 
 def clear_screen():
     print("\033c", end="")
@@ -652,8 +732,9 @@ def pause():
     input("\n按回车返回菜单...")
 
 def print_write_blocked():
-    print(f"错误：当前版本未适配，仅 3x-ui v{verified_version} 已验证。")
-    print("其它版本只允许备份、查看、预览和自检，不允许修改配置、写库或启用自动重置。")
+    print(paint(f"错误：当前 3x-ui v{detected_version} 未适配。", "red"))
+    print(paint(f"已适配版本：{', '.join('v' + v for v in verified_versions.split())}。", "yellow"))
+    print(paint("其它版本只允许备份、查看、预览和自检，不允许修改配置、写库或启用自动重置。", "yellow"))
 
 def require_config_write():
     if write_allowed:
@@ -773,15 +854,44 @@ def load_db():
             inbounds = conn.execute("SELECT id, remark, port, traffic_reset FROM inbounds ORDER BY id").fetchall()
         except sqlite3.OperationalError:
             inbounds = conn.execute("SELECT id, remark, port, 'unknown' AS traffic_reset FROM inbounds ORDER BY id").fetchall()
-        try:
-            clients = conn.execute("SELECT id, inbound_id, email FROM client_traffics ORDER BY id").fetchall()
-        except sqlite3.OperationalError:
-            clients = []
+        clients = load_clients(conn)
         conn.close()
         return inbounds, clients
     except Exception as exc:
-        print(f"数据库读取失败：{exc}")
+        print(paint(f"数据库读取失败：{exc}", "red"))
         sys.exit(1)
+
+def table_columns(conn, table):
+    try:
+        return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    except sqlite3.OperationalError:
+        return set()
+
+def has_normalized_clients(conn):
+    return (
+        {"id", "email"} <= table_columns(conn, "clients")
+        and {"client_id", "inbound_id"} <= table_columns(conn, "client_inbounds")
+    )
+
+def load_clients(conn):
+    if has_normalized_clients(conn):
+        rows = conn.execute(
+            """
+            SELECT COALESCE(ct.id, 0) AS id,
+                   ci.inbound_id AS inbound_id,
+                   c.email AS email
+            FROM client_inbounds ci
+            JOIN clients c ON c.id = ci.client_id
+            LEFT JOIN client_traffics ct ON ct.email = c.email
+            WHERE COALESCE(c.email, '') <> ''
+            ORDER BY ci.inbound_id, c.id
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+    try:
+        return conn.execute("SELECT id, inbound_id, email FROM client_traffics ORDER BY id").fetchall()
+    except sqlite3.OperationalError:
+        return []
 
 config = load_config()
 inbounds, clients = load_db()
@@ -791,9 +901,7 @@ for client in clients:
 
 def show_config():
     clear_screen()
-    print("================================================")
-    print("🧭 3x-ui 外置增强管理 - 当前自定义重置配置")
-    print("================================================")
+    title("🧭 3x-ui 外置增强管理 - 当前自定义重置配置")
     print(json.dumps(config, ensure_ascii=False, indent=2))
     pause()
 
@@ -801,28 +909,26 @@ def manage_clients(inbound_id, inbound_cfg):
     clients_for_inbound = clients_by_inbound.get(str(inbound_id), [])
     while True:
         clear_screen()
-        print("================================================")
-        print("🧭 3x-ui 外置增强管理 - 客户端单独日期")
-        print("================================================")
-        print(f"入站 ID：{inbound_id}")
-        print("说明：不单独设置时，客户端按入站规则处理。")
-        print("------------------------------------------------")
+        title("🧭 3x-ui 外置增强管理 - 客户端单独日期")
+        print(f"{paint('入站 ID：', 'cyan')}{paint(inbound_id, 'white')}")
+        print(paint("说明：不单独设置时，客户端按入站规则处理。", "yellow"))
+        separator()
 
         if not clients_for_inbound:
-            print("当前入站没有客户端。")
+            print(paint("当前入站没有客户端。", "yellow"))
         for idx, client in enumerate(clients_for_inbound, start=1):
             email = client["email"] or "无邮箱"
             ccfg = inbound_cfg.get("clients", {}).get(email, {})
             if ccfg.get("enabled") and ccfg.get("day"):
-                status = f"每月 {ccfg['day']} 号"
+                status = paint(f"每月 {ccfg['day']} 号", "green")
             else:
-                status = "不单独设置"
-            print(f" {idx}. {email}")
+                status = paint("不单独设置", "yellow")
+            print(f" {paint(str(idx) + '.', 'cyan')} {paint(email, 'white')}")
             print(f"    {status}")
 
-        print("------------------------------------------------")
-        print(" 0. 返回上级 / q 返回")
-        print("================================================")
+        separator()
+        print(f" {paint('0.', 'red')} 返回上级 / q 返回")
+        print(paint("================================================", "cyan"))
 
         valid = {"0", "q", "Q"} | {str(i) for i in range(1, len(clients_for_inbound) + 1)}
         choice = input_choice("👉 请选择客户端: ", valid)
@@ -856,29 +962,27 @@ def manage_inbound(inbound):
 
     while True:
         clear_screen()
-        print("================================================")
-        print("🧭 3x-ui 外置增强管理 - 入站设置")
-        print("================================================")
-        print(f"ID：{iid}")
-        print(f"端口：{inbound['port']}")
-        print(f"备注：{inbound['remark'] or '无备注'}")
+        title("🧭 3x-ui 外置增强管理 - 入站设置")
+        print(f"{paint('ID：', 'cyan')}{paint(iid, 'white')}")
+        print(f"{paint('端口：', 'cyan')}{paint(str(inbound['port']), 'white')}")
+        print(f"{paint('备注：', 'cyan')}{paint(inbound['remark'] or '无备注', 'white')}")
         print()
-        print(f"外置重置：{'开启' if cfg.get('enabled') else '关闭'}")
-        print(f"入站日期：每月 {cfg.get('day', config.get('default_day', 1))} 号")
-        print(f"入站自身 up/down：{'重置' if cfg.get('reset_inbound', True) else '不重置'}")
-        print(f"未单独设置日期的客户端：{'跟随入站' if cfg.get('reset_clients_without_custom_day', False) else '忽略'}")
+        print(f"{paint('外置重置：', 'cyan')}{status_value(cfg.get('enabled'))}")
+        print(f"{paint('入站日期：', 'cyan')}{paint('每月 ' + str(cfg.get('day', config.get('default_day', 1))) + ' 号', 'white')}")
+        print(f"{paint('入站自身 up/down：', 'cyan')}{paint('重置', 'green') if cfg.get('reset_inbound', True) else paint('不重置', 'yellow')}")
+        print(f"{paint('未单独设置日期的客户端：', 'cyan')}{paint('跟随入站', 'green') if cfg.get('reset_clients_without_custom_day', False) else paint('忽略', 'yellow')}")
         if inbound["traffic_reset"] == "monthly":
             print()
-            print("提醒：面板原生 monthly 仍启用，请在 3x-ui 面板中改为 never/不重置。")
-        print("------------------------------------------------")
-        print(" 1. 开启/关闭该入站外置重置")
-        print(" 2. 设置该入站日期")
-        print(" 3. 开启/关闭重置入站自身 up/down")
-        print(" 4. 开启/关闭客户端跟随入站")
-        print(" 5. 管理客户端单独日期")
-        print("------------------------------------------------")
-        print(" 0. 返回上级 / q 返回")
-        print("================================================")
+            print(paint("提醒：面板原生 monthly 仍启用，请在 3x-ui 面板中改为 never/不重置。", "yellow"))
+        separator()
+        menu_line(1, "开启/关闭该入站外置重置")
+        menu_line(2, "设置该入站日期")
+        menu_line(3, "开启/关闭重置入站自身 up/down")
+        menu_line(4, "开启/关闭客户端跟随入站")
+        menu_line(5, "管理客户端单独日期")
+        separator()
+        print(f" {paint('0.', 'red')} 返回上级 / q 返回")
+        print(paint("================================================", "cyan"))
 
         choice = input_choice("👉 请选择操作: ", {"0", "q", "Q", "1", "2", "3", "4", "5"})
         if choice in {"0", "q", "Q"}:
@@ -900,28 +1004,26 @@ def manage_inbound(inbound):
 def choose_inbound():
     while True:
         clear_screen()
-        print("================================================")
-        print("🧭 3x-ui 外置增强管理 - 选择入站")
-        print("================================================")
+        title("🧭 3x-ui 外置增强管理 - 选择入站")
 
         if not inbounds:
-            print("未读取到入站。")
+            print(paint("未读取到入站。", "yellow"))
         for idx, inbound in enumerate(inbounds, start=1):
             iid = str(inbound["id"])
             cfg = config.get("inbounds", {}).get(iid, {})
-            enabled = "开启" if cfg.get("enabled") else "关闭"
+            enabled = status_value(cfg.get("enabled"))
             day = cfg.get("day", config.get("default_day", 1))
-            print(f" {idx}. ID={iid}  端口={inbound['port']}  备注={trunc(inbound['remark'])}")
-            print(f"    外置重置：{enabled}  日期：每月 {day} 号")
+            print(f" {paint(str(idx) + '.', 'cyan')} ID={paint(iid, 'white')}  端口={paint(str(inbound['port']), 'white')}  备注={paint(trunc(inbound['remark']), 'white')}")
+            print(f"    外置重置：{enabled}  日期：{paint('每月 ' + str(day) + ' 号', 'green')}")
             if inbound["traffic_reset"] == "monthly":
-                print("    面板原生：monthly  警告：请在面板中改为 never/不重置")
+                print(f"    面板原生：{paint('monthly', 'red')}  {paint('警告：请在面板中改为 never/不重置', 'yellow')}")
             else:
-                print(f"    面板原生：{inbound['traffic_reset'] or 'unknown'}")
+                print(f"    面板原生：{paint(inbound['traffic_reset'] or 'unknown', 'white')}")
             print()
 
-        print("------------------------------------------------")
-        print(" 0. 返回上级 / q 返回")
-        print("================================================")
+        separator()
+        print(f" {paint('0.', 'red')} 返回上级 / q 返回")
+        print(paint("================================================", "cyan"))
 
         valid = {"0", "q", "Q"} | {str(i) for i in range(1, len(inbounds) + 1)}
         choice = input_choice("👉 请选择入站: ", valid)
@@ -931,28 +1033,26 @@ def choose_inbound():
 
 while True:
     clear_screen()
-    print("================================================")
-    print("🧭 3x-ui 外置增强管理 - 自定义流量重置日期")
-    print("================================================")
-    print(f"全局状态：{'启用' if config.get('enabled') else '禁用'}")
-    print(f"默认日期：每月 {config.get('default_day', 1)} 号")
-    print(f"自动检查：{'已启用' if timer_status() else '未启用'}")
+    title("🧭 3x-ui 外置增强管理 - 自定义流量重置日期")
+    print(f"{paint('全局状态：', 'cyan')}{status_value(config.get('enabled'), '启用', '禁用')}")
+    print(f"{paint('默认日期：', 'cyan')}{paint('每月 ' + str(config.get('default_day', 1)) + ' 号', 'white')}")
+    print(f"{paint('自动检查：', 'cyan')}{status_value(timer_status(), '已启用', '未启用')}")
     print()
     if not write_allowed:
-        print(f"兼容性：当前仅适配并验证 3x-ui v{verified_version}。")
-        print("当前只允许查看配置和预览，不允许修改配置或启用自动重置。")
+        print(paint(f"兼容性：当前 3x-ui v{detected_version} 未适配。", "yellow"))
+        print(paint("当前只允许查看配置和预览，不允许修改配置或启用自动重置。", "yellow"))
         print()
-    print("提示：请在 3x-ui 面板里关闭对应入站的原生 monthly 重置。")
-    print("如果只是想看本次会影响谁，选 [4]，会先预览，输入 YES 才会执行。")
-    print("------------------------------------------------")
-    print(" 1. 开启/关闭自定义重置")
-    print(f" 2. 设置默认重置日 当前：每月 {config.get('default_day', 1)} 号")
-    print(" 3. 管理入站/客户端重置日")
-    print(" 4. 预览并手动执行一次重置检查")
-    print(" 5. 查看当前 JSON 配置")
-    print("------------------------------------------------")
-    print(" 0. 返回主菜单 / q 返回")
-    print("================================================")
+    print(paint("提示：请在 3x-ui 面板里关闭对应入站的原生 monthly 重置。", "yellow"))
+    print(paint("如果只是想看本次会影响谁，选 [4]，会先预览，输入 YES 才会执行。", "yellow"))
+    separator()
+    menu_line(1, "开启/关闭自定义重置")
+    menu_line(2, "设置默认重置日", f"当前：每月 {config.get('default_day', 1)} 号")
+    menu_line(3, "管理入站/客户端重置日")
+    menu_line(4, "预览并手动执行一次重置检查")
+    menu_line(5, "查看当前 JSON 配置")
+    separator()
+    print(f" {paint('0.', 'red')} 返回主菜单 / q 返回")
+    print(paint("================================================", "cyan"))
 
     choice = input_choice("👉 请选择操作: ", {"0", "q", "Q", "1", "2", "3", "4", "5"})
     if choice in {"0", "q", "Q"}:
@@ -977,7 +1077,7 @@ while True:
 PY
 
     set +e
-    XUI_DB="$XUI_DB" CONFIG_FILE="$CONFIG_FILE" XUI_WRITE_ALLOWED="$xui_write_allowed" XUI_VERIFIED_VERSION="$XUI_VERIFIED_VERSION" python3 "$tmp_py" </dev/tty
+    XUI_DB="$XUI_DB" CONFIG_FILE="$CONFIG_FILE" XUI_WRITE_ALLOWED="$xui_write_allowed" XUI_VERIFIED_VERSIONS="$XUI_VERIFIED_VERSIONS" XUI_DETECTED_VERSION="$detected_version" python3 "$tmp_py" </dev/tty
     local ret=$?
     rm -f "$tmp_py"
     trap - RETURN
@@ -1033,6 +1133,34 @@ db_path = os.environ.get("XUI_DB", "/etc/x-ui/x-ui.db")
 writes_file = os.environ["WRITES_FILE"]
 GIB = Decimal(1024) ** 3
 
+ANSI = {
+    "red": "\033[0;31m",
+    "green": "\033[1;32m",
+    "yellow": "\033[1;33m",
+    "blue": "\033[1;34m",
+    "cyan": "\033[1;36m",
+    "white": "\033[1;37m",
+    "bold": "\033[1m",
+    "plain": "\033[0m",
+}
+
+def paint(text, color):
+    return f"{ANSI[color]}{text}{ANSI['plain']}"
+
+def title(text):
+    print(paint("================================================", "cyan"))
+    print(paint(text, "bold"))
+    print(paint("================================================", "cyan"))
+
+def separator():
+    print(paint("------------------------------------------------", "blue"))
+
+def menu_line(number, label, hint=""):
+    line = f" {paint(str(number) + '.', 'cyan')} {paint(label, 'green')}"
+    if hint:
+        line += f" {paint(hint, 'yellow')}"
+    print(line)
+
 def clear_screen():
     print("\033c", end="")
 
@@ -1077,6 +1205,44 @@ def trunc(text, limit=20):
     text = text or "无备注"
     return text if len(text) <= limit else text[:limit] + "..."
 
+def table_columns(conn, table):
+    try:
+        return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    except sqlite3.OperationalError:
+        return set()
+
+def has_normalized_clients(conn):
+    return (
+        {"id", "email"} <= table_columns(conn, "clients")
+        and {"client_id", "inbound_id"} <= table_columns(conn, "client_inbounds")
+    )
+
+def load_clients_for_inbound(conn, inbound_id):
+    if has_normalized_clients(conn):
+        return conn.execute(
+            """
+            SELECT ct.id AS id,
+                   c.email AS email,
+                   COALESCE(ct.up, 0) AS up,
+                   COALESCE(ct.down, 0) AS down,
+                   COALESCE(ct.total, 0) AS total
+            FROM client_inbounds ci
+            JOIN clients c ON c.id = ci.client_id
+            JOIN client_traffics ct ON ct.email = c.email
+            WHERE ci.inbound_id = ?
+              AND COALESCE(c.email, '') <> ''
+            ORDER BY c.id
+            """,
+            (inbound_id,),
+        ).fetchall()
+    try:
+        return conn.execute(
+            "SELECT id, email, up, down, total FROM client_traffics WHERE inbound_id=? ORDER BY id",
+            (inbound_id,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+
 def load_rows():
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -1104,19 +1270,17 @@ def build_write(target, up, down):
 
 def calibrate_target(target):
     clear_screen()
-    print("================================================")
-    print("🧭 3x-ui 外置增强管理 - 输入校准流量")
-    print("================================================")
-    print(f"对象：{target['label']}")
-    print(f"当前已用：{format_gib((target['up'] or 0) + (target['down'] or 0))}")
+    title("🧭 3x-ui 外置增强管理 - 输入校准流量")
+    print(f"{paint('对象：', 'cyan')}{paint(target['label'], 'white')}")
+    print(f"{paint('当前已用：', 'cyan')}{paint(format_gib((target['up'] or 0) + (target['down'] or 0)), 'green')}")
     print()
-    print("请选择写入方式：")
-    print(" 1. 输入总已用流量，全部写入 down")
-    print(" 2. 输入总已用流量，按当前 up/down 比例分配")
-    print(" 3. 分别输入 up 和 down")
-    print("------------------------------------------------")
-    print(" 0. 返回上级 / q 返回")
-    print("================================================")
+    print(paint("请选择写入方式：", "yellow"))
+    menu_line(1, "输入总已用流量，全部写入 down")
+    menu_line(2, "输入总已用流量，按当前 up/down 比例分配")
+    menu_line(3, "分别输入 up 和 down")
+    separator()
+    print(f" {paint('0.', 'red')} 返回上级 / q 返回")
+    print(paint("================================================", "cyan"))
     mode = input_choice("👉 请选择操作: ", {"0", "q", "Q", "1", "2", "3"})
     if mode in {"0", "q", "Q"}:
         return None
@@ -1140,26 +1304,24 @@ def calibrate_target(target):
 
 while True:
     clear_screen()
-    print("================================================")
-    print("🧭 3x-ui 外置增强管理 - 校准已用流量")
-    print("================================================")
-    print("说明：这里只校准已用流量 up/down，不修改流量上限 total。")
-    print("单位：GiB，1 GiB = 1024^3 bytes")
-    print("------------------------------------------------")
+    title("🧭 3x-ui 外置增强管理 - 校准已用流量")
+    print(paint("说明：这里只校准已用流量 up/down，不修改流量上限 total。", "yellow"))
+    print(paint("单位：GiB，1 GiB = 1024^3 bytes", "yellow"))
+    separator()
 
     if not inbounds:
-        print("当前没有入站。")
+        print(paint("当前没有入站。", "yellow"))
     for idx, inbound in enumerate(inbounds, start=1):
         used = int(inbound["up"] or 0) + int(inbound["down"] or 0)
         total = int(inbound["total"] or 0)
         total_text = format_gib(total) if total > 0 else "不限量"
-        print(f" {idx}. ID={inbound['id']}  端口={inbound['port']}  备注={trunc(inbound['remark'])}")
-        print(f"    已用：{format_gib(used)} / 上限：{total_text}")
+        print(f" {paint(str(idx) + '.', 'cyan')} ID={paint(str(inbound['id']), 'white')}  端口={paint(str(inbound['port']), 'white')}  备注={paint(trunc(inbound['remark']), 'white')}")
+        print(f"    已用：{paint(format_gib(used), 'green')} / 上限：{paint(total_text, 'yellow' if total <= 0 else 'white')}")
         print()
 
-    print("------------------------------------------------")
-    print(" 0. 返回主菜单 / q 返回")
-    print("================================================")
+    separator()
+    print(f" {paint('0.', 'red')} 返回主菜单 / q 返回")
+    print(paint("================================================", "cyan"))
 
     valid_inbounds = {"0", "q", "Q"} | {str(i) for i in range(1, len(inbounds) + 1)}
     choice = input_choice("👉 请选择入站: ", valid_inbounds)
@@ -1169,43 +1331,35 @@ while True:
     inbound = inbounds[int(choice) - 1]
     inbound_id = inbound["id"]
 
-    try:
-        clients = conn.execute(
-            "SELECT id, email, up, down, total FROM client_traffics WHERE inbound_id=? ORDER BY id",
-            (inbound_id,),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        clients = []
+    clients = load_clients_for_inbound(conn, inbound_id)
 
     while True:
         clear_screen()
-        print("================================================")
-        print("🧭 3x-ui 外置增强管理 - 选择校准对象")
-        print("================================================")
-        print(f"入站 ID：{inbound_id}")
-        print(f"端口：{inbound['port']}")
-        print(f"备注：{inbound['remark'] or '无备注'}")
-        print("------------------------------------------------")
+        title("🧭 3x-ui 外置增强管理 - 选择校准对象")
+        print(f"{paint('入站 ID：', 'cyan')}{paint(str(inbound_id), 'white')}")
+        print(f"{paint('端口：', 'cyan')}{paint(str(inbound['port']), 'white')}")
+        print(f"{paint('备注：', 'cyan')}{paint(inbound['remark'] or '无备注', 'white')}")
+        separator()
 
         inbound_used = int(inbound["up"] or 0) + int(inbound["down"] or 0)
-        print(" 1. 入站自身")
-        print(f"    已用：{format_gib(inbound_used)}")
+        menu_line(1, "入站自身")
+        print(f"    已用：{paint(format_gib(inbound_used), 'green')}")
         print()
 
         for idx, client in enumerate(clients, start=2):
             used = int(client["up"] or 0) + int(client["down"] or 0)
             total = int(client["total"] or 0)
             total_text = format_gib(total) if total > 0 else "不限量"
-            print(f" {idx}. {client['email'] or '无邮箱'}")
-            print(f"    已用：{format_gib(used)} / 上限：{total_text}")
+            print(f" {paint(str(idx) + '.', 'cyan')} {paint(client['email'] or '无邮箱', 'white')}")
+            print(f"    已用：{paint(format_gib(used), 'green')} / 上限：{paint(total_text, 'yellow' if total <= 0 else 'white')}")
             print()
 
         all_clients_choice = str(len(clients) + 2)
         if clients:
-            print(f" {all_clients_choice}. 逐个校准全部客户端")
-        print("------------------------------------------------")
-        print(" 0. 返回上级 / q 返回")
-        print("================================================")
+            menu_line(all_clients_choice, "逐个校准全部客户端")
+        separator()
+        print(f" {paint('0.', 'red')} 返回上级 / q 返回")
+        print(paint("================================================", "cyan"))
 
         valid_objects = {"0", "q", "Q", "1"} | {str(i) for i in range(2, len(clients) + 2)}
         if clients:
@@ -1255,18 +1409,16 @@ while True:
             continue
 
         clear_screen()
-        print("================================================")
-        print("🧭 3x-ui 外置增强管理 - 确认写入")
-        print("================================================")
-        print("以下操作只会修改 up/down，不会修改 total。")
-        print("写库前会自动备份数据库，并重启 x-ui。")
-        print("------------------------------------------------")
+        title("🧭 3x-ui 外置增强管理 - 确认写入")
+        print(paint("以下操作只会修改 up/down，不会修改 total。", "yellow"))
+        print(paint("写库前会自动备份数据库，并重启 x-ui。", "yellow"))
+        separator()
         for write in writes:
             before_total = write["before_up"] + write["before_down"]
             after_total = write["after_up"] + write["after_down"]
-            print(f"对象：{write['label']}")
-            print(f"  修改前：up {format_gib(write['before_up'])} / down {format_gib(write['before_down'])} / 合计 {format_gib(before_total)}")
-            print(f"  修改后：up {format_gib(write['after_up'])} / down {format_gib(write['after_down'])} / 合计 {format_gib(after_total)}")
+            print(f"{paint('对象：', 'cyan')}{paint(write['label'], 'white')}")
+            print(f"  修改前：up {paint(format_gib(write['before_up']), 'yellow')} / down {paint(format_gib(write['before_down']), 'yellow')} / 合计 {paint(format_gib(before_total), 'yellow')}")
+            print(f"  修改后：up {paint(format_gib(write['after_up']), 'green')} / down {paint(format_gib(write['after_down']), 'green')} / 合计 {paint(format_gib(after_total), 'green')}")
             print()
         try:
             answer = input("请输入 YES 确认写入：").strip()
@@ -1528,15 +1680,42 @@ def connect_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+def table_columns(conn, table):
+    try:
+        return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    except sqlite3.OperationalError:
+        return set()
+
+def has_normalized_clients(conn):
+    return (
+        {"id", "email"} <= table_columns(conn, "clients")
+        and {"client_id", "inbound_id"} <= table_columns(conn, "client_inbounds")
+    )
+
+def load_client_links(conn):
+    if has_normalized_clients(conn):
+        rows = conn.execute(
+            """
+            SELECT ci.inbound_id AS inbound_id,
+                   c.email AS email
+            FROM client_inbounds ci
+            JOIN clients c ON c.id = ci.client_id
+            WHERE COALESCE(c.email, '') <> ''
+            ORDER BY ci.inbound_id, c.id
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+    try:
+        return conn.execute("SELECT inbound_id, email FROM client_traffics ORDER BY id").fetchall()
+    except sqlite3.OperationalError:
+        return []
+
 def load_db_rows(conn):
     try:
         inbounds = conn.execute("SELECT id, remark, port, traffic_reset FROM inbounds ORDER BY id").fetchall()
     except sqlite3.OperationalError:
         inbounds = conn.execute("SELECT id, remark, port, 'unknown' AS traffic_reset FROM inbounds ORDER BY id").fetchall()
-    try:
-        clients = conn.execute("SELECT id, inbound_id, email FROM client_traffics ORDER BY id").fetchall()
-    except sqlite3.OperationalError:
-        clients = []
+    clients = load_client_links(conn)
     return inbounds, clients
 
 def build_plan(config, state, inbounds, clients):
@@ -1553,7 +1732,19 @@ def build_plan(config, state, inbounds, clients):
     plan_clients = []
     skipped = []
     warnings = []
+    planned_client_emails = set()
     default_day = safe_day(config.get("default_day", 1))
+
+    def add_client_plan(item):
+        email = item.get("email") or ""
+        if not email:
+            skipped.append((item["label"], "客户端 email 为空，跳过"))
+            return
+        if email in planned_client_emails:
+            skipped.append((item["label"], "同一 email 已在本次计划中处理，3x-ui 客户端流量按 email 共享"))
+            return
+        planned_client_emails.add(email)
+        plan_clients.append(item)
 
     for iid, cfg in sorted(config.get("inbounds", {}).items(), key=lambda item: int(item[0]) if str(item[0]).isdigit() else str(item[0])):
         if not isinstance(cfg, dict) or not cfg.get("enabled", False):
@@ -1592,7 +1783,7 @@ def build_plan(config, state, inbounds, clients):
                 due, reason = should_reset(inbound_day, state["clients"].get(key, {}))
                 label = f"客户端 {email or '无邮箱'}，入站 ID={iid}"
                 if due:
-                    plan_clients.append({"inbound_id": str(iid), "email": email, "key": key, "label": label, "reason": f"跟随入站，{reason}", "reset_scope": "inbound"})
+                    add_client_plan({"inbound_id": str(iid), "email": email, "key": key, "label": label, "reason": f"跟随入站，{reason}", "reset_scope": "inbound"})
                 else:
                     skipped.append((label, reason))
 
@@ -1610,7 +1801,7 @@ def build_plan(config, state, inbounds, clients):
             key = f"{iid}|{email}"
             due, reason = should_reset(cday, state["clients"].get(key, {}))
             if due:
-                plan_clients.append({"inbound_id": str(iid), "email": email, "key": key, "label": label, "reason": f"客户端单独日期，{reason}", "reset_scope": "client"})
+                add_client_plan({"inbound_id": str(iid), "email": email, "key": key, "label": label, "reason": f"客户端单独日期，{reason}", "reset_scope": "client"})
             else:
                 skipped.append((label, reason))
 
@@ -1720,6 +1911,7 @@ def execute_plan(plan_inbounds, plan_clients, state):
         client_columns = get_table_columns(cur, "client_traffics")
         reset_time_ms = int(time.time() * 1000)
         inbounds_to_mark = set()
+        reset_client_emails = set()
 
         for item in plan_inbounds:
             row = cur.execute("SELECT up, down FROM inbounds WHERE id=?", (item["id"],)).fetchone()
@@ -1739,24 +1931,25 @@ def execute_plan(plan_inbounds, plan_clients, state):
                 skipped_write.append((item["label"], "写入时入站已不存在"))
 
         for item in plan_clients:
-            row = cur.execute(
-                "SELECT up, down FROM client_traffics WHERE inbound_id=? AND email=?",
-                (item["inbound_id"], item["email"]),
-            ).fetchone()
+            if item["email"] in reset_client_emails:
+                skipped_write.append((item["label"], "同一 email 已在本次执行中重置"))
+                continue
+            row = cur.execute("SELECT up, down FROM client_traffics WHERE email=?", (item["email"],)).fetchone()
             if row is None:
                 skipped_write.append((item["label"], "写入时客户端已不存在"))
                 continue
             if "enable" in client_columns:
                 cur.execute(
-                    "UPDATE client_traffics SET enable=1, up=0, down=0 WHERE inbound_id=? AND email=?",
-                    (item["inbound_id"], item["email"]),
+                    "UPDATE client_traffics SET enable=1, up=0, down=0 WHERE email=?",
+                    (item["email"],),
                 )
             else:
                 cur.execute(
-                    "UPDATE client_traffics SET up=0, down=0 WHERE inbound_id=? AND email=?",
-                    (item["inbound_id"], item["email"]),
+                    "UPDATE client_traffics SET up=0, down=0 WHERE email=?",
+                    (item["email"],),
                 )
             if cur.rowcount > 0:
+                reset_client_emails.add(item["email"])
                 item["preserved_totals"] = add_preserved_traffic(
                     state["clients"].setdefault(item["key"], {}),
                     row[0],
@@ -2155,11 +2348,11 @@ run_self_test() {
 
     detected_version="$(detect_xui_version)"
     echo "检测到的 3x-ui 版本：$detected_version"
-    echo "已验证版本：$XUI_VERIFIED_VERSION"
-    if [ "$detected_version" = "$XUI_VERIFIED_VERSION" ]; then
+    echo "已适配版本：$(format_verified_versions)"
+    if xui_version_is_verified "$detected_version"; then
         selftest_pass "3x-ui 版本已验证"
     else
-        selftest_fail "写库功能不可用：当前 3x-ui 版本未适配，仅 3x-ui v${XUI_VERIFIED_VERSION} 已验证"
+        selftest_fail "写库功能不可用：当前 3x-ui 版本未适配"
     fi
 
     if [ -f "$CONFIG_FILE" ]; then
@@ -2405,29 +2598,29 @@ main_menu() {
     while true; do
         clear_screen
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🧭 3x-ui 外置增强管理${PLAIN}"
+        echo -e "${BOLD}${WHITE}🧭 3x-ui 外置增强管理${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：补充 3x-ui 面板缺失能力，例如自定义重置、校准已用流量、备份恢复和健康检查。${PLAIN}"
         print_xui_version_warning
         echo -e "${YELLOW}提示：不知道选哪个时输入 ? 查看“我要做什么”索引；写库前会自动备份。${PLAIN}"
-        echo -e "------------------------------------------------"
-        echo -e "配置：$CONFIG_FILE"
-        echo -e "备份：$BACKUP_DIR"
-        echo -e "日志：$LOG_FILE"
-        echo -e "自动检查：$(timer_active_status) | 本地执行器：$(runner_status) | 快捷命令：xcm"
+        echo -e "${BLUE}------------------------------------------------${PLAIN}"
+        echo -e "${CYAN}配置：${WHITE}$CONFIG_FILE${PLAIN}"
+        echo -e "${CYAN}备份：${WHITE}$BACKUP_DIR${PLAIN}"
+        echo -e "${CYAN}日志：${WHITE}$LOG_FILE${PLAIN}"
+        echo -e "${CYAN}自动检查：${GREEN}$(timer_active_status)${PLAIN} ${DIM}|${PLAIN} ${CYAN}本地执行器：${GREEN}$(runner_status)${PLAIN} ${DIM}|${PLAIN} ${CYAN}快捷命令：${WHITE}xcm${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD} ▶ 重置${PLAIN}"
-        echo -e "${GREEN}  1. 自定义流量重置日期${PLAIN}        ${YELLOW}(入站 / 客户端分开设置)${PLAIN}"
-        echo -e "${BOLD} ▶ 流量${PLAIN}"
-        echo -e "${GREEN}  2. 校准已用流量${PLAIN}              ${YELLOW}(只改 up/down，不改 total)${PLAIN}"
-        echo -e "${BOLD} ▶ 备份${PLAIN}"
-        echo -e "${GREEN}  3. 备份 / 恢复 x-ui${PLAIN}          ${YELLOW}(数据库 / 配置 / 程序)${PLAIN}"
-        echo -e "${BOLD} ▶ 诊断${PLAIN}"
-        echo -e "${GREEN}  4. 健康检查 / monthly 冲突${PLAIN}   ${YELLOW}(服务 / 数据库 / timer)${PLAIN}"
-        echo -e "${GREEN}  5. 查看日志与报错${PLAIN}            ${YELLOW}(脚本 / reset-check / systemd)${PLAIN}"
-        echo -e "${GREEN}  6. 清理旧备份${PLAIN}                ${YELLOW}(每次只删一个明确备份文件)${PLAIN}"
-        echo -e "------------------------------------------------"
-        echo -e "${BLUE}  ?. 功能索引 / 我想做什么${PLAIN}"
+        echo -e "${BOLD}${MAGENTA} ▶ 重置${PLAIN}"
+        echo -e "  ${CYAN}1.${PLAIN} ${GREEN}自定义流量重置日期${PLAIN}        ${YELLOW}(入站 / 客户端分开设置)${PLAIN}"
+        echo -e "${BOLD}${MAGENTA} ▶ 流量${PLAIN}"
+        echo -e "  ${CYAN}2.${PLAIN} ${GREEN}校准已用流量${PLAIN}              ${YELLOW}(只改 up/down，不改 total)${PLAIN}"
+        echo -e "${BOLD}${MAGENTA} ▶ 备份${PLAIN}"
+        echo -e "  ${CYAN}3.${PLAIN} ${GREEN}备份 / 恢复 x-ui${PLAIN}          ${YELLOW}(数据库 / 配置 / 程序)${PLAIN}"
+        echo -e "${BOLD}${MAGENTA} ▶ 诊断${PLAIN}"
+        echo -e "  ${CYAN}4.${PLAIN} ${GREEN}健康检查 / monthly 冲突${PLAIN}   ${YELLOW}(服务 / 数据库 / timer)${PLAIN}"
+        echo -e "  ${CYAN}5.${PLAIN} ${GREEN}查看日志与报错${PLAIN}            ${YELLOW}(脚本 / reset-check / systemd)${PLAIN}"
+        echo -e "  ${CYAN}6.${PLAIN} ${GREEN}清理旧备份${PLAIN}                ${YELLOW}(每次只删一个明确备份文件)${PLAIN}"
+        echo -e "${BLUE}------------------------------------------------${PLAIN}"
+        echo -e "  ${BLUE}?.${PLAIN} ${WHITE}功能索引 / 我想做什么${PLAIN}"
         echo -e "${RED}  0. 退出 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         read_menu_choice choice "👉 请输入数字 / ? 查看索引 / q 返回: "
