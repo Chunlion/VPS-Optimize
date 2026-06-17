@@ -1962,6 +1962,14 @@ assert_dist_contains "$panel_public_hint" "Release script must include the curre
 panel_help_public_hint='5/6/7/8 管理订阅工具和 Dockge，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both non-single-entry and 443 single-entry reverse proxy paths."
 assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
+panel_domain_menu_path='主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]'
+assert_file_contains "src/menus.sh" "$panel_domain_menu_path" "443 help must point panel-domain edits to the Web domain submenu."
+assert_file_contains "src/sni_stack_profiles.sh" "$panel_domain_menu_path" "443 shared-parameters submenu must point panel-domain edits to the Web domain submenu."
+assert_dist_contains "$panel_domain_menu_path" "Release script must include the current panel-domain edit path."
+assert_file_not_contains "src/menus.sh" '共享参数可修改面板域名' "443 help must not say shared parameters modify the panel domain."
+assert_file_not_contains "src/menus.sh" '面板域名、面板/订阅/REALITY/入口端口与路径' "443 menu label must not list panel domain under shared parameters."
+assert_file_not_contains "src/sni_stack_profiles.sh" '用途：后续修改面板域名' "443 shared-parameters submenu purpose must not list panel domain."
+assert_file_not_contains "src/sni_stack_profiles.sh" '4) edit_sni_stack_panel_domain_profile ;;' "443 shared-parameters submenu must not keep the old direct panel-domain action."
 subscription_internal_port_hint='该端口只给当前本地 Web 反代引擎（${web_label}）访问，不应写成公网订阅入口。'
 assert_file_contains "src/sni_stack_health.sh" "$subscription_internal_port_hint" "Subscription hint must describe the internal subscription port as current Web reverse proxy engine-only."
 assert_dist_contains "$subscription_internal_port_hint" "Release script must include the current Web reverse proxy engine subscription-port hint."

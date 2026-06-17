@@ -263,7 +263,8 @@ edit_sni_stack_runtime_profile() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}🧭 修改 443 分流参数${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：后续修改面板域名、面板端口/路径、订阅端口/路径、REALITY SNI、入口端口时使用。${PLAIN}"
+        echo -e "${YELLOW}用途：后续修改面板端口/路径、订阅端口/路径、REALITY SNI、入口端口时使用。${PLAIN}"
+        echo -e "${YELLOW}修改面板域名请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}"
         echo -e "${YELLOW}新增网站请走 [19] -> [8]，不用重跑首次配置。${PLAIN}"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
@@ -276,7 +277,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "${GREEN}  1. 修改面板/订阅端口与路径${PLAIN}"
         echo -e "${GREEN}  2. 修改 REALITY 本地监听 / 伪装 SNI${PLAIN}"
         echo -e "${GREEN}  3. 修改 Nginx 公网入口 / Web 反代本地 TLS${PLAIN}"
-        echo -e "${GREEN}  4. 修改面板域名${PLAIN}"
+        echo -e "${YELLOW}  4. 修改面板域名：请走 [8] -> [9]${PLAIN}"
         echo -e "${GREEN}  5. 重新应用当前保存的配置${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
@@ -289,7 +290,7 @@ edit_sni_stack_runtime_profile() {
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;
             3) edit_sni_stack_entry_profile ;;
-            4) edit_sni_stack_panel_domain_profile ;;
+            4) echo -e "${YELLOW}请使用：主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" ;;
             5) reapply_sni_stack_from_env ;;
             "?"|help) show_sni_help; pause_return; continue ;;
             0) break ;;

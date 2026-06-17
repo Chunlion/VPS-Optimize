@@ -15,6 +15,16 @@ assert_file_contains() {
     fi
 }
 
+assert_file_not_contains() {
+    local file="$1"
+    local needle="$2"
+    local message="${3:-${file} contains forbidden content: ${needle}}"
+    if grep -Fq -- "$needle" "$file"; then
+        echo "$message" >&2
+        exit 1
+    fi
+}
+
 module_list_entries() {
     awk '
         {
@@ -122,6 +132,13 @@ assert_file_contains dog.sh '当前统计来自 nftables counter' "dog.sh must e
 assert_file_contains dog.sh 'input/output/forward 流量' "dog.sh must explain that monitored-port input/output/forward traffic is counted."
 assert_file_contains dog.sh 'show_statistics_health_check' "dog.sh must keep the statistics health check function."
 assert_file_contains dog.sh '快照增量' "dog.sh daily reports must explain snapshot-increment accounting."
+
+assert_file_contains docs/443-single-entry.md 'Skip SSL / 不申请 SSL' "443 single-entry doc must explain the 3x-ui Skip SSL flow."
+assert_file_contains docs/443-single-entry.md '监听 IP：127.0.0.1' "443 single-entry doc must keep 3x-ui listeners on loopback."
+assert_file_not_contains docs/443-single-entry.md '监听 IP：首次安装阶段可以先留空或用默认' "443 single-entry doc must not tell users to leave the panel listen IP blank first."
+assert_file_not_contains docs/443-single-entry.md '监听 IP：先留空或用默认，443 跑通后再改 127.0.0.1' "443 single-entry doc must not defer subscription loopback binding until after 443 works."
+assert_file_not_contains docs/443-single-entry.md '首次临时登录通常是：' "443 single-entry doc must not recommend temporary direct public panel access."
+assert_file_not_contains docs/443-single-entry.md '清空后，如果还需要临时从公网端口访问面板' "443 single-entry doc must not keep the old direct-public-port fallback."
 
 assert_file_contains dist/vps.sh '/var/lib/vps-optimize/vpso-mux/status.json'
 assert_file_contains dist/vps.sh '/var/log/vps-traffic-guard.log'
