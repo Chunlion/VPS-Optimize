@@ -405,6 +405,7 @@ is_trusted_remote_script_url() {
         "http://v7.hostcli.com/install/install-ubuntu_6.0.sh"|\
         "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh"|\
         "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh"|\
+        "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-docker.sh"|\
         "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh"|\
         "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"|\
         "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh")

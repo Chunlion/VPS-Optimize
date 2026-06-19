@@ -417,6 +417,7 @@ is_trusted_remote_script_url() {
         "http://v7.hostcli.com/install/install-ubuntu_6.0.sh"|\
         "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh"|\
         "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh"|\
+        "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-docker.sh"|\
         "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh"|\
         "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"|\
         "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh")
@@ -5034,7 +5035,7 @@ func_env_install() {
         echo -e "${BOLD}${BLUE}▶ 转发、隧道与常用服务${PLAIN}"
         echo -e "${GREEN}  4. Realm 端口转发     ${YELLOW}  5. Gost 隧道          ${GREEN}  6. 极光面板${PLAIN}"
         echo -e "${GREEN}  7. 哪吒监控           ${YELLOW}  8. WARP 解锁/网络     ${GREEN}  9. Aria2 下载${PLAIN}"
-        echo -e "${GREEN} 10. 宝塔面板           ${YELLOW} 11. PVE 虚拟化工具     ${GREEN} 12. Argox 节点${PLAIN}"
+        echo -e "${GREEN} 10. Forwardx 转发面板  ${YELLOW} 11. PVE 虚拟化工具     ${GREEN} 12. Argox 节点${PLAIN}"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -5060,7 +5061,7 @@ func_env_install() {
                 ;;
             8) run_remote_script "安装 WARP 解锁/网络工具" "https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh" ;;
             9) run_remote_script "安装 Aria2 下载工具" "https://git.io/aria2.sh" ;;
-            10) run_remote_script "安装宝塔面板" "http://v7.hostcli.com/install/install-ubuntu_6.0.sh" ;;
+            10) ensure_docker_compose_ready && run_remote_script "安装 Forwardx 转发面板" "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-docker.sh" install ;;
             11) run_remote_script "安装 PVE 虚拟化工具" "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh" ;;
             12) run_remote_script "安装 Argox 节点" "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh" ;;
             "?"|help) echo "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443 单入口走主菜单 [19]。"; pause_return ;;

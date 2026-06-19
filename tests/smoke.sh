@@ -176,6 +176,9 @@ assert_function_body_contains dist/vps.sh main 'main_menu' "main must enter the 
 assert_dist_contains 'rotate_log_file' "Release script must include the shared log rotation helper."
 assert_dist_contains 'print_log_capacity_summary' "Health overview must include log capacity summary."
 assert_dist_contains 'check_vpso_file_permissions' "Health overview must expose file permission checks."
+assert_dist_contains '10. Forwardx 转发面板' "Basic components menu must replace the old option 10 with Forwardx."
+assert_dist_contains 'https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-docker.sh' "Release script must include the Forwardx Docker panel installer."
+assert_file_not_contains dist/vps.sh '10. 宝塔面板' "Basic components menu must not keep the old Baota option label."
 assert_dist_contains 'NET_KERNEL_MENU_ITEMS=(' "Network/kernel menu must use the declarative pilot table."
 assert_dist_contains 'dispatch_menu_choice "$nk_choice" NET_KERNEL_MENU_ITEMS' "Network/kernel menu must dispatch through the menu helper pilot."
 assert_dist_contains 'backend_retry_attempts' "vpso-mux status must expose backend retry attempts."
@@ -1007,6 +1010,7 @@ remote_script="$remote_tmp_dir/remote.sh"
 printf '%s\n' '#!/usr/bin/env bash' 'echo remote-run-ok' > "$remote_script"
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh")" == *"VPS-Optimize"* ]]
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh")" == *"项目内置硬编码外部脚本源"* ]]
+[[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-docker.sh")" == *"项目内置硬编码外部脚本源"* ]]
 if is_trusted_remote_script_url "https://example.com/not-built-in.sh" >/dev/null; then
     echo "Unexpected trusted remote script URL." >&2
     exit 1
