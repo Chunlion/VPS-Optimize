@@ -10,6 +10,7 @@ preflight_install_missing_commands() {
         case "$cmd" in
             curl) pkgs+=("curl") ;;
             wget) pkgs+=("wget") ;;
+            sudo) pkgs+=("sudo") ;;
             ss)
                 if is_debian; then
                     pkgs+=("iproute2")
@@ -31,7 +32,7 @@ preflight_install_missing_commands() {
 preflight_missing_minimal_compat_items() {
     local missing=()
     local cmd svc
-    local commands=(curl wget ss ip getent tar gzip openssl jq awk sed grep pgrep journalctl timedatectl)
+    local commands=(sudo curl wget ss ip getent tar gzip openssl jq awk sed grep pgrep journalctl timedatectl git nano lsof)
     local services=()
 
     for cmd in "${commands[@]}"; do
@@ -199,6 +200,7 @@ func_preflight_check() {
     local cmd_miss=()
     command -v curl >/dev/null 2>&1 || cmd_miss+=("curl")
     command -v wget >/dev/null 2>&1 || cmd_miss+=("wget")
+    command -v sudo >/dev/null 2>&1 || cmd_miss+=("sudo")
     command -v ss >/dev/null 2>&1 || cmd_miss+=("ss")
     if [[ ${#cmd_miss[@]} -eq 0 ]]; then
         echo -e "${GREEN}✅ 关键命令齐全${PLAIN}"

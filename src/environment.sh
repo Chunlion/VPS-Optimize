@@ -30,7 +30,7 @@ func_env_install() {
                 ;;
             2) run_remote_script "安装 Python 环境" "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh" ;;
             3) run_safe "安装 iperf3" install_pkg iperf3 ;;
-            4) run_remote_script "安装 Realm 端口转发" "https://raw.githubusercontent.com/zhouh047/realm-oneclick-install/main/realm.sh" -i ;;
+            4) run_remote_script "安装 Realm 端口转发" "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh" install ;;
             5) run_remote_script "安装 Gost 隧道" "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh" ;;
             6) run_remote_script "安装极光面板" "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh" ;;
             7) 

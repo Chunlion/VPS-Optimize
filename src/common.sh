@@ -185,10 +185,12 @@ minimal_compat_packages() {
     if is_debian; then
         printf '%s\n' \
             ca-certificates curl wget gnupg gpg lsb-release apt-transport-https debian-archive-keyring \
+            sudo bash coreutils findutils grep sed gawk util-linux git nano htop lsof net-tools iputils-ping dnsutils \
             iproute2 iptables procps psmisc cron dbus chrony jq unzip tar gzip openssl
     elif is_redhat; then
         printf '%s\n' \
             ca-certificates curl wget gnupg2 redhat-lsb-core iproute iptables procps-ng psmisc cronie \
+            sudo bash coreutils findutils grep sed gawk util-linux git nano htop lsof net-tools iputils bind-utils \
             dbus chrony jq unzip tar gzip openssl
     fi
 }
@@ -394,7 +396,7 @@ is_trusted_remote_script_url() {
         "https://IP.Check.Place"|\
         "https://run.NodeQuality.com"|\
         "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh"|\
-        "https://raw.githubusercontent.com/zhouh047/realm-oneclick-install/main/realm.sh"|\
+        "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh"|\
         "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh"|\
         "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh"|\
         "https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh"|\

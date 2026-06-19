@@ -26,12 +26,30 @@ install_docker_compose_standalone() {
     chmod +x /usr/local/bin/docker-compose || return 1
 }
 
-ensure_docker_compose_ready() {
-    DOCKER_COMPOSE_CMD=""
-    if ! command -v docker >/dev/null 2>&1; then
-        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 基础组件与常用服务] 中安装 Docker。${PLAIN}"
+ensure_docker_engine_ready() {
+    if command -v docker >/dev/null 2>&1; then
+        systemctl enable --now docker >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    echo -e "${YELLOW}⚠️ 未检测到 Docker，正在自动安装 Docker 引擎...${PLAIN}"
+    if ! VPSO_REMOTE_SCRIPT_CONFIRM=0 run_remote_script "安装 Docker 引擎" "https://get.docker.com"; then
+        echo -e "${RED}❌ Docker 自动安装失败，请检查网络或软件源。${PLAIN}"
         return 1
     fi
+
+    if ! command -v docker >/dev/null 2>&1; then
+        echo -e "${RED}❌ Docker 安装后仍不可用，请检查安装日志。${PLAIN}"
+        return 1
+    fi
+
+    systemctl enable --now docker >/dev/null 2>&1 || true
+    echo -e "${GREEN}✅ Docker 引擎已安装。${PLAIN}"
+}
+
+ensure_docker_compose_ready() {
+    DOCKER_COMPOSE_CMD=""
+    ensure_docker_engine_ready || return 1
 
     if docker compose version >/dev/null 2>&1; then
         DOCKER_COMPOSE_CMD="docker compose"

@@ -197,10 +197,12 @@ minimal_compat_packages() {
     if is_debian; then
         printf '%s\n' \
             ca-certificates curl wget gnupg gpg lsb-release apt-transport-https debian-archive-keyring \
+            sudo bash coreutils findutils grep sed gawk util-linux git nano htop lsof net-tools iputils-ping dnsutils \
             iproute2 iptables procps psmisc cron dbus chrony jq unzip tar gzip openssl
     elif is_redhat; then
         printf '%s\n' \
             ca-certificates curl wget gnupg2 redhat-lsb-core iproute iptables procps-ng psmisc cronie \
+            sudo bash coreutils findutils grep sed gawk util-linux git nano htop lsof net-tools iputils bind-utils \
             dbus chrony jq unzip tar gzip openssl
     fi
 }
@@ -406,7 +408,7 @@ is_trusted_remote_script_url() {
         "https://IP.Check.Place"|\
         "https://run.NodeQuality.com"|\
         "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh"|\
-        "https://raw.githubusercontent.com/zhouh047/realm-oneclick-install/main/realm.sh"|\
+        "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh"|\
         "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh"|\
         "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh"|\
         "https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh"|\
@@ -2426,10 +2428,10 @@ func_base_init() {
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -y && apt-get upgrade -y && APT_UPDATED=1
         unset DEBIAN_FRONTEND
-        install_pkg curl wget git nano unzip htop iptables iproute2 sqlite3 jq
+        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils-ping dnsutils iptables iproute2 sqlite3 jq
     elif is_redhat; then
         yum update -y
-        install_pkg curl wget git nano unzip htop iptables iproute epel-release sqlite jq
+        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils bind-utils iptables iproute epel-release sqlite jq
     fi
 
     ensure_minimal_system_compat
@@ -5047,7 +5049,7 @@ func_env_install() {
                 ;;
             2) run_remote_script "安装 Python 环境" "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh" ;;
             3) run_safe "安装 iperf3" install_pkg iperf3 ;;
-            4) run_remote_script "安装 Realm 端口转发" "https://raw.githubusercontent.com/zhouh047/realm-oneclick-install/main/realm.sh" -i ;;
+            4) run_remote_script "安装 Realm 端口转发" "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh" install ;;
             5) run_remote_script "安装 Gost 隧道" "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh" ;;
             6) run_remote_script "安装极光面板" "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh" ;;
             7) 
@@ -14551,12 +14553,30 @@ install_docker_compose_standalone() {
     chmod +x /usr/local/bin/docker-compose || return 1
 }
 
-ensure_docker_compose_ready() {
-    DOCKER_COMPOSE_CMD=""
-    if ! command -v docker >/dev/null 2>&1; then
-        echo -e "${RED}❌ 致命错误：未检测到 Docker！请先在菜单 [3 基础组件与常用服务] 中安装 Docker。${PLAIN}"
+ensure_docker_engine_ready() {
+    if command -v docker >/dev/null 2>&1; then
+        systemctl enable --now docker >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    echo -e "${YELLOW}⚠️ 未检测到 Docker，正在自动安装 Docker 引擎...${PLAIN}"
+    if ! VPSO_REMOTE_SCRIPT_CONFIRM=0 run_remote_script "安装 Docker 引擎" "https://get.docker.com"; then
+        echo -e "${RED}❌ Docker 自动安装失败，请检查网络或软件源。${PLAIN}"
         return 1
     fi
+
+    if ! command -v docker >/dev/null 2>&1; then
+        echo -e "${RED}❌ Docker 安装后仍不可用，请检查安装日志。${PLAIN}"
+        return 1
+    fi
+
+    systemctl enable --now docker >/dev/null 2>&1 || true
+    echo -e "${GREEN}✅ Docker 引擎已安装。${PLAIN}"
+}
+
+ensure_docker_compose_ready() {
+    DOCKER_COMPOSE_CMD=""
+    ensure_docker_engine_ready || return 1
 
     if docker compose version >/dev/null 2>&1; then
         DOCKER_COMPOSE_CMD="docker compose"
@@ -15837,6 +15857,7 @@ preflight_install_missing_commands() {
         case "$cmd" in
             curl) pkgs+=("curl") ;;
             wget) pkgs+=("wget") ;;
+            sudo) pkgs+=("sudo") ;;
             ss)
                 if is_debian; then
                     pkgs+=("iproute2")
@@ -15858,7 +15879,7 @@ preflight_install_missing_commands() {
 preflight_missing_minimal_compat_items() {
     local missing=()
     local cmd svc
-    local commands=(curl wget ss ip getent tar gzip openssl jq awk sed grep pgrep journalctl timedatectl)
+    local commands=(sudo curl wget ss ip getent tar gzip openssl jq awk sed grep pgrep journalctl timedatectl git nano lsof)
     local services=()
 
     for cmd in "${commands[@]}"; do
@@ -16026,6 +16047,7 @@ func_preflight_check() {
     local cmd_miss=()
     command -v curl >/dev/null 2>&1 || cmd_miss+=("curl")
     command -v wget >/dev/null 2>&1 || cmd_miss+=("wget")
+    command -v sudo >/dev/null 2>&1 || cmd_miss+=("sudo")
     command -v ss >/dev/null 2>&1 || cmd_miss+=("ss")
     if [[ ${#cmd_miss[@]} -eq 0 ]]; then
         echo -e "${GREEN}✅ 关键命令齐全${PLAIN}"

@@ -59,10 +59,10 @@ func_base_init() {
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -y && apt-get upgrade -y && APT_UPDATED=1
         unset DEBIAN_FRONTEND
-        install_pkg curl wget git nano unzip htop iptables iproute2 sqlite3 jq
+        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils-ping dnsutils iptables iproute2 sqlite3 jq
     elif is_redhat; then
         yum update -y
-        install_pkg curl wget git nano unzip htop iptables iproute epel-release sqlite jq
+        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils bind-utils iptables iproute epel-release sqlite jq
     fi
 
     ensure_minimal_system_compat

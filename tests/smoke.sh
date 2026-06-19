@@ -253,6 +253,7 @@ if grep -q $'\r' dist/vps.sh.sha256; then
 fi
 for function_name in \
     install_docker_compose_standalone \
+    ensure_docker_engine_ready \
     ensure_docker_compose_ready \
     find_compose_file \
     is_managed_compose_dir \
@@ -576,6 +577,9 @@ rmdir "$config_edit_tmp_dir"
 APT_UPDATED=1
 apt_update_once
 [[ "$APT_UPDATED" == "1" ]]
+assert_file_contains src/common.sh 'sudo bash coreutils findutils grep sed gawk util-linux git nano htop lsof net-tools' "Minimal compatibility packages must include basic system commands."
+assert_file_contains src/system_core.sh 'install_pkg sudo curl wget git nano unzip htop lsof net-tools' "Base init must install sudo and common tools."
+assert_file_contains src/preflight.sh 'command -v sudo >/dev/null 2>&1 || cmd_miss+=("sudo")' "Preflight must detect missing sudo as a basic command."
 
 (
     source src/common.sh
@@ -1002,6 +1006,7 @@ remote_tmp_dir=$(mktemp -d /tmp/vps-remote-smoke.XXXXXX)
 remote_script="$remote_tmp_dir/remote.sh"
 printf '%s\n' '#!/usr/bin/env bash' 'echo remote-run-ok' > "$remote_script"
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh")" == *"VPS-Optimize"* ]]
+[[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh")" == *"项目内置硬编码外部脚本源"* ]]
 if is_trusted_remote_script_url "https://example.com/not-built-in.sh" >/dev/null; then
     echo "Unexpected trusted remote script URL." >&2
     exit 1
