@@ -136,7 +136,7 @@ func_caddy_cf_maintenance_menu() {
 
                 if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
                     echo -e "${RED}❌ 证书签发失败：${domain}${PLAIN}"
-                    echo -e "${YELLOW}   提示：建议先执行本菜单 [13] 自动修复再重试。${PLAIN}"
+                    echo -e "${YELLOW}   提示：建议先执行本菜单 [14] 自动修复再重试。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi

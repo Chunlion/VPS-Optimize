@@ -16,7 +16,7 @@ list_sni_stack_sites() {
     [[ -n "$panel_ranges" ]] && echo -e "${YELLOW}面板域名 IP 白名单：${panel_ranges}${PLAIN}"
     echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
     [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#TCP_ROUTE_SNIS[@]} 个旧 TCP/SNI 入站。${PLAIN}"
-        [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#XRAY_SNI_ROUTE_SNIS[@]} 个 Xray 入站，请在 [19] -> [10] 查看。${PLAIN}"
+        [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#XRAY_SNI_ROUTE_SNIS[@]} 个 Xray 入站，请在 [19] -> [15] 查看。${PLAIN}"
     echo -e "------------------------------------------------"
     if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
         echo -e "${YELLOW}当前没有额外的网站/反代域名。${PLAIN}"
@@ -279,7 +279,7 @@ switch_sni_stack_web_proxy_engine() {
     echo -e "本地 TLS 后端：$(web_proxy_backend)"
     echo -e "读取来源：/etc/vps-optimize/sni-stack.env（脚本保存的 443 共享配置）"
     echo -e "${YELLOW}切换时会按当前域名、证书、后端和白名单重新渲染所选引擎，并隔离另一套 443 本地 Web 反代配置。${PLAIN}"
-    echo -e "${YELLOW}如果你手工改过 Caddy/Nginx 文件但没有通过本菜单保存，请先在 [8]/[14] 同步脚本保存值后再切换。${PLAIN}"
+    echo -e "${YELLOW}如果你手工改过 Caddy/Nginx 文件但没有通过本菜单保存，请先在 [8]/[10] 同步脚本保存值后再切换。${PLAIN}"
     echo -e "------------------------------------------------"
     echo -e "${GREEN}  1. Caddy 本地 HTTPS 反代${PLAIN}"
     echo -e "${GREEN}  2. Nginx 本地 HTTPS 反代${PLAIN}"

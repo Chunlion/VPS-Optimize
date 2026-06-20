@@ -134,7 +134,7 @@ EOF
         echo -e "${CYAN}▶ 正在为 ${domain} 申请 DNS 证书...${PLAIN}"
         if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
             echo -e "${RED}❌ 证书申请失败：${domain}${PLAIN}"
-            echo -e "${YELLOW}   提示：可进入主菜单 [19] -> [13] 一键自动修复后再重试。${PLAIN}"
+            echo -e "${YELLOW}   提示：可进入主菜单 [19] -> [12] -> [14] 一键自动修复后再重试。${PLAIN}"
             ((fail_count++))
             continue
         fi

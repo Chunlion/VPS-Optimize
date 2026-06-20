@@ -200,10 +200,10 @@ func_test_scripts() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}📊 VPS 综合测速与质量检验合集库${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${GREEN}  1. YABS 硬件性能测试      ${YELLOW}  2. 融合怪详细测速${PLAIN}"
-        echo -e "${GREEN}  3. SuperBench 综合测速    ${YELLOW}  4. bench.sh 基础测试${PLAIN}"
-        echo -e "${GREEN}  5. 流媒体解锁检测         ${YELLOW}  6. 三网回程路由测试${PLAIN}"
-        echo -e "${GREEN}  7. IP 质量 / 欺诈度检测   ${YELLOW}  8. NodeSeek 综合测试${PLAIN}"
+        echo -e "${GREEN}  1. YABS 硬件性能测试      ${YELLOW}  2. SuperBench 综合测速${PLAIN}"
+        echo -e "${GREEN}  3. bench.sh 基础测试      ${YELLOW}  4. 融合怪详细测速${PLAIN}"
+        echo -e "${GREEN}  5. 三网回程路由测试       ${YELLOW}  6. IP 质量 / 欺诈度检测${PLAIN}"
+        echo -e "${GREEN}  7. NodeSeek 综合测试      ${YELLOW}  8. 流媒体解锁检测${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -213,13 +213,13 @@ func_test_scripts() {
         read_trimmed t "👉 请输入对应序号选择: "
         case $t in
             1) ran_test=true; run_remote_script "运行 YABS 硬件性能测试" "https://yabs.sh" ;;
-            2) ran_test=true; run_remote_script "运行融合怪详细测速" "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh" ;;
-            3) ran_test=true; run_remote_script "运行 SuperBench 综合测速" "https://about.superbench.pro" ;;
-            4) ran_test=true; run_remote_script "运行 bench.sh 基础测试" "https://bench.sh" ;;
-            5) ran_test=true; run_remote_script "运行流媒体解锁检测" "https://check.unlock.media" ;;
-            6) ran_test=true; run_remote_script "运行三网回程路由测试" "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh" ;;
-            7) ran_test=true; run_remote_script "运行 IP 质量 / 欺诈度检测" "https://IP.Check.Place" ;;
-            8) ran_test=true; run_remote_script "运行 NodeSeek 综合测试" "https://run.NodeQuality.com" ;;
+            2) ran_test=true; run_remote_script "运行 SuperBench 综合测速" "https://about.superbench.pro" ;;
+            3) ran_test=true; run_remote_script "运行 bench.sh 基础测试" "https://bench.sh" ;;
+            4) ran_test=true; run_remote_script "运行融合怪详细测速" "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh" ;;
+            5) ran_test=true; run_remote_script "运行三网回程路由测试" "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh" ;;
+            6) ran_test=true; run_remote_script "运行 IP 质量 / 欺诈度检测" "https://IP.Check.Place" ;;
+            7) ran_test=true; run_remote_script "运行 NodeSeek 综合测试" "https://run.NodeQuality.com" ;;
+            8) ran_test=true; run_remote_script "运行流媒体解锁检测" "https://check.unlock.media" ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1; continue ;;
         esac

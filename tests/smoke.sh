@@ -176,8 +176,8 @@ assert_function_body_contains dist/vps.sh main 'main_menu' "main must enter the 
 assert_dist_contains 'rotate_log_file' "Release script must include the shared log rotation helper."
 assert_dist_contains 'print_log_capacity_summary' "Health overview must include log capacity summary."
 assert_dist_contains 'check_vpso_file_permissions' "Health overview must expose file permission checks."
-assert_dist_contains '10. Forwardx 转发面板' "Basic components menu must replace the old option 10 with Forwardx."
-assert_dist_contains 'https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-docker.sh' "Release script must include the Forwardx Docker panel installer."
+assert_dist_contains '7. Forwardx 转发面板' "Basic components menu must include Forwardx."
+assert_dist_contains 'https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh' "Release script must include the Forwardx local panel installer."
 assert_file_not_contains dist/vps.sh '10. 宝塔面板' "Basic components menu must not keep the old Baota option label."
 assert_dist_contains 'NET_KERNEL_MENU_ITEMS=(' "Network/kernel menu must use the declarative pilot table."
 assert_dist_contains 'dispatch_menu_choice "$nk_choice" NET_KERNEL_MENU_ITEMS' "Network/kernel menu must dispatch through the menu helper pilot."
@@ -1010,7 +1010,7 @@ remote_script="$remote_tmp_dir/remote.sh"
 printf '%s\n' '#!/usr/bin/env bash' 'echo remote-run-ok' > "$remote_script"
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh")" == *"VPS-Optimize"* ]]
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh")" == *"项目内置硬编码外部脚本源"* ]]
-[[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-docker.sh")" == *"项目内置硬编码外部脚本源"* ]]
+[[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh")" == *"项目内置硬编码外部脚本源"* ]]
 if is_trusted_remote_script_url "https://example.com/not-built-in.sh" >/dev/null; then
     echo "Unexpected trusted remote script URL." >&2
     exit 1
@@ -1178,11 +1178,12 @@ while IFS='|' read -r menu_no menu_label case_action; do
         exit 1
     fi
 done <<'SNI_MENU_MAP'
-11|443 链路体检|sni_stack_health_check_enhanced ;;
-12|443 网络访问测试|func_443_network_test; continue ;;
-13|CF DNS / Caddy 证书维护|func_caddy_cf_maintenance_menu; continue ;;
-14|修改 443 共享参数|edit_sni_stack_runtime_profile; continue ;;
-15|订阅链接 / External Proxy 提示|check_sni_stack_subscription_hint ;;
+10|修改 443 共享参数|edit_sni_stack_runtime_profile; continue ;;
+11|订阅链接 / External Proxy 提示|check_sni_stack_subscription_hint ;;
+12|CF DNS / Caddy 证书维护|func_caddy_cf_maintenance_menu; continue ;;
+13|443 链路体检|sni_stack_health_check_enhanced ;;
+14|443 网络访问测试|func_443_network_test; continue ;;
+15|Xray 入站管理|manage_xray_inbound_routes; continue ;;
 16|查看 TCP Peek + Splice 状态 / 8444 预检|start_tcp_peek_test_port ;;
 17|TCP Peek 分流规则校验|tcp_peek_dry_run_config ;;
 18|查看 TCP Peek + Splice 日志|view_vpso_mux_logs ;;
@@ -1388,10 +1389,10 @@ if grep -q '重置日只支持 1-28' dist/vps.sh; then
 fi
 grep -q 'counter reset detected on ${IFACE}, baseline reset and preserved current counters' dist/vps.sh
 grep -q 'traffic|quota|bill|流量|达量|账单) echo "10"' dist/vps.sh
-traffic_guard_menu_path='主菜单 [10 网络与内核优化] -> [7 流量达量关机保护]'
+traffic_guard_menu_path='主菜单 [10 网络与内核优化] -> [5 流量达量关机保护]'
 assert_file_contains CHANGELOG.md "$traffic_guard_menu_path" "CHANGELOG must document the current traffic guard menu path."
 assert_file_contains README.md "$traffic_guard_menu_path" "README must document the current traffic guard menu path."
-assert_file_contains src/menus.sh '10 -> 7  流量达量关机保护' "Menu help must keep traffic guard under network/kernel option 10 -> 7."
+assert_file_contains src/menus.sh '10 -> 5  流量达量关机保护' "Menu help must keep traffic guard under network/kernel option 10 -> 5."
 assert_file_not_contains CHANGELOG.md '[9 网络与内核优化] -> [7]' "CHANGELOG must not keep the stale traffic guard menu path."
 if grep -q '20\..*流量达量关机保护' dist/vps.sh; then
     echo "Traffic guard must stay in the network submenu, not the main menu." >&2
@@ -1943,7 +1944,7 @@ grep -q 'apply_web_proxy_configs_for_single_443' dist/vps.sh
 grep -q 'switch_sni_stack_web_proxy_engine' dist/vps.sh
 grep -q 'vps_sni_web_${CADDY_LISTEN_PORT}.conf' dist/vps.sh
 grep -q 'xray-fallback + Nginx 本地 Web 反代' dist/vps.sh
-grep -q '4. 查看/编辑 Compose 配置' dist/vps.sh
+grep -q '2. 查看/编辑 Compose 配置' dist/vps.sh
 grep -q 'edit_applied_config_file "$compose_file" "compose"' dist/vps.sh
 assert_file_contains "README.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "README must document the global applied-config editor."
 assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "Config paths doc must list the global applied-config editor."
@@ -1968,7 +1969,7 @@ assert_dist_contains "$subscription_public_hint" "Release script must include th
 panel_public_hint='提示：面板或订阅工具对外访问，未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] 统一管理。'
 assert_file_contains "src/menus.sh" "$panel_public_hint" "Panel/tools menu must explain both non-single-entry and 443 single-entry reverse proxy paths."
 assert_dist_contains "$panel_public_hint" "Release script must include the current panel/tools public HTTPS guidance."
-panel_help_public_hint='5/6/7/8 管理订阅工具和 Dockge，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
+panel_help_public_hint='7/8/9 管理订阅工具，11/12 管理 Dockge 和 Compose 迁移，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both non-single-entry and 443 single-entry reverse proxy paths."
 assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
 panel_domain_menu_path='主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]'
@@ -2025,8 +2026,8 @@ if grep -q '18) func_sni_stack_quick_menu' dist/vps.sh; then
     echo "Main menu numbering must be compact after removing duplicate SSH key entry." >&2
     exit 1
 fi
-grep -q '7) func_hosts_manage' dist/vps.sh
-grep -q '8|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|' dist/vps.sh
+grep -q '4) func_hosts_manage' dist/vps.sh
+grep -q '4|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|' dist/vps.sh
 grep -Fq "SCRIPT_VERSION=\"${vps_smoke_script_version}\"" dist/vps.sh
 grep -q 'SCRIPT_UPDATE_CACHE=' dist/vps.sh
 grep -q 'Compatibility marker: VPS 全能控制面板' dist/vps.sh

@@ -158,7 +158,7 @@ func_caddy_cf_health_check() {
                 echo -e "    ${GREEN}软链接状态: /root/cert 已正确挂载${PLAIN}"
                 ((ok_count++))
             else
-                echo -e "    ${YELLOW}软链接状态: 缺失或失效，建议执行维护菜单 [9] 重建软链接${PLAIN}"
+                echo -e "    ${YELLOW}软链接状态: 缺失或失效，建议执行维护菜单 [10] 重建软链接${PLAIN}"
                 ((warn_count++))
             fi
 
@@ -190,7 +190,7 @@ func_caddy_cf_health_check() {
         echo -e "${GREEN}✅ 清单文件存在: /root/cert/caddy_cf_manifest.txt${PLAIN}"
         ((ok_count++))
     else
-        echo -e "${YELLOW}⚠️ 清单文件不存在，建议执行维护菜单 [10] 重建。${PLAIN}"
+        echo -e "${YELLOW}⚠️ 清单文件不存在，建议执行维护菜单 [11] 重建。${PLAIN}"
         ((warn_count++))
     fi
 
@@ -364,9 +364,9 @@ EOF
     echo -e "------------------------------------------------"
     echo -e "${CYAN}自动修复结果: ${GREEN}${fixed_count} 已修复${PLAIN} / ${YELLOW}${warn_count} 警告${PLAIN} / ${RED}${fail_count} 失败${PLAIN}"
     if [[ "$fail_count" -gt 0 ]]; then
-        echo -e "${RED}存在失败项，建议先执行维护菜单 [12] 体检复查并查看 caddy 日志。${PLAIN}"
+        echo -e "${RED}存在失败项，建议先执行维护菜单 [13] 体检复查并查看 caddy 日志。${PLAIN}"
     else
-        echo -e "${GREEN}自动修复流程完成，可执行维护菜单 [12] 复检确认。${PLAIN}"
+        echo -e "${GREEN}自动修复流程完成，可执行维护菜单 [13] 复检确认。${PLAIN}"
     fi
 }
 
@@ -505,7 +505,7 @@ func_caddy_cf_maintenance_menu() {
 
                 if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
                     echo -e "${RED}❌ 证书签发失败：${domain}${PLAIN}"
-                    echo -e "${YELLOW}   提示：建议先执行本菜单 [13] 自动修复再重试。${PLAIN}"
+                    echo -e "${YELLOW}   提示：建议先执行本菜单 [14] 自动修复再重试。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi

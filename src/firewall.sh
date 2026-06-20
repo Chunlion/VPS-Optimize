@@ -238,7 +238,7 @@ print_port_connlimit_health_summary() {
     elif [[ "$backend" != "none" && "$runtime_count" -eq 0 && "$saved_count" -gt 0 ]]; then
         risk="${YELLOW}存在：运行时没有脚本规则，但保存文件仍有旧标记，重启后可能恢复旧规则。${PLAIN}"
     elif [[ "$backend" != "none" && "$runtime_rules" != "$saved_rules" ]]; then
-        risk="${YELLOW}存在：运行时规则与保存文件不同，建议到 [8] -> [6] -> [5] 重新保存/检查。${PLAIN}"
+        risk="${YELLOW}存在：运行时规则与保存文件不同，建议到 [8] -> [5] -> [5] 重新保存/检查。${PLAIN}"
     else
         risk="${GREEN}未发现明显丢失/旧快照风险${PLAIN}"
     fi
@@ -846,12 +846,12 @@ func_firewall_manage() {
 
         echo -e "当前防火墙状态: [ $str_fw ]"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 启用防火墙 + 自动放行当前公网端口${PLAIN} ${YELLOW}(不覆盖原有规则)${PLAIN}"
-        echo -e "${GREEN}  2. 手动放行端口${PLAIN} ${YELLOW}(支持 80,443 或 8000-9000)${PLAIN}"
-        echo -e "${GREEN}  3. 删除已放行端口${PLAIN} ${YELLOW}(支持批量/范围)${PLAIN}"
-        echo -e "${GREEN}  4. 查看防火墙放行列表${PLAIN}"
-        echo -e "${RED}  5. 关闭防火墙${PLAIN}"
-        echo -e "${GREEN}  6. 端口并发连接限制${PLAIN} ${YELLOW}(按每来源 IP 限制 TCP 并发)${PLAIN}"
+        echo -e "${GREEN}  1. 查看防火墙放行列表${PLAIN}"
+        echo -e "${GREEN}  2. 启用防火墙 + 自动放行当前公网端口${PLAIN} ${YELLOW}(不覆盖原有规则)${PLAIN}"
+        echo -e "${GREEN}  3. 手动放行端口${PLAIN} ${YELLOW}(支持 80,443 或 8000-9000)${PLAIN}"
+        echo -e "${GREEN}  4. 删除已放行端口${PLAIN} ${YELLOW}(支持批量/范围)${PLAIN}"
+        echo -e "${GREEN}  5. 端口并发连接限制${PLAIN} ${YELLOW}(按每来源 IP 限制 TCP 并发)${PLAIN}"
+        echo -e "${RED}  6. 关闭防火墙${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}"
@@ -862,6 +862,15 @@ func_firewall_manage() {
 
         case $fw_choice in
             1)
+                echo -e "${CYAN}👇 当前防火墙规则列表：${PLAIN}"
+                if [[ "$OS" =~ debian|ubuntu ]]; then
+                    ufw status numbered
+                else
+                    firewall-cmd --list-ports
+                fi
+                read -n 1 -s -r -p "按任意键继续..."
+                ;;
+            2)
                 echo -e "${CYAN}👉 正在嗅探活动端口并配置防火墙...${PLAIN}"
                 local active_ports
                 active_ports=$(ss -tuln 2>/dev/null | grep -E 'LISTEN|UNCONN' | awk '{print $5}' | grep -Ev '^(127\.0\.0\.1:|\[?::1\]?:)' | rev | cut -d: -f1 | rev | sort -nu | grep -E '^[0-9]+$' || true)
@@ -876,7 +885,7 @@ func_firewall_manage() {
 
                 if [[ -z "$active_ports" ]]; then
                     echo -e "${RED}❌ 未能识别到需要放行的监听端口，已取消启用防火墙，避免误锁 SSH。${PLAIN}"
-                    echo -e "${YELLOW}请先确认 ss/iproute2 可用，或使用 [2] 手动添加 SSH 端口后再启用。${PLAIN}"
+                    echo -e "${YELLOW}请先确认 ss/iproute2 可用，或使用 [3] 手动添加 SSH 端口后再启用。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -901,7 +910,7 @@ func_firewall_manage() {
                 echo -e "${GREEN}✅ 防火墙已成功配置！已为您安全追加放行了以下端口: $(echo "$active_ports" | tr '\n' ' ')${PLAIN}"
                 sleep 2
                 ;;
-            2)
+            3)
                 local add_p
                 echo -e "${YELLOW}💡 支持格式：单端口(80)、多端口(80,443)、端口范围(8000:9000 或 8000-9000)${PLAIN}"
                 read_trimmed add_p "👉 请输入要放行的端口号: "
@@ -925,7 +934,7 @@ func_firewall_manage() {
                             echo -e "${YELLOW}⚠️ UFW 当前未启用，本次只写入规则；需要启用时请回到 [1] 自动放行活动端口。${PLAIN}"
                         fi
                     elif ! systemctl is-active --quiet firewalld 2>/dev/null; then
-                        echo -e "${RED}❌ Firewalld 未运行。为避免误关端口，请先使用 [1] 启用并自动放行当前活动端口。${PLAIN}"
+                        echo -e "${RED}❌ Firewalld 未运行。为避免误关端口，请先使用 [2] 启用并自动放行当前活动端口。${PLAIN}"
                         sleep 2
                         continue
                     fi
@@ -959,7 +968,7 @@ func_firewall_manage() {
                 fi
                 sleep 2
                 ;;
-            3)
+            4)
                 local del_p
                 echo -e "${YELLOW}💡 支持格式：单端口(80)、多端口(80,443)、端口范围(8000:9000 或 8000-9000)${PLAIN}"
                 read_trimmed del_p "👉 请输入要删除放行的端口号: "
@@ -1020,16 +1029,8 @@ func_firewall_manage() {
                 fi
                 sleep 2
                 ;;
-            4)
-                echo -e "${CYAN}👇 当前防火墙规则列表：${PLAIN}"
-                if [[ "$OS" =~ debian|ubuntu ]]; then
-                    ufw status numbered
-                else
-                    firewall-cmd --list-ports
-                fi
-                read -n 1 -s -r -p "按任意键继续..."
-                ;;
-            5)
+            5) func_port_connlimit_menu ;;
+            6)
                 confirm_risk_action "关闭系统防火墙" \
                     "ufw/firewalld 服务状态和系统侧访问控制" \
                     "重新启用防火墙并恢复放行规则；必要时从云厂商安全组限制暴露面" \
@@ -1047,7 +1048,6 @@ func_firewall_manage() {
                 echo -e "${GREEN}✅ 防火墙已彻底禁用！${PLAIN}"
                 sleep 2
                 ;;
-            6) func_port_connlimit_menu ;;
             "?"|help) show_firewall_menu_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;

@@ -84,7 +84,7 @@ assert_function_once dist/vps.sh print_vpso_mux_status_json
 assert_file_contains src/menus.sh 'NET_KERNEL_MENU_ITEMS=(' "Network/kernel menu must stay on the declarative pilot table."
 assert_file_contains src/menus.sh '1|BBR / 拥塞控制管理|调用 ylx2016 多内核调优脚本|func_bbr_manage|net_bbr'
 assert_file_contains src/menus.sh '2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune'
-assert_file_contains src/menus.sh '8|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|'
+assert_file_contains src/menus.sh '4|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|'
 assert_file_contains dist/vps.sh '10) func_net_kernel_menu ;;' "Main menu item 10 must still route to network/kernel optimization."
 assert_file_contains dist/vps.sh '15) func_health_dashboard ;;' "Main menu item 15 must still route to health dashboard."
 assert_file_contains dist/vps.sh '19) func_sni_stack_quick_menu ;;' "Main menu item 19 must still route to 443 single-entry center."

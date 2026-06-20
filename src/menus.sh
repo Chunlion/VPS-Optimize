@@ -13,8 +13,8 @@ show_main_help() {
     echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
     echo "16  备份与回滚，高风险操作前建议先跑。"
     echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
-    echo "10 -> 7  流量达量关机保护，按账单周期防刷流量和超额账单。"
-    echo "xcm/外置  直达 3x-ui 外置增强管理；也可走 5 -> 16。"
+    echo "10 -> 5  流量达量关机保护，按账单周期防刷流量和超额账单。"
+    echo "xcm/外置  直达 3x-ui 外置增强管理；也可走 5 -> 2。"
     echo "? 查看帮助，0/q 退出。"
 }
 
@@ -31,12 +31,12 @@ show_beginner_help() {
 show_panel_help() {
     echo -e "${CYAN}VPS-Optimize > 面板、节点与订阅工具 > 帮助${PLAIN}"
     echo "1 管理 3x-ui / x-ui，适合安装、进入官方菜单、修复面板。"
-    echo "2 管理 S-UI，适合安装、进入官方菜单或卸载。"
-    echo "3/4 分别管理 Sing-box 和 Xray。"
-    echo "5/6/7/8 管理订阅工具和 Dockge，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。"
-    echo "11 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
-    echo "14 端口实际流量监控，只看已监控端口实际跑过的流量。"
-    echo "16 3x-ui 外置增强管理，适合自定义重置日期、校准已用流量、备份恢复和查看日志。"
+    echo "2 3x-ui 外置增强管理，适合自定义重置日期、校准已用流量、备份恢复和查看日志。"
+    echo "3 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
+    echo "4 管理 S-UI，适合安装、进入官方菜单或卸载。"
+    echo "5/6 分别管理 Sing-box 和 Xray。"
+    echo "7/8/9 管理订阅工具，11/12 管理 Dockge 和 Compose 迁移，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。"
+    echo "16 端口实际流量监控，只看已监控端口实际跑过的流量。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -49,13 +49,16 @@ show_sni_help() {
     echo "7 回滚：恢复上一次入口模式切换前的备份。"
     echo "8 管理 Web 域名/反代：后续新增或删除网站，不需要重跑首次配置。"
     echo "9 Web 域名 IP 白名单：只限制 Web 域名，不影响 Xray 节点。"
-    echo "10 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。"
-    echo "11 链路体检：排查 ENTRY_MODE、监听、证书、Web 和 Xray 分流。"
-    echo "12 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
-    echo "13/14/15 维护项：证书、共享参数和订阅 External Proxy 提示；修改面板域名请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。"
+    echo "10 修改 443 共享参数：调整面板、订阅、REALITY、入口端口与路径。"
+    echo "11 订阅链接 / External Proxy 提示：检查节点链接是否输出公网 443。"
+    echo "12 CF DNS / Caddy 证书维护：重签证书、修复软链接、清理和回滚。"
+    echo "13 链路体检：排查 ENTRY_MODE、监听、证书、Web 和 Xray 分流。"
+    echo "14 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
+    echo "15 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。"
     echo "16 查看 TCP Peek + Splice 状态 / 8444 预检：展示 status.json 统计；预检只监听 8444，不改公网 443。"
     echo "17 TCP Peek 分流规则校验：只检查配置，不重启入口。"
     echo "18 查看 TCP Peek + Splice 日志：查看 vpso-mux 分流器日志。"
+    echo "修改面板域名请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。"
     echo "未接入 443 单入口时，用主菜单 [4 反代] -> [5] 管理 Caddy/Nginx 域名 IP 白名单。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
@@ -74,12 +77,12 @@ show_net_kernel_help() {
     echo -e "${CYAN}VPS-Optimize > 网络/内核优化 > 帮助${PLAIN}"
     echo "1 BBR / 拥塞控制：调用外部调优脚本，执行前建议备份。"
     echo "2 TCP 参数：修改 sysctl，适合有明确参数需求的用户。"
-    echo "3 ZRAM / Swap：适合小内存 VPS。"
-    echo "4 安装/切换内核：高风险，必须确认快照和救援控制台可用。"
-    echo "5 清理旧内核：不要删除当前内核和云厂商定制内核。"
-    echo "6 DNS 更改优化：国内/国外默认 DNS，也支持自定义 IPv4 和 IPv6。"
-    echo "7 流量达量关机保护：按网卡流量和账单周期自动关机，防止超额账单。"
-    echo "8 网卡管理工具：查看网卡、路由、DNS，临时调整 MTU 或刷新 DHCP。"
+    echo "3 DNS 更改优化：国内/国外默认 DNS，也支持自定义 IPv4 和 IPv6。"
+    echo "4 网卡管理工具：查看网卡、路由、DNS，临时调整 MTU 或刷新 DHCP。"
+    echo "5 流量达量关机保护：按网卡流量和账单周期自动关机，防止超额账单。"
+    echo "6 ZRAM / Swap：适合小内存 VPS。"
+    echo "7 安装/切换内核：高风险，必须确认快照和救援控制台可用。"
+    echo "8 清理旧内核：不要删除当前内核和云厂商定制内核。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -95,12 +98,12 @@ show_health_help() {
 NET_KERNEL_MENU_ITEMS=(
     "1|BBR / 拥塞控制管理|调用 ylx2016 多内核调优脚本|func_bbr_manage|net_bbr"
     "2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune"
-    "3|ZRAM / Swap 内存调优|按内存分档优化小鸡|func_zram_swap|"
-    "4|安装/切换优化内核|Cloud/KVM 稳定推荐 / XanMod 高级可选|func_install_kernel|net_kernel_install"
-    "5|清理旧内核|释放磁盘空间，谨慎操作|func_clean_kernel|"
-    "6|DNS 更改优化|国内/国外/自定义，IPv4+IPv6|func_dns_optimize|"
-    "7|流量达量关机保护|防刷流量 / 防超额账单|func_traffic_guard_menu|"
-    "8|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|"
+    "3|DNS 更改优化|国内/国外/自定义，IPv4+IPv6|func_dns_optimize|"
+    "4|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|"
+    "5|流量达量关机保护|防刷流量 / 防超额账单|func_traffic_guard_menu|"
+    "6|ZRAM / Swap 内存调优|按内存分档优化小鸡|func_zram_swap|"
+    "7|安装/切换优化内核|Cloud/KVM 稳定推荐 / XanMod 高级可选|func_install_kernel|net_kernel_install"
+    "8|清理旧内核|释放磁盘空间，谨慎操作|func_clean_kernel|"
 )
 
 confirm_menu_risk() {
@@ -168,21 +171,21 @@ func_panel_deploy_menu() {
         echo -e "${YELLOW}提示：面板或订阅工具对外访问，未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] 统一管理。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 管理 3x-ui 面板${PLAIN}       ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  2. 管理 S-UI 面板${PLAIN}        ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  3. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  4. 管理 Xray${PLAIN}             ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  5. 管理 SublinkPro${PLAIN}       ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  6. 管理 妙妙屋订阅管理${PLAIN}     ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  7. 管理 Sub-Store${PLAIN}        ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  8. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${BOLD}${YELLOW}  9. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
-        echo -e "${GREEN} 10. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
-        echo -e "${GREEN} 11. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
-        echo -e "${GREEN} 12. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
-        echo -e "${GREEN} 13. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
-        echo -e "${GREEN} 14. 端口实际流量监控${PLAIN}      ${YELLOW}(只看已监控端口实际流量)${PLAIN}"
-        echo -e "${GREEN} 15. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
-        echo -e "${GREEN} 16. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
+        echo -e "${GREEN}  2. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
+        echo -e "${GREEN}  3. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
+        echo -e "${GREEN}  4. 管理 S-UI 面板${PLAIN}        ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  5. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  6. 管理 Xray${PLAIN}             ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  7. 管理 SublinkPro${PLAIN}       ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  8. 管理 妙妙屋订阅管理${PLAIN}     ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  9. 管理 Sub-Store${PLAIN}        ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${BOLD}${YELLOW} 10. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
+        echo -e "${GREEN} 11. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN} 12. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
+        echo -e "${GREEN} 13. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
+        echo -e "${GREEN} 14. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
+        echo -e "${GREEN} 15. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
+        echo -e "${GREEN} 16. 端口实际流量监控${PLAIN}      ${YELLOW}(只看已监控端口实际流量)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -192,21 +195,21 @@ func_panel_deploy_menu() {
         read_trimmed pd_choice "👉 请选择操作: "
         case $pd_choice in
             1) func_xpanel_menu ;;
-            2) func_sui_menu ;;
-            3) func_singbox_menu ;;
-            4) func_xray_menu ;;
-            5) func_sublinkpro_menu ;;
-            6) func_miaomiaowu_menu ;;
-            7) func_substore_menu ;;
-            8) func_dockge_menu ;;
-            9) func_update_subscription_tools ;;
-            10) func_migrate_compose_to_dockge ;;
-            11) func_rescue_panel ;;
-            12) func_dns_unlock ;;
-            13) func_ip_sentinel ;;
-            14) func_port_dog ;;
-            15) func_komari_menu ;;
-            16) func_xui_custom_manager ;;
+            2) func_xui_custom_manager ;;
+            3) func_rescue_panel ;;
+            4) func_sui_menu ;;
+            5) func_singbox_menu ;;
+            6) func_xray_menu ;;
+            7) func_sublinkpro_menu ;;
+            8) func_miaomiaowu_menu ;;
+            9) func_substore_menu ;;
+            10) func_update_subscription_tools ;;
+            11) func_dockge_menu ;;
+            12) func_migrate_compose_to_dockge ;;
+            13) func_komari_menu ;;
+            14) func_dns_unlock ;;
+            15) func_ip_sentinel ;;
+            16) func_port_dog ;;
             xcm|XCM|xui-custom|外置|外置增强|外置管理) func_xui_custom_manager ;;
             "?"|help) show_panel_help; pause_return ;;
             0|q|Q) break ;;
@@ -239,12 +242,12 @@ func_sni_stack_quick_menu() {
         echo -e "${BOLD}${BLUE}▶ 共享配置与体检${PLAIN}"
         echo -e "${GREEN}  8. 管理 Web 域名/反代${PLAIN}        ${YELLOW}(新增/删除/查看网站，最常用)${PLAIN}"
         echo -e "${CYAN}  9. 管理 Web 域名 IP 白名单${PLAIN}   ${YELLOW}(只限制 Web 域名)${PLAIN}"
-        echo -e "${CYAN} 10. Xray 入站管理${PLAIN}             ${YELLOW}(SNI -> 本地地址:端口 分流记录)${PLAIN}"
-        echo -e "${GREEN} 11. 443 链路体检${PLAIN}              ${YELLOW}(ENTRY_MODE/监听/证书/Web/Xray 分流)${PLAIN}"
-        echo -e "${CYAN} 12. 443 网络访问测试${PLAIN}          ${YELLOW}(DNS/TCP/TLS/面板/订阅路径)${PLAIN}"
-        echo -e "${CYAN} 13. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
-        echo -e "${CYAN} 14. 修改 443 共享参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
-        echo -e "${CYAN} 15. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}"
+        echo -e "${CYAN} 10. 修改 443 共享参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
+        echo -e "${CYAN} 11. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}"
+        echo -e "${CYAN} 12. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
+        echo -e "${GREEN} 13. 443 链路体检${PLAIN}              ${YELLOW}(ENTRY_MODE/监听/证书/Web/Xray 分流)${PLAIN}"
+        echo -e "${CYAN} 14. 443 网络访问测试${PLAIN}          ${YELLOW}(DNS/TCP/TLS/面板/订阅路径)${PLAIN}"
+        echo -e "${CYAN} 15. Xray 入站管理${PLAIN}             ${YELLOW}(SNI -> 本地地址:端口 分流记录)${PLAIN}"
         echo -e "${CYAN} 16. 查看 TCP Peek + Splice 状态 / 8444 预检${PLAIN} ${YELLOW}(不改公网 443)${PLAIN}"
         echo -e "${CYAN} 17. TCP Peek 分流规则校验${PLAIN} ${YELLOW}(只检查配置，不重启入口)${PLAIN}"
         echo -e "${CYAN} 18. 查看 TCP Peek + Splice 日志${PLAIN} ${YELLOW}(vpso-mux 分流器日志)${PLAIN}"
@@ -267,12 +270,12 @@ func_sni_stack_quick_menu() {
             7) rollback_last_entry_mode ;;
             8) manage_sni_stack_sites; continue ;;
             9) manage_sni_stack_ip_whitelist; continue ;;
-            10) manage_xray_inbound_routes; continue ;;
-            11) sni_stack_health_check_enhanced ;;
-            12) func_443_network_test; continue ;;
-            13) func_caddy_cf_maintenance_menu; continue ;;
-            14) edit_sni_stack_runtime_profile; continue ;;
-            15) check_sni_stack_subscription_hint ;;
+            10) edit_sni_stack_runtime_profile; continue ;;
+            11) check_sni_stack_subscription_hint ;;
+            12) func_caddy_cf_maintenance_menu; continue ;;
+            13) sni_stack_health_check_enhanced ;;
+            14) func_443_network_test; continue ;;
+            15) manage_xray_inbound_routes; continue ;;
             16) start_tcp_peek_test_port ;;
             17) tcp_peek_dry_run_config ;;
             18) view_vpso_mux_logs ;;

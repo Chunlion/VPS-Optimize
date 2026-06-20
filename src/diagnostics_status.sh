@@ -99,7 +99,7 @@ print_project_runtime_overview() {
             echo -e "订阅路径 : 普通 ${SUB_URI_PATH} / Clash-Mihomo ${CLASH_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
             echo -e "扩展分流 : 网站/反代 ${#SITE_DOMAINS[@]} 个，TCP/SNI 入站 ${#TCP_ROUTE_SNIS[@]} 个"
         else
-        echo -e "443 入口 : ${YELLOW}检测到配置文件，但读取失败，请运行 [19] -> [11] 体检。${PLAIN}"
+        echo -e "443 入口 : ${YELLOW}检测到配置文件，但读取失败，请运行 [19] -> [13] 体检。${PLAIN}"
         fi
     else
         echo -e "443 入口 : ${BLUE}尚未配置；需要面板/订阅/REALITY 共用 443 时进入 [19]。${PLAIN}"

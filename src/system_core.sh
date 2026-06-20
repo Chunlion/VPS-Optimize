@@ -423,10 +423,10 @@ func_system_tweaks() {
         echo -e "${GREEN}  1. IPv6 开关${PLAIN}              当前: [ $str_ipv6 ]"
         echo -e "${GREEN}  2. IPv4 出站优先${PLAIN}          当前: [ $str_ipv4_first ]"
         echo -e "${GREEN}  3. Ping 响应开关${PLAIN}          当前: [ $str_ping ]"
-        echo -e "${GREEN}  4. 自动安全更新开关${PLAIN}       当前: [ $str_update ]"
-        echo -e "${GREEN}  5. 清理系统垃圾${PLAIN}           (日志/缓存/无用包)"
-        echo -e "${GREEN}  6. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]"
-        echo -e "${GREEN}  7. 本机 hosts 解析管理${PLAIN}    (/etc/hosts 本机域名解析)"
+        echo -e "${GREEN}  4. 本机 hosts 解析管理${PLAIN}    (/etc/hosts 本机域名解析)"
+        echo -e "${GREEN}  5. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]"
+        echo -e "${GREEN}  6. 自动安全更新开关${PLAIN}       当前: [ $str_update ]"
+        echo -e "${GREEN}  7. 清理系统垃圾${PLAIN}           (日志/缓存/无用包)"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -472,7 +472,9 @@ func_system_tweaks() {
                     sysctl -p /etc/sysctl.d/99-disable-ping.conf >/dev/null 2>&1
                     echo -e "${RED}✅ 已开启禁 Ping 保护${PLAIN}"
                 fi; sleep 1 ;;
-            4)
+            4) func_hosts_manage ;;
+            5) func_change_hostname; sleep 1 ;;
+            6)
                 read_trimmed yn "❓ 开启系统自动更新？(y 开启 / n 关闭): "
                 if is_yes "$yn"; then
                     if [[ "$OS" =~ debian|ubuntu ]]; then
@@ -488,7 +490,7 @@ func_system_tweaks() {
                     else systemctl disable --now dnf-automatic.timer >/dev/null 2>&1; fi
                     echo -e "${GREEN}✅ 自动更新已关闭${PLAIN}"
                 fi; sleep 1 ;;
-            5)
+            7)
                 echo -e "${CYAN}👉 正在深度清理系统垃圾...${PLAIN}"
                 if [[ "$OS" =~ debian|ubuntu ]]; then
                     apt autoremove --purge -y >/dev/null 2>&1
@@ -500,8 +502,6 @@ func_system_tweaks() {
                 journalctl --vacuum-time=1d > /dev/null 2>&1
                 echo -e "${GREEN}✅ 清理完成！${PLAIN}"
                 sleep 1 ;;
-            6) func_change_hostname; sleep 1 ;;
-            7) func_hosts_manage ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac

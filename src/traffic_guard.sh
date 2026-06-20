@@ -1178,7 +1178,7 @@ print_traffic_guard_diagnostic_summary() {
             echo "- 最近检查: ${last_checked} (${state_age}s 前; 超时阈值 ${stale_threshold}s)"
             if (( state_age > stale_threshold )); then
                 if [[ "$timer_active" == "active" ]]; then
-                    echo "- 异常提示: 最近检查超时，timer active 但状态文件已超过 ${state_age}s 未刷新，请查看日志或使用菜单 [10] -> [7] -> [6] 修复 timer"
+                    echo "- 异常提示: 最近检查超时，timer active 但状态文件已超过 ${state_age}s 未刷新，请查看日志或使用菜单 [10] -> [5] -> [6] 修复 timer"
                 else
                     echo "- 异常提示: 最近检查超时，状态文件已超过 ${state_age}s 未刷新，timer 当前为 ${timer_active}"
                 fi

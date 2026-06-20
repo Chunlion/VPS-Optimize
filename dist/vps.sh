@@ -417,7 +417,7 @@ is_trusted_remote_script_url() {
         "http://v7.hostcli.com/install/install-ubuntu_6.0.sh"|\
         "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh"|\
         "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh"|\
-        "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-docker.sh"|\
+        "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh"|\
         "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh"|\
         "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"|\
         "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh")
@@ -2793,10 +2793,10 @@ func_system_tweaks() {
         echo -e "${GREEN}  1. IPv6 开关${PLAIN}              当前: [ $str_ipv6 ]"
         echo -e "${GREEN}  2. IPv4 出站优先${PLAIN}          当前: [ $str_ipv4_first ]"
         echo -e "${GREEN}  3. Ping 响应开关${PLAIN}          当前: [ $str_ping ]"
-        echo -e "${GREEN}  4. 自动安全更新开关${PLAIN}       当前: [ $str_update ]"
-        echo -e "${GREEN}  5. 清理系统垃圾${PLAIN}           (日志/缓存/无用包)"
-        echo -e "${GREEN}  6. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]"
-        echo -e "${GREEN}  7. 本机 hosts 解析管理${PLAIN}    (/etc/hosts 本机域名解析)"
+        echo -e "${GREEN}  4. 本机 hosts 解析管理${PLAIN}    (/etc/hosts 本机域名解析)"
+        echo -e "${GREEN}  5. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]"
+        echo -e "${GREEN}  6. 自动安全更新开关${PLAIN}       当前: [ $str_update ]"
+        echo -e "${GREEN}  7. 清理系统垃圾${PLAIN}           (日志/缓存/无用包)"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -2842,7 +2842,9 @@ func_system_tweaks() {
                     sysctl -p /etc/sysctl.d/99-disable-ping.conf >/dev/null 2>&1
                     echo -e "${RED}✅ 已开启禁 Ping 保护${PLAIN}"
                 fi; sleep 1 ;;
-            4)
+            4) func_hosts_manage ;;
+            5) func_change_hostname; sleep 1 ;;
+            6)
                 read_trimmed yn "❓ 开启系统自动更新？(y 开启 / n 关闭): "
                 if is_yes "$yn"; then
                     if [[ "$OS" =~ debian|ubuntu ]]; then
@@ -2858,7 +2860,7 @@ func_system_tweaks() {
                     else systemctl disable --now dnf-automatic.timer >/dev/null 2>&1; fi
                     echo -e "${GREEN}✅ 自动更新已关闭${PLAIN}"
                 fi; sleep 1 ;;
-            5)
+            7)
                 echo -e "${CYAN}👉 正在深度清理系统垃圾...${PLAIN}"
                 if [[ "$OS" =~ debian|ubuntu ]]; then
                     apt autoremove --purge -y >/dev/null 2>&1
@@ -2870,8 +2872,6 @@ func_system_tweaks() {
                 journalctl --vacuum-time=1d > /dev/null 2>&1
                 echo -e "${GREEN}✅ 清理完成！${PLAIN}"
                 sleep 1 ;;
-            6) func_change_hostname; sleep 1 ;;
-            7) func_hosts_manage ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
         esac
@@ -3125,7 +3125,7 @@ print_port_connlimit_health_summary() {
     elif [[ "$backend" != "none" && "$runtime_count" -eq 0 && "$saved_count" -gt 0 ]]; then
         risk="${YELLOW}存在：运行时没有脚本规则，但保存文件仍有旧标记，重启后可能恢复旧规则。${PLAIN}"
     elif [[ "$backend" != "none" && "$runtime_rules" != "$saved_rules" ]]; then
-        risk="${YELLOW}存在：运行时规则与保存文件不同，建议到 [8] -> [6] -> [5] 重新保存/检查。${PLAIN}"
+        risk="${YELLOW}存在：运行时规则与保存文件不同，建议到 [8] -> [5] -> [5] 重新保存/检查。${PLAIN}"
     else
         risk="${GREEN}未发现明显丢失/旧快照风险${PLAIN}"
     fi
@@ -3733,12 +3733,12 @@ func_firewall_manage() {
 
         echo -e "当前防火墙状态: [ $str_fw ]"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 启用防火墙 + 自动放行当前公网端口${PLAIN} ${YELLOW}(不覆盖原有规则)${PLAIN}"
-        echo -e "${GREEN}  2. 手动放行端口${PLAIN} ${YELLOW}(支持 80,443 或 8000-9000)${PLAIN}"
-        echo -e "${GREEN}  3. 删除已放行端口${PLAIN} ${YELLOW}(支持批量/范围)${PLAIN}"
-        echo -e "${GREEN}  4. 查看防火墙放行列表${PLAIN}"
-        echo -e "${RED}  5. 关闭防火墙${PLAIN}"
-        echo -e "${GREEN}  6. 端口并发连接限制${PLAIN} ${YELLOW}(按每来源 IP 限制 TCP 并发)${PLAIN}"
+        echo -e "${GREEN}  1. 查看防火墙放行列表${PLAIN}"
+        echo -e "${GREEN}  2. 启用防火墙 + 自动放行当前公网端口${PLAIN} ${YELLOW}(不覆盖原有规则)${PLAIN}"
+        echo -e "${GREEN}  3. 手动放行端口${PLAIN} ${YELLOW}(支持 80,443 或 8000-9000)${PLAIN}"
+        echo -e "${GREEN}  4. 删除已放行端口${PLAIN} ${YELLOW}(支持批量/范围)${PLAIN}"
+        echo -e "${GREEN}  5. 端口并发连接限制${PLAIN} ${YELLOW}(按每来源 IP 限制 TCP 并发)${PLAIN}"
+        echo -e "${RED}  6. 关闭防火墙${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}"
@@ -3749,6 +3749,15 @@ func_firewall_manage() {
 
         case $fw_choice in
             1)
+                echo -e "${CYAN}👇 当前防火墙规则列表：${PLAIN}"
+                if [[ "$OS" =~ debian|ubuntu ]]; then
+                    ufw status numbered
+                else
+                    firewall-cmd --list-ports
+                fi
+                read -n 1 -s -r -p "按任意键继续..."
+                ;;
+            2)
                 echo -e "${CYAN}👉 正在嗅探活动端口并配置防火墙...${PLAIN}"
                 local active_ports
                 active_ports=$(ss -tuln 2>/dev/null | grep -E 'LISTEN|UNCONN' | awk '{print $5}' | grep -Ev '^(127\.0\.0\.1:|\[?::1\]?:)' | rev | cut -d: -f1 | rev | sort -nu | grep -E '^[0-9]+$' || true)
@@ -3763,7 +3772,7 @@ func_firewall_manage() {
 
                 if [[ -z "$active_ports" ]]; then
                     echo -e "${RED}❌ 未能识别到需要放行的监听端口，已取消启用防火墙，避免误锁 SSH。${PLAIN}"
-                    echo -e "${YELLOW}请先确认 ss/iproute2 可用，或使用 [2] 手动添加 SSH 端口后再启用。${PLAIN}"
+                    echo -e "${YELLOW}请先确认 ss/iproute2 可用，或使用 [3] 手动添加 SSH 端口后再启用。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -3788,7 +3797,7 @@ func_firewall_manage() {
                 echo -e "${GREEN}✅ 防火墙已成功配置！已为您安全追加放行了以下端口: $(echo "$active_ports" | tr '\n' ' ')${PLAIN}"
                 sleep 2
                 ;;
-            2)
+            3)
                 local add_p
                 echo -e "${YELLOW}💡 支持格式：单端口(80)、多端口(80,443)、端口范围(8000:9000 或 8000-9000)${PLAIN}"
                 read_trimmed add_p "👉 请输入要放行的端口号: "
@@ -3812,7 +3821,7 @@ func_firewall_manage() {
                             echo -e "${YELLOW}⚠️ UFW 当前未启用，本次只写入规则；需要启用时请回到 [1] 自动放行活动端口。${PLAIN}"
                         fi
                     elif ! systemctl is-active --quiet firewalld 2>/dev/null; then
-                        echo -e "${RED}❌ Firewalld 未运行。为避免误关端口，请先使用 [1] 启用并自动放行当前活动端口。${PLAIN}"
+                        echo -e "${RED}❌ Firewalld 未运行。为避免误关端口，请先使用 [2] 启用并自动放行当前活动端口。${PLAIN}"
                         sleep 2
                         continue
                     fi
@@ -3846,7 +3855,7 @@ func_firewall_manage() {
                 fi
                 sleep 2
                 ;;
-            3)
+            4)
                 local del_p
                 echo -e "${YELLOW}💡 支持格式：单端口(80)、多端口(80,443)、端口范围(8000:9000 或 8000-9000)${PLAIN}"
                 read_trimmed del_p "👉 请输入要删除放行的端口号: "
@@ -3907,16 +3916,8 @@ func_firewall_manage() {
                 fi
                 sleep 2
                 ;;
-            4)
-                echo -e "${CYAN}👇 当前防火墙规则列表：${PLAIN}"
-                if [[ "$OS" =~ debian|ubuntu ]]; then
-                    ufw status numbered
-                else
-                    firewall-cmd --list-ports
-                fi
-                read -n 1 -s -r -p "按任意键继续..."
-                ;;
-            5)
+            5) func_port_connlimit_menu ;;
+            6)
                 confirm_risk_action "关闭系统防火墙" \
                     "ufw/firewalld 服务状态和系统侧访问控制" \
                     "重新启用防火墙并恢复放行规则；必要时从云厂商安全组限制暴露面" \
@@ -3934,7 +3935,6 @@ func_firewall_manage() {
                 echo -e "${GREEN}✅ 防火墙已彻底禁用！${PLAIN}"
                 sleep 2
                 ;;
-            6) func_port_connlimit_menu ;;
             "?"|help) show_firewall_menu_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1 ;;
@@ -5033,9 +5033,9 @@ func_env_install() {
         echo -e "${BOLD}${BLUE}▶ 基础运行环境${PLAIN}"
         echo -e "${GREEN}  1. Docker 引擎        ${YELLOW}  2. Python 环境        ${GREEN}  3. iperf3 测速工具${PLAIN}"
         echo -e "${BOLD}${BLUE}▶ 转发、隧道与常用服务${PLAIN}"
-        echo -e "${GREEN}  4. Realm 端口转发     ${YELLOW}  5. Gost 隧道          ${GREEN}  6. 极光面板${PLAIN}"
-        echo -e "${GREEN}  7. 哪吒监控           ${YELLOW}  8. WARP 解锁/网络     ${GREEN}  9. Aria2 下载${PLAIN}"
-        echo -e "${GREEN} 10. Forwardx 转发面板  ${YELLOW} 11. PVE 虚拟化工具     ${GREEN} 12. Argox 节点${PLAIN}"
+        echo -e "${GREEN}  4. WARP 解锁/网络     ${YELLOW}  5. Realm 端口转发     ${GREEN}  6. Gost 隧道${PLAIN}"
+        echo -e "${GREEN}  7. Forwardx 转发面板  ${YELLOW}  8. Argox 节点         ${GREEN}  9. 极光面板${PLAIN}"
+        echo -e "${GREEN} 10. 哪吒监控           ${YELLOW} 11. Aria2 下载         ${GREEN} 12. PVE 虚拟化工具${PLAIN}"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -5050,20 +5050,20 @@ func_env_install() {
                 ;;
             2) run_remote_script "安装 Python 环境" "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh" ;;
             3) run_safe "安装 iperf3" install_pkg iperf3 ;;
-            4) run_remote_script "安装 Realm 端口转发" "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh" install ;;
-            5) run_remote_script "安装 Gost 隧道" "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh" ;;
-            6) run_remote_script "安装极光面板" "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh" ;;
-            7) 
+            4) run_remote_script "安装 WARP 解锁/网络工具" "https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh" ;;
+            5) run_remote_script "安装 Realm 端口转发" "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh" install ;;
+            6) run_remote_script "安装 Gost 隧道" "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh" ;;
+            7) run_remote_script "安装 Forwardx 转发面板" "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh" install ;;
+            8) run_remote_script "安装 Argox 节点" "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh" ;;
+            9) run_remote_script "安装极光面板" "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh" ;;
+            10)
                 if run_remote_script "安装哪吒监控" "https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh"; then
                     echo -e "\n${YELLOW}💡 哪吒自定义代码提示 (去除动效并固定顶部)：${PLAIN}"
                     echo -e "${GREEN}<script>\nwindow.ShowNetTransfer = true;\nwindow.FixedTopServerName = true;\nwindow.DisableAnimatedMan = true;\n</script>${PLAIN}"
                 fi
                 ;;
-            8) run_remote_script "安装 WARP 解锁/网络工具" "https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh" ;;
-            9) run_remote_script "安装 Aria2 下载工具" "https://git.io/aria2.sh" ;;
-            10) ensure_docker_compose_ready && run_remote_script "安装 Forwardx 转发面板" "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-docker.sh" install ;;
-            11) run_remote_script "安装 PVE 虚拟化工具" "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh" ;;
-            12) run_remote_script "安装 Argox 节点" "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh" ;;
+            11) run_remote_script "安装 Aria2 下载工具" "https://git.io/aria2.sh" ;;
+            12) run_remote_script "安装 PVE 虚拟化工具" "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh" ;;
             "?"|help) echo "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443 单入口走主菜单 [19]。"; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;
@@ -5216,7 +5216,7 @@ EOF
         echo -e "${CYAN}▶ 正在为 ${domain} 申请 DNS 证书...${PLAIN}"
         if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
             echo -e "${RED}❌ 证书申请失败：${domain}${PLAIN}"
-            echo -e "${YELLOW}   提示：可进入主菜单 [19] -> [13] 一键自动修复后再重试。${PLAIN}"
+            echo -e "${YELLOW}   提示：可进入主菜单 [19] -> [12] -> [14] 一键自动修复后再重试。${PLAIN}"
             ((fail_count++))
             continue
         fi
@@ -10023,7 +10023,7 @@ list_sni_stack_sites() {
     [[ -n "$panel_ranges" ]] && echo -e "${YELLOW}面板域名 IP 白名单：${panel_ranges}${PLAIN}"
     echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
     [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#TCP_ROUTE_SNIS[@]} 个旧 TCP/SNI 入站。${PLAIN}"
-        [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#XRAY_SNI_ROUTE_SNIS[@]} 个 Xray 入站，请在 [19] -> [10] 查看。${PLAIN}"
+        [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "${CYAN}另有 ${#XRAY_SNI_ROUTE_SNIS[@]} 个 Xray 入站，请在 [19] -> [15] 查看。${PLAIN}"
     echo -e "------------------------------------------------"
     if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
         echo -e "${YELLOW}当前没有额外的网站/反代域名。${PLAIN}"
@@ -10286,7 +10286,7 @@ switch_sni_stack_web_proxy_engine() {
     echo -e "本地 TLS 后端：$(web_proxy_backend)"
     echo -e "读取来源：/etc/vps-optimize/sni-stack.env（脚本保存的 443 共享配置）"
     echo -e "${YELLOW}切换时会按当前域名、证书、后端和白名单重新渲染所选引擎，并隔离另一套 443 本地 Web 反代配置。${PLAIN}"
-    echo -e "${YELLOW}如果你手工改过 Caddy/Nginx 文件但没有通过本菜单保存，请先在 [8]/[14] 同步脚本保存值后再切换。${PLAIN}"
+    echo -e "${YELLOW}如果你手工改过 Caddy/Nginx 文件但没有通过本菜单保存，请先在 [8]/[10] 同步脚本保存值后再切换。${PLAIN}"
     echo -e "------------------------------------------------"
     echo -e "${GREEN}  1. Caddy 本地 HTTPS 反代${PLAIN}"
     echo -e "${GREEN}  2. Nginx 本地 HTTPS 反代${PLAIN}"
@@ -11175,7 +11175,7 @@ func_caddy_cf_health_check() {
                 echo -e "    ${GREEN}软链接状态: /root/cert 已正确挂载${PLAIN}"
                 ((ok_count++))
             else
-                echo -e "    ${YELLOW}软链接状态: 缺失或失效，建议执行维护菜单 [9] 重建软链接${PLAIN}"
+                echo -e "    ${YELLOW}软链接状态: 缺失或失效，建议执行维护菜单 [10] 重建软链接${PLAIN}"
                 ((warn_count++))
             fi
 
@@ -11207,7 +11207,7 @@ func_caddy_cf_health_check() {
         echo -e "${GREEN}✅ 清单文件存在: /root/cert/caddy_cf_manifest.txt${PLAIN}"
         ((ok_count++))
     else
-        echo -e "${YELLOW}⚠️ 清单文件不存在，建议执行维护菜单 [10] 重建。${PLAIN}"
+        echo -e "${YELLOW}⚠️ 清单文件不存在，建议执行维护菜单 [11] 重建。${PLAIN}"
         ((warn_count++))
     fi
 
@@ -11381,9 +11381,9 @@ EOF
     echo -e "------------------------------------------------"
     echo -e "${CYAN}自动修复结果: ${GREEN}${fixed_count} 已修复${PLAIN} / ${YELLOW}${warn_count} 警告${PLAIN} / ${RED}${fail_count} 失败${PLAIN}"
     if [[ "$fail_count" -gt 0 ]]; then
-        echo -e "${RED}存在失败项，建议先执行维护菜单 [12] 体检复查并查看 caddy 日志。${PLAIN}"
+        echo -e "${RED}存在失败项，建议先执行维护菜单 [13] 体检复查并查看 caddy 日志。${PLAIN}"
     else
-        echo -e "${GREEN}自动修复流程完成，可执行维护菜单 [12] 复检确认。${PLAIN}"
+        echo -e "${GREEN}自动修复流程完成，可执行维护菜单 [13] 复检确认。${PLAIN}"
     fi
 }
 
@@ -11522,7 +11522,7 @@ func_caddy_cf_maintenance_menu() {
 
                 if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
                     echo -e "${RED}❌ 证书签发失败：${domain}${PLAIN}"
-                    echo -e "${YELLOW}   提示：建议先执行本菜单 [13] 自动修复再重试。${PLAIN}"
+                    echo -e "${YELLOW}   提示：建议先执行本菜单 [14] 自动修复再重试。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
@@ -13023,10 +13023,10 @@ func_docker_manage() {
         print_breadcrumb "Docker 安全管理"
         echo -e "${BOLD}🐳 Docker 安全管理 (版本: ${GREEN}${docker_ver}${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${GREEN}  1. 开启 Docker 本地防穿透${PLAIN} ${YELLOW}(限制映射端口仅 127.0.0.1 访问)${PLAIN}"
-        echo -e "${GREEN}  2. 解除 Docker 本地防穿透${PLAIN} ${YELLOW}(恢复全网可访，不破坏原配置)${PLAIN}"
-        echo -e "${GREEN}  3. 查看 443 / 订阅工具容器状态${PLAIN}"
-        echo -e "${GREEN}  4. Docker 端口暴露审计${PLAIN} ${YELLOW}(检查是否绕过 443 单入口)${PLAIN}"
+        echo -e "${GREEN}  1. 查看 443 / 订阅工具容器状态${PLAIN}"
+        echo -e "${GREEN}  2. Docker 端口暴露审计${PLAIN} ${YELLOW}(检查是否绕过 443 单入口)${PLAIN}"
+        echo -e "${GREEN}  3. 开启 Docker 本地防穿透${PLAIN} ${YELLOW}(限制映射端口仅 127.0.0.1 访问)${PLAIN}"
+        echo -e "${GREEN}  4. 解除 Docker 本地防穿透${PLAIN} ${YELLOW}(恢复全网可访，不破坏原配置)${PLAIN}"
         echo -e "${BOLD}${YELLOW}  5. UPD 更新订阅工具容器${PLAIN} ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
@@ -13034,7 +13034,9 @@ func_docker_manage() {
         local c
         read_trimmed c "👉 请选择操作: "
         case $c in
-            1) 
+            1) func_docker_project_status ;;
+            2) func_docker_443_exposure_audit ;;
+            3)
                 confirm_risk_action "开启 Docker 本地防穿透" \
                     "Docker daemon.json 和 Docker 服务重启" \
                     "使用自动备份的 daemon.json 恢复并重启 Docker" \
@@ -13094,7 +13096,7 @@ EOF
                 fi
                 sleep 2
                 ;;
-            2) 
+            4)
                 local conf_file="/etc/docker/daemon.json"
                 if [[ -f "$conf_file" ]]; then
                     confirm_risk_action "解除 Docker 本地防穿透" \
@@ -13135,8 +13137,6 @@ EOF
                 fi
                 sleep 2
                 ;;
-            3) func_docker_project_status ;;
-            4) func_docker_443_exposure_audit ;;
             5) func_update_subscription_tools ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}"; sleep 1 ;;
@@ -13957,7 +13957,7 @@ print_project_runtime_overview() {
             echo -e "订阅路径 : 普通 ${SUB_URI_PATH} / Clash-Mihomo ${CLASH_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
             echo -e "扩展分流 : 网站/反代 ${#SITE_DOMAINS[@]} 个，TCP/SNI 入站 ${#TCP_ROUTE_SNIS[@]} 个"
         else
-        echo -e "443 入口 : ${YELLOW}检测到配置文件，但读取失败，请运行 [19] -> [11] 体检。${PLAIN}"
+        echo -e "443 入口 : ${YELLOW}检测到配置文件，但读取失败，请运行 [19] -> [13] 体检。${PLAIN}"
         fi
     else
         echo -e "443 入口 : ${BLUE}尚未配置；需要面板/订阅/REALITY 共用 443 时进入 [19]。${PLAIN}"
@@ -14213,10 +14213,10 @@ func_test_scripts() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${BOLD}📊 VPS 综合测速与质量检验合集库${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${GREEN}  1. YABS 硬件性能测试      ${YELLOW}  2. 融合怪详细测速${PLAIN}"
-        echo -e "${GREEN}  3. SuperBench 综合测速    ${YELLOW}  4. bench.sh 基础测试${PLAIN}"
-        echo -e "${GREEN}  5. 流媒体解锁检测         ${YELLOW}  6. 三网回程路由测试${PLAIN}"
-        echo -e "${GREEN}  7. IP 质量 / 欺诈度检测   ${YELLOW}  8. NodeSeek 综合测试${PLAIN}"
+        echo -e "${GREEN}  1. YABS 硬件性能测试      ${YELLOW}  2. SuperBench 综合测速${PLAIN}"
+        echo -e "${GREEN}  3. bench.sh 基础测试      ${YELLOW}  4. 融合怪详细测速${PLAIN}"
+        echo -e "${GREEN}  5. 三网回程路由测试       ${YELLOW}  6. IP 质量 / 欺诈度检测${PLAIN}"
+        echo -e "${GREEN}  7. NodeSeek 综合测试      ${YELLOW}  8. 流媒体解锁检测${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -14226,13 +14226,13 @@ func_test_scripts() {
         read_trimmed t "👉 请输入对应序号选择: "
         case $t in
             1) ran_test=true; run_remote_script "运行 YABS 硬件性能测试" "https://yabs.sh" ;;
-            2) ran_test=true; run_remote_script "运行融合怪详细测速" "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh" ;;
-            3) ran_test=true; run_remote_script "运行 SuperBench 综合测速" "https://about.superbench.pro" ;;
-            4) ran_test=true; run_remote_script "运行 bench.sh 基础测试" "https://bench.sh" ;;
-            5) ran_test=true; run_remote_script "运行流媒体解锁检测" "https://check.unlock.media" ;;
-            6) ran_test=true; run_remote_script "运行三网回程路由测试" "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh" ;;
-            7) ran_test=true; run_remote_script "运行 IP 质量 / 欺诈度检测" "https://IP.Check.Place" ;;
-            8) ran_test=true; run_remote_script "运行 NodeSeek 综合测试" "https://run.NodeQuality.com" ;;
+            2) ran_test=true; run_remote_script "运行 SuperBench 综合测速" "https://about.superbench.pro" ;;
+            3) ran_test=true; run_remote_script "运行 bench.sh 基础测试" "https://bench.sh" ;;
+            4) ran_test=true; run_remote_script "运行融合怪详细测速" "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh" ;;
+            5) ran_test=true; run_remote_script "运行三网回程路由测试" "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh" ;;
+            6) ran_test=true; run_remote_script "运行 IP 质量 / 欺诈度检测" "https://IP.Check.Place" ;;
+            7) ran_test=true; run_remote_script "运行 NodeSeek 综合测试" "https://run.NodeQuality.com" ;;
+            8) ran_test=true; run_remote_script "运行流媒体解锁检测" "https://check.unlock.media" ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1; continue ;;
         esac
@@ -14638,9 +14638,9 @@ manage_compose_project() {
         fi
 
         echo -e "${GREEN}  1. 查看运行状态${PLAIN}"
-        echo -e "${GREEN}  2. 重启服务${PLAIN}"
-        echo -e "${GREEN}  3. 更新镜像并重建${PLAIN}"
-        echo -e "${CYAN}  4. 查看/编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}"
+        echo -e "${CYAN}  2. 查看/编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}"
+        echo -e "${GREEN}  3. 重启服务${PLAIN}"
+        echo -e "${GREEN}  4. 更新镜像并重建${PLAIN}"
         echo -e "${YELLOW}  5. 停止并移除容器（保留目录数据）${PLAIN}"
         echo -e "${RED}  6. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}"
         echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
@@ -14654,17 +14654,17 @@ manage_compose_project() {
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
             2)
-                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" restart)
+                edit_applied_config_file "$compose_file" "compose" "${project_name} Compose 配置"
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
             3)
                 ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" restart)
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
             4)
-                edit_applied_config_file "$compose_file" "compose" "${project_name} Compose 配置"
+                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
             5)
@@ -17866,7 +17866,7 @@ print_traffic_guard_diagnostic_summary() {
             echo "- 最近检查: ${last_checked} (${state_age}s 前; 超时阈值 ${stale_threshold}s)"
             if (( state_age > stale_threshold )); then
                 if [[ "$timer_active" == "active" ]]; then
-                    echo "- 异常提示: 最近检查超时，timer active 但状态文件已超过 ${state_age}s 未刷新，请查看日志或使用菜单 [10] -> [7] -> [6] 修复 timer"
+                    echo "- 异常提示: 最近检查超时，timer active 但状态文件已超过 ${state_age}s 未刷新，请查看日志或使用菜单 [10] -> [5] -> [6] 修复 timer"
                 else
                     echo "- 异常提示: 最近检查超时，状态文件已超过 ${state_age}s 未刷新，timer 当前为 ${timer_active}"
                 fi
@@ -18455,8 +18455,8 @@ show_main_help() {
     echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
     echo "16  备份与回滚，高风险操作前建议先跑。"
     echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
-    echo "10 -> 7  流量达量关机保护，按账单周期防刷流量和超额账单。"
-    echo "xcm/外置  直达 3x-ui 外置增强管理；也可走 5 -> 16。"
+    echo "10 -> 5  流量达量关机保护，按账单周期防刷流量和超额账单。"
+    echo "xcm/外置  直达 3x-ui 外置增强管理；也可走 5 -> 2。"
     echo "? 查看帮助，0/q 退出。"
 }
 
@@ -18473,12 +18473,12 @@ show_beginner_help() {
 show_panel_help() {
     echo -e "${CYAN}VPS-Optimize > 面板、节点与订阅工具 > 帮助${PLAIN}"
     echo "1 管理 3x-ui / x-ui，适合安装、进入官方菜单、修复面板。"
-    echo "2 管理 S-UI，适合安装、进入官方菜单或卸载。"
-    echo "3/4 分别管理 Sing-box 和 Xray。"
-    echo "5/6/7/8 管理订阅工具和 Dockge，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。"
-    echo "11 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
-    echo "14 端口实际流量监控，只看已监控端口实际跑过的流量。"
-    echo "16 3x-ui 外置增强管理，适合自定义重置日期、校准已用流量、备份恢复和查看日志。"
+    echo "2 3x-ui 外置增强管理，适合自定义重置日期、校准已用流量、备份恢复和查看日志。"
+    echo "3 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
+    echo "4 管理 S-UI，适合安装、进入官方菜单或卸载。"
+    echo "5/6 分别管理 Sing-box 和 Xray。"
+    echo "7/8/9 管理订阅工具，11/12 管理 Dockge 和 Compose 迁移，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。"
+    echo "16 端口实际流量监控，只看已监控端口实际跑过的流量。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -18491,13 +18491,16 @@ show_sni_help() {
     echo "7 回滚：恢复上一次入口模式切换前的备份。"
     echo "8 管理 Web 域名/反代：后续新增或删除网站，不需要重跑首次配置。"
     echo "9 Web 域名 IP 白名单：只限制 Web 域名，不影响 Xray 节点。"
-    echo "10 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。"
-    echo "11 链路体检：排查 ENTRY_MODE、监听、证书、Web 和 Xray 分流。"
-    echo "12 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
-    echo "13/14/15 维护项：证书、共享参数和订阅 External Proxy 提示；修改面板域名请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。"
+    echo "10 修改 443 共享参数：调整面板、订阅、REALITY、入口端口与路径。"
+    echo "11 订阅链接 / External Proxy 提示：检查节点链接是否输出公网 443。"
+    echo "12 CF DNS / Caddy 证书维护：重签证书、修复软链接、清理和回滚。"
+    echo "13 链路体检：排查 ENTRY_MODE、监听、证书、Web 和 Xray 分流。"
+    echo "14 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅路径响应。"
+    echo "15 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。"
     echo "16 查看 TCP Peek + Splice 状态 / 8444 预检：展示 status.json 统计；预检只监听 8444，不改公网 443。"
     echo "17 TCP Peek 分流规则校验：只检查配置，不重启入口。"
     echo "18 查看 TCP Peek + Splice 日志：查看 vpso-mux 分流器日志。"
+    echo "修改面板域名请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。"
     echo "未接入 443 单入口时，用主菜单 [4 反代] -> [5] 管理 Caddy/Nginx 域名 IP 白名单。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
@@ -18516,12 +18519,12 @@ show_net_kernel_help() {
     echo -e "${CYAN}VPS-Optimize > 网络/内核优化 > 帮助${PLAIN}"
     echo "1 BBR / 拥塞控制：调用外部调优脚本，执行前建议备份。"
     echo "2 TCP 参数：修改 sysctl，适合有明确参数需求的用户。"
-    echo "3 ZRAM / Swap：适合小内存 VPS。"
-    echo "4 安装/切换内核：高风险，必须确认快照和救援控制台可用。"
-    echo "5 清理旧内核：不要删除当前内核和云厂商定制内核。"
-    echo "6 DNS 更改优化：国内/国外默认 DNS，也支持自定义 IPv4 和 IPv6。"
-    echo "7 流量达量关机保护：按网卡流量和账单周期自动关机，防止超额账单。"
-    echo "8 网卡管理工具：查看网卡、路由、DNS，临时调整 MTU 或刷新 DHCP。"
+    echo "3 DNS 更改优化：国内/国外默认 DNS，也支持自定义 IPv4 和 IPv6。"
+    echo "4 网卡管理工具：查看网卡、路由、DNS，临时调整 MTU 或刷新 DHCP。"
+    echo "5 流量达量关机保护：按网卡流量和账单周期自动关机，防止超额账单。"
+    echo "6 ZRAM / Swap：适合小内存 VPS。"
+    echo "7 安装/切换内核：高风险，必须确认快照和救援控制台可用。"
+    echo "8 清理旧内核：不要删除当前内核和云厂商定制内核。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -18537,12 +18540,12 @@ show_health_help() {
 NET_KERNEL_MENU_ITEMS=(
     "1|BBR / 拥塞控制管理|调用 ylx2016 多内核调优脚本|func_bbr_manage|net_bbr"
     "2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune"
-    "3|ZRAM / Swap 内存调优|按内存分档优化小鸡|func_zram_swap|"
-    "4|安装/切换优化内核|Cloud/KVM 稳定推荐 / XanMod 高级可选|func_install_kernel|net_kernel_install"
-    "5|清理旧内核|释放磁盘空间，谨慎操作|func_clean_kernel|"
-    "6|DNS 更改优化|国内/国外/自定义，IPv4+IPv6|func_dns_optimize|"
-    "7|流量达量关机保护|防刷流量 / 防超额账单|func_traffic_guard_menu|"
-    "8|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|"
+    "3|DNS 更改优化|国内/国外/自定义，IPv4+IPv6|func_dns_optimize|"
+    "4|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|"
+    "5|流量达量关机保护|防刷流量 / 防超额账单|func_traffic_guard_menu|"
+    "6|ZRAM / Swap 内存调优|按内存分档优化小鸡|func_zram_swap|"
+    "7|安装/切换优化内核|Cloud/KVM 稳定推荐 / XanMod 高级可选|func_install_kernel|net_kernel_install"
+    "8|清理旧内核|释放磁盘空间，谨慎操作|func_clean_kernel|"
 )
 
 confirm_menu_risk() {
@@ -18610,21 +18613,21 @@ func_panel_deploy_menu() {
         echo -e "${YELLOW}提示：面板或订阅工具对外访问，未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] 统一管理。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 管理 3x-ui 面板${PLAIN}       ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  2. 管理 S-UI 面板${PLAIN}        ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  3. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  4. 管理 Xray${PLAIN}             ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  5. 管理 SublinkPro${PLAIN}       ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  6. 管理 妙妙屋订阅管理${PLAIN}     ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  7. 管理 Sub-Store${PLAIN}        ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${GREEN}  8. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
-        echo -e "${BOLD}${YELLOW}  9. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
-        echo -e "${GREEN} 10. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
-        echo -e "${GREEN} 11. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
-        echo -e "${GREEN} 12. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
-        echo -e "${GREEN} 13. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
-        echo -e "${GREEN} 14. 端口实际流量监控${PLAIN}      ${YELLOW}(只看已监控端口实际流量)${PLAIN}"
-        echo -e "${GREEN} 15. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
-        echo -e "${GREEN} 16. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
+        echo -e "${GREEN}  2. 3x-ui 外置增强管理${PLAIN}    ${YELLOW}(快捷词 xcm / 重置日期 / 流量校准 / 备份恢复)${PLAIN}"
+        echo -e "${GREEN}  3. 面板救砖 / SSL 清理${PLAIN}    ${YELLOW}(清空 3x-ui 证书路径，回到 HTTP 后端)${PLAIN}"
+        echo -e "${GREEN}  4. 管理 S-UI 面板${PLAIN}        ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  5. 管理 Sing-box${PLAIN}         ${YELLOW}(安装 / 管理菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  6. 管理 Xray${PLAIN}             ${YELLOW}(安装 / 官方菜单 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  7. 管理 SublinkPro${PLAIN}       ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  8. 管理 妙妙屋订阅管理${PLAIN}     ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN}  9. 管理 Sub-Store${PLAIN}        ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${BOLD}${YELLOW} 10. UPD 更新订阅管理工具${PLAIN}   ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
+        echo -e "${GREEN} 11. 管理 Dockge${PLAIN}           ${YELLOW}(安装 / 状态 / 更新 / 卸载)${PLAIN}"
+        echo -e "${GREEN} 12. 迁移 Compose 到 Dockge${PLAIN} ${YELLOW}(Dockge 后安装时接管旧项目)${PLAIN}"
+        echo -e "${GREEN} 13. 管理 Komari 探针监控${PLAIN}  ${YELLOW}(Docker Compose / 探针面板)${PLAIN}"
+        echo -e "${GREEN} 14. DNS 流媒体解锁${PLAIN}        ${YELLOW}(Alice DNS 分流脚本)${PLAIN}"
+        echo -e "${GREEN} 15. 防 IP 送中脚本${PLAIN}        ${YELLOW}(IP-Sentinel)${PLAIN}"
+        echo -e "${GREEN} 16. 端口实际流量监控${PLAIN}      ${YELLOW}(只看已监控端口实际流量)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
@@ -18634,21 +18637,21 @@ func_panel_deploy_menu() {
         read_trimmed pd_choice "👉 请选择操作: "
         case $pd_choice in
             1) func_xpanel_menu ;;
-            2) func_sui_menu ;;
-            3) func_singbox_menu ;;
-            4) func_xray_menu ;;
-            5) func_sublinkpro_menu ;;
-            6) func_miaomiaowu_menu ;;
-            7) func_substore_menu ;;
-            8) func_dockge_menu ;;
-            9) func_update_subscription_tools ;;
-            10) func_migrate_compose_to_dockge ;;
-            11) func_rescue_panel ;;
-            12) func_dns_unlock ;;
-            13) func_ip_sentinel ;;
-            14) func_port_dog ;;
-            15) func_komari_menu ;;
-            16) func_xui_custom_manager ;;
+            2) func_xui_custom_manager ;;
+            3) func_rescue_panel ;;
+            4) func_sui_menu ;;
+            5) func_singbox_menu ;;
+            6) func_xray_menu ;;
+            7) func_sublinkpro_menu ;;
+            8) func_miaomiaowu_menu ;;
+            9) func_substore_menu ;;
+            10) func_update_subscription_tools ;;
+            11) func_dockge_menu ;;
+            12) func_migrate_compose_to_dockge ;;
+            13) func_komari_menu ;;
+            14) func_dns_unlock ;;
+            15) func_ip_sentinel ;;
+            16) func_port_dog ;;
             xcm|XCM|xui-custom|外置|外置增强|外置管理) func_xui_custom_manager ;;
             "?"|help) show_panel_help; pause_return ;;
             0|q|Q) break ;;
@@ -18681,12 +18684,12 @@ func_sni_stack_quick_menu() {
         echo -e "${BOLD}${BLUE}▶ 共享配置与体检${PLAIN}"
         echo -e "${GREEN}  8. 管理 Web 域名/反代${PLAIN}        ${YELLOW}(新增/删除/查看网站，最常用)${PLAIN}"
         echo -e "${CYAN}  9. 管理 Web 域名 IP 白名单${PLAIN}   ${YELLOW}(只限制 Web 域名)${PLAIN}"
-        echo -e "${CYAN} 10. Xray 入站管理${PLAIN}             ${YELLOW}(SNI -> 本地地址:端口 分流记录)${PLAIN}"
-        echo -e "${GREEN} 11. 443 链路体检${PLAIN}              ${YELLOW}(ENTRY_MODE/监听/证书/Web/Xray 分流)${PLAIN}"
-        echo -e "${CYAN} 12. 443 网络访问测试${PLAIN}          ${YELLOW}(DNS/TCP/TLS/面板/订阅路径)${PLAIN}"
-        echo -e "${CYAN} 13. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
-        echo -e "${CYAN} 14. 修改 443 共享参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
-        echo -e "${CYAN} 15. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}"
+        echo -e "${CYAN} 10. 修改 443 共享参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}"
+        echo -e "${CYAN} 11. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}"
+        echo -e "${CYAN} 12. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}"
+        echo -e "${GREEN} 13. 443 链路体检${PLAIN}              ${YELLOW}(ENTRY_MODE/监听/证书/Web/Xray 分流)${PLAIN}"
+        echo -e "${CYAN} 14. 443 网络访问测试${PLAIN}          ${YELLOW}(DNS/TCP/TLS/面板/订阅路径)${PLAIN}"
+        echo -e "${CYAN} 15. Xray 入站管理${PLAIN}             ${YELLOW}(SNI -> 本地地址:端口 分流记录)${PLAIN}"
         echo -e "${CYAN} 16. 查看 TCP Peek + Splice 状态 / 8444 预检${PLAIN} ${YELLOW}(不改公网 443)${PLAIN}"
         echo -e "${CYAN} 17. TCP Peek 分流规则校验${PLAIN} ${YELLOW}(只检查配置，不重启入口)${PLAIN}"
         echo -e "${CYAN} 18. 查看 TCP Peek + Splice 日志${PLAIN} ${YELLOW}(vpso-mux 分流器日志)${PLAIN}"
@@ -18709,12 +18712,12 @@ func_sni_stack_quick_menu() {
             7) rollback_last_entry_mode ;;
             8) manage_sni_stack_sites; continue ;;
             9) manage_sni_stack_ip_whitelist; continue ;;
-            10) manage_xray_inbound_routes; continue ;;
-            11) sni_stack_health_check_enhanced ;;
-            12) func_443_network_test; continue ;;
-            13) func_caddy_cf_maintenance_menu; continue ;;
-            14) edit_sni_stack_runtime_profile; continue ;;
-            15) check_sni_stack_subscription_hint ;;
+            10) edit_sni_stack_runtime_profile; continue ;;
+            11) check_sni_stack_subscription_hint ;;
+            12) func_caddy_cf_maintenance_menu; continue ;;
+            13) sni_stack_health_check_enhanced ;;
+            14) func_443_network_test; continue ;;
+            15) manage_xray_inbound_routes; continue ;;
             16) start_tcp_peek_test_port ;;
             17) tcp_peek_dry_run_config ;;
             18) view_vpso_mux_logs ;;

@@ -110,9 +110,9 @@ manage_compose_project() {
         fi
 
         echo -e "${GREEN}  1. 查看运行状态${PLAIN}"
-        echo -e "${GREEN}  2. 重启服务${PLAIN}"
-        echo -e "${GREEN}  3. 更新镜像并重建${PLAIN}"
-        echo -e "${CYAN}  4. 查看/编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}"
+        echo -e "${CYAN}  2. 查看/编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}"
+        echo -e "${GREEN}  3. 重启服务${PLAIN}"
+        echo -e "${GREEN}  4. 更新镜像并重建${PLAIN}"
         echo -e "${YELLOW}  5. 停止并移除容器（保留目录数据）${PLAIN}"
         echo -e "${RED}  6. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}"
         echo -e "${RED}  0. 返回上级菜单 / q 返回${PLAIN}"
@@ -126,17 +126,17 @@ manage_compose_project() {
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
             2)
-                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" restart)
+                edit_applied_config_file "$compose_file" "compose" "${project_name} Compose 配置"
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
             3)
                 ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" restart)
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
             4)
-                edit_applied_config_file "$compose_file" "compose" "${project_name} Compose 配置"
+                ensure_docker_compose_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
                 read -n 1 -s -r -p "按任意键返回..."
                 ;;
             5)

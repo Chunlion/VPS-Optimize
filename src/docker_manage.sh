@@ -124,10 +124,10 @@ func_docker_manage() {
         print_breadcrumb "Docker 安全管理"
         echo -e "${BOLD}🐳 Docker 安全管理 (版本: ${GREEN}${docker_ver}${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${GREEN}  1. 开启 Docker 本地防穿透${PLAIN} ${YELLOW}(限制映射端口仅 127.0.0.1 访问)${PLAIN}"
-        echo -e "${GREEN}  2. 解除 Docker 本地防穿透${PLAIN} ${YELLOW}(恢复全网可访，不破坏原配置)${PLAIN}"
-        echo -e "${GREEN}  3. 查看 443 / 订阅工具容器状态${PLAIN}"
-        echo -e "${GREEN}  4. Docker 端口暴露审计${PLAIN} ${YELLOW}(检查是否绕过 443 单入口)${PLAIN}"
+        echo -e "${GREEN}  1. 查看 443 / 订阅工具容器状态${PLAIN}"
+        echo -e "${GREEN}  2. Docker 端口暴露审计${PLAIN} ${YELLOW}(检查是否绕过 443 单入口)${PLAIN}"
+        echo -e "${GREEN}  3. 开启 Docker 本地防穿透${PLAIN} ${YELLOW}(限制映射端口仅 127.0.0.1 访问)${PLAIN}"
+        echo -e "${GREEN}  4. 解除 Docker 本地防穿透${PLAIN} ${YELLOW}(恢复全网可访，不破坏原配置)${PLAIN}"
         echo -e "${BOLD}${YELLOW}  5. UPD 更新订阅工具容器${PLAIN} ${CYAN}(SublinkPro / 妙妙屋 / Sub-Store)${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
@@ -135,7 +135,9 @@ func_docker_manage() {
         local c
         read_trimmed c "👉 请选择操作: "
         case $c in
-            1) 
+            1) func_docker_project_status ;;
+            2) func_docker_443_exposure_audit ;;
+            3)
                 confirm_risk_action "开启 Docker 本地防穿透" \
                     "Docker daemon.json 和 Docker 服务重启" \
                     "使用自动备份的 daemon.json 恢复并重启 Docker" \
@@ -195,7 +197,7 @@ EOF
                 fi
                 sleep 2
                 ;;
-            2) 
+            4)
                 local conf_file="/etc/docker/daemon.json"
                 if [[ -f "$conf_file" ]]; then
                     confirm_risk_action "解除 Docker 本地防穿透" \
@@ -236,8 +238,6 @@ EOF
                 fi
                 sleep 2
                 ;;
-            3) func_docker_project_status ;;
-            4) func_docker_443_exposure_audit ;;
             5) func_update_subscription_tools ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}"; sleep 1 ;;
