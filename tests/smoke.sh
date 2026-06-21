@@ -1251,6 +1251,7 @@ for file in "${single_entry_mode_doc_files[@]}"; do
 done
 assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" '| Nginx 公网监听地址 |' "3x-ui REALITY tutorial must not show Nginx as the fixed public 443 listener."
 assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" '| 公网 `443` | Nginx stream 监听 |' "3x-ui REALITY tutorial must not expect public 443 to always be Nginx stream."
+assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" '可以先保留当前访问方式' "3x-ui REALITY tutorial must not defer panel loopback binding until after 443 works."
 assert_file_not_contains "docs/443-single-entry.md" '默认 Nginx Stream 架构是：' "443 tutorial opening must describe the current entry-mode model, not the old Nginx-only default diagram."
 assert_file_not_contains "docs/443-single-entry.md" '公网 443 -> Nginx stream 按 SNI 分流' "443 tutorial opening must not show Nginx stream as the fixed public 443 path."
 assert_file_contains "docs/443-single-entry.md" '公网 443 -> 当前 ENTRY_MODE 对应的单个入口服务' "443 tutorial opening must show the current single-listener entry-mode chain."
