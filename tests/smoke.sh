@@ -1015,7 +1015,7 @@ if is_trusted_remote_script_url "https://example.com/not-built-in.sh" >/dev/null
     echo "Unexpected trusted remote script URL." >&2
     exit 1
 fi
-remote_output=$(run_remote_script "smoke remote script" "file://$remote_script" <<< $'yes\n')
+remote_output=$(run_remote_script "smoke remote script" "file://$remote_script" 2>&1 <<< $'\n')
 [[ "$remote_output" == *"非内置已知来源"* ]]
 [[ "$remote_output" == *"remote-run-ok"* ]]
 rm -f "$remote_script"
@@ -1059,6 +1059,7 @@ if grep -Eq '确认下载并执行该远程脚本|如仍要执行，请输入 YE
     echo "Remote script runner must not prompt for an extra execution confirmation." >&2
     exit 1
 fi
+grep -Fq '是否继续下载并执行该远程脚本？(Y/n，默认 yes):' dist/vps.sh
 grep -q 'func_sni_stack_quick_menu' dist/vps.sh
 grep -q 'manage_sni_stack_tcp_routes' dist/vps.sh
 grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh

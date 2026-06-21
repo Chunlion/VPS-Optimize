@@ -416,11 +416,27 @@ is_trusted_remote_script_url() {
     return 1
 }
 
+confirm_remote_script_execution() {
+    local confirm
+
+    if declare -F read_trimmed >/dev/null 2>&1; then
+        read_trimmed confirm "是否继续下载并执行该远程脚本？(Y/n，默认 yes): "
+    else
+        read -r -p "是否继续下载并执行该远程脚本？(Y/n，默认 yes): " confirm
+    fi
+    confirm="${confirm:-yes}"
+    if declare -F is_yes >/dev/null 2>&1; then
+        is_yes "$confirm"
+    else
+        [[ "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]
+    fi
+}
+
 run_remote_script() {
     local desc="$1"
     local url="$2"
     shift 2
-    local tmp_file rc confirm trusted_source
+    local tmp_file rc trusted_source
     echo -e "${CYAN}▶ ${desc}${PLAIN}"
     echo -e "${YELLOW}脚本来源：${url}${PLAIN}"
     if trusted_source=$(is_trusted_remote_script_url "$url"); then
@@ -434,15 +450,7 @@ run_remote_script() {
     fi
 
     if [[ -z "$trusted_source" || "${VPSO_REMOTE_SCRIPT_CONFIRM:-1}" != "0" ]]; then
-        if declare -F confirm_risk_action >/dev/null 2>&1; then
-            confirm_risk_action "$desc" \
-                "下载并执行远程脚本：${url}" \
-                "取消执行，或根据远程脚本自身备份/卸载方式恢复；必要时使用 VPS 快照或救援模式回滚" \
-                "确认脚本来源可信，并保持当前 SSH 会话不要断开。" || return 1
-        else
-            read -r -p "继续请输入 yes，直接回车取消（大小写均可）: " confirm
-            [[ "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]] || return 1
-        fi
+        confirm_remote_script_execution || return 1
     fi
 
     tmp_file=$(mktemp /tmp/vps-remote.XXXXXX.sh) || {

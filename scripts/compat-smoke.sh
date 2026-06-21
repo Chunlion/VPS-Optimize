@@ -92,7 +92,8 @@ assert_file_contains dist/vps.sh '19) func_sni_stack_quick_menu ;;' "Main menu i
 assert_file_contains src/common.sh 'command -v curl' "Remote downloads must keep curl fallback detection."
 assert_file_contains src/common.sh 'command -v wget' "Remote downloads must keep wget fallback detection."
 assert_file_contains src/common.sh 'install_pkg curl wget' "Remote download helper must still try to install missing download tools."
-assert_file_contains src/common.sh 'confirm_risk_action "$desc"' "Remote script execution must use the unified risk prompt when available."
+assert_file_contains src/common.sh 'confirm_remote_script_execution || return 1' "Remote script execution must use the Y/n default-allow source prompt."
+assert_file_contains src/common.sh '是否继续下载并执行该远程脚本？(Y/n，默认 yes):' "Remote script source prompt must default to yes."
 
 [[ -f scripts/modules.list ]]
 assert_file_contains scripts/build.sh 'scripts/modules.list' "Release build must read the shared module list."
