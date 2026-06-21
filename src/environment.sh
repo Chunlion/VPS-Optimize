@@ -15,7 +15,7 @@ func_env_install() {
         echo -e "${BOLD}${BLUE}▶ 转发、隧道与常用服务${PLAIN}"
         echo -e "${GREEN}  4. WARP 解锁/网络     ${YELLOW}  5. Realm 端口转发     ${GREEN}  6. Gost 隧道${PLAIN}"
         echo -e "${GREEN}  7. Forwardx 转发面板  ${YELLOW}  8. Argox 节点         ${GREEN}  9. 极光面板${PLAIN}"
-        echo -e "${GREEN} 10. 哪吒监控           ${YELLOW} 11. Aria2 下载         ${GREEN} 12. PVE 虚拟化工具${PLAIN}"
+        echo -e "${GREEN} 10. nftables NAT 转发  ${YELLOW} 11. Aria2 下载         ${GREEN} 12. PVE 虚拟化工具${PLAIN}"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -36,12 +36,7 @@ func_env_install() {
             7) run_remote_script "安装 Forwardx 转发面板" "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh" install ;;
             8) run_remote_script "安装 Argox 节点" "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh" ;;
             9) run_remote_script "安装极光面板" "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh" ;;
-            10)
-                if run_remote_script "安装哪吒监控" "https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh"; then
-                    echo -e "\n${YELLOW}💡 哪吒自定义代码提示 (去除动效并固定顶部)：${PLAIN}"
-                    echo -e "${GREEN}<script>\nwindow.ShowNetTransfer = true;\nwindow.FixedTopServerName = true;\nwindow.DisableAnimatedMan = true;\n</script>${PLAIN}"
-                fi
-                ;;
+            10) run_remote_script "安装 nftables NAT 转发工具" "https://us.arloor.dev/https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh" toml ;;
             11) run_remote_script "安装 Aria2 下载工具" "https://git.io/aria2.sh" ;;
             12) run_remote_script "安装 PVE 虚拟化工具" "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh" ;;
             "?"|help) echo "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443 单入口走主菜单 [19]。"; pause_return ;;

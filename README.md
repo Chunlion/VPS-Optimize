@@ -44,7 +44,15 @@
 <a id="quick-start"></a>
 ## ⚡ 快速开始
 
-在服务器上使用 `root` 运行：
+在服务器上使用 `root` 运行。
+
+国内：
+
+```bash
+wget -qO vps.sh https://ghfast.top/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
+```
+
+国外：
 
 ```bash
 wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
@@ -333,10 +341,7 @@ https://panel.example.com:40000/
 
 ```bash
 getent ahosts raw.githubusercontent.com
-curl -I https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh
 ```
-
-如果你的环境访问 GitHub 不稳定，可以先解决 DNS、IPv4/IPv6 优先级或代理出口问题。
 
 <a id="feedback"></a>
 ## 💬 反馈与联系

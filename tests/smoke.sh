@@ -1011,6 +1011,7 @@ printf '%s\n' '#!/usr/bin/env bash' 'echo remote-run-ok' > "$remote_script"
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh")" == *"VPS-Optimize"* ]]
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh")" == *"项目内置硬编码外部脚本源"* ]]
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh")" == *"项目内置硬编码外部脚本源"* ]]
+[[ "$(is_trusted_remote_script_url "https://us.arloor.dev/https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh")" == *"项目内置硬编码外部脚本源"* ]]
 if is_trusted_remote_script_url "https://example.com/not-built-in.sh" >/dev/null; then
     echo "Unexpected trusted remote script URL." >&2
     exit 1
@@ -1060,6 +1061,9 @@ if grep -Eq '确认下载并执行该远程脚本|如仍要执行，请输入 YE
     exit 1
 fi
 grep -Fq '是否继续下载并执行该远程脚本？(Y/n，默认 yes):' dist/vps.sh
+assert_file_contains "src/environment.sh" '安装 nftables NAT 转发工具' "Environment menu must install nftables-nat-rust from option 10."
+assert_file_not_contains "src/environment.sh" '哪吒监控' "Environment menu option 10 must not keep the old Nezha entry."
+assert_file_not_contains "dist/vps.sh" 'raw.githubusercontent.com/naiba/nezha/master/script/install.sh' "Release script must not keep the old Nezha install URL."
 grep -q 'func_sni_stack_quick_menu' dist/vps.sh
 grep -q 'manage_sni_stack_tcp_routes' dist/vps.sh
 grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh

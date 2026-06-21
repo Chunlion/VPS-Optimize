@@ -399,7 +399,7 @@ is_trusted_remote_script_url() {
         "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh"|\
         "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh"|\
         "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh"|\
-        "https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh"|\
+        "https://us.arloor.dev/https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh"|\
         "https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh"|\
         "https://git.io/aria2.sh"|\
         "http://v7.hostcli.com/install/install-ubuntu_6.0.sh"|\
