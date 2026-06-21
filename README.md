@@ -299,6 +299,8 @@ systemctl status sshd --no-pager
 
 ### 🧩 443 单入口配置后面板打不开
 
+下面的 `40000`、`8443` 等端口是示例端口；如果你改过端口，以实际监听和脚本保存的配置为准。
+
 优先检查：
 
 - 3x-ui 面板是否监听 `127.0.0.1:40000`。
@@ -347,6 +349,8 @@ getent ahosts raw.githubusercontent.com
 ## 💬 反馈与联系
 
 如有 Bug 或建议，欢迎前往 [GitHub Issues](https://github.com/Chunlion/VPS-Optimize/issues) 提交反馈。
+
+Telegram 群：[t.me/cutyy_github](https://t.me/cutyy_github)。
 
 也可以通过作者 [GitHub 主页](https://github.com/Chunlion) 展示的联系方式或邮箱联系。
 

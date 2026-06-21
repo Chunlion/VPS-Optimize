@@ -62,6 +62,8 @@ grep -E '^(PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTE
 
 检查 Nginx / Caddy：
 
+命令里的 `8443`、`1443`、`40000`、`2096` 是常见示例端口；实际以当前服务监听和脚本保存的配置为准。
+
 ```bash
 nginx -t
 caddy validate --config /etc/caddy/Caddyfile

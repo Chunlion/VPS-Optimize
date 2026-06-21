@@ -179,6 +179,8 @@ ip6tables -S INPUT | grep 'VPSO_CONN_LIMIT_PORT_'
 
 ### 第一轮检查
 
+下面命令和表格里的 `8443`、`1443`、`40000`、`2096` 是示例端口；实际以服务当前监听和脚本保存的配置为准。
+
 ```bash
 ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096'
 systemctl status nginx --no-pager
