@@ -218,7 +218,7 @@ assert_file_contains README.md '第 N 项语法错误' "README must document ite
 assert_file_contains README.md '第 N 项当前内核不支持' "README must document unsupported-kernel TCP sysctl diagnostics."
 assert_file_contains docs/443-single-entry-troubleshooting.md '端口并发连接限制误伤' "443 troubleshooting doc must include connlimit false-positive guidance."
 assert_file_contains docs/443-single-entry-troubleshooting.md '如果公网 `443` 存在本脚本添加的 connlimit 规则，它只能作用于整个公网 `443`，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "443 troubleshooting doc must explain public 443 connlimit scope."
-assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [19 443 单入口管理中心] -> [11 443 链路体检]' "443 troubleshooting doc must point users to the 443 health check."
+assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [19 443 单入口管理中心] -> [13 443 链路体检]' "443 troubleshooting doc must point users to the 443 health check."
 assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制]' "443 troubleshooting doc must point users to the connlimit menu."
 assert_file_contains docs/recovery-runbook.md '端口并发连接限制误封' "Recovery runbook must include connlimit lockout guidance."
 assert_file_contains docs/recovery-runbook.md '不要批量清空 INPUT 链' "Recovery runbook must warn against broad firewall cleanup for connlimit recovery."
@@ -1211,6 +1211,22 @@ for file in "${docs_menu_files[@]}"; do
     assert_file_not_contains "$file" '主菜单 [14 服务健康总览]' "${file} must not point users to the old main menu [14] health entry."
     assert_file_not_contains "$file" '[15 配置备份与回滚]' "${file} must not point users to the old backup menu [15]."
 done
+
+renumbered_sni_doc_files=(
+    "docs/443-single-entry-troubleshooting.md"
+    "docs/config-paths.md"
+    "docs/existing-server-migration.md"
+    "docs/recovery-runbook.md"
+    "tutorials/01-3x-ui-reality-443.md"
+    "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md"
+)
+for file in "${renumbered_sni_doc_files[@]}"; do
+    assert_file_not_contains "$file" '主菜单 [19 443 单入口管理中心] -> [11 443 链路体检]' "${file} must use [13 443 链路体检]."
+    assert_file_not_contains "$file" '主菜单 [19 443 单入口管理中心] -> [13 CF DNS / Caddy 证书维护]' "${file} must use [12 CF DNS / Caddy 证书维护]."
+    assert_file_not_contains "$file" '主菜单 [19 443 单入口管理中心] -> [14 修改 443 共享参数]' "${file} must use [10 修改 443 共享参数]."
+    assert_file_not_contains "$file" '主菜单 [19 443 单入口管理中心] -> [15 订阅链接 / External Proxy 提示]' "${file} must use [11 订阅链接 / External Proxy 提示]."
+done
+
 assert_file_not_contains "docs/443-single-entry.md" '主菜单 [3] -> [13] Caddy 反代' "443 tutorial must not point users to the old Caddy menu path."
 assert_file_not_contains "docs/443-single-entry.md" '[19] -> [2] -> [5]' "443 tutorial must not point Web whitelist users to the old nested whitelist path."
 assert_file_not_contains "docs/443-single-entry.md" '主菜单 [19 443 单入口管理中心] -> [9 管理 Web 域名 IP 白名单]' "443 tutorial must not point Web whitelist users to the stale direct [19] -> [9] path."
