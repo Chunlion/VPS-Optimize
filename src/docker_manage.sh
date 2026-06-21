@@ -104,10 +104,11 @@ func_docker_443_exposure_audit() {
 }
 
 func_docker_manage() {
-    if ! command -v docker >/dev/null 2>&1; then 
+    if declare -F ensure_docker_engine_ready >/dev/null 2>&1; then
+        ensure_docker_engine_ready || { read -n 1 -s -r -p "按任意键返回..."; return; }
+    elif ! command -v docker >/dev/null 2>&1; then
         clear
-        echo -e "${RED}❌ 错误：检测到系统尚未安装 Docker 引擎！${PLAIN}"
-        echo -e "${YELLOW}💡 请先在主菜单进入 [3 基础组件与常用服务] 安装 Docker。${PLAIN}"
+        echo -e "${RED}❌ 未检测到 Docker 引擎，且当前运行环境缺少自动安装组件。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return
     fi

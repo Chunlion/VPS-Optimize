@@ -1329,7 +1329,7 @@ grep -Fq '安装 3x-ui / x-ui 面板（v2.9.4）' dist/vps.sh
 grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh' dist/vps.sh
 grep -Fq 'install_args=("v2.9.4")' dist/vps.sh
 grep -Fq 'v2.9.4 属于 2.x 老流程' dist/vps.sh
-grep -Fq '管理 S-UI 面板' dist/vps.sh
+grep -Fq 'S-UI 面板脚本' dist/vps.sh
 grep -Fq '安装 S-UI 面板' dist/vps.sh
 grep -Fq 'https://raw.githubusercontent.com/alireza0/s-ui/master/install.sh' dist/vps.sh
 if grep -q 'x-ui\[$(service_status_compact x-ui)\]' dist/vps.sh; then
@@ -1966,10 +1966,10 @@ assert_file_contains "README.md" 'Nginx 反代会直接监听公网 80/443' "REA
 subscription_public_hint='公网 HTTPS 访问建议：未启用 443 单入口时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时，请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/subscription_apps.sh" "$subscription_public_hint" "Subscription/Komari installers must explain both non-single-entry and 443 single-entry reverse proxy paths."
 assert_dist_contains "$subscription_public_hint" "Release script must include the current Subscription/Komari public HTTPS guidance."
-panel_public_hint='提示：面板或订阅工具对外访问，未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] 统一管理。'
-assert_file_contains "src/menus.sh" "$panel_public_hint" "Panel/tools menu must explain both non-single-entry and 443 single-entry reverse proxy paths."
-assert_dist_contains "$panel_public_hint" "Release script must include the current panel/tools public HTTPS guidance."
-panel_help_public_hint='7/8/9 管理订阅工具，11/12 管理 Dockge 和 Compose 迁移，部署后公网 HTTPS 访问：未启用 443 单入口时走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
+panel_menu_compact_label='Sing-box 脚本'
+assert_file_contains "src/menus.sh" "$panel_menu_compact_label" "Panel/tools menu must use the compact script-style label."
+assert_dist_contains "$panel_menu_compact_label" "Release script must include the compact panel/tools menu label."
+panel_help_public_hint='7/8/9 订阅栈，11 Dockge Compose，12 Compose 迁移；公网 HTTPS：未启用 443 单入口走主菜单 [4 反代]，已启用走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both non-single-entry and 443 single-entry reverse proxy paths."
 assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
 panel_domain_menu_path='主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]'

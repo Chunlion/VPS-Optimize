@@ -30,7 +30,7 @@
 | 后端端口 | `3000`、`3001` 等 | 订阅工具实际监听端口 |
 | Cloudflare API Token | `Zone.Zone.Read`、`Zone.DNS.Edit` | 需要 DNS 签证书时使用 |
 | 当前 SSH 会话 | 不关闭 | 方便失败时恢复 |
-| 已安装 Docker | 脚本可安装 | 订阅工具通常用 Docker Compose 部署 |
+| Docker/Compose | 脚本会自动检查并安装 | 订阅工具通常用 Docker Compose 部署 |
 
 DNS 建议：
 
@@ -45,7 +45,7 @@ DNS 建议：
 | 阶段 | 预计耗时 |
 |---|---|
 | 预检 | 2-5 分钟 |
-| 安装 Docker 和订阅工具 | 5-20 分钟 |
+| 部署订阅工具 | 5-20 分钟 |
 | 配置 Caddy/Nginx 或 443 单入口 | 5-15 分钟 |
 | 验证订阅输出 | 5-10 分钟 |
 | 备份 | 1-3 分钟 |
@@ -75,7 +75,7 @@ DNS 建议：
 
 | 项目 | 期望 |
 |---|---|
-| Docker | 如未安装，后面先装 Docker |
+| Docker | 如未安装，订阅工具安装流程会自动安装 |
 | 端口占用 | 订阅工具端口不要和已有服务冲突 |
 | DNS | 订阅域名能解析到当前 VPS |
 | 防火墙 | SSH 和入口端口已放行 |
@@ -87,31 +87,15 @@ DNS 建议：
 ss -lntp
 ```
 
-### 2. 安装 Docker
-
-如果还没有 Docker，进入：
-
-```text
-主菜单 [3 基础组件与常用服务] -> [1 Docker 引擎]
-```
-
-验证：
-
-```bash
-docker version
-docker compose version || docker-compose version
-systemctl status docker --no-pager
-```
-
-如果 Docker 安装失败，先解决软件源、DNS 或网络连通性，不要继续部署订阅工具。
-
-### 3. 安装订阅工具
+### 2. 安装订阅工具
 
 进入：
 
 ```text
 主菜单 [5 面板、节点与订阅工具]
 ```
+
+安装流程会自动检查 Docker/Compose，缺失时先安装。
 
 常用入口：
 
@@ -134,7 +118,7 @@ docker ps
 ls /opt
 ```
 
-### 4. 确认后端监听方式
+### 3. 确认后端监听方式
 
 订阅工具后端建议只监听本地或内网，不建议直接暴露公网。理想状态：
 
@@ -160,7 +144,7 @@ curl -I http://127.0.0.1:3000/
 
 Docker 防穿透会修改 Docker 网络行为并重启 Docker，属于高风险操作，确认容器不依赖公网直连端口后再继续。
 
-### 5A. 方案一：未启用 443 单入口时使用 Caddy/Nginx 反代
+### 4A. 方案一：未启用 443 单入口时使用 Caddy/Nginx 反代
 
 适合还没启用 443 单入口，只想先用域名访问订阅工具。
 
@@ -222,7 +206,7 @@ journalctl -u nginx -n 80 --no-pager
 
 如果证书失败，检查 DNS、Cloudflare 代理状态和服务器时间。
 
-### 5B. 方案二：接入 443 单入口
+### 4B. 方案二：接入 443 单入口
 
 适合已经启用了：
 
@@ -255,7 +239,7 @@ curl -I https://sub.example.com/
 openssl s_client -connect 服务器IP:443 -servername sub.example.com </dev/null
 ```
 
-### 6. 配置订阅工具的外部访问地址
+### 5. 配置订阅工具的外部访问地址
 
 不同工具名称不同，常见字段包括：
 
@@ -283,7 +267,7 @@ https://sub.example.com:3000/
 
 如果订阅工具生成的链接里仍然带内部端口，客户端可能无法使用。
 
-### 7. 验证订阅内容
+### 6. 验证订阅内容
 
 浏览器打开：
 
@@ -308,7 +292,7 @@ curl -L https://sub.example.com/ -o /tmp/sub-tool-home.html
 | Token | 不要出现在公开日志里 |
 | 节点地址 | 不要被改成 `127.0.0.1` |
 
-### 8. 成功后备份
+### 7. 成功后备份
 
 进入：
 
