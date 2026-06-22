@@ -251,6 +251,8 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 
 ```text
 主菜单 [3 基础组件与常用服务] -> [1 Docker 引擎]
+主菜单 [3 基础组件与常用服务] -> [7 Forwardx 转发面板]
+主菜单 [3 基础组件与常用服务] -> [10 nftables NAT 转发]
 主菜单 [5 面板、节点与订阅工具]
 主菜单 [11 Docker 安全管理]
 ```

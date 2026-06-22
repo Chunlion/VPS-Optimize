@@ -80,7 +80,7 @@ cy
 | [docs/recovery-runbook.md](docs/recovery-runbook.md) | SSH 失联、防火墙误封、443 改坏、服务起不来 |
 | [docs/config-paths.md](docs/config-paths.md) | 真正排错时查配置、证书、备份路径 |
 | [docs/dog.md](docs/dog.md) | 端口流量狗 dog.sh 使用说明 |
-| [docs/xui-custom-manager.md](docs/xui-custom-manager.md) | x-ui 增强套件说明 |
+| [docs/xui-custom-manager.md](docs/xui-custom-manager.md) | 3x-ui 外置增强管理说明 |
 
 <a id="pre-run-checklist"></a>
 ## ✅ 运行前检查清单
@@ -138,6 +138,8 @@ cy
 
 `dog` 面板常用快捷词：`add`、`limit`、`tg`、`report`、`u`、`q`。
 
+基础组件入口：`主菜单 [3 基础组件与常用服务]`，包含 Forwardx 转发面板和 nftables NAT 转发。
+
 <a id="single-443-entry"></a>
 ## 🧩 443 单入口分流
 
@@ -175,7 +177,7 @@ TCP Peek + Splice 的配置过程和 Nginx Stream 一样；正式切换使用 `[
 
 节点和订阅相关入口集中在 `主菜单 [5 面板、节点与订阅工具]`。
 
-这里包含 3x-ui、x-ui 增强套件、S-UI、Sing-box、Xray、SublinkPro、妙妙屋、Sub-Store、Dockge、Komari 和 dog 流量计。
+这里包含 3x-ui、3x-ui 外置增强管理、S-UI、Sing-box、Xray、SublinkPro、妙妙屋、Sub-Store、Dockge、Komari 和 dog 流量计。
 
 订阅工具建议按“本地监听 + Caddy/Nginx/443 对外”的方式部署。新部署的订阅工具默认优先绑定 `127.0.0.1`。已经启用 443 单入口时，公网 HTTPS 访问到 `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]` 添加域名；未启用 443 单入口时，可以在 `主菜单 [4 反代]` 里选择 Caddy 或 Nginx HTTPS 反代，Nginx 反代会直接监听公网 80/443，不能和 443 单入口同时抢占公网 `443`。Nginx 反代复用现有 `acme.sh + Cloudflare DNS API` 证书流程，证书仍安装到 `/etc/caddy/certs/${domain}.crt|key` 并软链到 `/root/cert/`。[4 反代] 里的后端 HTTPS 跳过证书校验、域名 IP 白名单、查看/编辑已应用配置和清空反代配置都同时提供 Caddy/Nginx 入口。
 
@@ -186,14 +188,14 @@ Docker Compose 项目都有管理入口。停止服务会保留数据；归档�
 
 项目包含两个可以单独运行的维护工具。
 
-### x-ui 增强套件
+### 3x-ui 外置增强管理
 
 项目包含 `xui-custom-manager.sh`，用于补充 3x-ui / x-ui 面板外更适合脚本处理的维护功能：自定义重置日期、校准已用流量、备份恢复、健康检查、查看日志和清理旧备份。
 
 入口：
 
 ```text
-主菜单 [5 面板、节点与订阅工具] -> [2 x-ui 增强套件]
+主菜单 [5 面板、节点与订阅工具] -> [2 3x-ui 外置增强管理]
 ```
 
 单独运行：
@@ -205,7 +207,7 @@ wget -qO xui-custom-manager.sh https://raw.githubusercontent.com/Chunlion/VPS-Op
 首次打开后会自动注册 `xcm` 快捷命令。`xcm` 是手动入口，会优先拉取最新版；systemd timer 只调用本地稳定执行器 `/usr/local/bin/xui-custom-manager.sh --reset-check`。
 在 VPS-Optimize 主菜单也可以直接输入 `xcm` 或 `外置` 进入这个工具。
 
-详细说明请看：[x-ui 增强套件说明](docs/xui-custom-manager.md)。
+详细说明请看：[3x-ui 外置增强管理说明](docs/xui-custom-manager.md)。
 
 ### 端口流量狗
 
