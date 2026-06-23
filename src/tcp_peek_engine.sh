@@ -794,7 +794,7 @@ prepare_initial_entry_mode_dependencies() {
         "xray-fallback")
             xray_entry_service_name >/dev/null 2>&1 || {
                 echo -e "${RED}❌ 未检测到 xray/x-ui/3x-ui systemd 服务，无法首次配置为 xray-fallback。${PLAIN}"
-                echo -e "${YELLOW}请先在 [4 面板、节点与订阅工具] 中安装并配置 Xray/3x-ui 主入站，或改选 Nginx Stream 模式 / TCP Peek + Splice 模式。${PLAIN}"
+                echo -e "${YELLOW}请先在 [5 面板、节点与订阅工具] 中安装并配置 Xray/3x-ui 主入站，或改选 Nginx Stream 模式 / TCP Peek + Splice 模式。${PLAIN}"
                 return 1
             }
             print_xray_fallback_mode_explanation

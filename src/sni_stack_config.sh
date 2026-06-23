@@ -383,7 +383,7 @@ check_xui_cert_settings_for_single_443() {
     fi
 
     if [[ "$found" -eq 1 ]]; then
-        echo -e "${YELLOW}建议：3.x 新安装回到安装器选择 Skip SSL / 不申请 SSL；2.x/旧配置进入 [5] -> [11] 面板救砖 / SSL 清理，或在 3x-ui 面板里清空证书路径并重启。${PLAIN}"
+        echo -e "${YELLOW}建议：3.x 新安装回到安装器选择 Skip SSL / 不申请 SSL；2.x/旧配置进入 [5 面板、节点与订阅工具] -> [3 面板 SSL 修复]，或在 3x-ui 面板里清空证书路径并重启。${PLAIN}"
         return 1
     fi
 
