@@ -221,10 +221,45 @@ validate_json_file() {
     fi
 }
 
+load_docker_compose_runtime_helper() {
+    local helper_path
+    local -a helper_paths=()
+
+    declare -F ensure_docker_compose_ready >/dev/null 2>&1 && return 0
+
+    if [[ -n "${SCRIPT_DIR:-}" ]]; then
+        helper_paths+=("${SCRIPT_DIR}/src/compose_runtime.sh")
+    fi
+    helper_paths+=("$(dirname "${BASH_SOURCE[0]}")/compose_runtime.sh")
+
+    for helper_path in "${helper_paths[@]}"; do
+        [[ -f "$helper_path" ]] || continue
+        # shellcheck source=/dev/null
+        . "$helper_path"
+        declare -F ensure_docker_compose_ready >/dev/null 2>&1 && return 0
+    done
+
+    return 1
+}
+
+run_applied_config_compose() {
+    local target_file="$1"
+    local project_dir
+    shift
+
+    if ! load_docker_compose_runtime_helper; then
+        echo -e "${RED}❌ 未加载 Docker Compose 自动安装/检测逻辑，无法应用 Compose 操作。${PLAIN}"
+        return 1
+    fi
+
+    ensure_docker_compose_ready || return 1
+    project_dir=$(dirname "$target_file")
+    (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$target_file" "$@")
+}
+
 validate_applied_config_kind() {
     local kind="$1"
     local target_file="$2"
-    local project_dir
 
     case "$kind" in
         caddy)
@@ -246,19 +281,7 @@ validate_applied_config_kind() {
             validate_json_file "$target_file"
             ;;
         compose)
-            if declare -F ensure_docker_compose_ready >/dev/null 2>&1; then
-                ensure_docker_compose_ready || return 1
-                project_dir=$(dirname "$target_file")
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$target_file" config >/dev/null)
-            elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-                project_dir=$(dirname "$target_file")
-                (cd "$project_dir" && docker compose -f "$target_file" config >/dev/null)
-            elif command -v docker-compose >/dev/null 2>&1; then
-                project_dir=$(dirname "$target_file")
-                (cd "$project_dir" && docker-compose -f "$target_file" config >/dev/null)
-            else
-                echo -e "${YELLOW}⚠️ 未检测到 Docker Compose，已跳过 Compose 语法校验。${PLAIN}"
-            fi
+            run_applied_config_compose "$target_file" config >/dev/null
             ;;
         ssh)
             command -v sshd >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 sshd 命令，无法校验 SSH 配置。${PLAIN}"; return 1; }
@@ -312,7 +335,7 @@ restart_named_service_if_available() {
 reload_applied_config_kind() {
     local kind="$1"
     local target_file="$2"
-    local confirm unit_name project_dir
+    local confirm unit_name
 
     case "$kind" in
         caddy)
@@ -342,20 +365,7 @@ reload_applied_config_kind() {
         compose)
             read_trimmed confirm "Compose 配置已校验，是否现在执行 up -d 应用修改？(y/n，默认 n): "
             if is_yes "$confirm"; then
-                if declare -F ensure_docker_compose_ready >/dev/null 2>&1; then
-                    ensure_docker_compose_ready || return 1
-                    project_dir=$(dirname "$target_file")
-                    (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$target_file" up -d)
-                elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-                    project_dir=$(dirname "$target_file")
-                    (cd "$project_dir" && docker compose -f "$target_file" up -d)
-                elif command -v docker-compose >/dev/null 2>&1; then
-                    project_dir=$(dirname "$target_file")
-                    (cd "$project_dir" && docker-compose -f "$target_file" up -d)
-                else
-                    echo -e "${RED}❌ 未检测到 Docker Compose，无法应用修改。${PLAIN}"
-                    return 1
-                fi
+                run_applied_config_compose "$target_file" up -d
             else
                 echo -e "${YELLOW}⚠️ Compose 修改已保存，但容器尚未重建。${PLAIN}"
             fi

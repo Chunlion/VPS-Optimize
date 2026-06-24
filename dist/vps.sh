@@ -1737,10 +1737,45 @@ validate_json_file() {
     fi
 }
 
+load_docker_compose_runtime_helper() {
+    local helper_path
+    local -a helper_paths=()
+
+    declare -F ensure_docker_compose_ready >/dev/null 2>&1 && return 0
+
+    if [[ -n "${SCRIPT_DIR:-}" ]]; then
+        helper_paths+=("${SCRIPT_DIR}/src/compose_runtime.sh")
+    fi
+    helper_paths+=("$(dirname "${BASH_SOURCE[0]}")/compose_runtime.sh")
+
+    for helper_path in "${helper_paths[@]}"; do
+        [[ -f "$helper_path" ]] || continue
+        # shellcheck source=/dev/null
+        . "$helper_path"
+        declare -F ensure_docker_compose_ready >/dev/null 2>&1 && return 0
+    done
+
+    return 1
+}
+
+run_applied_config_compose() {
+    local target_file="$1"
+    local project_dir
+    shift
+
+    if ! load_docker_compose_runtime_helper; then
+        echo -e "${RED}❌ 未加载 Docker Compose 自动安装/检测逻辑，无法应用 Compose 操作。${PLAIN}"
+        return 1
+    fi
+
+    ensure_docker_compose_ready || return 1
+    project_dir=$(dirname "$target_file")
+    (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$target_file" "$@")
+}
+
 validate_applied_config_kind() {
     local kind="$1"
     local target_file="$2"
-    local project_dir
 
     case "$kind" in
         caddy)
@@ -1762,19 +1797,7 @@ validate_applied_config_kind() {
             validate_json_file "$target_file"
             ;;
         compose)
-            if declare -F ensure_docker_compose_ready >/dev/null 2>&1; then
-                ensure_docker_compose_ready || return 1
-                project_dir=$(dirname "$target_file")
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$target_file" config >/dev/null)
-            elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-                project_dir=$(dirname "$target_file")
-                (cd "$project_dir" && docker compose -f "$target_file" config >/dev/null)
-            elif command -v docker-compose >/dev/null 2>&1; then
-                project_dir=$(dirname "$target_file")
-                (cd "$project_dir" && docker-compose -f "$target_file" config >/dev/null)
-            else
-                echo -e "${YELLOW}⚠️ 未检测到 Docker Compose，已跳过 Compose 语法校验。${PLAIN}"
-            fi
+            run_applied_config_compose "$target_file" config >/dev/null
             ;;
         ssh)
             command -v sshd >/dev/null 2>&1 || { echo -e "${RED}❌ 未检测到 sshd 命令，无法校验 SSH 配置。${PLAIN}"; return 1; }
@@ -1828,7 +1851,7 @@ restart_named_service_if_available() {
 reload_applied_config_kind() {
     local kind="$1"
     local target_file="$2"
-    local confirm unit_name project_dir
+    local confirm unit_name
 
     case "$kind" in
         caddy)
@@ -1858,20 +1881,7 @@ reload_applied_config_kind() {
         compose)
             read_trimmed confirm "Compose 配置已校验，是否现在执行 up -d 应用修改？(y/n，默认 n): "
             if is_yes "$confirm"; then
-                if declare -F ensure_docker_compose_ready >/dev/null 2>&1; then
-                    ensure_docker_compose_ready || return 1
-                    project_dir=$(dirname "$target_file")
-                    (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$target_file" up -d)
-                elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-                    project_dir=$(dirname "$target_file")
-                    (cd "$project_dir" && docker compose -f "$target_file" up -d)
-                elif command -v docker-compose >/dev/null 2>&1; then
-                    project_dir=$(dirname "$target_file")
-                    (cd "$project_dir" && docker-compose -f "$target_file" up -d)
-                else
-                    echo -e "${RED}❌ 未检测到 Docker Compose，无法应用修改。${PLAIN}"
-                    return 1
-                fi
+                run_applied_config_compose "$target_file" up -d
             else
                 echo -e "${YELLOW}⚠️ Compose 修改已保存，但容器尚未重建。${PLAIN}"
             fi
@@ -8548,11 +8558,17 @@ check_sni_stack_subscription_hint() {
 
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🔎 订阅链接与 External Proxy 检查提示${PLAIN}"
+    echo -e "${BOLD}🔎 订阅链接与 Hosts / External Proxy 检查提示${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     web_label=$(web_proxy_engine_label)
-    echo -e "请在 3x-ui 的 REALITY 入站里开启 External Proxy，并确保："
+    echo -e "3x-ui v3.4.0 及之后：左侧侧边栏 -> Hosts / 主机 -> 新增 Host："
+    echo -e "  入站：选择对应的 REALITY 或本地 Xray 入站"
+    echo -e "  地址：你的节点域名或服务器 IP"
+    echo -e "  端口：${NGINX_LISTEN_PORT}"
+    echo -e "  Security/SNI/Fingerprint/ALPN：按该入站和客户端实际值保持一致"
+    echo -e ""
+    echo -e "3x-ui v3.3.1 及之前：在 REALITY 入站里开启 External Proxy，并确保："
     echo -e "  类型：相同"
     echo -e "  地址：你的节点域名或服务器 IP"
     echo -e "  端口：${NGINX_LISTEN_PORT}"
@@ -8566,7 +8582,7 @@ check_sni_stack_subscription_hint() {
     echo -e "  Clash/Mihomo：  https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
     echo -e "${YELLOW}不要把公网订阅地址写成 :${SUB_LISTEN_PORT}；该端口只给当前本地 Web 反代引擎（${web_label}）访问，不应写成公网订阅入口。${PLAIN}"
     echo -e ""
-    echo -e "${YELLOW}如果链接里还是 :${XRAY_LISTEN_PORT}，说明 3x-ui 订阅仍在输出本地入站端口，请回到入站设置检查 External Proxy。${PLAIN}"
+    echo -e "${YELLOW}如果链接里还是 :${XRAY_LISTEN_PORT}，3x-ui v3.4.0+ 请检查 Hosts / 主机；旧版请检查入站 External Proxy。${PLAIN}"
 }
 
 # ---------------------------------------------------------
@@ -14348,13 +14364,13 @@ func_xpanel_manage() {
 func_xui_custom_manager() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧭 3x-ui 外置增强管理${PLAIN}"
+    echo -e "${BOLD}🧭 x-ui 增强套件${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}用途：补充 3x-ui 面板内没有的维护能力，例如自定义流量重置、校准已用流量、备份恢复和健康检查。${PLAIN}"
-    echo -e "${YELLOW}提示：也可以在主菜单直接输入 xcm 或“外置”进入；脚本内输入 ? 可看功能索引。${PLAIN}"
+    echo -e "${YELLOW}提示：也可以在主菜单直接输入 xcm 进入；脚本内输入 ? 可看功能索引。${PLAIN}"
     echo -e "${YELLOW}建议：修改数据库或恢复备份前，先做快照或通过脚本备份 x-ui 数据。${PLAIN}"
     echo -e "------------------------------------------------"
-    run_remote_script "运行 3x-ui 外置增强管理脚本" "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh"
+    run_remote_script "运行 x-ui 增强套件脚本" "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh"
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
@@ -18460,7 +18476,7 @@ show_main_help() {
     echo "16  备份与回滚，高风险操作前建议先跑。"
     echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
     echo "10 -> 5  流量达量关机保护，按账单周期防刷流量和超额账单。"
-    echo "xcm/外置  直达 3x-ui 外置增强管理；也可走 5 -> 2。"
+    echo "xcm 直达 x-ui 增强套件；也可走 5 -> 2。"
     echo "? 查看帮助，0/q 退出。"
 }
 

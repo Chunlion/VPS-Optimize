@@ -334,7 +334,7 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 | 订阅 | `127.0.0.1:2096` |
 | 浏览器访问 | `https://panel.example.com/panel/` |
 
-### 9. 检查客户端订阅和 REALITY
+### 9. 检查客户端订阅、Hosts / External Proxy 和 REALITY
 
 订阅链接里不应该出现：
 
@@ -343,6 +343,26 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 :40000
 :8443
 127.0.0.1
+```
+
+节点链接需要输出公网 `443`。
+
+3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host：
+
+```text
+入站：选择这个 REALITY 入站
+地址：node.example.com 或服务器公网 IP
+端口：443
+Security：相同，或按该入站实际安全类型填写
+SNI / Fingerprint / ALPN：按该入站和客户端实际值保持一致
+```
+
+3x-ui v3.3.1 及之前：在 REALITY 入站里打开 `External Proxy`：
+
+```text
+类型：相同
+地址：node.example.com 或服务器公网 IP
+端口：443
 ```
 
 REALITY 节点里重点确认：
@@ -424,4 +444,5 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 | 订阅路径不带 `/` | 订阅 404 | 统一写 `/sub/`、`/clash/` |
 | Cloudflare 开橙云 | REALITY 或证书异常 | 改 DNS only / 灰云 |
 | External URL 输出内部端口 | 客户端无法订阅 | 改成 `https://panel.example.com/sub/` |
+| Hosts / External Proxy 输出内部端口 | 客户端节点连不上公网 `443` | 3x-ui v3.4.0+ 检查 `Hosts / 主机`；旧版检查 `External Proxy` |
 | 没备份就反复重跑 | 配置越来越乱 | 先备份，再按排错手册逐项修 |

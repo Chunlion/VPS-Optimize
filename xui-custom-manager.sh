@@ -7,8 +7,7 @@ BACKUP_DIR="${BACKUP_DIR:-/root/x-ui-backups}"
 XUI_DB="${XUI_DB:-/etc/x-ui/x-ui.db}"
 XUI_ETC_DIR="${XUI_ETC_DIR:-/etc/x-ui}"
 XUI_PROGRAM_DIR="${XUI_PROGRAM_DIR:-/usr/local/x-ui}"
-XUI_VERIFIED_VERSIONS="${XUI_VERIFIED_VERSIONS:-2.9.4 3.3.1}"
-XUI_LATEST_VERIFIED_VERSION="3.3.1"
+XUI_SUPPORTED_VERSION_RANGES="${XUI_SUPPORTED_VERSION_RANGES:-2.9.x 3.x}"
 LOG_FILE="${LOG_FILE:-/var/log/xui-custom-manager.log}"
 RESET_STATE="${RESET_STATE:-/var/lib/xui-custom-manager/reset-state.json}"
 RESET_SERVICE="${RESET_SERVICE:-/etc/systemd/system/xui-custom-reset.service}"
@@ -158,40 +157,42 @@ detect_xui_version() {
     echo "unknown"
 }
 
-format_verified_versions() {
-    local version output=""
-    for version in $XUI_VERIFIED_VERSIONS; do
-        if [ -z "$output" ]; then
-            output="v${version}"
-        else
-            output="${output}, v${version}"
-        fi
-    done
+format_supported_version_ranges() {
+    local output
+    output="${XUI_SUPPORTED_VERSION_RANGES// /, }"
     echo "$output"
 }
 
-xui_version_is_verified() {
+xui_version_is_supported() {
     local detected_version="${1:-}"
-    local version
+    local range
     detected_version="${detected_version:-$(detect_xui_version)}"
-    for version in $XUI_VERIFIED_VERSIONS; do
-        if [ "$detected_version" = "$version" ]; then
-            return 0
-        fi
+    for range in $XUI_SUPPORTED_VERSION_RANGES; do
+        case "$range" in
+            2.9.x)
+                [[ "$detected_version" == 2.9.* ]] && return 0
+                ;;
+            3.x)
+                [[ "$detected_version" == 3.* ]] && return 0
+                ;;
+            *)
+                [[ "$detected_version" == "$range" ]] && return 0
+                ;;
+        esac
     done
     return 1
 }
 
 print_xui_version_warning() {
     local detected_version="${1:-}"
-    local verified_versions
+    local supported_ranges
     detected_version="${detected_version:-$(detect_xui_version)}"
-    verified_versions="$(format_verified_versions)"
-    if xui_version_is_verified "$detected_version"; then
-        echo -e "${GREEN}兼容性：当前 3x-ui v${detected_version} 已在适配列表内，写库前仍会校验数据库字段。${PLAIN}"
+    supported_ranges="$(format_supported_version_ranges)"
+    if xui_version_is_supported "$detected_version"; then
+        echo -e "${GREEN}兼容性：当前 3x-ui v${detected_version} 在支持范围内，写库前仍会校验数据库表/字段关键字。${PLAIN}"
     else
-        echo -e "${YELLOW}兼容性提示：当前 3x-ui v${detected_version} 不在适配列表内。${PLAIN}"
-        echo -e "${YELLOW}已适配版本：${verified_versions}。其它版本只允许备份、查看、预览和自检，不允许写库或启用自动重置。${PLAIN}"
+        echo -e "${YELLOW}兼容性提示：当前 3x-ui v${detected_version} 不在支持范围内。${PLAIN}"
+        echo -e "${YELLOW}支持范围：${supported_ranges}。其它版本只允许备份、查看、预览和自检，不允许写库或启用自动重置。${PLAIN}"
     fi
 }
 
@@ -259,9 +260,9 @@ PY
 require_verified_xui_for_write() {
     local detected_version
     detected_version="$(detect_xui_version)"
-    if ! xui_version_is_verified "$detected_version"; then
+    if ! xui_version_is_supported "$detected_version"; then
         print_xui_version_warning "$detected_version"
-        echo -e "${RED}错误：当前 3x-ui 版本未适配，已禁止写库/启用 timer。${PLAIN}"
+        echo -e "${RED}错误：当前 3x-ui 版本不在支持范围内，已禁止写库/启用 timer。${PLAIN}"
         return 1
     fi
     if ! check_xui_db_schema_readonly; then
@@ -671,7 +672,7 @@ run_custom_reset_ui() {
     local xui_write_allowed=0
     local detected_version
     detected_version="$(detect_xui_version)"
-    if xui_version_is_verified "$detected_version" && check_xui_db_schema_readonly >/dev/null 2>&1; then
+    if xui_version_is_supported "$detected_version" && check_xui_db_schema_readonly >/dev/null 2>&1; then
         xui_write_allowed=1
     fi
 
@@ -690,7 +691,7 @@ from pathlib import Path
 db_path = os.environ.get("XUI_DB", "/etc/x-ui/x-ui.db")
 config_path = Path(os.environ.get("CONFIG_FILE", "/etc/xui-custom-reset.json"))
 write_allowed = os.environ.get("XUI_WRITE_ALLOWED") == "1"
-verified_versions = os.environ.get("XUI_VERIFIED_VERSIONS", "2.9.4 3.3.1")
+supported_ranges = os.environ.get("XUI_SUPPORTED_VERSION_RANGES", "2.9.x 3.x")
 detected_version = os.environ.get("XUI_DETECTED_VERSION", "unknown")
 
 ANSI = {
@@ -732,9 +733,9 @@ def pause():
     input("\n按回车返回菜单...")
 
 def print_write_blocked():
-    print(paint(f"错误：当前 3x-ui v{detected_version} 未适配。", "red"))
-    print(paint(f"已适配版本：{', '.join('v' + v for v in verified_versions.split())}。", "yellow"))
-    print(paint("其它版本只允许备份、查看、预览和自检，不允许修改配置、写库或启用自动重置。", "yellow"))
+    print(paint(f"错误：当前 3x-ui v{detected_version} 不在支持范围内，或数据库表/字段关键字未通过检查。", "red"))
+    print(paint(f"支持范围：{', '.join(supported_ranges.split())}。", "yellow"))
+    print(paint("不满足条件时只允许备份、查看、预览和自检，不允许修改配置、写库或启用自动重置。", "yellow"))
 
 def require_config_write():
     if write_allowed:
@@ -901,7 +902,7 @@ for client in clients:
 
 def show_config():
     clear_screen()
-    title("🧭 3x-ui 外置增强管理 - 当前自定义重置配置")
+    title("🧭 x-ui 增强套件 - 当前自定义重置配置")
     print(json.dumps(config, ensure_ascii=False, indent=2))
     pause()
 
@@ -909,7 +910,7 @@ def manage_clients(inbound_id, inbound_cfg):
     clients_for_inbound = clients_by_inbound.get(str(inbound_id), [])
     while True:
         clear_screen()
-        title("🧭 3x-ui 外置增强管理 - 客户端单独日期")
+        title("🧭 x-ui 增强套件 - 客户端单独日期")
         print(f"{paint('入站 ID：', 'cyan')}{paint(inbound_id, 'white')}")
         print(paint("说明：不单独设置时，客户端按入站规则处理。", "yellow"))
         separator()
@@ -962,7 +963,7 @@ def manage_inbound(inbound):
 
     while True:
         clear_screen()
-        title("🧭 3x-ui 外置增强管理 - 入站设置")
+        title("🧭 x-ui 增强套件 - 入站设置")
         print(f"{paint('ID：', 'cyan')}{paint(iid, 'white')}")
         print(f"{paint('端口：', 'cyan')}{paint(str(inbound['port']), 'white')}")
         print(f"{paint('备注：', 'cyan')}{paint(inbound['remark'] or '无备注', 'white')}")
@@ -1004,7 +1005,7 @@ def manage_inbound(inbound):
 def choose_inbound():
     while True:
         clear_screen()
-        title("🧭 3x-ui 外置增强管理 - 选择入站")
+        title("🧭 x-ui 增强套件 - 选择入站")
 
         if not inbounds:
             print(paint("未读取到入站。", "yellow"))
@@ -1033,13 +1034,13 @@ def choose_inbound():
 
 while True:
     clear_screen()
-    title("🧭 3x-ui 外置增强管理 - 自定义流量重置日期")
+    title("🧭 x-ui 增强套件 - 自定义流量重置日期")
     print(f"{paint('全局状态：', 'cyan')}{status_value(config.get('enabled'), '启用', '禁用')}")
     print(f"{paint('默认日期：', 'cyan')}{paint('每月 ' + str(config.get('default_day', 1)) + ' 号', 'white')}")
     print(f"{paint('自动检查：', 'cyan')}{status_value(timer_status(), '已启用', '未启用')}")
     print()
     if not write_allowed:
-        print(paint(f"兼容性：当前 3x-ui v{detected_version} 未适配。", "yellow"))
+        print(paint(f"兼容性：当前 3x-ui v{detected_version} 不在支持范围内，或数据库表/字段关键字未通过检查。", "yellow"))
         print(paint("当前只允许查看配置和预览，不允许修改配置或启用自动重置。", "yellow"))
         print()
     print(paint("提示：请在 3x-ui 面板里关闭对应入站的原生 monthly 重置。", "yellow"))
@@ -1077,7 +1078,7 @@ while True:
 PY
 
     set +e
-    XUI_DB="$XUI_DB" CONFIG_FILE="$CONFIG_FILE" XUI_WRITE_ALLOWED="$xui_write_allowed" XUI_VERIFIED_VERSIONS="$XUI_VERIFIED_VERSIONS" XUI_DETECTED_VERSION="$detected_version" python3 "$tmp_py" </dev/tty
+    XUI_DB="$XUI_DB" CONFIG_FILE="$CONFIG_FILE" XUI_WRITE_ALLOWED="$xui_write_allowed" XUI_SUPPORTED_VERSION_RANGES="$XUI_SUPPORTED_VERSION_RANGES" XUI_DETECTED_VERSION="$detected_version" python3 "$tmp_py" </dev/tty
     local ret=$?
     rm -f "$tmp_py"
     trap - RETURN
@@ -1270,7 +1271,7 @@ def build_write(target, up, down):
 
 def calibrate_target(target):
     clear_screen()
-    title("🧭 3x-ui 外置增强管理 - 输入校准流量")
+    title("🧭 x-ui 增强套件 - 输入校准流量")
     print(f"{paint('对象：', 'cyan')}{paint(target['label'], 'white')}")
     print(f"{paint('当前已用：', 'cyan')}{paint(format_gib((target['up'] or 0) + (target['down'] or 0)), 'green')}")
     print()
@@ -1304,7 +1305,7 @@ def calibrate_target(target):
 
 while True:
     clear_screen()
-    title("🧭 3x-ui 外置增强管理 - 校准已用流量")
+    title("🧭 x-ui 增强套件 - 校准已用流量")
     print(paint("说明：这里只校准已用流量 up/down，不修改流量上限 total。", "yellow"))
     print(paint("单位：GiB，1 GiB = 1024^3 bytes", "yellow"))
     separator()
@@ -1335,7 +1336,7 @@ while True:
 
     while True:
         clear_screen()
-        title("🧭 3x-ui 外置增强管理 - 选择校准对象")
+        title("🧭 x-ui 增强套件 - 选择校准对象")
         print(f"{paint('入站 ID：', 'cyan')}{paint(str(inbound_id), 'white')}")
         print(f"{paint('端口：', 'cyan')}{paint(str(inbound['port']), 'white')}")
         print(f"{paint('备注：', 'cyan')}{paint(inbound['remark'] or '无备注', 'white')}")
@@ -1409,7 +1410,7 @@ while True:
             continue
 
         clear_screen()
-        title("🧭 3x-ui 外置增强管理 - 确认写入")
+        title("🧭 x-ui 增强套件 - 确认写入")
         print(paint("以下操作只会修改 up/down，不会修改 total。", "yellow"))
         print(paint("写库前会自动备份数据库，并重启 x-ui。", "yellow"))
         separator()
@@ -2348,11 +2349,11 @@ run_self_test() {
 
     detected_version="$(detect_xui_version)"
     echo "检测到的 3x-ui 版本：$detected_version"
-    echo "已适配版本：$(format_verified_versions)"
-    if xui_version_is_verified "$detected_version"; then
-        selftest_pass "3x-ui 版本已验证"
+    echo "支持版本范围：$(format_supported_version_ranges)"
+    if xui_version_is_supported "$detected_version"; then
+        selftest_pass "3x-ui 版本在支持范围内"
     else
-        selftest_fail "写库功能不可用：当前 3x-ui 版本未适配"
+        selftest_fail "写库功能不可用：当前 3x-ui 版本不在支持范围内"
     fi
 
     if [ -f "$CONFIG_FILE" ]; then
@@ -2445,7 +2446,7 @@ PY
 health_check() {
     clear_screen
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧪 3x-ui 外置增强管理 - 健康检查${PLAIN}"
+    echo -e "${BOLD}🧪 x-ui 增强套件 - 健康检查${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     print_health_report
 }
@@ -2454,7 +2455,7 @@ menu_logs() {
     while true; do
         clear_screen
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🧾 3x-ui 外置增强管理 - 查看日志与报错${PLAIN}"
+        echo -e "${BOLD}🧾 x-ui 增强套件 - 查看日志与报错${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：查看外置脚本、自动检查 timer 和 x-ui 服务日志。${PLAIN}"
         echo -e "${YELLOW}提示：脚本日志包含历史记录，旧菜单或 read error 可能是旧版本留下的。${PLAIN}"
@@ -2527,7 +2528,7 @@ menu_backup_restore() {
     while true; do
         clear_screen
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}💾 3x-ui 外置增强管理 - 备份 / 恢复 x-ui${PLAIN}"
+        echo -e "${BOLD}💾 x-ui 增强套件 - 备份 / 恢复 x-ui${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：备份或恢复 x-ui 数据库、配置目录和程序目录。${PLAIN}"
         echo -e "${YELLOW}备份目录：$BACKUP_DIR${PLAIN}"
@@ -2573,7 +2574,7 @@ menu_backup_restore() {
 show_quick_guide() {
     clear_screen
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧭 3x-ui 外置增强管理 - 功能索引${PLAIN}"
+    echo -e "${BOLD}🧭 x-ui 增强套件 - 功能索引${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}按你想做的事选入口：${PLAIN}"
     echo "  想让不同入站/客户端按不同日期重置流量 -> [1] 自定义流量重置日期"
@@ -2598,7 +2599,7 @@ main_menu() {
     while true; do
         clear_screen
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}${WHITE}🧭 3x-ui 外置增强管理${PLAIN}"
+        echo -e "${BOLD}${WHITE}🧭 x-ui 增强套件${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}用途：补充 3x-ui 面板缺失能力，例如自定义重置、校准已用流量、备份恢复和健康检查。${PLAIN}"
         print_xui_version_warning

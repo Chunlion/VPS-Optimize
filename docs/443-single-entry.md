@@ -130,6 +130,30 @@ Clash/Mihomo 反向代理 URI：https://panel.example.com/clash/
 
 `panel.example.com`、`/sub/`、`/clash/` 都是示例值，请替换成你的实际面板域名和路径。
 
+### 3x-ui 3.4.0+ Hosts / 旧版 External Proxy
+
+3x-ui v3.4.0 及之后，订阅节点公网地址在左侧侧边栏 `Hosts / 主机` 里配置。旧版 3x-ui 仍使用入站里的 `External Proxy`。
+
+3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host：
+
+```text
+入站：选择对应的 REALITY 或本地 Xray 入站
+地址：node.example.com 或服务器公网 IP
+端口：443
+Security：相同，或按该入站实际安全类型填写
+SNI / Fingerprint / ALPN：按该入站和客户端实际值保持一致
+```
+
+3x-ui v3.3.1 及之前：在对应 REALITY 入站里打开 `External Proxy`：
+
+```text
+类型：相同
+地址：node.example.com 或服务器公网 IP
+端口：443
+```
+
+升级前已经设置 `External Proxy` 的面板，升级后仍应检查 `Hosts / 主机` 中地址和端口是否为公网 `443`。
+
 ### 模式 1：Nginx Stream
 
 这是默认稳定模式。3x-ui/Xray 节点入站不要监听公网 `443`，只监听本机端口。
@@ -142,7 +166,7 @@ Clash/Mihomo 反向代理 URI：https://panel.example.com/clash/
 | 客户端连接端口 | `443` |
 | REALITY `dest` / `Target` | 外部真实 HTTPS 站点，例如 `www.microsoft.com:443` |
 | REALITY `serverNames` / `SNI` | 同一个外部真实 HTTPS 站点，例如 `www.microsoft.com` |
-| External Proxy | 地址填 `node.example.com` 或服务器公网 IP，端口填 `443` |
+| Hosts / External Proxy | 3x-ui v3.4.0+ 在 `Hosts / 主机` 中新增 Host；旧版在入站 `External Proxy` 中设置。地址填 `node.example.com` 或服务器公网 IP，端口填 `443` |
 
 如果要多个本地 Xray 入站共用公网 `443`，先在 3x-ui 里创建多个本地入站，每个入站使用不同的 `127.0.0.1:端口`，再到：
 
@@ -161,7 +185,7 @@ TCP Peek + Splice 模式下，配置过程和 Nginx Stream 一样：面板、订
 | 3x-ui 面板和订阅 | 保持 `127.0.0.1` 本地 HTTP 后端，证书路径清空 |
 | REALITY 或其他 Xray 入站 | 保持 `127.0.0.1:1443` 这类本地监听 |
 | 客户端连接端口 | 仍然是 `443` |
-| External Proxy | 仍然输出 `node.example.com:443` 或 `服务器公网 IP:443` |
+| Hosts / External Proxy | 仍然输出 `node.example.com:443` 或 `服务器公网 IP:443` |
 | Xray 入站管理 | 和 Nginx Stream 一样支持多个本地 Xray 入站按 SNI 分流 |
 
 从 Nginx Stream 切到 TCP Peek + Splice 时，通常不需要改 3x-ui 面板里的任何配置。变化的是公网 `443` 的监听进程：从 `nginx` 换成 `vpso-mux`。
@@ -196,7 +220,7 @@ Xray Fallback 是特殊模式。公网 `443` 由你已经配置好的 3x-ui/Xray
 | fallback / fallback dest / 回落目标 | `127.0.0.1:8443`，端口以脚本里的 Web 反代引擎本地端口为准 |
 | 客户端连接地址 | `node.example.com` 或服务器公网 IP |
 | 客户端连接端口 | `443` |
-| External Proxy | 如果订阅链接没有输出 `:443`，就设置地址为节点域名或服务器公网 IP，端口为 `443` |
+| Hosts / External Proxy | 如果订阅链接没有输出 `:443`，3x-ui v3.4.0+ 在 `Hosts / 主机` 中设置；旧版在入站 `External Proxy` 中设置。地址填节点域名或服务器公网 IP，端口填 `443` |
 
 Web 面板和订阅仍然走当前 Web 反代引擎，所以面板证书路径、订阅证书路径仍然必须清空。`panel.example.com` 访问链路应是：
 
@@ -332,7 +356,7 @@ Cloudflare 建议：
 | 网站或反代域名 | 灰云 / DNS only |
 | REALITY 伪装 SNI | 写外部真实 HTTPS 站点，不要指向你的 VPS |
 
-不推荐给本方案相关域名开启 Cloudflare 代理。灰云直连更适合 Nginx stream 按 SNI 分流，也能减少 REALITY、订阅链接和 External Proxy 的异常。
+不推荐给本方案相关域名开启 Cloudflare 代理。灰云直连更适合 Nginx stream 按 SNI 分流，也能减少 REALITY、订阅链接和 Hosts / External Proxy 的异常。
 
 REALITY 伪装 SNI 建议选没有 CDN 防护、HTTPS 稳定、国内外都容易访问的外部网站。不要选自己的面板域名、节点域名、订阅域名，也不要选会频繁跳转、拦截异常请求或强制人机验证的网站。
 
@@ -353,7 +377,7 @@ Zone.DNS.Edit
 3. 让 3x-ui 面板和订阅使用 Skip SSL / 本机 HTTP 后端
 4. 配置 REALITY 入站
 5. 进入 `主菜单 [19 443 单入口管理中心] -> [2 首次配置 / 安装 443 单入口]`
-6. 回到 3x-ui 收尾：确认本机监听、订阅反代 URI、External Proxy
+6. 回到 3x-ui 收尾：确认本机监听、订阅反代 URI、Hosts / External Proxy
 7. 进入 `主菜单 [19 443 单入口管理中心] -> [13 443 链路体检]`
 ```
 
@@ -571,7 +595,19 @@ https://panel.example.com/sublinkqq/
 https://panel.example.com/mihomo/
 ```
 
-然后在 REALITY 入站里打开 `External Proxy`：
+然后按 3x-ui 版本设置节点公网地址。
+
+3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host：
+
+```text
+入站：选择对应的 REALITY 或本地 Xray 入站
+地址：node.example.com 或服务器公网 IP
+端口：443
+Security：相同，或按该入站实际安全类型填写
+SNI / Fingerprint / ALPN：按该入站和客户端实际值保持一致
+```
+
+3x-ui v3.3.1 及之前：在 REALITY 入站里打开 `External Proxy`：
 
 ```text
 类型：相同
@@ -579,7 +615,7 @@ https://panel.example.com/mihomo/
 端口：443
 ```
 
-保存后重新复制节点链接，端口应该是 `:443`。如果还是 `:1443`，说明 External Proxy 没生效。
+保存后重新复制节点链接，端口应该是 `:443`。如果还是 `:1443`，3x-ui v3.4.0+ 请检查 `Hosts / 主机`，旧版请检查 `External Proxy`。
 
 最后运行：
 

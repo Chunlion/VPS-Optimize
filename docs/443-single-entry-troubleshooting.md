@@ -344,7 +344,8 @@ https://panel.example.com:2096/sub/xxxx
 ### 常见原因
 
 - 3x-ui 订阅反向代理 URI 没设置。
-- Public URL / External Proxy 仍输出内部端口。
+- Public URL / External URL 仍输出内部端口。
+- 如果是订阅内容里的节点仍带本地端口，按下一节检查 `Hosts / 主机` 或 `External Proxy`。
 
 ### 解决方法
 
@@ -385,12 +386,23 @@ http://127.0.0.1:2096/sub/
 
 ### 常见原因
 
-- REALITY 入站没有设置 External Proxy。
+- 旧版 3x-ui 的 REALITY 入站没有设置 External Proxy。
+- 3x-ui v3.4.0+ 的 `Hosts / 主机` 没有给该入站设置公网地址和端口。
 - 节点域名走了 Cloudflare 代理，客户端无法直连 VPS。
 
 ### 解决方法
 
-回到 3x-ui 的 REALITY 入站，设置 `External Proxy`：
+3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host：
+
+```text
+入站：选择对应的 REALITY 入站
+地址：node.example.com 或服务器公网 IP
+端口：443
+Security：相同，或按该入站实际安全类型填写
+SNI / Fingerprint / ALPN：按该入站和客户端实际值保持一致
+```
+
+3x-ui v3.3.1 及之前：回到 REALITY 入站，设置 `External Proxy`：
 
 ```text
 类型：相同
@@ -590,7 +602,8 @@ grep -R "listen" /etc/nginx /etc/caddy 2>/dev/null
 
 - 3x-ui 订阅服务没有开启。
 - 订阅路径前缀与 Caddy 配置不一致。
-- External Proxy / Public URL 仍输出内部端口。
+- Public URL 仍输出内部端口。
+- 3x-ui v3.4.0+ 的 `Hosts / 主机` 或旧版 `External Proxy` 仍输出内部端口。
 
 ### 检查命令
 

@@ -564,6 +564,35 @@ declare -f collect_applied_config_files >/dev/null
     ensure_docker_compose_ready() { DOCKER_COMPOSE_CMD=true; }
     validate_applied_config_kind compose /tmp/vps-compose-smoke.yml >/dev/null
 )
+(
+    compose_apply_tmp=$(mktemp -d /tmp/vps-compose-apply-smoke.XXXXXX)
+    mkdir -p "$compose_apply_tmp/src" "$compose_apply_tmp/project"
+    printf '%s\n' 'services: {}' > "$compose_apply_tmp/project/docker-compose.yml"
+    cat > "$compose_apply_tmp/src/compose_runtime.sh" <<'SMOKE_COMPOSE_RUNTIME'
+ensure_docker_compose_ready() {
+    DOCKER_COMPOSE_CMD=mock_compose_cmd
+    printf loaded > "$COMPOSE_HELPER_MARKER"
+}
+SMOKE_COMPOSE_RUNTIME
+    mock_compose_cmd() {
+        printf '%s\n' "$*" > "$COMPOSE_CMD_ARGS"
+        [[ "$1" == "-f" && "$2" == "$compose_apply_tmp/project/docker-compose.yml" && "$3" == "up" && "$4" == "-d" ]]
+    }
+    unset -f ensure_docker_compose_ready install_docker_compose_standalone ensure_docker_engine_ready 2>/dev/null || true
+    SCRIPT_DIR="$compose_apply_tmp" \
+        COMPOSE_HELPER_MARKER="$compose_apply_tmp/helper.marker" \
+        COMPOSE_CMD_ARGS="$compose_apply_tmp/compose.args" \
+        reload_applied_config_kind compose "$compose_apply_tmp/project/docker-compose.yml" <<< "y"
+    grep -Fq loaded "$compose_apply_tmp/helper.marker"
+    grep -Fq -- "-f $compose_apply_tmp/project/docker-compose.yml up -d" "$compose_apply_tmp/compose.args"
+    rm -f "$compose_apply_tmp/src/compose_runtime.sh"
+    rm -f "$compose_apply_tmp/project/docker-compose.yml"
+    rm -f "$compose_apply_tmp/helper.marker"
+    rm -f "$compose_apply_tmp/compose.args"
+    rmdir "$compose_apply_tmp/src"
+    rmdir "$compose_apply_tmp/project"
+    rmdir "$compose_apply_tmp"
+)
 config_edit_tmp_dir=$(mktemp -d /tmp/vps-config-edit-smoke.XXXXXX)
 printf '%s\n' 'node.example.com|127.0.0.1|1443' > "$config_edit_tmp_dir/routes.conf"
 validate_xray_routes_file "$config_edit_tmp_dir/routes.conf"
@@ -1230,6 +1259,14 @@ for file in "${renumbered_sni_doc_files[@]}"; do
     assert_file_not_contains "$file" '主菜单 [19 443 单入口管理中心] -> [15 订阅链接 / External Proxy 提示]' "${file} must use [11 订阅链接 / External Proxy 提示]."
 done
 
+assert_file_contains "docs/443-single-entry.md" '3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host' "443 tutorial must document the 3x-ui v3.4.0+ Hosts path."
+assert_file_contains "docs/443-single-entry.md" '3x-ui v3.3.1 及之前：在对应 REALITY 入站里打开 `External Proxy`' "443 tutorial must keep the legacy External Proxy path."
+assert_file_contains "tutorials/01-3x-ui-reality-443.md" '3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host' "REALITY tutorial must document the 3x-ui v3.4.0+ Hosts path."
+assert_file_contains "tutorials/01-3x-ui-reality-443.md" '3x-ui v3.3.1 及之前：在 REALITY 入站里打开 `External Proxy`' "REALITY tutorial must keep the legacy External Proxy path."
+assert_file_contains "docs/443-single-entry-troubleshooting.md" '3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host' "Troubleshooting docs must document the 3x-ui v3.4.0+ Hosts path."
+assert_file_contains "src/sni_stack_health.sh" '3x-ui v3.4.0 及之后：左侧侧边栏 -> Hosts / 主机 -> 新增 Host：' "Subscription hint must mention the 3x-ui v3.4.0+ Hosts path."
+assert_dist_contains '3x-ui v3.4.0 及之后：左侧侧边栏 -> Hosts / 主机 -> 新增 Host：' "Built script must include the 3x-ui v3.4.0+ Hosts hint."
+
 assert_file_not_contains "docs/443-single-entry.md" '主菜单 [3] -> [13] Caddy 反代' "443 tutorial must not point users to the old Caddy menu path."
 assert_file_not_contains "docs/443-single-entry.md" '[19] -> [2] -> [5]' "443 tutorial must not point Web whitelist users to the old nested whitelist path."
 assert_file_not_contains "docs/443-single-entry.md" '主菜单 [19 443 单入口管理中心] -> [9 管理 Web 域名 IP 白名单]' "443 tutorial must not point Web whitelist users to the stale direct [19] -> [9] path."
@@ -1294,12 +1331,12 @@ assert_file_not_contains "docs/dog.md" '账单级准确' "dog.sh docs must not c
 assert_file_not_contains "docs/dog.md" '可作为账单依据' "dog.sh docs must not present dog.sh data as billing evidence."
 assert_file_not_contains "docs/dog.md" '可替代商家账单' "dog.sh docs must not present dog.sh data as a provider-bill replacement."
 
-assert_file_contains "docs/xui-custom-manager.md" '当前适配并验证 3x-ui v2.9.4 和 v3.3.1' "xui-custom-manager docs must state the adapted 3x-ui versions."
-assert_file_contains "docs/xui-custom-manager.md" '不适配版本不应执行写库功能' "xui-custom-manager docs must block write operations on unverified versions."
-assert_file_contains "docs/xui-custom-manager.md" '不要在不适配的 3x-ui 版本上强行写库' "xui-custom-manager docs must keep write operations limited to adapted 3x-ui versions."
-assert_file_contains "docs/xui-custom-manager.md" '不要把未验证版本当作兼容版本使用' "xui-custom-manager docs must not imply unverified 3x-ui versions may work."
-assert_file_not_contains "docs/xui-custom-manager.md" '未验证版本可能可用' "xui-custom-manager docs must not imply unverified 3x-ui versions may work."
-assert_file_not_contains "docs/xui-custom-manager.md" '其它版本也可能兼容' "xui-custom-manager docs must not imply other 3x-ui versions may work."
+assert_file_contains "docs/xui-custom-manager.md" '支持 3x-ui 2.9.x 和 3.x。' "xui-custom-manager docs must state the supported version ranges."
+assert_file_contains "docs/xui-custom-manager.md" '写库前必须通过只读数据库 schema 检查' "xui-custom-manager docs must require schema checks before writes."
+assert_file_contains "docs/xui-custom-manager.md" '不要跳过版本范围和 schema 检查强行写库' "xui-custom-manager docs must keep writes gated by version range and schema."
+assert_file_not_contains "docs/xui-custom-manager.md" '只有 3x-ui v2.9.4 验证过写库操作。' "xui-custom-manager docs must not keep the old single-version write gate."
+assert_file_not_contains "docs/xui-custom-manager.md" '未验证版本可能可用' "xui-custom-manager docs must not imply unsupported 3x-ui versions may work."
+assert_file_not_contains "docs/xui-custom-manager.md" '其它版本也可能兼容' "xui-custom-manager docs must not imply unsupported 3x-ui versions may work."
 assert_file_not_contains "docs/xui-custom-manager.md" '其它版本可尝试写库' "xui-custom-manager docs must not permit write trials on other 3x-ui versions."
 
 grep -q 'print_vpso_mux_failure_context' dist/vps.sh

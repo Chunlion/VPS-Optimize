@@ -87,13 +87,13 @@ func_xpanel_manage() {
 func_xui_custom_manager() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧭 3x-ui 外置增强管理${PLAIN}"
+    echo -e "${BOLD}🧭 x-ui 增强套件${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}用途：补充 3x-ui 面板内没有的维护能力，例如自定义流量重置、校准已用流量、备份恢复和健康检查。${PLAIN}"
-    echo -e "${YELLOW}提示：也可以在主菜单直接输入 xcm 或“外置”进入；脚本内输入 ? 可看功能索引。${PLAIN}"
+    echo -e "${YELLOW}提示：也可以在主菜单直接输入 xcm 进入；脚本内输入 ? 可看功能索引。${PLAIN}"
     echo -e "${YELLOW}建议：修改数据库或恢复备份前，先做快照或通过脚本备份 x-ui 数据。${PLAIN}"
     echo -e "------------------------------------------------"
-    run_remote_script "运行 3x-ui 外置增强管理脚本" "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh"
+    run_remote_script "运行 x-ui 增强套件脚本" "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh"
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
