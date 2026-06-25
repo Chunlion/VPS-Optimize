@@ -18494,7 +18494,7 @@ show_panel_help() {
     echo -e "${CYAN}VPS-Optimize > 面板、节点与订阅工具 > 帮助${PLAIN}"
     echo "1 3x-ui 面板脚本：安装、官方菜单、修复面板。"
     echo "2 x-ui 增强套件：重置日期、流量校准、备份恢复和日志。"
-    echo "3 面板救砖 / SSL 清理，适合 443 接入前清空面板证书路径。"
+    echo "3 面板 SSL 修复，适合 443 接入前清空面板证书路径。"
     echo "4 S-UI 面板脚本：安装、官方菜单、卸载。"
     echo "5/6 Sing-box 脚本和 Xray 脚本。"
     echo "7/8/9 订阅栈，11 Dockge Compose，12 Compose 迁移；公网 HTTPS：未启用 443 单入口走主菜单 [4 反代]，已启用走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。"
