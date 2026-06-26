@@ -15580,7 +15580,7 @@ func_migrate_compose_to_dockge() {
 func_rescue_panel() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🚑 面板紧急救砖 / SSL 清理工具${PLAIN}"
+    echo -e "${BOLD}🚑 面板 SSL 修复${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}用途：清空 3x-ui 面板证书路径，让 Caddy 可以按 HTTP 反代本机面板。${PLAIN}"
     echo -e "更推荐在 3x-ui 面板里手动进入：面板设置 -> 常规 -> 证书，把证书路径和私钥路径清空后保存重启。"
