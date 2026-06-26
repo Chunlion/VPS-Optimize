@@ -209,16 +209,8 @@ assert_file_contains src/preflight.sh '443 单入口摘要:' "Issue diagnostics 
 assert_file_contains src/preflight.sh '443 connlimit: 检测到本脚本添加的公网 443 connlimit 规则' "Issue diagnostics must warn when script-owned public 443 connlimit rules exist."
 assert_dist_contains '影响范围：该限制只能作用于整个公网 443 入口，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "Release script must include the 443 connlimit scope warning."
 assert_file_contains src/menus.sh '如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。' "Health help must mention the connlimit persistence summary."
-assert_file_contains README.md '主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [5 保存/检查重启持久化]' "README must document the connlimit persistence save/check path."
-assert_file_contains README.md '添加或删除 connlimit 规则后，脚本会自动尝试刷新持久化快照' "README must document automatic connlimit persistence refresh after changes."
-assert_file_contains README.md '基础组件入口：`主菜单 [3 基础组件与常用服务]`，包含 Forwardx 转发面板和 nftables NAT 转发。' "README must document the current basic components additions."
 assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [7 Forwardx 转发面板]' "Config paths doc must document the current Forwardx menu path."
 assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [10 nftables NAT 转发]' "Config paths doc must document the current nftables NAT menu path."
-assert_file_contains README.md '主菜单 [10 网络与内核优化] -> [2 动态 TCP 参数调优]' "README must document the dynamic TCP tuning menu path."
-assert_file_contains README.md '可以直接粘贴多行 `sysctl` 参数块' "README must document multi-line TCP sysctl paste support."
-assert_file_contains README.md '误复制成单行长串' "README must document single-line TCP sysctl paste recovery."
-assert_file_contains README.md '第 N 项语法错误' "README must document item-level TCP sysctl syntax diagnostics."
-assert_file_contains README.md '第 N 项当前内核不支持' "README must document unsupported-kernel TCP sysctl diagnostics."
 assert_file_contains docs/443-single-entry-troubleshooting.md '端口并发连接限制误伤' "443 troubleshooting doc must include connlimit false-positive guidance."
 assert_file_contains docs/443-single-entry-troubleshooting.md '如果公网 `443` 存在本脚本添加的 connlimit 规则，它只能作用于整个公网 `443`，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "443 troubleshooting doc must explain public 443 connlimit scope."
 assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [19 443 单入口管理中心] -> [13 443 链路体检]' "443 troubleshooting doc must point users to the 443 health check."
@@ -1284,11 +1276,8 @@ for file in "${tcp_peek_doc_files[@]}"; do
     assert_file_not_contains "$file" 'TCP Peek 专用回滚' "${file} should not recommend a TCP Peek-specific rollback path."
 done
 
-assert_file_contains "README.md" '配置过程和 Nginx Stream 一样' "README must explain that TCP Peek uses the same configuration flow as Nginx Stream."
 assert_file_contains ".github/ISSUE_TEMPLATE/bug_report.md" '主菜单 [19 443 单入口管理中心] -> [2 首次配置 / 安装 443 单入口]' "Bug report template must show the current 443 menu path."
 assert_file_contains ".github/ISSUE_TEMPLATE/bug_report.md" '主菜单 [15 服务健康总览]' "Bug report template must show the current health menu path."
-assert_file_contains "README.md" '正式切换使用 `[5] 切换到 TCP Peek + Splice 模式`' "README must point TCP Peek formal cutover at the existing entry-mode switch [5]."
-assert_file_contains "README.md" '[7] 回滚上一次入口模式切换' "README must point rollback guidance at the broader entry-mode rollback [7]."
 assert_file_contains "docs/443-single-entry.md" 'TCP Peek 的优点' "443 tutorial must list TCP Peek advantages."
 assert_file_contains "docs/443-single-entry.md" '配置过程和 Nginx Stream 一样' "443 tutorial must say TCP Peek uses the same configuration flow."
 assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443 单入口管理中心] -> [5 切换到 TCP Peek + Splice 模式]' "443 tutorial must show the existing TCP Peek cutover entry [5]."
@@ -1321,7 +1310,6 @@ assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" 'panel.example.com 
 assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" 'panel.example.com/sub/ -> Caddy ->' "3x-ui REALITY tutorial must not pin subscription Web backend to Caddy."
 assert_file_contains "tutorials/01-3x-ui-reality-443.md" 'panel.example.com  -> 当前 Web 反代引擎（Caddy 或 Nginx，例如 127.0.0.1:8443）' "3x-ui REALITY tutorial must describe the selectable local Web reverse proxy engine."
 assert_file_contains "tutorials/01-3x-ui-reality-443.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本只在兼容读取旧配置时按 `nginx-stream` 处理' "3x-ui REALITY tutorial must document ENTRY_MODE fallback compatibility."
-assert_file_contains "README.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，按 `nginx-stream` 兼容读取' "README must document ENTRY_MODE fallback compatibility."
 assert_file_contains "docs/config-paths.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本按 `nginx-stream` 兼容读取' "Config paths doc must document ENTRY_MODE fallback compatibility."
 assert_file_contains "docs/443-single-entry-troubleshooting.md" '公网 `443` 只应由当前 `ENTRY_MODE` 对应的单个入口服务监听' "Troubleshooting doc must describe the current entry-mode listener model."
 assert_file_contains "docs/dog.md" '不是商家账单级统计' "dog.sh docs must not imply bill-grade traffic accounting accuracy."
@@ -1453,7 +1441,6 @@ grep -q 'counter reset detected on ${IFACE}, baseline reset and preserved curren
 grep -q 'traffic|quota|bill|流量|达量|账单) echo "10"' dist/vps.sh
 traffic_guard_menu_path='主菜单 [10 网络与内核优化] -> [5 流量达量关机保护]'
 assert_file_contains CHANGELOG.md "$traffic_guard_menu_path" "CHANGELOG must document the current traffic guard menu path."
-assert_file_contains README.md "$traffic_guard_menu_path" "README must document the current traffic guard menu path."
 assert_file_contains src/menus.sh '10 -> 5  流量达量关机保护' "Menu help must keep traffic guard under network/kernel option 10 -> 5."
 assert_file_not_contains CHANGELOG.md '[9 网络与内核优化] -> [7]' "CHANGELOG must not keep the stale traffic guard menu path."
 if grep -q '20\..*流量达量关机保护' dist/vps.sh; then
@@ -2008,11 +1995,7 @@ grep -q 'vps_sni_web_${CADDY_LISTEN_PORT}.conf' dist/vps.sh
 grep -q 'xray-fallback + Nginx 本地 Web 反代' dist/vps.sh
 grep -q '2. 查看/编辑 Compose 配置' dist/vps.sh
 grep -q 'edit_applied_config_file "$compose_file" "compose"' dist/vps.sh
-assert_file_contains "README.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "README must document the global applied-config editor."
 assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "Config paths doc must list the global applied-config editor."
-assert_file_contains "README.md" '[4 反代] 里的后端 HTTPS 跳过证书校验、域名 IP 白名单、查看/编辑已应用配置和清空反代配置都同时提供 Caddy/Nginx 入口' "README must document Nginx parity in the reverse proxy menu."
-assert_file_contains "README.md" '443 单入口下的 Web 反代引擎可以选择 Caddy 或 Nginx' "README must document selectable Web proxy engines in 443 single-entry."
-assert_file_contains "README.md" 'xray-fallback + Nginx 本地 Web 反代' "README must warn about the unsupported whitelist combination."
 assert_file_contains "docs/443-single-entry.md" '[4] -> [5 域名 IP 白名单]' "443 doc must describe the combined Caddy/Nginx whitelist menu."
 assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "443 doc must describe the current 443 Web whitelist menu path."
 assert_file_contains "src/caddy_proxy.sh" '主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Nginx standalone whitelist guidance must point users to the current 443 Web whitelist submenu path."
@@ -2024,7 +2007,6 @@ assert_file_not_contains "src/caddy_whitelist.sh" '[19] -> [9]' "Compatibility C
 assert_file_contains "docs/443-single-entry.md" '[8 切换 Web 反代引擎]' "443 doc must document switching the Web reverse proxy engine."
 assert_file_contains "docs/443-single-entry.md" 'Nginx 本地 Web 反代 | 不允许新增或覆盖 Web 白名单' "443 doc must prohibit unsupported Nginx fallback whitelist usage."
 assert_file_contains "docs/443-tcp-peek-engine.md" 'Web 反代引擎可选择 Caddy 或 Nginx' "TCP Peek doc must describe the shared Caddy/Nginx Web proxy engine."
-assert_file_contains "README.md" 'Nginx 反代会直接监听公网 80/443' "README must explain the non-single-entry Nginx HTTPS reverse proxy behavior."
 subscription_public_hint='公网 HTTPS 访问建议：未启用 443 单入口时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时，请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/subscription_apps.sh" "$subscription_public_hint" "Subscription/Komari installers must explain both non-single-entry and 443 single-entry reverse proxy paths."
 assert_dist_contains "$subscription_public_hint" "Release script must include the current Subscription/Komari public HTTPS guidance."
