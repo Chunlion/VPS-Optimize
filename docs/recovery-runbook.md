@@ -478,4 +478,4 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 | 订阅密钥 | 删除 |
 | 真实用户域名 | 可按需要替换为 `example.com` |
 
-Issue 模板见 [.github/ISSUE_TEMPLATE/bug_report.md](../.github/ISSUE_TEMPLATE/bug_report.md)。
+Issue 模板见 [VPS-Optimize Bug report](https://github.com/Chunlion/VPS-Optimize/blob/main/.github/ISSUE_TEMPLATE/bug_report.md)。

@@ -265,7 +265,7 @@ https://panel.example.com/clash/客户端 Subscription
 
 只使用 `/clash/` 时，Caddy 里应能看到类似配置：
 
-```caddy
+```text
 @sub path /clash /clash/*
 handle @sub {
     reverse_proxy 127.0.0.1:2096
@@ -274,7 +274,7 @@ handle @sub {
 
 如果普通订阅和 Clash/Mihomo 都要使用，`@sub path` 应同时包含两个路径：
 
-```caddy
+```text
 @sub path /sub /sub/* /clash /clash/*
 ```
 
