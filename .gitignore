@@ -2,3 +2,23 @@ node_modules
 .vitepress/cache
 .vitepress/dist
 .vitepress/preview-*.log
+
+# Sensitive local backup and restore artifacts
+backup_*.tar.gz
+sni-stack_*/
+x-ui.db.*.bak
+etc/x-ui/x-ui.db
+etc/x-ui/x-ui.db-wal
+etc/x-ui/x-ui.db-shm
+usr/local/x-ui/x-ui.db
+usr/local/x-ui/x-ui.db-wal
+usr/local/x-ui/x-ui.db-shm
+usr/local/x-ui/bin/x-ui.db
+usr/local/x-ui/bin/x-ui.db-wal
+usr/local/x-ui/bin/x-ui.db-shm
+root/x-ui-backups/x-ui.db.*.bak
+vps_backup_*/
+vps_restore.*/
+manual-temp/
+manual-restore/
+manual-backups/
