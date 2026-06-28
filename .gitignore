@@ -6,6 +6,9 @@ node_modules
 # Sensitive local backup and restore artifacts
 backup_*.tar.gz
 sni-stack_*/
+etc/vps-optimize/backups/dns/
+etc/vps-optimize/backups/hosts/
+etc/vps-optimize/backups/nginx-proxy-clear_*/
 x-ui.db.*.bak
 etc/x-ui/x-ui.db
 etc/x-ui/x-ui.db-wal
