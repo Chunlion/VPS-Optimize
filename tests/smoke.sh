@@ -56,7 +56,7 @@ assert_gitignore_line() {
 
 assert_gitignore_ignores() {
     local path="$1"
-    if ! git check-ignore --quiet -- "$path"; then
+    if ! git -c "safe.directory=${repo_root}" check-ignore --quiet -- "$path"; then
         echo ".gitignore must ignore generated backup artifact: ${path}" >&2
         exit 1
     fi
