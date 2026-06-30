@@ -46,6 +46,22 @@ assert_file_not_matches() {
     fi
 }
 
+assert_gitignore_line() {
+    local pattern="$1"
+    if ! grep -Fxq -- "$pattern" .gitignore; then
+        echo ".gitignore is missing required ignore pattern: ${pattern}" >&2
+        exit 1
+    fi
+}
+
+assert_gitignore_ignores() {
+    local path="$1"
+    if ! git check-ignore --quiet -- "$path"; then
+        echo ".gitignore must ignore generated backup artifact: ${path}" >&2
+        exit 1
+    fi
+}
+
 assert_path_absent() {
     local path="$1"
     local message="${2:-${path} must not exist.}"
@@ -167,6 +183,47 @@ assert_file_contains scripts/selfcheck.ps1 'VPSO_WSL_EXE' "PowerShell selfcheck 
 assert_file_contains scripts/selfcheck.ps1 'bash scripts/selfcheck.sh' "PowerShell selfcheck wrapper must delegate to the Bash selfcheck through WSL."
 assert_file_contains scripts/selfcheck.ps1 'exit $exitCode' "PowerShell selfcheck wrapper must pass through the failing WSL exit code."
 assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read the shared module list."
+for ignore_pattern in \
+    'backup_*.tar.gz' \
+    'x-ui.db.*.bak' \
+    'etc/x-ui/x-ui.db' \
+    'etc/x-ui/x-ui.db-wal' \
+    'etc/x-ui/x-ui.db-shm' \
+    'usr/local/x-ui/x-ui.db' \
+    'usr/local/x-ui/x-ui.db-wal' \
+    'usr/local/x-ui/x-ui.db-shm' \
+    'usr/local/x-ui/bin/x-ui.db' \
+    'usr/local/x-ui/bin/x-ui.db-wal' \
+    'usr/local/x-ui/bin/x-ui.db-shm' \
+    'root/x-ui-backups/x-ui.db.*.bak' \
+    'vps_backup_*/' \
+    'vps_restore.*/' \
+    'manual-temp/' \
+    'manual-restore/' \
+    'manual-backups/'
+do
+    assert_gitignore_line "$ignore_pattern"
+done
+for ignored_artifact in \
+    'etc/vps-optimize/backups/manual/backup_20260101_010203.tar.gz' \
+    'tmp/vps_backup_20260101_010203/manifest.txt' \
+    'tmp/vps_restore.ABC123/manifest.txt' \
+    'etc/vps-optimize/quarantine/manual-temp/vps_restore.ABC123/manifest.txt' \
+    'etc/vps-optimize/quarantine/manual-restore/etc/x-ui/x-ui.db' \
+    'etc/vps-optimize/quarantine/manual-backups/backup_20260101_010203.tar.gz' \
+    'etc/x-ui/x-ui.db' \
+    'etc/x-ui/x-ui.db-wal' \
+    'etc/x-ui/x-ui.db-shm' \
+    'usr/local/x-ui/x-ui.db' \
+    'usr/local/x-ui/x-ui.db-wal' \
+    'usr/local/x-ui/x-ui.db-shm' \
+    'usr/local/x-ui/bin/x-ui.db' \
+    'usr/local/x-ui/bin/x-ui.db-wal' \
+    'usr/local/x-ui/bin/x-ui.db-shm' \
+    'root/x-ui-backups/x-ui.db.panel_domain_20260101_010203.bak'
+do
+    assert_gitignore_ignores "$ignored_artifact"
+done
 assert_dist_contains 'ensure_runtime_root()' "Release script must include the runtime root guard function."
 assert_dist_contains 'main()' "Release script must include the bootstrap main function."
 assert_function_defined_once dist/vps.sh ensure_runtime_root
