@@ -5,6 +5,10 @@ trap 'echo "Smoke failed at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+if [[ "${VPSO_CI_CONTAINER:-}" == "1" ]]; then
+    git config --global --add safe.directory "$repo_root" >/dev/null 2>&1 || true
+fi
+
 bash scripts/build.sh >/dev/null
 
 assert_dist_contains() {
@@ -56,7 +60,7 @@ assert_gitignore_line() {
 
 assert_gitignore_ignores() {
     local path="$1"
-    if ! git -c "safe.directory=${repo_root}" check-ignore --quiet -- "$path"; then
+    if ! git check-ignore --quiet -- "$path"; then
         echo ".gitignore must ignore generated backup artifact: ${path}" >&2
         exit 1
     fi
