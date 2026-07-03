@@ -66,6 +66,24 @@ assert_gitignore_ignores() {
     fi
 }
 
+assert_git_history_path_absent() {
+    local pattern="$1"
+    local message="${2:-Git history contains a forbidden generated artifact path.}"
+    local matches
+
+    matches=$(
+        {
+            git log --all --name-only --pretty=format:
+            git rev-list --objects --all | awk 'index($0, " ") { sub(/^[^ ]+ /, ""); print }'
+        } | grep -E -- "$pattern" | sort -u || true
+    )
+    if [[ -n "$matches" ]]; then
+        echo "$message" >&2
+        echo "$matches" >&2
+        exit 1
+    fi
+}
+
 assert_path_absent() {
     local path="$1"
     local message="${2:-${path} must not exist.}"
@@ -189,6 +207,7 @@ assert_file_contains scripts/selfcheck.ps1 'exit $exitCode' "PowerShell selfchec
 assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read the shared module list."
 for ignore_pattern in \
     'backup_*.tar.gz' \
+    'sni-stack_*/' \
     'x-ui.db.*.bak' \
     'etc/x-ui/x-ui.db' \
     'etc/x-ui/x-ui.db-wal' \
@@ -210,6 +229,7 @@ do
 done
 for ignored_artifact in \
     'etc/vps-optimize/backups/manual/backup_20260101_010203.tar.gz' \
+    'etc/vps-optimize/backups/sni-stack_20260101_010203/nginx.conf' \
     'tmp/vps_backup_20260101_010203/manifest.txt' \
     'tmp/vps_restore.ABC123/manifest.txt' \
     'etc/vps-optimize/quarantine/manual-temp/vps_restore.ABC123/manifest.txt' \
@@ -228,6 +248,8 @@ for ignored_artifact in \
 do
     assert_gitignore_ignores "$ignored_artifact"
 done
+sensitive_backup_history_pattern='(^|/)(backup_[^/]*\.tar\.gz|sni-stack_[^/]+(/|$)|vps_backup_[^/]+(/|$)|vps_restore\.[^/]+(/|$)|manual-backups(/|$)|manual-restore(/|$)|manual-temp(/|$)|x-ui\.db($|-wal$|-shm$|\.[^/]*\.bak$))'
+assert_git_history_path_absent "$sensitive_backup_history_pattern" "Git history must not contain sensitive generated backup or restore artifacts."
 assert_dist_contains 'ensure_runtime_root()' "Release script must include the runtime root guard function."
 assert_dist_contains 'main()' "Release script must include the bootstrap main function."
 assert_function_defined_once dist/vps.sh ensure_runtime_root

@@ -25,6 +25,15 @@ assert_file_not_contains() {
     fi
 }
 
+assert_file_exists() {
+    local file="$1"
+    local message="${2:-${file} must exist.}"
+    if [[ ! -f "$file" ]]; then
+        echo "$message" >&2
+        exit 1
+    fi
+}
+
 module_list_entries() {
     awk '
         {
@@ -69,6 +78,37 @@ bash -n vps.sh dist/vps.sh dog.sh xui-custom-manager.sh
 for module in src/*.sh; do
     bash -n "$module"
 done
+
+for doc_entry in \
+    README.md \
+    index.md \
+    quick-start.md \
+    docs/443-single-entry.md \
+    tutorials/01-3x-ui-reality-443.md \
+    tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md \
+    .vitepress/config.mts \
+    .github/workflows/pages.yml; do
+    assert_file_exists "$doc_entry"
+done
+
+assert_file_contains README.md 'https://chunlion.github.io/VPS-Optimize/' "README must keep the GitHub Pages docs entry."
+assert_file_contains .vitepress/config.mts "base: '/VPS-Optimize/'" "VitePress base must match the GitHub Pages project path."
+assert_file_contains .github/workflows/pages.yml 'run: npm run build' "Pages workflow must build the VitePress site."
+assert_file_contains .github/workflows/pages.yml 'path: .vitepress/dist' "Pages workflow must upload the VitePress dist artifact."
+
+assert_file_contains index.md '](quick-start.md)' "Docs homepage must link to quick-start."
+assert_file_contains index.md '](docs/443-single-entry.md)' "Docs homepage must link to the 443 single-entry doc."
+assert_file_contains index.md '](tutorials/01-3x-ui-reality-443.md)' "Docs homepage must link to the 3x-ui REALITY 443 tutorial."
+assert_file_contains index.md '](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)' "Docs homepage must link to the subscription tools 443 tutorial."
+
+assert_file_contains quick-start.md '](docs/443-single-entry.md)' "Quick start must link to the 443 single-entry doc."
+assert_file_contains quick-start.md '](tutorials/01-3x-ui-reality-443.md)' "Quick start must link to the 3x-ui REALITY 443 tutorial."
+assert_file_contains quick-start.md '](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)' "Quick start must link to the subscription tools 443 tutorial."
+
+assert_file_contains .vitepress/config.mts "link: '/quick-start'" "VitePress nav/sidebar must expose quick start."
+assert_file_contains .vitepress/config.mts "link: '/docs/443-single-entry'" "VitePress nav/sidebar must expose the 443 single-entry doc."
+assert_file_contains .vitepress/config.mts "link: '/tutorials/01-3x-ui-reality-443'" "VitePress nav/sidebar must expose the 3x-ui REALITY 443 tutorial."
+assert_file_contains .vitepress/config.mts "link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry'" "VitePress nav/sidebar must expose the subscription tools 443 tutorial."
 
 assert_function_once dist/vps.sh main_menu
 assert_function_once dist/vps.sh ensure_runtime_root
