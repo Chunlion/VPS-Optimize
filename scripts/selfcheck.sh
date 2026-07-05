@@ -18,6 +18,9 @@ done
 echo "==> golden render"
 bash tests/golden-render.sh
 
+echo "==> docs build"
+npm run build
+
 echo "==> shellcheck"
 if command -v shellcheck >/dev/null 2>&1; then
     shellcheck -S error vps.sh src/*.sh scripts/*.sh dist/vps.sh dog.sh xui-custom-manager.sh
