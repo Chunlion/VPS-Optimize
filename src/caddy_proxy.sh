@@ -1,6 +1,35 @@
 # shellcheck shell=bash
 # Ordinary Caddy/Nginx reverse proxy workflows outside the 443 single-entry stack.
 
+write_caddy_reverse_proxy_conf() {
+    local domain="$1"
+    local backend_addr="$2"
+    local port="$3"
+    local is_https="$4"
+    local conf_file="$5"
+    local ip_whitelist_ranges="${6:-}"
+    local backend_hostport
+    backend_hostport=$(format_hostport "$backend_addr" "$port")
+
+    if is_yes "$is_https"; then
+        cat <<EOF > "$conf_file"
+$domain {
+$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://${backend_hostport} {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+}
+EOF
+    else
+        cat <<EOF > "$conf_file"
+$domain {
+$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy ${backend_hostport}
+}
+EOF
+    fi
+}
+
 func_caddy_add_reverse_proxy() {
     echo -e "${CYAN}▶ 正在检查并安装 Caddy...${PLAIN}"
     if ! install_caddy_if_needed; then
@@ -12,9 +41,11 @@ func_caddy_add_reverse_proxy() {
         return 1
     fi
 
-    local domain domain_input port is_https
+    local domain domain_input backend_addr port is_https
     read_trimmed domain_input "请输入解析后的域名 (如 panel.site.com): "
     read_trimmed port "请输入面板本地映射端口 (如 40000): "
+    backend_addr=$(ask_with_default "后端地址" "127.0.0.1")
+    backend_addr=$(normalize_backend_addr_input "$backend_addr")
     domain=$(normalize_domain_input "$domain_input")
 
     if ! is_valid_domain "$domain"; then
@@ -23,6 +54,11 @@ func_caddy_add_reverse_proxy() {
     fi
     if ! is_valid_port "$port"; then
         echo -e "${RED}❌ 端口格式错误：${port}，端口必须是 1-65535。${PLAIN}"
+        return 1
+    fi
+
+    if ! is_valid_backend_addr "$backend_addr"; then
+        echo -e "${RED}❌ 后端地址无效：${backend_addr}${PLAIN}"
         return 1
     fi
 
@@ -54,23 +90,7 @@ func_caddy_add_reverse_proxy() {
     local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
     [[ -f /etc/caddy/Caddyfile ]] && cp -p /etc/caddy/Caddyfile "$backup_file"
 
-    if is_yes "$is_https"; then
-        cat <<EOF > "$domain_conf"
-$domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://127.0.0.1:$port {
-        transport http {
-            tls_insecure_skip_verify
-        }
-    }
-}
-EOF
-    else
-        cat <<EOF > "$domain_conf"
-$domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy localhost:$port
-}
-EOF
-    fi
+    write_caddy_reverse_proxy_conf "$domain" "$backend_addr" "$port" "$is_https" "$domain_conf" "$ip_whitelist_ranges"
 
     echo -e "${CYAN}▶ 正在校验 Caddy 配置文件...${PLAIN}"
     if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then

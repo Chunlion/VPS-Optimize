@@ -1069,6 +1069,16 @@ normalize_ip_input() {
     printf '%s' "$value"
 }
 
+normalize_backend_addr_input() {
+    local value
+    value="$(normalize_ip_input "$1")"
+    value="$(normalize_loopback_addr "$value")"
+    if [[ "$value" =~ ^([^:]+):[0-9]+$ ]]; then
+        value="${BASH_REMATCH[1]}"
+    fi
+    printf '%s' "$value"
+}
+
 normalize_ip_whitelist_input() {
     local input="$1"
     local -n out_array=$2
@@ -1163,6 +1173,12 @@ is_valid_listen_addr() {
         return 0
     fi
     return 1
+}
+
+is_valid_backend_addr() {
+    local addr="$1"
+    [[ -n "$addr" ]] || return 1
+    is_valid_listen_addr "$addr" || is_valid_hostname "$addr"
 }
 
 is_loopback_listen_addr() {
@@ -4197,6 +4213,35 @@ generate_caddy_cf_manifest() {
 # shellcheck shell=bash
 # Ordinary Caddy/Nginx reverse proxy workflows outside the 443 single-entry stack.
 
+write_caddy_reverse_proxy_conf() {
+    local domain="$1"
+    local backend_addr="$2"
+    local port="$3"
+    local is_https="$4"
+    local conf_file="$5"
+    local ip_whitelist_ranges="${6:-}"
+    local backend_hostport
+    backend_hostport=$(format_hostport "$backend_addr" "$port")
+
+    if is_yes "$is_https"; then
+        cat <<EOF > "$conf_file"
+$domain {
+$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://${backend_hostport} {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+}
+EOF
+    else
+        cat <<EOF > "$conf_file"
+$domain {
+$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy ${backend_hostport}
+}
+EOF
+    fi
+}
+
 func_caddy_add_reverse_proxy() {
     echo -e "${CYAN}▶ 正在检查并安装 Caddy...${PLAIN}"
     if ! install_caddy_if_needed; then
@@ -4208,9 +4253,11 @@ func_caddy_add_reverse_proxy() {
         return 1
     fi
 
-    local domain domain_input port is_https
+    local domain domain_input backend_addr port is_https
     read_trimmed domain_input "请输入解析后的域名 (如 panel.site.com): "
     read_trimmed port "请输入面板本地映射端口 (如 40000): "
+    backend_addr=$(ask_with_default "后端地址" "127.0.0.1")
+    backend_addr=$(normalize_backend_addr_input "$backend_addr")
     domain=$(normalize_domain_input "$domain_input")
 
     if ! is_valid_domain "$domain"; then
@@ -4219,6 +4266,11 @@ func_caddy_add_reverse_proxy() {
     fi
     if ! is_valid_port "$port"; then
         echo -e "${RED}❌ 端口格式错误：${port}，端口必须是 1-65535。${PLAIN}"
+        return 1
+    fi
+
+    if ! is_valid_backend_addr "$backend_addr"; then
+        echo -e "${RED}❌ 后端地址无效：${backend_addr}${PLAIN}"
         return 1
     fi
 
@@ -4250,23 +4302,7 @@ func_caddy_add_reverse_proxy() {
     local backup_file="/etc/caddy/Caddyfile.bak_$(date +%s)"
     [[ -f /etc/caddy/Caddyfile ]] && cp -p /etc/caddy/Caddyfile "$backup_file"
 
-    if is_yes "$is_https"; then
-        cat <<EOF > "$domain_conf"
-$domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://127.0.0.1:$port {
-        transport http {
-            tls_insecure_skip_verify
-        }
-    }
-}
-EOF
-    else
-        cat <<EOF > "$domain_conf"
-$domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy localhost:$port
-}
-EOF
-    fi
+    write_caddy_reverse_proxy_conf "$domain" "$backend_addr" "$port" "$is_https" "$domain_conf" "$ip_whitelist_ranges"
 
     echo -e "${CYAN}▶ 正在校验 Caddy 配置文件...${PLAIN}"
     if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
@@ -6261,7 +6297,7 @@ normalize_site_stack_arrays() {
                 SITE_BACKEND_PORTS[$i]="$default_port"
             fi
         fi
-        SITE_BACKEND_ADDRS[$i]=$(normalize_loopback_addr "$(normalize_ip_input "${SITE_BACKEND_ADDRS[$i]}")")
+        SITE_BACKEND_ADDRS[$i]=$(normalize_backend_addr_input "${SITE_BACKEND_ADDRS[$i]}")
         SITE_BACKEND_PORTS[$i]=$(normalize_port_input "${SITE_BACKEND_PORTS[$i]}")
         default_port=$((default_port + 1))
     done
@@ -9049,6 +9085,7 @@ collect_sni_stack_config() {
     local site_idx
     for site_idx in "${!SITE_DOMAINS[@]}"; do
         SITE_DOMAINS[$site_idx]=$(normalize_domain_input "${SITE_DOMAINS[$site_idx]}")
+        SITE_BACKEND_ADDRS[$site_idx]=$(normalize_backend_addr_input "${SITE_BACKEND_ADDRS[$site_idx]:-127.0.0.1}")
     done
 
     if ! is_valid_domain "$PANEL_DOMAIN"; then print_domain_validation_error "面板域名" "$panel_domain_input" "$PANEL_DOMAIN"; return 1; fi
@@ -9073,8 +9110,11 @@ collect_sni_stack_config() {
     for p in "$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}"; do
         is_valid_port "$p" || { echo -e "${RED}❌ 端口无效：${p}${PLAIN}"; return 1; }
     done
-    for a in "$NGINX_LISTEN_ADDR" "$CADDY_LISTEN_ADDR" "$XRAY_LISTEN_ADDR" "$PANEL_LISTEN_ADDR" "$SUB_LISTEN_ADDR" "${SITE_BACKEND_ADDRS[@]}"; do
+    for a in "$NGINX_LISTEN_ADDR" "$CADDY_LISTEN_ADDR" "$XRAY_LISTEN_ADDR" "$PANEL_LISTEN_ADDR" "$SUB_LISTEN_ADDR"; do
         is_valid_listen_addr "$a" || { echo -e "${RED}❌ 监听地址无效：${a}${PLAIN}"; return 1; }
+    done
+    for a in "${SITE_BACKEND_ADDRS[@]}"; do
+        is_valid_backend_addr "$a" || { echo -e "${RED}❌ 后端地址无效：${a}${PLAIN}"; return 1; }
     done
     is_valid_path_prefix "$PANEL_WEB_PATH" || { echo -e "${RED}❌ 面板公网路径无效：${PANEL_WEB_PATH}${PLAIN}"; return 1; }
     is_valid_path_prefix "$SUB_URI_PATH" || { echo -e "${RED}❌ 普通订阅路径前缀无效：${SUB_URI_PATH}${PLAIN}"; return 1; }
@@ -10129,9 +10169,10 @@ add_sni_stack_site() {
         site_addr="127.0.0.1"
         echo -e "${GREEN}普通模式：后端地址使用 127.0.0.1。${PLAIN}"
     fi
+    site_addr=$(normalize_backend_addr_input "$site_addr")
     site_port=$(ask_with_default "后端端口" "$((3000 + ${#SITE_DOMAINS[@]}))")
 
-    is_valid_listen_addr "$site_addr" || { echo -e "${RED}❌ 后端监听地址无效：${site_addr}${PLAIN}"; return 1; }
+    is_valid_backend_addr "$site_addr" || { echo -e "${RED}❌ 后端地址无效：${site_addr}${PLAIN}"; return 1; }
     is_valid_port "$site_port" || { echo -e "${RED}❌ 后端端口无效：${site_port}${PLAIN}"; return 1; }
     warn_if_public_bind "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
 
@@ -10203,9 +10244,10 @@ edit_sni_stack_site_backend() {
     idx=$((choice - 1))
     domain="${SITE_DOMAINS[$idx]}"
     new_addr=$(ask_with_default "后端监听地址" "${SITE_BACKEND_ADDRS[$idx]}")
+    new_addr=$(normalize_backend_addr_input "$new_addr")
     new_port=$(ask_with_default "后端端口" "${SITE_BACKEND_PORTS[$idx]}")
 
-    is_valid_listen_addr "$new_addr" || { echo -e "${RED}❌ 后端监听地址无效：${new_addr}${PLAIN}"; return 1; }
+    is_valid_backend_addr "$new_addr" || { echo -e "${RED}❌ 后端地址无效：${new_addr}${PLAIN}"; return 1; }
     is_valid_port "$new_port" || { echo -e "${RED}❌ 后端端口无效：${new_port}${PLAIN}"; return 1; }
     warn_if_public_bind "网站/反代后端 ${domain}" "$new_addr" "$new_port" || return 1
 
@@ -11954,6 +11996,41 @@ func_caddy_manage_ip_whitelist() {
 # ---------------------------------------------------------
 # 优化重构：核弹级域名证书清理与解除端口占用 (模块化安全版)
 # ---------------------------------------------------------
+sync_sni_stack_state_after_caddy_domain_delete() {
+    local domain="$1"
+    local env_file="/etc/vps-optimize/sni-stack.env"
+    local i removed=0
+    local -a new_domains=()
+    local -a new_addrs=()
+    local -a new_ports=()
+
+    [[ -f "$env_file" ]] || return 0
+    load_sni_stack_env >/dev/null 2>&1 || return 0
+
+    if [[ "$domain" == "${PANEL_DOMAIN:-}" ]]; then
+        echo -e "${YELLOW}⚠️ ${domain} 是当前 443 单入口面板域名，保存状态仍会引用它；重新应用前必须重新签发证书或更换面板域名。${PLAIN}"
+        return 0
+    fi
+
+    for i in "${!SITE_DOMAINS[@]}"; do
+        if [[ "$domain" == "${SITE_DOMAINS[$i]}" ]]; then
+            removed=1
+            continue
+        fi
+        new_domains+=("${SITE_DOMAINS[$i]}")
+        new_addrs+=("${SITE_BACKEND_ADDRS[$i]}")
+        new_ports+=("${SITE_BACKEND_PORTS[$i]}")
+    done
+
+    [[ "$removed" -eq 1 ]] || return 0
+    SITE_DOMAINS=("${new_domains[@]}")
+    SITE_BACKEND_ADDRS=("${new_addrs[@]}")
+    SITE_BACKEND_PORTS=("${new_ports[@]}")
+    remove_sni_ip_whitelist_for_domain "$domain"
+    save_sni_stack_env
+    echo -e "${GREEN}✅ 已同步移除 443 单入口保存状态中的 Web 域名：${domain}${PLAIN}"
+}
+
 func_caddy_delete_cert() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -12047,6 +12124,7 @@ func_caddy_delete_cert() {
         if command -v nginx >/dev/null 2>&1; then
             nginx -t >/dev/null 2>&1 && { systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1 || true; }
         fi
+        sync_sni_stack_state_after_caddy_domain_delete "$domain" || true
         generate_caddy_cf_manifest 2>/dev/null || true
 
         echo -e "------------------------------------------------"
@@ -12072,11 +12150,18 @@ func_caddy_add_insecure() {
     fi
     
     local domain domain_input
-    local port
+    local backend_addr port
     local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
     read_trimmed domain_input "👉 请输入解析后的域名 (如 panel.site.com): "
     read_trimmed port "👉 请输入面板 HTTPS 本地映射端口 (如 40000): "
+    backend_addr=$(ask_with_default "后端地址" "127.0.0.1")
+    backend_addr=$(normalize_backend_addr_input "$backend_addr")
+    if ! is_valid_backend_addr "$backend_addr"; then
+        echo -e "${RED}❌ 后端地址无效：${backend_addr}${PLAIN}"
+        read -n 1 -s -r -p "按任意键继续..."
+        return
+    fi
     domain=$(normalize_domain_input "$domain_input")
     
     if ! is_valid_domain "$domain"; then
@@ -12121,15 +12206,7 @@ func_caddy_add_insecure() {
         fi
     fi
     
-    cat <<EOF > "$conf_file"
-$domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://127.0.0.1:$port {
-        transport http {
-            tls_insecure_skip_verify
-        }
-    }
-}
-EOF
+    write_caddy_reverse_proxy_conf "$domain" "$backend_addr" "$port" "y" "$conf_file" "$ip_whitelist_ranges"
     if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
         systemctl reload caddy >/dev/null 2>&1
         echo -e "${GREEN}✅ 独立跳过验证配置已成功建立并生效！${PLAIN}"

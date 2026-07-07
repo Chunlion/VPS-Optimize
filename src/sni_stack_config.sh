@@ -957,7 +957,7 @@ normalize_site_stack_arrays() {
                 SITE_BACKEND_PORTS[$i]="$default_port"
             fi
         fi
-        SITE_BACKEND_ADDRS[$i]=$(normalize_loopback_addr "$(normalize_ip_input "${SITE_BACKEND_ADDRS[$i]}")")
+        SITE_BACKEND_ADDRS[$i]=$(normalize_backend_addr_input "${SITE_BACKEND_ADDRS[$i]}")
         SITE_BACKEND_PORTS[$i]=$(normalize_port_input "${SITE_BACKEND_PORTS[$i]}")
         default_port=$((default_port + 1))
     done

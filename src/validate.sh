@@ -313,6 +313,16 @@ normalize_ip_input() {
     printf '%s' "$value"
 }
 
+normalize_backend_addr_input() {
+    local value
+    value="$(normalize_ip_input "$1")"
+    value="$(normalize_loopback_addr "$value")"
+    if [[ "$value" =~ ^([^:]+):[0-9]+$ ]]; then
+        value="${BASH_REMATCH[1]}"
+    fi
+    printf '%s' "$value"
+}
+
 normalize_ip_whitelist_input() {
     local input="$1"
     local -n out_array=$2
@@ -407,6 +417,12 @@ is_valid_listen_addr() {
         return 0
     fi
     return 1
+}
+
+is_valid_backend_addr() {
+    local addr="$1"
+    [[ -n "$addr" ]] || return 1
+    is_valid_listen_addr "$addr" || is_valid_hostname "$addr"
 }
 
 is_loopback_listen_addr() {

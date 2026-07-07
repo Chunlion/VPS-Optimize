@@ -918,6 +918,41 @@ func_caddy_manage_ip_whitelist() {
 # ---------------------------------------------------------
 # 优化重构：核弹级域名证书清理与解除端口占用 (模块化安全版)
 # ---------------------------------------------------------
+sync_sni_stack_state_after_caddy_domain_delete() {
+    local domain="$1"
+    local env_file="/etc/vps-optimize/sni-stack.env"
+    local i removed=0
+    local -a new_domains=()
+    local -a new_addrs=()
+    local -a new_ports=()
+
+    [[ -f "$env_file" ]] || return 0
+    load_sni_stack_env >/dev/null 2>&1 || return 0
+
+    if [[ "$domain" == "${PANEL_DOMAIN:-}" ]]; then
+        echo -e "${YELLOW}⚠️ ${domain} 是当前 443 单入口面板域名，保存状态仍会引用它；重新应用前必须重新签发证书或更换面板域名。${PLAIN}"
+        return 0
+    fi
+
+    for i in "${!SITE_DOMAINS[@]}"; do
+        if [[ "$domain" == "${SITE_DOMAINS[$i]}" ]]; then
+            removed=1
+            continue
+        fi
+        new_domains+=("${SITE_DOMAINS[$i]}")
+        new_addrs+=("${SITE_BACKEND_ADDRS[$i]}")
+        new_ports+=("${SITE_BACKEND_PORTS[$i]}")
+    done
+
+    [[ "$removed" -eq 1 ]] || return 0
+    SITE_DOMAINS=("${new_domains[@]}")
+    SITE_BACKEND_ADDRS=("${new_addrs[@]}")
+    SITE_BACKEND_PORTS=("${new_ports[@]}")
+    remove_sni_ip_whitelist_for_domain "$domain"
+    save_sni_stack_env
+    echo -e "${GREEN}✅ 已同步移除 443 单入口保存状态中的 Web 域名：${domain}${PLAIN}"
+}
+
 func_caddy_delete_cert() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -1011,6 +1046,7 @@ func_caddy_delete_cert() {
         if command -v nginx >/dev/null 2>&1; then
             nginx -t >/dev/null 2>&1 && { systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1 || true; }
         fi
+        sync_sni_stack_state_after_caddy_domain_delete "$domain" || true
         generate_caddy_cf_manifest 2>/dev/null || true
 
         echo -e "------------------------------------------------"
@@ -1036,11 +1072,18 @@ func_caddy_add_insecure() {
     fi
     
     local domain domain_input
-    local port
+    local backend_addr port
     local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
     read_trimmed domain_input "👉 请输入解析后的域名 (如 panel.site.com): "
     read_trimmed port "👉 请输入面板 HTTPS 本地映射端口 (如 40000): "
+    backend_addr=$(ask_with_default "后端地址" "127.0.0.1")
+    backend_addr=$(normalize_backend_addr_input "$backend_addr")
+    if ! is_valid_backend_addr "$backend_addr"; then
+        echo -e "${RED}❌ 后端地址无效：${backend_addr}${PLAIN}"
+        read -n 1 -s -r -p "按任意键继续..."
+        return
+    fi
     domain=$(normalize_domain_input "$domain_input")
     
     if ! is_valid_domain "$domain"; then
@@ -1085,15 +1128,7 @@ func_caddy_add_insecure() {
         fi
     fi
     
-    cat <<EOF > "$conf_file"
-$domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://127.0.0.1:$port {
-        transport http {
-            tls_insecure_skip_verify
-        }
-    }
-}
-EOF
+    write_caddy_reverse_proxy_conf "$domain" "$backend_addr" "$port" "y" "$conf_file" "$ip_whitelist_ranges"
     if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
         systemctl reload caddy >/dev/null 2>&1
         echo -e "${GREEN}✅ 独立跳过验证配置已成功建立并生效！${PLAIN}"

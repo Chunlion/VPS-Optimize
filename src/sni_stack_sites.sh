@@ -103,9 +103,10 @@ add_sni_stack_site() {
         site_addr="127.0.0.1"
         echo -e "${GREEN}普通模式：后端地址使用 127.0.0.1。${PLAIN}"
     fi
+    site_addr=$(normalize_backend_addr_input "$site_addr")
     site_port=$(ask_with_default "后端端口" "$((3000 + ${#SITE_DOMAINS[@]}))")
 
-    is_valid_listen_addr "$site_addr" || { echo -e "${RED}❌ 后端监听地址无效：${site_addr}${PLAIN}"; return 1; }
+    is_valid_backend_addr "$site_addr" || { echo -e "${RED}❌ 后端地址无效：${site_addr}${PLAIN}"; return 1; }
     is_valid_port "$site_port" || { echo -e "${RED}❌ 后端端口无效：${site_port}${PLAIN}"; return 1; }
     warn_if_public_bind "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
 
@@ -177,9 +178,10 @@ edit_sni_stack_site_backend() {
     idx=$((choice - 1))
     domain="${SITE_DOMAINS[$idx]}"
     new_addr=$(ask_with_default "后端监听地址" "${SITE_BACKEND_ADDRS[$idx]}")
+    new_addr=$(normalize_backend_addr_input "$new_addr")
     new_port=$(ask_with_default "后端端口" "${SITE_BACKEND_PORTS[$idx]}")
 
-    is_valid_listen_addr "$new_addr" || { echo -e "${RED}❌ 后端监听地址无效：${new_addr}${PLAIN}"; return 1; }
+    is_valid_backend_addr "$new_addr" || { echo -e "${RED}❌ 后端地址无效：${new_addr}${PLAIN}"; return 1; }
     is_valid_port "$new_port" || { echo -e "${RED}❌ 后端端口无效：${new_port}${PLAIN}"; return 1; }
     warn_if_public_bind "网站/反代后端 ${domain}" "$new_addr" "$new_port" || return 1
 

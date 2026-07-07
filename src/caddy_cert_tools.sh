@@ -195,18 +195,22 @@ func_caddy_add_insecure() {
     fi
     
     local domain
-    local port
+    local backend_addr port
+    local backend_hostport
     local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
     read_trimmed domain "👉 请输入解析后的域名 (如 panel.site.com): "
     read_trimmed port "👉 请输入面板 HTTPS 本地映射端口 (如 40000): "
+    backend_addr=$(ask_with_default "后端地址" "127.0.0.1")
+    backend_addr=$(normalize_backend_addr_input "$backend_addr")
     domain=$(normalize_domain_input "$domain")
     
-    if ! is_valid_domain "$domain" || ! is_valid_port "$port"; then
+    if ! is_valid_domain "$domain" || ! is_valid_port "$port" || ! is_valid_backend_addr "$backend_addr"; then
         echo -e "${RED}❌ 域名为空或端口格式错误！已取消操作。${PLAIN}"
         read -n 1 -s -r -p "按任意键继续..."
         return
     fi
+    backend_hostport=$(format_hostport "$backend_addr" "$port")
 
     read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
     if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
@@ -241,7 +245,7 @@ func_caddy_add_insecure() {
     
     cat <<EOF > "$conf_file"
 $domain {
-$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://127.0.0.1:$port {
+$(caddy_ip_whitelist_block "$ip_whitelist_ranges")    reverse_proxy https://${backend_hostport} {
         transport http {
             tls_insecure_skip_verify
         }

@@ -969,8 +969,20 @@ PY
 fi
 
 (
+    source src/input.sh
+    source src/validate.sh
+    source src/sni_stack_config.sh
     source src/caddy_proxy.sh
+    caddy_proxy_tmp=$(mktemp /tmp/vps-caddy-proxy.XXXXXX)
     nginx_proxy_tmp=$(mktemp /tmp/vps-nginx-proxy.XXXXXX)
+    is_valid_backend_addr "host.docker.internal"
+    is_valid_backend_addr "dockge"
+    ! is_valid_backend_addr "bad/backend"
+    write_caddy_reverse_proxy_conf "docker.example.com" "host.docker.internal" "8080" "n" "$caddy_proxy_tmp"
+    grep -q 'reverse_proxy host.docker.internal:8080' "$caddy_proxy_tmp"
+    write_caddy_reverse_proxy_conf "docker.example.com" "backend.local" "8443" "y" "$caddy_proxy_tmp"
+    grep -q 'reverse_proxy https://backend.local:8443' "$caddy_proxy_tmp"
+    grep -q 'tls_insecure_skip_verify' "$caddy_proxy_tmp"
     [[ "$(nginx_proxy_conf_path "panel.example.com")" == "/etc/nginx/conf.d/vps_proxy_panel.example.com.conf" ]]
     write_nginx_reverse_proxy_conf "panel.example.com" "40000" "n" "$nginx_proxy_tmp"
     grep -q 'server_name panel.example.com;' "$nginx_proxy_tmp"
@@ -987,6 +999,7 @@ fi
     [[ "$(nginx_proxy_whitelist_ranges_from_conf "$nginx_proxy_tmp")" == "198.51.100.10 2001:db8::/32" ]]
     strip_nginx_ip_whitelist_block "$nginx_proxy_tmp"
     ! grep -q '# vps-optimize-ip-whitelist-start' "$nginx_proxy_tmp"
+    rm -f "$caddy_proxy_tmp"
     rm -f "$nginx_proxy_tmp"
 )
 
@@ -1007,7 +1020,7 @@ fi
     SUB_URI_PATH=/sub/
     CLASH_URI_PATH=/clash/
     SITE_DOMAINS=(site.example.com dockge.example.com)
-    SITE_BACKEND_ADDRS=(127.0.0.1 localhost)
+    SITE_BACKEND_ADDRS=(127.0.0.1 host.docker.internal)
     SITE_BACKEND_PORTS=(3000 5000)
     write_nginx_single_443_web_config "$nginx_sni_web_tmp"
     [[ "$(nginx_http_listen_directive "127.0.0.1" "8443")" == "    listen 127.0.0.1:8443 ssl http2;" ]]
@@ -1027,7 +1040,7 @@ fi
     grep -Fq 'ssl_certificate /etc/caddy/certs/site.example.com.crt;' "$nginx_sni_web_tmp"
     grep -Fq 'proxy_pass http://127.0.0.1:3000;' "$nginx_sni_web_tmp"
     grep -Fq 'server_name dockge.example.com;' "$nginx_sni_web_tmp"
-    grep -Fq 'proxy_pass http://localhost:5000;' "$nginx_sni_web_tmp"
+    grep -Fq 'proxy_pass http://host.docker.internal:5000;' "$nginx_sni_web_tmp"
     [[ "$(grep -c '^server {' "$nginx_sni_web_tmp")" == "3" ]]
     rm -f "$nginx_sni_web_tmp"
 )
