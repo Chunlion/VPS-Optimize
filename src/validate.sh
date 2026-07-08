@@ -279,8 +279,7 @@ is_valid_ip_cidr() {
     local value="$1"
     [[ -n "$value" && "$value" != *";"* && "$value" != *"{"* && "$value" != *"}"* ]] || return 1
     if command -v python3 >/dev/null 2>&1; then
-        validate_ip_cidr_python "$value"
-        return $?
+        validate_ip_cidr_python "$value" && return 0
     fi
     is_valid_ipv4_cidr "$value" || is_valid_ipv6_cidr "$value"
 }

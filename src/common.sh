@@ -309,6 +309,16 @@ download_remote_script() {
     local url="$1"
     local output_file="$2"
     local downloaded=1
+    local local_file
+
+    if [[ "$url" == file://* ]]; then
+        local_file="${url#file://}"
+        if [[ -f "$local_file" ]] && cp "$local_file" "$output_file" 2>/dev/null; then
+            return 0
+        fi
+        echo -e "${RED}❌ 本地脚本文件不可读：${local_file}${PLAIN}"
+        return 1
+    fi
 
     if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
         echo -e "${YELLOW}⚠️ 缺少 curl/wget，正在尝试自动补齐下载工具...${PLAIN}"

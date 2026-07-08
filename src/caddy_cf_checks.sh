@@ -59,7 +59,9 @@ func_caddy_cf_health_check() {
     if [[ -d /etc/caddy/conf.d ]]; then
         while IFS= read -r conf_file; do
             local domain
+            local listen_addr
             local listen_port
+            local listen_target
             local backend
             local backend_port
             local cert_file
@@ -78,9 +80,11 @@ func_caddy_cf_health_check() {
             fi
             ((domain_count++))
 
-            listen_port=$(sed -n '1{s@^https://[^:]*:\([0-9]\+\)[[:space:]]*{.*$@\1@p;q}' "$conf_file")
-            backend=$(grep -E '^[[:space:]]*reverse_proxy[[:space:]]+127.0.0.1:[0-9]+' "$conf_file" | awk '{print $2}' | head -n1)
-            backend_port=$(echo "$backend" | awk -F: '{print $2}')
+            listen_addr=$(caddy_conf_site_bind_addr "$conf_file")
+            listen_port=$(caddy_conf_site_listen_port "$conf_file")
+            listen_target=$(caddy_conf_site_listen_target "$conf_file")
+            backend=$(caddy_conf_first_reverse_proxy_target "$conf_file")
+            backend_port=$(caddy_reverse_proxy_target_port "$backend")
 
             echo -e "${CYAN}  - 域名: ${domain}${PLAIN}"
 
@@ -113,19 +117,21 @@ func_caddy_cf_health_check() {
                 ((warn_count++))
             fi
 
-            if [[ -n "$listen_port" ]] && ss -lnt 2>/dev/null | awk '{print $4}' | grep -q "127.0.0.1:${listen_port}$"; then
-                echo -e "    ${GREEN}监听状态: Caddy 本地端口 127.0.0.1:${listen_port} 可见${PLAIN}"
+            [[ -z "$listen_target" ]] && listen_target="未知"
+            if [[ -n "$listen_port" ]] && caddy_listen_addr_port_is_visible "$listen_addr" "$listen_port"; then
+                echo -e "    ${GREEN}监听状态: Caddy 本地端口 ${listen_target} 可见${PLAIN}"
                 ((ok_count++))
             else
-                echo -e "    ${YELLOW}监听状态: 未检测到 127.0.0.1:${listen_port} 在监听${PLAIN}"
+                echo -e "    ${YELLOW}监听状态: 未检测到 ${listen_target} 在监听${PLAIN}"
                 ((warn_count++))
             fi
 
-            if [[ -n "$backend_port" ]] && ss -lnt 2>/dev/null | awk '{print $4}' | grep -Eq ":${backend_port}$"; then
-                echo -e "    ${GREEN}后端状态: 127.0.0.1:${backend_port} 有服务监听${PLAIN}"
+            [[ -z "$backend" ]] && backend="未知"
+            if [[ -n "$backend_port" ]] && caddy_listen_port_is_visible "$backend_port"; then
+                echo -e "    ${GREEN}后端状态: ${backend} 有服务监听${PLAIN}"
                 ((ok_count++))
             else
-                echo -e "    ${YELLOW}后端状态: 127.0.0.1:${backend_port} 未检测到监听${PLAIN}"
+                echo -e "    ${YELLOW}后端状态: ${backend} 未检测到监听${PLAIN}"
                 ((warn_count++))
             fi
         done < <(find /etc/caddy/conf.d -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)

@@ -11,6 +11,12 @@ MODULES=()
 
 download_release_script() {
     local output_file="$1"
+    local local_file
+    if [[ "$RELEASE_URL" == file://* ]]; then
+        local_file="${RELEASE_URL#file://}"
+        [[ -f "$local_file" ]] && cp "$local_file" "$output_file" 2>/dev/null
+        return $?
+    fi
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL --connect-timeout 10 --max-time 90 --retry 2 --retry-delay 1 --retry-connrefused "$RELEASE_URL" -o "$output_file"
     elif command -v wget >/dev/null 2>&1; then

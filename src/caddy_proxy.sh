@@ -30,6 +30,30 @@ EOF
     fi
 }
 
+validate_caddy_config_with_log() {
+    local log_file="$1"
+    caddy validate --config /etc/caddy/Caddyfile >"$log_file" 2>&1
+}
+
+print_caddy_validate_failure() {
+    local title="$1"
+    local log_file="$2"
+    local generated_conf="${3:-}"
+
+    echo -e "${RED}❌ ${title}${PLAIN}"
+    if [[ -s "$log_file" ]]; then
+        echo -e "${YELLOW}Caddy 校验错误：${PLAIN}"
+        tail -n 40 "$log_file" 2>/dev/null || true
+        echo -e "${YELLOW}完整日志：${log_file}${PLAIN}"
+    else
+        echo -e "${YELLOW}Caddy 未返回详细错误，请手动执行：caddy validate --config /etc/caddy/Caddyfile${PLAIN}"
+    fi
+    if [[ -n "$generated_conf" && -f "$generated_conf" ]]; then
+        echo -e "${YELLOW}本次新增配置：${generated_conf}${PLAIN}"
+        sed -n '1,80p' "$generated_conf" 2>/dev/null || true
+    fi
+}
+
 func_caddy_add_reverse_proxy() {
     echo -e "${CYAN}▶ 正在检查并安装 Caddy...${PLAIN}"
     if ! install_caddy_if_needed; then
@@ -38,6 +62,14 @@ func_caddy_add_reverse_proxy() {
     fi
     if ! ensure_caddy_module_layout; then
         echo -e "${RED}❌ Caddy 配置目录初始化失败，请检查 /etc/caddy 权限。${PLAIN}"
+        return 1
+    fi
+
+    local validate_log
+    validate_log=$(mktemp /tmp/vps-caddy-validate.XXXXXX.log) || return 1
+    if ! validate_caddy_config_with_log "$validate_log"; then
+        print_caddy_validate_failure "当前 Caddy 配置校验失败，未写入新增反代。" "$validate_log"
+        echo -e "${YELLOW}请先修复 /etc/caddy/Caddyfile 或 /etc/caddy/conf.d/*.caddy 后再添加域名。${PLAIN}"
         return 1
     fi
 
@@ -93,7 +125,7 @@ func_caddy_add_reverse_proxy() {
     write_caddy_reverse_proxy_conf "$domain" "$backend_addr" "$port" "$is_https" "$domain_conf" "$ip_whitelist_ranges"
 
     echo -e "${CYAN}▶ 正在校验 Caddy 配置文件...${PLAIN}"
-    if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+    if validate_caddy_config_with_log "$validate_log"; then
         if systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1; then
             echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
             [[ -n "$ip_whitelist_ranges" ]] && echo -e "${GREEN}✅ 已为 ${domain} 启用 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
@@ -106,7 +138,7 @@ func_caddy_add_reverse_proxy() {
             return 1
         fi
     else
-        echo -e "${RED}❌ 致命错误：生成的配置存在语法异常！正在自动回滚...${PLAIN}"
+        print_caddy_validate_failure "写入新增反代后 Caddy 校验失败，正在自动回滚。" "$validate_log" "$domain_conf"
         [[ -f "$backup_file" ]] && mv "$backup_file" /etc/caddy/Caddyfile
         quarantine_path "$domain_conf" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
         return 1

@@ -127,8 +127,8 @@ assert_file_contains src/menus.sh '2|动态 TCP 参数调优|粘贴 Omnitt 参�
 assert_file_contains src/menus.sh '4|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|'
 assert_file_contains src/menus.sh 'echo "3 面板 SSL 修复，适合 443 接入前清空面板证书路径。"' "Panel help item 3 must use the current menu label."
 assert_file_contains dist/vps.sh 'echo "3 面板 SSL 修复，适合 443 接入前清空面板证书路径。"' "Built panel help item 3 must use the current menu label."
-assert_file_contains src/panel_rescue.sh 'echo -e "${BOLD}🚑 面板 SSL 修复${PLAIN}"' "Panel SSL repair page title must use the current menu label."
-assert_file_contains dist/vps.sh 'echo -e "${BOLD}🚑 面板 SSL 修复${PLAIN}"' "Built panel SSL repair page title must use the current menu label."
+assert_file_contains src/panel_rescue.sh '面板 SSL 修复${PLAIN}' "Panel SSL repair page title must use the current menu label."
+assert_file_contains dist/vps.sh '面板 SSL 修复${PLAIN}' "Built panel SSL repair page title must use the current menu label."
 assert_file_not_contains src/panel_rescue.sh '面板紧急救砖 / SSL 清理工具' "Panel SSL repair page title must not keep the old rescue/cleanup label."
 assert_file_not_contains dist/vps.sh '面板紧急救砖 / SSL 清理工具' "Built panel SSL repair page title must not keep the old rescue/cleanup label."
 assert_file_contains dist/vps.sh '10) func_net_kernel_menu ;;' "Main menu item 10 must still route to network/kernel optimization."

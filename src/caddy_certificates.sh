@@ -180,6 +180,94 @@ verify_cf_token_online() {
     return 1
 }
 
+caddy_conf_site_listen_port() {
+    local conf_file="$1"
+    sed -n '1{s@^[[:space:]]*https://[^[:space:]]*:\([0-9]\+\)[[:space:]]*{.*$@\1@p;q}' "$conf_file"
+}
+
+caddy_conf_site_bind_addr() {
+    local conf_file="$1"
+    awk '
+        /^[[:space:]]*#/ {next}
+        /^[[:space:]]*bind[[:space:]]+/ {print $2; exit}
+    ' "$conf_file"
+}
+
+caddy_conf_site_listen_target() {
+    local conf_file="$1"
+    local listen_port
+    local listen_addr
+
+    listen_port=$(caddy_conf_site_listen_port "$conf_file")
+    [[ -z "$listen_port" ]] && return 1
+
+    listen_addr=$(caddy_conf_site_bind_addr "$conf_file")
+    [[ -z "$listen_addr" ]] && listen_addr="0.0.0.0"
+
+    if [[ "$listen_addr" == *:* && "$listen_addr" != \[* ]]; then
+        echo "[${listen_addr}]:${listen_port}"
+    else
+        echo "${listen_addr}:${listen_port}"
+    fi
+}
+
+caddy_conf_first_reverse_proxy_target() {
+    local conf_file="$1"
+    awk '
+        /^[[:space:]]*#/ {next}
+        /^[[:space:]]*reverse_proxy[[:space:]]+/ {
+            target=$2
+            sub(/\{[[:space:]]*$/, "", target)
+            print target
+            exit
+        }
+    ' "$conf_file"
+}
+
+caddy_reverse_proxy_target_port() {
+    local target="$1"
+    local port
+
+    target="${target#http://}"
+    target="${target#https://}"
+    target="${target%%/*}"
+
+    port=$(printf '%s\n' "$target" | sed -n 's@^\[[^]]\+\]:\([0-9]\+\)$@\1@p')
+    if [[ -z "$port" ]]; then
+        port=$(printf '%s\n' "$target" | sed -n 's@^.*:\([0-9]\+\)$@\1@p')
+    fi
+    [[ "$port" =~ ^[0-9]+$ ]] || return 1
+    echo "$port"
+}
+
+caddy_listen_addr_port_is_visible() {
+    local addr="$1"
+    local port="$2"
+    local host_regex
+
+    [[ "$port" =~ ^[0-9]+$ ]] || return 1
+    [[ -z "$addr" ]] && addr="0.0.0.0"
+    addr="${addr#\[}"
+    addr="${addr%\]}"
+
+    case "$addr" in
+        "127.0.0.1") host_regex='(127\.0\.0\.1|0\.0\.0\.0|\*)' ;;
+        "localhost") host_regex='(127\.0\.0\.1|0\.0\.0\.0|\[::1\]|\[::\]|\*)' ;;
+        "0.0.0.0") host_regex='(0\.0\.0\.0|\*)' ;;
+        "::1") host_regex='(\[::1\]|\[::\]|\*)' ;;
+        "::") host_regex='(\[::\]|\*)' ;;
+        *) host_regex=$(printf '%s' "$addr" | sed 's/[.[\*^$()+?{}|\\]/\\&/g') ;;
+    esac
+
+    ss -lnt 2>/dev/null | awk '{print $4}' | grep -Eq "^${host_regex}:${port}$"
+}
+
+caddy_listen_port_is_visible() {
+    local port="$1"
+    [[ "$port" =~ ^[0-9]+$ ]] || return 1
+    ss -lnt 2>/dev/null | awk '{print $4}' | grep -Eq ":${port}$"
+}
+
 generate_caddy_cf_manifest() {
     local summary_file="/root/cert/caddy_cf_manifest.txt"
     mkdir -p /root/cert
@@ -191,7 +279,7 @@ generate_caddy_cf_manifest() {
     if [[ -d /etc/caddy/conf.d ]]; then
         while IFS= read -r conf_file; do
             local domain
-            local listen_port
+            local listen_target
             local backend
             domain=$(basename "$conf_file" .caddy)
 
@@ -199,15 +287,15 @@ generate_caddy_cf_manifest() {
                 continue
             fi
 
-            listen_port=$(sed -n '1{s@^https://[^:]*:\([0-9]\+\)[[:space:]]*{.*$@\1@p;q}' "$conf_file")
-            backend=$(grep -E '^[[:space:]]*reverse_proxy[[:space:]]+127.0.0.1:[0-9]+' "$conf_file" | awk '{print $2}' | head -n1)
+            listen_target=$(caddy_conf_site_listen_target "$conf_file")
+            backend=$(caddy_conf_first_reverse_proxy_target "$conf_file")
 
-            [[ -z "$listen_port" ]] && listen_port="未知"
+            [[ -z "$listen_target" ]] && listen_target="未知"
             [[ -z "$backend" ]] && backend="未知"
 
             echo "域名: ${domain}" >> "$summary_file"
             echo "  后端: ${backend}" >> "$summary_file"
-            echo "  Caddy监听: 127.0.0.1:${listen_port}" >> "$summary_file"
+            echo "  Caddy监听: ${listen_target}" >> "$summary_file"
             echo "  证书CRT: /root/cert/${domain}.crt" >> "$summary_file"
             echo "  证书KEY: /root/cert/${domain}.key" >> "$summary_file"
             echo "  配置文件: ${conf_file}" >> "$summary_file"

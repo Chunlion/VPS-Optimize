@@ -321,6 +321,16 @@ download_remote_script() {
     local url="$1"
     local output_file="$2"
     local downloaded=1
+    local local_file
+
+    if [[ "$url" == file://* ]]; then
+        local_file="${url#file://}"
+        if [[ -f "$local_file" ]] && cp "$local_file" "$output_file" 2>/dev/null; then
+            return 0
+        fi
+        echo -e "${RED}❌ 本地脚本文件不可读：${local_file}${PLAIN}"
+        return 1
+    fi
 
     if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
         echo -e "${YELLOW}⚠️ 缺少 curl/wget，正在尝试自动补齐下载工具...${PLAIN}"
@@ -1035,8 +1045,7 @@ is_valid_ip_cidr() {
     local value="$1"
     [[ -n "$value" && "$value" != *";"* && "$value" != *"{"* && "$value" != *"}"* ]] || return 1
     if command -v python3 >/dev/null 2>&1; then
-        validate_ip_cidr_python "$value"
-        return $?
+        validate_ip_cidr_python "$value" && return 0
     fi
     is_valid_ipv4_cidr "$value" || is_valid_ipv6_cidr "$value"
 }
@@ -4161,6 +4170,94 @@ verify_cf_token_online() {
     return 1
 }
 
+caddy_conf_site_listen_port() {
+    local conf_file="$1"
+    sed -n '1{s@^[[:space:]]*https://[^[:space:]]*:\([0-9]\+\)[[:space:]]*{.*$@\1@p;q}' "$conf_file"
+}
+
+caddy_conf_site_bind_addr() {
+    local conf_file="$1"
+    awk '
+        /^[[:space:]]*#/ {next}
+        /^[[:space:]]*bind[[:space:]]+/ {print $2; exit}
+    ' "$conf_file"
+}
+
+caddy_conf_site_listen_target() {
+    local conf_file="$1"
+    local listen_port
+    local listen_addr
+
+    listen_port=$(caddy_conf_site_listen_port "$conf_file")
+    [[ -z "$listen_port" ]] && return 1
+
+    listen_addr=$(caddy_conf_site_bind_addr "$conf_file")
+    [[ -z "$listen_addr" ]] && listen_addr="0.0.0.0"
+
+    if [[ "$listen_addr" == *:* && "$listen_addr" != \[* ]]; then
+        echo "[${listen_addr}]:${listen_port}"
+    else
+        echo "${listen_addr}:${listen_port}"
+    fi
+}
+
+caddy_conf_first_reverse_proxy_target() {
+    local conf_file="$1"
+    awk '
+        /^[[:space:]]*#/ {next}
+        /^[[:space:]]*reverse_proxy[[:space:]]+/ {
+            target=$2
+            sub(/\{[[:space:]]*$/, "", target)
+            print target
+            exit
+        }
+    ' "$conf_file"
+}
+
+caddy_reverse_proxy_target_port() {
+    local target="$1"
+    local port
+
+    target="${target#http://}"
+    target="${target#https://}"
+    target="${target%%/*}"
+
+    port=$(printf '%s\n' "$target" | sed -n 's@^\[[^]]\+\]:\([0-9]\+\)$@\1@p')
+    if [[ -z "$port" ]]; then
+        port=$(printf '%s\n' "$target" | sed -n 's@^.*:\([0-9]\+\)$@\1@p')
+    fi
+    [[ "$port" =~ ^[0-9]+$ ]] || return 1
+    echo "$port"
+}
+
+caddy_listen_addr_port_is_visible() {
+    local addr="$1"
+    local port="$2"
+    local host_regex
+
+    [[ "$port" =~ ^[0-9]+$ ]] || return 1
+    [[ -z "$addr" ]] && addr="0.0.0.0"
+    addr="${addr#\[}"
+    addr="${addr%\]}"
+
+    case "$addr" in
+        "127.0.0.1") host_regex='(127\.0\.0\.1|0\.0\.0\.0|\*)' ;;
+        "localhost") host_regex='(127\.0\.0\.1|0\.0\.0\.0|\[::1\]|\[::\]|\*)' ;;
+        "0.0.0.0") host_regex='(0\.0\.0\.0|\*)' ;;
+        "::1") host_regex='(\[::1\]|\[::\]|\*)' ;;
+        "::") host_regex='(\[::\]|\*)' ;;
+        *) host_regex=$(printf '%s' "$addr" | sed 's/[.[\*^$()+?{}|\\]/\\&/g') ;;
+    esac
+
+    ss -lnt 2>/dev/null | awk '{print $4}' | grep -Eq "^${host_regex}:${port}$"
+}
+
+caddy_listen_port_is_visible() {
+    local port="$1"
+    [[ "$port" =~ ^[0-9]+$ ]] || return 1
+    ss -lnt 2>/dev/null | awk '{print $4}' | grep -Eq ":${port}$"
+}
+
 generate_caddy_cf_manifest() {
     local summary_file="/root/cert/caddy_cf_manifest.txt"
     mkdir -p /root/cert
@@ -4172,7 +4269,7 @@ generate_caddy_cf_manifest() {
     if [[ -d /etc/caddy/conf.d ]]; then
         while IFS= read -r conf_file; do
             local domain
-            local listen_port
+            local listen_target
             local backend
             domain=$(basename "$conf_file" .caddy)
 
@@ -4180,15 +4277,15 @@ generate_caddy_cf_manifest() {
                 continue
             fi
 
-            listen_port=$(sed -n '1{s@^https://[^:]*:\([0-9]\+\)[[:space:]]*{.*$@\1@p;q}' "$conf_file")
-            backend=$(grep -E '^[[:space:]]*reverse_proxy[[:space:]]+127.0.0.1:[0-9]+' "$conf_file" | awk '{print $2}' | head -n1)
+            listen_target=$(caddy_conf_site_listen_target "$conf_file")
+            backend=$(caddy_conf_first_reverse_proxy_target "$conf_file")
 
-            [[ -z "$listen_port" ]] && listen_port="未知"
+            [[ -z "$listen_target" ]] && listen_target="未知"
             [[ -z "$backend" ]] && backend="未知"
 
             echo "域名: ${domain}" >> "$summary_file"
             echo "  后端: ${backend}" >> "$summary_file"
-            echo "  Caddy监听: 127.0.0.1:${listen_port}" >> "$summary_file"
+            echo "  Caddy监听: ${listen_target}" >> "$summary_file"
             echo "  证书CRT: /root/cert/${domain}.crt" >> "$summary_file"
             echo "  证书KEY: /root/cert/${domain}.key" >> "$summary_file"
             echo "  配置文件: ${conf_file}" >> "$summary_file"
@@ -4242,6 +4339,30 @@ EOF
     fi
 }
 
+validate_caddy_config_with_log() {
+    local log_file="$1"
+    caddy validate --config /etc/caddy/Caddyfile >"$log_file" 2>&1
+}
+
+print_caddy_validate_failure() {
+    local title="$1"
+    local log_file="$2"
+    local generated_conf="${3:-}"
+
+    echo -e "${RED}❌ ${title}${PLAIN}"
+    if [[ -s "$log_file" ]]; then
+        echo -e "${YELLOW}Caddy 校验错误：${PLAIN}"
+        tail -n 40 "$log_file" 2>/dev/null || true
+        echo -e "${YELLOW}完整日志：${log_file}${PLAIN}"
+    else
+        echo -e "${YELLOW}Caddy 未返回详细错误，请手动执行：caddy validate --config /etc/caddy/Caddyfile${PLAIN}"
+    fi
+    if [[ -n "$generated_conf" && -f "$generated_conf" ]]; then
+        echo -e "${YELLOW}本次新增配置：${generated_conf}${PLAIN}"
+        sed -n '1,80p' "$generated_conf" 2>/dev/null || true
+    fi
+}
+
 func_caddy_add_reverse_proxy() {
     echo -e "${CYAN}▶ 正在检查并安装 Caddy...${PLAIN}"
     if ! install_caddy_if_needed; then
@@ -4250,6 +4371,14 @@ func_caddy_add_reverse_proxy() {
     fi
     if ! ensure_caddy_module_layout; then
         echo -e "${RED}❌ Caddy 配置目录初始化失败，请检查 /etc/caddy 权限。${PLAIN}"
+        return 1
+    fi
+
+    local validate_log
+    validate_log=$(mktemp /tmp/vps-caddy-validate.XXXXXX.log) || return 1
+    if ! validate_caddy_config_with_log "$validate_log"; then
+        print_caddy_validate_failure "当前 Caddy 配置校验失败，未写入新增反代。" "$validate_log"
+        echo -e "${YELLOW}请先修复 /etc/caddy/Caddyfile 或 /etc/caddy/conf.d/*.caddy 后再添加域名。${PLAIN}"
         return 1
     fi
 
@@ -4305,7 +4434,7 @@ func_caddy_add_reverse_proxy() {
     write_caddy_reverse_proxy_conf "$domain" "$backend_addr" "$port" "$is_https" "$domain_conf" "$ip_whitelist_ranges"
 
     echo -e "${CYAN}▶ 正在校验 Caddy 配置文件...${PLAIN}"
-    if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+    if validate_caddy_config_with_log "$validate_log"; then
         if systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1; then
             echo -e "${GREEN}✅ Caddy 反代配置已追加并生效！请访问 https://$domain${PLAIN}"
             [[ -n "$ip_whitelist_ranges" ]] && echo -e "${GREEN}✅ 已为 ${domain} 启用 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
@@ -4318,7 +4447,7 @@ func_caddy_add_reverse_proxy() {
             return 1
         fi
     else
-        echo -e "${RED}❌ 致命错误：生成的配置存在语法异常！正在自动回滚...${PLAIN}"
+        print_caddy_validate_failure "写入新增反代后 Caddy 校验失败，正在自动回滚。" "$validate_log" "$domain_conf"
         [[ -f "$backup_file" ]] && mv "$backup_file" /etc/caddy/Caddyfile
         quarantine_path "$domain_conf" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
         return 1
@@ -11186,7 +11315,9 @@ func_caddy_cf_health_check() {
     if [[ -d /etc/caddy/conf.d ]]; then
         while IFS= read -r conf_file; do
             local domain
+            local listen_addr
             local listen_port
+            local listen_target
             local backend
             local backend_port
             local cert_file
@@ -11205,9 +11336,11 @@ func_caddy_cf_health_check() {
             fi
             ((domain_count++))
 
-            listen_port=$(sed -n '1{s@^https://[^:]*:\([0-9]\+\)[[:space:]]*{.*$@\1@p;q}' "$conf_file")
-            backend=$(grep -E '^[[:space:]]*reverse_proxy[[:space:]]+127.0.0.1:[0-9]+' "$conf_file" | awk '{print $2}' | head -n1)
-            backend_port=$(echo "$backend" | awk -F: '{print $2}')
+            listen_addr=$(caddy_conf_site_bind_addr "$conf_file")
+            listen_port=$(caddy_conf_site_listen_port "$conf_file")
+            listen_target=$(caddy_conf_site_listen_target "$conf_file")
+            backend=$(caddy_conf_first_reverse_proxy_target "$conf_file")
+            backend_port=$(caddy_reverse_proxy_target_port "$backend")
 
             echo -e "${CYAN}  - 域名: ${domain}${PLAIN}"
 
@@ -11240,19 +11373,21 @@ func_caddy_cf_health_check() {
                 ((warn_count++))
             fi
 
-            if [[ -n "$listen_port" ]] && ss -lnt 2>/dev/null | awk '{print $4}' | grep -q "127.0.0.1:${listen_port}$"; then
-                echo -e "    ${GREEN}监听状态: Caddy 本地端口 127.0.0.1:${listen_port} 可见${PLAIN}"
+            [[ -z "$listen_target" ]] && listen_target="未知"
+            if [[ -n "$listen_port" ]] && caddy_listen_addr_port_is_visible "$listen_addr" "$listen_port"; then
+                echo -e "    ${GREEN}监听状态: Caddy 本地端口 ${listen_target} 可见${PLAIN}"
                 ((ok_count++))
             else
-                echo -e "    ${YELLOW}监听状态: 未检测到 127.0.0.1:${listen_port} 在监听${PLAIN}"
+                echo -e "    ${YELLOW}监听状态: 未检测到 ${listen_target} 在监听${PLAIN}"
                 ((warn_count++))
             fi
 
-            if [[ -n "$backend_port" ]] && ss -lnt 2>/dev/null | awk '{print $4}' | grep -Eq ":${backend_port}$"; then
-                echo -e "    ${GREEN}后端状态: 127.0.0.1:${backend_port} 有服务监听${PLAIN}"
+            [[ -z "$backend" ]] && backend="未知"
+            if [[ -n "$backend_port" ]] && caddy_listen_port_is_visible "$backend_port"; then
+                echo -e "    ${GREEN}后端状态: ${backend} 有服务监听${PLAIN}"
                 ((ok_count++))
             else
-                echo -e "    ${YELLOW}后端状态: 127.0.0.1:${backend_port} 未检测到监听${PLAIN}"
+                echo -e "    ${YELLOW}后端状态: ${backend} 未检测到监听${PLAIN}"
                 ((warn_count++))
             fi
         done < <(find /etc/caddy/conf.d -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)
@@ -16514,6 +16649,261 @@ check_vpso_file_permissions() {
     fi
 }
 
+HEALTH_RECOVERY_UNITS=(
+    "1|Caddy|caddy.service"
+    "2|Nginx|nginx.service"
+    "3|Docker|docker.service"
+    "4|Fail2ban|fail2ban.service"
+    "5|3x-ui|3x-ui.service"
+    "6|x-ui|x-ui.service"
+    "7|x-panel|x-panel.service"
+    "8|Xray|xray.service"
+    "9|Sing-box|sing-box.service"
+    "10|S-UI|s-ui.service"
+    "11|TCP Peek 分流器|vpso-mux.service"
+    "12|流量保护检查器|vps-traffic-guard.service"
+)
+
+health_unit_exists() {
+    local unit="$1"
+    command -v systemctl >/dev/null 2>&1 || return 1
+    systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q . && return 0
+    systemctl list-units "$unit" --all --no-legend 2>/dev/null | grep -q . && return 0
+    systemctl status "$unit" >/dev/null 2>&1
+}
+
+health_unit_status_label() {
+    local unit="$1"
+    if ! health_unit_exists "$unit"; then
+        printf '%b' "${BLUE}未安装${PLAIN}"
+    elif systemctl is-active --quiet "$unit"; then
+        printf '%b' "${GREEN}运行中${PLAIN}"
+    elif systemctl is-failed --quiet "$unit"; then
+        printf '%b' "${RED}失败${PLAIN}"
+    else
+        printf '%b' "${YELLOW}未运行${PLAIN}"
+    fi
+}
+
+health_system_state_label() {
+    local state="${1:-unknown}"
+    case "$state" in
+        running) printf '%b' "${GREEN}running${PLAIN}" ;;
+        degraded) printf '%b' "${YELLOW}degraded${PLAIN}" ;;
+        starting|stopping|maintenance|initializing) printf '%b' "${YELLOW}${state}${PLAIN}" ;;
+        *) printf '%b' "${RED}${state}${PLAIN}" ;;
+    esac
+}
+
+print_failed_systemd_units() {
+    local count=0
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        count=$((count + 1))
+        echo "  - ${line}"
+    done < <(systemctl --failed --no-legend --no-pager 2>/dev/null | awk 'NF {print $1 " " $2 " " $3 " " $4}' | head -n 12)
+    (( count > 0 )) || echo "  - 未发现 failed 单元"
+}
+
+collect_failed_service_units() {
+    systemctl --failed --type=service --no-legend --no-pager 2>/dev/null | awk '$1 ~ /\.service$/ {print $1}' | sort -u
+}
+
+health_restart_unit() {
+    local label="$1"
+    local unit="$2"
+
+    if ! health_unit_exists "$unit"; then
+        echo -e "${YELLOW}⚠️ 未检测到 ${unit}，跳过。${PLAIN}"
+        return 1
+    fi
+
+    systemctl reset-failed "$unit" >/dev/null 2>&1 || true
+    if systemctl restart "$unit" >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ ${label} 已重启：${unit}${PLAIN}"
+        return 0
+    fi
+
+    echo -e "${RED}❌ ${label} 重启失败：${unit}${PLAIN}"
+    journalctl -u "$unit" -n 20 --no-pager 2>/dev/null || true
+    return 1
+}
+
+health_restart_selected_unit() {
+    local item number label unit selected="$1"
+
+    for item in "${HEALTH_RECOVERY_UNITS[@]}"; do
+        IFS='|' read -r number label unit <<< "$item"
+        if [[ "$selected" == "$number" ]]; then
+            confirm_risk_action "重启 ${label}" \
+                "${unit} 服务进程" \
+                "查看 journalctl -u ${unit} 日志，修正配置后重新启动" \
+                "该服务会短暂中断；不要关闭当前 SSH 会话。" || return 1
+            health_restart_unit "$label" "$unit"
+            return
+        fi
+    done
+
+    echo -e "${RED}❌ 无效选择。${PLAIN}"
+    return 1
+}
+
+health_restart_failed_services() {
+    local failed_units=()
+    local unit label ok=0 fail=0 skipped=0
+
+    mapfile -t failed_units < <(collect_failed_service_units)
+    if [[ ${#failed_units[@]} -eq 0 ]]; then
+        echo -e "${GREEN}未发现 failed service。${PLAIN}"
+        return 0
+    fi
+
+    echo -e "${CYAN}将尝试重启以下 failed service：${PLAIN}"
+    printf '  - %s\n' "${failed_units[@]}"
+    confirm_risk_action "重启 failed systemd 服务" \
+        "当前 failed 状态的 service 单元" \
+        "查看对应 journalctl 日志，修正配置后单独重启失败服务" \
+        "会跳过 ssh/sshd，其他服务会短暂中断。" || return 1
+
+    for unit in "${failed_units[@]}"; do
+        case "$unit" in
+            ssh.service|sshd.service)
+                echo -e "${YELLOW}⚠️ 跳过 ${unit}，避免影响当前 SSH 会话。${PLAIN}"
+                skipped=$((skipped + 1))
+                continue
+                ;;
+        esac
+        label="${unit%.service}"
+        if health_restart_unit "$label" "$unit"; then
+            ok=$((ok + 1))
+        else
+            fail=$((fail + 1))
+        fi
+    done
+
+    systemctl reset-failed >/dev/null 2>&1 || true
+    echo -e "${CYAN}处理结果：成功 ${ok}，失败 ${fail}，跳过 ${skipped}。${PLAIN}"
+}
+
+health_reset_failed_state() {
+    if systemctl reset-failed >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ 已执行 systemctl reset-failed。${PLAIN}"
+    else
+        echo -e "${RED}❌ reset-failed 执行失败。${PLAIN}"
+        return 1
+    fi
+}
+
+health_enable_auto_restart_for_unit() {
+    local item number label unit selected="$1"
+    local dropin_dir dropin_file
+
+    for item in "${HEALTH_RECOVERY_UNITS[@]}"; do
+        IFS='|' read -r number label unit <<< "$item"
+        [[ "$selected" == "$number" ]] || continue
+
+        if [[ "$unit" != *.service ]]; then
+            echo -e "${YELLOW}⚠️ ${unit} 不是 service 单元，跳过自动重启配置。${PLAIN}"
+            return 1
+        fi
+        if ! health_unit_exists "$unit"; then
+            echo -e "${YELLOW}⚠️ 未检测到 ${unit}，跳过。${PLAIN}"
+            return 1
+        fi
+
+        confirm_risk_action "启用 ${label} 失败自动重启" \
+            "/etc/systemd/system/${unit}.d/10-vps-optimize-restart.conf" \
+            "删除该 drop-in 后执行 systemctl daemon-reload" \
+            "服务崩溃后 systemd 会自动拉起；配置错误仍需要查看日志修复。" || return 1
+
+        dropin_dir="/etc/systemd/system/${unit}.d"
+        dropin_file="${dropin_dir}/10-vps-optimize-restart.conf"
+        mkdir -p "$dropin_dir" || { echo -e "${RED}❌ 创建 drop-in 目录失败。${PLAIN}"; return 1; }
+        cat > "$dropin_file" <<'EOF'
+[Service]
+Restart=on-failure
+RestartSec=5s
+EOF
+        systemctl daemon-reload >/dev/null 2>&1 || { echo -e "${RED}❌ systemctl daemon-reload 失败。${PLAIN}"; return 1; }
+        systemctl enable "$unit" >/dev/null 2>&1 || true
+        echo -e "${GREEN}✅ 已启用自动重启：${dropin_file}${PLAIN}"
+        health_restart_unit "$label" "$unit" || true
+        return
+    done
+
+    echo -e "${RED}❌ 无效选择。${PLAIN}"
+    return 1
+}
+
+health_show_failed_unit_logs() {
+    local unit
+    read_trimmed unit "请输入要查看日志的 unit（如 caddy.service）: "
+    [[ -n "$unit" ]] || return 0
+    [[ "$unit" == *.service || "$unit" == *.timer || "$unit" == *.socket ]] || unit="${unit}.service"
+    if ! health_unit_exists "$unit"; then
+        echo -e "${YELLOW}⚠️ 未检测到 ${unit}。${PLAIN}"
+        return 1
+    fi
+    journalctl -u "$unit" -n 80 --no-pager 2>/dev/null || true
+}
+
+func_health_service_recovery_menu() {
+    local choice
+
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "诊断/健康检查 > 服务恢复"
+        echo -e "${BOLD}🧰 服务重启与自动拉起${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${CYAN}failed 单元：${PLAIN}"
+        print_failed_systemd_units
+        echo -e "------------------------------------------------"
+        echo -e "${BOLD}${BLUE}常用服务${PLAIN}"
+        local item number label unit
+        for item in "${HEALTH_RECOVERY_UNITS[@]}"; do
+            IFS='|' read -r number label unit <<< "$item"
+            echo -e "${GREEN} ${number}. ${label}${PLAIN} [${unit}] $(health_unit_status_label "$unit")"
+        done
+        echo -e "------------------------------------------------"
+        echo -e "${GREEN} r. 重启一个常用服务${PLAIN}"
+        echo -e "${GREEN} f. 重启当前 failed service${PLAIN}"
+        echo -e "${GREEN} a. 为一个常用 service 启用失败自动重启${PLAIN}"
+        echo -e "${GREEN} x. 清除已恢复的 failed/degraded 状态${PLAIN}"
+        echo -e "${GREEN} l. 查看某个 unit 日志${PLAIN}"
+        echo -e "${RED} 0. 返回上级菜单 / q 返回${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        read_trimmed choice "👉 请选择操作: "
+        case "$choice" in
+            r|R)
+                read_trimmed choice "请输入要重启的服务编号: "
+                health_restart_selected_unit "$choice"
+                pause_return
+                ;;
+            f|F)
+                health_restart_failed_services
+                pause_return
+                ;;
+            a|A)
+                read_trimmed choice "请输入要启用自动重启的服务编号: "
+                health_enable_auto_restart_for_unit "$choice"
+                pause_return
+                ;;
+            x|X)
+                health_reset_failed_state
+                pause_return
+                ;;
+            l|L)
+                health_show_failed_unit_logs
+                pause_return
+                ;;
+            0|q|Q) return ;;
+            *) echo -e "${RED}❌ 无效选择。${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
 func_health_dashboard() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -16575,12 +16965,16 @@ func_health_dashboard() {
 
     local failed_units
     failed_units=$(systemctl --failed --no-legend 2>/dev/null | grep -c .)
+    local system_state
+    system_state=$(systemctl is-system-running 2>/dev/null || true)
+    [[ -z "$system_state" ]] && system_state="unknown"
 
     echo -e "SSH 服务状态       : [ $ssh_state ]  监听端口: ${CYAN}${current_p}${PLAIN}"
     echo -e "Caddy 服务状态     : [ $caddy_state ]"
     echo -e "Docker 服务状态    : [ $docker_state ]"
     echo -e "Fail2ban 服务状态  : [ $f2b_state ]"
     echo -e "防火墙服务状态      : [ $fw_state ]"
+    echo -e "systemd 整体状态    : [ $(health_system_state_label "$system_state") ]"
     echo -e "失败 systemd 单元数 : ${YELLOW}${failed_units}${PLAIN}"
     echo -e "------------------------------------------------"
     print_project_runtime_overview
@@ -16624,12 +17018,13 @@ func_health_dashboard() {
     fi
 
     echo -e "------------------------------------------------"
-    echo -e "${YELLOW}💡 若失败单元 > 0，可执行: systemctl --failed 查看详情。${PLAIN}"
-    echo -e "${CYAN}输入 d 生成反馈诊断信息，输入 p 查看权限体检，输入 P 修复权限，输入 ? 查看帮助，其他任意键返回。${PLAIN}"
+    echo -e "${YELLOW}💡 若失败单元 > 0，可进入 s 服务恢复处理。${PLAIN}"
+    echo -e "${CYAN}输入 s 服务恢复，输入 d 生成反馈诊断信息，输入 p 查看权限体检，输入 P 修复权限，输入 ? 查看帮助，其他任意键返回。${PLAIN}"
     local health_choice
     read -n 1 -s -r health_choice
     echo ""
     case "$health_choice" in
+        s|S) func_health_service_recovery_menu ;;
         d|D) generate_issue_diagnostics; pause_return ;;
         p) check_vpso_file_permissions; pause_return ;;
         P) check_vpso_file_permissions fix; pause_return ;;
@@ -18630,6 +19025,7 @@ show_health_help() {
     echo "健康总览会检查关键服务、监听端口和证书摘要。"
     echo "如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。"
     echo "健康总览会显示日志容量摘要；输入 p 可做配置、状态和日志文件权限体检，输入 P 可确认后修复。"
+    echo "输入 s 可进入服务恢复，支持常用服务重启、failed service 重启、reset-failed 和失败自动重启 drop-in。"
     echo "系统硬件探针会附带 443、Caddy、3x-ui、订阅工具和 Docker 场景概览。"
     echo "生成反馈诊断信息用于提交 GitHub Issue，会尽量避免输出 Token、私钥和敏感密钥。"
 }

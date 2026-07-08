@@ -262,6 +262,9 @@ assert_function_body_contains dist/vps.sh main 'main_menu' "main must enter the 
 assert_dist_contains 'rotate_log_file' "Release script must include the shared log rotation helper."
 assert_dist_contains 'print_log_capacity_summary' "Health overview must include log capacity summary."
 assert_dist_contains 'check_vpso_file_permissions' "Health overview must expose file permission checks."
+assert_dist_contains 'func_health_service_recovery_menu' "Health overview must expose service restart and recovery actions."
+assert_dist_contains '10-vps-optimize-restart.conf' "Health service recovery must support systemd auto-restart drop-ins."
+assert_dist_contains 'collect_failed_service_units' "Health service recovery must support failed service restart."
 assert_dist_contains '7. Forwardx 转发面板' "Basic components menu must include Forwardx."
 assert_dist_contains 'https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh' "Release script must include the Forwardx local panel installer."
 assert_file_not_contains dist/vps.sh '10. 宝塔面板' "Basic components menu must not keep the old Baota option label."
@@ -971,18 +974,37 @@ fi
 (
     source src/input.sh
     source src/validate.sh
+    source src/caddy_certificates.sh
     source src/sni_stack_config.sh
     source src/caddy_proxy.sh
     caddy_proxy_tmp=$(mktemp /tmp/vps-caddy-proxy.XXXXXX)
+    caddy_single_entry_tmp=$(mktemp /tmp/vps-caddy-single-entry.XXXXXX)
     nginx_proxy_tmp=$(mktemp /tmp/vps-nginx-proxy.XXXXXX)
     is_valid_backend_addr "host.docker.internal"
     is_valid_backend_addr "dockge"
     ! is_valid_backend_addr "bad/backend"
     write_caddy_reverse_proxy_conf "docker.example.com" "host.docker.internal" "8080" "n" "$caddy_proxy_tmp"
     grep -q 'reverse_proxy host.docker.internal:8080' "$caddy_proxy_tmp"
+    [[ "$(caddy_conf_first_reverse_proxy_target "$caddy_proxy_tmp")" == "host.docker.internal:8080" ]]
+    [[ "$(caddy_reverse_proxy_target_port "$(caddy_conf_first_reverse_proxy_target "$caddy_proxy_tmp")")" == "8080" ]]
+    write_caddy_reverse_proxy_conf "view.stardustcloud.best" "127.0.0.1" "25774" "n" "$caddy_proxy_tmp"
+    grep -q '^view.stardustcloud.best {$' "$caddy_proxy_tmp"
+    grep -q 'reverse_proxy 127.0.0.1:25774' "$caddy_proxy_tmp"
     write_caddy_reverse_proxy_conf "docker.example.com" "backend.local" "8443" "y" "$caddy_proxy_tmp"
     grep -q 'reverse_proxy https://backend.local:8443' "$caddy_proxy_tmp"
+    [[ "$(caddy_conf_first_reverse_proxy_target "$caddy_proxy_tmp")" == "https://backend.local:8443" ]]
+    [[ "$(caddy_reverse_proxy_target_port "$(caddy_conf_first_reverse_proxy_target "$caddy_proxy_tmp")")" == "8443" ]]
     grep -q 'tls_insecure_skip_verify' "$caddy_proxy_tmp"
+    cat > "$caddy_single_entry_tmp" <<'EOF'
+https://docker.example.com:9443 {
+    bind 127.0.0.1
+    tls /etc/caddy/certs/docker.example.com.crt /etc/caddy/certs/docker.example.com.key
+    reverse_proxy host.docker.internal:8080
+}
+EOF
+    [[ "$(caddy_conf_site_listen_port "$caddy_single_entry_tmp")" == "9443" ]]
+    [[ "$(caddy_conf_site_listen_target "$caddy_single_entry_tmp")" == "127.0.0.1:9443" ]]
+    [[ "$(caddy_conf_first_reverse_proxy_target "$caddy_single_entry_tmp")" == "host.docker.internal:8080" ]]
     [[ "$(nginx_proxy_conf_path "panel.example.com")" == "/etc/nginx/conf.d/vps_proxy_panel.example.com.conf" ]]
     write_nginx_reverse_proxy_conf "panel.example.com" "40000" "n" "$nginx_proxy_tmp"
     grep -q 'server_name panel.example.com;' "$nginx_proxy_tmp"
@@ -1000,8 +1022,15 @@ fi
     strip_nginx_ip_whitelist_block "$nginx_proxy_tmp"
     ! grep -q '# vps-optimize-ip-whitelist-start' "$nginx_proxy_tmp"
     rm -f "$caddy_proxy_tmp"
+    rm -f "$caddy_single_entry_tmp"
     rm -f "$nginx_proxy_tmp"
 )
+
+assert_file_not_contains src/caddy_maintenance.sh 'reverse_proxy[[:space:]]+127.0.0.1' "Caddy health check must read the configured backend target, not only 127.0.0.1."
+assert_file_not_contains src/caddy_cf_checks.sh 'reverse_proxy[[:space:]]+127.0.0.1' "Compatibility Caddy health check must read the configured backend target, not only 127.0.0.1."
+assert_file_not_contains src/caddy_certificates.sh 'Caddy监听: 127.0.0.1:' "Caddy manifest must summarize the configured listen target."
+assert_file_contains src/caddy_proxy.sh '当前 Caddy 配置校验失败，未写入新增反代。' "Caddy reverse proxy must not blame new config when the existing Caddy config is already invalid."
+assert_file_contains src/caddy_proxy.sh 'Caddy 校验错误' "Caddy reverse proxy failures must print the real caddy validate output."
 
 (
     source src/input.sh
