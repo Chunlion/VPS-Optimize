@@ -147,9 +147,9 @@ chmod +x "$out_file"
 bash -n "$out_file"
 bash "$traffic_guard_checker_validator" "$repo_root/src/traffic_guard.sh" "$out_file"
 if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$out_dir" && sha256sum "$(basename "$out_file")" > "$(basename "$out_file").sha256")
+    (cd "$out_dir" && printf '%s  %s\n' "$(sha256sum "$(basename "$out_file")" | awk '{print $1}')" "$(basename "$out_file")" > "$(basename "$out_file").sha256")
 elif command -v shasum >/dev/null 2>&1; then
-    (cd "$out_dir" && shasum -a 256 "$(basename "$out_file")" > "$(basename "$out_file").sha256")
+    (cd "$out_dir" && printf '%s  %s\n' "$(shasum -a 256 "$(basename "$out_file")" | awk '{print $1}')" "$(basename "$out_file")" > "$(basename "$out_file").sha256")
 else
     printf 'Missing sha256sum/shasum; cannot write %s.sha256\n' "$out_file" >&2
     exit 1

@@ -55,6 +55,7 @@ bash tests/smoke.sh
 
 echo "==> dist artifact checks"
 git diff --check -- dist/vps.sh dist/vps.sh.sha256
+grep -Eq '^[0-9a-f]{64}  vps\.sh$' dist/vps.sh.sha256
 if ! git diff --quiet -- dist/vps.sh dist/vps.sh.sha256; then
     if [[ "${CI:-}" == "true" ]]; then
         echo "dist artifacts changed after build; commit regenerated dist/vps.sh and dist/vps.sh.sha256." >&2
