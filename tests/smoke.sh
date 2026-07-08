@@ -852,6 +852,58 @@ assert_file_contains src/preflight.sh 'command -v sudo >/dev/null 2>&1 || cmd_mi
     grep -Fq '不能精确到某个 SNI' <<<"$issue_443_output"
 )
 
+(
+    source src/common.sh
+    source src/ui.sh
+    source src/validate.sh
+    source src/sni_stack_config.sh
+
+    ENTRY_MODE=nginx-stream
+    NGINX_LISTEN_ADDR=0.0.0.0
+    NGINX_LISTEN_PORT=443
+    CADDY_LISTEN_ADDR=127.0.0.1
+    CADDY_LISTEN_PORT=8443
+    XRAY_LISTEN_ADDR=127.0.0.1
+    XRAY_LISTEN_PORT=1443
+    PANEL_DOMAIN=panel.example.com
+    PANEL_WEB_PATH=/panel/
+    PANEL_LISTEN_ADDR=127.0.0.1
+    PANEL_LISTEN_PORT=40000
+    SUB_URI_PATH=/sub/
+    CLASH_URI_PATH=/clash/
+    SUB_LISTEN_ADDR=127.0.0.1
+    SUB_LISTEN_PORT=2096
+    REALITY_SNI=reality.example.com
+    SITE_DOMAINS=()
+    SITE_BACKEND_ADDRS=()
+    SITE_BACKEND_PORTS=()
+    TCP_ROUTE_SNIS=()
+    TCP_ROUTE_ADDRS=()
+    TCP_ROUTE_PORTS=()
+    XRAY_SNI_ROUTE_SNIS=()
+    XRAY_SNI_ROUTE_ADDRS=()
+    XRAY_SNI_ROUTE_PORTS=()
+    SNI_IP_WHITELIST_DOMAINS=()
+    SNI_IP_WHITELIST_RANGES=()
+
+    WEB_PROXY_ENGINE=nginx
+    current_summary_nginx=$(print_sni_stack_current_summary 2>&1)
+    grep -Fq 'Web 反代：  Nginx 本地 HTTPS 反代 (127.0.0.1:8443)' <<<"$current_summary_nginx"
+    grep -Fq '公网入口：  0.0.0.0:443 -> Nginx 本地 HTTPS 反代 127.0.0.1:8443' <<<"$current_summary_nginx"
+    grep -Fq 'Nginx Web /etc/nginx/conf.d/vps_sni_web_8443.conf' <<<"$current_summary_nginx"
+    grep -Fq 'Nginx 本地 HTTPS 反代：' <<<"$current_summary_nginx"
+    ! grep -Fq 'Caddy /etc/caddy/conf.d/panel.example.com.caddy' <<<"$current_summary_nginx"
+    ! grep -Fq 'Caddy 本地：' <<<"$current_summary_nginx"
+
+    WEB_PROXY_ENGINE=caddy
+    current_summary_caddy=$(print_sni_stack_current_summary 2>&1)
+    grep -Fq 'Web 反代：  Caddy 本地 HTTPS 反代 (127.0.0.1:8443)' <<<"$current_summary_caddy"
+    grep -Fq '公网入口：  0.0.0.0:443 -> Caddy 本地 HTTPS 反代 127.0.0.1:8443' <<<"$current_summary_caddy"
+    grep -Fq 'Caddy /etc/caddy/conf.d/panel.example.com.caddy' <<<"$current_summary_caddy"
+    grep -Fq 'Caddy 本地 HTTPS 反代：' <<<"$current_summary_caddy"
+    ! grep -Fq 'Nginx Web /etc/nginx/conf.d/vps_sni_web_8443.conf' <<<"$current_summary_caddy"
+)
+
 [[ "$(nginx_stream_listen_directives "127.0.0.1" "443")" == "    listen 127.0.0.1:443;" ]]
 [[ "$(nginx_stream_listen_directives "0.0.0.0" "443" | grep -c '^    listen ')" == "2" ]]
 [[ "$(nginx_stream_listen_directives "::1" "443")" == "    listen [::1]:443;" ]]
@@ -1031,6 +1083,13 @@ assert_file_not_contains src/caddy_cf_checks.sh 'reverse_proxy[[:space:]]+127.0.
 assert_file_not_contains src/caddy_certificates.sh 'Caddy监听: 127.0.0.1:' "Caddy manifest must summarize the configured listen target."
 assert_file_contains src/caddy_proxy.sh '当前 Caddy 配置校验失败，未写入新增反代。' "Caddy reverse proxy must not blame new config when the existing Caddy config is already invalid."
 assert_file_contains src/caddy_proxy.sh 'Caddy 校验错误' "Caddy reverse proxy failures must print the real caddy validate output."
+cert_delete_paths='"/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key" "/root/cert/${domain}.crt" "/root/cert/${domain}.key"'
+assert_file_contains src/caddy_maintenance.sh "$cert_delete_paths" "Caddy certificate deletion must quarantine installed cert files and /root/cert links."
+assert_file_contains src/caddy_cert_tools.sh "$cert_delete_paths" "Compatibility Caddy certificate deletion must quarantine installed cert files and /root/cert links."
+assert_dist_contains "$cert_delete_paths" "Release Caddy certificate deletion must quarantine installed cert files and /root/cert links."
+assert_file_contains src/caddy_maintenance.sh 'generate_caddy_cf_manifest 2>/dev/null || true' "Caddy certificate deletion must refresh the managed certificate manifest."
+assert_file_contains src/caddy_cert_tools.sh 'generate_caddy_cf_manifest 2>/dev/null || true' "Compatibility Caddy certificate deletion must refresh the managed certificate manifest."
+assert_dist_contains 'generate_caddy_cf_manifest 2>/dev/null || true' "Release Caddy certificate deletion must refresh the managed certificate manifest."
 
 (
     source src/input.sh

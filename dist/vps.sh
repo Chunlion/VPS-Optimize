@@ -6370,7 +6370,7 @@ print_sni_stack_current_summary() {
         done
     fi
     echo -e "Web 反代：  ${web_label} (${web_backend})"
-    echo -e "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${web_backend}"
+    echo -e "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${web_label} ${web_backend}"
     echo -e "配置文件：  Nginx ${nginx_conf}"
     if [[ "$web_engine" == "nginx" ]]; then
         echo -e "           Nginx Web ${nginx_web_conf}"
@@ -6381,7 +6381,7 @@ print_sni_stack_current_summary() {
     echo -e "------------------------------------------------"
     echo -e "${BOLD}当前实际监听状态${PLAIN}"
     echo -e "Nginx 入口：  $(get_listen_line_by_port "$NGINX_LISTEN_PORT")"
-    echo -e "Web 反代本地：$(get_listen_line_by_port "$CADDY_LISTEN_PORT")"
+    echo -e "${web_label}：$(get_listen_line_by_port "$CADDY_LISTEN_PORT")"
     echo -e "面板后端：    $(get_listen_line_by_port "$PANEL_LISTEN_PORT")"
     echo -e "订阅后端：    $(get_listen_line_by_port "$SUB_LISTEN_PORT")"
     echo -e "REALITY 后端：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")"

@@ -10,6 +10,7 @@ load_sni_stack_env() {
     # shellcheck disable=SC1090
     source "$env_file"
     ENTRY_MODE=$(get_entry_mode)
+    WEB_PROXY_ENGINE=$(normalize_web_proxy_engine "${WEB_PROXY_ENGINE:-caddy}" 2>/dev/null || echo "caddy")
     PANEL_WEB_PATH=$(normalize_path_prefix "${PANEL_WEB_PATH:-/panel/}")
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
     CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
@@ -29,7 +30,12 @@ get_listen_line_by_port() {
 print_sni_stack_current_summary() {
     local env_file="/etc/vps-optimize/sni-stack.env"
     local caddy_conf="/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy"
+    local nginx_web_conf="/etc/nginx/conf.d/vps_sni_web_${CADDY_LISTEN_PORT}.conf"
     local nginx_conf="/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf"
+    local web_engine web_label web_backend
+    web_engine=$(current_web_proxy_engine)
+    web_label=$(web_proxy_engine_label "$web_engine")
+    web_backend=$(web_proxy_backend)
 
     echo -e "${BOLD}当前保存的 443 分流配置${PLAIN} ${CYAN}(${env_file})${PLAIN}"
     echo -e "面板：      https://${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
@@ -48,14 +54,19 @@ print_sni_stack_current_summary() {
             echo -e "Xray 入站：  ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}"
         done
     fi
-    echo -e "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> Caddy ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT}"
+    echo -e "Web 反代：  ${web_label} (${web_backend})"
+    echo -e "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${web_label} ${web_backend}"
     echo -e "配置文件：  Nginx ${nginx_conf}"
-    echo -e "           Caddy ${caddy_conf}"
+    if [[ "$web_engine" == "nginx" ]]; then
+        echo -e "           Nginx Web ${nginx_web_conf}"
+    else
+        echo -e "           Caddy ${caddy_conf}"
+    fi
     print_sni_ip_whitelist_summary
     echo -e "------------------------------------------------"
     echo -e "${BOLD}当前实际监听状态${PLAIN}"
     echo -e "Nginx 入口：  $(get_listen_line_by_port "$NGINX_LISTEN_PORT")"
-    echo -e "Caddy 本地：  $(get_listen_line_by_port "$CADDY_LISTEN_PORT")"
+    echo -e "${web_label}：$(get_listen_line_by_port "$CADDY_LISTEN_PORT")"
     echo -e "面板后端：    $(get_listen_line_by_port "$PANEL_LISTEN_PORT")"
     echo -e "订阅后端：    $(get_listen_line_by_port "$SUB_LISTEN_PORT")"
     echo -e "REALITY 后端：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")"
