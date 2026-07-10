@@ -1190,6 +1190,100 @@ is_valid_backend_addr() {
     is_valid_listen_addr "$addr" || is_valid_hostname "$addr"
 }
 
+backend_addr_resolution_status() {
+    local addr="$1"
+
+    addr="${addr#[}"
+    addr="${addr%]}"
+    if is_valid_listen_addr "$addr"; then
+        return 0
+    fi
+    if command -v getent >/dev/null 2>&1; then
+        getent ahosts "$addr" >/dev/null 2>&1
+        return $?
+    fi
+    return 2
+}
+
+tcp_target_reachable() {
+    local host="$1"
+    local port="$2"
+    local attempted=0
+
+    is_valid_port "$port" || return 1
+    if command -v nc >/dev/null 2>&1; then
+        attempted=1
+        nc -z -w 3 "$host" "$port" >/dev/null 2>&1 && return 0
+    fi
+    if command -v timeout >/dev/null 2>&1; then
+        attempted=1
+        timeout 5 bash -c 'cat < /dev/null > /dev/tcp/$1/$2' _ "$host" "$port" 2>/dev/null && return 0
+    fi
+    if command -v curl >/dev/null 2>&1; then
+        attempted=1
+        curl -fsS --connect-timeout 3 --max-time 5 "telnet://$(format_hostport "$host" "$port")" </dev/null >/dev/null 2>&1 && return 0
+    fi
+    [[ "$attempted" -eq 1 ]] && return 1
+    return 2
+}
+
+probe_backend_target() {
+    local label="$1"
+    local addr="$2"
+    local port="$3"
+    local probe_rc
+
+    if ! is_valid_backend_addr "$addr" || ! is_valid_port "$port"; then
+        echo -e "${RED}❌ ${label}：后端地址或端口无效（$(format_hostport "$addr" "$port")）${PLAIN}"
+        return 1
+    fi
+
+    if backend_addr_resolution_status "$addr"; then
+        :
+    else
+        probe_rc=$?
+        if [[ "$probe_rc" -eq 2 ]]; then
+            echo -e "${YELLOW}⚠️ ${label}：缺少地址解析工具，未检查 $(format_hostport "$addr" "$port")${PLAIN}"
+            return 2
+        fi
+        echo -e "${RED}❌ ${label}：无法解析后端地址 ${addr}${PLAIN}"
+        return 1
+    fi
+
+    if tcp_target_reachable "$addr" "$port"; then
+        echo -e "${GREEN}✅ ${label}：$(format_hostport "$addr" "$port") 可连接${PLAIN}"
+        return 0
+    fi
+    probe_rc=$?
+    if [[ "$probe_rc" -eq 2 ]]; then
+        echo -e "${YELLOW}⚠️ ${label}：缺少 nc、timeout 或 curl，未检查 $(format_hostport "$addr" "$port")${PLAIN}"
+        return 2
+    fi
+    echo -e "${RED}❌ ${label}：$(format_hostport "$addr" "$port") 当前不可连接${PLAIN}"
+    return 1
+}
+
+confirm_backend_target_or_continue() {
+    local label="$1"
+    local addr="$2"
+    local port="$3"
+    local probe_rc continue_confirm
+
+    if probe_backend_target "$label" "$addr" "$port"; then
+        return 0
+    fi
+    probe_rc=$?
+    [[ "$probe_rc" -eq 2 ]] && return 0
+
+    read_trimmed continue_confirm "后端当前不可连接，仍要继续保存吗？(y/n，默认 n): "
+    if is_yes "$continue_confirm"; then
+        echo -e "${YELLOW}⚠️ 已选择继续；保存后请检查后端服务、地址和端口。${PLAIN}"
+        return 0
+    fi
+    echo -e "${BLUE}已取消保存。${PLAIN}"
+    return 1
+}
+
 is_loopback_listen_addr() {
     local addr="$1"
     [[ "$addr" == "127.0.0.1" || "$addr" == "localhost" || "$addr" == "::1" ]]
@@ -4230,6 +4324,23 @@ caddy_reverse_proxy_target_port() {
     echo "$port"
 }
 
+caddy_reverse_proxy_target_host() {
+    local target="$1"
+
+    target="${target#http://}"
+    target="${target#https://}"
+    target="${target%%/*}"
+    if [[ "$target" =~ ^\[([^]]+)\]:[0-9]+$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    if [[ "$target" =~ ^(.+):[0-9]+$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    return 1
+}
+
 caddy_listen_addr_port_is_visible() {
     local addr="$1"
     local port="$2"
@@ -6839,6 +6950,23 @@ sni_stack_health_check() {
             ((fail++))
         fi
     }
+    check_backend() {
+        local name="$1"
+        local addr="$2"
+        local port="$3"
+        local probe_rc
+
+        if probe_backend_target "$name" "$addr" "$port"; then
+            ((ok++))
+            return 0
+        fi
+        probe_rc=$?
+        if [[ "$probe_rc" -eq 2 ]]; then
+            ((warn++))
+        else
+            ((fail++))
+        fi
+    }
 
     check_listen "Nginx 公网入口" "$NGINX_LISTEN_PORT" ""
     check_listen "$(web_proxy_engine_label) 本地 TLS" "$CADDY_LISTEN_PORT" "$CADDY_LISTEN_ADDR"
@@ -6848,7 +6976,7 @@ sni_stack_health_check() {
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i
         for i in "${!SITE_DOMAINS[@]}"; do
-            check_listen "网站后端 ${SITE_DOMAINS[$i]}" "${SITE_BACKEND_PORTS[$i]}" "${SITE_BACKEND_ADDRS[$i]}"
+            check_backend "网站后端 ${SITE_DOMAINS[$i]}" "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}"
         done
     fi
     if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
@@ -8637,6 +8765,18 @@ sni_stack_health_check_enhanced() {
     fi
 
     echo -e "------------------------------------------------"
+    echo -e "${BOLD}网站后端连通性${PLAIN}"
+    if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
+        echo "未配置自定义网站/反代后端。"
+    else
+        for i in "${!SITE_DOMAINS[@]}"; do
+            domain="${SITE_DOMAINS[$i]}"
+            [[ -n "$domain" ]] || continue
+            probe_backend_target "网站后端 ${domain}" "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}" || true
+        done
+    fi
+
+    echo -e "------------------------------------------------"
     echo -e "${BOLD}Xray 入站分流规则${PLAIN}"
     if entry_mode_supports_xray_sni_routes "$mode"; then
         echo -e "当前入口模式是否支持 Xray 入站分流规则：${GREEN}支持${PLAIN}"
@@ -9179,7 +9319,7 @@ collect_sni_stack_config() {
                 continue
             fi
             if is_yes "$advanced_mode"; then
-                SITE_BACKEND_ADDRS[$i]=$(ask_with_default "网站 ${SITE_DOMAINS[$i]} 的后端监听地址" "127.0.0.1")
+                SITE_BACKEND_ADDRS[$i]=$(ask_with_default "网站 ${SITE_DOMAINS[$i]} 的后端地址" "127.0.0.1")
             else
                 SITE_BACKEND_ADDRS[$i]="127.0.0.1"
             fi
@@ -9264,6 +9404,10 @@ collect_sni_stack_config() {
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
     warn_if_public_bind "3x-ui 面板" "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT" || return 1
     warn_if_public_bind "3x-ui 订阅服务" "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT" || return 1
+    for site_idx in "${!SITE_DOMAINS[@]}"; do
+        [[ -n "${SITE_DOMAINS[$site_idx]}" ]] || continue
+        confirm_backend_target_or_continue "网站/反代后端 ${SITE_DOMAINS[$site_idx]}" "${SITE_BACKEND_ADDRS[$site_idx]}" "${SITE_BACKEND_PORTS[$site_idx]}" || return 1
+    done
 
     if [[ -z "$CF_TOKEN" || ${#CF_TOKEN} -lt 20 ]]; then echo -e "${RED}❌ Cloudflare Token 长度异常。${PLAIN}"; return 1; fi
     echo -e "${CYAN}▶ 正在在线校验 Cloudflare Token...${PLAIN}"
@@ -10120,7 +10264,7 @@ print_sni_stack_result() {
     echo -e "  HTTP 404：先检查访问路径是否等于 3x-ui 的 webBasePath，再检查 Web 反代引擎是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  502 Bad Gateway：通常是 3x-ui 没启动、端口不对，或 3x-ui 后端仍是 HTTPS"
     echo -e ""
-    echo -e "${BOLD}五、监听状态应该长这样${PLAIN}"
+    echo -e "${BOLD}五、入口与后端配置${PLAIN}"
     echo -e "  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${entry_listener}"
     echo -e "  ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${web_label}"
     echo -e "  ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT} -> xray"
@@ -10291,12 +10435,12 @@ add_sni_stack_site() {
         fi
     done
 
-    read_trimmed advanced_mode "是否进入高级模式并允许修改后端监听地址？(y/n，默认 n): "
+    read_trimmed advanced_mode "后端是否使用自定义地址？(y/n，默认 n): "
     if is_yes "$advanced_mode"; then
-        site_addr=$(ask_with_default "后端监听地址" "127.0.0.1")
+        site_addr=$(ask_with_default "后端地址" "127.0.0.1")
     else
         site_addr="127.0.0.1"
-        echo -e "${GREEN}普通模式：后端地址使用 127.0.0.1。${PLAIN}"
+        echo -e "${GREEN}后端地址使用 127.0.0.1。${PLAIN}"
     fi
     site_addr=$(normalize_backend_addr_input "$site_addr")
     site_port=$(ask_with_default "后端端口" "$((3000 + ${#SITE_DOMAINS[@]}))")
@@ -10304,6 +10448,7 @@ add_sni_stack_site() {
     is_valid_backend_addr "$site_addr" || { echo -e "${RED}❌ 后端地址无效：${site_addr}${PLAIN}"; return 1; }
     is_valid_port "$site_port" || { echo -e "${RED}❌ 后端端口无效：${site_port}${PLAIN}"; return 1; }
     warn_if_public_bind "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
+    confirm_backend_target_or_continue "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
 
     if web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "$web_engine"; then
         read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
@@ -10338,7 +10483,7 @@ add_sni_stack_site() {
     issue_and_install_cert_for_domain "$site_domain" "$CF_Token" || return 1
     apply_sni_stack_runtime_config || return 1
     echo -e "${GREEN}✅ 已添加网站入口：https://${site_domain}/${PLAIN}"
-    echo -e "${YELLOW}提醒：后端服务需要监听 ${site_addr}:${site_port}，浏览器只访问 https://${site_domain}/。${PLAIN}"
+    echo -e "${YELLOW}提醒：当前 VPS 必须能访问 ${site_addr}:${site_port}，浏览器只访问 https://${site_domain}/。${PLAIN}"
     echo -e "${CYAN}当前 Web 反代后端：${web_label} -> ${site_addr}:${site_port}${PLAIN}"
 }
 
@@ -10372,20 +10517,21 @@ edit_sni_stack_site_backend() {
 
     idx=$((choice - 1))
     domain="${SITE_DOMAINS[$idx]}"
-    new_addr=$(ask_with_default "后端监听地址" "${SITE_BACKEND_ADDRS[$idx]}")
+    new_addr=$(ask_with_default "后端地址" "${SITE_BACKEND_ADDRS[$idx]}")
     new_addr=$(normalize_backend_addr_input "$new_addr")
     new_port=$(ask_with_default "后端端口" "${SITE_BACKEND_PORTS[$idx]}")
 
     is_valid_backend_addr "$new_addr" || { echo -e "${RED}❌ 后端地址无效：${new_addr}${PLAIN}"; return 1; }
     is_valid_port "$new_port" || { echo -e "${RED}❌ 后端端口无效：${new_port}${PLAIN}"; return 1; }
     warn_if_public_bind "网站/反代后端 ${domain}" "$new_addr" "$new_port" || return 1
+    confirm_backend_target_or_continue "网站/反代后端 ${domain}" "$new_addr" "$new_port" || return 1
 
     echo -e ""
     echo -e "${CYAN}即将修改：${domain} -> ${new_addr}:${new_port}${PLAIN}"
     confirm_risk_action "修改 443 网站/反代后端" \
         "Web 反代引擎后端和 443 入口分流配置" \
         "使用 443 单入口备份恢复修改前配置" \
-        "确认新后端地址和端口已经在本机监听。" || return 1
+        "确认当前 VPS 能访问新的后端地址和端口。" || return 1
 
     SITE_BACKEND_ADDRS[$idx]="$new_addr"
     SITE_BACKEND_PORTS[$idx]="$new_port"
@@ -11169,7 +11315,7 @@ manage_sni_stack_sites() {
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 查看当前网站/反代域名${PLAIN}"
         echo -e "${GREEN}  2. 新增网站/反代域名${PLAIN}"
-        echo -e "${GREEN}  3. 修改网站/反代后端端口${PLAIN}"
+        echo -e "${GREEN}  3. 修改网站/反代后端${PLAIN}"
         echo -e "${GREEN}  4. 删除网站/反代域名${PLAIN}"
         echo -e "${GREEN}  5. 管理域名 IP 白名单${PLAIN}       ${YELLOW}(只限制被选择的域名)${PLAIN}"
         echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"
@@ -11319,6 +11465,7 @@ func_caddy_cf_health_check() {
             local listen_port
             local listen_target
             local backend
+            local backend_addr
             local backend_port
             local cert_file
             local key_file
@@ -11340,6 +11487,7 @@ func_caddy_cf_health_check() {
             listen_port=$(caddy_conf_site_listen_port "$conf_file")
             listen_target=$(caddy_conf_site_listen_target "$conf_file")
             backend=$(caddy_conf_first_reverse_proxy_target "$conf_file")
+            backend_addr=$(caddy_reverse_proxy_target_host "$backend")
             backend_port=$(caddy_reverse_proxy_target_port "$backend")
 
             echo -e "${CYAN}  - 域名: ${domain}${PLAIN}"
@@ -11383,11 +11531,12 @@ func_caddy_cf_health_check() {
             fi
 
             [[ -z "$backend" ]] && backend="未知"
-            if [[ -n "$backend_port" ]] && caddy_listen_port_is_visible "$backend_port"; then
-                echo -e "    ${GREEN}后端状态: ${backend} 有服务监听${PLAIN}"
+            if [[ -z "$backend_addr" || -z "$backend_port" ]]; then
+                echo -e "    ${YELLOW}⚠️ 后端状态：无法从配置读取后端地址${PLAIN}"
+                ((warn_count++))
+            elif probe_backend_target "    后端状态" "$backend_addr" "$backend_port"; then
                 ((ok_count++))
             else
-                echo -e "    ${YELLOW}后端状态: ${backend} 未检测到监听${PLAIN}"
                 ((warn_count++))
             fi
         done < <(find /etc/caddy/conf.d -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)
@@ -11415,7 +11564,7 @@ func_caddy_cf_health_check() {
     elif [[ "$warn_count" -gt 0 ]]; then
         echo -e "${YELLOW}当前可继续运行，但建议处理警告项提高稳定性。${PLAIN}"
     else
-        echo -e "${GREEN}环境健康，可放心使用 Reality 回落 + Caddy 反代链路。${PLAIN}"
+        echo -e "${GREEN}检查未发现异常。${PLAIN}"
     fi
 }
 
@@ -12129,7 +12278,7 @@ func_caddy_manage_ip_whitelist() {
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 优化重构：核弹级域名证书清理与解除端口占用 (模块化安全版)
+# 清理域名证书、配置与端口占用
 # ---------------------------------------------------------
 sync_sni_stack_state_after_caddy_domain_delete() {
     local domain="$1"
@@ -12169,13 +12318,13 @@ sync_sni_stack_state_after_caddy_domain_delete() {
 func_caddy_delete_cert() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}☢️ 核弹级：彻底清理域名证书与配置${PLAIN}"
+    echo -e "${BOLD}清理域名证书与配置${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}功能介绍：该脚本将彻底清理指定域名的证书与配置，确保服务器环境干净。${PLAIN}"
+    echo -e "${YELLOW}将隔离指定域名的证书和配置，并清理 acme.sh 残留。${PLAIN}"
     echo -e "------------------------------------------------"
     
     local domain domain_input
-    read_trimmed domain_input "👉 请输入要强杀清理的精准域名 (如 panel.site.com): "
+    read_trimmed domain_input "👉 请输入要清理的域名（例如 panel.site.com）: "
     domain=$(normalize_domain_input "$domain_input")
     if [[ -z "$domain" ]]; then
         echo -e "${RED}❌ 域名不能为空！${PLAIN}"
@@ -12189,10 +12338,10 @@ func_caddy_delete_cert() {
         return
     fi
 
-    echo -e "\n${CYAN}▶ 正在执行核弹级清理流程...${PLAIN}"
-    echo -e "${YELLOW}此操作将永久删除该域名的证书与配置，无法恢复！${PLAIN}"
+    echo -e "\n${CYAN}▶ 正在清理域名证书与配置...${PLAIN}"
+    echo -e "${YELLOW}此操作会移走该域名的证书与配置，相关网站会暂时不可用。${PLAIN}"
     echo -e "请确认操作...${PLAIN}"
-    if confirm_danger "彻底清理 ${domain} 的证书与配置" "会停止 Caddy，隔离该域名的 Caddy/Nginx 配置、共享证书文件和 acme.sh 残留，再启动/重载相关服务。" "请先确认已有系统快照或反代配置备份；删除后的证书需要重新签发。"; then
+    if confirm_danger "清理 ${domain} 的证书与配置" "会停止 Caddy，隔离该域名的 Caddy/Nginx 配置、共享证书文件和 acme.sh 残留，再启动/重载相关服务。" "请先确认已有系统快照或反代配置备份；清理后的证书需要重新签发。"; then
         # 1. 停止 Caddy，强制释放 80/443 端口
         systemctl stop caddy >/dev/null 2>&1
         echo -e "${GREEN}✅ [1/4] 已强制停止 Caddy 服务，释放网络端口。${PLAIN}"
@@ -12263,7 +12412,7 @@ func_caddy_delete_cert() {
         generate_caddy_cf_manifest 2>/dev/null || true
 
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}🎉 清理彻底完成！当前域名环境已处于出厂真空状态。${PLAIN}"
+        echo -e "${GREEN}✅ 清理完成；相关配置和证书已移入隔离目录。${PLAIN}"
     else
         echo -e "${BLUE}操作已取消。${PLAIN}"
     fi
@@ -12347,7 +12496,7 @@ func_caddy_add_insecure() {
         echo -e "${GREEN}✅ 独立跳过验证配置已成功建立并生效！${PLAIN}"
         [[ -n "$ip_whitelist_ranges" ]] && echo -e "${GREEN}✅ 已为 ${domain} 启用 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
     else
-        echo -e "${RED}❌ 致命错误：追加的配置导致语法错误！正在回滚...${PLAIN}"
+        echo -e "${RED}❌ 新配置语法错误，正在回滚...${PLAIN}"
         quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
         [[ -n "$backup_file" && -f "$backup_file" ]] && mv "$backup_file" "$conf_file"
     fi
@@ -14283,13 +14432,7 @@ tcp_probe_once() {
     local host="$1"
     local port="$2"
 
-    if command -v nc >/dev/null 2>&1; then
-        nc -z -w 3 "$host" "$port" >/dev/null 2>&1 && return 0
-    fi
-    if command -v timeout >/dev/null 2>&1; then
-        timeout 5 bash -c 'cat < /dev/null > /dev/tcp/$1/$2' _ "$host" "$port" 2>/dev/null && return 0
-    fi
-    return 1
+    tcp_target_reachable "$host" "$port"
 }
 
 is_loopback_probe_host() {
@@ -16702,7 +16845,7 @@ print_failed_systemd_units() {
         count=$((count + 1))
         echo "  - ${line}"
     done < <(systemctl --failed --no-legend --no-pager 2>/dev/null | awk 'NF {print $1 " " $2 " " $3 " " $4}' | head -n 12)
-    (( count > 0 )) || echo "  - 未发现 failed 单元"
+    (( count > 0 )) || echo "  - 未发现失败单元"
 }
 
 collect_failed_service_units() {
@@ -16754,14 +16897,14 @@ health_restart_failed_services() {
 
     mapfile -t failed_units < <(collect_failed_service_units)
     if [[ ${#failed_units[@]} -eq 0 ]]; then
-        echo -e "${GREEN}未发现 failed service。${PLAIN}"
+        echo -e "${GREEN}未发现失败服务。${PLAIN}"
         return 0
     fi
 
-    echo -e "${CYAN}将尝试重启以下 failed service：${PLAIN}"
+    echo -e "${CYAN}将尝试重启以下失败服务：${PLAIN}"
     printf '  - %s\n' "${failed_units[@]}"
-    confirm_risk_action "重启 failed systemd 服务" \
-        "当前 failed 状态的 service 单元" \
+    confirm_risk_action "重启失败的 systemd 服务" \
+        "当前处于失败状态的服务单元" \
         "查看对应 journalctl 日志，修正配置后单独重启失败服务" \
         "会跳过 ssh/sshd，其他服务会短暂中断。" || return 1
 
@@ -16803,7 +16946,7 @@ health_enable_auto_restart_for_unit() {
         [[ "$selected" == "$number" ]] || continue
 
         if [[ "$unit" != *.service ]]; then
-            echo -e "${YELLOW}⚠️ ${unit} 不是 service 单元，跳过自动重启配置。${PLAIN}"
+            echo -e "${YELLOW}⚠️ ${unit} 不是服务单元，跳过自动重启配置。${PLAIN}"
             return 1
         fi
         if ! health_unit_exists "$unit"; then
@@ -16836,8 +16979,30 @@ EOF
 }
 
 health_show_failed_unit_logs() {
-    local unit
-    read_trimmed unit "请输入要查看日志的 unit（如 caddy.service）: "
+    local unit choice i
+    local failed_units=()
+
+    mapfile -t failed_units < <(collect_failed_service_units)
+    if [[ ${#failed_units[@]} -gt 0 ]]; then
+        echo -e "${CYAN}失败服务：${PLAIN}"
+        for i in "${!failed_units[@]}"; do
+            echo -e "${GREEN} $((i + 1)). ${failed_units[$i]}${PLAIN}"
+        done
+        echo " 0. 输入其他服务名"
+        read_trimmed choice "请选择编号，或直接输入服务名: "
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#failed_units[@]} )); then
+            unit="${failed_units[$((choice - 1))]}"
+        elif [[ "$choice" == "0" ]]; then
+            read_trimmed unit "请输入服务名（例如 caddy.service）: "
+        elif [[ "$choice" =~ ^[0-9]+$ ]]; then
+            echo -e "${RED}❌ 编号无效。${PLAIN}"
+            return 1
+        else
+            unit="$choice"
+        fi
+    else
+        read_trimmed unit "请输入服务名（例如 caddy.service）: "
+    fi
     [[ -n "$unit" ]] || return 0
     [[ "$unit" == *.service || "$unit" == *.timer || "$unit" == *.socket ]] || unit="${unit}.service"
     if ! health_unit_exists "$unit"; then
@@ -16856,7 +17021,7 @@ func_health_service_recovery_menu() {
         print_breadcrumb "诊断/健康检查 > 服务恢复"
         echo -e "${BOLD}🧰 服务重启与自动拉起${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${CYAN}failed 单元：${PLAIN}"
+        echo -e "${CYAN}失败单元：${PLAIN}"
         print_failed_systemd_units
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}常用服务${PLAIN}"
@@ -16867,10 +17032,10 @@ func_health_service_recovery_menu() {
         done
         echo -e "------------------------------------------------"
         echo -e "${GREEN} r. 重启一个常用服务${PLAIN}"
-        echo -e "${GREEN} f. 重启当前 failed service${PLAIN}"
-        echo -e "${GREEN} a. 为一个常用 service 启用失败自动重启${PLAIN}"
-        echo -e "${GREEN} x. 清除已恢复的 failed/degraded 状态${PLAIN}"
-        echo -e "${GREEN} l. 查看某个 unit 日志${PLAIN}"
+        echo -e "${GREEN} f. 重启失败服务${PLAIN}"
+        echo -e "${GREEN} a. 为常用服务启用失败自动重启${PLAIN}"
+        echo -e "${GREEN} x. 清除已恢复的失败状态${PLAIN}"
+        echo -e "${GREEN} l. 查看服务日志${PLAIN}"
         echo -e "${RED} 0. 返回上级菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
@@ -19025,7 +19190,7 @@ show_health_help() {
     echo "健康总览会检查关键服务、监听端口和证书摘要。"
     echo "如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。"
     echo "健康总览会显示日志容量摘要；输入 p 可做配置、状态和日志文件权限体检，输入 P 可确认后修复。"
-    echo "输入 s 可进入服务恢复，支持常用服务重启、failed service 重启、reset-failed 和失败自动重启 drop-in。"
+    echo "输入 s 可进入服务恢复，支持重启常用/失败服务、清除失败状态和设置失败自动重启。"
     echo "系统硬件探针会附带 443、Caddy、3x-ui、订阅工具和 Docker 场景概览。"
     echo "生成反馈诊断信息用于提交 GitHub Issue，会尽量避免输出 Token、私钥和敏感密钥。"
 }

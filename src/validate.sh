@@ -424,6 +424,100 @@ is_valid_backend_addr() {
     is_valid_listen_addr "$addr" || is_valid_hostname "$addr"
 }
 
+backend_addr_resolution_status() {
+    local addr="$1"
+
+    addr="${addr#[}"
+    addr="${addr%]}"
+    if is_valid_listen_addr "$addr"; then
+        return 0
+    fi
+    if command -v getent >/dev/null 2>&1; then
+        getent ahosts "$addr" >/dev/null 2>&1
+        return $?
+    fi
+    return 2
+}
+
+tcp_target_reachable() {
+    local host="$1"
+    local port="$2"
+    local attempted=0
+
+    is_valid_port "$port" || return 1
+    if command -v nc >/dev/null 2>&1; then
+        attempted=1
+        nc -z -w 3 "$host" "$port" >/dev/null 2>&1 && return 0
+    fi
+    if command -v timeout >/dev/null 2>&1; then
+        attempted=1
+        timeout 5 bash -c 'cat < /dev/null > /dev/tcp/$1/$2' _ "$host" "$port" 2>/dev/null && return 0
+    fi
+    if command -v curl >/dev/null 2>&1; then
+        attempted=1
+        curl -fsS --connect-timeout 3 --max-time 5 "telnet://$(format_hostport "$host" "$port")" </dev/null >/dev/null 2>&1 && return 0
+    fi
+    [[ "$attempted" -eq 1 ]] && return 1
+    return 2
+}
+
+probe_backend_target() {
+    local label="$1"
+    local addr="$2"
+    local port="$3"
+    local probe_rc
+
+    if ! is_valid_backend_addr "$addr" || ! is_valid_port "$port"; then
+        echo -e "${RED}❌ ${label}：后端地址或端口无效（$(format_hostport "$addr" "$port")）${PLAIN}"
+        return 1
+    fi
+
+    if backend_addr_resolution_status "$addr"; then
+        :
+    else
+        probe_rc=$?
+        if [[ "$probe_rc" -eq 2 ]]; then
+            echo -e "${YELLOW}⚠️ ${label}：缺少地址解析工具，未检查 $(format_hostport "$addr" "$port")${PLAIN}"
+            return 2
+        fi
+        echo -e "${RED}❌ ${label}：无法解析后端地址 ${addr}${PLAIN}"
+        return 1
+    fi
+
+    if tcp_target_reachable "$addr" "$port"; then
+        echo -e "${GREEN}✅ ${label}：$(format_hostport "$addr" "$port") 可连接${PLAIN}"
+        return 0
+    fi
+    probe_rc=$?
+    if [[ "$probe_rc" -eq 2 ]]; then
+        echo -e "${YELLOW}⚠️ ${label}：缺少 nc、timeout 或 curl，未检查 $(format_hostport "$addr" "$port")${PLAIN}"
+        return 2
+    fi
+    echo -e "${RED}❌ ${label}：$(format_hostport "$addr" "$port") 当前不可连接${PLAIN}"
+    return 1
+}
+
+confirm_backend_target_or_continue() {
+    local label="$1"
+    local addr="$2"
+    local port="$3"
+    local probe_rc continue_confirm
+
+    if probe_backend_target "$label" "$addr" "$port"; then
+        return 0
+    fi
+    probe_rc=$?
+    [[ "$probe_rc" -eq 2 ]] && return 0
+
+    read_trimmed continue_confirm "后端当前不可连接，仍要继续保存吗？(y/n，默认 n): "
+    if is_yes "$continue_confirm"; then
+        echo -e "${YELLOW}⚠️ 已选择继续；保存后请检查后端服务、地址和端口。${PLAIN}"
+        return 0
+    fi
+    echo -e "${BLUE}已取消保存。${PLAIN}"
+    return 1
+}
+
 is_loopback_listen_addr() {
     local addr="$1"
     [[ "$addr" == "127.0.0.1" || "$addr" == "localhost" || "$addr" == "::1" ]]

@@ -188,7 +188,7 @@ print_failed_systemd_units() {
         count=$((count + 1))
         echo "  - ${line}"
     done < <(systemctl --failed --no-legend --no-pager 2>/dev/null | awk 'NF {print $1 " " $2 " " $3 " " $4}' | head -n 12)
-    (( count > 0 )) || echo "  - 未发现 failed 单元"
+    (( count > 0 )) || echo "  - 未发现失败单元"
 }
 
 collect_failed_service_units() {
@@ -240,14 +240,14 @@ health_restart_failed_services() {
 
     mapfile -t failed_units < <(collect_failed_service_units)
     if [[ ${#failed_units[@]} -eq 0 ]]; then
-        echo -e "${GREEN}未发现 failed service。${PLAIN}"
+        echo -e "${GREEN}未发现失败服务。${PLAIN}"
         return 0
     fi
 
-    echo -e "${CYAN}将尝试重启以下 failed service：${PLAIN}"
+    echo -e "${CYAN}将尝试重启以下失败服务：${PLAIN}"
     printf '  - %s\n' "${failed_units[@]}"
-    confirm_risk_action "重启 failed systemd 服务" \
-        "当前 failed 状态的 service 单元" \
+    confirm_risk_action "重启失败的 systemd 服务" \
+        "当前处于失败状态的服务单元" \
         "查看对应 journalctl 日志，修正配置后单独重启失败服务" \
         "会跳过 ssh/sshd，其他服务会短暂中断。" || return 1
 
@@ -289,7 +289,7 @@ health_enable_auto_restart_for_unit() {
         [[ "$selected" == "$number" ]] || continue
 
         if [[ "$unit" != *.service ]]; then
-            echo -e "${YELLOW}⚠️ ${unit} 不是 service 单元，跳过自动重启配置。${PLAIN}"
+            echo -e "${YELLOW}⚠️ ${unit} 不是服务单元，跳过自动重启配置。${PLAIN}"
             return 1
         fi
         if ! health_unit_exists "$unit"; then
@@ -322,8 +322,30 @@ EOF
 }
 
 health_show_failed_unit_logs() {
-    local unit
-    read_trimmed unit "请输入要查看日志的 unit（如 caddy.service）: "
+    local unit choice i
+    local failed_units=()
+
+    mapfile -t failed_units < <(collect_failed_service_units)
+    if [[ ${#failed_units[@]} -gt 0 ]]; then
+        echo -e "${CYAN}失败服务：${PLAIN}"
+        for i in "${!failed_units[@]}"; do
+            echo -e "${GREEN} $((i + 1)). ${failed_units[$i]}${PLAIN}"
+        done
+        echo " 0. 输入其他服务名"
+        read_trimmed choice "请选择编号，或直接输入服务名: "
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#failed_units[@]} )); then
+            unit="${failed_units[$((choice - 1))]}"
+        elif [[ "$choice" == "0" ]]; then
+            read_trimmed unit "请输入服务名（例如 caddy.service）: "
+        elif [[ "$choice" =~ ^[0-9]+$ ]]; then
+            echo -e "${RED}❌ 编号无效。${PLAIN}"
+            return 1
+        else
+            unit="$choice"
+        fi
+    else
+        read_trimmed unit "请输入服务名（例如 caddy.service）: "
+    fi
     [[ -n "$unit" ]] || return 0
     [[ "$unit" == *.service || "$unit" == *.timer || "$unit" == *.socket ]] || unit="${unit}.service"
     if ! health_unit_exists "$unit"; then
@@ -342,7 +364,7 @@ func_health_service_recovery_menu() {
         print_breadcrumb "诊断/健康检查 > 服务恢复"
         echo -e "${BOLD}🧰 服务重启与自动拉起${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${CYAN}failed 单元：${PLAIN}"
+        echo -e "${CYAN}失败单元：${PLAIN}"
         print_failed_systemd_units
         echo -e "------------------------------------------------"
         echo -e "${BOLD}${BLUE}常用服务${PLAIN}"
@@ -353,10 +375,10 @@ func_health_service_recovery_menu() {
         done
         echo -e "------------------------------------------------"
         echo -e "${GREEN} r. 重启一个常用服务${PLAIN}"
-        echo -e "${GREEN} f. 重启当前 failed service${PLAIN}"
-        echo -e "${GREEN} a. 为一个常用 service 启用失败自动重启${PLAIN}"
-        echo -e "${GREEN} x. 清除已恢复的 failed/degraded 状态${PLAIN}"
-        echo -e "${GREEN} l. 查看某个 unit 日志${PLAIN}"
+        echo -e "${GREEN} f. 重启失败服务${PLAIN}"
+        echo -e "${GREEN} a. 为常用服务启用失败自动重启${PLAIN}"
+        echo -e "${GREEN} x. 清除已恢复的失败状态${PLAIN}"
+        echo -e "${GREEN} l. 查看服务日志${PLAIN}"
         echo -e "${RED} 0. 返回上级菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 

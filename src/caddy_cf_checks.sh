@@ -63,6 +63,7 @@ func_caddy_cf_health_check() {
             local listen_port
             local listen_target
             local backend
+            local backend_addr
             local backend_port
             local cert_file
             local key_file
@@ -84,6 +85,7 @@ func_caddy_cf_health_check() {
             listen_port=$(caddy_conf_site_listen_port "$conf_file")
             listen_target=$(caddy_conf_site_listen_target "$conf_file")
             backend=$(caddy_conf_first_reverse_proxy_target "$conf_file")
+            backend_addr=$(caddy_reverse_proxy_target_host "$backend")
             backend_port=$(caddy_reverse_proxy_target_port "$backend")
 
             echo -e "${CYAN}  - 域名: ${domain}${PLAIN}"
@@ -127,11 +129,12 @@ func_caddy_cf_health_check() {
             fi
 
             [[ -z "$backend" ]] && backend="未知"
-            if [[ -n "$backend_port" ]] && caddy_listen_port_is_visible "$backend_port"; then
-                echo -e "    ${GREEN}后端状态: ${backend} 有服务监听${PLAIN}"
+            if [[ -z "$backend_addr" || -z "$backend_port" ]]; then
+                echo -e "    ${YELLOW}⚠️ 后端状态：无法从配置读取后端地址${PLAIN}"
+                ((warn_count++))
+            elif probe_backend_target "    后端状态" "$backend_addr" "$backend_port"; then
                 ((ok_count++))
             else
-                echo -e "    ${YELLOW}后端状态: ${backend} 未检测到监听${PLAIN}"
                 ((warn_count++))
             fi
         done < <(find /etc/caddy/conf.d -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)
@@ -159,7 +162,7 @@ func_caddy_cf_health_check() {
     elif [[ "$warn_count" -gt 0 ]]; then
         echo -e "${YELLOW}当前可继续运行，但建议处理警告项提高稳定性。${PLAIN}"
     else
-        echo -e "${GREEN}环境健康，可放心使用 Reality 回落 + Caddy 反代链路。${PLAIN}"
+        echo -e "${GREEN}检查未发现异常。${PLAIN}"
     fi
 }
 

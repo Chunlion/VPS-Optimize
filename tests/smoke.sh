@@ -265,6 +265,18 @@ assert_dist_contains 'check_vpso_file_permissions' "Health overview must expose 
 assert_dist_contains 'func_health_service_recovery_menu' "Health overview must expose service restart and recovery actions."
 assert_dist_contains '10-vps-optimize-restart.conf' "Health service recovery must support systemd auto-restart drop-ins."
 assert_dist_contains 'collect_failed_service_units' "Health service recovery must support failed service restart."
+assert_function_body_contains src/health_dashboard.sh health_show_failed_unit_logs 'mapfile -t failed_units < <(collect_failed_service_units)' "Health log viewer must list failed services for direct selection."
+assert_function_body_contains src/health_dashboard.sh func_health_service_recovery_menu 'l. 查看服务日志' "Health recovery menu must use a clear Chinese log label."
+(
+    CYAN='' GREEN='' YELLOW='' RED='' BLUE='' PLAIN=''
+    source src/input.sh
+    source src/health_dashboard.sh
+    collect_failed_service_units() { printf '%s\n' caddy.service nginx.service; }
+    health_unit_exists() { [[ "$1" == "caddy.service" ]]; }
+    journalctl() { printf 'selected-log:%s\n' "$*"; }
+    selected_log_output=$(health_show_failed_unit_logs <<<"1")
+    grep -Fq 'selected-log:-u caddy.service -n 80 --no-pager' <<<"$selected_log_output"
+)
 assert_dist_contains '7. Forwardx 转发面板' "Basic components menu must include Forwardx."
 assert_dist_contains 'https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh' "Release script must include the Forwardx local panel installer."
 assert_file_not_contains dist/vps.sh '10. 宝塔面板' "Basic components menu must not keep the old Baota option label."
@@ -300,6 +312,15 @@ assert_dist_contains '影响范围：该限制只能作用于整个公网 443 �
 assert_file_contains src/menus.sh '如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。' "Health help must mention the connlimit persistence summary."
 assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [7 Forwardx 转发面板]' "Config paths doc must document the current Forwardx menu path."
 assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [10 nftables NAT 转发]' "Config paths doc must document the current nftables NAT menu path."
+health_restart_path='主菜单 [15 服务健康总览] -> [s 服务恢复] -> [r 重启一个常用服务]'
+health_failed_restart_path='主菜单 [15 服务健康总览] -> [s 服务恢复] -> [f 重启失败服务]'
+health_unit_log_path='主菜单 [15 服务健康总览] -> [s 服务恢复] -> [l 查看服务日志]'
+assert_file_contains docs/config-paths.md "$health_restart_path" "Config paths doc must document the common service restart path."
+assert_file_contains docs/config-paths.md "$health_failed_restart_path" "Config paths doc must document the failed service restart path."
+assert_file_contains docs/config-paths.md "$health_unit_log_path" "Config paths doc must document the unit log path."
+assert_file_contains docs/recovery-runbook.md "$health_restart_path" "Recovery runbook must document the common service restart path."
+assert_file_contains docs/recovery-runbook.md "$health_failed_restart_path" "Recovery runbook must document the failed service restart path."
+assert_file_contains docs/recovery-runbook.md "$health_unit_log_path" "Recovery runbook must document the unit log path."
 assert_file_contains docs/443-single-entry-troubleshooting.md '端口并发连接限制误伤' "443 troubleshooting doc must include connlimit false-positive guidance."
 assert_file_contains docs/443-single-entry-troubleshooting.md '如果公网 `443` 存在本脚本添加的 connlimit 规则，它只能作用于整个公网 `443`，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "443 troubleshooting doc must explain public 443 connlimit scope."
 assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [19 443 单入口管理中心] -> [13 443 链路体检]' "443 troubleshooting doc must point users to the 443 health check."
@@ -1032,13 +1053,15 @@ fi
     caddy_proxy_tmp=$(mktemp /tmp/vps-caddy-proxy.XXXXXX)
     caddy_single_entry_tmp=$(mktemp /tmp/vps-caddy-single-entry.XXXXXX)
     nginx_proxy_tmp=$(mktemp /tmp/vps-nginx-proxy.XXXXXX)
-    is_valid_backend_addr "host.docker.internal"
+    is_valid_backend_addr "backend.internal"
     is_valid_backend_addr "dockge"
     ! is_valid_backend_addr "bad/backend"
-    write_caddy_reverse_proxy_conf "docker.example.com" "host.docker.internal" "8080" "n" "$caddy_proxy_tmp"
-    grep -q 'reverse_proxy host.docker.internal:8080' "$caddy_proxy_tmp"
-    [[ "$(caddy_conf_first_reverse_proxy_target "$caddy_proxy_tmp")" == "host.docker.internal:8080" ]]
+    write_caddy_reverse_proxy_conf "docker.example.com" "backend.internal" "8080" "n" "$caddy_proxy_tmp"
+    grep -q 'reverse_proxy backend.internal:8080' "$caddy_proxy_tmp"
+    [[ "$(caddy_conf_first_reverse_proxy_target "$caddy_proxy_tmp")" == "backend.internal:8080" ]]
     [[ "$(caddy_reverse_proxy_target_port "$(caddy_conf_first_reverse_proxy_target "$caddy_proxy_tmp")")" == "8080" ]]
+    [[ "$(caddy_reverse_proxy_target_host "$(caddy_conf_first_reverse_proxy_target "$caddy_proxy_tmp")")" == "backend.internal" ]]
+    [[ "$(caddy_reverse_proxy_target_host "https://[::1]:8443")" == "::1" ]]
     write_caddy_reverse_proxy_conf "view.stardustcloud.best" "127.0.0.1" "25774" "n" "$caddy_proxy_tmp"
     grep -q '^view.stardustcloud.best {$' "$caddy_proxy_tmp"
     grep -q 'reverse_proxy 127.0.0.1:25774' "$caddy_proxy_tmp"
@@ -1051,12 +1074,12 @@ fi
 https://docker.example.com:9443 {
     bind 127.0.0.1
     tls /etc/caddy/certs/docker.example.com.crt /etc/caddy/certs/docker.example.com.key
-    reverse_proxy host.docker.internal:8080
+    reverse_proxy backend.internal:8080
 }
 EOF
     [[ "$(caddy_conf_site_listen_port "$caddy_single_entry_tmp")" == "9443" ]]
     [[ "$(caddy_conf_site_listen_target "$caddy_single_entry_tmp")" == "127.0.0.1:9443" ]]
-    [[ "$(caddy_conf_first_reverse_proxy_target "$caddy_single_entry_tmp")" == "host.docker.internal:8080" ]]
+    [[ "$(caddy_conf_first_reverse_proxy_target "$caddy_single_entry_tmp")" == "backend.internal:8080" ]]
     [[ "$(nginx_proxy_conf_path "panel.example.com")" == "/etc/nginx/conf.d/vps_proxy_panel.example.com.conf" ]]
     write_nginx_reverse_proxy_conf "panel.example.com" "40000" "n" "$nginx_proxy_tmp"
     grep -q 'server_name panel.example.com;' "$nginx_proxy_tmp"
@@ -1078,6 +1101,29 @@ EOF
     rm -f "$nginx_proxy_tmp"
 )
 
+(
+    CYAN='' GREEN='' YELLOW='' RED='' BLUE='' PLAIN=''
+    source src/input.sh
+    source src/validate.sh
+    backend_addr_resolution_status() { return 0; }
+    tcp_target_reachable() { [[ "$1" == "reachable.internal" && "$2" == "8080" ]]; }
+    reachable_output=$(probe_backend_target "测试后端" "reachable.internal" "8080")
+    grep -Fq 'reachable.internal:8080 可连接' <<<"$reachable_output"
+    if probe_backend_target "测试后端" "unreachable.internal" "8080" >/dev/null; then
+        echo "Backend probe must fail when the exact target is unreachable." >&2
+        exit 1
+    fi
+)
+
+assert_function_body_contains src/sni_stack_sites.sh add_sni_stack_site 'confirm_backend_target_or_continue "网站/反代后端 ${site_domain}" "$site_addr" "$site_port"' "Adding a Web backend must probe the exact target before saving."
+assert_function_body_contains src/sni_stack_sites.sh edit_sni_stack_site_backend 'confirm_backend_target_or_continue "网站/反代后端 ${domain}" "$new_addr" "$new_port"' "Editing a Web backend must probe the exact target before saving."
+assert_file_contains src/sni_stack_install.sh 'confirm_backend_target_or_continue "网站/反代后端 ${SITE_DOMAINS[$site_idx]}" "${SITE_BACKEND_ADDRS[$site_idx]}" "${SITE_BACKEND_PORTS[$site_idx]}"' "Initial 443 setup must probe configured Web backends before saving."
+assert_function_body_contains src/caddy_maintenance.sh func_caddy_cf_health_check 'probe_backend_target "    后端状态" "$backend_addr" "$backend_port"' "Caddy health must probe the configured backend address and port."
+assert_function_body_contains src/caddy_cf_checks.sh func_caddy_cf_health_check 'probe_backend_target "    后端状态" "$backend_addr" "$backend_port"' "Compatibility Caddy health must probe the configured backend address and port."
+assert_file_contains src/sni_stack_config.sh 'check_backend "网站后端 ${SITE_DOMAINS[$i]}" "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}"' "Nginx-stream health must probe configured Web backends instead of local ports."
+assert_function_body_contains src/sni_stack_health.sh sni_stack_health_check_enhanced 'probe_backend_target "网站后端 ${domain}" "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}"' "Enhanced 443 health must probe configured Web backends."
+assert_function_body_contains src/diagnostics_network.sh tcp_probe_once 'tcp_target_reachable "$host" "$port"' "Network diagnostics must reuse the shared exact-target TCP probe."
+
 assert_file_not_contains src/caddy_maintenance.sh 'reverse_proxy[[:space:]]+127.0.0.1' "Caddy health check must read the configured backend target, not only 127.0.0.1."
 assert_file_not_contains src/caddy_cf_checks.sh 'reverse_proxy[[:space:]]+127.0.0.1' "Compatibility Caddy health check must read the configured backend target, not only 127.0.0.1."
 assert_file_not_contains src/caddy_certificates.sh 'Caddy监听: 127.0.0.1:' "Caddy manifest must summarize the configured listen target."
@@ -1090,6 +1136,8 @@ assert_dist_contains "$cert_delete_paths" "Release Caddy certificate deletion mu
 assert_file_contains src/caddy_maintenance.sh 'generate_caddy_cf_manifest 2>/dev/null || true' "Caddy certificate deletion must refresh the managed certificate manifest."
 assert_file_contains src/caddy_cert_tools.sh 'generate_caddy_cf_manifest 2>/dev/null || true' "Compatibility Caddy certificate deletion must refresh the managed certificate manifest."
 assert_dist_contains 'generate_caddy_cf_manifest 2>/dev/null || true' "Release Caddy certificate deletion must refresh the managed certificate manifest."
+assert_file_not_contains src/caddy_maintenance.sh '永久删除该域名的证书与配置，无法恢复' "Caddy cleanup copy must match the quarantine-based recovery behavior."
+assert_file_not_contains src/caddy_cert_tools.sh '永久删除该域名的证书与配置，无法恢复' "Compatibility Caddy cleanup copy must match the quarantine-based recovery behavior."
 
 (
     source src/input.sh
@@ -1108,7 +1156,7 @@ assert_dist_contains 'generate_caddy_cf_manifest 2>/dev/null || true' "Release C
     SUB_URI_PATH=/sub/
     CLASH_URI_PATH=/clash/
     SITE_DOMAINS=(site.example.com dockge.example.com)
-    SITE_BACKEND_ADDRS=(127.0.0.1 host.docker.internal)
+    SITE_BACKEND_ADDRS=(127.0.0.1 backend.internal)
     SITE_BACKEND_PORTS=(3000 5000)
     write_nginx_single_443_web_config "$nginx_sni_web_tmp"
     [[ "$(nginx_http_listen_directive "127.0.0.1" "8443")" == "    listen 127.0.0.1:8443 ssl http2;" ]]
@@ -1128,7 +1176,7 @@ assert_dist_contains 'generate_caddy_cf_manifest 2>/dev/null || true' "Release C
     grep -Fq 'ssl_certificate /etc/caddy/certs/site.example.com.crt;' "$nginx_sni_web_tmp"
     grep -Fq 'proxy_pass http://127.0.0.1:3000;' "$nginx_sni_web_tmp"
     grep -Fq 'server_name dockge.example.com;' "$nginx_sni_web_tmp"
-    grep -Fq 'proxy_pass http://host.docker.internal:5000;' "$nginx_sni_web_tmp"
+    grep -Fq 'proxy_pass http://backend.internal:5000;' "$nginx_sni_web_tmp"
     [[ "$(grep -c '^server {' "$nginx_sni_web_tmp")" == "3" ]]
     rm -f "$nginx_sni_web_tmp"
 )
@@ -1492,6 +1540,9 @@ assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" '可以先保留当
 assert_file_not_contains "docs/443-single-entry.md" '默认 Nginx Stream 架构是：' "443 tutorial opening must describe the current entry-mode model, not the old Nginx-only default diagram."
 assert_file_not_contains "docs/443-single-entry.md" '公网 443 -> Nginx stream 按 SNI 分流' "443 tutorial opening must not show Nginx stream as the fixed public 443 path."
 assert_file_contains "docs/443-single-entry.md" '公网 443 -> 当前 ENTRY_MODE 对应的单个入口服务' "443 tutorial opening must show the current single-listener entry-mode chain."
+assert_file_contains "docs/443-single-entry.md" '保存前脚本会检查后端是否可连接' "443 tutorial must document the Web backend connectivity check."
+assert_file_contains "docs/443-single-entry.md" '后端地址：127.0.0.1' "443 tutorial must use a loopback-published Docker backend example."
+assert_file_not_contains "docs/443-single-entry.md" 'host.docker.internal' "443 tutorial must not present the container-to-host special name as a host-to-container default."
 assert_file_not_contains "docs/443-single-entry.md" 'Caddy 监听：127.0.0.1:8443' "443 tutorial examples must not pin the local Web reverse proxy listener to Caddy."
 assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" 'panel.example.com  -> Caddy 127.0.0.1:8443' "3x-ui REALITY tutorial must not pin panel Web backend to Caddy 127.0.0.1:8443."
 assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" 'panel.example.com/sub/ -> Caddy ->' "3x-ui REALITY tutorial must not pin subscription Web backend to Caddy."
@@ -1499,6 +1550,9 @@ assert_file_contains "tutorials/01-3x-ui-reality-443.md" 'panel.example.com  -> 
 assert_file_contains "tutorials/01-3x-ui-reality-443.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本只在兼容读取旧配置时按 `nginx-stream` 处理' "3x-ui REALITY tutorial must document ENTRY_MODE fallback compatibility."
 assert_file_contains "docs/config-paths.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本按 `nginx-stream` 兼容读取' "Config paths doc must document ENTRY_MODE fallback compatibility."
 assert_file_contains "docs/443-single-entry-troubleshooting.md" '公网 `443` 只应由当前 `ENTRY_MODE` 对应的单个入口服务监听' "Troubleshooting doc must describe the current entry-mode listener model."
+assert_file_contains "docs/443-single-entry-troubleshooting.md" 'curl -I http://10.0.0.20:3000/' "443 troubleshooting doc must show checking an actual inner-network backend address."
+assert_file_contains "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '| 后端地址 | `127.0.0.1` |' "Subscription tutorial must use the loopback-published Docker backend model."
+assert_file_not_contains "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" 'host.docker.internal' "Subscription tutorial must not present the container-to-host special name as a host-to-container default."
 assert_file_contains "docs/dog.md" '不是商家账单级统计' "dog.sh docs must not imply bill-grade traffic accounting accuracy."
 assert_file_contains "docs/dog.md" '不建议用它和 VPS 商家面板做精确对账' "dog.sh docs must steer users away from bill-grade reconciliation."
 assert_file_contains "docs/dog.md" '商家后台仍应作为账单参考' "dog.sh docs must keep provider billing as the final reference."

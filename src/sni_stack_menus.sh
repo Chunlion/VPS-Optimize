@@ -12,7 +12,7 @@ manage_sni_stack_sites() {
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 查看当前网站/反代域名${PLAIN}"
         echo -e "${GREEN}  2. 新增网站/反代域名${PLAIN}"
-        echo -e "${GREEN}  3. 修改网站/反代后端端口${PLAIN}"
+        echo -e "${GREEN}  3. 修改网站/反代后端${PLAIN}"
         echo -e "${GREEN}  4. 删除网站/反代域名${PLAIN}"
         echo -e "${GREEN}  5. 管理域名 IP 白名单${PLAIN}       ${YELLOW}(只限制被选择的域名)${PLAIN}"
         echo -e "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}"

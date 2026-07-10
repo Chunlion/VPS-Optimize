@@ -91,7 +91,7 @@ show_health_help() {
     echo "健康总览会检查关键服务、监听端口和证书摘要。"
     echo "如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。"
     echo "健康总览会显示日志容量摘要；输入 p 可做配置、状态和日志文件权限体检，输入 P 可确认后修复。"
-    echo "输入 s 可进入服务恢复，支持常用服务重启、failed service 重启、reset-failed 和失败自动重启 drop-in。"
+    echo "输入 s 可进入服务恢复，支持重启常用/失败服务、清除失败状态和设置失败自动重启。"
     echo "系统硬件探针会附带 443、Caddy、3x-ui、订阅工具和 Docker 场景概览。"
     echo "生成反馈诊断信息用于提交 GitHub Issue，会尽量避免输出 Token、私钥和敏感密钥。"
 }

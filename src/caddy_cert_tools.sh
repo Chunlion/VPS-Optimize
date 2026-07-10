@@ -101,12 +101,12 @@ func_caddy_clear_config() {
 func_caddy_delete_cert() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}☢️ 核弹级：彻底清理域名证书与配置${PLAIN}"
+    echo -e "${BOLD}清理域名证书与配置${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}功能介绍：该脚本将彻底清理指定域名的证书与配置，确保服务器环境干净。${PLAIN}"
+    echo -e "${YELLOW}将隔离指定域名的证书和配置，并清理 acme.sh 残留。${PLAIN}"
     echo -e "------------------------------------------------"
     
-    read_trimmed domain "👉 请输入要强杀清理的精准域名 (如 panel.site.com): "
+    read_trimmed domain "👉 请输入要清理的域名（例如 panel.site.com）: "
     domain=$(normalize_domain_input "$domain")
     if [[ -z "$domain" ]]; then
         echo -e "${RED}❌ 域名不能为空！${PLAIN}"
@@ -119,10 +119,10 @@ func_caddy_delete_cert() {
         return
     fi
 
-    echo -e "\n${CYAN}▶ 正在执行核弹级清理流程...${PLAIN}"
-    echo -e "${YELLOW}此操作将永久删除该域名的证书与配置，无法恢复！${PLAIN}"
+    echo -e "\n${CYAN}▶ 正在清理域名证书与配置...${PLAIN}"
+    echo -e "${YELLOW}此操作会移走该域名的证书与配置，相关网站会暂时不可用。${PLAIN}"
     echo -e "请确认操作...${PLAIN}"
-    if confirm_danger "彻底清理 ${domain} 的证书与配置" "会停止 Caddy，删除该域名证书、acme.sh 残留和 Caddy 配置，再启动 Caddy。" "请先确认已有系统快照或 Caddy 备份；删除后的证书需要重新签发。"; then
+    if confirm_danger "清理 ${domain} 的证书与配置" "会停止 Caddy，隔离该域名证书、acme.sh 残留和 Caddy 配置，再启动 Caddy。" "请先确认已有系统快照或 Caddy 备份；清理后的证书需要重新签发。"; then
         # 1. 停止 Caddy，强制释放 80/443 端口
         systemctl stop caddy >/dev/null 2>&1
         echo -e "${GREEN}✅ [1/5] 已强制停止 Caddy 服务，释放网络端口。${PLAIN}"
@@ -182,7 +182,7 @@ func_caddy_delete_cert() {
         generate_caddy_cf_manifest 2>/dev/null || true
 
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}🎉 清理彻底完成！当前域名环境已处于出厂真空状态。${PLAIN}"
+        echo -e "${GREEN}✅ 清理完成；相关配置和证书已移入隔离目录。${PLAIN}"
     else
         echo -e "${BLUE}操作已取消。${PLAIN}"
     fi
@@ -267,7 +267,7 @@ EOF
         echo -e "${GREEN}✅ 独立跳过验证配置已成功建立并生效！${PLAIN}"
         [[ -n "$ip_whitelist_ranges" ]] && echo -e "${GREEN}✅ 已为 ${domain} 启用 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
     else
-        echo -e "${RED}❌ 致命错误：追加的配置导致语法错误！正在回滚...${PLAIN}"
+        echo -e "${RED}❌ 新配置语法错误，正在回滚...${PLAIN}"
         quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
         [[ -n "$backup_file" && -f "$backup_file" ]] && mv "$backup_file" "$conf_file"
     fi

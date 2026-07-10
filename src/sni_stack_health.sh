@@ -200,6 +200,18 @@ sni_stack_health_check_enhanced() {
     fi
 
     echo -e "------------------------------------------------"
+    echo -e "${BOLD}网站后端连通性${PLAIN}"
+    if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
+        echo "未配置自定义网站/反代后端。"
+    else
+        for i in "${!SITE_DOMAINS[@]}"; do
+            domain="${SITE_DOMAINS[$i]}"
+            [[ -n "$domain" ]] || continue
+            probe_backend_target "网站后端 ${domain}" "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}" || true
+        done
+    fi
+
+    echo -e "------------------------------------------------"
     echo -e "${BOLD}Xray 入站分流规则${PLAIN}"
     if entry_mode_supports_xray_sni_routes "$mode"; then
         echo -e "当前入口模式是否支持 Xray 入站分流规则：${GREEN}支持${PLAIN}"

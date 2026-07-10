@@ -96,12 +96,12 @@ add_sni_stack_site() {
         fi
     done
 
-    read_trimmed advanced_mode "是否进入高级模式并允许修改后端监听地址？(y/n，默认 n): "
+    read_trimmed advanced_mode "后端是否使用自定义地址？(y/n，默认 n): "
     if is_yes "$advanced_mode"; then
-        site_addr=$(ask_with_default "后端监听地址" "127.0.0.1")
+        site_addr=$(ask_with_default "后端地址" "127.0.0.1")
     else
         site_addr="127.0.0.1"
-        echo -e "${GREEN}普通模式：后端地址使用 127.0.0.1。${PLAIN}"
+        echo -e "${GREEN}后端地址使用 127.0.0.1。${PLAIN}"
     fi
     site_addr=$(normalize_backend_addr_input "$site_addr")
     site_port=$(ask_with_default "后端端口" "$((3000 + ${#SITE_DOMAINS[@]}))")
@@ -109,6 +109,7 @@ add_sni_stack_site() {
     is_valid_backend_addr "$site_addr" || { echo -e "${RED}❌ 后端地址无效：${site_addr}${PLAIN}"; return 1; }
     is_valid_port "$site_port" || { echo -e "${RED}❌ 后端端口无效：${site_port}${PLAIN}"; return 1; }
     warn_if_public_bind "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
+    confirm_backend_target_or_continue "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
 
     if web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "$web_engine"; then
         read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
@@ -143,7 +144,7 @@ add_sni_stack_site() {
     issue_and_install_cert_for_domain "$site_domain" "$CF_Token" || return 1
     apply_sni_stack_runtime_config || return 1
     echo -e "${GREEN}✅ 已添加网站入口：https://${site_domain}/${PLAIN}"
-    echo -e "${YELLOW}提醒：后端服务需要监听 ${site_addr}:${site_port}，浏览器只访问 https://${site_domain}/。${PLAIN}"
+    echo -e "${YELLOW}提醒：当前 VPS 必须能访问 ${site_addr}:${site_port}，浏览器只访问 https://${site_domain}/。${PLAIN}"
     echo -e "${CYAN}当前 Web 反代后端：${web_label} -> ${site_addr}:${site_port}${PLAIN}"
 }
 
@@ -177,20 +178,21 @@ edit_sni_stack_site_backend() {
 
     idx=$((choice - 1))
     domain="${SITE_DOMAINS[$idx]}"
-    new_addr=$(ask_with_default "后端监听地址" "${SITE_BACKEND_ADDRS[$idx]}")
+    new_addr=$(ask_with_default "后端地址" "${SITE_BACKEND_ADDRS[$idx]}")
     new_addr=$(normalize_backend_addr_input "$new_addr")
     new_port=$(ask_with_default "后端端口" "${SITE_BACKEND_PORTS[$idx]}")
 
     is_valid_backend_addr "$new_addr" || { echo -e "${RED}❌ 后端地址无效：${new_addr}${PLAIN}"; return 1; }
     is_valid_port "$new_port" || { echo -e "${RED}❌ 后端端口无效：${new_port}${PLAIN}"; return 1; }
     warn_if_public_bind "网站/反代后端 ${domain}" "$new_addr" "$new_port" || return 1
+    confirm_backend_target_or_continue "网站/反代后端 ${domain}" "$new_addr" "$new_port" || return 1
 
     echo -e ""
     echo -e "${CYAN}即将修改：${domain} -> ${new_addr}:${new_port}${PLAIN}"
     confirm_risk_action "修改 443 网站/反代后端" \
         "Web 反代引擎后端和 443 入口分流配置" \
         "使用 443 单入口备份恢复修改前配置" \
-        "确认新后端地址和端口已经在本机监听。" || return 1
+        "确认当前 VPS 能访问新的后端地址和端口。" || return 1
 
     SITE_BACKEND_ADDRS[$idx]="$new_addr"
     SITE_BACKEND_PORTS[$idx]="$new_port"

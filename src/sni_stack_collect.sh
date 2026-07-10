@@ -69,7 +69,7 @@ collect_sni_stack_config() {
                 continue
             fi
             if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
-                SITE_BACKEND_ADDRS[$i]=$(ask_with_default "网站 ${SITE_DOMAINS[$i]} 的后端监听地址" "127.0.0.1")
+                SITE_BACKEND_ADDRS[$i]=$(ask_with_default "网站 ${SITE_DOMAINS[$i]} 的后端地址" "127.0.0.1")
             else
                 SITE_BACKEND_ADDRS[$i]="127.0.0.1"
             fi

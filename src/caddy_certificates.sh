@@ -240,6 +240,23 @@ caddy_reverse_proxy_target_port() {
     echo "$port"
 }
 
+caddy_reverse_proxy_target_host() {
+    local target="$1"
+
+    target="${target#http://}"
+    target="${target#https://}"
+    target="${target%%/*}"
+    if [[ "$target" =~ ^\[([^]]+)\]:[0-9]+$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    if [[ "$target" =~ ^(.+):[0-9]+$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    return 1
+}
+
 caddy_listen_addr_port_is_visible() {
     local addr="$1"
     local port="$2"

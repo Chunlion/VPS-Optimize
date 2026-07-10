@@ -110,7 +110,7 @@ collect_sni_stack_config() {
                 continue
             fi
             if is_yes "$advanced_mode"; then
-                SITE_BACKEND_ADDRS[$i]=$(ask_with_default "网站 ${SITE_DOMAINS[$i]} 的后端监听地址" "127.0.0.1")
+                SITE_BACKEND_ADDRS[$i]=$(ask_with_default "网站 ${SITE_DOMAINS[$i]} 的后端地址" "127.0.0.1")
             else
                 SITE_BACKEND_ADDRS[$i]="127.0.0.1"
             fi
@@ -195,6 +195,10 @@ collect_sni_stack_config() {
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
     warn_if_public_bind "3x-ui 面板" "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT" || return 1
     warn_if_public_bind "3x-ui 订阅服务" "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT" || return 1
+    for site_idx in "${!SITE_DOMAINS[@]}"; do
+        [[ -n "${SITE_DOMAINS[$site_idx]}" ]] || continue
+        confirm_backend_target_or_continue "网站/反代后端 ${SITE_DOMAINS[$site_idx]}" "${SITE_BACKEND_ADDRS[$site_idx]}" "${SITE_BACKEND_PORTS[$site_idx]}" || return 1
+    done
 
     if [[ -z "$CF_TOKEN" || ${#CF_TOKEN} -lt 20 ]]; then echo -e "${RED}❌ Cloudflare Token 长度异常。${PLAIN}"; return 1; fi
     echo -e "${CYAN}▶ 正在在线校验 Cloudflare Token...${PLAIN}"
@@ -1051,7 +1055,7 @@ print_sni_stack_result() {
     echo -e "  HTTP 404：先检查访问路径是否等于 3x-ui 的 webBasePath，再检查 Web 反代引擎是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
     echo -e "  502 Bad Gateway：通常是 3x-ui 没启动、端口不对，或 3x-ui 后端仍是 HTTPS"
     echo -e ""
-    echo -e "${BOLD}五、监听状态应该长这样${PLAIN}"
+    echo -e "${BOLD}五、入口与后端配置${PLAIN}"
     echo -e "  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${entry_listener}"
     echo -e "  ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} -> ${web_label}"
     echo -e "  ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT} -> xray"

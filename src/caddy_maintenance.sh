@@ -112,6 +112,7 @@ func_caddy_cf_health_check() {
             local listen_port
             local listen_target
             local backend
+            local backend_addr
             local backend_port
             local cert_file
             local key_file
@@ -133,6 +134,7 @@ func_caddy_cf_health_check() {
             listen_port=$(caddy_conf_site_listen_port "$conf_file")
             listen_target=$(caddy_conf_site_listen_target "$conf_file")
             backend=$(caddy_conf_first_reverse_proxy_target "$conf_file")
+            backend_addr=$(caddy_reverse_proxy_target_host "$backend")
             backend_port=$(caddy_reverse_proxy_target_port "$backend")
 
             echo -e "${CYAN}  - 域名: ${domain}${PLAIN}"
@@ -176,11 +178,12 @@ func_caddy_cf_health_check() {
             fi
 
             [[ -z "$backend" ]] && backend="未知"
-            if [[ -n "$backend_port" ]] && caddy_listen_port_is_visible "$backend_port"; then
-                echo -e "    ${GREEN}后端状态: ${backend} 有服务监听${PLAIN}"
+            if [[ -z "$backend_addr" || -z "$backend_port" ]]; then
+                echo -e "    ${YELLOW}⚠️ 后端状态：无法从配置读取后端地址${PLAIN}"
+                ((warn_count++))
+            elif probe_backend_target "    后端状态" "$backend_addr" "$backend_port"; then
                 ((ok_count++))
             else
-                echo -e "    ${YELLOW}后端状态: ${backend} 未检测到监听${PLAIN}"
                 ((warn_count++))
             fi
         done < <(find /etc/caddy/conf.d -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)
@@ -208,7 +211,7 @@ func_caddy_cf_health_check() {
     elif [[ "$warn_count" -gt 0 ]]; then
         echo -e "${YELLOW}当前可继续运行，但建议处理警告项提高稳定性。${PLAIN}"
     else
-        echo -e "${GREEN}环境健康，可放心使用 Reality 回落 + Caddy 反代链路。${PLAIN}"
+        echo -e "${GREEN}检查未发现异常。${PLAIN}"
     fi
 }
 
@@ -922,7 +925,7 @@ func_caddy_manage_ip_whitelist() {
     read -n 1 -s -r -p "按任意键继续..."
 }
 # ---------------------------------------------------------
-# 优化重构：核弹级域名证书清理与解除端口占用 (模块化安全版)
+# 清理域名证书、配置与端口占用
 # ---------------------------------------------------------
 sync_sni_stack_state_after_caddy_domain_delete() {
     local domain="$1"
@@ -962,13 +965,13 @@ sync_sni_stack_state_after_caddy_domain_delete() {
 func_caddy_delete_cert() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}☢️ 核弹级：彻底清理域名证书与配置${PLAIN}"
+    echo -e "${BOLD}清理域名证书与配置${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}功能介绍：该脚本将彻底清理指定域名的证书与配置，确保服务器环境干净。${PLAIN}"
+    echo -e "${YELLOW}将隔离指定域名的证书和配置，并清理 acme.sh 残留。${PLAIN}"
     echo -e "------------------------------------------------"
     
     local domain domain_input
-    read_trimmed domain_input "👉 请输入要强杀清理的精准域名 (如 panel.site.com): "
+    read_trimmed domain_input "👉 请输入要清理的域名（例如 panel.site.com）: "
     domain=$(normalize_domain_input "$domain_input")
     if [[ -z "$domain" ]]; then
         echo -e "${RED}❌ 域名不能为空！${PLAIN}"
@@ -982,10 +985,10 @@ func_caddy_delete_cert() {
         return
     fi
 
-    echo -e "\n${CYAN}▶ 正在执行核弹级清理流程...${PLAIN}"
-    echo -e "${YELLOW}此操作将永久删除该域名的证书与配置，无法恢复！${PLAIN}"
+    echo -e "\n${CYAN}▶ 正在清理域名证书与配置...${PLAIN}"
+    echo -e "${YELLOW}此操作会移走该域名的证书与配置，相关网站会暂时不可用。${PLAIN}"
     echo -e "请确认操作...${PLAIN}"
-    if confirm_danger "彻底清理 ${domain} 的证书与配置" "会停止 Caddy，隔离该域名的 Caddy/Nginx 配置、共享证书文件和 acme.sh 残留，再启动/重载相关服务。" "请先确认已有系统快照或反代配置备份；删除后的证书需要重新签发。"; then
+    if confirm_danger "清理 ${domain} 的证书与配置" "会停止 Caddy，隔离该域名的 Caddy/Nginx 配置、共享证书文件和 acme.sh 残留，再启动/重载相关服务。" "请先确认已有系统快照或反代配置备份；清理后的证书需要重新签发。"; then
         # 1. 停止 Caddy，强制释放 80/443 端口
         systemctl stop caddy >/dev/null 2>&1
         echo -e "${GREEN}✅ [1/4] 已强制停止 Caddy 服务，释放网络端口。${PLAIN}"
@@ -1056,7 +1059,7 @@ func_caddy_delete_cert() {
         generate_caddy_cf_manifest 2>/dev/null || true
 
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}🎉 清理彻底完成！当前域名环境已处于出厂真空状态。${PLAIN}"
+        echo -e "${GREEN}✅ 清理完成；相关配置和证书已移入隔离目录。${PLAIN}"
     else
         echo -e "${BLUE}操作已取消。${PLAIN}"
     fi
@@ -1140,7 +1143,7 @@ func_caddy_add_insecure() {
         echo -e "${GREEN}✅ 独立跳过验证配置已成功建立并生效！${PLAIN}"
         [[ -n "$ip_whitelist_ranges" ]] && echo -e "${GREEN}✅ 已为 ${domain} 启用 IP 白名单：${ip_whitelist_ranges}${PLAIN}"
     else
-        echo -e "${RED}❌ 致命错误：追加的配置导致语法错误！正在回滚...${PLAIN}"
+        echo -e "${RED}❌ 新配置语法错误，正在回滚...${PLAIN}"
         quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/caddy-conf" >/dev/null 2>&1 || true
         [[ -n "$backup_file" && -f "$backup_file" ]] && mv "$backup_file" "$conf_file"
     fi

@@ -38,13 +38,7 @@ tcp_probe_once() {
     local host="$1"
     local port="$2"
 
-    if command -v nc >/dev/null 2>&1; then
-        nc -z -w 3 "$host" "$port" >/dev/null 2>&1 && return 0
-    fi
-    if command -v timeout >/dev/null 2>&1; then
-        timeout 5 bash -c 'cat < /dev/null > /dev/tcp/$1/$2' _ "$host" "$port" 2>/dev/null && return 0
-    fi
-    return 1
+    tcp_target_reachable "$host" "$port"
 }
 
 is_loopback_probe_host() {

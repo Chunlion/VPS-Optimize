@@ -1370,6 +1370,23 @@ sni_stack_health_check() {
             ((fail++))
         fi
     }
+    check_backend() {
+        local name="$1"
+        local addr="$2"
+        local port="$3"
+        local probe_rc
+
+        if probe_backend_target "$name" "$addr" "$port"; then
+            ((ok++))
+            return 0
+        fi
+        probe_rc=$?
+        if [[ "$probe_rc" -eq 2 ]]; then
+            ((warn++))
+        else
+            ((fail++))
+        fi
+    }
 
     check_listen "Nginx 公网入口" "$NGINX_LISTEN_PORT" ""
     check_listen "$(web_proxy_engine_label) 本地 TLS" "$CADDY_LISTEN_PORT" "$CADDY_LISTEN_ADDR"
@@ -1379,7 +1396,7 @@ sni_stack_health_check() {
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
         local i
         for i in "${!SITE_DOMAINS[@]}"; do
-            check_listen "网站后端 ${SITE_DOMAINS[$i]}" "${SITE_BACKEND_PORTS[$i]}" "${SITE_BACKEND_ADDRS[$i]}"
+            check_backend "网站后端 ${SITE_DOMAINS[$i]}" "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}"
         done
     fi
     if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
