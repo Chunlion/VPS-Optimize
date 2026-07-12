@@ -392,6 +392,14 @@ is_trusted_remote_script_url() {
             echo "S-UI 官方安装脚本"
             return 0
             ;;
+        "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh")
+            echo "EasyTier 官方安装脚本"
+            return 0
+            ;;
+        "https://tailscale.com/install.sh")
+            echo "Tailscale 官方安装脚本"
+            return 0
+            ;;
         "https://github.com/233boy/sing-box/raw/main/install.sh"|\
         "https://github.com/233boy/Xray/raw/main/install.sh")
             echo "233boy 官方安装脚本"
@@ -416,6 +424,7 @@ is_trusted_remote_script_url() {
         "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh"|\
         "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh"|\
         "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh"|\
+        "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh"|\
         "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh"|\
         "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"|\
         "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh")

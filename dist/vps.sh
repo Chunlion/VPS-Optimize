@@ -404,6 +404,14 @@ is_trusted_remote_script_url() {
             echo "S-UI 官方安装脚本"
             return 0
             ;;
+        "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh")
+            echo "EasyTier 官方安装脚本"
+            return 0
+            ;;
+        "https://tailscale.com/install.sh")
+            echo "Tailscale 官方安装脚本"
+            return 0
+            ;;
         "https://github.com/233boy/sing-box/raw/main/install.sh"|\
         "https://github.com/233boy/Xray/raw/main/install.sh")
             echo "233boy 官方安装脚本"
@@ -428,6 +436,7 @@ is_trusted_remote_script_url() {
         "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh"|\
         "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh"|\
         "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh"|\
+        "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh"|\
         "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh"|\
         "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"|\
         "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh")
@@ -5330,6 +5339,7 @@ func_env_install() {
         echo -e "${GREEN}  4. WARP 解锁/网络     ${YELLOW}  5. Realm 端口转发     ${GREEN}  6. Gost 隧道${PLAIN}"
         echo -e "${GREEN}  7. Forwardx 转发面板  ${YELLOW}  8. Argox 节点         ${GREEN}  9. 极光面板${PLAIN}"
         echo -e "${GREEN} 10. nftables NAT 转发  ${YELLOW} 11. Aria2 下载         ${GREEN} 12. PVE 虚拟化工具${PLAIN}"
+        echo -e "${GREEN} 13. FLVX 哆啦转发面板  ${YELLOW} 14. EasyTier 组网       ${GREEN} 15. Tailscale 组网${PLAIN}"
         echo -e "${BLUE}  ?. 查看帮助${PLAIN}"
         echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -5353,6 +5363,13 @@ func_env_install() {
             10) run_remote_script "安装 nftables NAT 转发工具" "https://us.arloor.dev/https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh" toml ;;
             11) run_remote_script "安装 Aria2 下载工具" "https://git.io/aria2.sh" ;;
             12) run_remote_script "安装 PVE 虚拟化工具" "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh" ;;
+            13) run_remote_script "安装 FLVX 哆啦转发面板" "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh" ;;
+            14) run_remote_script "安装 EasyTier 组网" "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh" install ;;
+            15)
+                if run_remote_script "安装 Tailscale 组网" "https://tailscale.com/install.sh"; then
+                    echo -e "${GREEN}✅ 安装完成后运行 tailscale up，按提示登录并加入网络。${PLAIN}"
+                fi
+                ;;
             "?"|help) echo "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443 单入口走主菜单 [19]。"; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的输入！${PLAIN}" ;;

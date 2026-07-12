@@ -265,6 +265,18 @@ assert_dist_contains 'check_vpso_file_permissions' "Health overview must expose 
 assert_dist_contains 'func_health_service_recovery_menu' "Health overview must expose service restart and recovery actions."
 assert_dist_contains '10-vps-optimize-restart.conf' "Health service recovery must support systemd auto-restart drop-ins."
 assert_dist_contains 'collect_failed_service_units' "Health service recovery must support failed service restart."
+assert_dist_contains '13. FLVX 哆啦转发面板' "Basic components menu must include FLVX."
+assert_dist_contains '14. EasyTier 组网' "Basic components menu must include EasyTier."
+assert_dist_contains '15. Tailscale 组网' "Basic components menu must include Tailscale."
+assert_dist_contains 'https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh' "Release script must include the FLVX installer."
+assert_dist_contains 'https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh' "Release script must include the EasyTier installer."
+assert_dist_contains 'https://tailscale.com/install.sh' "Release script must include the Tailscale installer."
+assert_function_body_contains src/environment.sh func_env_install '13) run_remote_script "安装 FLVX 哆啦转发面板" "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh"' "FLVX menu entry must use the selected project installer."
+assert_function_body_contains src/environment.sh func_env_install '14) run_remote_script "安装 EasyTier 组网" "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh" install' "EasyTier menu entry must use the official installer."
+assert_function_body_contains src/environment.sh func_env_install '15)' "Tailscale menu entry must be wired."
+assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [13 FLVX 哆啦转发面板]' "Config paths doc must document the FLVX menu path."
+assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [14 EasyTier 组网]' "Config paths doc must document the EasyTier menu path."
+assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [15 Tailscale 组网]' "Config paths doc must document the Tailscale menu path."
 assert_function_body_contains src/health_dashboard.sh health_show_failed_unit_logs 'mapfile -t failed_units < <(collect_failed_service_units)' "Health log viewer must list failed services for direct selection."
 assert_function_body_contains src/health_dashboard.sh func_health_service_recovery_menu 'l. 查看服务日志' "Health recovery menu must use a clear Chinese log label."
 (
@@ -1270,6 +1282,9 @@ printf '%s\n' '#!/usr/bin/env bash' 'echo remote-run-ok' > "$remote_script"
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh")" == *"VPS-Optimize"* ]]
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh")" == *"项目内置硬编码外部脚本源"* ]]
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh")" == *"项目内置硬编码外部脚本源"* ]]
+[[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh")" == *"项目内置硬编码外部脚本源"* ]]
+[[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh")" == *"EasyTier 官方"* ]]
+[[ "$(is_trusted_remote_script_url "https://tailscale.com/install.sh")" == *"Tailscale 官方"* ]]
 [[ "$(is_trusted_remote_script_url "https://us.arloor.dev/https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh")" == *"项目内置硬编码外部脚本源"* ]]
 if is_trusted_remote_script_url "https://example.com/not-built-in.sh" >/dev/null; then
     echo "Unexpected trusted remote script URL." >&2

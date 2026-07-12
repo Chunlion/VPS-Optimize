@@ -256,9 +256,14 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 主菜单 [3 基础组件与常用服务] -> [1 Docker 引擎]
 主菜单 [3 基础组件与常用服务] -> [7 Forwardx 转发面板]
 主菜单 [3 基础组件与常用服务] -> [10 nftables NAT 转发]
+主菜单 [3 基础组件与常用服务] -> [13 FLVX 哆啦转发面板]
+主菜单 [3 基础组件与常用服务] -> [14 EasyTier 组网]
+主菜单 [3 基础组件与常用服务] -> [15 Tailscale 组网]
 主菜单 [5 面板、节点与订阅工具]
 主菜单 [11 Docker 安全管理]
 ```
+
+FLVX 使用 Docker Compose 部署，先安装 Docker。EasyTier 和 Tailscale 菜单只安装客户端；网络名、登录和节点授权由各自工具完成。
 
 ## Port Traffic Dog
 

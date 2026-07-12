@@ -46,6 +46,7 @@ cy
 | 系统初始化 | 预检、常用工具、时区、基础 BBR |
 | 安全加固 | SSH、公钥登录、Fail2ban、防火墙、端口并发限制 |
 | 面板与订阅 | 3x-ui、S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari |
+| 转发与组网 | Realm、Gost、FLVX 哆啦转发面板、EasyTier、Tailscale |
 | 443 单入口 | Web、面板、订阅和节点共用公网 `443`，按 SNI 分流 |
 | 诊断与回滚 | 服务健康、443 链路体检、配置备份、恢复和隔离归档 |
 
