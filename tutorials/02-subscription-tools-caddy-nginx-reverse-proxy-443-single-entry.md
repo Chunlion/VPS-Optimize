@@ -206,7 +206,7 @@ journalctl -u caddy -n 80 --no-pager
 journalctl -u nginx -n 80 --no-pager
 ```
 
-如果证书失败，检查 DNS、Cloudflare 代理状态和服务器时间。
+如果证书失败，检查 Cloudflare Token 权限、授权 zone、`_acme-challenge` TXT 传播、服务器时间和 acme.sh 日志。脚本使用 DNS-01，橙云状态不是签发失败的直接原因。
 
 ### 4B. 方案二：接入 443 单入口
 
@@ -375,8 +375,8 @@ docker logs --tail=80 容器名
 | 错误 | 现象 | 处理 |
 |---|---|---|
 | 后端不可连接 | 502 | 先启动服务，再按实际后端确认 `curl http://127.0.0.1:端口/` 或 `curl http://内网地址:端口/` 可用 |
-| DNS 没解析到 VPS | 证书失败或打不开 | 修正 A 记录并等待生效 |
-| Cloudflare 开橙云 | REALITY/证书/链路异常 | 先改 DNS only / 灰云跑通 |
+| DNS 没解析到 VPS | 域名打不开或访问到错误服务器 | 修正 A/AAAA 记录并等待生效 |
+| REALITY/节点域名开启 Cloudflare 橙云 | 客户端无法直连 VPS | 节点域名改为 DNS only / 灰云；Web 域名是否代理按实际需求决定 |
 | 同一个域名重复配置 | Caddy/Nginx 行为不稳定 | 先查看现有站点，再新增 |
 | 直接访问内部端口 | 安全暴露 | 外部只访问 HTTPS 域名 |
 | 订阅工具输出 `127.0.0.1` | 客户端不可用 | 设置外部访问地址 |

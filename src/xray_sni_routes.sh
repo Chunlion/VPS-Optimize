@@ -332,8 +332,8 @@ manage_sni_stack_ip_whitelist() {
         echo -e "${YELLOW}只限制你选择的 Web 域名；支持面板、订阅、网站/反代，Xray 入站、REALITY SNI 与未知 SNI 不受 Web 白名单影响。${PLAIN}"
         echo -e "${YELLOW}Nginx Stream/TCP Peek 入口会在入口层按 SNI + 源 IP 拦截，避免影响同入口其他服务。${PLAIN}"
         if [[ "$whitelist_supported" != "yes" ]]; then
-            echo -e "${RED}当前组合为 xray-fallback + Nginx 本地 Web 反代，无法可靠获取真实客户端源 IP，禁止新增或覆盖 Web 白名单。${PLAIN}"
-            echo -e "${YELLOW}你仍可清除已有白名单；如需继续使用白名单，请切到 Nginx Stream/TCP Peek，或选择 Caddy 作为 Web 反代引擎。${PLAIN}"
+            echo -e "${RED}当前为 xray-fallback，本地 Web 反代引擎无法可靠获取真实客户端源 IP，禁止新增或覆盖 Web 白名单。${PLAIN}"
+            echo -e "${YELLOW}你仍可清除已有白名单；如需继续使用白名单，请切到 Nginx Stream/TCP Peek。${PLAIN}"
         fi
         echo -e "------------------------------------------------"
 

@@ -91,8 +91,8 @@ collect_sni_stack_config() {
     read_trimmed panel_whitelist_enabled "是否为面板域名启用 IP 白名单？(y/n，默认 n): "
     if is_yes "$panel_whitelist_enabled"; then
         if ! web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-nginx-stream}" "$WEB_PROXY_ENGINE"; then
-            echo -e "${RED}❌ 当前组合不支持 Web 白名单：ENTRY_MODE=xray-fallback 且 WEB_PROXY_ENGINE=nginx。${PLAIN}"
-            echo -e "${YELLOW}请改用 Nginx Stream/TCP Peek 入口模式，或选择 Caddy 作为 Web 反代引擎。${PLAIN}"
+            echo -e "${RED}❌ xray-fallback 模式不支持 Web 白名单。${PLAIN}"
+            echo -e "${YELLOW}请改用 Nginx Stream/TCP Peek 入口模式。${PLAIN}"
             return 1
         fi
         current_client_ip=$(detect_ssh_client_ip)

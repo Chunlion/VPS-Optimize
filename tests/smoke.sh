@@ -336,7 +336,15 @@ assert_file_contains docs/recovery-runbook.md "$health_unit_log_path" "Recovery 
 assert_file_contains docs/443-single-entry-troubleshooting.md '端口并发连接限制误伤' "443 troubleshooting doc must include connlimit false-positive guidance."
 assert_file_contains docs/443-single-entry-troubleshooting.md '如果公网 `443` 存在本脚本添加的 connlimit 规则，它只能作用于整个公网 `443`，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "443 troubleshooting doc must explain public 443 connlimit scope."
 assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [19 443 单入口管理中心] -> [13 443 链路体检]' "443 troubleshooting doc must point users to the 443 health check."
-assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制]' "443 troubleshooting doc must point users to the connlimit menu."
+assert_file_contains src/firewall.sh '${GREEN}  5. 端口并发连接限制${PLAIN}' "Firewall menu must keep connlimit on option 5."
+assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]' "443 troubleshooting doc must point users to the connlimit menu."
+assert_file_contains docs/recovery-runbook.md '主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]' "Recovery runbook must point users to the connlimit menu."
+assert_file_not_contains docs/443-single-entry-troubleshooting.md '[6 端口并发连接限制]' "443 troubleshooting doc must not point connlimit users at the firewall shutdown option."
+assert_file_not_contains docs/recovery-runbook.md '[6 端口并发连接限制]' "Recovery runbook must not point connlimit users at the firewall shutdown option."
+assert_file_contains src/docker_manage.sh '${GREEN}  3. 开启 Docker 本地防穿透${PLAIN}' "Docker safety menu must keep local exposure protection on option 3."
+assert_file_contains docs/existing-server-migration.md '主菜单 [11 Docker 安全管理] -> [3 开启 Docker 本地防穿透]' "Migration docs must point users to the current Docker protection option."
+assert_file_contains docs/config-paths.md '主菜单 [11 Docker 安全管理] -> [3 开启 Docker 本地防穿透]' "Config paths doc must list the current Docker protection option."
+assert_file_contains docs/config-paths.md '主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]' "Config paths doc must list the current connlimit option."
 assert_file_contains docs/recovery-runbook.md '端口并发连接限制误封' "Recovery runbook must include connlimit lockout guidance."
 assert_file_contains docs/recovery-runbook.md '不要批量清空 INPUT 链' "Recovery runbook must warn against broad firewall cleanup for connlimit recovery."
 assert_function_defined_once dist/vps.sh func_firewall_manage
@@ -889,6 +897,7 @@ assert_file_contains src/preflight.sh 'command -v sudo >/dev/null 2>&1 || cmd_mi
     source src/common.sh
     source src/ui.sh
     source src/validate.sh
+    source src/tcp_peek_engine.sh
     source src/sni_stack_config.sh
 
     ENTRY_MODE=nginx-stream
@@ -935,6 +944,13 @@ assert_file_contains src/preflight.sh 'command -v sudo >/dev/null 2>&1 || cmd_mi
     grep -Fq 'Caddy /etc/caddy/conf.d/panel.example.com.caddy' <<<"$current_summary_caddy"
     grep -Fq 'Caddy 本地 HTTPS 反代：' <<<"$current_summary_caddy"
     ! grep -Fq 'Nginx Web /etc/nginx/conf.d/vps_sni_web_8443.conf' <<<"$current_summary_caddy"
+
+    web_proxy_engine_supports_web_whitelist nginx-stream caddy
+    web_proxy_engine_supports_web_whitelist nginx-stream nginx
+    web_proxy_engine_supports_web_whitelist tcp-peek caddy
+    web_proxy_engine_supports_web_whitelist tcp-peek nginx
+    ! web_proxy_engine_supports_web_whitelist xray-fallback caddy
+    ! web_proxy_engine_supports_web_whitelist xray-fallback nginx
 )
 
 [[ "$(nginx_stream_listen_directives "127.0.0.1" "443")" == "    listen 127.0.0.1:443;" ]]
@@ -2248,7 +2264,7 @@ grep -q 'write_nginx_single_443_web_config' dist/vps.sh
 grep -q 'apply_web_proxy_configs_for_single_443' dist/vps.sh
 grep -q 'switch_sni_stack_web_proxy_engine' dist/vps.sh
 grep -q 'vps_sni_web_${CADDY_LISTEN_PORT}.conf' dist/vps.sh
-grep -q 'xray-fallback + Nginx 本地 Web 反代' dist/vps.sh
+grep -q 'xray-fallback 模式不支持 Web 白名单' dist/vps.sh
 grep -q '2. 查看/编辑 Compose 配置' dist/vps.sh
 grep -q 'edit_applied_config_file "$compose_file" "compose"' dist/vps.sh
 assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "Config paths doc must list the global applied-config editor."
@@ -2261,7 +2277,8 @@ assert_file_not_contains "src/caddy_proxy.sh" '[19] -> [9]' "Nginx standalone wh
 assert_file_not_contains "src/caddy_maintenance.sh" '[19] -> [9]' "Caddy standalone whitelist guidance must not point users to the stale direct [19] -> [9] path."
 assert_file_not_contains "src/caddy_whitelist.sh" '[19] -> [9]' "Compatibility Caddy whitelist guidance must not point users to the stale direct [19] -> [9] path."
 assert_file_contains "docs/443-single-entry.md" '[8 切换 Web 反代引擎]' "443 doc must document switching the Web reverse proxy engine."
-assert_file_contains "docs/443-single-entry.md" 'Nginx 本地 Web 反代 | 不允许新增或覆盖 Web 白名单' "443 doc must prohibit unsupported Nginx fallback whitelist usage."
+assert_file_contains "docs/443-single-entry.md" '`xray-fallback`，无论使用 Caddy 还是 Nginx 本地 Web 反代' "443 doc must prohibit Web whitelist usage for every xray-fallback Web engine."
+assert_file_contains "docs/443-tcp-peek-engine.md" '`xray-fallback` 无论选择 Caddy 还是 Nginx 本地 Web 反代' "TCP Peek doc must describe the xray-fallback Web whitelist boundary."
 assert_file_contains "docs/443-tcp-peek-engine.md" 'Web 反代引擎可选择 Caddy 或 Nginx' "TCP Peek doc must describe the shared Caddy/Nginx Web proxy engine."
 subscription_public_hint='公网 HTTPS 访问建议：未启用 443 单入口时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时，请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/subscription_apps.sh" "$subscription_public_hint" "Subscription/Komari installers must explain both non-single-entry and 443 single-entry reverse proxy paths."

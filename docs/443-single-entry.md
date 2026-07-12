@@ -92,7 +92,7 @@ https://panel.example.com:1443/
 
 ## 3x-ui 三种入口模式配置速查
 
-三种入口模式共享同一套 Web 配置：面板域名、订阅路径、网站反代、Web 反代引擎、本地 TLS 端口、证书和 Web 白名单都一样。区别只是谁监听公网 `443`，以及 3x-ui/Xray 主入站是否需要直接占用公网 `443`。
+三种入口模式共享面板域名、订阅路径、网站反代、Web 反代引擎、本地 TLS 端口和证书配置。Nginx Stream 与 TCP Peek 还共享 Web 白名单；`xray-fallback` 不支持 Web 白名单，因为 Xray fallback 到本地 Web 反代引擎后，Caddy/Nginx 无法可靠获得真实客户端源 IP。其他区别只是谁监听公网 `443`，以及 3x-ui/Xray 主入站是否需要直接占用公网 `443`。
 
 ### Web 反代引擎选择
 
@@ -102,7 +102,7 @@ https://panel.example.com:1443/
 主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [8 切换 Web 反代引擎]
 ```
 
-切换时脚本会复用当前域名、证书、后端和 Web 白名单，重新渲染所选引擎配置，并把另一套 443 本地 Web 反代配置隔离起来，避免 Caddy/Nginx 同时处理同一批 443 Web 域名。证书路径仍保持 `/etc/caddy/certs/${domain}.crt|key` 和 `/root/cert/${domain}.crt|key`，不改变证书策略。
+切换时脚本会复用当前域名、证书和后端；在支持白名单的入口模式下也会复用 Web 白名单。脚本会重新渲染所选引擎配置，并把另一套 443 本地 Web 反代配置隔离起来，避免 Caddy/Nginx 同时处理同一批 443 Web 域名。证书路径仍保持 `/etc/caddy/certs/${domain}.crt|key` 和 `/root/cert/${domain}.crt|key`，不改变证书策略。
 
 如果之前在 `主菜单 [4 反代]` 配过独立 Caddy/Nginx HTTPS 反代，启用或重新应用 443 单入口时，脚本会隔离这些可能抢占公网 `443` 的旧配置。之后新增网站请统一走 `[19] -> [8 管理 Web 域名/反代]`。
 
@@ -308,6 +308,8 @@ REALITY 节点不同。REALITY 更关注外部目标站点是否真实可访问�
 
 443 单入口继续使用 `acme.sh + Cloudflare DNS API` 签发和安装 Web 域名证书。不使用 Caddy DNS 模块，不需要 `xcaddy`，也不让 Caddy 负责 DNS-01 证书申请。
 
+DNS-01 通过 `_acme-challenge` TXT 记录验证域名控制权。Cloudflare 橙云本身不是 `dns_cf` 签发失败的直接原因；签发失败应优先检查 Token 权限、授权 zone、TXT 传播、服务器时间和 acme.sh 日志。橙云仍会改变 Web 请求的来源 IP，也不适合需要直连 VPS 的 REALITY/节点域名，因此要把“证书签发”和“公网访问链路”分开排查。
+
 3x-ui 安装阶段出现的证书选择，只是为了完成 3x-ui 安装流程；它不是 443 单入口最终使用的证书方案。最终架构是：公网 HTTPS 由当前 Web 反代引擎统一处理，3x-ui 面板和订阅只作为本地 HTTP 后端。
 
 ## 域名 IP 白名单
@@ -321,7 +323,7 @@ REALITY 节点不同。REALITY 更关注外部目标站点是否真实可访问�
 | 未启用 443 单入口，只用 Caddy/Nginx 反代 | 新增时用 `主菜单 [4 反代] -> [1 添加 Caddy 反代]` 或 `[2 添加 Nginx HTTPS 反代]`；已有域名用 `[4] -> [5 域名 IP 白名单]`；直接编辑配置用 `[4] -> [6 查看/编辑已应用配置文件]` | Caddy 当前域名站点块使用 `remote_ip` 匹配；Nginx HTTPS 反代使用 `allow/deny` 匹配 | 只影响当前 Caddy/Nginx Web 域名 |
 | 已启用 443 Nginx Stream 单入口 | `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]` | Nginx stream 入口层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
 | 已启用 443 TCP Peek + Splice 单入口 | `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]` | vpso-mux 入口层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
-| `xray-fallback` + Nginx 本地 Web 反代 | 不允许新增或覆盖 Web 白名单 | 禁止使用；Xray fallback 到本地 Nginx 后无法可靠获得真实客户端源 IP | 如需白名单，请切到 Nginx Stream/TCP Peek，或选择 Caddy 作为 Web 反代引擎 |
+| `xray-fallback`，无论使用 Caddy 还是 Nginx 本地 Web 反代 | 不允许新增、保留或应用 Web 白名单 | 禁止使用；Xray fallback 后本地 Web 反代引擎无法可靠获得真实客户端源 IP | 如需白名单，请切到 Nginx Stream 或 TCP Peek |
 
 白名单支持单个 IP 和 CIDR，例如：
 

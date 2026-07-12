@@ -155,14 +155,14 @@ ss -lntp
 
 ### 端口并发连接限制误封
 
-`主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制]` 写入的是额外 `iptables` / `ip6tables` connlimit 限制规则，不等同于 UFW/firewalld 的端口放行规则。它会按公网端口限制每来源 IP 的 TCP 并发连接数；如果限制公网 `443` 且启用了 443 单入口，只能限制整个公网 `443`，不能精准到某个 Xray/3x-ui 入站、SNI、UUID 或用户。
+`主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]` 写入的是额外 `iptables` / `ip6tables` connlimit 限制规则，不等同于 UFW/firewalld 的端口放行规则。它会按公网端口限制每来源 IP 的 TCP 并发连接数；如果限制公网 `443` 且启用了 443 单入口，只能限制整个公网 `443`，不能精准到某个 Xray/3x-ui 入站、SNI、UUID 或用户。不要误选 `[6 关闭防火墙]`。
 
 还能进菜单时，优先走：
 
 ```text
-主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [3 查看当前连接数限制规则]
-主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [2 删除端口并发连接限制]
-主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制] -> [5 保存/检查重启持久化]
+主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制] -> [3 查看当前连接数限制规则]
+主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制] -> [2 删除端口并发连接限制]
+主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制] -> [5 保存/检查重启持久化]
 ```
 
 脚本删除规则后会自动尝试刷新持久化快照；`[5]` 用来确认保存文件是否已经同步。如果系统没有 `netfilter-persistent`、`iptables-persistent` 或 RHEL 系列已有的 `iptables-services` 持久化路径，菜单会提示当前 connlimit 规则只在本次运行期生效。
@@ -223,7 +223,7 @@ caddy validate --config /etc/caddy/Caddyfile
 
 如果之前手动改过 `/etc/caddy/conf.d`、`/etc/nginx/conf.d/vps_sni_web_*.conf` 或旧 `[4 反代]` 生成的 `/etc/nginx/conf.d/vps_proxy_*.conf`，先通过 `[8 管理 Web 域名/反代]` 或 `[10 修改 443 共享参数]` 把参数同步到脚本，再切换。切换到 Nginx 本地 Web 反代会隔离脚本管理的 Caddy 443 Web 配置；切换回 Caddy 会隔离脚本管理的 Nginx 本地 Web 配置。重新应用 443 时也会隔离旧 Nginx HTTPS 公网反代配置，避免继续抢公网 `443`。
 
-如果当前是 `ENTRY_MODE=xray-fallback` 且 `WEB_PROXY_ENGINE=nginx`，脚本会禁止新增或覆盖 Web 白名单。原因是 Xray fallback 到本地 Nginx 后，Nginx 不能可靠拿到真实客户端源 IP。如需 Web 白名单，切到 Nginx Stream/TCP Peek 入口层白名单，或选择 Caddy 作为 Web 反代引擎。
+`ENTRY_MODE=xray-fallback` 不支持 Web 白名单，无论本地 Web 反代引擎选择 Caddy 还是 Nginx。原因是 Xray fallback 后，本地 Web 反代引擎不能可靠拿到真实客户端源 IP。如需 Web 白名单，切到 Nginx Stream 或 TCP Peek，在公网入口层按 `SNI + 源 IP` 限制。
 
 ## Nginx 起不来
 
@@ -326,7 +326,7 @@ Zone.Zone.Read
 Zone.DNS.Edit
 ```
 
-相关域名建议先保持 DNS only / 灰云。
+脚本使用 Cloudflare DNS-01 签发证书。橙云不是签发失败的直接原因；这里切换灰云只用于排除公网访问链路问题。签发失败应优先检查 Token 权限、授权 zone、`_acme-challenge` TXT 传播、服务器时间和 acme.sh 日志。
 
 ### 处理入口
 

@@ -16,9 +16,9 @@
 
 ## 网站选择建议
 
-新增网站、反代域名或填写 REALITY 伪装 SNI 时，尽量选择没有 CDN 防护、能直接访问源站的 HTTPS 网站。开启 CDN、防火墙托管或强跳转规则的网站，可能会影响证书验证、SNI 分流和 REALITY 连接判断，排错时容易把 CDN 行为误判成脚本配置问题。
+新增网站、反代域名或填写 REALITY 伪装 SNI 时，要先区分用途。Web 域名可以按实际需要使用 CDN，但源站会看到 CDN 节点 IP；REALITY/节点域名需要客户端直连 VPS，不应开启 Cloudflare 代理；REALITY 伪装 SNI 应使用外部真实 HTTPS 站点。
 
-如果使用 Cloudflare 管理自己的面板、节点、订阅或网站域名，建议保持 DNS only / 灰云。
+初次排错时可以先把相关域名设为 DNS only / 灰云，以减少链路变量。这项建议用于排查访问链路，不代表橙云会直接导致 DNS-01 证书签发失败。
 
 ## 基础检查命令
 
@@ -198,7 +198,7 @@ systemctl status caddy --no-pager
 
 ```text
 主菜单 [19 443 单入口管理中心] -> [13 443 链路体检]
-主菜单 [8 防火墙规则管理] -> [6 端口并发连接限制]
+主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]
 ```
 
 ## Nginx 运行中但 443 未监听
@@ -432,9 +432,9 @@ Caddy 或 acme.sh 申请证书失败，HTTPS 无法正常打开。
 
 ### 常见原因
 
-- DNS 没解析到当前 VPS。
 - Cloudflare API Token 权限不足。
-- 域名被 Cloudflare 代理，导致验证异常。
+- Token 没有授权当前域名所在的 zone。
+- `_acme-challenge` TXT 记录尚未传播或残留记录异常。
 - 服务器时间不准。
 
 ### 检查命令
@@ -448,8 +448,8 @@ journalctl -u caddy -n 80 --no-pager
 
 ### 解决方法
 
-- 确认 DNS A 记录正确。
-- 使用 DNS only / 灰云。
+- 确认域名位于 Token 已授权的 Cloudflare zone。
+- 检查 `_acme-challenge` TXT 记录和 acme.sh 错误日志。
 - 修正 Token 权限后重新签发。
 - 开启 NTP 时间同步。
 
@@ -506,7 +506,7 @@ grep -n "CF_" /root/.config/vps-panel/cloudflare.env 2>/dev/null
 
 ### 现象
 
-REALITY 连接失败，订阅链接异常，或者证书验证结果和预期不一致。
+REALITY 连接失败、订阅链接异常、Web 白名单拿不到真实来源 IP，或者浏览器访问结果与直连 VPS 不同。
 
 ### 常见原因
 
@@ -522,7 +522,8 @@ dig +short A node.example.com @1.1.1.1
 
 ### 解决方法
 
-- 将面板、节点、订阅相关域名改为 DNS only / 灰云。
+- REALITY/节点域名改为 DNS only / 灰云，确保客户端直连 VPS。
+- Web 面板、订阅和网站域名可按实际需要使用橙云；需要真实来源 IP 白名单时，先改灰云，或按 Cloudflare 来源地址重新设计访问控制。
 - 等 DNS 生效后重新体检。
 
 ### 相关菜单入口

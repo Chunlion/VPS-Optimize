@@ -442,7 +442,7 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 | 3x-ui 面板自带 HTTPS 没关 | 重定向循环、证书错误 | 清空面板证书路径并重启 |
 | REALITY 写自己的域名做 SNI | 客户端连接失败 | 改成外部真实 HTTPS 站点 |
 | 订阅路径不带 `/` | 订阅 404 | 统一写 `/sub/`、`/clash/` |
-| Cloudflare 开橙云 | REALITY 或证书异常 | 改 DNS only / 灰云 |
+| REALITY/节点域名开启 Cloudflare 橙云 | 客户端无法直连 VPS | 节点域名改为 DNS only / 灰云；DNS-01 证书问题单独检查 Token、zone 和 TXT 传播 |
 | External URL 输出内部端口 | 客户端无法订阅 | 改成 `https://panel.example.com/sub/` |
 | Hosts / External Proxy 输出内部端口 | 客户端节点连不上公网 `443` | 3x-ui v3.4.0+ 检查 `Hosts / 主机`；旧版检查 `External Proxy` |
 | 没备份就反复重跑 | 配置越来越乱 | 先备份，再按排错手册逐项修 |

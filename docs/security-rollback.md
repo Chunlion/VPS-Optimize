@@ -4,7 +4,9 @@
 
 ## 备份范围
 
-备份会尽量覆盖 SSH、主机名、Nginx/Caddy、443 单入口、DNS、证书、Cloudflare Token、Docker、Fail2ban、sysctl 和 3x-ui 关键配置。
+菜单中的“全量配置备份”指脚本管理配置备份，会尽量覆盖 SSH、主机名、Nginx/Caddy、443 单入口、DNS、证书、Cloudflare Token、Docker daemon 配置、Fail2ban、sysctl 和 3x-ui 关键配置。
+
+它不包含 Docker volume、容器业务数据、镜像和完整防火墙运行状态，也不能替代 VPS 快照。Compose 项目还需要单独备份数据目录和 volume。
 
 备份里可能包含私钥、面板数据库和 API Token，不要公开分享。
 
@@ -16,7 +18,7 @@
 
 常用操作：
 
-- 创建全量配置备份。
+- 创建全量配置备份（脚本管理配置，不含完整业务数据）。
 - 查看现有备份列表。
 - 从备份一键回滚。
 - 查看或编辑脚本已应用配置。

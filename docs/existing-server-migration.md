@@ -267,7 +267,7 @@ ss -lntp | grep -E ':3000|:3001|:3002'
 如果后端暴露在 `0.0.0.0`，可以考虑：
 
 ```text
-主菜单 [11 Docker 安全管理] -> [1 开启 Docker 本地防穿透]
+主菜单 [11 Docker 安全管理] -> [3 开启 Docker 本地防穿透]
 ```
 
 这个操作会影响 Docker 网络行为，执行前确认容器不依赖公网直连端口。
@@ -352,5 +352,5 @@ https://sub.example.com:3000/
 | 新增网站时重跑首次配置 | 配置被重复改写，排错变复杂 | 后续新增只走 `[8 管理 Web 域名/反代]` |
 | 保留 3x-ui 自带 HTTPS | 重定向循环或 502 | 清空证书路径，让 Web 反代引擎接管 HTTPS |
 | 把后端写成公网域名 | 反代绕路，证书和 Header 混乱 | 后端使用 `127.0.0.1:端口` |
-| Cloudflare 开橙云 | REALITY、证书或 SNI 行为异常 | 先用 DNS only / 灰云跑通 |
+| REALITY/节点域名开启 Cloudflare 橙云 | 客户端无法直连 VPS，REALITY 或 SNI 链路异常 | 节点域名改为 DNS only / 灰云；DNS-01 证书问题单独检查 Token、zone 和 TXT 传播 |
 | 没有迁移旧 Caddy/Nginx 站点 | 旧网站启用 443 后打不开 | 逐个通过 `[8 管理 Web 域名/反代]` 补录，并选择需要的 Web 反代引擎 |

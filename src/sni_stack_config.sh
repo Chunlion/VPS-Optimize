@@ -138,13 +138,11 @@ web_proxy_backend() {
 
 web_proxy_engine_supports_web_whitelist() {
     local mode="${1:-${ENTRY_MODE:-$(get_entry_mode)}}"
-    local engine="${2:-${WEB_PROXY_ENGINE:-caddy}}"
     mode=$(normalize_entry_mode_name "$mode" 2>/dev/null || echo "nginx-stream")
-    engine=$(normalize_web_proxy_engine "$engine" 2>/dev/null || echo "caddy")
 
-    # With xray-fallback, the local Web proxy only sees Xray/local traffic. For the
-    # Nginx local Web engine this would make allow/deny rules misleading, so block it.
-    [[ "$mode" == "xray-fallback" && "$engine" == "nginx" ]] && return 1
+    # Xray fallback reconnects to the local Web proxy, so neither Caddy remote_ip
+    # nor Nginx allow/deny can reliably identify the original client address.
+    [[ "$mode" == "xray-fallback" ]] && return 1
     return 0
 }
 
@@ -157,8 +155,8 @@ assert_web_proxy_whitelist_supported() {
     if web_proxy_engine_supports_web_whitelist "$mode" "$engine"; then
         return 0
     fi
-    echo -e "${RED}❌ 当前组合不支持 Web 白名单：ENTRY_MODE=xray-fallback 且 WEB_PROXY_ENGINE=nginx。${PLAIN}"
-    echo -e "${YELLOW}原因：Xray fallback 到本地 Nginx 后，Nginx 无法可靠拿到真实客户端源 IP。${PLAIN}"
+    echo -e "${RED}❌ xray-fallback 模式不支持 Web 白名单。${PLAIN}"
+    echo -e "${YELLOW}原因：Xray fallback 到本地 Web 反代引擎后，Caddy/Nginx 无法可靠拿到真实客户端源 IP。${PLAIN}"
     echo -e "${YELLOW}请改用 Nginx Stream/TCP Peek 入口模式，或先清除 Web 白名单后再使用该组合。${PLAIN}"
     return 1
 }

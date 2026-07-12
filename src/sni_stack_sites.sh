@@ -114,8 +114,8 @@ add_sni_stack_site() {
     if web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "$web_engine"; then
         read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
     else
-        echo -e "${YELLOW}当前组合为 xray-fallback + Nginx 本地 Web 反代，无法可靠获取真实客户端源 IP，本次禁止为新域名启用 Web 白名单。${PLAIN}"
-        echo -e "${YELLOW}如需 Web 白名单，请改用 Nginx Stream/TCP Peek 入口模式，或选择 Caddy 作为 Web 反代引擎。${PLAIN}"
+        echo -e "${YELLOW}xray-fallback 无法让本地 Web 反代引擎可靠获取真实客户端源 IP，本次禁止为新域名启用 Web 白名单。${PLAIN}"
+        echo -e "${YELLOW}如需 Web 白名单，请改用 Nginx Stream/TCP Peek 入口模式。${PLAIN}"
         enable_ip_whitelist="n"
     fi
     if is_yes "$enable_ip_whitelist"; then
@@ -310,12 +310,12 @@ switch_sni_stack_web_proxy_engine() {
     fi
 
     if [[ ${#SNI_IP_WHITELIST_DOMAINS[@]} -gt 0 ]] && ! web_proxy_engine_supports_web_whitelist "$entry_mode" "$new_engine"; then
-        echo -e "${RED}❌ 不能切换到 ${new_label}：当前已有 Web 白名单，且 xray-fallback + Nginx 本地反代无法可靠获取真实客户端源 IP。${PLAIN}"
+        echo -e "${RED}❌ 不能切换到 ${new_label}：当前为 xray-fallback 且已有 Web 白名单，本地 Web 反代引擎无法可靠获取真实客户端源 IP。${PLAIN}"
         echo -e "${YELLOW}请先清除 Web 白名单，或改用 Nginx Stream/TCP Peek 入口模式后再切换。${PLAIN}"
         return 1
     fi
     if ! web_proxy_engine_supports_web_whitelist "$entry_mode" "$new_engine"; then
-        echo -e "${YELLOW}⚠️ 当前入口模式为 xray-fallback，切换到 Nginx 本地反代后将禁止新增 Web 白名单。${PLAIN}"
+        echo -e "${YELLOW}⚠️ 当前入口模式为 xray-fallback，切换 Web 反代引擎后仍禁止新增 Web 白名单。${PLAIN}"
     fi
 
     confirm_risk_action "切换 443 Web 反代引擎为 ${new_label}" \

@@ -8,11 +8,11 @@
 
 三种入口模式共用同一套公开配置：
 
-- Web 域名、Web 反代引擎后端映射、证书和 Web 白名单共用。
+- Web 域名、Web 反代引擎后端映射和证书共用；Web 白名单只在 Nginx Stream 与 TCP Peek 之间共用。
 - 证书仍使用现有 `acme.sh + Cloudflare DNS API` 流程，不引入 Caddy DNS 模块，不使用 `xcaddy`。
 - Web 白名单只保护 Web 域名，不用于限制 Xray 节点流量。
 - 443 单入口下的 Web 反代引擎可选择 Caddy 或 Nginx，切换入口模式时复用同一份配置。
-- 使用 Nginx Stream 或 TCP Peek 时，Web 白名单在入口层按 `SNI + 源 IP` 生效；`xray-fallback + Nginx 本地 Web 反代` 不允许新增或覆盖 Web 白名单。
+- 使用 Nginx Stream 或 TCP Peek 时，Web 白名单在入口层按 `SNI + 源 IP` 生效；`xray-fallback` 无论选择 Caddy 还是 Nginx 本地 Web 反代，都不允许新增、保留或应用 Web 白名单。
 - 只有一个服务可以监听公网 `443`：`nginx`、`xray` 或 `vpso-mux`。
 - 如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，按 `nginx-stream` 兼容处理。
 - `ENTRY_MODE` 和 `/etc/vps-optimize/443-engine.conf` 的 `engine` 统一写入 `nginx-stream`、`xray-fallback`、`tcp-peek`。旧版本写过的 `nginx_stream`、`xray_fallback`、`tcp_peek` 只作为读取兼容别名保留；单个简单赋值会自动改写为新命名，无法安全改写时状态页会继续提示。
