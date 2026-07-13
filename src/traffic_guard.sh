@@ -113,6 +113,28 @@ traffic_guard_mode_label() {
     esac
 }
 
+traffic_guard_action_label() {
+    case "$1" in
+        poweroff) echo "立即关机" ;;
+        ssh-only) echo "仅保留 SSH，封锁其余网络流量" ;;
+        log) echo "只写日志" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+traffic_guard_detect_ssh_port() {
+    local ssh_port sshd_bin
+    ssh_port=$(ss -tlnp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | sort -u | head -n1)
+    if [[ ! "$ssh_port" =~ ^[0-9]+$ ]] || (( ssh_port < 1 || ssh_port > 65535 )); then
+        sshd_bin=$(command -v sshd 2>/dev/null || true)
+        if [[ -n "$sshd_bin" ]]; then
+            ssh_port=$("$sshd_bin" -T 2>/dev/null | awk '$1 == "port" {print $2; exit}')
+        fi
+    fi
+    [[ "$ssh_port" =~ ^[0-9]+$ ]] && (( ssh_port >= 1 && ssh_port <= 65535 )) || return 1
+    printf '%s' "$ssh_port"
+}
+
 traffic_guard_normalize_cycle_day() {
     local cycle_day="${1:-1}"
     [[ "$cycle_day" =~ ^[0-9]+$ ]] || cycle_day=1
@@ -427,6 +449,83 @@ log_msg() {
     logger -t vps-traffic-guard "$msg" 2>/dev/null || true
 }
 
+SSH_ONLY_FIREWALL_TAG="VPSO-TRAFFIC-GUARD-SSH-ONLY"
+
+firewall_delete_rule_all() {
+    local bin="$1"
+    shift
+    while "$bin" -C "$@" >/dev/null 2>&1; do
+        "$bin" -D "$@" >/dev/null 2>&1 || return 1
+    done
+}
+
+clear_ssh_only_firewall() {
+    local bin
+    local rc=0
+    for bin in iptables ip6tables; do
+        command -v "$bin" >/dev/null 2>&1 || continue
+        firewall_delete_rule_all "$bin" INPUT -p tcp --dport "${SSH_PORT:-0}" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
+        firewall_delete_rule_all "$bin" OUTPUT -p tcp --sport "${SSH_PORT:-0}" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
+        firewall_delete_rule_all "$bin" INPUT -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j DROP || rc=1
+        firewall_delete_rule_all "$bin" OUTPUT -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j DROP || rc=1
+    done
+    return "$rc"
+}
+
+ensure_ssh_only_rule() {
+    local bin="$1"
+    local chain="$2"
+    shift 2
+    "$bin" -C "$chain" "$@" >/dev/null 2>&1 || "$bin" -I "$chain" 1 "$@" >/dev/null 2>&1
+}
+
+apply_ssh_only_firewall_for_bin() {
+    local bin="$1"
+    ensure_ssh_only_rule "$bin" INPUT -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j DROP || return 1
+    ensure_ssh_only_rule "$bin" OUTPUT -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j DROP || return 1
+    ensure_ssh_only_rule "$bin" INPUT -p tcp --dport "$SSH_PORT" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || return 1
+    ensure_ssh_only_rule "$bin" OUTPUT -p tcp --sport "$SSH_PORT" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || return 1
+}
+
+apply_ssh_only_firewall() {
+    [[ "${SSH_PORT:-}" =~ ^[0-9]+$ ]] && (( SSH_PORT >= 1 && SSH_PORT <= 65535 )) || {
+        log_msg "ssh-only action skipped: invalid SSH_PORT=${SSH_PORT:-empty}"
+        return 1
+    }
+    command -v iptables >/dev/null 2>&1 || {
+        log_msg "ssh-only action skipped: iptables is unavailable"
+        return 1
+    }
+    if [[ -s /proc/net/if_inet6 ]] && ! command -v ip6tables >/dev/null 2>&1; then
+        log_msg "ssh-only action skipped: IPv6 is enabled but ip6tables is unavailable"
+        return 1
+    fi
+
+    clear_ssh_only_firewall || {
+        log_msg "ssh-only action skipped: unable to clear previous managed firewall rules"
+        return 1
+    }
+    if ! apply_ssh_only_firewall_for_bin iptables || { [[ -s /proc/net/if_inet6 ]] && ! apply_ssh_only_firewall_for_bin ip6tables; }; then
+        clear_ssh_only_firewall >/dev/null 2>&1 || true
+        log_msg "ssh-only action failed: unable to install managed firewall rules"
+        return 1
+    fi
+    log_msg "ssh-only firewall enabled on TCP port ${SSH_PORT}"
+}
+
+if [[ "${1:-}" == "--restore-ssh-only-firewall" ]]; then
+    if [[ -r "$CONFIG" ]]; then
+        # shellcheck disable=SC1090
+        . "$CONFIG"
+    fi
+    if clear_ssh_only_firewall; then
+        log_msg "ssh-only firewall restored"
+        exit 0
+    fi
+    log_msg "ssh-only firewall restore failed"
+    exit 1
+fi
+
 guard_exit() {
     local rc=$?
     if [[ "$rc" -ne 0 ]]; then
@@ -624,6 +723,7 @@ LIMIT_BYTES="${LIMIT_BYTES:-0}"
 CYCLE_DAY="${CYCLE_DAY:-1}"
 WARN_PERCENT="${WARN_PERCENT:-90}"
 ACTION="${ACTION:-poweroff}"
+SSH_PORT="${SSH_PORT:-}"
 INITIAL_USED_BYTES="${INITIAL_USED_BYTES:-0}"
 
 [[ -n "$IFACE" && -r "${SYS_CLASS_NET}/${IFACE}/statistics/rx_bytes" && -r "${SYS_CLASS_NET}/${IFACE}/statistics/tx_bytes" ]] || {
@@ -660,6 +760,10 @@ if [[ "$STATE_EXISTS" -eq 1 ]]; then
 fi
 
 if [[ "${CYCLE_KEY:-}" != "$CYCLE_NOW" ]]; then
+    if [[ "$ACTION" == "ssh-only" ]] && ! clear_ssh_only_firewall; then
+        log_msg "new cycle ${CYCLE_NOW} detected but ssh-only firewall restore failed; will retry"
+        exit 0
+    fi
     offset_stats=()
     CYCLE_KEY="$CYCLE_NOW"
     BASE_RX="$CURRENT_RX"
@@ -735,6 +839,13 @@ if (( USAGE_BYTES >= LIMIT_BYTES )); then
     case "$ACTION" in
         log)
             exit 0
+            ;;
+        ssh-only)
+            if ! apply_ssh_only_firewall; then
+                TRIPPED=0
+                save_state
+                log_msg "ssh-only firewall action failed; will retry on next timer run"
+            fi
             ;;
         poweroff|*)
             sync
@@ -932,6 +1043,7 @@ write_traffic_guard_config() {
     local initial_used_gb="$8"
     local initial_used_bytes="$9"
     local interval="${10}"
+    local ssh_port="${11:-}"
 
     mkdir -p "$(dirname "$TRAFFIC_GUARD_CONFIG")" || return 1
     cat > "$TRAFFIC_GUARD_CONFIG" <<EOF
@@ -945,6 +1057,7 @@ LIMIT_BYTES='${limit_bytes}'
 CYCLE_DAY='${cycle_day}'
 WARN_PERCENT='${warn_percent}'
 ACTION='${action}'
+SSH_PORT='${ssh_port}'
 INITIAL_USED_GB='${initial_used_gb}'
 INITIAL_USED_BYTES='${initial_used_bytes}'
 CHECK_INTERVAL='${interval}'
@@ -956,6 +1069,15 @@ load_traffic_guard_config() {
     [[ -r "$TRAFFIC_GUARD_CONFIG" ]] || return 1
     # shellcheck disable=SC1090
     . "$TRAFFIC_GUARD_CONFIG"
+}
+
+traffic_guard_restore_ssh_only_firewall() {
+    local configured_action
+    load_traffic_guard_config || return 0
+    configured_action="${ACTION:-poweroff}"
+    [[ "$configured_action" == "ssh-only" ]] || return 0
+    [[ -x "$TRAFFIC_GUARD_CHECKER" ]] || return 1
+    /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" --restore-ssh-only-firewall
 }
 
 traffic_guard_usage_from_state() {
@@ -1125,11 +1247,11 @@ print_traffic_guard_diagnostic_summary() {
     [[ -r "$TRAFFIC_GUARD_LOG" ]] && has_log="yes" || has_log="no"
 
     if [[ "$has_config" == "no" && "$has_state" == "no" && "$has_log" == "no" && "$timer_active" != "active" && "$timer_enabled" == "disabled" ]]; then
-        [[ "$show_unconfigured" == "yes" ]] && echo "流量达量关机保护摘要: 未配置"
+        [[ "$show_unconfigured" == "yes" ]] && echo "流量达量保护摘要: 未配置"
         return 0
     fi
 
-    echo "流量达量关机保护摘要:"
+    echo "流量达量保护摘要:"
     echo "- timer: vps-traffic-guard.timer active=${timer_active}; enabled=${timer_enabled}"
     config_status="不可读或不存在"
     state_status="不可读或不存在"
@@ -1160,7 +1282,7 @@ print_traffic_guard_diagnostic_summary() {
         if (( limit > 0 )); then
             pct=$(awk -v u="$usage" -v l="$limit" 'BEGIN { printf "%.2f", (u/l)*100 }')
             mode_label=$(traffic_guard_mode_label "${MODE:-tx}")
-            echo "- 当前配置: ENABLED=${ENABLED:-0}; 模式=${mode_label}; 动作=${ACTION:-poweroff}; 检查间隔=${CHECK_INTERVAL:-60}s"
+            echo "- 当前配置: ENABLED=${ENABLED:-0}; 模式=${mode_label}; 动作=$(traffic_guard_action_label "${ACTION:-poweroff}"); 检查间隔=${CHECK_INTERVAL:-60}s"
             echo "- ${source_usage}: $(traffic_guard_human_bytes "$usage") / $(traffic_guard_human_bytes "$limit") (${pct}%)"
         else
             echo "- 当前配置: ENABLED=${ENABLED:-0}; 模式=$(traffic_guard_mode_label "${MODE:-tx}"); 阈值未设置或无效"
@@ -1199,12 +1321,12 @@ print_traffic_guard_diagnostic_summary() {
 show_traffic_guard_status() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "网络/内核优化 > 流量达量关机保护"
-    echo -e "${BOLD}🧯 流量达量关机保护状态${PLAIN}"
+    print_breadcrumb "网络/内核优化 > 流量达量保护"
+    echo -e "${BOLD}🧯 流量达量保护状态${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
 
     if ! load_traffic_guard_config; then
-        echo -e "${YELLOW}当前未配置流量达量关机保护。${PLAIN}"
+        echo -e "${YELLOW}当前未配置流量达量保护。${PLAIN}"
         echo -e "${BLUE}建议先选择 [1] 配置，避免 VPS 被刷流量产生超额账单。${PLAIN}"
         return 0
     fi
@@ -1234,6 +1356,10 @@ show_traffic_guard_status() {
     echo -e "计费模式 : ${CYAN}$(traffic_guard_mode_label "${MODE:-tx}")${PLAIN}"
     echo -e "本周期   : ${CYAN}${cycle_key}${PLAIN} 起，配置为每月 ${CYCLE_DAY:-1} 日重置（短月份按最后一天）"
     echo -e "阈值     : ${YELLOW}${LIMIT_GB:-未知}GB${PLAIN} ($(traffic_guard_human_bytes "$limit"))"
+    echo -e "达量动作 : ${RED}$(traffic_guard_action_label "${ACTION:-poweroff}")${PLAIN}"
+    if [[ "${ACTION:-}" == "ssh-only" ]]; then
+        echo -e "保留 SSH : ${CYAN}${SSH_PORT:-未知}/tcp${PLAIN}；下个重置周期会自动移除临时封锁规则"
+    fi
     echo -e "本周期已用 : ${GREEN}$(traffic_guard_human_bytes "$usage")${PLAIN} / ${pct}%（按基线和初始已用实时估算）"
     if [[ "$state_usage" =~ ^[0-9]+$ && "$state_usage" != "$usage" ]]; then
         echo -e "状态记录 : ${YELLOW}$(traffic_guard_human_bytes "$state_usage")${PLAIN}（上次检查写入）"
@@ -1268,7 +1394,7 @@ show_traffic_guard_status() {
 
 sync_traffic_guard_now() {
     load_traffic_guard_config || {
-        echo -e "${YELLOW}尚未配置流量达量关机保护。${PLAIN}"
+        echo -e "${YELLOW}尚未配置流量达量保护。${PLAIN}"
         pause_return
         return 1
     }
@@ -1297,15 +1423,15 @@ sync_traffic_guard_now() {
 configure_traffic_guard() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "网络/内核优化 > 配置流量达量关机保护"
-    echo -e "${BOLD}🧯 配置流量达量关机保护${PLAIN}"
+    print_breadcrumb "网络/内核优化 > 配置流量达量保护"
+    echo -e "${BOLD}🧯 配置流量达量保护${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "${YELLOW}用途：定时读取网卡流量，达到阈值后自动关机，避免超额流量产生账单。${PLAIN}"
     echo -e "${YELLOW}注意：脚本只能按本机网卡计数估算，云厂商后台统计可能有延迟或口径差异，请留安全余量。${PLAIN}"
     echo -e "------------------------------------------------"
 
     local default_iface iface limit_gb limit_bytes initial_used_gb initial_used_bytes
-    local cycle_day cycle_default_day warn_percent action_choice action mode_choice mode interval
+    local cycle_day cycle_default_day warn_percent action_choice action mode_choice mode interval ssh_port=""
     local current_stats current_rx current_tx detected_used_bytes detected_used_gb existing_used_bytes
     default_iface=$(traffic_guard_detect_iface)
     iface=$(ask_with_default "监控网卡（自动推荐活跃公网网卡）" "${default_iface:-eth0}")
@@ -1384,29 +1510,49 @@ configure_traffic_guard() {
 
     echo -e "触发动作："
     echo -e "  1. 立即关机 ${YELLOW}(防止继续产生流量费用)${PLAIN}"
-    echo -e "  2. 只写日志 ${YELLOW}(测试配置，不关机)${PLAIN}"
+    echo -e "  2. 仅保留 SSH 端口 ${YELLOW}(封锁其他网络流量，到重置日自动恢复)${PLAIN}"
+    echo -e "  3. 只写日志 ${YELLOW}(测试配置，不关机)${PLAIN}"
     read_trimmed action_choice "请选择触发动作 (默认 1): "
-    if [[ "${action_choice:-1}" == "2" ]]; then
-        action="log"
-    else
-        action="poweroff"
-    fi
+    case "${action_choice:-1}" in
+        2)
+            ssh_port=$(traffic_guard_detect_ssh_port) || {
+                echo -e "${RED}❌ 未检测到有效的 SSH 监听端口，无法安全启用仅保留 SSH 模式。${PLAIN}"
+                pause_return
+                return 1
+            }
+            action="ssh-only"
+            ;;
+        3) action="log" ;;
+        *) action="poweroff" ;;
+    esac
 
     echo -e "------------------------------------------------"
     echo -e "网卡：${CYAN}${iface}${PLAIN}"
     echo -e "阈值：${YELLOW}${limit_gb}GB${PLAIN}，本周期初始已用：${initial_used_gb}GB"
     echo -e "模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}"
     echo -e "周期：每月 ${cycle_day} 日重置（短月份按最后一天）；检查间隔：${interval}s；预警：${warn_percent}%"
-    echo -e "动作：${RED}${action}${PLAIN}"
+    echo -e "动作：${RED}$(traffic_guard_action_label "$action")${PLAIN}"
+    [[ "$action" == "ssh-only" ]] && echo -e "保留 SSH：${CYAN}${ssh_port}/tcp${PLAIN}；其余 IPv4/IPv6 网络流量会被临时封锁。"
 
     if [[ "$action" == "poweroff" ]]; then
         confirm_danger "启用流量达量自动关机" \
             "安装 vps-traffic-guard systemd timer；达到阈值会执行 systemctl poweroff。" \
             "从云厂商控制台手动开机；开机后进入本菜单调整阈值、重置基线或停用保护。" \
             "建议阈值低于套餐上限，并确认云厂商后台流量口径。" || return 1
+    elif [[ "$action" == "ssh-only" ]]; then
+        confirm_danger "启用达量后仅保留 SSH" \
+            "达到阈值后，仅保留 ${ssh_port}/tcp 的 SSH 入/出流量；其他 IPv4/IPv6 网络流量会被临时封锁。" \
+            "下个账单重置日自动解除封锁；也可在本菜单重置基线或停用保护来立即解除。" \
+            "SSH 端口必须保持可用；云厂商安全组和 SSH 服务异常仍可能导致无法登录。" || return 1
     fi
 
-    write_traffic_guard_config "$iface" "$mode" "$limit_gb" "$limit_bytes" "$cycle_day" "$warn_percent" "$action" "$initial_used_gb" "$initial_used_bytes" "$interval" || {
+    traffic_guard_restore_ssh_only_firewall || {
+        echo -e "${RED}❌ 无法解除上一周期的仅保留 SSH 封锁规则，已取消重新配置。${PLAIN}"
+        pause_return
+        return 1
+    }
+
+    write_traffic_guard_config "$iface" "$mode" "$limit_gb" "$limit_bytes" "$cycle_day" "$warn_percent" "$action" "$initial_used_gb" "$initial_used_bytes" "$interval" "$ssh_port" || {
         echo -e "${RED}❌ 写入配置失败。${PLAIN}"
         pause_return
         return 1
@@ -1428,7 +1574,7 @@ configure_traffic_guard() {
 
     /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || true
     reset_traffic_guard_failed_state
-    echo -e "${GREEN}✅ 流量达量关机保护已启用。${PLAIN}"
+    echo -e "${GREEN}✅ 流量达量保护已启用。${PLAIN}"
     echo -e "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}"
     pause_return
 }
@@ -1437,7 +1583,7 @@ reset_traffic_guard_baseline() {
     local iface mode cycle_day initial_used_gb initial_used_bytes
     local detected_used_bytes detected_used_gb
     load_traffic_guard_config || {
-        echo -e "${YELLOW}尚未配置流量达量关机保护。${PLAIN}"
+        echo -e "${YELLOW}尚未配置流量达量保护。${PLAIN}"
         pause_return
         return 1
     }
@@ -1463,6 +1609,11 @@ reset_traffic_guard_baseline() {
         "重新进入本菜单再次重置基线，或参考云厂商后台手动修正已用流量。" \
         "请只在账单周期开始、刚配置完成或确认云厂商统计后执行。" || return 1
 
+    traffic_guard_restore_ssh_only_firewall || {
+        echo -e "${RED}❌ 无法解除仅保留 SSH 封锁规则，未重置统计基线。${PLAIN}"
+        pause_return
+        return 1
+    }
     traffic_guard_write_state_baseline "$iface" "$cycle_day" "$initial_used_bytes" "$mode" || {
         echo -e "${RED}❌ 写入流量保护基线失败。${PLAIN}"
         pause_return
@@ -1476,7 +1627,7 @@ reset_traffic_guard_baseline() {
 repair_traffic_guard_timer() {
     local interval
     load_traffic_guard_config || {
-        echo -e "${YELLOW}尚未配置流量达量关机保护。${PLAIN}"
+        echo -e "${YELLOW}尚未配置流量达量保护。${PLAIN}"
         pause_return
         return 1
     }
@@ -1529,17 +1680,22 @@ disable_traffic_guard() {
         pause_return
         return 0
     fi
-    confirm_risk_action "停用流量达量关机保护" \
-        "vps-traffic-guard.timer 会停止，达到流量阈值后不再自动关机。" \
+    confirm_risk_action "停用流量达量保护" \
+        "vps-traffic-guard.timer 会停止，达到流量阈值后不再执行配置的动作。" \
         "重新进入本菜单选择 [1] 启用保护。" \
         "停用后请自行监控云厂商流量，避免超额账单。" || return 1
+    traffic_guard_restore_ssh_only_firewall || {
+        echo -e "${RED}❌ 无法解除仅保留 SSH 封锁规则，未停用保护。${PLAIN}"
+        pause_return
+        return 1
+    }
     systemctl disable --now vps-traffic-guard.timer >/dev/null 2>&1 || true
     systemctl daemon-reload >/dev/null 2>&1 || true
     reset_traffic_guard_failed_state
     if [[ -f "$TRAFFIC_GUARD_CONFIG" ]]; then
         sed -i 's/^ENABLED=.*/ENABLED=0/' "$TRAFFIC_GUARD_CONFIG" 2>/dev/null || true
     fi
-    echo -e "${GREEN}✅ 已停用流量达量关机保护，配置文件仍保留：${TRAFFIC_GUARD_CONFIG}${PLAIN}"
+    echo -e "${GREEN}✅ 已停用流量达量保护，配置文件仍保留：${TRAFFIC_GUARD_CONFIG}${PLAIN}"
     pause_return
 }
 
@@ -1547,10 +1703,10 @@ func_traffic_guard_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "网络/内核优化 > 流量达量关机保护"
-        echo -e "${BOLD}🧯 流量达量关机保护${PLAIN}"
+        print_breadcrumb "网络/内核优化 > 流量达量保护"
+        echo -e "${BOLD}🧯 流量达量保护${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}达到套餐安全阈值后自动关机，优先防止刷流量造成天价账单。${PLAIN}"
+        echo -e "${YELLOW}达到套餐安全阈值后可自动关机或仅保留 SSH，优先防止刷流量造成天价账单。${PLAIN}"
         echo -e "${YELLOW}推荐阈值低于云厂商套餐上限，并按出站 TX 或总量模式保守配置。${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 配置 / 启用保护${PLAIN}"
