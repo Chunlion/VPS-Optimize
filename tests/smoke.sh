@@ -1697,6 +1697,9 @@ grep -Fq 'OFFSET_RX_BYTES=$(( ${previous_direction_usage[0]:-0} + CURRENT_RX ))'
 grep -q '本次重新配置默认按当前网卡原始计数估算' dist/vps.sh
 grep -q 'traffic_guard_gb_to_bytes_zero_ok' dist/vps.sh
 grep -q 'traffic_guard_cycle_date_for_month' dist/vps.sh
+grep -q 'traffic_guard_select_ssh_port' dist/vps.sh
+grep -q 'traffic_guard_ssh_only_firewall_supported' dist/vps.sh
+grep -q 'apply_ssh_only_firewall' dist/vps.sh
 grep -q 'cycle_date_for_month' dist/vps.sh
 grep -q '每月套餐/账单重置日 1-31' dist/vps.sh
 grep -q 'guard_exit()' dist/vps.sh
@@ -1713,7 +1716,7 @@ grep -q 'counter reset detected on ${IFACE}, baseline reset and preserved curren
 grep -q 'traffic|quota|bill|流量|达量|账单) echo "10"' dist/vps.sh
 traffic_guard_menu_path='主菜单 [10 网络与内核优化] -> [5 流量达量关机保护]'
 assert_file_contains CHANGELOG.md "$traffic_guard_menu_path" "CHANGELOG must document the current traffic guard menu path."
-assert_file_contains src/menus.sh '10 -> 5  流量达量关机保护' "Menu help must keep traffic guard under network/kernel option 10 -> 5."
+assert_file_contains src/menus.sh '10 -> 5  流量达量保护' "Menu help must keep traffic guard under network/kernel option 10 -> 5."
 assert_file_not_contains CHANGELOG.md '[9 网络与内核优化] -> [7]' "CHANGELOG must not keep the stale traffic guard menu path."
 if grep -q '20\..*流量达量关机保护' dist/vps.sh; then
     echo "Traffic guard must stay in the network submenu, not the main menu." >&2
@@ -2011,7 +2014,7 @@ traffic_guard_accounting_regression() {
     # shellcheck disable=SC1091
     source src/traffic_guard.sh
     local offsets usage_rx usage_tx usage
-    local tmp fake_sys fake_proc fake_bin fake_calls guard config state_dir log_file iface current_cycle
+    local tmp fake_sys fake_proc fake_bin fake_calls fake_firewall_calls guard config state_dir log_file iface current_cycle detected_port
 
     mapfile -t offsets < <(traffic_guard_baseline_direction_offsets max 1000 100 1000)
     usage_rx=$(( offsets[0] + 0 ))
@@ -2041,6 +2044,22 @@ traffic_guard_accounting_regression() {
     iface="eth-smoke0"
     printf '999999999 0\n' > "$fake_proc"
     mkdir -p "$fake_bin"
+    cat > "${fake_bin}/ss" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' \
+    'LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1,fd=3))' \
+    'LISTEN 0 128 [::]:2222 [::]:* users:(("sshd",pid=1,fd=4))'
+EOF
+    chmod +x "${fake_bin}/ss"
+    detected_port=$(SSH_CONNECTION='198.51.100.10 50000 203.0.113.10 2222' PATH="${fake_bin}:$PATH" traffic_guard_detect_ssh_port)
+    if [[ "$detected_port" != "2222" ]]; then
+        echo "Traffic guard must preserve the SSH port used by the current connection; got ${detected_port:-unset}." >&2
+        exit 1
+    fi
+    if SSH_CONNECTION='' PATH="${fake_bin}:$PATH" traffic_guard_detect_ssh_port >/dev/null; then
+        echo "Traffic guard must reject ambiguous SSH listeners without a current SSH connection." >&2
+        exit 1
+    fi
     awk "/<<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" src/traffic_guard.sh > "$guard"
     chmod +x "$guard"
     current_cycle=$(traffic_guard_current_cycle_key 1)
@@ -2054,7 +2073,7 @@ traffic_guard_accounting_regression() {
     }
 
     traffic_guard_write_smoke_config() {
-        local action="${1:-log}" limit_bytes="${2:-1000000000}" initial_bytes="${3:-0}"
+        local action="${1:-log}" limit_bytes="${2:-1000000000}" initial_bytes="${3:-0}" ssh_port="${4:-}"
         cat > "$config" <<EOF
 ENABLED='1'
 IFACE='${iface}'
@@ -2064,6 +2083,7 @@ LIMIT_BYTES='${limit_bytes}'
 CYCLE_DAY='1'
 WARN_PERCENT='90'
 ACTION='${action}'
+SSH_PORT='${ssh_port}'
 INITIAL_USED_GB='0'
 INITIAL_USED_BYTES='${initial_bytes}'
 CHECK_INTERVAL='60'
@@ -2187,6 +2207,50 @@ EOF
     grep -q '^systemctl poweroff$' "$fake_calls"
     grep -q '^poweroff $' "$fake_calls"
     grep -q '^shutdown -h now$' "$fake_calls"
+
+    fake_firewall_calls="${tmp}/firewall-calls.log"
+    for cmd in iptables ip6tables; do
+        cat > "${fake_bin}/${cmd}" <<EOF
+#!/usr/bin/env bash
+printf '%s %s\n' "\${0##*/}" "\$*" >> "${fake_firewall_calls}"
+case "\${1:-}" in
+    -C) exit 1 ;;
+    -I|-D) exit 0 ;;
+    *) exit 1 ;;
+esac
+EOF
+        chmod +x "${fake_bin}/${cmd}"
+    done
+    traffic_guard_write_fake_iface "$fake_sys" "$iface" 0 2000
+    cat > "${state_dir}/state" <<EOF
+CYCLE_KEY='${current_cycle}'
+STATE_IFACE='${iface}'
+STATE_MODE='tx'
+BASE_RX='0'
+BASE_TX='0'
+OFFSET_RX_BYTES='0'
+OFFSET_TX_BYTES='0'
+OFFSET_BYTES='0'
+WARN_SENT='0'
+TRIPPED='0'
+LAST_RX='0'
+LAST_TX='0'
+LAST_USAGE='0'
+LAST_CHECKED_AT='${current_cycle}T00:00:00+00:00'
+EOF
+    traffic_guard_write_smoke_config ssh-only 1000 0 2222
+    PATH="${fake_bin}:$PATH" traffic_guard_run_smoke_checker
+    # shellcheck disable=SC1090
+    source "${state_dir}/state"
+    if [[ "${LAST_USAGE:-}" != "2000" || "${TRIPPED:-}" != "1" ]]; then
+        echo "Traffic guard ssh-only success must persist the tripped state; usage=${LAST_USAGE:-unset} tripped=${TRIPPED:-unset}." >&2
+        exit 1
+    fi
+    grep -Fq 'iptables -I INPUT 1 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j DROP' "$fake_firewall_calls"
+    grep -Fq 'iptables -I OUTPUT 1 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j DROP' "$fake_firewall_calls"
+    grep -Fq 'iptables -I INPUT 1 -p tcp --dport 2222 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT' "$fake_firewall_calls"
+    grep -Fq 'iptables -I OUTPUT 1 -p tcp --sport 2222 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT' "$fake_firewall_calls"
+    grep -q 'ssh-only firewall enabled on TCP port 2222' "$log_file"
 }
 traffic_guard_accounting_regression
 

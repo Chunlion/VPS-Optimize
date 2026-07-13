@@ -17482,17 +17482,46 @@ traffic_guard_action_label() {
     esac
 }
 
-traffic_guard_detect_ssh_port() {
-    local ssh_port sshd_bin
-    ssh_port=$(ss -tlnp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | sort -u | head -n1)
-    if [[ ! "$ssh_port" =~ ^[0-9]+$ ]] || (( ssh_port < 1 || ssh_port > 65535 )); then
-        sshd_bin=$(command -v sshd 2>/dev/null || true)
-        if [[ -n "$sshd_bin" ]]; then
-            ssh_port=$("$sshd_bin" -T 2>/dev/null | awk '$1 == "port" {print $2; exit}')
-        fi
+traffic_guard_select_ssh_port() {
+    local current_port="${1:-}" candidate
+    shift || true
+    if [[ "$current_port" =~ ^[0-9]+$ ]] && (( current_port >= 1 && current_port <= 65535 )); then
+        for candidate in "$@"; do
+            if [[ "$candidate" == "$current_port" ]]; then
+                printf '%s' "$current_port"
+                return 0
+            fi
+        done
     fi
-    [[ "$ssh_port" =~ ^[0-9]+$ ]] && (( ssh_port >= 1 && ssh_port <= 65535 )) || return 1
-    printf '%s' "$ssh_port"
+    if (( $# == 1 )) && [[ "${1:-}" =~ ^[0-9]+$ ]] && (( $1 >= 1 && $1 <= 65535 )); then
+        printf '%s' "$1"
+        return 0
+    fi
+    return 1
+}
+
+traffic_guard_detect_ssh_port() {
+    local _client_addr _client_port _server_addr current_port _extra sshd_bin
+    local -a ssh_ports=()
+    read -r _client_addr _client_port _server_addr current_port _extra <<< "${SSH_CONNECTION:-}"
+    [[ -z "${_extra:-}" ]] || current_port=""
+
+    mapfile -t ssh_ports < <(ss -tlnp 2>/dev/null | awk '/sshd/ {addr=$4; sub(/^.*:/, "", addr); if (addr ~ /^[0-9]+$/) print addr}' | sort -nu)
+    if (( ${#ssh_ports[@]} > 0 )); then
+        traffic_guard_select_ssh_port "$current_port" "${ssh_ports[@]}"
+        return $?
+    fi
+
+    sshd_bin=$(command -v sshd 2>/dev/null || true)
+    if [[ -n "$sshd_bin" ]]; then
+        mapfile -t ssh_ports < <("$sshd_bin" -T 2>/dev/null | awk '$1 == "port" && $2 ~ /^[0-9]+$/ {print $2}' | sort -nu)
+    fi
+    traffic_guard_select_ssh_port "$current_port" "${ssh_ports[@]}"
+}
+
+traffic_guard_ssh_only_firewall_supported() {
+    command -v iptables >/dev/null 2>&1 || return 1
+    [[ ! -s /proc/net/if_inet6 ]] || command -v ip6tables >/dev/null 2>&1
 }
 
 traffic_guard_normalize_cycle_day() {
@@ -17823,7 +17852,12 @@ clear_ssh_only_firewall() {
     local bin
     local rc=0
     for bin in iptables ip6tables; do
-        command -v "$bin" >/dev/null 2>&1 || continue
+        if ! command -v "$bin" >/dev/null 2>&1; then
+            if [[ "$bin" == "iptables" || -s /proc/net/if_inet6 ]]; then
+                rc=1
+            fi
+            continue
+        fi
         firewall_delete_rule_all "$bin" INPUT -p tcp --dport "${SSH_PORT:-0}" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
         firewall_delete_rule_all "$bin" OUTPUT -p tcp --sport "${SSH_PORT:-0}" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
         firewall_delete_rule_all "$bin" INPUT -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j DROP || rc=1
@@ -18875,8 +18909,13 @@ configure_traffic_guard() {
     read_trimmed action_choice "请选择触发动作 (默认 1): "
     case "${action_choice:-1}" in
         2)
+            traffic_guard_ssh_only_firewall_supported || {
+                echo -e "${RED}❌ 缺少 iptables，或启用 IPv6 时缺少 ip6tables，无法安全启用仅保留 SSH 模式。${PLAIN}"
+                pause_return
+                return 1
+            }
             ssh_port=$(traffic_guard_detect_ssh_port) || {
-                echo -e "${RED}❌ 未检测到有效的 SSH 监听端口，无法安全启用仅保留 SSH 模式。${PLAIN}"
+                echo -e "${RED}❌ 未检测到唯一可用的 SSH 监听端口，无法安全启用仅保留 SSH 模式。${PLAIN}"
                 pause_return
                 return 1
             }
