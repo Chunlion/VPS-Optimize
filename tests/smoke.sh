@@ -715,6 +715,17 @@ SMOKE_COMPOSE_RUNTIME
     rmdir "$compose_apply_tmp/project"
     rmdir "$compose_apply_tmp"
 )
+(
+    traffic_guard_reload_tmp=$(mktemp -d /tmp/vps-traffic-guard-reload-smoke.XXXXXX)
+    traffic_guard_restore_ssh_only_firewall_from_config() {
+        printf '%s\n' "$1" > "$traffic_guard_reload_tmp/restore-config"
+    }
+    confirm_risk_action() { return 1; }
+    reload_applied_config_kind traffic-guard "$traffic_guard_reload_tmp/current.conf" "$traffic_guard_reload_tmp/previous.conf" >/dev/null
+    grep -Fxq "$traffic_guard_reload_tmp/previous.conf" "$traffic_guard_reload_tmp/restore-config"
+    rm -f "$traffic_guard_reload_tmp/restore-config"
+    rmdir "$traffic_guard_reload_tmp"
+)
 config_edit_tmp_dir=$(mktemp -d /tmp/vps-config-edit-smoke.XXXXXX)
 printf '%s\n' 'node.example.com|127.0.0.1|1443' > "$config_edit_tmp_dir/routes.conf"
 validate_xray_routes_file "$config_edit_tmp_dir/routes.conf"
@@ -1699,6 +1710,7 @@ grep -q 'traffic_guard_gb_to_bytes_zero_ok' dist/vps.sh
 grep -q 'traffic_guard_cycle_date_for_month' dist/vps.sh
 grep -q 'traffic_guard_select_ssh_port' dist/vps.sh
 grep -q 'traffic_guard_ssh_only_firewall_supported' dist/vps.sh
+grep -q 'traffic_guard_restore_ssh_only_firewall_from_config' dist/vps.sh
 grep -q 'apply_ssh_only_firewall' dist/vps.sh
 grep -q 'cycle_date_for_month' dist/vps.sh
 grep -q '每月套餐/账单重置日 1-31' dist/vps.sh
@@ -2014,7 +2026,7 @@ traffic_guard_accounting_regression() {
     # shellcheck disable=SC1091
     source src/traffic_guard.sh
     local offsets usage_rx usage_tx usage
-    local tmp fake_sys fake_proc fake_bin fake_calls fake_firewall_calls guard config state_dir log_file iface current_cycle detected_port
+    local tmp fake_sys fake_proc fake_bin fake_calls fake_firewall_calls fake_firewall_rules guard config state_dir log_file iface current_cycle detected_port insert_count
 
     mapfile -t offsets < <(traffic_guard_baseline_direction_offsets max 1000 100 1000)
     usage_rx=$(( offsets[0] + 0 ))
@@ -2209,13 +2221,29 @@ EOF
     grep -q '^shutdown -h now$' "$fake_calls"
 
     fake_firewall_calls="${tmp}/firewall-calls.log"
+    fake_firewall_rules="${tmp}/firewall-rules"
     for cmd in iptables ip6tables; do
         cat > "${fake_bin}/${cmd}" <<EOF
 #!/usr/bin/env bash
 printf '%s %s\n' "\${0##*/}" "\$*" >> "${fake_firewall_calls}"
+family="\${0##*/}"
 case "\${1:-}" in
-    -C) exit 1 ;;
-    -I|-D) exit 0 ;;
+    -C)
+        shift
+        grep -Fxq -- "\${family} \$*" "${fake_firewall_rules}" 2>/dev/null
+        ;;
+    -I)
+        chain="\$2"
+        shift 3
+        rule="\${family} \${chain} \$*"
+        grep -Fxq -- "\$rule" "${fake_firewall_rules}" 2>/dev/null || printf '%s\n' "\$rule" >> "${fake_firewall_rules}"
+        ;;
+    -D)
+        shift
+        rule="\${family} \$*"
+        grep -Fvx -- "\$rule" "${fake_firewall_rules}" 2>/dev/null > "${fake_firewall_rules}.tmp" || true
+        mv -f "${fake_firewall_rules}.tmp" "${fake_firewall_rules}"
+        ;;
     *) exit 1 ;;
 esac
 EOF
@@ -2248,11 +2276,48 @@ EOF
     fi
     grep -Fq 'iptables -I INPUT 1 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j DROP' "$fake_firewall_calls"
     grep -Fq 'iptables -I OUTPUT 1 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j DROP' "$fake_firewall_calls"
+    grep -Fq 'iptables -I FORWARD 1 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j DROP' "$fake_firewall_calls"
+    grep -Fq 'iptables -I INPUT 1 -i lo -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT' "$fake_firewall_calls"
+    grep -Fq 'iptables -I OUTPUT 1 -o lo -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT' "$fake_firewall_calls"
+    grep -Fq 'iptables -I INPUT 1 -p udp --sport 67 --dport 68 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT' "$fake_firewall_calls"
+    grep -Fq 'iptables -I OUTPUT 1 -p udp --sport 68 --dport 67 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT' "$fake_firewall_calls"
     grep -Fq 'iptables -I INPUT 1 -p tcp --dport 2222 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT' "$fake_firewall_calls"
     grep -Fq 'iptables -I OUTPUT 1 -p tcp --sport 2222 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT' "$fake_firewall_calls"
+    if [[ -s /proc/net/if_inet6 ]]; then
+        grep -Fq 'ip6tables -I FORWARD 1 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j DROP' "$fake_firewall_calls"
+        grep -Fq 'ip6tables -I INPUT 1 -p udp --sport 547 --dport 546 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT' "$fake_firewall_calls"
+        grep -Fq 'ip6tables -I OUTPUT 1 -p udp --sport 546 --dport 547 -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT' "$fake_firewall_calls"
+        for icmp_type in 1 2 3 4 130 131 132 133 134 135 136 137 141 142 143; do
+            grep -Fq "ip6tables -I INPUT 1 -p ipv6-icmp --icmpv6-type ${icmp_type} -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT" "$fake_firewall_calls"
+            grep -Fq "ip6tables -I OUTPUT 1 -p ipv6-icmp --icmpv6-type ${icmp_type} -m comment --comment VPSO-TRAFFIC-GUARD-SSH-ONLY -j ACCEPT" "$fake_firewall_calls"
+        done
+    fi
     grep -q 'ssh-only firewall enabled on TCP port 2222' "$log_file"
+    if grep -q ' -D ' "$fake_firewall_calls"; then
+        echo "Traffic guard apply must not delete active ssh-only firewall rules before ensuring them." >&2
+        exit 1
+    fi
+    insert_count=$(grep -c ' -I ' "$fake_firewall_calls")
+    PATH="${fake_bin}:$PATH" traffic_guard_run_smoke_checker
+    if [[ "$(grep -c ' -I ' "$fake_firewall_calls")" != "$insert_count" ]] || grep -q ' -D ' "$fake_firewall_calls"; then
+        echo "Traffic guard repeated apply must keep managed firewall rules idempotent." >&2
+        exit 1
+    fi
+    TRAFFIC_GUARD_CHECKER="$guard" \
+    TRAFFIC_GUARD_STATE_DIR="$state_dir" \
+    TRAFFIC_GUARD_LOG="$log_file" \
+    PATH="${fake_bin}:$PATH" \
+        traffic_guard_restore_ssh_only_firewall_from_config "$config"
+    if [[ -s "$fake_firewall_rules" ]]; then
+        echo "Traffic guard restore must remove every managed ssh-only firewall rule." >&2
+        cat "$fake_firewall_rules" >&2
+        exit 1
+    fi
 }
 traffic_guard_accounting_regression
+
+assert_file_contains src/backup.sh 'traffic_guard_restore_ssh_only_firewall_from_config "$previous_file"' "Traffic Guard config editing must clear rules from the previous ssh-only config."
+assert_file_contains src/backup.sh '! traffic_guard_restore_ssh_only_firewall' "Full restore must clear active ssh-only rules before replacing Traffic Guard files."
 
 grep -q 'curl_rc=' dist/vps.sh
 if grep -q 'HTTP ${code}${PLAIN}' dist/vps.sh && grep -q '|| echo "000"' dist/vps.sh; then

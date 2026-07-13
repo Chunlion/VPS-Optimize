@@ -335,6 +335,7 @@ restart_named_service_if_available() {
 reload_applied_config_kind() {
     local kind="$1"
     local target_file="$2"
+    local previous_file="${3:-}"
     local confirm unit_name
 
     case "$kind" in
@@ -405,6 +406,12 @@ reload_applied_config_kind() {
             fi
             ;;
         traffic-guard)
+            if [[ -n "$previous_file" ]] && declare -F traffic_guard_restore_ssh_only_firewall_from_config >/dev/null 2>&1; then
+                traffic_guard_restore_ssh_only_firewall_from_config "$previous_file" || {
+                    echo -e "${RED}❌ 无法解除编辑前配置的仅保留 SSH 封锁规则，已取消应用。${PLAIN}"
+                    return 1
+                }
+            fi
             if confirm_risk_action "重启 Traffic Guard timer" \
                 "vps-traffic-guard.timer 和流量阈值检查周期" \
                 "重新编辑 ${target_file} 或从 ${target_file}.bak_* 恢复；必要时停用 vps-traffic-guard.timer" \
@@ -520,7 +527,7 @@ edit_applied_config_file() {
         return 1
     fi
 
-    if reload_applied_config_kind "$target_kind" "$target_file"; then
+    if reload_applied_config_kind "$target_kind" "$target_file" "$backup_file"; then
         echo -e "${GREEN}✅ 配置已保存并完成可执行的校验/应用步骤。${PLAIN}"
         echo -e "${CYAN}备份文件：${backup_file}${PLAIN}"
     else
@@ -739,6 +746,15 @@ func_backup_center() {
                     echo -e "${RED}❌ 备份解压失败，回滚中止。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
+                fi
+
+                if [[ -f "$restore_dir/etc/vps-optimize/traffic-guard.conf" || -f "$restore_dir/usr/local/bin/vps-traffic-guard-check" ]]; then
+                    if declare -F traffic_guard_restore_ssh_only_firewall >/dev/null 2>&1 && ! traffic_guard_restore_ssh_only_firewall; then
+                        quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                        echo -e "${RED}❌ 无法解除当前仅保留 SSH 封锁规则，回滚中止。${PLAIN}"
+                        read -n 1 -s -r -p "按任意键继续..."
+                        continue
+                    fi
                 fi
 
                 restore_backup_file "$restore_dir/etc/ssh/sshd_config" /etc/ssh/sshd_config || restore_failed=1

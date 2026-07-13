@@ -1979,6 +1979,7 @@ restart_named_service_if_available() {
 reload_applied_config_kind() {
     local kind="$1"
     local target_file="$2"
+    local previous_file="${3:-}"
     local confirm unit_name
 
     case "$kind" in
@@ -2049,6 +2050,12 @@ reload_applied_config_kind() {
             fi
             ;;
         traffic-guard)
+            if [[ -n "$previous_file" ]] && declare -F traffic_guard_restore_ssh_only_firewall_from_config >/dev/null 2>&1; then
+                traffic_guard_restore_ssh_only_firewall_from_config "$previous_file" || {
+                    echo -e "${RED}❌ 无法解除编辑前配置的仅保留 SSH 封锁规则，已取消应用。${PLAIN}"
+                    return 1
+                }
+            fi
             if confirm_risk_action "重启 Traffic Guard timer" \
                 "vps-traffic-guard.timer 和流量阈值检查周期" \
                 "重新编辑 ${target_file} 或从 ${target_file}.bak_* 恢复；必要时停用 vps-traffic-guard.timer" \
@@ -2164,7 +2171,7 @@ edit_applied_config_file() {
         return 1
     fi
 
-    if reload_applied_config_kind "$target_kind" "$target_file"; then
+    if reload_applied_config_kind "$target_kind" "$target_file" "$backup_file"; then
         echo -e "${GREEN}✅ 配置已保存并完成可执行的校验/应用步骤。${PLAIN}"
         echo -e "${CYAN}备份文件：${backup_file}${PLAIN}"
     else
@@ -2383,6 +2390,15 @@ func_backup_center() {
                     echo -e "${RED}❌ 备份解压失败，回滚中止。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
+                fi
+
+                if [[ -f "$restore_dir/etc/vps-optimize/traffic-guard.conf" || -f "$restore_dir/usr/local/bin/vps-traffic-guard-check" ]]; then
+                    if declare -F traffic_guard_restore_ssh_only_firewall >/dev/null 2>&1 && ! traffic_guard_restore_ssh_only_firewall; then
+                        quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                        echo -e "${RED}❌ 无法解除当前仅保留 SSH 封锁规则，回滚中止。${PLAIN}"
+                        read -n 1 -s -r -p "按任意键继续..."
+                        continue
+                    fi
                 fi
 
                 restore_backup_file "$restore_dir/etc/ssh/sshd_config" /etc/ssh/sshd_config || restore_failed=1
@@ -17476,7 +17492,7 @@ traffic_guard_mode_label() {
 traffic_guard_action_label() {
     case "$1" in
         poweroff) echo "立即关机" ;;
-        ssh-only) echo "仅保留 SSH，封锁其余网络流量" ;;
+        ssh-only) echo "仅保留 SSH，封锁其余公网业务流量" ;;
         log) echo "只写日志" ;;
         *) echo "$1" ;;
     esac
@@ -17839,6 +17855,7 @@ log_msg() {
 }
 
 SSH_ONLY_FIREWALL_TAG="VPSO-TRAFFIC-GUARD-SSH-ONLY"
+SSH_ONLY_ICMPV6_TYPES="1 2 3 4 130 131 132 133 134 135 136 137 141 142 143"
 
 firewall_delete_rule_all() {
     local bin="$1"
@@ -17849,7 +17866,7 @@ firewall_delete_rule_all() {
 }
 
 clear_ssh_only_firewall() {
-    local bin
+    local bin chain icmp_type
     local rc=0
     for bin in iptables ip6tables; do
         if ! command -v "$bin" >/dev/null 2>&1; then
@@ -17860,8 +17877,23 @@ clear_ssh_only_firewall() {
         fi
         firewall_delete_rule_all "$bin" INPUT -p tcp --dport "${SSH_PORT:-0}" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
         firewall_delete_rule_all "$bin" OUTPUT -p tcp --sport "${SSH_PORT:-0}" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
+        firewall_delete_rule_all "$bin" INPUT -i lo -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
+        firewall_delete_rule_all "$bin" OUTPUT -o lo -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
+        if [[ "$bin" == "ip6tables" ]]; then
+            firewall_delete_rule_all "$bin" INPUT -p udp --sport 547 --dport 546 -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
+            firewall_delete_rule_all "$bin" OUTPUT -p udp --sport 546 --dport 547 -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
+            for chain in INPUT OUTPUT; do
+                for icmp_type in $SSH_ONLY_ICMPV6_TYPES; do
+                    firewall_delete_rule_all "$bin" "$chain" -p ipv6-icmp --icmpv6-type "$icmp_type" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
+                done
+            done
+        else
+            firewall_delete_rule_all "$bin" INPUT -p udp --sport 67 --dport 68 -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
+            firewall_delete_rule_all "$bin" OUTPUT -p udp --sport 68 --dport 67 -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || rc=1
+        fi
         firewall_delete_rule_all "$bin" INPUT -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j DROP || rc=1
         firewall_delete_rule_all "$bin" OUTPUT -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j DROP || rc=1
+        firewall_delete_rule_all "$bin" FORWARD -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j DROP || rc=1
     done
     return "$rc"
 }
@@ -17874,9 +17906,24 @@ ensure_ssh_only_rule() {
 }
 
 apply_ssh_only_firewall_for_bin() {
-    local bin="$1"
+    local bin="$1" chain icmp_type
     ensure_ssh_only_rule "$bin" INPUT -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j DROP || return 1
     ensure_ssh_only_rule "$bin" OUTPUT -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j DROP || return 1
+    ensure_ssh_only_rule "$bin" FORWARD -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j DROP || return 1
+    ensure_ssh_only_rule "$bin" INPUT -i lo -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || return 1
+    ensure_ssh_only_rule "$bin" OUTPUT -o lo -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || return 1
+    if [[ "$bin" == "ip6tables" ]]; then
+        ensure_ssh_only_rule "$bin" INPUT -p udp --sport 547 --dport 546 -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || return 1
+        ensure_ssh_only_rule "$bin" OUTPUT -p udp --sport 546 --dport 547 -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || return 1
+        for chain in INPUT OUTPUT; do
+            for icmp_type in $SSH_ONLY_ICMPV6_TYPES; do
+                ensure_ssh_only_rule "$bin" "$chain" -p ipv6-icmp --icmpv6-type "$icmp_type" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || return 1
+            done
+        done
+    else
+        ensure_ssh_only_rule "$bin" INPUT -p udp --sport 67 --dport 68 -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || return 1
+        ensure_ssh_only_rule "$bin" OUTPUT -p udp --sport 68 --dport 67 -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || return 1
+    fi
     ensure_ssh_only_rule "$bin" INPUT -p tcp --dport "$SSH_PORT" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || return 1
     ensure_ssh_only_rule "$bin" OUTPUT -p tcp --sport "$SSH_PORT" -m comment --comment "$SSH_ONLY_FIREWALL_TAG" -j ACCEPT || return 1
 }
@@ -17895,10 +17942,6 @@ apply_ssh_only_firewall() {
         return 1
     fi
 
-    clear_ssh_only_firewall || {
-        log_msg "ssh-only action skipped: unable to clear previous managed firewall rules"
-        return 1
-    }
     if ! apply_ssh_only_firewall_for_bin iptables || { [[ -s /proc/net/if_inet6 ]] && ! apply_ssh_only_firewall_for_bin ip6tables; }; then
         clear_ssh_only_firewall >/dev/null 2>&1 || true
         log_msg "ssh-only action failed: unable to install managed firewall rules"
@@ -18465,13 +18508,26 @@ load_traffic_guard_config() {
     . "$TRAFFIC_GUARD_CONFIG"
 }
 
-traffic_guard_restore_ssh_only_firewall() {
+traffic_guard_restore_ssh_only_firewall_from_config() {
+    local config_path="${1:-$TRAFFIC_GUARD_CONFIG}"
     local configured_action
-    load_traffic_guard_config || return 0
-    configured_action="${ACTION:-poweroff}"
+    [[ -r "$config_path" ]] || return 0
+    configured_action=$(
+        unset ACTION
+        # shellcheck disable=SC1090
+        . "$config_path" || exit 1
+        printf '%s' "${ACTION:-poweroff}"
+    ) || return 1
     [[ "$configured_action" == "ssh-only" ]] || return 0
     [[ -x "$TRAFFIC_GUARD_CHECKER" ]] || return 1
-    /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" --restore-ssh-only-firewall
+    VPSO_TRAFFIC_GUARD_CONFIG="$config_path" \
+    VPSO_TRAFFIC_GUARD_STATE_DIR="$TRAFFIC_GUARD_STATE_DIR" \
+    VPSO_TRAFFIC_GUARD_LOG="$TRAFFIC_GUARD_LOG" \
+        /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" --restore-ssh-only-firewall
+}
+
+traffic_guard_restore_ssh_only_firewall() {
+    traffic_guard_restore_ssh_only_firewall_from_config "$TRAFFIC_GUARD_CONFIG"
 }
 
 traffic_guard_usage_from_state() {
@@ -18904,7 +18960,7 @@ configure_traffic_guard() {
 
     echo -e "触发动作："
     echo -e "  1. 立即关机 ${YELLOW}(防止继续产生流量费用)${PLAIN}"
-    echo -e "  2. 仅保留 SSH 端口 ${YELLOW}(封锁其他网络流量，到重置日自动恢复)${PLAIN}"
+    echo -e "  2. 仅保留 SSH 端口 ${YELLOW}(封锁其他公网业务流量，到重置日自动恢复)${PLAIN}"
     echo -e "  3. 只写日志 ${YELLOW}(测试配置，不关机)${PLAIN}"
     read_trimmed action_choice "请选择触发动作 (默认 1): "
     case "${action_choice:-1}" in
@@ -18931,7 +18987,7 @@ configure_traffic_guard() {
     echo -e "模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}"
     echo -e "周期：每月 ${cycle_day} 日重置（短月份按最后一天）；检查间隔：${interval}s；预警：${warn_percent}%"
     echo -e "动作：${RED}$(traffic_guard_action_label "$action")${PLAIN}"
-    [[ "$action" == "ssh-only" ]] && echo -e "保留 SSH：${CYAN}${ssh_port}/tcp${PLAIN}；其余 IPv4/IPv6 网络流量会被临时封锁。"
+    [[ "$action" == "ssh-only" ]] && echo -e "保留 SSH：${CYAN}${ssh_port}/tcp${PLAIN}；其余公网业务流量会被临时封锁，必要网络控制流量仍保留。"
 
     if [[ "$action" == "poweroff" ]]; then
         confirm_danger "启用流量达量自动关机" \
@@ -18940,7 +18996,7 @@ configure_traffic_guard() {
             "建议阈值低于套餐上限，并确认云厂商后台流量口径。" || return 1
     elif [[ "$action" == "ssh-only" ]]; then
         confirm_danger "启用达量后仅保留 SSH" \
-            "达到阈值后，仅保留 ${ssh_port}/tcp 的 SSH 入/出流量；其他 IPv4/IPv6 网络流量会被临时封锁。" \
+            "达到阈值后，保留 ${ssh_port}/tcp 的 SSH 和必要网络控制流量；其他公网业务流量会被临时封锁。" \
             "下个账单重置日自动解除封锁；也可在本菜单重置基线或停用保护来立即解除。" \
             "SSH 端口必须保持可用；云厂商安全组和 SSH 服务异常仍可能导致无法登录。" || return 1
     fi
