@@ -782,7 +782,10 @@ func_show_port_current_connections() {
 
 show_firewall_menu_help() {
     echo "防火墙菜单用于放行、删除、查看或关闭系统防火墙规则。删除规则和关闭防火墙都必须输入 yes 确认，大小写均可。"
-    echo "自动放行会保留监听协议；手动添加默认只放行 TCP，可明确选择 udp 或 both。删除旧规则默认同时检查 TCP/UDP。"
+    echo "自动放行会生成最小权限计划，展示协议、监听地址、进程和 Docker 映射；回环监听不会放行，当前 SSH 端口不能排除。"
+    echo "计划只代表当前公网监听和 Docker 发布端口，不能判断业务是否仍需对外开放；可按编号排除非必要规则，确认后才应用。"
+    echo "Docker 映射可能绕过普通 UFW/firewalld 端口规则；排除计划项不会关闭容器映射，需要同时修改 Docker 发布地址或使用 Docker 安全管理。"
+    echo "手动添加默认只放行 TCP，可明确选择 udp 或 both。删除旧规则默认同时检查 TCP/UDP。"
     echo "端口并发连接限制用于按公网端口限制每来源 IP 的 TCP 并发连接数，IPv4 使用 iptables connlimit，IPv6 使用 ip6tables connlimit。"
     echo "该限制是额外连接数限制规则，不等同于 UFW/firewalld 的端口放行规则；两者可能并存。"
     echo "添加/删除 connlimit 后会自动尝试刷新持久化快照；[5] 可手动检查或再次保存。系统不支持时会提示当前规则只在本次运行期生效。"
@@ -824,22 +827,232 @@ func_port_connlimit_menu() {
 }
 
 firewall_detect_public_listener_rules() {
-    ss -H -lntu 2>/dev/null | awk '
+    firewall_collect_public_listener_details | awk -F'|' '
+        NF >= 2 {
+            print $1 "/" $2
+        }
+    ' | sort -t/ -k1,1n -k2,2 -u
+}
+
+firewall_collect_public_listener_details() {
+    ss -H -lntup 2>/dev/null | awk '
         $1 ~ /^(tcp|udp)/ {
             proto = ($1 ~ /^tcp/) ? "tcp" : "udp"
             endpoint = $5
-            if (endpoint ~ /^127\./ ||
-                endpoint ~ /^\[?::1\]?:/ ||
-                endpoint ~ /^\[?::ffff:127\./) {
-                next
-            }
             port = endpoint
             sub(/^.*:/, "", port)
+            address = endpoint
+            sub(/:[0-9]+$/, "", address)
+            normalized = tolower(address)
+            gsub(/^\[|\]$/, "", normalized)
+            sub(/%.*/, "", normalized)
+            if (normalized == "localhost" ||
+                normalized ~ /^127\./ ||
+                normalized == "::1" ||
+                normalized ~ /^::ffff:127\./) {
+                next
+            }
+            process = "-"
+            details = ""
+            for (i = 7; i <= NF; i++) {
+                details = details (details ? " " : "") $i
+            }
+            if (match(details, /users:\(\("[^"]+"/)) {
+                process = substr(details, RSTART, RLENGTH)
+                sub(/^users:\(\("/, "", process)
+                sub(/".*$/, "", process)
+            }
             if (port ~ /^[0-9]+$/ && port >= 1 && port <= 65535) {
-                print port "/" proto
+                print port "|" proto "|" address "|" process "|系统监听|"
             }
         }
-    ' | sort -t/ -k1,1n -k2,2 -u
+    '
+}
+
+firewall_is_loopback_address() {
+    local address
+    address=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')
+    address="${address#[}"
+    address="${address%]}"
+    address="${address%%%*}"
+    [[ "$address" == "localhost" || "$address" == 127.* || "$address" == "::1" || "$address" == ::ffff:127.* ]]
+}
+
+firewall_collect_docker_listener_details() {
+    command -v docker >/dev/null 2>&1 || return 0
+
+    local container line container_port protocol binding host_address host_port
+    while IFS= read -r container; do
+        [[ -n "$container" ]] || continue
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^([0-9]+)/(tcp|udp)[[:space:]]+-\>[[:space:]]+(.+):([0-9]+)$ ]]; then
+                container_port="${BASH_REMATCH[1]}"
+                protocol="${BASH_REMATCH[2]}"
+                host_address="${BASH_REMATCH[3]}"
+                host_port="${BASH_REMATCH[4]}"
+                if ! firewall_is_loopback_address "$host_address" && is_valid_port "$host_port"; then
+                    binding="${host_port} -> ${container_port}/${protocol}"
+                    printf '%s|%s|%s|docker:%s|Docker|%s\n' \
+                        "$host_port" "$protocol" "$host_address" "$container" "$binding"
+                fi
+            fi
+        done < <(docker port "$container" 2>/dev/null || true)
+    done < <(docker ps --format '{{.Names}}' 2>/dev/null || true)
+}
+
+firewall_add_unique_plan_value() {
+    local current="$1"
+    local value="$2"
+    local item
+    local -a current_items=()
+    [[ -n "$value" && "$value" != "-" ]] || {
+        printf '%s\n' "$current"
+        return 0
+    }
+    IFS=';' read -ra current_items <<< "$current"
+    for item in "${current_items[@]}"; do
+        if [[ "$item" == "$value" ]]; then
+            printf '%s\n' "$current"
+            return 0
+        fi
+    done
+    if [[ -n "$current" ]]; then
+        printf '%s;%s\n' "$current" "$value"
+    else
+        printf '%s\n' "$value"
+    fi
+}
+
+firewall_detect_ssh_port() {
+    local ssh_port=""
+    local -a ssh_connection_parts=()
+    if [[ -n "${SSH_CONNECTION:-}" ]]; then
+        read -ra ssh_connection_parts <<< "$SSH_CONNECTION"
+        ssh_port="${ssh_connection_parts[3]:-}"
+        is_valid_port "$ssh_port" || ssh_port=""
+    fi
+    if [[ -z "$ssh_port" ]]; then
+        ssh_port=$(ss -H -tlnp 2>/dev/null | awk '
+            /users:\(\("sshd"/ {
+                port = $5
+                sub(/^.*:/, "", port)
+                if (port ~ /^[0-9]+$/) {
+                    print port
+                    exit
+                }
+            }
+        ' || true)
+    fi
+    [[ -n "$ssh_port" ]] || ssh_port=$(awk 'tolower($1) == "port" { print $2; exit }' /etc/ssh/sshd_config 2>/dev/null || true)
+    ssh_port="${ssh_port:-22}"
+    is_valid_port "$ssh_port" || ssh_port=22
+    printf '%s\n' "$ssh_port"
+}
+
+firewall_build_minimum_plan() {
+    local ssh_port="${1:-}"
+    local port protocol address process source mapping key
+    local -A addresses=()
+    local -A processes=()
+    local -A sources=()
+    local -A mappings=()
+    local -A protected=()
+    local -A seen=()
+    local -a keys=()
+
+    while IFS='|' read -r port protocol address process source mapping; do
+        [[ -n "$port" && -n "$protocol" ]] || continue
+        key="${port}/${protocol}"
+        if [[ -z "${seen[$key]:-}" ]]; then
+            keys+=("$key")
+            seen["$key"]=1
+            protected["$key"]="no"
+        fi
+        addresses["$key"]=$(firewall_add_unique_plan_value "${addresses[$key]:-}" "$address")
+        processes["$key"]=$(firewall_add_unique_plan_value "${processes[$key]:-}" "$process")
+        sources["$key"]=$(firewall_add_unique_plan_value "${sources[$key]:-}" "$source")
+        mappings["$key"]=$(firewall_add_unique_plan_value "${mappings[$key]:-}" "$mapping")
+    done < <(
+        firewall_collect_public_listener_details
+        firewall_collect_docker_listener_details
+    )
+
+    [[ -n "$ssh_port" ]] || ssh_port=$(firewall_detect_ssh_port 2>/dev/null || true)
+    if is_valid_port "$ssh_port"; then
+        key="${ssh_port}/tcp"
+        if [[ -z "${seen[$key]:-}" ]]; then
+            keys+=("$key")
+            seen["$key"]=1
+            addresses["$key"]="按 SSH 配置保护"
+        fi
+        processes["$key"]=$(firewall_add_unique_plan_value "${processes[$key]:-}" "sshd")
+        sources["$key"]=$(firewall_add_unique_plan_value "${sources[$key]:-}" "SSH 保护")
+        protected["$key"]="yes"
+    fi
+
+    for key in "${keys[@]}"; do
+        port="${key%/*}"
+        protocol="${key#*/}"
+        printf '%s|%s|%s|%s|%s|%s|%s\n' \
+            "$port" "$protocol" "${addresses[$key]:--}" "${processes[$key]:--}" \
+            "${sources[$key]:--}" "${mappings[$key]:--}" "${protected[$key]:-no}"
+    done | sort -t'|' -k1,1n -k2,2
+}
+
+firewall_print_minimum_plan() {
+    local plan="$1"
+    local index=0 port protocol address process source mapping protected
+    echo -e "${CYAN}👇 最小权限防火墙计划：${PLAIN}"
+    while IFS='|' read -r port protocol address process source mapping protected; do
+        [[ -n "$port" ]] || continue
+        index=$((index + 1))
+        printf '  [%d] %s/%s\n' "$index" "$port" "$protocol"
+        printf '      监听地址: %s\n' "${address:--}"
+        printf '      进程: %s\n' "${process:--}"
+        printf '      来源: %s\n' "${source:--}"
+        printf '      Docker 映射: %s\n' "${mapping:--}"
+        if [[ "$protected" == "yes" ]]; then
+            echo "      保护: 当前 SSH 端口，不能排除"
+        fi
+    done <<< "$plan"
+}
+
+firewall_select_minimum_plan_rules() {
+    local plan="$1"
+    local exclusions="${2:-}"
+    local count index item item_number port protocol address process source mapping protected
+    local -A excluded=()
+    local -a exclusion_items=()
+
+    exclusions="${exclusions//[[:space:]]/}"
+    count=$(grep -c '^[0-9]' <<< "$plan" || true)
+    if [[ -n "$exclusions" ]]; then
+        [[ "$exclusions" =~ ^[0-9]+(,[0-9]+)*$ ]] || {
+            echo "排除编号格式无效，请使用逗号分隔，例如：2,4。" >&2
+            return 1
+        }
+        IFS=',' read -ra exclusion_items <<< "$exclusions"
+        for item in "${exclusion_items[@]}"; do
+            item_number=$((10#$item))
+            if (( item_number < 1 || item_number > count )); then
+                echo "排除编号 ${item} 不在计划范围内。" >&2
+                return 1
+            fi
+            excluded["$item_number"]=1
+        done
+    fi
+
+    index=0
+    while IFS='|' read -r port protocol address process source mapping protected; do
+        [[ -n "$port" ]] || continue
+        index=$((index + 1))
+        if [[ -n "${excluded[$index]:-}" && "$protected" == "yes" ]]; then
+            echo "编号 ${index} 是当前 SSH 端口，已强制保留。" >&2
+        elif [[ -n "${excluded[$index]:-}" ]]; then
+            continue
+        fi
+        printf '%s/%s\n' "$port" "$protocol"
+    done <<< "$plan"
 }
 
 normalize_firewall_protocol() {
@@ -938,7 +1151,7 @@ func_firewall_manage() {
         echo -e "当前防火墙状态: [ $str_fw ]"
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 查看防火墙放行列表${PLAIN}"
-        echo -e "${GREEN}  2. 启用防火墙 + 自动放行当前公网端口${PLAIN} ${YELLOW}(不覆盖原有规则)${PLAIN}"
+        echo -e "${GREEN}  2. 启用防火墙 + 最小权限放行规划${PLAIN} ${YELLOW}(可预览/排除，不覆盖原有规则)${PLAIN}"
         echo -e "${GREEN}  3. 手动放行端口${PLAIN} ${YELLOW}(可选 TCP/UDP，支持批量/范围)${PLAIN}"
         echo -e "${GREEN}  4. 删除已放行端口${PLAIN} ${YELLOW}(可选 TCP/UDP，支持批量/范围)${PLAIN}"
         echo -e "${GREEN}  5. 端口并发连接限制${PLAIN} ${YELLOW}(按每来源 IP 限制 TCP 并发)${PLAIN}"
@@ -962,24 +1175,48 @@ func_firewall_manage() {
                 read -n 1 -s -r -p "按任意键继续..."
                 ;;
             2)
-                echo -e "${CYAN}👉 正在嗅探活动端口并配置防火墙...${PLAIN}"
-                local active_rules
-                active_rules=$(firewall_detect_public_listener_rules)
+                echo -e "${CYAN}👉 正在检查公网监听、进程和 Docker 发布端口...${PLAIN}"
+                local firewall_plan active_rules exclusions selection_cancelled
+                firewall_plan=$(firewall_build_minimum_plan)
 
-                local ssh_port
-                ssh_port=$(ss -H -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $5}' | awk -F: '{print $NF}' | head -n1)
-                [[ -z "$ssh_port" ]] && ssh_port=$(grep -i '^Port' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
-                ssh_port=${ssh_port:-22}
-                if is_valid_port "$ssh_port" && ! printf '%s\n' "$active_rules" | grep -qx "${ssh_port}/tcp"; then
-                    active_rules=$(printf '%s\n%s\n' "$active_rules" "${ssh_port}/tcp" | grep -E '^[0-9]+/(tcp|udp)$' | sort -t/ -k1,1n -k2,2 -u)
-                fi
-
-                if [[ -z "$active_rules" ]]; then
+                if [[ -z "$firewall_plan" ]]; then
                     echo -e "${RED}❌ 未能识别到需要放行的监听端口，已取消启用防火墙，避免误锁 SSH。${PLAIN}"
                     echo -e "${YELLOW}请先确认 ss/iproute2 可用，或使用 [3] 手动添加 SSH 端口后再启用。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
+                firewall_print_minimum_plan "$firewall_plan"
+                echo -e "${YELLOW}说明：计划仅依据当前公网监听和 Docker 发布端口，仍需由你判断业务是否需要公网访问。${PLAIN}"
+                if grep -Fq '|Docker|' <<< "$firewall_plan"; then
+                    echo -e "${RED}⚠️ Docker 映射可能绕过普通 UFW/firewalld 规则；从计划排除不会关闭容器映射。${PLAIN}"
+                    echo -e "${YELLOW}如需收口，请同时修改 Docker 发布地址，或使用 [11 Docker 安全管理]。${PLAIN}"
+                fi
+
+                selection_cancelled=0
+                while true; do
+                    read_trimmed exclusions "👉 输入要排除的编号（逗号分隔，直接回车全部保留，q 取消）: "
+                    if [[ "$exclusions" =~ ^[qQ]$ ]]; then
+                        selection_cancelled=1
+                        break
+                    fi
+                    if active_rules=$(firewall_select_minimum_plan_rules "$firewall_plan" "$exclusions"); then
+                        break
+                    fi
+                done
+                if [[ "$selection_cancelled" -eq 1 ]]; then
+                    echo -e "${BLUE}已取消启用防火墙。${PLAIN}"
+                    sleep 1
+                    continue
+                fi
+                echo -e "${CYAN}将放行：$(echo "$active_rules" | tr '\n' ' ')${PLAIN}"
+                confirm_risk_action "启用防火墙并应用最小权限放行计划" \
+                    "系统防火墙默认入站策略，以及上方选中的 TCP/UDP 放行规则" \
+                    "保持当前 SSH 会话，使用云厂商控制台/VNC 关闭防火墙或补回业务端口" \
+                    "确认上方计划已覆盖当前 SSH 和所有必须公网访问的服务。" || {
+                    echo -e "${BLUE}已取消启用防火墙。${PLAIN}"
+                    sleep 1
+                    continue
+                }
 
                 local firewall_rc=0 rule_entry rule_port rule_protocol
                 local firewalld_was_inactive=0

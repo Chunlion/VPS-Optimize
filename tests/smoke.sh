@@ -757,6 +757,10 @@ assert_function_body_contains src/menus.sh func_beginner_machine_init '预检存
 assert_function_body_contains src/menus.sh func_beginner_machine_init '已跳过：${skipped[*]}' "Beginner initialization must summarize skipped steps."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'VPSO_FIREWALLD_OFFLINE_MODE=1' "Inactive firewalld must receive allow rules before the service starts."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'systemctl enable --now firewalld' "Firewalld must start only after offline rules succeed."
+assert_function_body_contains src/firewall.sh func_firewall_manage 'firewall_build_minimum_plan' "Firewall enable flow must build a least-privilege plan."
+assert_function_body_contains src/firewall.sh func_firewall_manage 'firewall_print_minimum_plan' "Firewall enable flow must preview the least-privilege plan."
+assert_function_body_contains src/firewall.sh func_firewall_manage 'Docker 映射可能绕过普通 UFW/firewalld 规则' "Firewall plan must not imply that excluding Docker mappings closes them."
+assert_function_body_contains src/firewall.sh func_firewall_manage 'confirm_risk_action "启用防火墙并应用最小权限放行计划"' "Firewall enable flow must require confirmation after plan selection."
 
 (
     source src/common.sh
@@ -764,17 +768,58 @@ assert_function_body_contains src/firewall.sh func_firewall_manage 'systemctl en
 
     ss() {
         cat <<'SS_OUTPUT'
-tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:*
-udp UNCONN 0 0 [::]:53 [::]:*
-tcp LISTEN 0 128 127.0.0.1:8080 0.0.0.0:*
-udp UNCONN 0 0 [::1]:5353 [::]:*
+tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=100,fd=3))
+udp UNCONN 0 0 [::]:53 [::]:* users:(("dnsd",pid=101,fd=4))
+tcp LISTEN 0 128 127.0.0.1:8080 0.0.0.0:* users:(("local-app",pid=102,fd=5))
+udp UNCONN 0 0 [::1]:5353 [::]:* users:(("mdns",pid=103,fd=6))
 SS_OUTPUT
+    }
+    docker() {
+        case "$1" in
+            ps)
+                printf '%s\n' web localdb
+                ;;
+            port)
+                case "$2" in
+                    web)
+                        printf '%s\n' \
+                            '80/tcp -> 0.0.0.0:8080' \
+                            '80/tcp -> [::]:8080'
+                        ;;
+                    localdb)
+                        printf '%s\n' '3306/tcp -> 127.0.0.1:3306'
+                        ;;
+                esac
+                ;;
+        esac
     }
     detected_rules=$(firewall_detect_public_listener_rules)
     grep -Fxq '22/tcp' <<<"$detected_rules"
     grep -Fxq '53/udp' <<<"$detected_rules"
+    [[ "$(SSH_CONNECTION='198.51.100.10 54321 203.0.113.10 2222' firewall_detect_ssh_port)" == "2222" ]]
     if grep -Eq '8080|5353|22/udp|53/tcp' <<<"$detected_rules"; then
         echo "Firewall listener detection must preserve protocol and exclude loopback listeners." >&2
+        exit 1
+    fi
+    firewall_plan=$(firewall_build_minimum_plan 22)
+    grep -Fq '22|tcp|0.0.0.0|sshd|系统监听;SSH 保护|-|yes' <<<"$firewall_plan"
+    grep -Fq '53|udp|[::]|dnsd|系统监听|-|no' <<<"$firewall_plan"
+    grep -Fq '8080|tcp|0.0.0.0;[::]|docker:web|Docker|8080 -> 80/tcp|no' <<<"$firewall_plan"
+    if grep -Eq '3306|local-app|mdns' <<<"$firewall_plan"; then
+        echo "Firewall plan must exclude loopback system and Docker listeners." >&2
+        exit 1
+    fi
+    selected_rules=$(firewall_select_minimum_plan_rules "$firewall_plan" "2,3")
+    [[ "$selected_rules" == "22/tcp" ]]
+    selected_rules=$(firewall_select_minimum_plan_rules "$firewall_plan" "1" 2>/dev/null)
+    grep -Fxq '22/tcp' <<<"$selected_rules"
+    selected_rules=$(firewall_select_minimum_plan_rules "$firewall_plan" "03")
+    if grep -Fxq '8080/tcp' <<<"$selected_rules"; then
+        echo "Firewall plan selection must accept zero-padded decimal indexes safely." >&2
+        exit 1
+    fi
+    if firewall_select_minimum_plan_rules "$firewall_plan" "99" >/dev/null 2>&1; then
+        echo "Firewall plan selection must reject out-of-range indexes." >&2
         exit 1
     fi
 
