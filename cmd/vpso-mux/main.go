@@ -146,6 +146,8 @@ func run(cfg *mux.Config) error {
 		return err
 	}
 	logger := mux.NewLogger(mux.LoggerOptions{
+		Level:        cfg.Logging.Level,
+		Format:       cfg.Logging.Format,
 		File:         cfg.Logging.File,
 		MaxSizeBytes: cfg.Logging.MaxSizeBytes,
 		MaxBackups:   cfg.Logging.MaxBackups,

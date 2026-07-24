@@ -46,6 +46,32 @@ routes:
 	}
 }
 
+func TestLoadConfigRejectsUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "vpso-mux.yaml")
+	data := []byte(`
+listen:
+  tcp:
+    - "127.0.0.1:443"
+default_backend: "127.0.0.1:1443"
+routes:
+  - name: "panel"
+    sni:
+      - "panel.example.com"
+    backend: "127.0.0.1:8443"
+    whitelits:
+      - "127.0.0.1/32"
+`)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := LoadConfig(path)
+	if err == nil || !strings.Contains(err.Error(), "whitelits") {
+		t.Fatalf("error = %v, want unknown field validation error", err)
+	}
+}
+
 func TestValidateConfigRejectsNegativeConnectionLimit(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Listen.TCP = []string{"127.0.0.1:443"}

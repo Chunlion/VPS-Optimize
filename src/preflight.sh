@@ -98,7 +98,7 @@ func_preflight_check() {
     local warn_count=0
     local err_count=0
 
-    echo -e "${YELLOW}▶ [1/8] 检查系统运行状态...${PLAIN}"
+    echo -e "${YELLOW}▶ [1/9] 检查系统运行状态...${PLAIN}"
     local sys_state
     sys_state=$(systemctl is-system-running 2>/dev/null)
     sys_state=${sys_state:-unknown}
@@ -114,7 +114,7 @@ func_preflight_check() {
         ((err_count++))
     fi
 
-    echo -e "${YELLOW}▶ [2/8] 检查公网连通性...${PLAIN}"
+    echo -e "${YELLOW}▶ [2/9] 检查公网连通性...${PLAIN}"
     local ipv4
     ipv4=$(curl -s4 --max-time 3 icanhazip.com 2>/dev/null)
     if [[ -n "$ipv4" ]]; then
@@ -125,7 +125,7 @@ func_preflight_check() {
         ((warn_count++))
     fi
 
-    echo -e "${YELLOW}▶ [3/8] 检查 DNS 解析能力...${PLAIN}"
+    echo -e "${YELLOW}▶ [3/9] 检查 DNS 解析能力...${PLAIN}"
     if getent ahosts raw.githubusercontent.com >/dev/null 2>&1; then
         echo -e "${GREEN}✅ DNS 解析正常 (raw.githubusercontent.com)${PLAIN}"
         ((ok_count++))
@@ -134,7 +134,7 @@ func_preflight_check() {
         ((err_count++))
     fi
 
-    echo -e "${YELLOW}▶ [4/8] 检查时间同步状态...${PLAIN}"
+    echo -e "${YELLOW}▶ [4/9] 检查时间同步状态...${PLAIN}"
     local ntp_sync
     local can_fix_ntp=false
     ntp_sync=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
@@ -147,7 +147,7 @@ func_preflight_check() {
         ((warn_count++))
     fi
 
-    echo -e "${YELLOW}▶ [5/8] 检查磁盘空间...${PLAIN}"
+    echo -e "${YELLOW}▶ [5/9] 检查磁盘空间...${PLAIN}"
     local root_use
     root_use=$(df -P / | awk 'NR==2 {gsub("%", "", $5); print $5}')
     if [[ -n "$root_use" && "$root_use" -lt 80 ]]; then
@@ -161,7 +161,7 @@ func_preflight_check() {
         ((err_count++))
     fi
 
-    echo -e "${YELLOW}▶ [6/8] 检查可用内存...${PLAIN}"
+    echo -e "${YELLOW}▶ [6/9] 检查可用内存...${PLAIN}"
     local mem_avail
     mem_avail=$(free -m | awk '/^Mem:/ {print $7}')
     [[ -z "$mem_avail" ]] && mem_avail=$(free -m | awk '/^Mem:/ {print $4}')
@@ -176,7 +176,7 @@ func_preflight_check() {
         ((err_count++))
     fi
 
-    echo -e "${YELLOW}▶ [7/8] 检查包管理器占用...${PLAIN}"
+    echo -e "${YELLOW}▶ [7/9] 检查包管理器占用...${PLAIN}"
     local pkg_busy=false
     if is_debian; then
         pgrep -x apt >/dev/null 2>&1 && pkg_busy=true
@@ -248,14 +248,20 @@ func_preflight_check() {
             read_trimmed rerun_confirm "是否立即重新体检？(y/N): "
             if is_yes "$rerun_confirm"; then
                 func_preflight_check
-                return
+                return $?
             fi
         fi
     elif $pkg_busy; then
         echo -e "${YELLOW}ℹ️ 包管理器正在运行，本次跳过自动安装类修复。${PLAIN}"
     fi
 
-    read -n 1 -s -r -p "按任意键返回..."
+    if [[ "${VPSO_BEGINNER_FLOW:-0}" != "1" ]]; then
+        read -n 1 -s -r -p "按任意键返回..."
+    fi
+    if [[ "$err_count" -gt 0 ]]; then
+        return 1
+    fi
+    return 0
 }
 
 # ---------------------------------------------------------

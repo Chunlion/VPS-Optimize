@@ -748,6 +748,66 @@ apt_update_once
 assert_file_contains src/common.sh 'sudo bash coreutils findutils grep sed gawk util-linux git nano htop lsof net-tools' "Minimal compatibility packages must include basic system commands."
 assert_file_contains src/system_core.sh 'install_pkg sudo curl wget git nano unzip htop lsof net-tools' "Base init must install sudo and common tools."
 assert_file_contains src/preflight.sh 'command -v sudo >/dev/null 2>&1 || cmd_miss+=("sudo")' "Preflight must detect missing sudo as a basic command."
+assert_file_contains src/preflight.sh '▶ [1/9] 检查系统运行状态' "Preflight progress must consistently use nine checks."
+assert_file_not_contains src/preflight.sh '[1/8]' "Preflight progress must not keep the stale eight-step denominator."
+assert_function_body_contains src/preflight.sh func_preflight_check 'return 1' "Preflight must return failure when blocking errors remain."
+assert_function_body_contains src/system_core.sh func_base_init 'failed_steps+=("系统软件包更新")' "Base init must preserve package update failures."
+assert_function_body_contains src/system_core.sh func_base_init 'BBR 状态验证' "Base init must verify BBR runtime state before reporting success."
+assert_function_body_contains src/menus.sh func_beginner_machine_init '预检存在异常，新机器初始化已停止' "Beginner initialization must stop when preflight fails."
+assert_function_body_contains src/menus.sh func_beginner_machine_init '已跳过：${skipped[*]}' "Beginner initialization must summarize skipped steps."
+assert_function_body_contains src/firewall.sh func_firewall_manage 'VPSO_FIREWALLD_OFFLINE_MODE=1' "Inactive firewalld must receive allow rules before the service starts."
+assert_function_body_contains src/firewall.sh func_firewall_manage 'systemctl enable --now firewalld' "Firewalld must start only after offline rules succeed."
+
+(
+    source src/common.sh
+    source src/firewall.sh
+
+    ss() {
+        cat <<'SS_OUTPUT'
+tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:*
+udp UNCONN 0 0 [::]:53 [::]:*
+tcp LISTEN 0 128 127.0.0.1:8080 0.0.0.0:*
+udp UNCONN 0 0 [::1]:5353 [::]:*
+SS_OUTPUT
+    }
+    detected_rules=$(firewall_detect_public_listener_rules)
+    grep -Fxq '22/tcp' <<<"$detected_rules"
+    grep -Fxq '53/udp' <<<"$detected_rules"
+    if grep -Eq '8080|5353|22/udp|53/tcp' <<<"$detected_rules"; then
+        echo "Firewall listener detection must preserve protocol and exclude loopback listeners." >&2
+        exit 1
+    fi
+
+    OS=ubuntu
+    firewall_calls=$(mktemp /tmp/vps-firewall-rule-smoke.XXXXXX)
+    ufw() {
+        printf '%s\n' "$*" >> "$firewall_calls"
+        [[ "$*" != "allow 443/udp" ]]
+    }
+    firewall_apply_port_input add "80,8000-9000" tcp
+    grep -Fxq 'allow 80/tcp' "$firewall_calls"
+    grep -Fxq 'allow 8000:9000/tcp' "$firewall_calls"
+    if grep -Fq '/udp' "$firewall_calls"; then
+        echo "TCP-only firewall input must not add UDP rules." >&2
+        exit 1
+    fi
+    if firewall_apply_port_input add "443" both >/dev/null 2>&1; then
+        echo "Firewall rule application must report partial command failures." >&2
+        exit 1
+    fi
+    : > "$firewall_calls"
+    ufw() {
+        printf '%s\n' "$*" >> "$firewall_calls"
+        [[ "$*" == "delete allow 80" ]]
+    }
+    firewall_apply_port_input delete "80" both
+    grep -Fxq 'delete allow 80' "$firewall_calls"
+    if grep -Eq '/(tcp|udp)' "$firewall_calls"; then
+        echo "Legacy protocol-agnostic UFW rules must be deleted without false per-protocol failures." >&2
+        exit 1
+    fi
+    rm -f "$firewall_calls"
+)
 
 (
     source src/common.sh
@@ -1317,7 +1377,7 @@ if is_trusted_remote_script_url "https://example.com/not-built-in.sh" >/dev/null
     echo "Unexpected trusted remote script URL." >&2
     exit 1
 fi
-remote_output=$(run_remote_script "smoke remote script" "file://$remote_script" 2>&1 <<< $'\n')
+remote_output=$(run_remote_script "smoke remote script" "file://$remote_script" 2>&1 <<< $'yes\n')
 [[ "$remote_output" == *"非内置已知来源"* ]]
 [[ "$remote_output" == *"remote-run-ok"* ]]
 rm -f "$remote_script"
@@ -1361,7 +1421,7 @@ if grep -Eq '确认下载并执行该远程脚本|如仍要执行，请输入 YE
     echo "Remote script runner must not prompt for an extra execution confirmation." >&2
     exit 1
 fi
-grep -Fq '是否继续下载并执行该远程脚本？(Y/n，默认 yes):' dist/vps.sh
+grep -Fq '是否继续下载并执行该远程脚本？(y/N):' dist/vps.sh
 assert_file_contains "src/environment.sh" '安装 nftables NAT 转发工具' "Environment menu must install nftables-nat-rust from option 10."
 assert_file_not_contains "src/environment.sh" '哪吒监控' "Environment menu option 10 must not keep the old Nezha entry."
 assert_file_not_contains "dist/vps.sh" 'raw.githubusercontent.com/naiba/nezha/master/script/install.sh' "Release script must not keep the old Nezha install URL."
@@ -1670,6 +1730,51 @@ if grep -q 'x-ui\[$(service_status_compact x-ui)\]' dist/vps.sh; then
     exit 1
 fi
 grep -q 'print_auto_update_notice' dist/vps.sh
+assert_file_contains src/updater.sh 'latest_sha256=$(fetch_latest_script_sha256)' "Update status must compare the remote content hash."
+assert_file_contains src/updater.sh '检测到同版本内容更新' "Update status must report same-version content changes."
+assert_function_body_contains src/common.sh create_shortcut 'download_verified_update_script' "Shortcut registration must verify the downloaded release checksum."
+assert_function_body_contains src/common.sh confirm_remote_script_execution 'confirm="${confirm:-no}"' "Remote script execution confirmation must default to no."
+assert_file_not_contains README.md 'ghfast.top' "README must not recommend executing a root script through a third-party GitHub proxy."
+
+(
+    update_tmp=$(mktemp -d /tmp/vps-update-smoke.XXXXXX)
+    cp dist/vps.sh "$update_tmp/local.sh"
+    cp dist/vps.sh "$update_tmp/remote.sh"
+    printf '\n# same-version content update\n' >> "$update_tmp/remote.sh"
+    sha256sum "$update_tmp/remote.sh" > "$update_tmp/remote.sh.sha256"
+
+    source src/updater.sh
+    UPDATE_URL="file://${update_tmp}/remote.sh"
+    UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
+    SCRIPT_UPDATE_CACHE="${update_tmp}/update.cache"
+    VPSO_CURRENT_SCRIPT_PATH="${update_tmp}/local.sh"
+
+    update_status=$(check_script_update_status force)
+    if [[ "$update_status" != "available|${vps_smoke_script_version}" ]]; then
+        echo "Same-version content drift must report available; got: ${update_status}" >&2
+        exit 1
+    fi
+    cp "$update_tmp/remote.sh" "$update_tmp/local.sh"
+    update_status=$(check_script_update_status force)
+    if [[ "$update_status" != "current|${vps_smoke_script_version}" ]]; then
+        echo "Matching local and remote script hashes must report current; got: ${update_status}" >&2
+        exit 1
+    fi
+
+    read_trimmed() {
+        printf -v "$1" '%s' ""
+    }
+    if confirm_remote_script_execution; then
+        echo "Remote script confirmation must not proceed on empty input." >&2
+        exit 1
+    fi
+    if run_remote_script "HTTP smoke" "http://example.invalid/script.sh" >/dev/null 2>&1; then
+        echo "Remote script runner must reject non-HTTPS sources." >&2
+        exit 1
+    fi
+    rm -f "$update_tmp/local.sh" "$update_tmp/remote.sh" "$update_tmp/remote.sh.sha256" "$update_tmp/update.cache"
+    rmdir "$update_tmp"
+)
 grep -q 'func_traffic_guard_menu' dist/vps.sh
 grep -q 'install_traffic_guard_checker' dist/vps.sh
 grep -q 'vps-traffic-guard.timer' dist/vps.sh

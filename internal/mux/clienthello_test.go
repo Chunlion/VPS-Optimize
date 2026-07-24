@@ -62,3 +62,40 @@ func TestExtractSNIIncomplete(t *testing.T) {
 		t.Fatalf("error = %v, want ErrNeedMore", err)
 	}
 }
+
+func TestExtractSNIFromFragmentedTLSRecords(t *testing.T) {
+	hello := makeClientHello(t, "fragmented.example.com")
+	recordLen := int(hello[3])<<8 | int(hello[4])
+	if len(hello) < 5+recordLen || recordLen < 16 {
+		t.Fatalf("unexpected ClientHello record length: %d", recordLen)
+	}
+	payload := hello[5 : 5+recordLen]
+	split := 11
+	fragmented := appendTLSRecord(nil, hello[1:3], payload[:split])
+	fragmented = appendTLSRecord(fragmented, hello[1:3], payload[split:])
+
+	sni, err := ExtractSNI(fragmented)
+	if err != nil {
+		t.Fatalf("ExtractSNI returned error: %v", err)
+	}
+	if sni != "fragmented.example.com" {
+		t.Fatalf("SNI = %q, want fragmented.example.com", sni)
+	}
+}
+
+func TestExtractSNIFromIncompleteFragmentedTLSRecords(t *testing.T) {
+	hello := makeClientHello(t, "fragmented.example.com")
+	recordLen := int(hello[3])<<8 | int(hello[4])
+	payload := hello[5 : 5+recordLen]
+	fragmented := appendTLSRecord(nil, hello[1:3], payload[:11])
+
+	_, err := ExtractSNI(fragmented)
+	if !errors.Is(err, ErrNeedMore) {
+		t.Fatalf("error = %v, want ErrNeedMore", err)
+	}
+}
+
+func appendTLSRecord(dst []byte, version []byte, payload []byte) []byte {
+	dst = append(dst, tlsRecordHandshake, version[0], version[1], byte(len(payload)>>8), byte(len(payload)))
+	return append(dst, payload...)
+}

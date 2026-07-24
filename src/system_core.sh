@@ -47,46 +47,87 @@ configure_system_timezone_for_init() {
         echo -e "${GREEN}✅ 系统时区已设置为：${target_tz}${PLAIN}"
     else
         echo -e "${YELLOW}⚠️ 时区设置失败，已保持当前时区：${current_tz}${PLAIN}"
+        return 1
     fi
 }
 
 func_base_init() {
+    local failed_steps=()
+    local current_cc current_qdisc
+
     clear
     echo -e "${CYAN}👉 正在更新系统软件包、安装基础工具、限制日志并开启基础 BBR...${PLAIN}"
 
-    # 更新系统软件包并优雅调用全局安装函数
     if is_debian; then
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update -y && apt-get upgrade -y && APT_UPDATED=1
+        if apt-get update -y && apt-get upgrade -y; then
+            APT_UPDATED=1
+        else
+            failed_steps+=("系统软件包更新")
+        fi
         unset DEBIAN_FRONTEND
-        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils-ping dnsutils iptables iproute2 sqlite3 jq
+        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils-ping dnsutils iptables iproute2 sqlite3 jq \
+            || failed_steps+=("基础工具安装")
     elif is_redhat; then
-        yum update -y
-        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils bind-utils iptables iproute epel-release sqlite jq
+        if command -v dnf >/dev/null 2>&1; then
+            dnf update -y || failed_steps+=("系统软件包更新")
+        else
+            yum update -y || failed_steps+=("系统软件包更新")
+        fi
+        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils bind-utils iptables iproute epel-release sqlite jq \
+            || failed_steps+=("基础工具安装")
+    else
+        failed_steps+=("当前发行版不受支持")
     fi
 
-    ensure_minimal_system_compat
+    ensure_minimal_system_compat || failed_steps+=("精简系统兼容组件")
 
-    # 限制系统日志最大 100M
-    mkdir -p /etc/systemd/journald.conf.d/
-    cat > /etc/systemd/journald.conf.d/99-limit.conf <<EOF
+    if ! mkdir -p /etc/systemd/journald.conf.d/ || ! cat > /etc/systemd/journald.conf.d/99-limit.conf <<EOF
 [Journal]
 SystemMaxUse=100M
 RuntimeMaxUse=100M
 EOF
-    systemctl restart systemd-journald > /dev/null 2>&1
+    then
+        failed_steps+=("journald 日志限制")
+    elif ! systemctl restart systemd-journald >/dev/null 2>&1; then
+        failed_steps+=("journald 重启")
+    fi
 
-    # 时区默认保持当前设置，必要时由用户选择
-    configure_system_timezone_for_init
+    configure_system_timezone_for_init || failed_steps+=("时区设置")
 
-    # 强制激活基础 BBR
-    modprobe tcp_bbr >/dev/null 2>&1 # 先主动唤醒/加载 BBR 内核模块
-    echo "net.core.default_qdisc = fq" > /etc/sysctl.d/99-bbr-init.conf
-    echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.d/99-bbr-init.conf
-    sysctl -p /etc/sysctl.d/99-bbr-init.conf > /dev/null 2>&1
+    modprobe tcp_bbr >/dev/null 2>&1 || true
+    if ! {
+        printf '%s\n' \
+            "net.core.default_qdisc = fq" \
+            "net.ipv4.tcp_congestion_control = bbr" \
+            > /etc/sysctl.d/99-bbr-init.conf
+    }; then
+        failed_steps+=("BBR 配置写入")
+    elif ! sysctl -p /etc/sysctl.d/99-bbr-init.conf >/dev/null 2>&1; then
+        failed_steps+=("BBR 参数加载")
+    else
+        current_cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)
+        current_qdisc=$(sysctl -n net.core.default_qdisc 2>/dev/null || true)
+        if [[ "$current_cc" != "bbr" || "$current_qdisc" != "fq" ]]; then
+            failed_steps+=("BBR 状态验证")
+        fi
+    fi
 
-    echo -e "${GREEN}✅ 基础初始化完成，原生 BBR 已激活！${PLAIN}"
-    read -n 1 -s -r -p "按任意键返回主菜单..."
+    if [[ ${#failed_steps[@]} -eq 0 ]]; then
+        echo -e "${GREEN}✅ 基础初始化完成，已验证 BBR 与 fq 生效。${PLAIN}"
+        if [[ "${VPSO_BEGINNER_FLOW:-0}" != "1" ]]; then
+            read -n 1 -s -r -p "按任意键返回主菜单..."
+        fi
+        return 0
+    fi
+
+    echo -e "${RED}❌ 基础初始化未完整完成，失败步骤：${PLAIN}"
+    printf '  - %s\n' "${failed_steps[@]}"
+    echo -e "${YELLOW}已保留成功完成的步骤；请修复上述问题后重新运行基础初始化。${PLAIN}"
+    if [[ "${VPSO_BEGINNER_FLOW:-0}" != "1" ]]; then
+        read -n 1 -s -r -p "按任意键返回主菜单..."
+    fi
+    return 1
 }
 
 update_hosts_hostname_entry() {

@@ -237,49 +237,115 @@ copy_shortcut_candidate() {
     local source_file="$1"
     local target_file="$2"
     local label="$3"
+    local target_dir tmp_file
 
-    if ! is_vps_optimize_generated_script "$source_file"; then
+    if ! is_vps_optimize_generated_script "$source_file" || ! bash -n "$source_file" >/dev/null 2>&1; then
         echo -e "${YELLOW}⚠️ ${label} 未通过 VPS-Optimize 脚本标识校验，已拒绝注册快捷指令。${PLAIN}"
         return 1
     fi
-    cp "$source_file" "$target_file" 2>/dev/null
+    target_dir=$(dirname "$target_file")
+    mkdir -p "$target_dir" 2>/dev/null || return 1
+    tmp_file=$(mktemp "${target_file}.XXXXXX") || return 1
+    if ! cp "$source_file" "$tmp_file" 2>/dev/null \
+        || ! chmod +x "$tmp_file" \
+        || ! mv -f "$tmp_file" "$target_file"; then
+        rm -f "$tmp_file"
+        return 1
+    fi
+}
+
+script_version_from_file() {
+    local file="$1"
+    local line version
+    line=$(grep -m1 '^SCRIPT_VERSION=' "$file" 2>/dev/null || true)
+    version="${line#SCRIPT_VERSION=}"
+    version="${version%\"}"
+    version="${version#\"}"
+    [[ -n "$version" ]] || return 1
+    printf '%s\n' "$version"
+}
+
+download_verified_update_script() {
+    local output_file="$1"
+    local sha_file
+    sha_file=$(mktemp /tmp/cy_update.XXXXXX.sha256) || return 1
+    if download_remote_script "$UPDATE_URL" "$output_file" \
+        && bash -n "$output_file" >/dev/null 2>&1 \
+        && is_vps_optimize_generated_script "$output_file" \
+        && download_remote_script "$UPDATE_SHA256_URL" "$sha_file" \
+        && verify_file_sha256 "$output_file" "$sha_file" >/dev/null; then
+        rm -f "$sha_file"
+        return 0
+    fi
+    rm -f "$sha_file" "$output_file"
+    return 1
+}
+
+sync_shortcut_from_newer_current_script() {
+    local current_file="$1"
+    local shortcut_file="$2"
+    local current_version shortcut_version
+
+    [[ -f "$current_file" && -f "$shortcut_file" ]] || return 1
+    is_vps_optimize_generated_script "$current_file" || return 1
+    current_version=$(script_version_from_file "$current_file" 2>/dev/null || true)
+    shortcut_version=$(script_version_from_file "$shortcut_file" 2>/dev/null || true)
+    [[ -n "$current_version" && -n "$shortcut_version" ]] || return 1
+    declare -F version_is_newer >/dev/null 2>&1 || return 1
+    version_is_newer "$current_version" "$shortcut_version" || return 1
+    copy_shortcut_candidate "$current_file" "$shortcut_file" "当前脚本"
 }
 
 create_shortcut() {
-    local script_path="/usr/local/bin/cy"
-    local release_path
-    if [[ ! -f "$script_path" ]]; then
-        # 优先尝试从远端直接拉取
-        if ! download_remote_script "$UPDATE_URL" "$script_path" 2>/dev/null; then
+    local script_path="${VPSO_SHORTCUT_PATH:-/usr/local/bin/cy}"
+    local release_path current_file candidate_file
+    current_file="${VPSO_CURRENT_SCRIPT_PATH:-$(readlink -f "$0" 2>/dev/null || true)}"
+
+    if [[ -f "$script_path" ]] \
+        && is_vps_optimize_generated_script "$script_path" \
+        && bash -n "$script_path" >/dev/null 2>&1; then
+        if sync_shortcut_from_newer_current_script "$current_file" "$script_path"; then
+            echo -e "${GREEN}✅ 快捷指令 'cy' 已同步到当前较新版本。${PLAIN}"
+            sleep 1
+        fi
+        return 0
+    fi
+
+    if [[ -f "$script_path" ]]; then
+        quarantine_path "$script_path" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || return 1
+        echo -e "${YELLOW}⚠️ 已隔离无效的旧快捷指令，正在重新注册。${PLAIN}"
+    fi
+
+    candidate_file=$(mktemp /tmp/cy_shortcut.XXXXXX.sh) || return 1
+    if ! download_verified_update_script "$candidate_file" 2>/dev/null; then
+        rm -f "$candidate_file"
+        candidate_file=$(mktemp /tmp/cy_shortcut.XXXXXX.sh) || return 1
+        if {
             release_path="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/dist/vps.sh"
             if [[ -f "$release_path" ]]; then
-                copy_shortcut_candidate "$release_path" "$script_path" "本地脚本" || {
-                    echo -e "${YELLOW}⚠️ 快捷指令本地注册失败，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
-                    return
-                }
-            # 若远端拉取失败，且检测到 $0 确实是本地存在的物理文件，才允许复制
-            elif [[ -f "$0" ]]; then
-                copy_shortcut_candidate "$(readlink -f "$0")" "$script_path" "当前脚本 \$0" || {
-                    echo -e "${YELLOW}⚠️ 快捷指令本地注册失败，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
-                    return
-                }
+                cp "$release_path" "$candidate_file"
+            elif [[ -f "$current_file" ]]; then
+                cp "$current_file" "$candidate_file"
             else
-                echo -e "${YELLOW}⚠️ 快捷指令本地注册挂起，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
-                return
+                false
             fi
+        }; then
+            :
+        else
+            rm -f "$candidate_file"
+            echo -e "${YELLOW}⚠️ 快捷指令注册挂起，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
+            return 1
         fi
-        if ! bash -n "$script_path" >/dev/null 2>&1; then
-            quarantine_path "$script_path" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
-            echo -e "${RED}❌ 快捷指令脚本未通过语法检查，已隔离异常文件。${PLAIN}"
-            return
-        fi
-        chmod +x "$script_path" || {
-            echo -e "${YELLOW}⚠️ 快捷指令授权失败，请检查 /usr/local/bin 权限。${PLAIN}"
-            return
-        }
-        echo -e "${GREEN}✅ 快捷指令 'cy' 已全局注册！下次可直接输入 cy 唤出面板。${PLAIN}"
-        sleep 1
     fi
+
+    if ! copy_shortcut_candidate "$candidate_file" "$script_path" "快捷指令候选脚本"; then
+        rm -f "$candidate_file"
+        echo -e "${YELLOW}⚠️ 快捷指令注册失败，请检查 /usr/local/bin 权限。${PLAIN}"
+        return 1
+    fi
+    rm -f "$candidate_file"
+    echo -e "${GREEN}✅ 快捷指令 'cy' 已全局注册！下次可直接输入 cy 唤出面板。${PLAIN}"
+    sleep 1
 }
 
 run_safe() {
@@ -439,11 +505,11 @@ confirm_remote_script_execution() {
     local confirm
 
     if declare -F read_trimmed >/dev/null 2>&1; then
-        read_trimmed confirm "是否继续下载并执行该远程脚本？(Y/n，默认 yes): "
+        read_trimmed confirm "是否继续下载并执行该远程脚本？(y/N): "
     else
-        read -r -p "是否继续下载并执行该远程脚本？(Y/n，默认 yes): " confirm
+        read -r -p "是否继续下载并执行该远程脚本？(y/N): " confirm
     fi
-    confirm="${confirm:-yes}"
+    confirm="${confirm:-no}"
     if declare -F is_yes >/dev/null 2>&1; then
         is_yes "$confirm"
     else
@@ -464,8 +530,9 @@ run_remote_script() {
         trusted_source=""
         echo -e "${RED}⚠️ 非内置已知来源：该 URL 不在 VPS-Optimize 内置远程脚本白名单内。${PLAIN}"
     fi
-    if [[ "$url" != https://* ]]; then
-        echo -e "${YELLOW}⚠️ 该来源不是 HTTPS，将按脚本内置地址继续下载执行。${PLAIN}"
+    if [[ "$url" != https://* && "$url" != file://* ]]; then
+        echo -e "${RED}❌ 该来源不是 HTTPS，已拒绝下载和执行。${PLAIN}"
+        return 1
     fi
 
     if [[ -z "$trusted_source" || "${VPSO_REMOTE_SCRIPT_CONFIRM:-1}" != "0" ]]; then

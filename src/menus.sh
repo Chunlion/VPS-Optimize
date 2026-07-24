@@ -314,6 +314,76 @@ normalize_main_choice() {
     esac
 }
 
+beginner_run_optional_step() {
+    local step="$1"
+    local total="$2"
+    local label="$3"
+    local function_name="$4"
+    local choice
+
+    echo -e "${CYAN}[${step}/${total}] ${label}${PLAIN}"
+    read_trimmed choice "是否进入此步骤？(Y/n): "
+    if [[ "${choice:-yes}" =~ ^[Nn]([Oo])?$ ]]; then
+        echo -e "${BLUE}已跳过：${label}${PLAIN}"
+        return 2
+    fi
+    "$function_name"
+}
+
+func_beginner_machine_init() {
+    local total=7
+    local step_rc step_entry step label function_name
+    local VPSO_BEGINNER_FLOW=1
+    local completed=("部署前预检")
+    local skipped=()
+    local optional_steps=(
+        "3|SSH 安全配置|func_security"
+        "4|SSH 公钥配置|func_add_ssh_key"
+        "5|Fail2ban 配置|func_fail2ban"
+        "6|防火墙配置|func_firewall_manage"
+        "7|配置备份|func_backup_center"
+    )
+
+    echo -e "${CYAN}[1/${total}] 部署前预检${PLAIN}"
+    if ! func_preflight_check; then
+        echo -e "${RED}❌ 预检存在异常，新机器初始化已停止，未继续修改系统。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    echo -e "${CYAN}[2/${total}] 基础初始化${PLAIN}"
+    if ! func_base_init; then
+        echo -e "${RED}❌ 基础初始化未完整完成，后续安全配置已停止。${PLAIN}"
+        pause_return
+        return 1
+    fi
+    completed+=("基础初始化")
+
+    for step_entry in "${optional_steps[@]}"; do
+        IFS='|' read -r step label function_name <<< "$step_entry"
+        beginner_run_optional_step "$step" "$total" "$label" "$function_name"
+        step_rc=$?
+        if [[ "$step_rc" -eq 0 ]]; then
+            completed+=("$label")
+        elif [[ "$step_rc" -eq 2 ]]; then
+            skipped+=("$label")
+        else
+            echo -e "${RED}❌ ${label} 执行失败，新机器初始化已停止。${PLAIN}"
+            echo -e "${CYAN}已完成：${completed[*]}${PLAIN}"
+            pause_return
+            return 1
+        fi
+    done
+
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${GREEN}✅ 新机器初始化流程结束。${PLAIN}"
+    echo -e "已完成：${completed[*]}"
+    if [[ ${#skipped[@]} -gt 0 ]]; then
+        echo -e "${YELLOW}已跳过：${skipped[*]}${PLAIN}"
+    fi
+    pause_return
+}
+
 func_beginner_menu() {
     while true; do
         clear
@@ -337,13 +407,7 @@ func_beginner_menu() {
         read_trimmed beginner_choice "👉 请选择操作: "
         case "$beginner_choice" in
             1)
-                func_preflight_check
-                func_base_init
-                func_security
-                func_add_ssh_key
-                func_fail2ban
-                func_firewall_manage
-                func_backup_center
+                func_beginner_machine_init
                 ;;
             2) func_panel_deploy_menu ;;
             3) func_sni_stack_quick_menu ;;

@@ -18,6 +18,31 @@ fetch_latest_script_version() {
     printf '%s\n' "$version"
 }
 
+fetch_latest_script_sha256() {
+    local checksum
+    if command -v curl >/dev/null 2>&1; then
+        checksum=$(curl -fsSL --connect-timeout 4 --max-time 10 "$UPDATE_SHA256_URL" 2>/dev/null | awk 'NR == 1 {print $1}' || true)
+    elif command -v wget >/dev/null 2>&1; then
+        checksum=$(wget -q --timeout=10 --tries=1 -O - "$UPDATE_SHA256_URL" 2>/dev/null | awk 'NR == 1 {print $1}' || true)
+    else
+        return 1
+    fi
+    checksum=$(printf '%s' "$checksum" | tr 'A-F' 'a-f')
+    [[ "$checksum" =~ ^[0-9a-f]{64}$ ]] || return 1
+    printf '%s\n' "$checksum"
+}
+
+current_script_sha256() {
+    local current_file
+    current_file="${VPSO_CURRENT_SCRIPT_PATH:-$(readlink -f "$0" 2>/dev/null || true)}"
+    if [[ ! -f "$current_file" ]] || ! is_vps_optimize_generated_script "$current_file"; then
+        current_file="${VPSO_SHORTCUT_PATH:-/usr/local/bin/cy}"
+    fi
+    [[ -f "$current_file" ]] || return 1
+    command -v sha256sum >/dev/null 2>&1 || return 1
+    sha256sum "$current_file" 2>/dev/null | awk 'NR == 1 {print $1}'
+}
+
 version_is_newer() {
     local latest="${1#v}"
     local current="${2#v}"
@@ -51,13 +76,15 @@ read_script_update_cache_field() {
 write_script_update_cache() {
     local status="$1"
     local latest="$2"
-    local message="$3"
+    local latest_sha256="$3"
+    local message="$4"
     local cache_dir
     cache_dir=$(dirname "$SCRIPT_UPDATE_CACHE")
     mkdir -p "$cache_dir" 2>/dev/null || return 0
     {
         echo "status=${status}"
         echo "latest=${latest}"
+        echo "latest_sha256=${latest_sha256}"
         echo "message=${message}"
         echo "checked_at=$(date -Is 2>/dev/null || date)"
     } > "$SCRIPT_UPDATE_CACHE" 2>/dev/null || true
@@ -65,35 +92,42 @@ write_script_update_cache() {
 
 check_script_update_status() {
     local mode="${1:-auto}"
-    local status latest message
+    local status latest latest_sha256 current_sha256 message
+    current_sha256=$(current_script_sha256 2>/dev/null || true)
     if [[ "$mode" != "force" ]] && script_update_cache_is_fresh; then
         status=$(read_script_update_cache_field status)
         latest=$(read_script_update_cache_field latest)
-        if [[ -n "$latest" && "$latest" != "unknown" ]]; then
+        latest_sha256=$(read_script_update_cache_field latest_sha256)
+        if [[ "$latest_sha256" =~ ^[0-9a-f]{64}$ && -n "$latest" && "$latest" != "unknown" ]]; then
             if version_is_newer "$latest" "$SCRIPT_VERSION"; then
+                status="available"
+            elif [[ -n "$current_sha256" && -n "$latest_sha256" && "$current_sha256" != "$latest_sha256" ]]; then
                 status="available"
             else
                 status="current"
             fi
+            printf '%s|%s\n' "${status:-unknown}" "${latest:-unknown}"
+            return 0
         fi
-        printf '%s|%s\n' "${status:-unknown}" "${latest:-unknown}"
-        return 0
     fi
 
-    if latest=$(fetch_latest_script_version); then
+    if latest=$(fetch_latest_script_version) && latest_sha256=$(fetch_latest_script_sha256); then
         if version_is_newer "$latest" "$SCRIPT_VERSION"; then
             status="available"
             message="发现新版本 ${latest}"
+        elif [[ -n "$current_sha256" && "$current_sha256" != "$latest_sha256" ]]; then
+            status="available"
+            message="检测到同版本内容更新"
         else
             status="current"
-            message="当前已是最新版本"
+            message="当前脚本内容已是最新"
         fi
-        write_script_update_cache "$status" "$latest" "$message"
+        write_script_update_cache "$status" "$latest" "$latest_sha256" "$message"
         printf '%s|%s\n' "$status" "$latest"
         return 0
     fi
 
-    write_script_update_cache "error" "unknown" "无法检查更新"
+    write_script_update_cache "error" "unknown" "unknown" "无法检查更新"
     printf 'error|unknown\n'
 }
 
@@ -104,45 +138,39 @@ print_auto_update_notice() {
     latest="${result#*|}"
     case "$status" in
         available)
-            echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
+            if [[ "$latest" == "$SCRIPT_VERSION" ]]; then
+                echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN} 的内容更新，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
+            else
+                echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
+            fi
             ;;
         current)
-            echo -e " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，未发现更高版本。"
+            echo -e " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，脚本内容已是最新。"
             ;;
     esac
 }
 
 func_update_script() {
     clear
-    local tmp_file sha_file
+    local tmp_file
     tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh) || {
         echo -e "${RED}❌ 临时文件创建失败，更新已取消。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return 1
     }
-    sha_file=$(mktemp /tmp/cy_update.XXXXXX.sha256) || {
-        rm -f "$tmp_file"
-        echo -e "${RED}❌ 临时校验文件创建失败，更新已取消。${PLAIN}"
-        read -n 1 -s -r -p "按任意键返回..."
-        return 1
-    }
     echo -e "${CYAN}👉 正在从 GitHub 源地址拉取最新版本...${PLAIN}"
-    if download_remote_script "$UPDATE_URL" "$tmp_file" \
-        && bash -n "$tmp_file" \
-        && download_remote_script "$UPDATE_SHA256_URL" "$sha_file" \
-        && verify_file_sha256 "$tmp_file" "$sha_file" \
+    if download_verified_update_script "$tmp_file" \
         && grep -q "func_sni_stack_quick_menu" "$tmp_file" 2>/dev/null \
         && grep -q "main_menu" "$tmp_file" 2>/dev/null \
-        && ! grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' "$tmp_file" 2>/dev/null; then
-        mv "$tmp_file" /usr/local/bin/cy
-        chmod +x /usr/local/bin/cy
-        rm -f "$sha_file"
+        && ! grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' "$tmp_file" 2>/dev/null \
+        && copy_shortcut_candidate "$tmp_file" /usr/local/bin/cy "已验证更新脚本"; then
+        rm -f "$tmp_file" "$SCRIPT_UPDATE_CACHE"
         echo -e "${GREEN}✅ 更新下载并覆盖完成！正在重启面板...${PLAIN}"
         sleep 1
         exec bash /usr/local/bin/cy
     else
-        rm -f "$tmp_file" "$sha_file"
-        echo -e "${RED}❌ 更新失败！请检查您的网络连通性或 GitHub 地址是否正确。${PLAIN}"
+        rm -f "$tmp_file"
+        echo -e "${RED}❌ 更新失败：下载、脚本标识、语法或 sha256 校验未全部通过。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
     fi
 }

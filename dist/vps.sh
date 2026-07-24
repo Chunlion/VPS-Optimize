@@ -249,49 +249,115 @@ copy_shortcut_candidate() {
     local source_file="$1"
     local target_file="$2"
     local label="$3"
+    local target_dir tmp_file
 
-    if ! is_vps_optimize_generated_script "$source_file"; then
+    if ! is_vps_optimize_generated_script "$source_file" || ! bash -n "$source_file" >/dev/null 2>&1; then
         echo -e "${YELLOW}⚠️ ${label} 未通过 VPS-Optimize 脚本标识校验，已拒绝注册快捷指令。${PLAIN}"
         return 1
     fi
-    cp "$source_file" "$target_file" 2>/dev/null
+    target_dir=$(dirname "$target_file")
+    mkdir -p "$target_dir" 2>/dev/null || return 1
+    tmp_file=$(mktemp "${target_file}.XXXXXX") || return 1
+    if ! cp "$source_file" "$tmp_file" 2>/dev/null \
+        || ! chmod +x "$tmp_file" \
+        || ! mv -f "$tmp_file" "$target_file"; then
+        rm -f "$tmp_file"
+        return 1
+    fi
+}
+
+script_version_from_file() {
+    local file="$1"
+    local line version
+    line=$(grep -m1 '^SCRIPT_VERSION=' "$file" 2>/dev/null || true)
+    version="${line#SCRIPT_VERSION=}"
+    version="${version%\"}"
+    version="${version#\"}"
+    [[ -n "$version" ]] || return 1
+    printf '%s\n' "$version"
+}
+
+download_verified_update_script() {
+    local output_file="$1"
+    local sha_file
+    sha_file=$(mktemp /tmp/cy_update.XXXXXX.sha256) || return 1
+    if download_remote_script "$UPDATE_URL" "$output_file" \
+        && bash -n "$output_file" >/dev/null 2>&1 \
+        && is_vps_optimize_generated_script "$output_file" \
+        && download_remote_script "$UPDATE_SHA256_URL" "$sha_file" \
+        && verify_file_sha256 "$output_file" "$sha_file" >/dev/null; then
+        rm -f "$sha_file"
+        return 0
+    fi
+    rm -f "$sha_file" "$output_file"
+    return 1
+}
+
+sync_shortcut_from_newer_current_script() {
+    local current_file="$1"
+    local shortcut_file="$2"
+    local current_version shortcut_version
+
+    [[ -f "$current_file" && -f "$shortcut_file" ]] || return 1
+    is_vps_optimize_generated_script "$current_file" || return 1
+    current_version=$(script_version_from_file "$current_file" 2>/dev/null || true)
+    shortcut_version=$(script_version_from_file "$shortcut_file" 2>/dev/null || true)
+    [[ -n "$current_version" && -n "$shortcut_version" ]] || return 1
+    declare -F version_is_newer >/dev/null 2>&1 || return 1
+    version_is_newer "$current_version" "$shortcut_version" || return 1
+    copy_shortcut_candidate "$current_file" "$shortcut_file" "当前脚本"
 }
 
 create_shortcut() {
-    local script_path="/usr/local/bin/cy"
-    local release_path
-    if [[ ! -f "$script_path" ]]; then
-        # 优先尝试从远端直接拉取
-        if ! download_remote_script "$UPDATE_URL" "$script_path" 2>/dev/null; then
+    local script_path="${VPSO_SHORTCUT_PATH:-/usr/local/bin/cy}"
+    local release_path current_file candidate_file
+    current_file="${VPSO_CURRENT_SCRIPT_PATH:-$(readlink -f "$0" 2>/dev/null || true)}"
+
+    if [[ -f "$script_path" ]] \
+        && is_vps_optimize_generated_script "$script_path" \
+        && bash -n "$script_path" >/dev/null 2>&1; then
+        if sync_shortcut_from_newer_current_script "$current_file" "$script_path"; then
+            echo -e "${GREEN}✅ 快捷指令 'cy' 已同步到当前较新版本。${PLAIN}"
+            sleep 1
+        fi
+        return 0
+    fi
+
+    if [[ -f "$script_path" ]]; then
+        quarantine_path "$script_path" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || return 1
+        echo -e "${YELLOW}⚠️ 已隔离无效的旧快捷指令，正在重新注册。${PLAIN}"
+    fi
+
+    candidate_file=$(mktemp /tmp/cy_shortcut.XXXXXX.sh) || return 1
+    if ! download_verified_update_script "$candidate_file" 2>/dev/null; then
+        rm -f "$candidate_file"
+        candidate_file=$(mktemp /tmp/cy_shortcut.XXXXXX.sh) || return 1
+        if {
             release_path="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/dist/vps.sh"
             if [[ -f "$release_path" ]]; then
-                copy_shortcut_candidate "$release_path" "$script_path" "本地脚本" || {
-                    echo -e "${YELLOW}⚠️ 快捷指令本地注册失败，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
-                    return
-                }
-            # 若远端拉取失败，且检测到 $0 确实是本地存在的物理文件，才允许复制
-            elif [[ -f "$0" ]]; then
-                copy_shortcut_candidate "$(readlink -f "$0")" "$script_path" "当前脚本 \$0" || {
-                    echo -e "${YELLOW}⚠️ 快捷指令本地注册失败，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
-                    return
-                }
+                cp "$release_path" "$candidate_file"
+            elif [[ -f "$current_file" ]]; then
+                cp "$current_file" "$candidate_file"
             else
-                echo -e "${YELLOW}⚠️ 快捷指令本地注册挂起，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
-                return
+                false
             fi
+        }; then
+            :
+        else
+            rm -f "$candidate_file"
+            echo -e "${YELLOW}⚠️ 快捷指令注册挂起，请稍后在主菜单 [17] 更新脚本完成注册。${PLAIN}"
+            return 1
         fi
-        if ! bash -n "$script_path" >/dev/null 2>&1; then
-            quarantine_path "$script_path" "/tmp/vps-optimize-quarantine" >/dev/null 2>&1 || true
-            echo -e "${RED}❌ 快捷指令脚本未通过语法检查，已隔离异常文件。${PLAIN}"
-            return
-        fi
-        chmod +x "$script_path" || {
-            echo -e "${YELLOW}⚠️ 快捷指令授权失败，请检查 /usr/local/bin 权限。${PLAIN}"
-            return
-        }
-        echo -e "${GREEN}✅ 快捷指令 'cy' 已全局注册！下次可直接输入 cy 唤出面板。${PLAIN}"
-        sleep 1
     fi
+
+    if ! copy_shortcut_candidate "$candidate_file" "$script_path" "快捷指令候选脚本"; then
+        rm -f "$candidate_file"
+        echo -e "${YELLOW}⚠️ 快捷指令注册失败，请检查 /usr/local/bin 权限。${PLAIN}"
+        return 1
+    fi
+    rm -f "$candidate_file"
+    echo -e "${GREEN}✅ 快捷指令 'cy' 已全局注册！下次可直接输入 cy 唤出面板。${PLAIN}"
+    sleep 1
 }
 
 run_safe() {
@@ -451,11 +517,11 @@ confirm_remote_script_execution() {
     local confirm
 
     if declare -F read_trimmed >/dev/null 2>&1; then
-        read_trimmed confirm "是否继续下载并执行该远程脚本？(Y/n，默认 yes): "
+        read_trimmed confirm "是否继续下载并执行该远程脚本？(y/N): "
     else
-        read -r -p "是否继续下载并执行该远程脚本？(Y/n，默认 yes): " confirm
+        read -r -p "是否继续下载并执行该远程脚本？(y/N): " confirm
     fi
-    confirm="${confirm:-yes}"
+    confirm="${confirm:-no}"
     if declare -F is_yes >/dev/null 2>&1; then
         is_yes "$confirm"
     else
@@ -476,8 +542,9 @@ run_remote_script() {
         trusted_source=""
         echo -e "${RED}⚠️ 非内置已知来源：该 URL 不在 VPS-Optimize 内置远程脚本白名单内。${PLAIN}"
     fi
-    if [[ "$url" != https://* ]]; then
-        echo -e "${YELLOW}⚠️ 该来源不是 HTTPS，将按脚本内置地址继续下载执行。${PLAIN}"
+    if [[ "$url" != https://* && "$url" != file://* ]]; then
+        echo -e "${RED}❌ 该来源不是 HTTPS，已拒绝下载和执行。${PLAIN}"
+        return 1
     fi
 
     if [[ -z "$trusted_source" || "${VPSO_REMOTE_SCRIPT_CONFIRM:-1}" != "0" ]]; then
@@ -2579,46 +2646,87 @@ configure_system_timezone_for_init() {
         echo -e "${GREEN}✅ 系统时区已设置为：${target_tz}${PLAIN}"
     else
         echo -e "${YELLOW}⚠️ 时区设置失败，已保持当前时区：${current_tz}${PLAIN}"
+        return 1
     fi
 }
 
 func_base_init() {
+    local failed_steps=()
+    local current_cc current_qdisc
+
     clear
     echo -e "${CYAN}👉 正在更新系统软件包、安装基础工具、限制日志并开启基础 BBR...${PLAIN}"
 
-    # 更新系统软件包并优雅调用全局安装函数
     if is_debian; then
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update -y && apt-get upgrade -y && APT_UPDATED=1
+        if apt-get update -y && apt-get upgrade -y; then
+            APT_UPDATED=1
+        else
+            failed_steps+=("系统软件包更新")
+        fi
         unset DEBIAN_FRONTEND
-        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils-ping dnsutils iptables iproute2 sqlite3 jq
+        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils-ping dnsutils iptables iproute2 sqlite3 jq \
+            || failed_steps+=("基础工具安装")
     elif is_redhat; then
-        yum update -y
-        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils bind-utils iptables iproute epel-release sqlite jq
+        if command -v dnf >/dev/null 2>&1; then
+            dnf update -y || failed_steps+=("系统软件包更新")
+        else
+            yum update -y || failed_steps+=("系统软件包更新")
+        fi
+        install_pkg sudo curl wget git nano unzip htop lsof net-tools iputils bind-utils iptables iproute epel-release sqlite jq \
+            || failed_steps+=("基础工具安装")
+    else
+        failed_steps+=("当前发行版不受支持")
     fi
 
-    ensure_minimal_system_compat
+    ensure_minimal_system_compat || failed_steps+=("精简系统兼容组件")
 
-    # 限制系统日志最大 100M
-    mkdir -p /etc/systemd/journald.conf.d/
-    cat > /etc/systemd/journald.conf.d/99-limit.conf <<EOF
+    if ! mkdir -p /etc/systemd/journald.conf.d/ || ! cat > /etc/systemd/journald.conf.d/99-limit.conf <<EOF
 [Journal]
 SystemMaxUse=100M
 RuntimeMaxUse=100M
 EOF
-    systemctl restart systemd-journald > /dev/null 2>&1
+    then
+        failed_steps+=("journald 日志限制")
+    elif ! systemctl restart systemd-journald >/dev/null 2>&1; then
+        failed_steps+=("journald 重启")
+    fi
 
-    # 时区默认保持当前设置，必要时由用户选择
-    configure_system_timezone_for_init
+    configure_system_timezone_for_init || failed_steps+=("时区设置")
 
-    # 强制激活基础 BBR
-    modprobe tcp_bbr >/dev/null 2>&1 # 先主动唤醒/加载 BBR 内核模块
-    echo "net.core.default_qdisc = fq" > /etc/sysctl.d/99-bbr-init.conf
-    echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.d/99-bbr-init.conf
-    sysctl -p /etc/sysctl.d/99-bbr-init.conf > /dev/null 2>&1
+    modprobe tcp_bbr >/dev/null 2>&1 || true
+    if ! {
+        printf '%s\n' \
+            "net.core.default_qdisc = fq" \
+            "net.ipv4.tcp_congestion_control = bbr" \
+            > /etc/sysctl.d/99-bbr-init.conf
+    }; then
+        failed_steps+=("BBR 配置写入")
+    elif ! sysctl -p /etc/sysctl.d/99-bbr-init.conf >/dev/null 2>&1; then
+        failed_steps+=("BBR 参数加载")
+    else
+        current_cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)
+        current_qdisc=$(sysctl -n net.core.default_qdisc 2>/dev/null || true)
+        if [[ "$current_cc" != "bbr" || "$current_qdisc" != "fq" ]]; then
+            failed_steps+=("BBR 状态验证")
+        fi
+    fi
 
-    echo -e "${GREEN}✅ 基础初始化完成，原生 BBR 已激活！${PLAIN}"
-    read -n 1 -s -r -p "按任意键返回主菜单..."
+    if [[ ${#failed_steps[@]} -eq 0 ]]; then
+        echo -e "${GREEN}✅ 基础初始化完成，已验证 BBR 与 fq 生效。${PLAIN}"
+        if [[ "${VPSO_BEGINNER_FLOW:-0}" != "1" ]]; then
+            read -n 1 -s -r -p "按任意键返回主菜单..."
+        fi
+        return 0
+    fi
+
+    echo -e "${RED}❌ 基础初始化未完整完成，失败步骤：${PLAIN}"
+    printf '  - %s\n' "${failed_steps[@]}"
+    echo -e "${YELLOW}已保留成功完成的步骤；请修复上述问题后重新运行基础初始化。${PLAIN}"
+    if [[ "${VPSO_BEGINNER_FLOW:-0}" != "1" ]]; then
+        read -n 1 -s -r -p "按任意键返回主菜单..."
+    fi
+    return 1
 }
 
 update_hosts_hostname_entry() {
@@ -3831,6 +3939,7 @@ func_show_port_current_connections() {
 
 show_firewall_menu_help() {
     echo "防火墙菜单用于放行、删除、查看或关闭系统防火墙规则。删除规则和关闭防火墙都必须输入 yes 确认，大小写均可。"
+    echo "自动放行会保留监听协议；手动添加默认只放行 TCP，可明确选择 udp 或 both。删除旧规则默认同时检查 TCP/UDP。"
     echo "端口并发连接限制用于按公网端口限制每来源 IP 的 TCP 并发连接数，IPv4 使用 iptables connlimit，IPv6 使用 ip6tables connlimit。"
     echo "该限制是额外连接数限制规则，不等同于 UFW/firewalld 的端口放行规则；两者可能并存。"
     echo "添加/删除 connlimit 后会自动尝试刷新持久化快照；[5] 可手动检查或再次保存。系统不支持时会提示当前规则只在本次运行期生效。"
@@ -3871,6 +3980,96 @@ func_port_connlimit_menu() {
     done
 }
 
+firewall_detect_public_listener_rules() {
+    ss -H -lntu 2>/dev/null | awk '
+        $1 ~ /^(tcp|udp)/ {
+            proto = ($1 ~ /^tcp/) ? "tcp" : "udp"
+            endpoint = $5
+            if (endpoint ~ /^127\./ ||
+                endpoint ~ /^\[?::1\]?:/ ||
+                endpoint ~ /^\[?::ffff:127\./) {
+                next
+            }
+            port = endpoint
+            sub(/^.*:/, "", port)
+            if (port ~ /^[0-9]+$/ && port >= 1 && port <= 65535) {
+                print port "/" proto
+            }
+        }
+    ' | sort -t/ -k1,1n -k2,2 -u
+}
+
+normalize_firewall_protocol() {
+    local protocol
+    protocol=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')
+    case "$protocol" in
+        tcp|udp|both) printf '%s\n' "$protocol" ;;
+        *) return 1 ;;
+    esac
+}
+
+firewall_apply_port_rule() {
+    local action="$1"
+    local port_rule="$2"
+    local protocol="$3"
+    local output command_rc
+
+    if [[ "$OS" =~ debian|ubuntu ]]; then
+        port_rule="${port_rule//-/:}"
+        if [[ "$action" == "add" ]]; then
+            output=$(ufw allow "${port_rule}/${protocol}" 2>&1)
+            command_rc=$?
+        else
+            output=$(ufw delete allow "${port_rule}/${protocol}" 2>&1)
+            command_rc=$?
+        fi
+    else
+        port_rule="${port_rule//:/-}"
+        if [[ "${VPSO_FIREWALLD_OFFLINE_MODE:-0}" == "1" && "$action" == "add" ]]; then
+            output=$(firewall-offline-cmd --add-port="${port_rule}/${protocol}" 2>&1)
+            command_rc=$?
+        elif [[ "$action" == "add" ]]; then
+            output=$(firewall-cmd --permanent --add-port="${port_rule}/${protocol}" 2>&1)
+            command_rc=$?
+        else
+            output=$(firewall-cmd --permanent --remove-port="${port_rule}/${protocol}" 2>&1)
+            command_rc=$?
+        fi
+    fi
+    if [[ "$command_rc" -ne 0 ]]; then
+        echo -e "${RED}❌ ${action} ${port_rule}/${protocol} 失败：${output:-未知错误}${PLAIN}"
+        return 1
+    fi
+}
+
+firewall_apply_port_input() {
+    local action="$1"
+    local port_input="$2"
+    local protocol="$3"
+    local rc=0 port_rule current_protocol
+    local protocols=()
+    local port_rules=()
+
+    if [[ "$protocol" == "both" ]]; then
+        protocols=(tcp udp)
+    else
+        protocols=("$protocol")
+    fi
+    IFS=',' read -ra port_rules <<< "$port_input"
+    for port_rule in "${port_rules[@]}"; do
+        if [[ "$action" == "delete" && "$protocol" == "both" && "$OS" =~ debian|ubuntu ]]; then
+            local legacy_port_rule="${port_rule//-/:}"
+            if ufw delete allow "$legacy_port_rule" >/dev/null 2>&1; then
+                continue
+            fi
+        fi
+        for current_protocol in "${protocols[@]}"; do
+            firewall_apply_port_rule "$action" "$port_rule" "$current_protocol" || rc=1
+        done
+    done
+    return "$rc"
+}
+
 func_firewall_manage() {
     while true; do
         clear
@@ -3897,8 +4096,8 @@ func_firewall_manage() {
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. 查看防火墙放行列表${PLAIN}"
         echo -e "${GREEN}  2. 启用防火墙 + 自动放行当前公网端口${PLAIN} ${YELLOW}(不覆盖原有规则)${PLAIN}"
-        echo -e "${GREEN}  3. 手动放行端口${PLAIN} ${YELLOW}(支持 80,443 或 8000-9000)${PLAIN}"
-        echo -e "${GREEN}  4. 删除已放行端口${PLAIN} ${YELLOW}(支持批量/范围)${PLAIN}"
+        echo -e "${GREEN}  3. 手动放行端口${PLAIN} ${YELLOW}(可选 TCP/UDP，支持批量/范围)${PLAIN}"
+        echo -e "${GREEN}  4. 删除已放行端口${PLAIN} ${YELLOW}(可选 TCP/UDP，支持批量/范围)${PLAIN}"
         echo -e "${GREEN}  5. 端口并发连接限制${PLAIN} ${YELLOW}(按每来源 IP 限制 TCP 并发)${PLAIN}"
         echo -e "${RED}  6. 关闭防火墙${PLAIN}"
         echo -e "------------------------------------------------"
@@ -3921,46 +4120,83 @@ func_firewall_manage() {
                 ;;
             2)
                 echo -e "${CYAN}👉 正在嗅探活动端口并配置防火墙...${PLAIN}"
-                local active_ports
-                active_ports=$(ss -tuln 2>/dev/null | grep -E 'LISTEN|UNCONN' | awk '{print $5}' | grep -Ev '^(127\.0\.0\.1:|\[?::1\]?:)' | rev | cut -d: -f1 | rev | sort -nu | grep -E '^[0-9]+$' || true)
+                local active_rules
+                active_rules=$(firewall_detect_public_listener_rules)
 
                 local ssh_port
-                ssh_port=$(ss -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | head -n1)
+                ssh_port=$(ss -H -tlnp 2>/dev/null | grep -w 'sshd' | awk '{print $5}' | awk -F: '{print $NF}' | head -n1)
                 [[ -z "$ssh_port" ]] && ssh_port=$(grep -i '^Port' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1)
                 ssh_port=${ssh_port:-22}
-                if is_valid_port "$ssh_port" && ! printf '%s\n' "$active_ports" | grep -qx "$ssh_port"; then
-                    active_ports=$(printf '%s\n%s\n' "$active_ports" "$ssh_port" | grep -E '^[0-9]+$' | sort -nu)
+                if is_valid_port "$ssh_port" && ! printf '%s\n' "$active_rules" | grep -qx "${ssh_port}/tcp"; then
+                    active_rules=$(printf '%s\n%s\n' "$active_rules" "${ssh_port}/tcp" | grep -E '^[0-9]+/(tcp|udp)$' | sort -t/ -k1,1n -k2,2 -u)
                 fi
 
-                if [[ -z "$active_ports" ]]; then
+                if [[ -z "$active_rules" ]]; then
                     echo -e "${RED}❌ 未能识别到需要放行的监听端口，已取消启用防火墙，避免误锁 SSH。${PLAIN}"
                     echo -e "${YELLOW}请先确认 ss/iproute2 可用，或使用 [3] 手动添加 SSH 端口后再启用。${PLAIN}"
                     read -n 1 -s -r -p "按任意键继续..."
                     continue
                 fi
 
+                local firewall_rc=0 rule_entry rule_port rule_protocol
+                local firewalld_was_inactive=0
                 if [[ "$OS" =~ debian|ubuntu ]]; then
-                    install_pkg ufw
-                    ufw default deny incoming >/dev/null 2>&1
-                    ufw default allow outgoing >/dev/null 2>&1
-
-                    for p in $active_ports; do ufw allow "$p" >/dev/null 2>&1; done
-                    ufw --force enable >/dev/null 2>&1
+                    if ! install_pkg ufw || ! command -v ufw >/dev/null 2>&1; then
+                        echo -e "${RED}❌ UFW 安装失败，未启用防火墙。${PLAIN}"
+                        sleep 2
+                        continue
+                    fi
+                    ufw default deny incoming >/dev/null 2>&1 || firewall_rc=1
+                    ufw default allow outgoing >/dev/null 2>&1 || firewall_rc=1
                 else
-                    install_pkg firewalld
-                    systemctl enable --now firewalld >/dev/null 2>&1
-
-                    for p in $active_ports; do
-                        firewall-cmd --permanent --add-port="${p}/tcp" >/dev/null 2>&1
-                        firewall-cmd --permanent --add-port="${p}/udp" >/dev/null 2>&1
-                    done
-                    firewall-cmd --reload >/dev/null 2>&1
+                    if ! install_pkg firewalld || ! command -v firewall-cmd >/dev/null 2>&1; then
+                        echo -e "${RED}❌ Firewalld 安装失败，未继续写入规则。${PLAIN}"
+                        sleep 2
+                        continue
+                    fi
+                    if ! systemctl is-active --quiet firewalld; then
+                        if ! command -v firewall-offline-cmd >/dev/null 2>&1; then
+                            echo -e "${RED}❌ 缺少 firewall-offline-cmd，无法在启动防火墙前安全写入 SSH 放行规则。${PLAIN}"
+                            sleep 2
+                            continue
+                        fi
+                        firewalld_was_inactive=1
+                        VPSO_FIREWALLD_OFFLINE_MODE=1
+                    fi
                 fi
-                echo -e "${GREEN}✅ 防火墙已成功配置！已为您安全追加放行了以下端口: $(echo "$active_ports" | tr '\n' ' ')${PLAIN}"
+                while IFS= read -r rule_entry; do
+                    [[ -n "$rule_entry" ]] || continue
+                    rule_port="${rule_entry%/*}"
+                    rule_protocol="${rule_entry#*/}"
+                    firewall_apply_port_rule add "$rule_port" "$rule_protocol" || firewall_rc=1
+                done <<< "$active_rules"
+                unset VPSO_FIREWALLD_OFFLINE_MODE
+
+                if [[ "$OS" =~ debian|ubuntu ]]; then
+                    if [[ "$firewall_rc" -eq 0 ]]; then
+                        ufw --force enable >/dev/null 2>&1 || firewall_rc=1
+                        ufw status 2>/dev/null | grep -qi active || firewall_rc=1
+                    fi
+                elif [[ "$firewall_rc" -eq 0 ]]; then
+                    if [[ "$firewalld_was_inactive" -eq 1 ]]; then
+                        systemctl enable --now firewalld >/dev/null 2>&1 || firewall_rc=1
+                        systemctl is-active --quiet firewalld || firewall_rc=1
+                    else
+                        firewall-cmd --reload >/dev/null 2>&1 || firewall_rc=1
+                    fi
+                fi
+
+                if [[ "$firewall_rc" -ne 0 ]]; then
+                    echo -e "${RED}❌ 防火墙配置未完整成功，请根据上方失败规则修复后重试。${PLAIN}"
+                    echo -e "${YELLOW}计划放行：$(echo "$active_rules" | tr '\n' ' ')${PLAIN}"
+                    sleep 3
+                    continue
+                fi
+                echo -e "${GREEN}✅ 防火墙已启用，已按实际监听协议放行：$(echo "$active_rules" | tr '\n' ' ')${PLAIN}"
                 sleep 2
                 ;;
             3)
-                local add_p
+                local add_p add_protocol
                 echo -e "${YELLOW}💡 支持格式：单端口(80)、多端口(80,443)、端口范围(8000:9000 或 8000-9000)${PLAIN}"
                 read_trimmed add_p "👉 请输入要放行的端口号: "
                 add_p=$(normalize_port_rule_input "$add_p")
@@ -3987,38 +4223,26 @@ func_firewall_manage() {
                         sleep 2
                         continue
                     fi
-                    # 将输入的逗号分隔符转换为数组，按个循环处理
-                    IFS=',' read -ra PORT_ARRAY <<< "$add_p"
-                    for p in "${PORT_ARRAY[@]}"; do
-                        if [[ "$OS" =~ debian|ubuntu ]]; then
-                            # UFW 语法转换：将减号强转为冒号
-                            local p_ufw="${p//-/:}"
-                            if [[ "$p_ufw" == *":"* ]]; then
-                                ufw allow "$p_ufw/tcp" >/dev/null 2>&1
-                                ufw allow "$p_ufw/udp" >/dev/null 2>&1
-                            else
-                                ufw allow "$p_ufw" >/dev/null 2>&1
-                            fi
-                        else
-                            # Firewalld 语法转换：将冒号强转为减号
-                            local p_fwd="${p//:/-}"
-                            firewall-cmd --permanent --add-port="${p_fwd}/tcp" >/dev/null 2>&1
-                            firewall-cmd --permanent --add-port="${p_fwd}/udp" >/dev/null 2>&1
-                        fi
-                    done
-
-                    if [[ ! "$OS" =~ debian|ubuntu ]]; then
-                        firewall-cmd --reload >/dev/null 2>&1
+                    read_trimmed add_protocol "👉 请选择协议 tcp/udp/both（默认 tcp）: "
+                    add_protocol=$(normalize_firewall_protocol "${add_protocol:-tcp}" 2>/dev/null || true)
+                    if [[ -z "$add_protocol" ]]; then
+                        echo -e "${RED}❌ 协议只能是 tcp、udp 或 both。${PLAIN}"
+                        sleep 2
+                        continue
                     fi
-
-                    echo -e "${GREEN}✅ 端口规则 [$add_p] 已成功添加至允许列表！${PLAIN}"
+                    if firewall_apply_port_input add "$add_p" "$add_protocol" \
+                        && { [[ "$OS" =~ debian|ubuntu ]] || firewall-cmd --reload >/dev/null 2>&1; }; then
+                        echo -e "${GREEN}✅ 端口规则 [${add_p}/${add_protocol}] 已添加至允许列表。${PLAIN}"
+                    else
+                        echo -e "${RED}❌ 端口规则 [${add_p}/${add_protocol}] 未完整添加，请检查上方错误。${PLAIN}"
+                    fi
                 else
                     echo -e "${RED}❌ 无效的端口格式！端口必须是 1-65535，范围起始值不能大于结束值。${PLAIN}"
                 fi
                 sleep 2
                 ;;
             4)
-                local del_p
+                local del_p del_protocol
                 echo -e "${YELLOW}💡 支持格式：单端口(80)、多端口(80,443)、端口范围(8000:9000 或 8000-9000)${PLAIN}"
                 read_trimmed del_p "👉 请输入要删除放行的端口号: "
                 del_p=$(normalize_port_rule_input "$del_p")
@@ -4049,30 +4273,19 @@ func_firewall_manage() {
                         sleep 2
                         continue
                     fi
-                    IFS=',' read -ra PORT_ARRAY <<< "$del_p"
-                    for p in "${PORT_ARRAY[@]}"; do
-                        if [[ "$OS" =~ debian|ubuntu ]]; then
-                            # UFW 语法转换：将减号强转为冒号
-                            local p_ufw="${p//-/:}"
-                            if [[ "$p_ufw" == *":"* ]]; then
-                                ufw delete allow "$p_ufw/tcp" >/dev/null 2>&1
-                                ufw delete allow "$p_ufw/udp" >/dev/null 2>&1
-                            else
-                                ufw delete allow "$p_ufw" >/dev/null 2>&1
-                            fi
-                        else
-                            # Firewalld 语法转换：将冒号强转为减号
-                            local p_fwd="${p//:/-}"
-                            firewall-cmd --permanent --remove-port="${p_fwd}/tcp" >/dev/null 2>&1
-                            firewall-cmd --permanent --remove-port="${p_fwd}/udp" >/dev/null 2>&1
-                        fi
-                    done
-
-                    if [[ ! "$OS" =~ debian|ubuntu ]]; then
-                        firewall-cmd --reload >/dev/null 2>&1
+                    read_trimmed del_protocol "👉 请选择要删除的协议 tcp/udp/both（默认 both）: "
+                    del_protocol=$(normalize_firewall_protocol "${del_protocol:-both}" 2>/dev/null || true)
+                    if [[ -z "$del_protocol" ]]; then
+                        echo -e "${RED}❌ 协议只能是 tcp、udp 或 both。${PLAIN}"
+                        sleep 2
+                        continue
                     fi
-
-                    echo -e "${GREEN}✅ 端口规则 [$del_p] 已成功从允许列表中移除！${PLAIN}"
+                    if firewall_apply_port_input delete "$del_p" "$del_protocol" \
+                        && { [[ "$OS" =~ debian|ubuntu ]] || firewall-cmd --reload >/dev/null 2>&1; }; then
+                        echo -e "${GREEN}✅ 端口规则 [${del_p}/${del_protocol}] 已从允许列表移除。${PLAIN}"
+                    else
+                        echo -e "${RED}❌ 端口规则 [${del_p}/${del_protocol}] 未完整移除，请检查上方错误。${PLAIN}"
+                    fi
                 else
                     echo -e "${RED}❌ 无效的端口格式！端口必须是 1-65535，范围起始值不能大于结束值。${PLAIN}"
                 fi
@@ -4090,11 +4303,18 @@ func_firewall_manage() {
                 }
                 echo -e "${RED}⚠️ 正在关闭防火墙...${PLAIN}"
                 if [[ "$OS" =~ debian|ubuntu ]]; then
-                    ufw disable >/dev/null 2>&1
+                    if ufw disable >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi inactive; then
+                        echo -e "${GREEN}✅ 防火墙已禁用。${PLAIN}"
+                    else
+                        echo -e "${RED}❌ UFW 禁用失败或状态仍为 active。${PLAIN}"
+                    fi
                 else
-                    systemctl disable --now firewalld >/dev/null 2>&1
+                    if systemctl disable --now firewalld >/dev/null 2>&1 && ! systemctl is-active --quiet firewalld; then
+                        echo -e "${GREEN}✅ 防火墙已禁用。${PLAIN}"
+                    else
+                        echo -e "${RED}❌ Firewalld 禁用失败或服务仍在运行。${PLAIN}"
+                    fi
                 fi
-                echo -e "${GREEN}✅ 防火墙已彻底禁用！${PLAIN}"
                 sleep 2
                 ;;
             "?"|help) show_firewall_menu_help; pause_return ;;
@@ -16116,6 +16336,31 @@ fetch_latest_script_version() {
     printf '%s\n' "$version"
 }
 
+fetch_latest_script_sha256() {
+    local checksum
+    if command -v curl >/dev/null 2>&1; then
+        checksum=$(curl -fsSL --connect-timeout 4 --max-time 10 "$UPDATE_SHA256_URL" 2>/dev/null | awk 'NR == 1 {print $1}' || true)
+    elif command -v wget >/dev/null 2>&1; then
+        checksum=$(wget -q --timeout=10 --tries=1 -O - "$UPDATE_SHA256_URL" 2>/dev/null | awk 'NR == 1 {print $1}' || true)
+    else
+        return 1
+    fi
+    checksum=$(printf '%s' "$checksum" | tr 'A-F' 'a-f')
+    [[ "$checksum" =~ ^[0-9a-f]{64}$ ]] || return 1
+    printf '%s\n' "$checksum"
+}
+
+current_script_sha256() {
+    local current_file
+    current_file="${VPSO_CURRENT_SCRIPT_PATH:-$(readlink -f "$0" 2>/dev/null || true)}"
+    if [[ ! -f "$current_file" ]] || ! is_vps_optimize_generated_script "$current_file"; then
+        current_file="${VPSO_SHORTCUT_PATH:-/usr/local/bin/cy}"
+    fi
+    [[ -f "$current_file" ]] || return 1
+    command -v sha256sum >/dev/null 2>&1 || return 1
+    sha256sum "$current_file" 2>/dev/null | awk 'NR == 1 {print $1}'
+}
+
 version_is_newer() {
     local latest="${1#v}"
     local current="${2#v}"
@@ -16149,13 +16394,15 @@ read_script_update_cache_field() {
 write_script_update_cache() {
     local status="$1"
     local latest="$2"
-    local message="$3"
+    local latest_sha256="$3"
+    local message="$4"
     local cache_dir
     cache_dir=$(dirname "$SCRIPT_UPDATE_CACHE")
     mkdir -p "$cache_dir" 2>/dev/null || return 0
     {
         echo "status=${status}"
         echo "latest=${latest}"
+        echo "latest_sha256=${latest_sha256}"
         echo "message=${message}"
         echo "checked_at=$(date -Is 2>/dev/null || date)"
     } > "$SCRIPT_UPDATE_CACHE" 2>/dev/null || true
@@ -16163,35 +16410,42 @@ write_script_update_cache() {
 
 check_script_update_status() {
     local mode="${1:-auto}"
-    local status latest message
+    local status latest latest_sha256 current_sha256 message
+    current_sha256=$(current_script_sha256 2>/dev/null || true)
     if [[ "$mode" != "force" ]] && script_update_cache_is_fresh; then
         status=$(read_script_update_cache_field status)
         latest=$(read_script_update_cache_field latest)
-        if [[ -n "$latest" && "$latest" != "unknown" ]]; then
+        latest_sha256=$(read_script_update_cache_field latest_sha256)
+        if [[ "$latest_sha256" =~ ^[0-9a-f]{64}$ && -n "$latest" && "$latest" != "unknown" ]]; then
             if version_is_newer "$latest" "$SCRIPT_VERSION"; then
+                status="available"
+            elif [[ -n "$current_sha256" && -n "$latest_sha256" && "$current_sha256" != "$latest_sha256" ]]; then
                 status="available"
             else
                 status="current"
             fi
+            printf '%s|%s\n' "${status:-unknown}" "${latest:-unknown}"
+            return 0
         fi
-        printf '%s|%s\n' "${status:-unknown}" "${latest:-unknown}"
-        return 0
     fi
 
-    if latest=$(fetch_latest_script_version); then
+    if latest=$(fetch_latest_script_version) && latest_sha256=$(fetch_latest_script_sha256); then
         if version_is_newer "$latest" "$SCRIPT_VERSION"; then
             status="available"
             message="发现新版本 ${latest}"
+        elif [[ -n "$current_sha256" && "$current_sha256" != "$latest_sha256" ]]; then
+            status="available"
+            message="检测到同版本内容更新"
         else
             status="current"
-            message="当前已是最新版本"
+            message="当前脚本内容已是最新"
         fi
-        write_script_update_cache "$status" "$latest" "$message"
+        write_script_update_cache "$status" "$latest" "$latest_sha256" "$message"
         printf '%s|%s\n' "$status" "$latest"
         return 0
     fi
 
-    write_script_update_cache "error" "unknown" "无法检查更新"
+    write_script_update_cache "error" "unknown" "unknown" "无法检查更新"
     printf 'error|unknown\n'
 }
 
@@ -16202,45 +16456,39 @@ print_auto_update_notice() {
     latest="${result#*|}"
     case "$status" in
         available)
-            echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
+            if [[ "$latest" == "$SCRIPT_VERSION" ]]; then
+                echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN} 的内容更新，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
+            else
+                echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
+            fi
             ;;
         current)
-            echo -e " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，未发现更高版本。"
+            echo -e " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，脚本内容已是最新。"
             ;;
     esac
 }
 
 func_update_script() {
     clear
-    local tmp_file sha_file
+    local tmp_file
     tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh) || {
         echo -e "${RED}❌ 临时文件创建失败，更新已取消。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
         return 1
     }
-    sha_file=$(mktemp /tmp/cy_update.XXXXXX.sha256) || {
-        rm -f "$tmp_file"
-        echo -e "${RED}❌ 临时校验文件创建失败，更新已取消。${PLAIN}"
-        read -n 1 -s -r -p "按任意键返回..."
-        return 1
-    }
     echo -e "${CYAN}👉 正在从 GitHub 源地址拉取最新版本...${PLAIN}"
-    if download_remote_script "$UPDATE_URL" "$tmp_file" \
-        && bash -n "$tmp_file" \
-        && download_remote_script "$UPDATE_SHA256_URL" "$sha_file" \
-        && verify_file_sha256 "$tmp_file" "$sha_file" \
+    if download_verified_update_script "$tmp_file" \
         && grep -q "func_sni_stack_quick_menu" "$tmp_file" 2>/dev/null \
         && grep -q "main_menu" "$tmp_file" 2>/dev/null \
-        && ! grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' "$tmp_file" 2>/dev/null; then
-        mv "$tmp_file" /usr/local/bin/cy
-        chmod +x /usr/local/bin/cy
-        rm -f "$sha_file"
+        && ! grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' "$tmp_file" 2>/dev/null \
+        && copy_shortcut_candidate "$tmp_file" /usr/local/bin/cy "已验证更新脚本"; then
+        rm -f "$tmp_file" "$SCRIPT_UPDATE_CACHE"
         echo -e "${GREEN}✅ 更新下载并覆盖完成！正在重启面板...${PLAIN}"
         sleep 1
         exec bash /usr/local/bin/cy
     else
-        rm -f "$tmp_file" "$sha_file"
-        echo -e "${RED}❌ 更新失败！请检查您的网络连通性或 GitHub 地址是否正确。${PLAIN}"
+        rm -f "$tmp_file"
+        echo -e "${RED}❌ 更新失败：下载、脚本标识、语法或 sha256 校验未全部通过。${PLAIN}"
         read -n 1 -s -r -p "按任意键返回..."
     fi
 }
@@ -16352,7 +16600,7 @@ func_preflight_check() {
     local warn_count=0
     local err_count=0
 
-    echo -e "${YELLOW}▶ [1/8] 检查系统运行状态...${PLAIN}"
+    echo -e "${YELLOW}▶ [1/9] 检查系统运行状态...${PLAIN}"
     local sys_state
     sys_state=$(systemctl is-system-running 2>/dev/null)
     sys_state=${sys_state:-unknown}
@@ -16368,7 +16616,7 @@ func_preflight_check() {
         ((err_count++))
     fi
 
-    echo -e "${YELLOW}▶ [2/8] 检查公网连通性...${PLAIN}"
+    echo -e "${YELLOW}▶ [2/9] 检查公网连通性...${PLAIN}"
     local ipv4
     ipv4=$(curl -s4 --max-time 3 icanhazip.com 2>/dev/null)
     if [[ -n "$ipv4" ]]; then
@@ -16379,7 +16627,7 @@ func_preflight_check() {
         ((warn_count++))
     fi
 
-    echo -e "${YELLOW}▶ [3/8] 检查 DNS 解析能力...${PLAIN}"
+    echo -e "${YELLOW}▶ [3/9] 检查 DNS 解析能力...${PLAIN}"
     if getent ahosts raw.githubusercontent.com >/dev/null 2>&1; then
         echo -e "${GREEN}✅ DNS 解析正常 (raw.githubusercontent.com)${PLAIN}"
         ((ok_count++))
@@ -16388,7 +16636,7 @@ func_preflight_check() {
         ((err_count++))
     fi
 
-    echo -e "${YELLOW}▶ [4/8] 检查时间同步状态...${PLAIN}"
+    echo -e "${YELLOW}▶ [4/9] 检查时间同步状态...${PLAIN}"
     local ntp_sync
     local can_fix_ntp=false
     ntp_sync=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
@@ -16401,7 +16649,7 @@ func_preflight_check() {
         ((warn_count++))
     fi
 
-    echo -e "${YELLOW}▶ [5/8] 检查磁盘空间...${PLAIN}"
+    echo -e "${YELLOW}▶ [5/9] 检查磁盘空间...${PLAIN}"
     local root_use
     root_use=$(df -P / | awk 'NR==2 {gsub("%", "", $5); print $5}')
     if [[ -n "$root_use" && "$root_use" -lt 80 ]]; then
@@ -16415,7 +16663,7 @@ func_preflight_check() {
         ((err_count++))
     fi
 
-    echo -e "${YELLOW}▶ [6/8] 检查可用内存...${PLAIN}"
+    echo -e "${YELLOW}▶ [6/9] 检查可用内存...${PLAIN}"
     local mem_avail
     mem_avail=$(free -m | awk '/^Mem:/ {print $7}')
     [[ -z "$mem_avail" ]] && mem_avail=$(free -m | awk '/^Mem:/ {print $4}')
@@ -16430,7 +16678,7 @@ func_preflight_check() {
         ((err_count++))
     fi
 
-    echo -e "${YELLOW}▶ [7/8] 检查包管理器占用...${PLAIN}"
+    echo -e "${YELLOW}▶ [7/9] 检查包管理器占用...${PLAIN}"
     local pkg_busy=false
     if is_debian; then
         pgrep -x apt >/dev/null 2>&1 && pkg_busy=true
@@ -16502,14 +16750,20 @@ func_preflight_check() {
             read_trimmed rerun_confirm "是否立即重新体检？(y/N): "
             if is_yes "$rerun_confirm"; then
                 func_preflight_check
-                return
+                return $?
             fi
         fi
     elif $pkg_busy; then
         echo -e "${YELLOW}ℹ️ 包管理器正在运行，本次跳过自动安装类修复。${PLAIN}"
     fi
 
-    read -n 1 -s -r -p "按任意键返回..."
+    if [[ "${VPSO_BEGINNER_FLOW:-0}" != "1" ]]; then
+        read -n 1 -s -r -p "按任意键返回..."
+    fi
+    if [[ "$err_count" -gt 0 ]]; then
+        return 1
+    fi
+    return 0
 }
 
 # ---------------------------------------------------------
@@ -19679,6 +19933,76 @@ normalize_main_choice() {
     esac
 }
 
+beginner_run_optional_step() {
+    local step="$1"
+    local total="$2"
+    local label="$3"
+    local function_name="$4"
+    local choice
+
+    echo -e "${CYAN}[${step}/${total}] ${label}${PLAIN}"
+    read_trimmed choice "是否进入此步骤？(Y/n): "
+    if [[ "${choice:-yes}" =~ ^[Nn]([Oo])?$ ]]; then
+        echo -e "${BLUE}已跳过：${label}${PLAIN}"
+        return 2
+    fi
+    "$function_name"
+}
+
+func_beginner_machine_init() {
+    local total=7
+    local step_rc step_entry step label function_name
+    local VPSO_BEGINNER_FLOW=1
+    local completed=("部署前预检")
+    local skipped=()
+    local optional_steps=(
+        "3|SSH 安全配置|func_security"
+        "4|SSH 公钥配置|func_add_ssh_key"
+        "5|Fail2ban 配置|func_fail2ban"
+        "6|防火墙配置|func_firewall_manage"
+        "7|配置备份|func_backup_center"
+    )
+
+    echo -e "${CYAN}[1/${total}] 部署前预检${PLAIN}"
+    if ! func_preflight_check; then
+        echo -e "${RED}❌ 预检存在异常，新机器初始化已停止，未继续修改系统。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    echo -e "${CYAN}[2/${total}] 基础初始化${PLAIN}"
+    if ! func_base_init; then
+        echo -e "${RED}❌ 基础初始化未完整完成，后续安全配置已停止。${PLAIN}"
+        pause_return
+        return 1
+    fi
+    completed+=("基础初始化")
+
+    for step_entry in "${optional_steps[@]}"; do
+        IFS='|' read -r step label function_name <<< "$step_entry"
+        beginner_run_optional_step "$step" "$total" "$label" "$function_name"
+        step_rc=$?
+        if [[ "$step_rc" -eq 0 ]]; then
+            completed+=("$label")
+        elif [[ "$step_rc" -eq 2 ]]; then
+            skipped+=("$label")
+        else
+            echo -e "${RED}❌ ${label} 执行失败，新机器初始化已停止。${PLAIN}"
+            echo -e "${CYAN}已完成：${completed[*]}${PLAIN}"
+            pause_return
+            return 1
+        fi
+    done
+
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${GREEN}✅ 新机器初始化流程结束。${PLAIN}"
+    echo -e "已完成：${completed[*]}"
+    if [[ ${#skipped[@]} -gt 0 ]]; then
+        echo -e "${YELLOW}已跳过：${skipped[*]}${PLAIN}"
+    fi
+    pause_return
+}
+
 func_beginner_menu() {
     while true; do
         clear
@@ -19702,13 +20026,7 @@ func_beginner_menu() {
         read_trimmed beginner_choice "👉 请选择操作: "
         case "$beginner_choice" in
             1)
-                func_preflight_check
-                func_base_init
-                func_security
-                func_add_ssh_key
-                func_fail2ban
-                func_firewall_manage
-                func_backup_center
+                func_beginner_machine_init
                 ;;
             2) func_panel_deploy_menu ;;
             3) func_sni_stack_quick_menu ;;

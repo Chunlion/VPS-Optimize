@@ -2,9 +2,12 @@ package mux
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -24,6 +27,8 @@ type LogEvent struct {
 }
 
 type LoggerOptions struct {
+	Level        string
+	Format       string
 	File         string
 	MaxSizeBytes int64
 	MaxBackups   int
@@ -31,6 +36,8 @@ type LoggerOptions struct {
 
 type Logger struct {
 	mu           sync.Mutex
+	minLevel     int
+	format       string
 	filePath     string
 	maxSizeBytes int64
 	maxBackups   int
@@ -39,11 +46,19 @@ type Logger struct {
 
 func NewLogger(options ...LoggerOptions) *Logger {
 	logger := &Logger{
+		minLevel:     logLevelPriority("info"),
+		format:       "json",
 		maxSizeBytes: 5 * 1024 * 1024,
 		maxBackups:   3,
 	}
 	if len(options) > 0 {
 		opt := options[0]
+		if priority := logLevelPriority(opt.Level); priority >= 0 {
+			logger.minLevel = priority
+		}
+		if opt.Format == "text" {
+			logger.format = "text"
+		}
 		logger.filePath = opt.File
 		if opt.MaxSizeBytes > 0 {
 			logger.maxSizeBytes = opt.MaxSizeBytes
@@ -56,16 +71,65 @@ func NewLogger(options ...LoggerOptions) *Logger {
 }
 
 func (l *Logger) Emit(level string, ev LogEvent) {
-	ev.Time = time.Now().Format(time.RFC3339Nano)
-	ev.Level = level
-	data, err := json.Marshal(ev)
-	if err != nil {
-		log.Printf(`{"level":"error","message":"failed to encode log event","error":%q}`, err.Error())
+	if l == nil || logLevelPriority(level) < l.minLevel {
 		return
 	}
-	line := string(data)
+	ev.Time = time.Now().Format(time.RFC3339Nano)
+	ev.Level = level
+	var line string
+	if l.format == "text" {
+		line = formatTextLogEvent(ev)
+	} else {
+		data, err := json.Marshal(ev)
+		if err != nil {
+			log.Printf(`{"level":"error","message":"failed to encode log event","error":%q}`, err.Error())
+			return
+		}
+		line = string(data)
+	}
 	log.Print(line)
 	l.writeFile(line + "\n")
+}
+
+func logLevelPriority(level string) int {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		return 0
+	case "info", "":
+		return 1
+	case "warn":
+		return 2
+	case "error":
+		return 3
+	default:
+		return -1
+	}
+}
+
+func formatTextLogEvent(ev LogEvent) string {
+	fields := []string{
+		"time=" + strconv.Quote(ev.Time),
+		"level=" + strconv.Quote(ev.Level),
+	}
+	appendStringField := func(key, value string) {
+		if value != "" {
+			fields = append(fields, key+"="+strconv.Quote(value))
+		}
+	}
+	appendStringField("client_ip", ev.ClientIP)
+	appendStringField("sni", ev.SNI)
+	appendStringField("backend", ev.Backend)
+	appendStringField("route_name", ev.RouteName)
+	if ev.Allowed != nil {
+		fields = append(fields, fmt.Sprintf("allowed=%t", *ev.Allowed))
+	}
+	if ev.Blocked {
+		fields = append(fields, "blocked=true")
+	}
+	appendStringField("transfer_mode", ev.TransferMode)
+	appendStringField("error", ev.Error)
+	appendStringField("message", ev.Message)
+	return strings.Join(fields, " ")
 }
 
 func (l *Logger) Close() error {

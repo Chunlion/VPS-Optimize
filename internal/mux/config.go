@@ -1,6 +1,7 @@
 package mux
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
@@ -59,7 +60,9 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	cfg := DefaultConfig()
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil
