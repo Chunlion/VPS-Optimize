@@ -1748,6 +1748,10 @@ assert_file_not_contains README.md 'ghfast.top' "README must not recommend execu
     UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
     SCRIPT_UPDATE_CACHE="${update_tmp}/update.cache"
     VPSO_CURRENT_SCRIPT_PATH="${update_tmp}/local.sh"
+    curl() {
+        local url="${!#}"
+        cat "${url#file://}"
+    }
 
     update_status=$(check_script_update_status force)
     if [[ "$update_status" != "available|${vps_smoke_script_version}" ]]; then
