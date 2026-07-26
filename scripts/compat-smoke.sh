@@ -177,7 +177,7 @@ assert_file_contains xui-custom-manager.sh 'XUI_WRITE_ALLOWED="$xui_write_allowe
 assert_file_contains xui-custom-manager.sh 'bash -n "$TMP_FILE"' "xcm wrapper must syntax-check downloaded scripts before updating cache."
 assert_file_contains xui-custom-manager.sh 'validate_manager_script_source "$self_path"' "install_local_runner must validate the source script before installing."
 assert_file_contains xui-custom-manager.sh 'ExecStart=/usr/bin/env bash $LOCAL_RUNNER --reset-check' "xui custom reset service must keep bash-based ExecStart."
-assert_file_contains xui-custom-manager.sh 'TimeoutStartSec=120' "xui custom reset service must set TimeoutStartSec."
+assert_file_contains xui-custom-manager.sh 'TimeoutStartSec=900' "xui custom reset service must set TimeoutStartSec."
 assert_file_contains xui-custom-manager.sh '--self-test' "xui-custom-manager must expose a non-destructive self-test mode."
 
 assert_file_contains dog.sh '当前统计来自 nftables counter' "dog.sh must explain the nftables counter traffic accounting source."

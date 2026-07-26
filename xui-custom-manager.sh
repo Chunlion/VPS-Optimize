@@ -86,7 +86,8 @@ clear_screen() {
 
 pause() {
     echo
-    read -rp "按回车返回菜单..."
+    # EOF（Ctrl+D）时不因 set -e 直接退出整个脚本
+    read -rp "按回车返回菜单..." || true
 }
 
 confirm_yes() {
@@ -123,7 +124,8 @@ read_menu_choice() {
     local __var_name="$1"
     local __prompt="${2:-👉 请选择操作: }"
     local __value
-    read -rp "$__prompt" __value
+    # EOF（Ctrl+D）按“返回上级”处理，避免 set -e 直接退出整个脚本
+    read -rp "$__prompt" __value || { echo; __value="q"; }
     printf -v "$__var_name" '%s' "$__value"
 }
 
@@ -282,11 +284,6 @@ install_runtime_deps() {
         return 0
     fi
 
-    if ! command -v apt-get >/dev/null 2>&1; then
-        echo "错误：缺少依赖：${missing[*]}，且未找到 apt-get，请手动安装后重试。"
-        return 1
-    fi
-
     local apt_log_dir apt_log
     if [ -d /var/log ] && [ -w /var/log ]; then
         apt_log_dir="/var/log"
@@ -295,15 +292,37 @@ install_runtime_deps() {
     fi
     apt_log="$(mktemp "${apt_log_dir}/xui-custom-manager-apt-XXXXXX.log")"
 
-    export DEBIAN_FRONTEND=noninteractive
-    if ! apt-get update -qq >"$apt_log" 2>&1 || ! apt-get install -y "${missing[@]}" >>"$apt_log" 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+        export DEBIAN_FRONTEND=noninteractive
+        if ! apt-get update -qq >"$apt_log" 2>&1 || ! apt-get install -y "${missing[@]}" >>"$apt_log" 2>&1; then
+            unset DEBIAN_FRONTEND
+            echo "错误：自动安装依赖失败，日志：$apt_log"
+            echo "最后 20 行："
+            tail -n 20 "$apt_log" 2>/dev/null || true
+            return 1
+        fi
         unset DEBIAN_FRONTEND
-        echo "错误：自动安装依赖失败，日志：$apt_log"
-        echo "最后 20 行："
-        tail -n 20 "$apt_log" 2>/dev/null || true
+    elif command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+        # RHEL 系（Rocky/Alma 等）：sqlite3 命令由 sqlite 包提供
+        local rhel_pkg_cmd="dnf" rhel_pkgs=() tool
+        command -v dnf >/dev/null 2>&1 || rhel_pkg_cmd="yum"
+        for tool in "${missing[@]}"; do
+            case "$tool" in
+                sqlite3) rhel_pkgs+=("sqlite") ;;
+                *) rhel_pkgs+=("$tool") ;;
+            esac
+        done
+        if ! "$rhel_pkg_cmd" install -y "${rhel_pkgs[@]}" >"$apt_log" 2>&1; then
+            echo "错误：自动安装依赖失败，日志：$apt_log"
+            echo "最后 20 行："
+            tail -n 20 "$apt_log" 2>/dev/null || true
+            return 1
+        fi
+    else
+        rm -f "$apt_log"
+        echo "错误：缺少依赖：${missing[*]}，且未找到 apt-get/dnf/yum，请手动安装后重试。"
         return 1
     fi
-    unset DEBIAN_FRONTEND
     rm -f "$apt_log"
 }
 
@@ -433,8 +452,11 @@ install_local_runner() {
 
 ensure_reset_timer_installed() {
     require_verified_xui_for_write || return 1
-    install_local_runner
+    # 本地 runner 安装失败时必须中止，否则 timer 会指向不存在的执行器
+    install_local_runner || return 1
 
+    # TimeoutStartSec 需覆盖首次运行时的依赖安装与大数据库备份；
+    # ExecStopPost 兜底：即使运行中途被杀，也会把 x-ui 拉起来
     cat > "$RESET_SERVICE" <<EOF
 [Unit]
 Description=x-ui custom reset check
@@ -443,7 +465,8 @@ After=network.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/env bash $LOCAL_RUNNER --reset-check
-TimeoutStartSec=120
+ExecStopPost=-/usr/bin/systemctl start x-ui
+TimeoutStartSec=900
 StandardOutput=journal
 StandardError=journal
 EOF
@@ -472,7 +495,8 @@ backup_database() {
     ensure_dirs
 
     if [ ! -f "$XUI_DB" ]; then
-        echo "错误：数据库不存在：$XUI_DB"
+        # 错误信息走 stderr：调用方用 $(…) 捕获 stdout，否则用户看不到报错
+        echo "错误：数据库不存在：$XUI_DB" >&2
         return 1
     fi
 
@@ -480,13 +504,16 @@ backup_database() {
     ts="$(date +%F_%H%M%S)"
     backup_file="$BACKUP_DIR/x-ui.db.$ts.bak"
 
-    if sqlite3 "$XUI_DB" ".backup '$backup_file'"; then
-        chmod 600 "$backup_file"
+    # 先写临时文件再原子改名，避免中断产生的半截备份混入恢复列表
+    if sqlite3 "$XUI_DB" ".backup '$backup_file.tmp'"; then
+        chmod 600 "$backup_file.tmp"
+        mv "$backup_file.tmp" "$backup_file"
         echo "$backup_file"
         return 0
     fi
 
-    echo "错误：数据库备份失败，已取消写库。"
+    rm -f "$backup_file.tmp"
+    echo "错误：数据库备份失败，已取消写库。" >&2
     return 1
 }
 
@@ -507,18 +534,33 @@ backup_all() {
     local ts
     ts="$(date +%F_%H%M%S)"
 
+    # 压缩包同样先写 .tmp 再原子改名，防止半截包被恢复列表当成有效备份
     if [ -d "$XUI_ETC_DIR" ]; then
-        tar -czf "$BACKUP_DIR/x-ui-etc.$ts.tar.gz" -C "$(dirname "$XUI_ETC_DIR")" "$(basename "$XUI_ETC_DIR")"
-        chmod 600 "$BACKUP_DIR/x-ui-etc.$ts.tar.gz"
-        echo "配置目录备份：$BACKUP_DIR/x-ui-etc.$ts.tar.gz"
+        local etc_tar="$BACKUP_DIR/x-ui-etc.$ts.tar.gz"
+        if tar -czf "$etc_tar.tmp" -C "$(dirname "$XUI_ETC_DIR")" "$(basename "$XUI_ETC_DIR")"; then
+            chmod 600 "$etc_tar.tmp"
+            mv "$etc_tar.tmp" "$etc_tar"
+            echo "配置目录备份：$etc_tar"
+        else
+            rm -f "$etc_tar.tmp"
+            echo "错误：配置目录备份失败。" >&2
+            return 1
+        fi
     else
         echo "配置目录不存在，跳过：$XUI_ETC_DIR"
     fi
 
     if [ -d "$XUI_PROGRAM_DIR" ]; then
-        tar -czf "$BACKUP_DIR/x-ui-program.$ts.tar.gz" -C "$(dirname "$XUI_PROGRAM_DIR")" "$(basename "$XUI_PROGRAM_DIR")"
-        chmod 600 "$BACKUP_DIR/x-ui-program.$ts.tar.gz"
-        echo "程序目录备份：$BACKUP_DIR/x-ui-program.$ts.tar.gz"
+        local program_tar="$BACKUP_DIR/x-ui-program.$ts.tar.gz"
+        if tar -czf "$program_tar.tmp" -C "$(dirname "$XUI_PROGRAM_DIR")" "$(basename "$XUI_PROGRAM_DIR")"; then
+            chmod 600 "$program_tar.tmp"
+            mv "$program_tar.tmp" "$program_tar"
+            echo "程序目录备份：$program_tar"
+        else
+            rm -f "$program_tar.tmp"
+            echo "错误：程序目录备份失败。" >&2
+            return 1
+        fi
     else
         echo "程序目录不存在，跳过：$XUI_PROGRAM_DIR"
     fi
@@ -595,23 +637,54 @@ restore_backup() {
             return 0
         }
 
-        require_verified_xui_for_write || return 1
+        # 恢复是灾难修复入口：不再要求当前安装状态健康（当前损坏时正是最需要恢复的时候），
+        # 改为校验所选备份文件本身的完整性
+        if [ "$kind" = "db" ]; then
+            if command -v sqlite3 >/dev/null 2>&1 && ! sqlite3 "$selected" "PRAGMA integrity_check;" 2>/dev/null | grep -qx "ok"; then
+                echo -e "${RED}错误：所选数据库备份未通过完整性校验，已取消恢复。${PLAIN}"
+                pause
+                continue
+            fi
+        else
+            if ! tar -tzf "$selected" >/dev/null 2>&1; then
+                echo -e "${RED}错误：所选备份压缩包已损坏，已取消恢复。${PLAIN}"
+                pause
+                continue
+            fi
+        fi
 
         echo "恢复前备份当前状态..."
-        backup_all || return 1
+        if ! backup_all; then
+            echo -e "${YELLOW}警告：恢复前备份失败（当前安装可能已损坏）。${PLAIN}"
+            confirm_yes "仍要继续恢复吗？继续后当前状态将无法回退。" || {
+                echo "已取消。"
+                return 0
+            }
+        fi
 
         echo "停止 x-ui..."
         systemctl stop x-ui || true
 
+        # 恢复动作必须受控失败：中途出错也要把 x-ui 拉起来并明确告知，不能让脚本静默退出
+        local restore_failed=0
         if [ "$kind" = "db" ]; then
-            cp -a "$selected" "$XUI_DB"
-            chmod 600 "$XUI_DB"
+            mkdir -p "$(dirname "$XUI_DB")" 2>/dev/null || true
+            if cp -a "$selected" "$XUI_DB"; then
+                chmod 600 "$XUI_DB"
+            else
+                restore_failed=1
+            fi
         else
-            tar -xzf "$selected" -C "$target_dir"
+            tar -xzf "$selected" -C "$target_dir" || restore_failed=1
         fi
 
         echo "启动 x-ui..."
         systemctl start x-ui || true
+        if [ "$restore_failed" -ne 0 ]; then
+            echo -e "${RED}错误：恢复过程中出现失败，目标可能处于不完整状态；可重试或改用其他备份。${PLAIN}"
+            pause
+            return 1
+        fi
         echo
         print_health_report
         return 0
@@ -849,7 +922,8 @@ def timer_status():
 
 def load_db():
     try:
-        conn = sqlite3.connect(db_path)
+        # 只读模式打开：数据库缺失时报错而不是悄悄创建一个空的 x-ui.db
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
         try:
             inbounds = conn.execute("SELECT id, remark, port, traffic_reset FROM inbounds ORDER BY id").fetchall()
@@ -948,6 +1022,7 @@ def manage_clients(inbound_id, inbound_cfg):
             inbound_cfg["clients"][email] = {"enabled": True, "day": day}
             print(f"已设置为每月 {day} 号。")
         save_config(config)
+        pause()
 
 def manage_inbound(inbound):
     iid = str(inbound["id"])
@@ -999,7 +1074,10 @@ def manage_inbound(inbound):
         elif choice == "4":
             cfg["reset_clients_without_custom_day"] = not cfg.get("reset_clients_without_custom_day", False)
         elif choice == "5":
+            # 客户端子菜单在其内部已按需保存；此处跳过保存，
+            # 避免只读模式下反复弹出“禁止写入”的提示
             manage_clients(iid, cfg)
+            continue
         save_config(config)
 
 def choose_inbound():
@@ -1060,6 +1138,14 @@ while True:
         sys.exit(0)
     if choice == "1":
         if not require_config_write():
+            continue
+        action = "关闭" if config.get("enabled", False) else "开启"
+        try:
+            answer = input(f"确认{action}自定义重置（将同步{'停用' if action == '关闭' else '安装并启动'}自动检查 timer）？[y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n已取消。")
+            continue
+        if answer not in {"y", "yes"}:
             continue
         config["enabled"] = not config.get("enabled", False)
         save_config(config)
@@ -1245,7 +1331,8 @@ def load_clients_for_inbound(conn, inbound_id):
         return []
 
 def load_rows():
-    conn = sqlite3.connect(db_path)
+    # 只读模式打开：校准界面只读展示，写库由后续独立连接完成
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     inbounds = conn.execute("SELECT id, remark, port, up, down, total FROM inbounds ORDER BY id").fetchall()
     return conn, inbounds
@@ -1734,6 +1821,7 @@ def build_plan(config, state, inbounds, clients):
     skipped = []
     warnings = []
     planned_client_emails = set()
+    planned_client_by_email = {}
     default_day = safe_day(config.get("default_day", 1))
 
     def add_client_plan(item):
@@ -1743,8 +1831,14 @@ def build_plan(config, state, inbounds, clients):
             return
         if email in planned_client_emails:
             skipped.append((item["label"], "同一 email 已在本次计划中处理，3x-ui 客户端流量按 email 共享"))
+            # 记录被去重项的状态键：执行成功后需一并盖章，
+            # 否则下次运行会因该键缺少本月记录而把共享流量再次清零
+            planned = planned_client_by_email.get(email)
+            if planned is not None and item.get("key") and item["key"] != planned.get("key"):
+                planned.setdefault("alias_keys", []).append(item["key"])
             return
         planned_client_emails.add(email)
+        planned_client_by_email[email] = item
         plan_clients.append(item)
 
     for iid, cfg in sorted(config.get("inbounds", {}).items(), key=lambda item: int(item[0]) if str(item[0]).isdigit() else str(item[0])):
@@ -1975,6 +2069,9 @@ def execute_plan(plan_inbounds, plan_clients, state):
             state["inbounds"].setdefault(item["id"], {}).update({"last_reset_month": current_month, "last_reset_date": today.isoformat()})
         for item in updated_clients:
             state["clients"].setdefault(item["key"], {}).update({"last_reset_month": current_month, "last_reset_date": today.isoformat()})
+            # 同一 email 在其他入站下的状态键一并盖章，防止次日重复重置共享流量
+            for alias_key in item.get("alias_keys", []):
+                state["clients"].setdefault(alias_key, {}).update({"last_reset_month": current_month, "last_reset_date": today.isoformat()})
         save_state(state)
 
         if updated_inbounds or updated_clients:
@@ -2104,7 +2201,7 @@ run_reset_check_interactive() {
 
     echo
     local answer
-    read -rp "是否立即执行以上重置？请输入 YES 确认： " answer
+    read -rp "是否立即执行以上重置？请输入 YES 确认： " answer || answer=""
     if [ "$answer" != "YES" ]; then
         echo "已取消，没有写入数据库。"
         pause
@@ -2112,7 +2209,7 @@ run_reset_check_interactive() {
     fi
 
     echo
-    DRY_RUN=0 run_reset_engine
+    DRY_RUN=0 run_reset_engine || true
     pause
 }
 
@@ -2545,19 +2642,20 @@ menu_backup_restore() {
         case "$choice" in
             1)
                 clear_screen
-                backup_all
+                # 失败时函数内部已提示；|| true 防止 set -e 把整个菜单杀掉
+                backup_all || true
                 pause
                 ;;
             2)
-                restore_backup "db"
+                restore_backup "db" || true
                 pause
                 ;;
             3)
-                restore_backup "program"
+                restore_backup "program" || true
                 pause
                 ;;
             4)
-                restore_backup "etc"
+                restore_backup "etc" || true
                 pause
                 ;;
             0|q|Q)
@@ -2622,9 +2720,9 @@ main_menu() {
         echo -e "  ${CYAN}6.${PLAIN} ${GREEN}清理旧备份${PLAIN}                ${YELLOW}(每次只删一个明确备份文件)${PLAIN}"
         echo -e "${BLUE}------------------------------------------------${PLAIN}"
         echo -e "  ${BLUE}?.${PLAIN} ${WHITE}功能索引 / 我想做什么${PLAIN}"
-        echo -e "${RED}  0. 退出 / q 返回上一级${PLAIN}"
+        echo -e "${RED}  0. 退出 / q 退出${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        read_menu_choice choice "👉 请输入数字 / ? 查看索引 / q 返回: "
+        read_menu_choice choice "👉 请输入数字 / ? 查看索引 / q 退出: "
 
         case "$choice" in
             "?"|help|HELP|帮助)
@@ -2632,16 +2730,17 @@ main_menu() {
                 pause
                 ;;
             1)
-                run_custom_reset_ui
+                # 各入口失败时内部已提示；|| true 防止 set -e 结束整个交互会话
+                run_custom_reset_ui || true
                 ;;
             2)
-                run_traffic_ui
+                run_traffic_ui || true
                 ;;
             3)
                 menu_backup_restore
                 ;;
             4)
-                health_check
+                health_check || true
                 pause
                 ;;
             5)

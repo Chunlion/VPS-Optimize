@@ -30,7 +30,11 @@ read_trimmed() {
     local __target="$1"
     local prompt="${2:-}"
     local input
-    read -r -p "$prompt" input
+    # 输入流关闭（Ctrl+D）时优雅退出，避免 set -e 直接崩溃
+    if ! read -r -p "$prompt" input; then
+        echo
+        exit 0
+    fi
     printf -v "$__target" '%s' "$(trim_input "$input")"
 }
 
@@ -38,7 +42,10 @@ read_secret_trimmed() {
     local __target="$1"
     local prompt="${2:-}"
     local input
-    read -r -s -p "$prompt" input
+    if ! read -r -s -p "$prompt" input; then
+        echo
+        exit 0
+    fi
     echo ""
     printf -v "$__target" '%s' "$(trim_input "$input")"
 }
@@ -113,6 +120,10 @@ detect_system() {
         echo "debian"
         return
     fi
+    if [ -f /etc/redhat-release ]; then
+        echo "rhel"
+        return
+    fi
     echo "unknown"
 }
 
@@ -123,8 +134,10 @@ install_missing_tools() {
     local packages=()
     local tool pkg
     case $system_type in
-        "ubuntu") pkg_cmd="apt-get" ;;
-        "debian") pkg_cmd="apt-get" ;;
+        "ubuntu"|"debian") pkg_cmd="apt-get" ;;
+        "rhel")
+            if command -v dnf >/dev/null 2>&1; then pkg_cmd="dnf"; else pkg_cmd="yum"; fi
+            ;;
         *)
             echo -e "${RED}不支持的系统类型: $system_type${NC}"
             exit 1
@@ -133,23 +146,39 @@ install_missing_tools() {
 
     echo -e "${YELLOW}检测到缺少工具: ${missing_tools[*]}${NC}"
     for tool in "${missing_tools[@]}"; do
-        case $tool in
-            "nft") pkg="nftables" ;;
-            "tc"|"ss") pkg="iproute2" ;;
-            "awk") pkg="gawk" ;;
-            *) pkg="$tool" ;;
-        esac
+        if [ "$system_type" = "rhel" ]; then
+            case $tool in
+                "nft") pkg="nftables" ;;
+                "tc"|"ss") pkg="iproute" ;;
+                "awk") pkg="gawk" ;;
+                "cron") pkg="cronie" ;;
+                "conntrack") pkg="conntrack-tools" ;;
+                *) pkg="$tool" ;;
+            esac
+        else
+            case $tool in
+                "nft") pkg="nftables" ;;
+                "tc"|"ss") pkg="iproute2" ;;
+                "awk") pkg="gawk" ;;
+                *) pkg="$tool" ;;
+            esac
+        fi
         [[ " ${packages[*]} " == *" $pkg "* ]] || packages+=("$pkg")
     done
 
-    export DEBIAN_FRONTEND=noninteractive
-    $pkg_cmd update -qq
-    $pkg_cmd install -y "${packages[@]}"
-    unset DEBIAN_FRONTEND
+    if [ "$system_type" = "rhel" ]; then
+        $pkg_cmd install -y "${packages[@]}"
+    else
+        export DEBIAN_FRONTEND=noninteractive
+        $pkg_cmd update -qq
+        $pkg_cmd install -y "${packages[@]}"
+        unset DEBIAN_FRONTEND
+    fi
 
     if [[ " ${missing_tools[*]} " == *" cron "* ]]; then
-        systemctl enable cron 2>/dev/null || true
-        systemctl start cron 2>/dev/null || true
+        # Debian 系服务名为 cron，RHEL 系为 crond
+        systemctl enable cron 2>/dev/null || systemctl enable crond 2>/dev/null || true
+        systemctl start cron 2>/dev/null || systemctl start crond 2>/dev/null || true
     fi
     echo -e "${GREEN}依赖工具安装完成${NC}"
 }
@@ -160,6 +189,13 @@ check_dependencies() {
     local required_tools=("nft" "tc" "ss" "jq" "awk" "bc" "unzip" "cron" "curl" "conntrack")
 
     for tool in "${required_tools[@]}"; do
+        # RHEL 系的 cron 守护进程二进制名为 crond，二者任一存在即视为满足
+        if [ "$tool" = "cron" ]; then
+            if ! command -v cron >/dev/null 2>&1 && ! command -v crond >/dev/null 2>&1; then
+                missing_tools+=("cron")
+            fi
+            continue
+        fi
         if ! command -v "$tool" >/dev/null 2>&1; then
             missing_tools+=("$tool")
         fi
@@ -219,10 +255,11 @@ setup_cron_environment() {
     fi
     
     # 修复：强行注册开机自启任务，确保重启后恢复逻辑被执行
-    if ! crontab -l 2>/dev/null | grep -Fq "@reboot /bin/bash $SCRIPT_PATH"; then
+    # 兼容旧版未加引号的条目：只要 @reboot 行里含本脚本路径就视为已注册
+    if ! crontab -l 2>/dev/null | grep -F "$SCRIPT_PATH" | grep -Fq "@reboot"; then
         local temp_cron2=$(mktemp)
         crontab -l 2>/dev/null > "$temp_cron2" || true
-        echo "@reboot /bin/bash $SCRIPT_PATH >/dev/null 2>&1" >> "$temp_cron2"
+        echo "@reboot /bin/bash \"$SCRIPT_PATH\" >/dev/null 2>&1" >> "$temp_cron2"
         crontab "$temp_cron2" 2>/dev/null || true
         rm -f "$temp_cron2"
     fi
@@ -797,13 +834,28 @@ get_port_status_label() {
     local remark=$(echo "$port_config" | jq -r '.remark // ""')
     local limit_enabled=$(echo "$port_config" | jq -r '.bandwidth_limit.enabled // false')
     local rate_limit=$(echo "$port_config" | jq -r '.bandwidth_limit.rate // "unlimited"')
-    local quota_enabled=$(echo "$port_config" | jq -r '.quota.enabled // true')
+    local quota_enabled=$(echo "$port_config" | jq -r '.quota.enabled // false')
     local monthly_limit=$(echo "$port_config" | jq -r '.quota.monthly_limit // "unlimited"')
     local reset_day_raw=$(echo "$port_config" | jq -r '.quota.reset_day')
-    local reset_day="null"
-    
-    if [ "$monthly_limit" != "unlimited" ] && [ "$reset_day_raw" != "null" ]; then
-        reset_day="${reset_day_raw:-1}"
+
+    # 预生成重置日标签：按目标月的实际天数收敛显示（31 号在 2 月显示为月末日），
+    # 与 check_and_run_daily_resets 的"月末补偿"行为保持一致
+    local reset_tag=""
+    if [ "$reset_day_raw" != "null" ] && [[ "$reset_day_raw" =~ ^[0-9]+$ ]]; then
+        local time_info=($(get_beijing_month_year))
+        local current_day=${time_info[0]}
+        local target_month=${time_info[1]}
+        local target_year=${time_info[2]}
+        if [ "$current_day" -ge "$reset_day_raw" ]; then
+            target_month=$((target_month + 1))
+            if [ $target_month -gt 12 ]; then target_month=1; target_year=$((target_year + 1)); fi
+        fi
+        local target_last=$(date -d "$(printf '%04d-%02d-01' "$target_year" "$target_month") +1 month -1 day" +%d 2>/dev/null | sed 's/^0//')
+        local display_day=$reset_day_raw
+        if [ -n "$target_last" ] && [ "$display_day" -gt "$target_last" ]; then
+            display_day=$target_last
+        fi
+        reset_tag="[${target_month}月${display_day}日重置]"
     fi
 
     local status_tags=()
@@ -820,20 +872,15 @@ get_port_status_label() {
             fi
             local quota_display="$monthly_limit"
             status_tags+=("[配额:${quota_display}]")
-            if [ "$reset_day" != "null" ]; then
-                local time_info=($(get_beijing_month_year))
-                local current_day=${time_info[0]}
-                local current_month=${time_info[1]}
-                local next_month=$current_month
-                if [ $current_day -ge $reset_day ]; then
-                    next_month=$((current_month + 1))
-                    if [ $next_month -gt 12 ]; then next_month=1; fi
-                fi
-                status_tags+=("[${next_month}月${reset_day}日重置]")
+            if [ -n "$reset_tag" ]; then
+                status_tags+=("$reset_tag")
             fi
             if [ $usage_percent -ge 100 ]; then status_tags+=("[已超限]"); fi
         else
             status_tags+=("[无限制]")
+            if [ -n "$reset_tag" ]; then
+                status_tags+=("$reset_tag")
+            fi
         fi
     fi
     if [ "$limit_enabled" = "true" ] && [ "$rate_limit" != "unlimited" ]; then
@@ -1117,7 +1164,8 @@ manage_daily_usage_reports() {
     case $choice in
         1)
             collect_daily_usage_snapshot
-            sleep 1
+            echo
+            read -r -p "按回车返回..." || true
             manage_daily_usage_reports
             ;;
         2)
@@ -1248,7 +1296,7 @@ show_main_menu() {
         5) install_update_script ;;
         6) uninstall_script ;;
         7) manage_notifications ;;
-        8|9) manage_daily_usage_reports ;;
+        8) manage_daily_usage_reports ;;
         detail) show_detailed_port_usage ;;
         health)
             show_statistics_health_check
@@ -1540,11 +1588,13 @@ remove_nftables_rules() {
     local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
 
+    # 锚定到计数器全名（含 in/out 后缀和收尾引号），防止把
+    # 端口段规则误删（例如删除端口 80 时波及 80-90 的 port_80_90_in）
     if is_port_range "$port"; then
         local port_safe=$(echo "$port" | tr '-' '_')
-        local search_pattern="port_${port_safe}_"
+        local search_pattern="port_${port_safe}_(in|out)\""
     else
-        local search_pattern="port_${port}_"
+        local search_pattern="port_${port}_(in|out)\""
     fi
 
     local deleted_count=0
@@ -1597,7 +1647,13 @@ set_port_bandwidth_limit() {
 
     local port_list=$(IFS=','; echo "${ports_to_limit[*]}")
     echo "请输入限制值（0为无限制）（要带单位Kbps/Mbps/Gbps）:"
-    read_trimmed limit_input "带宽限制: "
+    read_trimmed limit_input "带宽限制(回车取消): "
+    if [ -z "$limit_input" ]; then
+        echo -e "${YELLOW}已取消设置带宽限制${NC}"
+        sleep 1
+        manage_traffic_limits
+        return
+    fi
 
     local LIMITS=()
     parse_comma_separated_input "$limit_input" LIMITS
@@ -1745,7 +1801,13 @@ apply_nftables_quota() {
 
     local port_safe=$(echo "$port" | tr '-' '_')
     local quota_name="port_${port_safe}_quota"
-    
+
+    # 恢复路径会在每次运行时反复调用本函数：若内核中已有引用该配额的规则，
+    # 直接跳过，防止 drop 规则不断叠加导致同一数据包被多条规则重复计入配额
+    if nft list table "$family" "$table_name" 2>/dev/null | grep -Fq "quota name \"$quota_name\""; then
+        return 0
+    fi
+
     nft delete quota "$family" "$table_name" "$quota_name" 2>/dev/null || true
     nft add quota "$family" "$table_name" "$quota_name" { over "$effective_quota_bytes" bytes used "$effective_used_bytes" bytes } 2>/dev/null || true
 
@@ -1804,7 +1866,12 @@ apply_tc_limit() {
     local burst_bytes=$(calculate_tc_burst "$base_rate")
     local burst_size=$(format_tc_burst "$burst_bytes")
 
-    tc class add dev $interface parent 1:1 classid $class_id htb rate $total_limit ceil $total_limit burst $burst_size
+    # 创建失败时给出警告但不中断脚本（set -e 下裸命令失败会导致整个脚本
+    # 在启动恢复阶段直接退出，例如根 qdisc 已被其他工具占用时）
+    if ! tc class add dev $interface parent 1:1 classid $class_id htb rate $total_limit ceil $total_limit burst $burst_size 2>/dev/null; then
+        echo -e "${YELLOW}警告：在网卡 $interface 上创建限速类失败，端口 $port 的带宽限制未生效。${NC}" >&2
+        return 0
+    fi
 
     if is_port_range "$port"; then
         local mark_id=$(generate_port_range_mark "$port")
@@ -1949,7 +2016,9 @@ check_and_run_daily_resets() {
     if [ -z "$all_port_configs" ]; then return 0; fi
 
     echo "$all_port_configs" | while read -r port quota_enabled monthly_limit reset_day; do
-        if [ "$quota_enabled" = "true" ] && [ "$monthly_limit" != "unlimited" ] && [ "$reset_day" != "null" ]; then
+        # 只要设置了重置日就生效——不再要求端口必须配置配额，
+        # 保证"设置重置日期"菜单的承诺对无配额端口同样兑现
+        if [ "$quota_enabled" = "true" ] && [ "$reset_day" != "null" ]; then
             local should_reset=false
             
             # 规则 1：今天刚好等于用户设定的重置日
@@ -1993,7 +2062,7 @@ manage_configuration() {
         1) export_config ;;
         2) import_config ;;
         0) show_main_menu ;;
-        *) manage_configuration ;;
+        *) echo -e "${RED}无效选择${NC}"; sleep 1; manage_configuration ;;
     esac
 }
 
@@ -2007,8 +2076,12 @@ export_config() {
 }
 
 import_config() {
-    read_trimmed package_path "配置包路径: "
-    if [ -f "$package_path" ]; then
+    read_trimmed package_path "配置包路径(回车取消): "
+    if [ -z "$package_path" ]; then
+        echo -e "${YELLOW}已取消导入${NC}"
+    elif [ ! -f "$package_path" ]; then
+        echo -e "${RED}文件不存在：$package_path${NC}"
+    else
         if confirm_danger "导入配置包" "会把配置包内容解压到系统根目录，覆盖现有 Port Traffic Dog 配置。"; then
             if tar -tzf "$package_path" 2>/dev/null | awk '
                 BEGIN { ok = 1; seen = 0 }
@@ -2062,8 +2135,26 @@ install_update_script() {
     
     if download_with_sources "$SCRIPT_URL" "$temp_file"; then
         if [ -s "$temp_file" ] && grep -q "端口流量狗" "$temp_file" 2>/dev/null && bash -n "$temp_file" >/dev/null 2>&1; then
+            # 先展示版本信息并确认，避免"检查"菜单项直接执行不可逆的替换重启
+            local remote_version=$(grep -m1 '^readonly SCRIPT_VERSION=' "$temp_file" | cut -d'"' -f2)
+            echo -e "当前版本: ${GREEN}${SCRIPT_VERSION}${NC}"
+            echo -e "远程版本: ${GREEN}${remote_version:-未知}${NC}"
+            if [ -n "$remote_version" ] && [ "$remote_version" = "$SCRIPT_VERSION" ]; then
+                echo -e "${GREEN}当前已是最新版本。${NC}"
+            fi
+            read_trimmed update_confirm "确认更新并原地重启脚本？[y/N]: "
+            case "$update_confirm" in
+                y|Y) ;;
+                *)
+                    rm -f "$temp_file"
+                    echo -e "${YELLOW}已取消更新${NC}"
+                    read -r -p "按回车键返回菜单..." || true
+                    show_main_menu
+                    return
+                    ;;
+            esac
             echo -e "${GREEN}下载成功，正在进行热替换...${NC}"
-            
+
             mv "$temp_file" "$SCRIPT_PATH"
             chmod +x "$SCRIPT_PATH"
             
@@ -2094,7 +2185,7 @@ uninstall_script() {
     echo -e "${YELLOW}将要执行以下操作:${NC}"
     echo "  1. 清除所有端口的流量监控规则 (nftables)" 
     echo "  2. 清除所有端口的带宽限制规则 (TC)"
-    echo "  3. 删除 Telegram/企业微信/自动重置等定时任务"
+    echo "  3. 删除本脚本注册的全部定时任务 (开机自启/数据存档/日报快照/自动重置)"
     echo "  4. 停止并隔离 TG 交互机器人后台服务 (Systemd)"
     echo "  5. 隔离快捷命令 dog"
     echo "  6. 隔离配置文件及日志 (/etc/port-traffic-dog)"
@@ -2122,8 +2213,14 @@ uninstall_script() {
         quarantine_path /etc/systemd/system/port-tg-bot.service "/root/port-traffic-dog-quarantine/systemd" >/dev/null 2>&1 || true
         systemctl daemon-reload >/dev/null 2>&1 || true
 
-        remove_telegram_notification_cron 2>/dev/null || true
-        remove_wecom_notification_cron 2>/dev/null || true
+        # 清理本脚本注册的全部定时任务（@reboot / --save-data / --daily-snapshot / --daily-reset-check）
+        local cleaned_cron
+        cleaned_cron=$(crontab -l 2>/dev/null | grep -vF "$SCRIPT_PATH" || true)
+        if [ -n "$cleaned_cron" ]; then
+            printf '%s\n' "$cleaned_cron" | crontab - 2>/dev/null || true
+        else
+            crontab -r 2>/dev/null || true
+        fi
 
         quarantine_path "$CONFIG_DIR" "/root/port-traffic-dog-quarantine" >/dev/null 2>&1 || true
         quarantine_path "/usr/local/bin/$SHORTCUT_COMMAND" "/root/port-traffic-dog-quarantine/bin" >/dev/null 2>&1 || true
@@ -2204,6 +2301,16 @@ EOF
 }
 
 stop_interactive_tg() {
+    read_trimmed stop_confirm "确认停止并隔离 Telegram 交互机器人服务？[y/N]: "
+    case "$stop_confirm" in
+        y|Y) ;;
+        *)
+            echo -e "${YELLOW}已取消${NC}"
+            sleep 1
+            manage_notifications
+            return
+            ;;
+    esac
     echo -e "${YELLOW}正在停止并隔离 Telegram 交互机器人服务...${NC}"
     systemctl stop port-tg-bot 2>/dev/null || true
     systemctl disable port-tg-bot 2>/dev/null || true
@@ -2281,14 +2388,16 @@ build_tg_port_report() {
     local in_b=${traffic_data[0]:-0}
     local out_b=${traffic_data[1]:-0}
     local actual_total=$((in_b + out_b))
+    local monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE" 2>/dev/null)
 
-    cat <<EOF
-<b>端口流量实时报告</b>
-监听端口: <code>${port}</code>
-实际端口流量: <b>$(format_bytes "$actual_total")</b>
-配额已用: <b>$(format_bytes "$actual_total")</b>
-查询时间: $(get_beijing_time '+%Y-%m-%d %H:%M:%S')
-EOF
+    echo "<b>端口流量实时报告</b>"
+    echo "监听端口: <code>${port}</code>"
+    echo "实际端口流量: <b>$(format_bytes "$actual_total")</b>"
+    # 仅在端口设置了配额时展示配额用量，避免无配额端口出现误导性数字
+    if [ "$monthly_limit" != "unlimited" ] && [ -n "$monthly_limit" ]; then
+        echo "配额已用: <b>$(format_bytes "$actual_total")</b> / ${monthly_limit}"
+    fi
+    echo "查询时间: $(get_beijing_time '+%Y-%m-%d %H:%M:%S')"
 }
 
 build_tg_all_ports_report() {
@@ -2510,6 +2619,10 @@ main() {
     
     # 4. 拦截自动重置的参数
     if [ "${1:-}" == "--reset-port" ]; then
+        if [ -z "${2:-}" ]; then
+            echo -e "${RED}错误：--reset-port 需要指定端口参数${NC}" >&2
+            exit 1
+        fi
         auto_reset_port "$2"
         exit 0
     fi
