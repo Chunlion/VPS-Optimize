@@ -4,7 +4,11 @@
 # Compatibility fallback is handled below when local files are incomplete.
 # Compatibility marker for legacy updater: VPS 全能控制面板
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+if [[ -z "$SCRIPT_DIR" ]]; then
+    echo "无法确定脚本所在目录。" >&2
+    exit 1
+fi
 RELEASE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
 MODULE_LIST="$SCRIPT_DIR/scripts/modules.list"
 MODULES=()
@@ -30,12 +34,12 @@ download_release_script() {
 
 switch_to_release_script() {
     local tmp_file self_path
-    tmp_file=$(mktemp /tmp/vps-optimize-release.XXXXXX.sh) || {
+    tmp_file=$(mktemp "${TMPDIR:-/tmp}/vps-optimize-release.XXXXXX.sh") || {
         echo "创建临时脚本失败。" >&2
         return 1
     }
 
-    echo "当前脚本文件不完整，正在下载可运行脚本..." >&2
+    echo "检测到本地文件不完整，正在下载完整脚本..." >&2
     if ! download_release_script "$tmp_file"; then
         rm -f "$tmp_file"
         echo "下载脚本失败：$RELEASE_URL" >&2
@@ -54,8 +58,9 @@ switch_to_release_script() {
 
     chmod +x "$tmp_file" 2>/dev/null || true
     self_path="$0"
-    if [[ -f "$self_path" && -w "$self_path" ]]; then
-        mv "$tmp_file" "$self_path"
+    # 覆盖自身需要目录可写（mv 替换文件依赖父目录权限，而非文件本身）。
+    # 若替换失败，回退到直接运行已下载的完整脚本，避免反复下载造成死循环。
+    if [[ -f "$self_path" && -w "$self_path" ]] && mv "$tmp_file" "$self_path" 2>/dev/null; then
         chmod +x "$self_path" 2>/dev/null || true
         exec bash "$self_path" "$@"
     fi
@@ -67,7 +72,7 @@ load_source_modules() {
     local raw module
     MODULES=()
     [[ -f "$MODULE_LIST" ]] || {
-        echo "Missing module list: scripts/modules.list" >&2
+        echo "缺少模块列表文件：scripts/modules.list" >&2
         return 1
     }
     while IFS= read -r raw || [[ -n "$raw" ]]; do
@@ -76,13 +81,13 @@ load_source_modules() {
         module="${module%"${module##*[![:space:]]}"}"
         [[ -n "$module" ]] || continue
         if [[ "$module" == *.sh ]]; then
-            echo "Invalid module list entry, omit .sh: ${module}" >&2
+            echo "模块列表条目不应包含 .sh 后缀：${module}" >&2
             return 1
         fi
         MODULES+=("$module")
     done < "$MODULE_LIST"
     [[ ${#MODULES[@]} -gt 0 ]] || {
-        echo "Module list is empty: scripts/modules.list" >&2
+        echo "模块列表为空：scripts/modules.list" >&2
         return 1
     }
 }
@@ -93,7 +98,7 @@ if ! load_source_modules; then
 fi
 for module in "${MODULES[@]}"; do
     if [[ ! -f "$SCRIPT_DIR/src/${module}.sh" ]]; then
-        echo "Missing source module: src/${module}.sh" >&2
+        echo "缺少源码模块：src/${module}.sh" >&2
         missing_module=1
     fi
 done
