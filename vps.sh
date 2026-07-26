@@ -4,7 +4,16 @@
 # Compatibility fallback is handled below when local files are incomplete.
 # Compatibility marker for legacy updater: VPS 全能控制面板
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+# 解析符号链接，确保通过软链调用时也能定位真实仓库目录（限 40 跳，防环）。
+SCRIPT_SOURCE="${BASH_SOURCE[0]:-$0}"
+link_hops=0
+while [[ -L "$SCRIPT_SOURCE" && $link_hops -lt 40 ]]; do
+    link_dir="$(cd "$(dirname "$SCRIPT_SOURCE")" 2>/dev/null && pwd)" || break
+    SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")" || break
+    [[ "$SCRIPT_SOURCE" != /* ]] && SCRIPT_SOURCE="$link_dir/$SCRIPT_SOURCE"
+    link_hops=$((link_hops + 1))
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" 2>/dev/null && pwd)"
 if [[ -z "$SCRIPT_DIR" ]]; then
     echo "无法确定脚本所在目录。" >&2
     exit 1
@@ -58,9 +67,10 @@ switch_to_release_script() {
 
     chmod +x "$tmp_file" 2>/dev/null || true
     self_path="$0"
-    # 覆盖自身需要目录可写（mv 替换文件依赖父目录权限，而非文件本身）。
+    # 覆盖自身需要目录可写（mv 替换文件依赖父目录权限，而非文件本身）；
+    # 符号链接不覆盖，避免把用户创建的快捷方式替换成实体文件。
     # 若替换失败，回退到直接运行已下载的完整脚本，避免反复下载造成死循环。
-    if [[ -f "$self_path" && -w "$self_path" ]] && mv "$tmp_file" "$self_path" 2>/dev/null; then
+    if [[ -f "$self_path" && ! -L "$self_path" && -w "$self_path" ]] && mv "$tmp_file" "$self_path" 2>/dev/null; then
         chmod +x "$self_path" 2>/dev/null || true
         exec bash "$self_path" "$@"
     fi
@@ -69,10 +79,10 @@ switch_to_release_script() {
 }
 
 load_source_modules() {
-    local raw module
+    local raw module seen=" "
     MODULES=()
-    [[ -f "$MODULE_LIST" ]] || {
-        echo "缺少模块列表文件：scripts/modules.list" >&2
+    [[ -f "$MODULE_LIST" && -r "$MODULE_LIST" ]] || {
+        echo "缺少或无法读取模块列表文件：scripts/modules.list" >&2
         return 1
     }
     while IFS= read -r raw || [[ -n "$raw" ]]; do
@@ -84,6 +94,11 @@ load_source_modules() {
             echo "模块列表条目不应包含 .sh 后缀：${module}" >&2
             return 1
         fi
+        if [[ "$seen" == *" $module "* ]]; then
+            echo "模块列表存在重复条目：${module}" >&2
+            return 1
+        fi
+        seen+="$module "
         MODULES+=("$module")
     done < "$MODULE_LIST"
     [[ ${#MODULES[@]} -gt 0 ]] || {
@@ -97,8 +112,8 @@ if ! load_source_modules; then
     missing_module=1
 fi
 for module in "${MODULES[@]}"; do
-    if [[ ! -f "$SCRIPT_DIR/src/${module}.sh" ]]; then
-        echo "缺少源码模块：src/${module}.sh" >&2
+    if [[ ! -f "$SCRIPT_DIR/src/${module}.sh" || ! -r "$SCRIPT_DIR/src/${module}.sh" ]]; then
+        echo "缺少或无法读取源码模块：src/${module}.sh" >&2
         missing_module=1
     fi
 done
