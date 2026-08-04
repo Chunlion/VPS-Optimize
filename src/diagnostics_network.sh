@@ -223,6 +223,101 @@ func_test_scripts() {
         fi
     done
 }
+
+func_server_bandwidth_test() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "网络/内核优化 > 服务器带宽测试"
+    echo -e "${BOLD}📶 服务器带宽测试${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    if ! ensure_speedtest_client; then
+        echo -e "${RED}测速客户端安装失败，无法执行测试。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    echo -e "${YELLOW}测速会产生较大流量，结果受测速节点和线路负载影响。${PLAIN}"
+    echo ""
+    if run_speedtest_client; then
+        echo -e "${GREEN}✅ 带宽测试完成。${PLAIN}"
+    else
+        echo -e "${RED}带宽测试失败，请检查网络连通性或更换测速时段。${PLAIN}"
+    fi
+    pause_return
+}
+
+func_iperf3_single_thread_test() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "网络/内核优化 > iperf3 单线程测试"
+    echo -e "${BOLD}📡 iperf3 单线程测试${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    if ! command -v iperf3 >/dev/null 2>&1 && ! install_pkg iperf3; then
+        echo -e "${RED}iperf3 安装失败，无法执行测试。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    local target port direction duration
+    local -a args
+    read_trimmed target "请输入已运行 iperf3 服务端的 IP 或域名: "
+    if ! is_valid_backend_addr "$target"; then
+        echo -e "${RED}目标地址格式无效。${PLAIN}"
+        pause_return
+        return 1
+    fi
+    read_trimmed port "请输入服务端端口 [5201]: "
+    port="${port:-5201}"
+    if ! is_valid_port "$port"; then
+        echo -e "${RED}端口必须为 1-65535。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    echo "  1. 上传（本机 -> 服务端）"
+    echo "  2. 下载（服务端 -> 本机）"
+    read_trimmed direction "请选择方向 [1]: "
+    direction="${direction:-1}"
+    [[ "$direction" == "1" || "$direction" == "2" ]] || { echo -e "${RED}无效方向。${PLAIN}"; pause_return; return 1; }
+
+    read_trimmed duration "请输入测试时长（秒，1-300）[30]: "
+    duration="${duration:-30}"
+    if [[ ! "$duration" =~ ^[0-9]+$ ]] || (( duration < 1 || duration > 300 )); then
+        echo -e "${RED}测试时长必须为 1-300 秒。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    args=(-c "$target" -p "$port" -P 1 -t "$duration" -f m)
+    [[ "$direction" == "2" ]] && args+=(-R)
+    echo -e "${YELLOW}目标端必须已启动 iperf3 服务；本测试固定使用 1 条并行流。${PLAIN}"
+    echo ""
+    if iperf3 "${args[@]}"; then
+        echo -e "${GREEN}✅ iperf3 单线程测试完成。${PLAIN}"
+    else
+        echo -e "${RED}测试失败，请检查服务端监听、防火墙和端口。${PLAIN}"
+    fi
+    pause_return
+}
+
+func_international_speed_test() {
+    clear
+    run_remote_script "运行国际互联速度测试" \
+        "https://raw.githubusercontent.com/Cd1s/network-latency-tester/main/latency.sh"
+    local rc=$?
+    pause_after_external_script "操作结束，按回车键返回网络优化菜单..."
+    return "$rc"
+}
+
+func_network_latency_quality_test() {
+    clear
+    run_remote_script "运行网络延迟质量检测" "https://Check.Place" -N
+    local rc=$?
+    pause_after_external_script "操作结束，按回车键返回网络优化菜单..."
+    return "$rc"
+}
 # ---------------------------------------------------------
 # 13, 14, 15 面板与流量狗快速部署
 # ---------------------------------------------------------

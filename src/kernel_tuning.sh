@@ -8,6 +8,255 @@ func_bbr_manage() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
+VPSO_BBR_DIRECT_CONF="/etc/sysctl.d/99-vps-optimize-bbr-direct.conf"
+
+speedtest_client_kind() {
+    if command -v speedtest-cli >/dev/null 2>&1; then
+        echo "speedtest-cli"
+    elif command -v speedtest >/dev/null 2>&1; then
+        echo "ookla"
+    else
+        return 1
+    fi
+}
+
+ensure_speedtest_client() {
+    if speedtest_client_kind >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo -e "${YELLOW}未检测到测速客户端，正在安装 speedtest-cli...${PLAIN}"
+    install_pkg speedtest-cli || return 1
+    speedtest_client_kind >/dev/null 2>&1
+}
+
+run_speedtest_client() {
+    case "$(speedtest_client_kind 2>/dev/null)" in
+        ookla) speedtest --accept-license --accept-gdpr ;;
+        speedtest-cli) speedtest-cli --secure ;;
+        *) return 127 ;;
+    esac
+}
+
+extract_speedtest_upload_mbps() {
+    local output="$1"
+    printf '%s\n' "$output" | awk '
+        BEGIN { IGNORECASE = 1 }
+        /Upload:/ {
+            for (i = 1; i <= NF; i++) {
+                value = $i
+                gsub(/[^0-9.]/, "", value)
+                if (value ~ /^[0-9]+([.][0-9]+)?$/) {
+                    seen_upload = 1
+                    candidate = value
+                }
+                if (seen_upload && $i ~ /Mbit\/s|Mbps/) {
+                    printf "%d\n", candidate + 0.5
+                    exit
+                }
+            }
+        }
+    '
+}
+
+bbr_direct_buffer_mb() {
+    local bandwidth="$1"
+    local profile="${2:-near}"
+    local buffer_mb
+
+    [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 )) || return 1
+    case "$profile" in
+        near)
+            if (( bandwidth <= 200 )); then buffer_mb=8
+            elif (( bandwidth <= 700 )); then buffer_mb=12
+            elif (( bandwidth <= 1500 )); then buffer_mb=16
+            elif (( bandwidth <= 5000 )); then buffer_mb=24
+            else buffer_mb=32
+            fi
+            ;;
+        long)
+            if (( bandwidth <= 100 )); then buffer_mb=8
+            elif (( bandwidth <= 300 )); then buffer_mb=20
+            elif (( bandwidth <= 700 )); then buffer_mb=48
+            else buffer_mb=64
+            fi
+            ;;
+        *) return 1 ;;
+    esac
+    echo "$buffer_mb"
+}
+
+prompt_bbr_bandwidth_mbps() {
+    local choice output bandwidth
+
+    echo -e "${CYAN}带宽获取方式：${PLAIN}" >&2
+    echo "  1. 自动测速（使用上传带宽）" >&2
+    echo "  2. 手动输入套餐带宽" >&2
+    read_trimmed choice "请选择 [1]: "
+    choice="${choice:-1}"
+
+    if [[ "$choice" == "1" ]]; then
+        if ensure_speedtest_client >&2; then
+            echo -e "${CYAN}正在执行带宽测试...${PLAIN}" >&2
+            output=$(run_speedtest_client 2>&1)
+            printf '%s\n' "$output" >&2
+            bandwidth=$(extract_speedtest_upload_mbps "$output")
+            if [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 )); then
+                echo -e "${GREEN}检测到上传带宽：${bandwidth} Mbps${PLAIN}" >&2
+                echo "$bandwidth"
+                return 0
+            fi
+            echo -e "${YELLOW}未能解析测速结果，请手动输入套餐带宽。${PLAIN}" >&2
+        else
+            echo -e "${YELLOW}测速客户端不可用，请手动输入套餐带宽。${PLAIN}" >&2
+        fi
+    elif [[ "$choice" != "2" ]]; then
+        echo -e "${RED}无效选择。${PLAIN}" >&2
+        return 1
+    fi
+
+    while true; do
+        read_trimmed bandwidth "请输入带宽（Mbps，输入 0 取消）: "
+        [[ "$bandwidth" == "0" ]] && return 1
+        if [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 )); then
+            echo "$bandwidth"
+            return 0
+        fi
+        echo -e "${RED}请输入正整数。${PLAIN}" >&2
+    done
+}
+
+sysctl_tune_capture_runtime() {
+    local source_file="$1"
+    local output_file="$2"
+    local line key value
+
+    : > "$output_file"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="$(trim_input "$line")"
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
+        key="${line%%=*}"
+        key="$(trim_input "$key")"
+        value=$(sysctl -n "$key" 2>/dev/null) || return 1
+        printf '%s = %s\n' "$key" "$value" >> "$output_file"
+    done < "$source_file"
+}
+
+write_bbr_direct_candidate() {
+    local output_file="$1"
+    local bandwidth="$2"
+    local profile="$3"
+    local buffer_mb="$4"
+    local buffer_bytes
+    buffer_bytes=$((buffer_mb * 1024 * 1024))
+
+    cat > "$output_file" <<EOF
+# VPS-Optimize BBR direct/endpoint profile
+# Bandwidth: ${bandwidth} Mbps; RTT profile: ${profile}; buffer: ${buffer_mb} MiB
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.core.rmem_max = ${buffer_bytes}
+net.core.wmem_max = ${buffer_bytes}
+net.ipv4.tcp_rmem = 4096 87380 ${buffer_bytes}
+net.ipv4.tcp_wmem = 4096 65536 ${buffer_bytes}
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.ip_local_port_range = 1024 65535
+net.core.somaxconn = 4096
+net.ipv4.tcp_max_syn_backlog = 8192
+net.core.netdev_max_backlog = 5000
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_notsent_lowat = 16384
+net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_keepalive_time = 300
+net.ipv4.tcp_keepalive_intvl = 30
+net.ipv4.tcp_keepalive_probes = 5
+net.ipv4.tcp_syncookies = 1
+EOF
+}
+
+func_bbr_direct_tune() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "网络/内核优化 > BBR 直连/落地优化"
+    echo -e "${BOLD}🚀 BBR 直连/落地优化（智能带宽检测）${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    local bandwidth profile_choice profile buffer_mb buffer_bytes
+    local candidate runtime_backup config_backup=""
+    bandwidth=$(prompt_bbr_bandwidth_mbps) || { pause_return "操作已取消，按任意键返回..."; return 0; }
+
+    echo ""
+    echo "  1. 近距离/亚太为主（主要 RTT 通常低于 100ms）"
+    echo "  2. 跨洲链路为主（主要 RTT 通常为 150-300ms）"
+    read_trimmed profile_choice "请选择主要使用场景 [1]: "
+    case "${profile_choice:-1}" in
+        1) profile="near" ;;
+        2) profile="long" ;;
+        *) echo -e "${RED}无效选择。${PLAIN}"; pause_return; return 1 ;;
+    esac
+
+    buffer_mb=$(bbr_direct_buffer_mb "$bandwidth" "$profile") || return 1
+    buffer_bytes=$((buffer_mb * 1024 * 1024))
+    echo -e "${CYAN}计算结果：${bandwidth} Mbps，TCP 最大缓冲区 ${buffer_mb} MiB。${PLAIN}"
+
+    if ! modprobe tcp_bbr >/dev/null 2>&1; then
+        echo -e "${RED}当前内核无法加载 tcp_bbr 模块，未修改配置。${PLAIN}"
+        pause_return
+        return 1
+    fi
+    if ! sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null | grep -qw bbr; then
+        echo -e "${RED}当前内核未提供 BBR 拥塞控制，未修改配置。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    candidate=$(mktemp /tmp/vpso-bbr-direct.XXXXXX.conf) || return 1
+    runtime_backup=$(mktemp /tmp/vpso-bbr-runtime.XXXXXX.conf) || { rm -f "$candidate"; return 1; }
+    write_bbr_direct_candidate "$candidate" "$bandwidth" "$profile" "$buffer_mb"
+
+    if ! sysctl_tune_check_supported_file "$candidate" || ! sysctl_tune_capture_runtime "$candidate" "$runtime_backup"; then
+        rm -f "$candidate" "$runtime_backup"
+        echo -e "${RED}当前内核不支持完整调优参数，未修改配置。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    mkdir -p /etc/sysctl.d || { rm -f "$candidate" "$runtime_backup"; return 1; }
+    if [[ -f "$VPSO_BBR_DIRECT_CONF" ]]; then
+        config_backup="${VPSO_BBR_DIRECT_CONF}.bak_$(date +%Y%m%d_%H%M%S)"
+        if ! cp -p "$VPSO_BBR_DIRECT_CONF" "$config_backup"; then
+            rm -f "$candidate" "$runtime_backup"
+            echo -e "${RED}旧配置备份失败，未应用新参数。${PLAIN}"
+            pause_return
+            return 1
+        fi
+    fi
+
+    if ! sysctl_tune_apply_file "$candidate" || ! install -m 0644 "$candidate" "$VPSO_BBR_DIRECT_CONF"; then
+        sysctl_tune_apply_file "$runtime_backup" >/dev/null 2>&1 || true
+        if [[ -n "$config_backup" && -f "$config_backup" ]]; then
+            cp -p "$config_backup" "$VPSO_BBR_DIRECT_CONF" >/dev/null 2>&1 || true
+        else
+            rm -f "$VPSO_BBR_DIRECT_CONF"
+        fi
+        rm -f "$candidate" "$runtime_backup"
+        echo -e "${RED}调优应用失败，已恢复运行时参数和原配置。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    rm -f "$candidate" "$runtime_backup"
+    echo -e "${GREEN}✅ BBR 直连/落地优化已应用。${PLAIN}"
+    echo "配置文件：$VPSO_BBR_DIRECT_CONF"
+    [[ -n "$config_backup" ]] && echo "原配置备份：$config_backup"
+    echo "当前拥塞控制：$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)"
+    echo "当前最大缓冲区：${buffer_bytes} bytes (${buffer_mb} MiB)"
+    echo -e "${YELLOW}该功能不修改内核、Swap、防火墙、路由或 systemd 服务。${PLAIN}"
+    pause_return
+}
+
 sysctl_tune_split_line() {
     local line="$1"
     line="${line//$'\r'/}"

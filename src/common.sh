@@ -476,6 +476,8 @@ is_trusted_remote_script_url() {
         "https://about.superbench.pro"|\
         "https://bench.sh"|\
         "https://check.unlock.media"|\
+        "https://Check.Place"|\
+        "https://raw.githubusercontent.com/Cd1s/network-latency-tester/main/latency.sh"|\
         "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh"|\
         "https://IP.Check.Place"|\
         "https://run.NodeQuality.com"|\

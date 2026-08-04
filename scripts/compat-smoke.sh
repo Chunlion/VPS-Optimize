@@ -118,6 +118,11 @@ assert_function_once dist/vps.sh func_health_dashboard
 assert_function_once dist/vps.sh render_menu
 assert_function_once dist/vps.sh dispatch_menu_choice
 assert_function_once dist/vps.sh rotate_log_file
+assert_function_once dist/vps.sh func_bbr_direct_tune
+assert_function_once dist/vps.sh func_server_bandwidth_test
+assert_function_once dist/vps.sh func_iperf3_single_thread_test
+assert_function_once dist/vps.sh func_international_speed_test
+assert_function_once dist/vps.sh func_network_latency_quality_test
 assert_function_once dist/vps.sh check_vpso_file_permissions
 assert_function_once dist/vps.sh print_vpso_mux_status_json
 
@@ -125,6 +130,12 @@ assert_file_contains src/menus.sh 'NET_KERNEL_MENU_ITEMS=(' "Network/kernel menu
 assert_file_contains src/menus.sh '1|BBR / 拥塞控制管理|调用 ylx2016 多内核调优脚本|func_bbr_manage|net_bbr'
 assert_file_contains src/menus.sh '2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune'
 assert_file_contains src/menus.sh '4|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|'
+assert_file_contains src/menus.sh '9|BBR 直连/落地优化|智能带宽检测，按主要 RTT 调整缓冲区|func_bbr_direct_tune|net_bbr_direct'
+assert_file_contains src/menus.sh '10|服务器带宽测试|Speedtest 上下行带宽与延迟|func_server_bandwidth_test|'
+assert_file_contains src/menus.sh '11|iperf3 单线程测试|自定义服务端、方向、端口和时长|func_iperf3_single_thread_test|'
+assert_file_contains src/menus.sh '12|国际互联速度测试|多地区网络互联质量测试|func_international_speed_test|'
+assert_file_contains src/menus.sh '13|网络延迟质量检测|三网延迟、连通性与网络质量|func_network_latency_quality_test|'
+assert_file_contains src/menus.sh '三网回程路由测试已在主菜单 [12 测速与质量检测] 中提供，不重复添加。'
 assert_file_contains src/menus.sh 'echo "3 面板 SSL 修复，适合 443 接入前清空面板证书路径。"' "Panel help item 3 must use the current menu label."
 assert_file_contains dist/vps.sh 'echo "3 面板 SSL 修复，适合 443 接入前清空面板证书路径。"' "Built panel help item 3 must use the current menu label."
 assert_file_contains src/panel_rescue.sh '面板 SSL 修复${PLAIN}' "Panel SSL repair page title must use the current menu label."
@@ -219,6 +230,9 @@ trap cleanup_compat_tmp EXIT
 
 source src/common.sh
 source src/ui.sh
+source src/input.sh
+source src/validate.sh
+source src/kernel_tuning.sh
 
 for function_name in render_menu dispatch_menu_choice rotate_log_file format_bytes; do
     assert_function_loaded "$function_name"
@@ -258,5 +272,9 @@ rotate_log_file "$compat_tmp_dir/large.log" 4 3
 [[ -n "$(format_bytes 0)" ]]
 [[ -n "$(format_bytes 1024)" ]]
 [[ -n "$(format_bytes 1048576)" ]]
+[[ "$(bbr_direct_buffer_mb 100 near)" == "8" ]]
+[[ "$(bbr_direct_buffer_mb 1000 near)" == "16" ]]
+[[ "$(bbr_direct_buffer_mb 1000 long)" == "64" ]]
+[[ "$(extract_speedtest_upload_mbps 'Upload: 123.45 Mbit/s')" == "123" ]]
 
 echo "Compatibility smoke passed."

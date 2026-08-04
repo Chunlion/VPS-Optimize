@@ -83,6 +83,12 @@ show_net_kernel_help() {
     echo "6 ZRAM / Swap：适合小内存 VPS。"
     echo "7 安装/切换内核：高风险，必须确认快照和救援控制台可用。"
     echo "8 清理旧内核：不要删除当前内核和云厂商定制内核。"
+    echo "9 BBR 直连/落地优化：按上传带宽和主要 RTT 场景计算 TCP 缓冲区，并安全应用独立配置。"
+    echo "10 服务器带宽测试：调用已安装的 Ookla speedtest，或安装发行版提供的 speedtest-cli。"
+    echo "11 iperf3 单线程测试：连接你自己的 iperf3 服务端，固定使用 1 条并行流。"
+    echo "12 国际互联速度测试：调用 network-latency-tester；执行前会显示来源并确认。"
+    echo "13 网络延迟质量检测：调用 Check.Place 网络质量检测；执行前会显示来源并确认。"
+    echo "三网回程路由测试已在主菜单 [12 测速与质量检测] 中提供，不重复添加。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -105,6 +111,11 @@ NET_KERNEL_MENU_ITEMS=(
     "6|ZRAM / Swap 内存调优|按内存分档优化小鸡|func_zram_swap|"
     "7|安装/切换优化内核|Cloud/KVM 稳定推荐 / XanMod 高级可选|func_install_kernel|net_kernel_install"
     "8|清理旧内核|释放磁盘空间，谨慎操作|func_clean_kernel|"
+    "9|BBR 直连/落地优化|智能带宽检测，按主要 RTT 调整缓冲区|func_bbr_direct_tune|net_bbr_direct"
+    "10|服务器带宽测试|Speedtest 上下行带宽与延迟|func_server_bandwidth_test|"
+    "11|iperf3 单线程测试|自定义服务端、方向、端口和时长|func_iperf3_single_thread_test|"
+    "12|国际互联速度测试|多地区网络互联质量测试|func_international_speed_test|"
+    "13|网络延迟质量检测|三网延迟、连通性与网络质量|func_network_latency_quality_test|"
 )
 
 confirm_menu_risk() {
@@ -121,6 +132,12 @@ confirm_menu_risk() {
                 "sysctl TCP 参数和网络栈配置" \
                 "恢复 /etc/sysctl.d 中的备份配置，或手动回退参数" \
                 "确认参数来源可信，错误参数可能影响网络连接。"
+            ;;
+        net_bbr_direct)
+            confirm_risk_action "BBR 直连/落地优化" \
+                "BBR/FQ 拥塞控制及 TCP 缓冲区、连接队列参数" \
+                "恢复 /etc/sysctl.d/99-vps-optimize-bbr-direct.conf 的时间戳备份，并执行 sysctl --system" \
+                "保留当前 SSH 会话；脚本会在应用失败时自动恢复运行时参数和原配置。"
             ;;
         net_kernel_install)
             confirm_risk_action "安装/切换优化内核" \

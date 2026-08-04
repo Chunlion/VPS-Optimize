@@ -488,6 +488,8 @@ is_trusted_remote_script_url() {
         "https://about.superbench.pro"|\
         "https://bench.sh"|\
         "https://check.unlock.media"|\
+        "https://Check.Place"|\
+        "https://raw.githubusercontent.com/Cd1s/network-latency-tester/main/latency.sh"|\
         "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh"|\
         "https://IP.Check.Place"|\
         "https://run.NodeQuality.com"|\
@@ -14029,6 +14031,255 @@ func_bbr_manage() {
     pause_after_external_script "操作结束，按回车键返回菜单..."
 }
 
+VPSO_BBR_DIRECT_CONF="/etc/sysctl.d/99-vps-optimize-bbr-direct.conf"
+
+speedtest_client_kind() {
+    if command -v speedtest-cli >/dev/null 2>&1; then
+        echo "speedtest-cli"
+    elif command -v speedtest >/dev/null 2>&1; then
+        echo "ookla"
+    else
+        return 1
+    fi
+}
+
+ensure_speedtest_client() {
+    if speedtest_client_kind >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo -e "${YELLOW}未检测到测速客户端，正在安装 speedtest-cli...${PLAIN}"
+    install_pkg speedtest-cli || return 1
+    speedtest_client_kind >/dev/null 2>&1
+}
+
+run_speedtest_client() {
+    case "$(speedtest_client_kind 2>/dev/null)" in
+        ookla) speedtest --accept-license --accept-gdpr ;;
+        speedtest-cli) speedtest-cli --secure ;;
+        *) return 127 ;;
+    esac
+}
+
+extract_speedtest_upload_mbps() {
+    local output="$1"
+    printf '%s\n' "$output" | awk '
+        BEGIN { IGNORECASE = 1 }
+        /Upload:/ {
+            for (i = 1; i <= NF; i++) {
+                value = $i
+                gsub(/[^0-9.]/, "", value)
+                if (value ~ /^[0-9]+([.][0-9]+)?$/) {
+                    seen_upload = 1
+                    candidate = value
+                }
+                if (seen_upload && $i ~ /Mbit\/s|Mbps/) {
+                    printf "%d\n", candidate + 0.5
+                    exit
+                }
+            }
+        }
+    '
+}
+
+bbr_direct_buffer_mb() {
+    local bandwidth="$1"
+    local profile="${2:-near}"
+    local buffer_mb
+
+    [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 )) || return 1
+    case "$profile" in
+        near)
+            if (( bandwidth <= 200 )); then buffer_mb=8
+            elif (( bandwidth <= 700 )); then buffer_mb=12
+            elif (( bandwidth <= 1500 )); then buffer_mb=16
+            elif (( bandwidth <= 5000 )); then buffer_mb=24
+            else buffer_mb=32
+            fi
+            ;;
+        long)
+            if (( bandwidth <= 100 )); then buffer_mb=8
+            elif (( bandwidth <= 300 )); then buffer_mb=20
+            elif (( bandwidth <= 700 )); then buffer_mb=48
+            else buffer_mb=64
+            fi
+            ;;
+        *) return 1 ;;
+    esac
+    echo "$buffer_mb"
+}
+
+prompt_bbr_bandwidth_mbps() {
+    local choice output bandwidth
+
+    echo -e "${CYAN}带宽获取方式：${PLAIN}" >&2
+    echo "  1. 自动测速（使用上传带宽）" >&2
+    echo "  2. 手动输入套餐带宽" >&2
+    read_trimmed choice "请选择 [1]: "
+    choice="${choice:-1}"
+
+    if [[ "$choice" == "1" ]]; then
+        if ensure_speedtest_client >&2; then
+            echo -e "${CYAN}正在执行带宽测试...${PLAIN}" >&2
+            output=$(run_speedtest_client 2>&1)
+            printf '%s\n' "$output" >&2
+            bandwidth=$(extract_speedtest_upload_mbps "$output")
+            if [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 )); then
+                echo -e "${GREEN}检测到上传带宽：${bandwidth} Mbps${PLAIN}" >&2
+                echo "$bandwidth"
+                return 0
+            fi
+            echo -e "${YELLOW}未能解析测速结果，请手动输入套餐带宽。${PLAIN}" >&2
+        else
+            echo -e "${YELLOW}测速客户端不可用，请手动输入套餐带宽。${PLAIN}" >&2
+        fi
+    elif [[ "$choice" != "2" ]]; then
+        echo -e "${RED}无效选择。${PLAIN}" >&2
+        return 1
+    fi
+
+    while true; do
+        read_trimmed bandwidth "请输入带宽（Mbps，输入 0 取消）: "
+        [[ "$bandwidth" == "0" ]] && return 1
+        if [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 )); then
+            echo "$bandwidth"
+            return 0
+        fi
+        echo -e "${RED}请输入正整数。${PLAIN}" >&2
+    done
+}
+
+sysctl_tune_capture_runtime() {
+    local source_file="$1"
+    local output_file="$2"
+    local line key value
+
+    : > "$output_file"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="$(trim_input "$line")"
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
+        key="${line%%=*}"
+        key="$(trim_input "$key")"
+        value=$(sysctl -n "$key" 2>/dev/null) || return 1
+        printf '%s = %s\n' "$key" "$value" >> "$output_file"
+    done < "$source_file"
+}
+
+write_bbr_direct_candidate() {
+    local output_file="$1"
+    local bandwidth="$2"
+    local profile="$3"
+    local buffer_mb="$4"
+    local buffer_bytes
+    buffer_bytes=$((buffer_mb * 1024 * 1024))
+
+    cat > "$output_file" <<EOF
+# VPS-Optimize BBR direct/endpoint profile
+# Bandwidth: ${bandwidth} Mbps; RTT profile: ${profile}; buffer: ${buffer_mb} MiB
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.core.rmem_max = ${buffer_bytes}
+net.core.wmem_max = ${buffer_bytes}
+net.ipv4.tcp_rmem = 4096 87380 ${buffer_bytes}
+net.ipv4.tcp_wmem = 4096 65536 ${buffer_bytes}
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.ip_local_port_range = 1024 65535
+net.core.somaxconn = 4096
+net.ipv4.tcp_max_syn_backlog = 8192
+net.core.netdev_max_backlog = 5000
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_notsent_lowat = 16384
+net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_keepalive_time = 300
+net.ipv4.tcp_keepalive_intvl = 30
+net.ipv4.tcp_keepalive_probes = 5
+net.ipv4.tcp_syncookies = 1
+EOF
+}
+
+func_bbr_direct_tune() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "网络/内核优化 > BBR 直连/落地优化"
+    echo -e "${BOLD}🚀 BBR 直连/落地优化（智能带宽检测）${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    local bandwidth profile_choice profile buffer_mb buffer_bytes
+    local candidate runtime_backup config_backup=""
+    bandwidth=$(prompt_bbr_bandwidth_mbps) || { pause_return "操作已取消，按任意键返回..."; return 0; }
+
+    echo ""
+    echo "  1. 近距离/亚太为主（主要 RTT 通常低于 100ms）"
+    echo "  2. 跨洲链路为主（主要 RTT 通常为 150-300ms）"
+    read_trimmed profile_choice "请选择主要使用场景 [1]: "
+    case "${profile_choice:-1}" in
+        1) profile="near" ;;
+        2) profile="long" ;;
+        *) echo -e "${RED}无效选择。${PLAIN}"; pause_return; return 1 ;;
+    esac
+
+    buffer_mb=$(bbr_direct_buffer_mb "$bandwidth" "$profile") || return 1
+    buffer_bytes=$((buffer_mb * 1024 * 1024))
+    echo -e "${CYAN}计算结果：${bandwidth} Mbps，TCP 最大缓冲区 ${buffer_mb} MiB。${PLAIN}"
+
+    if ! modprobe tcp_bbr >/dev/null 2>&1; then
+        echo -e "${RED}当前内核无法加载 tcp_bbr 模块，未修改配置。${PLAIN}"
+        pause_return
+        return 1
+    fi
+    if ! sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null | grep -qw bbr; then
+        echo -e "${RED}当前内核未提供 BBR 拥塞控制，未修改配置。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    candidate=$(mktemp /tmp/vpso-bbr-direct.XXXXXX.conf) || return 1
+    runtime_backup=$(mktemp /tmp/vpso-bbr-runtime.XXXXXX.conf) || { rm -f "$candidate"; return 1; }
+    write_bbr_direct_candidate "$candidate" "$bandwidth" "$profile" "$buffer_mb"
+
+    if ! sysctl_tune_check_supported_file "$candidate" || ! sysctl_tune_capture_runtime "$candidate" "$runtime_backup"; then
+        rm -f "$candidate" "$runtime_backup"
+        echo -e "${RED}当前内核不支持完整调优参数，未修改配置。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    mkdir -p /etc/sysctl.d || { rm -f "$candidate" "$runtime_backup"; return 1; }
+    if [[ -f "$VPSO_BBR_DIRECT_CONF" ]]; then
+        config_backup="${VPSO_BBR_DIRECT_CONF}.bak_$(date +%Y%m%d_%H%M%S)"
+        if ! cp -p "$VPSO_BBR_DIRECT_CONF" "$config_backup"; then
+            rm -f "$candidate" "$runtime_backup"
+            echo -e "${RED}旧配置备份失败，未应用新参数。${PLAIN}"
+            pause_return
+            return 1
+        fi
+    fi
+
+    if ! sysctl_tune_apply_file "$candidate" || ! install -m 0644 "$candidate" "$VPSO_BBR_DIRECT_CONF"; then
+        sysctl_tune_apply_file "$runtime_backup" >/dev/null 2>&1 || true
+        if [[ -n "$config_backup" && -f "$config_backup" ]]; then
+            cp -p "$config_backup" "$VPSO_BBR_DIRECT_CONF" >/dev/null 2>&1 || true
+        else
+            rm -f "$VPSO_BBR_DIRECT_CONF"
+        fi
+        rm -f "$candidate" "$runtime_backup"
+        echo -e "${RED}调优应用失败，已恢复运行时参数和原配置。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    rm -f "$candidate" "$runtime_backup"
+    echo -e "${GREEN}✅ BBR 直连/落地优化已应用。${PLAIN}"
+    echo "配置文件：$VPSO_BBR_DIRECT_CONF"
+    [[ -n "$config_backup" ]] && echo "原配置备份：$config_backup"
+    echo "当前拥塞控制：$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)"
+    echo "当前最大缓冲区：${buffer_bytes} bytes (${buffer_mb} MiB)"
+    echo -e "${YELLOW}该功能不修改内核、Swap、防火墙、路由或 systemd 服务。${PLAIN}"
+    pause_return
+}
+
 sysctl_tune_split_line() {
     local line="$1"
     line="${line//$'\r'/}"
@@ -15104,6 +15355,101 @@ func_test_scripts() {
             pause_after_external_script "操作结束，按回车键返回测试菜单..."
         fi
     done
+}
+
+func_server_bandwidth_test() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "网络/内核优化 > 服务器带宽测试"
+    echo -e "${BOLD}📶 服务器带宽测试${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    if ! ensure_speedtest_client; then
+        echo -e "${RED}测速客户端安装失败，无法执行测试。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    echo -e "${YELLOW}测速会产生较大流量，结果受测速节点和线路负载影响。${PLAIN}"
+    echo ""
+    if run_speedtest_client; then
+        echo -e "${GREEN}✅ 带宽测试完成。${PLAIN}"
+    else
+        echo -e "${RED}带宽测试失败，请检查网络连通性或更换测速时段。${PLAIN}"
+    fi
+    pause_return
+}
+
+func_iperf3_single_thread_test() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    print_breadcrumb "网络/内核优化 > iperf3 单线程测试"
+    echo -e "${BOLD}📡 iperf3 单线程测试${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    if ! command -v iperf3 >/dev/null 2>&1 && ! install_pkg iperf3; then
+        echo -e "${RED}iperf3 安装失败，无法执行测试。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    local target port direction duration
+    local -a args
+    read_trimmed target "请输入已运行 iperf3 服务端的 IP 或域名: "
+    if ! is_valid_backend_addr "$target"; then
+        echo -e "${RED}目标地址格式无效。${PLAIN}"
+        pause_return
+        return 1
+    fi
+    read_trimmed port "请输入服务端端口 [5201]: "
+    port="${port:-5201}"
+    if ! is_valid_port "$port"; then
+        echo -e "${RED}端口必须为 1-65535。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    echo "  1. 上传（本机 -> 服务端）"
+    echo "  2. 下载（服务端 -> 本机）"
+    read_trimmed direction "请选择方向 [1]: "
+    direction="${direction:-1}"
+    [[ "$direction" == "1" || "$direction" == "2" ]] || { echo -e "${RED}无效方向。${PLAIN}"; pause_return; return 1; }
+
+    read_trimmed duration "请输入测试时长（秒，1-300）[30]: "
+    duration="${duration:-30}"
+    if [[ ! "$duration" =~ ^[0-9]+$ ]] || (( duration < 1 || duration > 300 )); then
+        echo -e "${RED}测试时长必须为 1-300 秒。${PLAIN}"
+        pause_return
+        return 1
+    fi
+
+    args=(-c "$target" -p "$port" -P 1 -t "$duration" -f m)
+    [[ "$direction" == "2" ]] && args+=(-R)
+    echo -e "${YELLOW}目标端必须已启动 iperf3 服务；本测试固定使用 1 条并行流。${PLAIN}"
+    echo ""
+    if iperf3 "${args[@]}"; then
+        echo -e "${GREEN}✅ iperf3 单线程测试完成。${PLAIN}"
+    else
+        echo -e "${RED}测试失败，请检查服务端监听、防火墙和端口。${PLAIN}"
+    fi
+    pause_return
+}
+
+func_international_speed_test() {
+    clear
+    run_remote_script "运行国际互联速度测试" \
+        "https://raw.githubusercontent.com/Cd1s/network-latency-tester/main/latency.sh"
+    local rc=$?
+    pause_after_external_script "操作结束，按回车键返回网络优化菜单..."
+    return "$rc"
+}
+
+func_network_latency_quality_test() {
+    clear
+    run_remote_script "运行网络延迟质量检测" "https://Check.Place" -N
+    local rc=$?
+    pause_after_external_script "操作结束，按回车键返回网络优化菜单..."
+    return "$rc"
 }
 # ---------------------------------------------------------
 # 13, 14, 15 面板与流量狗快速部署
@@ -19939,6 +20285,12 @@ show_net_kernel_help() {
     echo "6 ZRAM / Swap：适合小内存 VPS。"
     echo "7 安装/切换内核：高风险，必须确认快照和救援控制台可用。"
     echo "8 清理旧内核：不要删除当前内核和云厂商定制内核。"
+    echo "9 BBR 直连/落地优化：按上传带宽和主要 RTT 场景计算 TCP 缓冲区，并安全应用独立配置。"
+    echo "10 服务器带宽测试：调用已安装的 Ookla speedtest，或安装发行版提供的 speedtest-cli。"
+    echo "11 iperf3 单线程测试：连接你自己的 iperf3 服务端，固定使用 1 条并行流。"
+    echo "12 国际互联速度测试：调用 network-latency-tester；执行前会显示来源并确认。"
+    echo "13 网络延迟质量检测：调用 Check.Place 网络质量检测；执行前会显示来源并确认。"
+    echo "三网回程路由测试已在主菜单 [12 测速与质量检测] 中提供，不重复添加。"
     echo "? 查看帮助，0/q 返回主菜单。"
 }
 
@@ -19961,6 +20313,11 @@ NET_KERNEL_MENU_ITEMS=(
     "6|ZRAM / Swap 内存调优|按内存分档优化小鸡|func_zram_swap|"
     "7|安装/切换优化内核|Cloud/KVM 稳定推荐 / XanMod 高级可选|func_install_kernel|net_kernel_install"
     "8|清理旧内核|释放磁盘空间，谨慎操作|func_clean_kernel|"
+    "9|BBR 直连/落地优化|智能带宽检测，按主要 RTT 调整缓冲区|func_bbr_direct_tune|net_bbr_direct"
+    "10|服务器带宽测试|Speedtest 上下行带宽与延迟|func_server_bandwidth_test|"
+    "11|iperf3 单线程测试|自定义服务端、方向、端口和时长|func_iperf3_single_thread_test|"
+    "12|国际互联速度测试|多地区网络互联质量测试|func_international_speed_test|"
+    "13|网络延迟质量检测|三网延迟、连通性与网络质量|func_network_latency_quality_test|"
 )
 
 confirm_menu_risk() {
@@ -19977,6 +20334,12 @@ confirm_menu_risk() {
                 "sysctl TCP 参数和网络栈配置" \
                 "恢复 /etc/sysctl.d 中的备份配置，或手动回退参数" \
                 "确认参数来源可信，错误参数可能影响网络连接。"
+            ;;
+        net_bbr_direct)
+            confirm_risk_action "BBR 直连/落地优化" \
+                "BBR/FQ 拥塞控制及 TCP 缓冲区、连接队列参数" \
+                "恢复 /etc/sysctl.d/99-vps-optimize-bbr-direct.conf 的时间戳备份，并执行 sysctl --system" \
+                "保留当前 SSH 会话；脚本会在应用失败时自动恢复运行时参数和原配置。"
             ;;
         net_kernel_install)
             confirm_risk_action "安装/切换优化内核" \
