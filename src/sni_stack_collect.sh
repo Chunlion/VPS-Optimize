@@ -29,7 +29,7 @@ collect_sni_stack_config() {
     NGINX_LISTEN_PORT=$(ask_with_default "Nginx 公网监听端口" "443")
 
     local advanced_mode
-    read_trimmed advanced_mode "是否进入高级模式并允许修改本地服务监听地址？(y/n，默认 n): "
+    read_trimmed advanced_mode "是否进入高级模式并允许修改本地服务监听地址？(Y/n，默认 y): "
     if [[ "$advanced_mode" =~ ^[Yy]$ ]]; then
         CADDY_LISTEN_ADDR=$(ask_with_default "Caddy 本地监听地址" "127.0.0.1")
         XRAY_LISTEN_ADDR=$(ask_with_default "Xray REALITY 本地监听地址" "127.0.0.1")
@@ -52,7 +52,7 @@ collect_sni_stack_config() {
     CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "/clash/")")
     local panel_whitelist_enabled panel_whitelist_input panel_whitelist_ranges current_client_ip
     local -a panel_whitelist_array=()
-    read_trimmed panel_whitelist_enabled "是否为面板域名启用 IP 白名单？(y/n，默认 n): "
+    read_trimmed panel_whitelist_enabled "是否为面板域名启用 IP 白名单？(Y/n，默认 y): "
     if [[ "$panel_whitelist_enabled" =~ ^[Yy]$ ]]; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
@@ -81,7 +81,7 @@ collect_sni_stack_config() {
     echo -e "${YELLOW}请确认 3x-ui 面板设置 -> 常规 -> 证书、订阅设置 -> 证书 路径已经清空。${PLAIN}"
     echo -e "${YELLOW}本向导会让 Caddy 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}"
     local cert_clear_confirm
-    read_trimmed cert_clear_confirm "确认已经清空面板证书和订阅证书路径？(y/n): "
+    read_trimmed cert_clear_confirm "确认已经清空面板证书和订阅证书路径？(Y/n): "
     is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
 
     echo -e "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}"

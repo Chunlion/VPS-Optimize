@@ -348,7 +348,7 @@ reload_applied_config_kind() {
         systemd)
             systemctl daemon-reload >/dev/null 2>&1 || return 1
             unit_name=$(basename "$target_file")
-            read_trimmed confirm "systemd 已 daemon-reload，是否现在重启/重新加载 ${unit_name}？(y/n，默认 n): "
+            read_trimmed confirm "systemd 已 daemon-reload，是否现在重启/重新加载 ${unit_name}？(Y/n，默认 y): "
             if is_yes "$confirm"; then
                 systemctl try-reload-or-restart "$unit_name" >/dev/null 2>&1 || systemctl restart "$unit_name" >/dev/null 2>&1
             else
@@ -356,7 +356,7 @@ reload_applied_config_kind() {
             fi
             ;;
         docker-json)
-            read_trimmed confirm "Docker daemon.json 已校验，是否现在重启 Docker 使其生效？(y/n，默认 n): "
+            read_trimmed confirm "Docker daemon.json 已校验，是否现在重启 Docker 使其生效？(Y/n，默认 y): "
             if is_yes "$confirm"; then
                 restart_named_service_if_available docker
             else
@@ -364,7 +364,7 @@ reload_applied_config_kind() {
             fi
             ;;
         compose)
-            read_trimmed confirm "Compose 配置已校验，是否现在执行 up -d 应用修改？(y/n，默认 n): "
+            read_trimmed confirm "Compose 配置已校验，是否现在执行 up -d 应用修改？(Y/n，默认 y): "
             if is_yes "$confirm"; then
                 run_applied_config_compose "$target_file" up -d
             else
@@ -494,7 +494,7 @@ edit_applied_config_file() {
     echo -e "${CYAN}------------------------------------------------${PLAIN}"
     nl -ba "$target_file"
     echo -e "${CYAN}------------------------------------------------${PLAIN}"
-    read_trimmed confirm "是否打开编辑器修改该文件？(y/n，默认 n): "
+    read_trimmed confirm "是否打开编辑器修改该文件？(Y/n，默认 y): "
     is_yes "$confirm" || return 0
 
     editor=$(applied_config_editor_command) || {

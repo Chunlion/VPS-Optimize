@@ -96,7 +96,7 @@ add_sni_stack_site() {
         fi
     done
 
-    read_trimmed advanced_mode "后端是否使用自定义地址？(y/n，默认 n): "
+    read_trimmed advanced_mode "后端是否使用自定义地址？(Y/n，默认 y): "
     if is_yes "$advanced_mode"; then
         site_addr=$(ask_with_default "后端地址" "127.0.0.1")
     else
@@ -112,7 +112,7 @@ add_sni_stack_site() {
     confirm_backend_target_or_continue "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
 
     if web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "$web_engine"; then
-        read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
+        read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(Y/n，默认 y): "
     else
         echo -e "${YELLOW}xray-fallback 无法让本地 Web 反代引擎可靠获取真实客户端源 IP，本次禁止为新域名启用 Web 白名单。${PLAIN}"
         echo -e "${YELLOW}如需 Web 白名单，请改用 Nginx Stream/TCP Peek 入口模式。${PLAIN}"
@@ -253,7 +253,7 @@ remove_sni_stack_site() {
 
     apply_sni_stack_runtime_config || return 1
 
-    read_trimmed delete_cert "是否同时隔离 ${domain} 的 Caddy 证书文件？(y/n，默认 n): "
+    read_trimmed delete_cert "是否同时隔离 ${domain} 的 Caddy 证书文件？(Y/n，默认 y): "
     if is_yes "$delete_cert"; then
         quarantine_path "/etc/caddy/certs/${domain}.crt" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
         quarantine_path "/etc/caddy/certs/${domain}.key" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true

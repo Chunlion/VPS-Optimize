@@ -67,7 +67,7 @@ func_xpanel_manage() {
     if [[ -z "$panel_cmd" ]]; then
         echo -e "${YELLOW}未检测到 x-ui / 3x-ui 命令，当前机器可能尚未安装 3x-ui 面板。${PLAIN}"
         local yn
-        read_trimmed yn "是否现在安装 3x-ui 面板？(y/n): "
+        read_trimmed yn "是否现在安装 3x-ui 面板？(Y/n): "
         if is_yes "$yn"; then
             func_xpanel
         else
@@ -122,7 +122,7 @@ func_sui_manage() {
     if ! command -v s-ui >/dev/null 2>&1; then
         echo -e "${YELLOW}未检测到 s-ui 命令，当前机器可能尚未安装 S-UI。${PLAIN}"
         local yn
-        read_trimmed yn "是否现在安装 S-UI？(y/n): "
+        read_trimmed yn "是否现在安装 S-UI？(Y/n): "
         if is_yes "$yn"; then
             func_sui_panel
         else
@@ -199,7 +199,7 @@ func_xray_manage() {
     if ! command -v xray >/dev/null 2>&1; then
         echo -e "${YELLOW}未检测到 xray 管理命令，当前机器可能尚未安装 233boy Xray 脚本。${PLAIN}"
         local yn
-        read_trimmed yn "是否现在安装 Xray？(y/n): "
+        read_trimmed yn "是否现在安装 Xray？(Y/n): "
         if is_yes "$yn"; then
             func_xray_233boy
         else
@@ -234,7 +234,7 @@ func_dns_unlock() {
     echo -e "------------------------------------------------"
     
     local yn
-    read_trimmed yn "❓ 确认现在运行 Alice DNS 解锁脚本吗？(y/n): "
+    read_trimmed yn "❓ 确认现在运行 Alice DNS 解锁脚本吗？(Y/n): "
     if is_yes "$yn"; then
         run_remote_script "运行 Alice DNS 解锁脚本" "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"
     else
@@ -253,7 +253,7 @@ func_ip_sentinel() {
     echo -e "${YELLOW}该脚本将持续监控并修正路由，防止服务器 IP 被错误定位至中国大陆。${PLAIN}"
     echo -e "------------------------------------------------"
     
-    read_trimmed yn "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(y/n): "
+    read_trimmed yn "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(Y/n): "
     if is_yes "$yn"; then
         run_remote_script "安装并配置 IP Sentinel" "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh"
     else

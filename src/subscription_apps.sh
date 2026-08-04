@@ -45,7 +45,7 @@ func_sublinkpro() {
     echo -e "${YELLOW}部署完成后请尽快登录后台修改默认密码。${PLAIN}"
     echo -e "------------------------------------------------"
     
-    read_trimmed yn "❓ 确认现在开始一键安装吗？(y/n): "
+    read_trimmed yn "❓ 确认现在开始一键安装吗？(Y/n): "
     if is_yes "$yn"; then
         mkdir -p "$install_dir"
         cd "$install_dir" || return
@@ -131,7 +131,7 @@ func_miaomiaowu() {
     echo -e "------------------------------------------------"
 
     local yn
-    read_trimmed yn "确认现在部署 妙妙屋订阅管理 吗？(y/n): "
+    read_trimmed yn "确认现在部署 妙妙屋订阅管理 吗？(Y/n): "
     if is_yes "$yn"; then
         mkdir -p "$install_dir"/{data,subscribes,rule_templates}
         cd "$install_dir" || return
@@ -225,7 +225,7 @@ func_substore() {
     echo -e "------------------------------------------------"
 
     local yn
-    read_trimmed yn "确认现在部署 Sub-Store 吗？(y/n): "
+    read_trimmed yn "确认现在部署 Sub-Store 吗？(Y/n): "
     if is_yes "$yn"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
@@ -303,7 +303,7 @@ func_dockge() {
     echo -e "------------------------------------------------"
 
     local yn
-    read_trimmed yn "确认现在部署 Dockge 吗？(y/n): "
+    read_trimmed yn "确认现在部署 Dockge 吗？(Y/n): "
     if is_yes "$yn"; then
         mkdir -p "$install_dir" "$stacks_dir"
         cd "$install_dir" || return
@@ -370,7 +370,7 @@ func_komari() {
     done
     warn_if_public_bind "Komari 探针监控面板" "$komari_bind_addr" "$komari_port" || return 1
 
-    read_trimmed custom_admin "是否自定义初始管理员账号和密码？(y/n，默认 n): "
+    read_trimmed custom_admin "是否自定义初始管理员账号和密码？(Y/n，默认 y): "
     if is_yes "$custom_admin"; then
         while true; do
             read_trimmed admin_username "管理员用户名（默认 admin）: "
@@ -405,7 +405,7 @@ func_komari() {
         echo -e "${YELLOW}初始管理员：${CYAN}使用 Komari 默认生成账号，请安装后查看容器日志${PLAIN}"
     fi
     echo -e "------------------------------------------------"
-    read_trimmed yn "确认现在部署 Komari 吗？(y/n): "
+    read_trimmed yn "确认现在部署 Komari 吗？(Y/n): "
     if is_yes "$yn"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return

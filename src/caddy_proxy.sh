@@ -100,11 +100,11 @@ func_caddy_add_reverse_proxy() {
         return 1
     fi
 
-    read_trimmed is_https "❓ 后端面板是否开启了自带的 SSL 证书？(y/n): "
+    read_trimmed is_https "❓ 后端面板是否开启了自带的 SSL 证书？(Y/n): "
 
     local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
-    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
+    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(Y/n，默认 y): "
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}"
@@ -400,8 +400,8 @@ func_nginx_add_reverse_proxy() {
         return 1
     fi
 
-    read_trimmed is_https "后端是否是自带证书的 HTTPS 服务？(y/n，默认 n): "
-    read_trimmed enable_ip_whitelist "是否只允许指定 IP/CIDR 访问该 Nginx 域名？(y/n，默认 n): "
+    read_trimmed is_https "后端是否是自带证书的 HTTPS 服务？(Y/n，默认 y): "
+    read_trimmed enable_ip_whitelist "是否只允许指定 IP/CIDR 访问该 Nginx 域名？(Y/n，默认 y): "
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}"
@@ -802,7 +802,7 @@ func_edit_applied_proxy_config() {
     echo -e "${CYAN}------------------------------------------------${PLAIN}"
     nl -ba "$target_file"
     echo -e "${CYAN}------------------------------------------------${PLAIN}"
-    read_trimmed confirm "是否打开编辑器修改该文件？(y/n，默认 n): "
+    read_trimmed confirm "是否打开编辑器修改该文件？(Y/n，默认 y): "
     is_yes "$confirm" || return 0
 
     editor=$(proxy_config_editor_command) || {

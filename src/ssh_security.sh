@@ -750,7 +750,7 @@ func_add_ssh_key() {
     user=$(ssh_choose_user) || { read -n 1 -s -r -p "按任意键继续..."; return; }
     if ssh_add_public_key_for_user "$user"; then
         echo -e "${GREEN}✅ 公钥添加完成。请立刻新开一个 SSH 窗口测试私钥登录。${PLAIN}"
-        read_trimmed enable_mode "是否同时写入“密钥 + 密码登录（保留/恢复密码）”模式？(y/N): "
+        read_trimmed enable_mode "是否同时写入“密钥 + 密码登录（保留/恢复密码）”模式？(Y/n): "
         if is_yes "$enable_mode"; then
             ssh_apply_auth_mode key_preferred || true
         fi

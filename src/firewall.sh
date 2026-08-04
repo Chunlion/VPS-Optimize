@@ -630,7 +630,7 @@ func_add_port_connlimit_rule() {
 
     read_connlimit_port port || return 0
     read_connlimit_limit limit || return 0
-    read_trimmed apply_ipv6 "是否同时应用 IPv6？(y/n，默认 n): "
+    read_trimmed apply_ipv6 "是否同时应用 IPv6？(Y/n，默认 y): "
 
     print_port_connlimit_scope_notice "$port"
     echo -e "${CYAN}即将添加规则标记：$(port_connlimit_comment "$port")${PLAIN}"

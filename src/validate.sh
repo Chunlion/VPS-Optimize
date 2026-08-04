@@ -188,7 +188,7 @@ check_domain_dns_sanity() {
         echo -e "${YELLOW}请在 VPS 上复查 DNS。若只在本地电脑开启了 fake-ip，198.18.x.x 可能只是本地代理映射；若 VPS/公共 DNS 也看到此地址，请把 A 记录改成真实 VPS 公网 IP。${PLAIN}"
         echo -e "${YELLOW}如果使用 Cloudflare 小云朵，公共 DNS 应看到 Cloudflare 边缘 IP，而不是 198.18/10/127/192.168 等地址。${PLAIN}"
         if [[ "$mode" == "prompt" ]]; then
-            read_trimmed confirm "仍要继续请输入 yes（不推荐，大小写均可）: "
+            read_trimmed confirm "仍要继续？(Y/n，不推荐): "
             is_yes "$confirm" || return 1
         else
             return 1
@@ -509,7 +509,7 @@ confirm_backend_target_or_continue() {
     probe_rc=$?
     [[ "$probe_rc" -eq 2 ]] && return 0
 
-    read_trimmed continue_confirm "后端当前不可连接，仍要继续保存吗？(y/n，默认 n): "
+    read_trimmed continue_confirm "后端当前不可连接，仍要继续保存吗？(Y/n，默认 y): "
     if is_yes "$continue_confirm"; then
         echo -e "${YELLOW}⚠️ 已选择继续；保存后请检查后端服务、地址和端口。${PLAIN}"
         return 0

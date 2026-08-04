@@ -10,7 +10,7 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
     echo -e "${YELLOW}推荐用于：3x-ui Reality 已占用 443，同时 Web 服务需要同域名 HTTPS。${PLAIN}"
     echo -e "------------------------------------------------"
 
-    read_trimmed reality_occupied "❓ 当前 443 端口是否已被 3x-ui VLESS-Reality 占用？(y/n): "
+    read_trimmed reality_occupied "❓ 当前 443 端口是否已被 3x-ui VLESS-Reality 占用？(Y/n): "
     if is_no "$reality_occupied"; then
         echo -e "${BLUE}ℹ️ 您选择了未占用 443，本向导仍将使用本地端口模式，避免与未来业务冲突。${PLAIN}"
     fi
@@ -172,7 +172,7 @@ EOF
         echo -e "${GREEN}✅ 域名 ${domain} 已完成：证书签发 + 反代配置 + 证书挂载。${PLAIN}"
         ((success_count++))
 
-        read_trimmed continue_add "继续添加下一个域名？(y/n): "
+        read_trimmed continue_add "继续添加下一个域名？(Y/n): "
         if ! is_yes "$continue_add"; then
             break
         fi

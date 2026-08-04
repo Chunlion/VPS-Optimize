@@ -41,7 +41,7 @@ confirm_danger() {
     echo "- 当前 SSH 会话不要断开。"
     [[ -n "$advice" ]] && echo -e "- ${advice}"
     echo ""
-    read_trimmed confirm "继续请输入 yes，直接回车取消（大小写均可）: "
+    read_trimmed confirm "直接回车继续，输入 n 取消（大小写均可）: "
     is_yes "$confirm"
 }
 

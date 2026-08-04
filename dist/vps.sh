@@ -519,11 +519,11 @@ confirm_remote_script_execution() {
     local confirm
 
     if declare -F read_trimmed >/dev/null 2>&1; then
-        read_trimmed confirm "是否继续下载并执行该远程脚本？(y/N): "
+        read_trimmed confirm "是否继续下载并执行该远程脚本？(Y/n): "
     else
-        read -r -p "是否继续下载并执行该远程脚本？(y/N): " confirm
+        read -r -p "是否继续下载并执行该远程脚本？(Y/n): " confirm
     fi
-    confirm="${confirm:-no}"
+    confirm="${confirm:-yes}"
     if declare -F is_yes >/dev/null 2>&1; then
         is_yes "$confirm"
     else
@@ -654,7 +654,7 @@ confirm_danger() {
     echo "- 当前 SSH 会话不要断开。"
     [[ -n "$advice" ]] && echo -e "- ${advice}"
     echo ""
-    read_trimmed confirm "继续请输入 yes，直接回车取消（大小写均可）: "
+    read_trimmed confirm "直接回车继续，输入 n 取消（大小写均可）: "
     is_yes "$confirm"
 }
 
@@ -745,6 +745,11 @@ read_trimmed() {
     local prompt="${2:-}"
     local __raw_input
     read -r -p "$prompt" __raw_input
+    if [[ -z "$(trim_input "$__raw_input")" ]]; then
+        case "$prompt" in
+            *"(Y/n"*|*"[Y/n]"*|*"直接回车继续"*) __raw_input="y" ;;
+        esac
+    fi
     case "$__target" in
         mode_choice|action_choice)
             printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
@@ -1032,7 +1037,7 @@ check_domain_dns_sanity() {
         echo -e "${YELLOW}请在 VPS 上复查 DNS。若只在本地电脑开启了 fake-ip，198.18.x.x 可能只是本地代理映射；若 VPS/公共 DNS 也看到此地址，请把 A 记录改成真实 VPS 公网 IP。${PLAIN}"
         echo -e "${YELLOW}如果使用 Cloudflare 小云朵，公共 DNS 应看到 Cloudflare 边缘 IP，而不是 198.18/10/127/192.168 等地址。${PLAIN}"
         if [[ "$mode" == "prompt" ]]; then
-            read_trimmed confirm "仍要继续请输入 yes（不推荐，大小写均可）: "
+            read_trimmed confirm "仍要继续？(Y/n，不推荐): "
             is_yes "$confirm" || return 1
         else
             return 1
@@ -1353,7 +1358,7 @@ confirm_backend_target_or_continue() {
     probe_rc=$?
     [[ "$probe_rc" -eq 2 ]] && return 0
 
-    read_trimmed continue_confirm "后端当前不可连接，仍要继续保存吗？(y/n，默认 n): "
+    read_trimmed continue_confirm "后端当前不可连接，仍要继续保存吗？(Y/n，默认 y): "
     if is_yes "$continue_confirm"; then
         echo -e "${YELLOW}⚠️ 已选择继续；保存后请检查后端服务、地址和端口。${PLAIN}"
         return 0
@@ -2061,7 +2066,7 @@ reload_applied_config_kind() {
         systemd)
             systemctl daemon-reload >/dev/null 2>&1 || return 1
             unit_name=$(basename "$target_file")
-            read_trimmed confirm "systemd 已 daemon-reload，是否现在重启/重新加载 ${unit_name}？(y/n，默认 n): "
+            read_trimmed confirm "systemd 已 daemon-reload，是否现在重启/重新加载 ${unit_name}？(Y/n，默认 y): "
             if is_yes "$confirm"; then
                 systemctl try-reload-or-restart "$unit_name" >/dev/null 2>&1 || systemctl restart "$unit_name" >/dev/null 2>&1
             else
@@ -2069,7 +2074,7 @@ reload_applied_config_kind() {
             fi
             ;;
         docker-json)
-            read_trimmed confirm "Docker daemon.json 已校验，是否现在重启 Docker 使其生效？(y/n，默认 n): "
+            read_trimmed confirm "Docker daemon.json 已校验，是否现在重启 Docker 使其生效？(Y/n，默认 y): "
             if is_yes "$confirm"; then
                 restart_named_service_if_available docker
             else
@@ -2077,7 +2082,7 @@ reload_applied_config_kind() {
             fi
             ;;
         compose)
-            read_trimmed confirm "Compose 配置已校验，是否现在执行 up -d 应用修改？(y/n，默认 n): "
+            read_trimmed confirm "Compose 配置已校验，是否现在执行 up -d 应用修改？(Y/n，默认 y): "
             if is_yes "$confirm"; then
                 run_applied_config_compose "$target_file" up -d
             else
@@ -2207,7 +2212,7 @@ edit_applied_config_file() {
     echo -e "${CYAN}------------------------------------------------${PLAIN}"
     nl -ba "$target_file"
     echo -e "${CYAN}------------------------------------------------${PLAIN}"
-    read_trimmed confirm "是否打开编辑器修改该文件？(y/n，默认 n): "
+    read_trimmed confirm "是否打开编辑器修改该文件？(Y/n，默认 y): "
     is_yes "$confirm" || return 0
 
     editor=$(applied_config_editor_command) || {
@@ -3789,7 +3794,7 @@ func_add_port_connlimit_rule() {
 
     read_connlimit_port port || return 0
     read_connlimit_limit limit || return 0
-    read_trimmed apply_ipv6 "是否同时应用 IPv6？(y/n，默认 n): "
+    read_trimmed apply_ipv6 "是否同时应用 IPv6？(Y/n，默认 y): "
 
     print_port_connlimit_scope_notice "$port"
     echo -e "${CYAN}即将添加规则标记：$(port_connlimit_comment "$port")${PLAIN}"
@@ -5004,11 +5009,11 @@ func_caddy_add_reverse_proxy() {
         return 1
     fi
 
-    read_trimmed is_https "❓ 后端面板是否开启了自带的 SSL 证书？(y/n): "
+    read_trimmed is_https "❓ 后端面板是否开启了自带的 SSL 证书？(Y/n): "
 
     local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
-    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
+    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(Y/n，默认 y): "
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}"
@@ -5304,8 +5309,8 @@ func_nginx_add_reverse_proxy() {
         return 1
     fi
 
-    read_trimmed is_https "后端是否是自带证书的 HTTPS 服务？(y/n，默认 n): "
-    read_trimmed enable_ip_whitelist "是否只允许指定 IP/CIDR 访问该 Nginx 域名？(y/n，默认 n): "
+    read_trimmed is_https "后端是否是自带证书的 HTTPS 服务？(Y/n，默认 y): "
+    read_trimmed enable_ip_whitelist "是否只允许指定 IP/CIDR 访问该 Nginx 域名？(Y/n，默认 y): "
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}"
@@ -5706,7 +5711,7 @@ func_edit_applied_proxy_config() {
     echo -e "${CYAN}------------------------------------------------${PLAIN}"
     nl -ba "$target_file"
     echo -e "${CYAN}------------------------------------------------${PLAIN}"
-    read_trimmed confirm "是否打开编辑器修改该文件？(y/n，默认 n): "
+    read_trimmed confirm "是否打开编辑器修改该文件？(Y/n，默认 y): "
     is_yes "$confirm" || return 0
 
     editor=$(proxy_config_editor_command) || {
@@ -5873,7 +5878,7 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
     echo -e "${YELLOW}推荐用于：3x-ui Reality 已占用 443，同时 Web 服务需要同域名 HTTPS。${PLAIN}"
     echo -e "------------------------------------------------"
 
-    read_trimmed reality_occupied "❓ 当前 443 端口是否已被 3x-ui VLESS-Reality 占用？(y/n): "
+    read_trimmed reality_occupied "❓ 当前 443 端口是否已被 3x-ui VLESS-Reality 占用？(Y/n): "
     if is_no "$reality_occupied"; then
         echo -e "${BLUE}ℹ️ 您选择了未占用 443，本向导仍将使用本地端口模式，避免与未来业务冲突。${PLAIN}"
     fi
@@ -6035,7 +6040,7 @@ EOF
         echo -e "${GREEN}✅ 域名 ${domain} 已完成：证书签发 + 反代配置 + 证书挂载。${PLAIN}"
         ((success_count++))
 
-        read_trimmed continue_add "继续添加下一个域名？(y/n): "
+        read_trimmed continue_add "继续添加下一个域名？(Y/n): "
         if ! is_yes "$continue_add"; then
             break
         fi
@@ -8959,7 +8964,7 @@ switch_entry_mode() {
     current_mode=$(get_entry_mode)
 
     if [[ "$target_mode" == "$current_mode" ]]; then
-        read_trimmed yn "当前已经是 ${target_mode}，是否重新应用当前模式？(y/n，默认 n): "
+        read_trimmed yn "当前已经是 ${target_mode}，是否重新应用当前模式？(Y/n，默认 y): "
         is_yes "$yn" && reapply_current_entry_mode
         return $?
     fi
@@ -9397,7 +9402,7 @@ save_and_offer_reapply_sni_stack() {
     save_sni_stack_env
     echo -e "${GREEN}✅ 已保存新的 443 单入口运行参数。${PLAIN}"
     echo -e "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的域名、端口或路径。${PLAIN}"
-    read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？输入 yes 继续，直接回车取消（大小写均可）: "
+    read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？直接回车继续，输入 n 取消（大小写均可）: "
     if is_yes "$yn"; then
         if ! reapply_sni_stack_from_env --yes; then
             if [[ -n "$env_backup" && -f "$env_backup" ]]; then
@@ -9764,7 +9769,7 @@ collect_sni_stack_config() {
     NGINX_LISTEN_PORT=$(ask_with_default "Nginx 公网监听端口" "443")
 
     local advanced_mode
-    read_trimmed advanced_mode "是否进入高级模式并允许修改本地服务监听地址？(y/n，默认 n): "
+    read_trimmed advanced_mode "是否进入高级模式并允许修改本地服务监听地址？(Y/n，默认 y): "
     if is_yes "$advanced_mode"; then
         CADDY_LISTEN_ADDR=$(ask_with_default "$(web_proxy_engine_label "$WEB_PROXY_ENGINE")监听地址" "127.0.0.1")
         XRAY_LISTEN_ADDR=$(ask_with_default "Xray REALITY 本地监听地址" "127.0.0.1")
@@ -9787,7 +9792,7 @@ collect_sni_stack_config() {
     CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "$default_clash_path")")
     local panel_whitelist_enabled panel_whitelist_input panel_whitelist_ranges current_client_ip
     local -a panel_whitelist_array=()
-    read_trimmed panel_whitelist_enabled "是否为面板域名启用 IP 白名单？(y/n，默认 n): "
+    read_trimmed panel_whitelist_enabled "是否为面板域名启用 IP 白名单？(Y/n，默认 y): "
     if is_yes "$panel_whitelist_enabled"; then
         if ! web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-nginx-stream}" "$WEB_PROXY_ENGINE"; then
             echo -e "${RED}❌ xray-fallback 模式不支持 Web 白名单。${PLAIN}"
@@ -9828,11 +9833,11 @@ collect_sni_stack_config() {
     cert_clear_confirm="${cert_clear_confirm:-yes}"
     if is_yes "$cert_clear_confirm"; then
         if ! clear_xui_cert_settings_for_single_443; then
-            read_trimmed cert_clear_confirm "未能自动确认清空，是否已经手动清空面板证书和订阅证书路径？(y/n，默认 n): "
+            read_trimmed cert_clear_confirm "未能自动确认清空，是否已经手动清空面板证书和订阅证书路径？(Y/n，默认 y): "
             is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
         fi
     else
-        read_trimmed cert_clear_confirm "确认已经手动清空面板证书和订阅证书路径？(y/n，默认 n): "
+        read_trimmed cert_clear_confirm "确认已经手动清空面板证书和订阅证书路径？(Y/n，默认 y): "
         is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
     fi
 
@@ -10635,7 +10640,7 @@ harden_single_443_firewall() {
     local yn ssh_port remove_ports port
     echo -e "${YELLOW}可选：防火墙只保留 SSH 与 Nginx 公网入口端口。${PLAIN}"
     echo -e "${YELLOW}提醒：若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，脚本的“自动追加当前活动端口”功能可能再次放行它。${PLAIN}"
-    read_trimmed yn "是否现在收紧防火墙？(y/n，默认 n): "
+    read_trimmed yn "是否现在收紧防火墙？(Y/n，默认 y): "
     is_yes "$yn" || return 0
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}
@@ -10925,7 +10930,7 @@ add_sni_stack_site() {
         fi
     done
 
-    read_trimmed advanced_mode "后端是否使用自定义地址？(y/n，默认 n): "
+    read_trimmed advanced_mode "后端是否使用自定义地址？(Y/n，默认 y): "
     if is_yes "$advanced_mode"; then
         site_addr=$(ask_with_default "后端地址" "127.0.0.1")
     else
@@ -10941,7 +10946,7 @@ add_sni_stack_site() {
     confirm_backend_target_or_continue "网站/反代后端 ${site_domain}" "$site_addr" "$site_port" || return 1
 
     if web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "$web_engine"; then
-        read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(y/n，默认 n): "
+        read_trimmed enable_ip_whitelist "是否为 ${site_domain} 启用 IP 白名单？(Y/n，默认 y): "
     else
         echo -e "${YELLOW}xray-fallback 无法让本地 Web 反代引擎可靠获取真实客户端源 IP，本次禁止为新域名启用 Web 白名单。${PLAIN}"
         echo -e "${YELLOW}如需 Web 白名单，请改用 Nginx Stream/TCP Peek 入口模式。${PLAIN}"
@@ -11082,7 +11087,7 @@ remove_sni_stack_site() {
 
     apply_sni_stack_runtime_config || return 1
 
-    read_trimmed delete_cert "是否同时隔离 ${domain} 的 Caddy 证书文件？(y/n，默认 n): "
+    read_trimmed delete_cert "是否同时隔离 ${domain} 的 Caddy 证书文件？(Y/n，默认 y): "
     if is_yes "$delete_cert"; then
         quarantine_path "/etc/caddy/certs/${domain}.crt" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
         quarantine_path "/etc/caddy/certs/${domain}.key" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
@@ -12450,7 +12455,7 @@ func_caddy_cf_maintenance_menu() {
                 quarantine_path "/root/cert/${domain}.crt" "$domain_quarantine_dir" >/dev/null 2>&1 || true
                 quarantine_path "/root/cert/${domain}.key" "$domain_quarantine_dir" >/dev/null 2>&1 || true
 
-                read_trimmed purge_acme "❓ 是否同时删除 acme.sh 历史记录？(y/n，默认n，建议保留): "
+                read_trimmed purge_acme "❓ 是否同时删除 acme.sh 历史记录？(Y/n，默认 y，建议保留): "
                 if is_yes "$purge_acme"; then
                     /root/.acme.sh/acme.sh --remove -d "$domain" --ecc >/dev/null 2>&1 || true
                     quarantine_path "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
@@ -12949,7 +12954,7 @@ func_caddy_add_insecure() {
         return
     fi
 
-    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
+    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(Y/n，默认 y): "
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"
@@ -13752,7 +13757,7 @@ func_add_ssh_key() {
     user=$(ssh_choose_user) || { read -n 1 -s -r -p "按任意键继续..."; return; }
     if ssh_add_public_key_for_user "$user"; then
         echo -e "${GREEN}✅ 公钥添加完成。请立刻新开一个 SSH 窗口测试私钥登录。${PLAIN}"
-        read_trimmed enable_mode "是否同时写入“密钥 + 密码登录（保留/恢复密码）”模式？(y/N): "
+        read_trimmed enable_mode "是否同时写入“密钥 + 密码登录（保留/恢复密码）”模式？(Y/n): "
         if is_yes "$enable_mode"; then
             ssh_apply_auth_mode key_preferred || true
         fi
@@ -14396,7 +14401,7 @@ func_tcp_tune() {
     echo -e "👉 推荐浏览器访问: ${BLUE}https://omnitt.com/${PLAIN} 获取针对您网络的定制参数"
     echo -e "------------------------------------------------"
     
-    read_trimmed yn "❓ 准备好粘贴参数了吗？(y 继续 / n 取消): "
+    read_trimmed yn "❓ 准备好粘贴参数了吗？(Y/n): "
     if ! is_yes "$yn"; then return; fi
     
     local temp_f="/etc/sysctl.d/99-omnitt-tune.conf"
@@ -15533,7 +15538,7 @@ func_xpanel_manage() {
     if [[ -z "$panel_cmd" ]]; then
         echo -e "${YELLOW}未检测到 x-ui / 3x-ui 命令，当前机器可能尚未安装 3x-ui 面板。${PLAIN}"
         local yn
-        read_trimmed yn "是否现在安装 3x-ui 面板？(y/n): "
+        read_trimmed yn "是否现在安装 3x-ui 面板？(Y/n): "
         if is_yes "$yn"; then
             func_xpanel
         else
@@ -15588,7 +15593,7 @@ func_sui_manage() {
     if ! command -v s-ui >/dev/null 2>&1; then
         echo -e "${YELLOW}未检测到 s-ui 命令，当前机器可能尚未安装 S-UI。${PLAIN}"
         local yn
-        read_trimmed yn "是否现在安装 S-UI？(y/n): "
+        read_trimmed yn "是否现在安装 S-UI？(Y/n): "
         if is_yes "$yn"; then
             func_sui_panel
         else
@@ -15665,7 +15670,7 @@ func_xray_manage() {
     if ! command -v xray >/dev/null 2>&1; then
         echo -e "${YELLOW}未检测到 xray 管理命令，当前机器可能尚未安装 233boy Xray 脚本。${PLAIN}"
         local yn
-        read_trimmed yn "是否现在安装 Xray？(y/n): "
+        read_trimmed yn "是否现在安装 Xray？(Y/n): "
         if is_yes "$yn"; then
             func_xray_233boy
         else
@@ -15700,7 +15705,7 @@ func_dns_unlock() {
     echo -e "------------------------------------------------"
     
     local yn
-    read_trimmed yn "❓ 确认现在运行 Alice DNS 解锁脚本吗？(y/n): "
+    read_trimmed yn "❓ 确认现在运行 Alice DNS 解锁脚本吗？(Y/n): "
     if is_yes "$yn"; then
         run_remote_script "运行 Alice DNS 解锁脚本" "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"
     else
@@ -15719,7 +15724,7 @@ func_ip_sentinel() {
     echo -e "${YELLOW}该脚本将持续监控并修正路由，防止服务器 IP 被错误定位至中国大陆。${PLAIN}"
     echo -e "------------------------------------------------"
     
-    read_trimmed yn "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(y/n): "
+    read_trimmed yn "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(Y/n): "
     if is_yes "$yn"; then
         run_remote_script "安装并配置 IP Sentinel" "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh"
     else
@@ -15968,7 +15973,7 @@ func_sublinkpro() {
     echo -e "${YELLOW}部署完成后请尽快登录后台修改默认密码。${PLAIN}"
     echo -e "------------------------------------------------"
     
-    read_trimmed yn "❓ 确认现在开始一键安装吗？(y/n): "
+    read_trimmed yn "❓ 确认现在开始一键安装吗？(Y/n): "
     if is_yes "$yn"; then
         mkdir -p "$install_dir"
         cd "$install_dir" || return
@@ -16054,7 +16059,7 @@ func_miaomiaowu() {
     echo -e "------------------------------------------------"
 
     local yn
-    read_trimmed yn "确认现在部署 妙妙屋订阅管理 吗？(y/n): "
+    read_trimmed yn "确认现在部署 妙妙屋订阅管理 吗？(Y/n): "
     if is_yes "$yn"; then
         mkdir -p "$install_dir"/{data,subscribes,rule_templates}
         cd "$install_dir" || return
@@ -16148,7 +16153,7 @@ func_substore() {
     echo -e "------------------------------------------------"
 
     local yn
-    read_trimmed yn "确认现在部署 Sub-Store 吗？(y/n): "
+    read_trimmed yn "确认现在部署 Sub-Store 吗？(Y/n): "
     if is_yes "$yn"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
@@ -16226,7 +16231,7 @@ func_dockge() {
     echo -e "------------------------------------------------"
 
     local yn
-    read_trimmed yn "确认现在部署 Dockge 吗？(y/n): "
+    read_trimmed yn "确认现在部署 Dockge 吗？(Y/n): "
     if is_yes "$yn"; then
         mkdir -p "$install_dir" "$stacks_dir"
         cd "$install_dir" || return
@@ -16293,7 +16298,7 @@ func_komari() {
     done
     warn_if_public_bind "Komari 探针监控面板" "$komari_bind_addr" "$komari_port" || return 1
 
-    read_trimmed custom_admin "是否自定义初始管理员账号和密码？(y/n，默认 n): "
+    read_trimmed custom_admin "是否自定义初始管理员账号和密码？(Y/n，默认 y): "
     if is_yes "$custom_admin"; then
         while true; do
             read_trimmed admin_username "管理员用户名（默认 admin）: "
@@ -16328,7 +16333,7 @@ func_komari() {
         echo -e "${YELLOW}初始管理员：${CYAN}使用 Komari 默认生成账号，请安装后查看容器日志${PLAIN}"
     fi
     echo -e "------------------------------------------------"
-    read_trimmed yn "确认现在部署 Komari 吗？(y/n): "
+    read_trimmed yn "确认现在部署 Komari 吗？(Y/n): "
     if is_yes "$yn"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
@@ -16448,7 +16453,7 @@ func_update_subscription_tools() {
     echo -e "------------------------------------------------"
     echo -e "${GREEN}✅ 更新流程已执行完成。${PLAIN}"
     local prune_confirm
-    read_trimmed prune_confirm "是否清理无标签旧镜像以释放磁盘空间？(y/n，默认 n): "
+    read_trimmed prune_confirm "是否清理无标签旧镜像以释放磁盘空间？(Y/n，默认 y): "
     if is_yes "$prune_confirm"; then
         docker image prune -f
     fi
@@ -16777,7 +16782,7 @@ func_rescue_panel() {
     echo -e "------------------------------------------------"
     
     local yn
-    read_trimmed yn "❓ 确定要清空面板证书路径并尝试退回 HTTP 吗？(y/n): "
+    read_trimmed yn "❓ 确定要清空面板证书路径并尝试退回 HTTP 吗？(Y/n): "
     if is_yes "$yn"; then
         local xui_bin
         xui_bin=$(detect_xui_command 2>/dev/null || true)
@@ -17324,13 +17329,13 @@ func_preflight_check() {
         $can_fix_ntp && echo -e "  - 开启 NTP 时间同步"
         [[ ${#cmd_miss[@]} -gt 0 ]] && echo -e "  - 安装缺失基础命令: ${cmd_miss[*]}"
         [[ ${#minimal_miss[@]} -gt 0 ]] && echo -e "  - 补齐精简系统兼容组件"
-        read_trimmed fix_confirm "是否现在自动修复这些简单问题？(y/N): "
+        read_trimmed fix_confirm "是否现在自动修复这些简单问题？(Y/n): "
         if is_yes "$fix_confirm"; then
             [[ ${#minimal_miss[@]} -gt 0 ]] && ensure_minimal_system_compat
             $can_fix_ntp && preflight_enable_ntp
             [[ ${#cmd_miss[@]} -gt 0 ]] && preflight_install_missing_commands "${cmd_miss[@]}"
             echo -e "${GREEN}✅ 简单修复已执行。${PLAIN}"
-            read_trimmed rerun_confirm "是否立即重新体检？(y/N): "
+            read_trimmed rerun_confirm "是否立即重新体检？(Y/n): "
             if is_yes "$rerun_confirm"; then
                 func_preflight_check
                 return $?

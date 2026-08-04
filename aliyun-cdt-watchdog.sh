@@ -482,8 +482,9 @@ uninstall_watchdog() {
     local assume_yes=${1:-}
     if [[ ${assume_yes} != "--yes" ]]; then
         local answer
-        read_input answer "将删除程序、定时器和包含密钥的配置，输入 YES 确认: " || die "输入已取消。"
-        [[ ${answer} == "YES" ]] || die "已取消。"
+        read_input answer "将删除程序、定时器和包含密钥的配置，确认继续？[Y/n]: " || die "输入已取消。"
+        answer=${answer:-yes}
+        [[ ${answer} =~ ^[Yy]([Ee][Ss])?$ ]] || die "已取消。"
     fi
 
     systemctl disable --now "${TIMER_NAME}" >/dev/null 2>&1 || true

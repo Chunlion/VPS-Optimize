@@ -35,6 +35,11 @@ read_trimmed() {
         echo
         exit 0
     fi
+    if [[ -z "$(trim_input "$input")" ]]; then
+        case "$prompt" in
+            *"(Y/n"*|*"[Y/n]"*|*"直接回车继续"*) input="y" ;;
+        esac
+    fi
     printf -v "$__target" '%s' "$(trim_input "$input")"
 }
 
@@ -240,8 +245,8 @@ confirm_danger() {
     echo -e "${RED}高风险操作: ${title}${NC}"
     echo -e "${YELLOW}影响: ${impact}${NC}"
     echo -e "${BLUE}回退: ${rollback}${NC}"
-    read_trimmed confirm "确认继续请输入 YES（直接回车取消）: "
-    [[ "$confirm" == "YES" ]]
+    read_trimmed confirm "确认继续？[Y/n]: "
+    [[ "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
 setup_cron_environment() {
@@ -1505,7 +1510,7 @@ remove_port_monitoring() {
         sleep 2; remove_port_monitoring; return
     fi
 
-    read_trimmed confirm "确认删除这些端口的监控? [y/N]: "
+    read_trimmed confirm "确认删除这些端口的监控? [Y/n]: "
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
         local deleted_count=0
         for port in "${ports_to_delete[@]}"; do
@@ -2142,7 +2147,7 @@ install_update_script() {
             if [ -n "$remote_version" ] && [ "$remote_version" = "$SCRIPT_VERSION" ]; then
                 echo -e "${GREEN}当前已是最新版本。${NC}"
             fi
-            read_trimmed update_confirm "确认更新并原地重启脚本？[y/N]: "
+            read_trimmed update_confirm "确认更新并原地重启脚本？[Y/n]: "
             case "$update_confirm" in
                 y|Y) ;;
                 *)
@@ -2301,7 +2306,7 @@ EOF
 }
 
 stop_interactive_tg() {
-    read_trimmed stop_confirm "确认停止并隔离 Telegram 交互机器人服务？[y/N]: "
+    read_trimmed stop_confirm "确认停止并隔离 Telegram 交互机器人服务？[Y/n]: "
     case "$stop_confirm" in
         y|Y) ;;
         *)

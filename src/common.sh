@@ -507,11 +507,11 @@ confirm_remote_script_execution() {
     local confirm
 
     if declare -F read_trimmed >/dev/null 2>&1; then
-        read_trimmed confirm "是否继续下载并执行该远程脚本？(y/N): "
+        read_trimmed confirm "是否继续下载并执行该远程脚本？(Y/n): "
     else
-        read -r -p "是否继续下载并执行该远程脚本？(y/N): " confirm
+        read -r -p "是否继续下载并执行该远程脚本？(Y/n): " confirm
     fi
-    confirm="${confirm:-no}"
+    confirm="${confirm:-yes}"
     if declare -F is_yes >/dev/null 2>&1; then
         is_yes "$confirm"
     else

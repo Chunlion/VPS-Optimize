@@ -12,7 +12,7 @@ save_and_offer_reapply_sni_stack() {
     save_sni_stack_env
     echo -e "${GREEN}✅ 已保存新的 443 单入口运行参数。${PLAIN}"
     echo -e "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的域名、端口或路径。${PLAIN}"
-    read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？输入 yes 继续，直接回车取消（大小写均可）: "
+    read_trimmed yn "是否现在重新应用并重启 Nginx/Caddy？直接回车继续，输入 n 取消（大小写均可）: "
     if is_yes "$yn"; then
         if ! reapply_sni_stack_from_env --yes; then
             if [[ -n "$env_backup" && -f "$env_backup" ]]; then

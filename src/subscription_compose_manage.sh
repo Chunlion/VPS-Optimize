@@ -58,7 +58,7 @@ func_update_subscription_tools() {
     echo -e "------------------------------------------------"
     echo -e "${GREEN}✅ 更新流程已执行完成。${PLAIN}"
     local prune_confirm
-    read_trimmed prune_confirm "是否清理无标签旧镜像以释放磁盘空间？(y/n，默认 n): "
+    read_trimmed prune_confirm "是否清理无标签旧镜像以释放磁盘空间？(Y/n，默认 y): "
     if is_yes "$prune_confirm"; then
         docker image prune -f
     fi

@@ -229,7 +229,7 @@ func_caddy_cf_maintenance_menu() {
                 quarantine_path "/root/cert/${domain}.crt" "$domain_quarantine_dir" >/dev/null 2>&1 || true
                 quarantine_path "/root/cert/${domain}.key" "$domain_quarantine_dir" >/dev/null 2>&1 || true
 
-                read_trimmed purge_acme "❓ 是否同时删除 acme.sh 历史记录？(y/n，默认n，建议保留): "
+                read_trimmed purge_acme "❓ 是否同时删除 acme.sh 历史记录？(Y/n，默认 y，建议保留): "
                 if is_yes "$purge_acme"; then
                     /root/.acme.sh/acme.sh --remove -d "$domain" --ecc >/dev/null 2>&1 || true
                     quarantine_path "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true

@@ -20,7 +20,7 @@ func_tcp_tune() {
     echo -e "👉 推荐浏览器访问: ${BLUE}https://omnitt.com/${PLAIN} 获取针对您网络的定制参数"
     echo -e "------------------------------------------------"
     
-    read_trimmed yn "❓ 准备好粘贴参数了吗？(y 继续 / n 取消): "
+    read_trimmed yn "❓ 准备好粘贴参数了吗？(Y/n): "
     if [[ ! "$yn" =~ ^[Yy]$ ]]; then return; fi
     
     local temp_f="/etc/sysctl.d/99-omnitt-tune.conf"

@@ -222,7 +222,7 @@ func_caddy_add_insecure() {
     fi
     backend_hostport=$(format_hostport "$backend_addr" "$port")
 
-    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
+    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(Y/n，默认 y): "
     if [[ "$enable_ip_whitelist" =~ ^[Yy]$ ]]; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"

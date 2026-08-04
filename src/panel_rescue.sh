@@ -12,7 +12,7 @@ func_rescue_panel() {
     echo -e "------------------------------------------------"
     
     local yn
-    read_trimmed yn "❓ 确定要清空面板证书路径并尝试退回 HTTP 吗？(y/n): "
+    read_trimmed yn "❓ 确定要清空面板证书路径并尝试退回 HTTP 吗？(Y/n): "
     if is_yes "$yn"; then
         local xui_bin
         xui_bin=$(detect_xui_command 2>/dev/null || true)

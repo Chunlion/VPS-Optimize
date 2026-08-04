@@ -150,7 +150,8 @@ assert_file_contains src/common.sh 'command -v curl' "Remote downloads must keep
 assert_file_contains src/common.sh 'command -v wget' "Remote downloads must keep wget fallback detection."
 assert_file_contains src/common.sh 'install_pkg curl wget' "Remote download helper must still try to install missing download tools."
 assert_file_contains src/common.sh 'confirm_remote_script_execution || return 1' "Remote script execution must use an explicit source prompt."
-assert_file_contains src/common.sh '是否继续下载并执行该远程脚本？(y/N):' "Remote script source prompt must default to no."
+assert_file_contains src/common.sh '是否继续下载并执行该远程脚本？(Y/n):' "Remote script source prompt must default to yes."
+assert_file_contains src/common.sh 'confirm="${confirm:-yes}"' "Remote script execution must treat empty input as yes."
 assert_file_contains src/common.sh '该来源不是 HTTPS，已拒绝下载和执行' "Remote script execution must reject non-HTTPS sources."
 
 [[ -f scripts/modules.list ]]
@@ -195,6 +196,10 @@ assert_file_contains dog.sh '当前统计来自 nftables counter' "dog.sh must e
 assert_file_contains dog.sh 'input/output/forward 流量' "dog.sh must explain that monitored-port input/output/forward traffic is counted."
 assert_file_contains dog.sh 'show_statistics_health_check' "dog.sh must keep the statistics health check function."
 assert_file_contains dog.sh '快照增量' "dog.sh daily reports must explain snapshot-increment accounting."
+assert_file_contains dog.sh '*"(Y/n"*|*"[Y/n]"*|*"直接回车继续"*) input="y" ;;' "dog.sh confirmations must default to yes on empty input."
+assert_file_contains xui-custom-manager.sh 'answer="${answer:-yes}"' "xui shell confirmations must default to yes."
+assert_file_contains xui-custom-manager.sh '.strip().lower() or "y"' "xui embedded confirmations must default to yes."
+assert_file_contains aliyun-cdt-watchdog.sh 'answer=${answer:-yes}' "Aliyun watchdog uninstall confirmation must default to yes."
 
 assert_file_contains docs/443-single-entry.md 'Skip SSL / 不申请 SSL' "443 single-entry doc must explain the 3x-ui Skip SSL flow."
 assert_file_contains docs/443-single-entry.md '监听 IP：127.0.0.1' "443 single-entry doc must keep 3x-ui listeners on loopback."

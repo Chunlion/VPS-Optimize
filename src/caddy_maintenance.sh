@@ -607,7 +607,7 @@ func_caddy_cf_maintenance_menu() {
                 quarantine_path "/root/cert/${domain}.crt" "$domain_quarantine_dir" >/dev/null 2>&1 || true
                 quarantine_path "/root/cert/${domain}.key" "$domain_quarantine_dir" >/dev/null 2>&1 || true
 
-                read_trimmed purge_acme "❓ 是否同时删除 acme.sh 历史记录？(y/n，默认n，建议保留): "
+                read_trimmed purge_acme "❓ 是否同时删除 acme.sh 历史记录？(Y/n，默认 y，建议保留): "
                 if is_yes "$purge_acme"; then
                     /root/.acme.sh/acme.sh --remove -d "$domain" --ecc >/dev/null 2>&1 || true
                     quarantine_path "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
@@ -1106,7 +1106,7 @@ func_caddy_add_insecure() {
         return
     fi
 
-    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/n，默认 n): "
+    read_trimmed enable_ip_whitelist "❓ 是否只允许指定 IP/CIDR 访问该域名？(Y/n，默认 y): "
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}"

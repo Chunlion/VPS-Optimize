@@ -239,13 +239,13 @@ func_preflight_check() {
         $can_fix_ntp && echo -e "  - 开启 NTP 时间同步"
         [[ ${#cmd_miss[@]} -gt 0 ]] && echo -e "  - 安装缺失基础命令: ${cmd_miss[*]}"
         [[ ${#minimal_miss[@]} -gt 0 ]] && echo -e "  - 补齐精简系统兼容组件"
-        read_trimmed fix_confirm "是否现在自动修复这些简单问题？(y/N): "
+        read_trimmed fix_confirm "是否现在自动修复这些简单问题？(Y/n): "
         if is_yes "$fix_confirm"; then
             [[ ${#minimal_miss[@]} -gt 0 ]] && ensure_minimal_system_compat
             $can_fix_ntp && preflight_enable_ntp
             [[ ${#cmd_miss[@]} -gt 0 ]] && preflight_install_missing_commands "${cmd_miss[@]}"
             echo -e "${GREEN}✅ 简单修复已执行。${PLAIN}"
-            read_trimmed rerun_confirm "是否立即重新体检？(y/N): "
+            read_trimmed rerun_confirm "是否立即重新体检？(Y/n): "
             if is_yes "$rerun_confirm"; then
                 func_preflight_check
                 return $?

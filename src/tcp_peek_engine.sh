@@ -814,7 +814,7 @@ switch_entry_mode() {
     current_mode=$(get_entry_mode)
 
     if [[ "$target_mode" == "$current_mode" ]]; then
-        read_trimmed yn "当前已经是 ${target_mode}，是否重新应用当前模式？(y/n，默认 n): "
+        read_trimmed yn "当前已经是 ${target_mode}，是否重新应用当前模式？(Y/n，默认 y): "
         is_yes "$yn" && reapply_current_entry_mode
         return $?
     fi

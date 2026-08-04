@@ -63,7 +63,7 @@ harden_single_443_firewall() {
     local yn ssh_port remove_ports port
     echo -e "${YELLOW}可选：防火墙只保留 SSH 与 Nginx 公网入口端口。${PLAIN}"
     echo -e "${YELLOW}提醒：若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，脚本的“自动追加当前活动端口”功能可能再次放行它。${PLAIN}"
-    read_trimmed yn "是否现在收紧防火墙？(y/n，默认 n): "
+    read_trimmed yn "是否现在收紧防火墙？(Y/n，默认 y): "
     [[ "$yn" =~ ^[Yy]$ ]] || return 0
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}

@@ -48,6 +48,11 @@ read_trimmed() {
     local prompt="${2:-}"
     local __raw_input
     read -r -p "$prompt" __raw_input
+    if [[ -z "$(trim_input "$__raw_input")" ]]; then
+        case "$prompt" in
+            *"(Y/n"*|*"[Y/n]"*|*"直接回车继续"*) __raw_input="y" ;;
+        esac
+    fi
     case "$__target" in
         mode_choice|action_choice)
             printf -v "$__target" '%s' "$(trim_input "$__raw_input")"

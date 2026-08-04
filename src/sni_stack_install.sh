@@ -65,7 +65,7 @@ collect_sni_stack_config() {
     NGINX_LISTEN_PORT=$(ask_with_default "Nginx 公网监听端口" "443")
 
     local advanced_mode
-    read_trimmed advanced_mode "是否进入高级模式并允许修改本地服务监听地址？(y/n，默认 n): "
+    read_trimmed advanced_mode "是否进入高级模式并允许修改本地服务监听地址？(Y/n，默认 y): "
     if is_yes "$advanced_mode"; then
         CADDY_LISTEN_ADDR=$(ask_with_default "$(web_proxy_engine_label "$WEB_PROXY_ENGINE")监听地址" "127.0.0.1")
         XRAY_LISTEN_ADDR=$(ask_with_default "Xray REALITY 本地监听地址" "127.0.0.1")
@@ -88,7 +88,7 @@ collect_sni_stack_config() {
     CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "$default_clash_path")")
     local panel_whitelist_enabled panel_whitelist_input panel_whitelist_ranges current_client_ip
     local -a panel_whitelist_array=()
-    read_trimmed panel_whitelist_enabled "是否为面板域名启用 IP 白名单？(y/n，默认 n): "
+    read_trimmed panel_whitelist_enabled "是否为面板域名启用 IP 白名单？(Y/n，默认 y): "
     if is_yes "$panel_whitelist_enabled"; then
         if ! web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-nginx-stream}" "$WEB_PROXY_ENGINE"; then
             echo -e "${RED}❌ xray-fallback 模式不支持 Web 白名单。${PLAIN}"
@@ -129,11 +129,11 @@ collect_sni_stack_config() {
     cert_clear_confirm="${cert_clear_confirm:-yes}"
     if is_yes "$cert_clear_confirm"; then
         if ! clear_xui_cert_settings_for_single_443; then
-            read_trimmed cert_clear_confirm "未能自动确认清空，是否已经手动清空面板证书和订阅证书路径？(y/n，默认 n): "
+            read_trimmed cert_clear_confirm "未能自动确认清空，是否已经手动清空面板证书和订阅证书路径？(Y/n，默认 y): "
             is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
         fi
     else
-        read_trimmed cert_clear_confirm "确认已经手动清空面板证书和订阅证书路径？(y/n，默认 n): "
+        read_trimmed cert_clear_confirm "确认已经手动清空面板证书和订阅证书路径？(Y/n，默认 y): "
         is_yes "$cert_clear_confirm" || { echo -e "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}"; return 1; }
     fi
 
@@ -936,7 +936,7 @@ harden_single_443_firewall() {
     local yn ssh_port remove_ports port
     echo -e "${YELLOW}可选：防火墙只保留 SSH 与 Nginx 公网入口端口。${PLAIN}"
     echo -e "${YELLOW}提醒：若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，脚本的“自动追加当前活动端口”功能可能再次放行它。${PLAIN}"
-    read_trimmed yn "是否现在收紧防火墙？(y/n，默认 n): "
+    read_trimmed yn "是否现在收紧防火墙？(Y/n，默认 y): "
     is_yes "$yn" || return 0
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}

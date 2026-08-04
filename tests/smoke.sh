@@ -600,6 +600,9 @@ read_trimmed ip "" <<< "https://[2001:DB8::1]:443/path"
 ip_whitelist_input=""
 read_trimmed ip_whitelist_input "" <<< "1.1.1.1 2.2.2.2/32"
 [[ "$ip_whitelist_input" == "1.1.1.1 2.2.2.2/32" ]]
+confirm=""
+read_trimmed confirm "确认操作？(Y/n): " <<< ""
+[[ "$confirm" == "y" ]]
 [[ "$(ask_with_default "后端端口" "3000" <<< "https://site.example.com:８４４３/path")" == "8443" ]]
 [[ "$(ask_with_default "本地监听地址" "127.0.0.1" <<< "https://[::1]:443/path")" == "::1" ]]
 [[ "$(ask_with_default "普通订阅路径前缀（不带端口）" "/sub/" <<< "/sub/")" == "/sub/" ]]
@@ -1446,6 +1449,9 @@ rm -f "$legacy_release"
 rmdir "$legacy_tmp_dir"
 
 source <(sed -n '1,/^show_port_list()/p' dog.sh | sed '$d')
+dog_confirm=""
+read_trimmed dog_confirm "确认操作？[Y/n]: " <<< ""
+[[ "$dog_confirm" == "y" ]]
 [[ "$(normalize_main_choice " add ")" == "1" ]]
 [[ "$(normalize_main_choice "tg")" == "7" ]]
 [[ "$(normalize_main_choice "q")" == "0" ]]
@@ -1466,7 +1472,7 @@ if grep -Eq '确认下载并执行该远程脚本|如仍要执行，请输入 YE
     echo "Remote script runner must not prompt for an extra execution confirmation." >&2
     exit 1
 fi
-grep -Fq '是否继续下载并执行该远程脚本？(y/N):' dist/vps.sh
+grep -Fq '是否继续下载并执行该远程脚本？(Y/n):' dist/vps.sh
 assert_file_contains "src/environment.sh" '安装 nftables NAT 转发工具' "Environment menu must install nftables-nat-rust from option 10."
 assert_file_not_contains "src/environment.sh" '哪吒监控' "Environment menu option 10 must not keep the old Nezha entry."
 assert_file_not_contains "dist/vps.sh" 'raw.githubusercontent.com/naiba/nezha/master/script/install.sh' "Release script must not keep the old Nezha install URL."
@@ -1778,7 +1784,7 @@ grep -q 'print_auto_update_notice' dist/vps.sh
 assert_file_contains src/updater.sh 'latest_sha256=$(fetch_latest_script_sha256)' "Update status must compare the remote content hash."
 assert_file_contains src/updater.sh '检测到同版本内容更新' "Update status must report same-version content changes."
 assert_function_body_contains src/common.sh create_shortcut 'download_verified_update_script' "Shortcut registration must verify the downloaded release checksum."
-assert_function_body_contains src/common.sh confirm_remote_script_execution 'confirm="${confirm:-no}"' "Remote script execution confirmation must default to no."
+assert_function_body_contains src/common.sh confirm_remote_script_execution 'confirm="${confirm:-yes}"' "Remote script execution confirmation must default to yes."
 assert_file_not_contains README.md 'ghfast.top' "README must not recommend executing a root script through a third-party GitHub proxy."
 
 (
@@ -1813,8 +1819,8 @@ assert_file_not_contains README.md 'ghfast.top' "README must not recommend execu
     read_trimmed() {
         printf -v "$1" '%s' ""
     }
-    if confirm_remote_script_execution; then
-        echo "Remote script confirmation must not proceed on empty input." >&2
+    if ! confirm_remote_script_execution; then
+        echo "Remote script confirmation must proceed on empty input." >&2
         exit 1
     fi
     if run_remote_script "HTTP smoke" "http://example.invalid/script.sh" >/dev/null 2>&1; then

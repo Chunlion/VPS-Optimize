@@ -95,8 +95,9 @@ confirm_yes() {
     local answer
     echo
     echo -e "${YELLOW}${message}${PLAIN}"
-    read -rp "请输入 YES 确认继续： " answer
-    [ "$answer" = "YES" ]
+    read -rp "确认继续？[Y/n]: " answer
+    answer="${answer:-yes}"
+    [[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
 need_tty() {
@@ -1122,7 +1123,7 @@ while True:
         print(paint("当前只允许查看配置和预览，不允许修改配置或启用自动重置。", "yellow"))
         print()
     print(paint("提示：请在 3x-ui 面板里关闭对应入站的原生 monthly 重置。", "yellow"))
-    print(paint("如果只是想看本次会影响谁，选 [4]，会先预览，输入 YES 才会执行。", "yellow"))
+    print(paint("如果只是想看本次会影响谁，选 [4]，会先预览；确认步骤直接回车执行，输入 n 取消。", "yellow"))
     separator()
     menu_line(1, "开启/关闭自定义重置")
     menu_line(2, "设置默认重置日", f"当前：每月 {config.get('default_day', 1)} 号")
@@ -1141,7 +1142,7 @@ while True:
             continue
         action = "关闭" if config.get("enabled", False) else "开启"
         try:
-            answer = input(f"确认{action}自定义重置（将同步{'停用' if action == '关闭' else '安装并启动'}自动检查 timer）？[y/N]: ").strip().lower()
+            answer = input(f"确认{action}自定义重置（将同步{'停用' if action == '关闭' else '安装并启动'}自动检查 timer）？[Y/n]: ").strip().lower() or "y"
         except (EOFError, KeyboardInterrupt):
             print("\n已取消。")
             continue
@@ -1509,11 +1510,11 @@ while True:
             print(f"  修改后：up {paint(format_gib(write['after_up']), 'green')} / down {paint(format_gib(write['after_down']), 'green')} / 合计 {paint(format_gib(after_total), 'green')}")
             print()
         try:
-            answer = input("请输入 YES 确认写入：").strip()
+            answer = input("确认写入？[Y/n]: ").strip().lower() or "y"
         except (EOFError, KeyboardInterrupt):
             print("\n已取消。")
             sys.exit(100)
-        if answer != "YES":
+        if answer not in {"y", "yes"}:
             print("已取消，没有写入数据库。")
             sys.exit(100)
 
@@ -2201,8 +2202,9 @@ run_reset_check_interactive() {
 
     echo
     local answer
-    read -rp "是否立即执行以上重置？请输入 YES 确认： " answer || answer=""
-    if [ "$answer" != "YES" ]; then
+    read -rp "是否立即执行以上重置？[Y/n]: " answer || answer=""
+    answer="${answer:-yes}"
+    if [[ ! "$answer" =~ ^[Yy]([Ee][Ss])?$ ]]; then
         echo "已取消，没有写入数据库。"
         pause
         return 0
