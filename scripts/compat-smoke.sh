@@ -149,9 +149,8 @@ assert_file_contains dist/vps.sh '19) func_sni_stack_quick_menu ;;' "Main menu i
 assert_file_contains src/common.sh 'command -v curl' "Remote downloads must keep curl fallback detection."
 assert_file_contains src/common.sh 'command -v wget' "Remote downloads must keep wget fallback detection."
 assert_file_contains src/common.sh 'install_pkg curl wget' "Remote download helper must still try to install missing download tools."
-assert_file_contains src/common.sh 'confirm_remote_script_execution || return 1' "Remote script execution must use an explicit source prompt."
-assert_file_contains src/common.sh '是否继续下载并执行该远程脚本？(Y/n):' "Remote script source prompt must default to yes."
-assert_file_contains src/common.sh 'confirm="${confirm:-yes}"' "Remote script execution must treat empty input as yes."
+assert_file_not_contains src/common.sh 'confirm_remote_script_execution' "Remote script execution must not require interactive confirmation."
+assert_file_not_contains src/common.sh 'VPSO_REMOTE_SCRIPT_CONFIRM' "Remote script confirmation bypass flag must be removed with the prompt."
 assert_file_contains src/common.sh '该来源不是 HTTPS，已拒绝下载和执行' "Remote script execution must reject non-HTTPS sources."
 
 [[ -f scripts/modules.list ]]

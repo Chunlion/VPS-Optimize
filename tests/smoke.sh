@@ -1425,7 +1425,7 @@ if is_trusted_remote_script_url "https://example.com/not-built-in.sh" >/dev/null
     echo "Unexpected trusted remote script URL." >&2
     exit 1
 fi
-remote_output=$(run_remote_script "smoke remote script" "file://$remote_script" 2>&1 <<< $'yes\n')
+remote_output=$(run_remote_script "smoke remote script" "file://$remote_script" 2>&1)
 [[ "$remote_output" == *"非内置已知来源"* ]]
 [[ "$remote_output" == *"remote-run-ok"* ]]
 rm -f "$remote_script"
@@ -1468,11 +1468,12 @@ if grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' dist/vps.sh; then
     echo "Release script must not source src modules at runtime." >&2
     exit 1
 fi
-if grep -Eq '确认下载并执行该远程脚本|如仍要执行，请输入 YES' dist/vps.sh; then
-    echo "Remote script runner must not prompt for an extra execution confirmation." >&2
+if grep -Eq '确认下载并执行该远程脚本|是否继续下载并执行该远程脚本|如仍要执行，请输入 YES' dist/vps.sh; then
+    echo "Remote script runner must not prompt for execution confirmation." >&2
     exit 1
 fi
-grep -Fq '是否继续下载并执行该远程脚本？(Y/n):' dist/vps.sh
+assert_file_not_contains src/common.sh 'confirm_remote_script_execution' "Remote script execution must not define an interactive confirmation helper."
+assert_file_not_contains dist/vps.sh 'VPSO_REMOTE_SCRIPT_CONFIRM' "Built remote script runner must not keep the obsolete confirmation flag."
 assert_file_contains "src/environment.sh" '安装 nftables NAT 转发工具' "Environment menu must install nftables-nat-rust from option 10."
 assert_file_not_contains "src/environment.sh" '哪吒监控' "Environment menu option 10 must not keep the old Nezha entry."
 assert_file_not_contains "dist/vps.sh" 'raw.githubusercontent.com/naiba/nezha/master/script/install.sh' "Release script must not keep the old Nezha install URL."
@@ -1784,7 +1785,7 @@ grep -q 'print_auto_update_notice' dist/vps.sh
 assert_file_contains src/updater.sh 'latest_sha256=$(fetch_latest_script_sha256)' "Update status must compare the remote content hash."
 assert_file_contains src/updater.sh '检测到同版本内容更新' "Update status must report same-version content changes."
 assert_function_body_contains src/common.sh create_shortcut 'download_verified_update_script' "Shortcut registration must verify the downloaded release checksum."
-assert_function_body_contains src/common.sh confirm_remote_script_execution 'confirm="${confirm:-yes}"' "Remote script execution confirmation must default to yes."
+assert_function_body_contains src/common.sh run_remote_script 'download_remote_script "$url" "$tmp_file"' "Remote script execution must proceed directly to the verified download path."
 assert_file_not_contains README.md 'ghfast.top' "README must not recommend executing a root script through a third-party GitHub proxy."
 
 (
@@ -1816,13 +1817,6 @@ assert_file_not_contains README.md 'ghfast.top' "README must not recommend execu
         exit 1
     fi
 
-    read_trimmed() {
-        printf -v "$1" '%s' ""
-    }
-    if ! confirm_remote_script_execution; then
-        echo "Remote script confirmation must proceed on empty input." >&2
-        exit 1
-    fi
     if run_remote_script "HTTP smoke" "http://example.invalid/script.sh" >/dev/null 2>&1; then
         echo "Remote script runner must reject non-HTTPS sources." >&2
         exit 1

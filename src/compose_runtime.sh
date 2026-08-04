@@ -33,7 +33,7 @@ ensure_docker_engine_ready() {
     fi
 
     echo -e "${YELLOW}⚠️ 未检测到 Docker，正在自动安装 Docker 引擎...${PLAIN}"
-    if ! VPSO_REMOTE_SCRIPT_CONFIRM=0 run_remote_script "安装 Docker 引擎" "https://get.docker.com"; then
+    if ! run_remote_script "安装 Docker 引擎" "https://get.docker.com"; then
         echo -e "${RED}❌ Docker 自动安装失败，请检查网络或软件源。${PLAIN}"
         return 1
     fi

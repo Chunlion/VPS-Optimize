@@ -503,22 +503,6 @@ is_trusted_remote_script_url() {
     return 1
 }
 
-confirm_remote_script_execution() {
-    local confirm
-
-    if declare -F read_trimmed >/dev/null 2>&1; then
-        read_trimmed confirm "是否继续下载并执行该远程脚本？(Y/n): "
-    else
-        read -r -p "是否继续下载并执行该远程脚本？(Y/n): " confirm
-    fi
-    confirm="${confirm:-yes}"
-    if declare -F is_yes >/dev/null 2>&1; then
-        is_yes "$confirm"
-    else
-        [[ "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]
-    fi
-}
-
 run_remote_script() {
     local desc="$1"
     local url="$2"
@@ -535,10 +519,6 @@ run_remote_script() {
     if [[ "$url" != https://* && "$url" != file://* ]]; then
         echo -e "${RED}❌ 该来源不是 HTTPS，已拒绝下载和执行。${PLAIN}"
         return 1
-    fi
-
-    if [[ -z "$trusted_source" || "${VPSO_REMOTE_SCRIPT_CONFIRM:-1}" != "0" ]]; then
-        confirm_remote_script_execution || return 1
     fi
 
     tmp_file=$(mktemp /tmp/vps-remote.XXXXXX.sh) || {
