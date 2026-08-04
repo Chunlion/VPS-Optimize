@@ -31,8 +31,16 @@ jobs:
 
       - name: Install ShellCheck
         run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
+          for attempt in 1 2 3; do
+            if sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y shellcheck; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "Package installation failed; retrying ($attempt/3)..." >&2
+            sleep 5
+          done
 
       - name: Run selfcheck
         run: |
@@ -69,10 +77,27 @@ jobs:
       - name: Install container test dependencies
         run: |
           if command -v apt-get >/dev/null 2>&1; then
-            apt-get update
-            apt-get install -y --no-install-recommends bash ca-certificates git grep sed gawk coreutils diffutils findutils procps
+            for attempt in 1 2 3; do
+              if apt-get -o Acquire::Retries=3 update && apt-get -o Acquire::Retries=3 install -y --no-install-recommends bash ca-certificates git grep sed gawk coreutils diffutils findutils procps; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                exit 1
+              fi
+              echo "Package installation failed; retrying ($attempt/3)..." >&2
+              sleep 5
+            done
           elif command -v dnf >/dev/null 2>&1; then
-            dnf install -y bash ca-certificates git grep sed gawk diffutils findutils procps-ng
+            for attempt in 1 2 3; do
+              if dnf --setopt=retries=3 install -y bash ca-certificates git grep sed gawk diffutils findutils procps-ng; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                exit 1
+              fi
+              echo "Package installation failed; retrying ($attempt/3)..." >&2
+              sleep 5
+            done
           else
             echo "Unsupported CI container package manager." >&2
             exit 1
