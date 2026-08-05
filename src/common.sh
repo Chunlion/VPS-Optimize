@@ -479,6 +479,7 @@ is_trusted_remote_script_url() {
         "https://Check.Place"|\
         "https://raw.githubusercontent.com/Cd1s/network-latency-tester/main/latency.sh"|\
         "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh"|\
+        "https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh"|\
         "https://IP.Check.Place"|\
         "https://run.NodeQuality.com"|\
         "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh"|\

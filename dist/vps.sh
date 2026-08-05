@@ -491,6 +491,7 @@ is_trusted_remote_script_url() {
         "https://Check.Place"|\
         "https://raw.githubusercontent.com/Cd1s/network-latency-tester/main/latency.sh"|\
         "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh"|\
+        "https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh"|\
         "https://IP.Check.Place"|\
         "https://run.NodeQuality.com"|\
         "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh"|\
@@ -15316,6 +15317,7 @@ func_test_scripts() {
         echo -e "${GREEN}  3. bench.sh 基础测试      ${YELLOW}  4. 融合怪详细测速${PLAIN}"
         echo -e "${GREEN}  5. 三网回程路由测试       ${YELLOW}  6. IP 质量 / 欺诈度检测${PLAIN}"
         echo -e "${GREEN}  7. NodeSeek 综合测试      ${YELLOW}  8. 流媒体解锁检测${PLAIN}"
+        echo -e "${GREEN}  9. TcpQuality TCP 质量测试${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -15332,6 +15334,7 @@ func_test_scripts() {
             6) ran_test=true; run_remote_script "运行 IP 质量 / 欺诈度检测" "https://IP.Check.Place" ;;
             7) ran_test=true; run_remote_script "运行 NodeSeek 综合测试" "https://run.NodeQuality.com" ;;
             8) ran_test=true; run_remote_script "运行流媒体解锁检测" "https://check.unlock.media" ;;
+            9) ran_test=true; run_remote_script "运行 TcpQuality TCP 质量测试" "https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh" ;;
             0|q|Q) break ;;
             *) echo -e "${RED}❌ 无效的选择！${PLAIN}"; sleep 1; continue ;;
         esac

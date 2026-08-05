@@ -136,6 +136,9 @@ assert_file_contains src/menus.sh '11|iperf3 单线程测试|自定义服务端�
 assert_file_contains src/menus.sh '12|国际互联速度测试|多地区网络互联质量测试|func_international_speed_test|'
 assert_file_contains src/menus.sh '13|网络延迟质量检测|三网延迟、连通性与网络质量|func_network_latency_quality_test|'
 assert_file_contains src/menus.sh '三网回程路由测试已在主菜单 [12 测速与质量检测] 中提供，不重复添加。'
+assert_file_contains src/diagnostics_network.sh '9. TcpQuality TCP 质量测试' "TcpQuality must be exposed in the benchmark menu."
+assert_file_contains src/diagnostics_network.sh 'https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh' "TcpQuality must use the requested upstream entry script."
+assert_file_contains src/common.sh 'https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh' "TcpQuality must be recognized as a built-in remote script source."
 assert_file_contains src/menus.sh 'echo "3 面板 SSL 修复，适合 443 接入前清空面板证书路径。"' "Panel help item 3 must use the current menu label."
 assert_file_contains dist/vps.sh 'echo "3 面板 SSL 修复，适合 443 接入前清空面板证书路径。"' "Built panel help item 3 must use the current menu label."
 assert_file_contains src/panel_rescue.sh '面板 SSL 修复${PLAIN}' "Panel SSL repair page title must use the current menu label."

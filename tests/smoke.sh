@@ -1420,6 +1420,7 @@ printf '%s\n' '#!/usr/bin/env bash' 'echo remote-run-ok' > "$remote_script"
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh")" == *"项目内置硬编码外部脚本源"* ]]
 [[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh")" == *"EasyTier 官方"* ]]
 [[ "$(is_trusted_remote_script_url "https://tailscale.com/install.sh")" == *"Tailscale 官方"* ]]
+[[ "$(is_trusted_remote_script_url "https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh")" == *"项目内置硬编码外部脚本源"* ]]
 [[ "$(is_trusted_remote_script_url "https://us.arloor.dev/https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh")" == *"项目内置硬编码外部脚本源"* ]]
 if is_trusted_remote_script_url "https://example.com/not-built-in.sh" >/dev/null; then
     echo "Unexpected trusted remote script URL." >&2
