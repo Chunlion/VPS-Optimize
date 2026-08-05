@@ -835,11 +835,17 @@ restart_web_proxy_for_single_443() {
     WEB_PROXY_ENGINE=$(current_web_proxy_engine)
     case "$WEB_PROXY_ENGINE" in
         nginx)
-            systemctl enable nginx >/dev/null 2>&1 || true
+            if ! systemctl enable nginx >/dev/null 2>&1; then
+                echo -e "${RED}❌ nginx Web 反代开机启动设置失败。${PLAIN}"
+                return 1
+            fi
             systemctl restart nginx || return 1
             ;;
         *)
-            systemctl enable caddy >/dev/null 2>&1 || true
+            if ! systemctl enable caddy >/dev/null 2>&1; then
+                echo -e "${RED}❌ Caddy Web 反代开机启动设置失败。${PLAIN}"
+                return 1
+            fi
             systemctl restart caddy || return 1
             ;;
     esac

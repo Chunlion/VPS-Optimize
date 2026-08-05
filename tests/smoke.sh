@@ -1744,6 +1744,11 @@ grep -q 'local current_mode backup_dir planned_backup_dir assume_yes' dist/vps.s
 grep -q 'if \[\[ "$assume_yes" != "--yes" \]\]; then' dist/vps.sh
 grep -q 'if ! restart_service_if_available nginx; then' dist/vps.sh
 grep -q 'stop_vpso_mux_service_if_public_443 || return 1' dist/vps.sh
+assert_file_contains src/tcp_peek_engine.sh 'systemctl disable --now vpso-mux' 'Leaving TCP Peek mode must disable vpso-mux boot startup even when it is not the current listener.'
+assert_file_contains src/tcp_peek_engine.sh 'if ! systemctl enable nginx' 'Nginx Stream mode must fail if nginx boot enablement fails.'
+assert_file_contains src/tcp_peek_engine.sh 'if ! systemctl enable vpso-mux' 'TCP Peek mode must fail if vpso-mux boot enablement fails.'
+assert_file_contains src/sni_stack_install.sh 'if ! systemctl enable nginx' 'The nginx Web proxy must be enabled persistently.'
+assert_file_contains src/sni_stack_install.sh 'if ! systemctl enable caddy' 'The Caddy Web proxy must be enabled persistently.'
 grep -q 'stop_xray_entry_service_if_public_443 || return 1' dist/vps.sh
 grep -q 'Xray 仍在监听公网 443' dist/vps.sh
 grep -q 'nginx 服务仍在运行，但已不监听公网 ${NGINX_LISTEN_PORT}' dist/vps.sh
@@ -1753,6 +1758,28 @@ grep -q 'backup_dir=$(backup_entry_mode_config) || return 1' dist/vps.sh
 grep -q 'issue_and_install_cert_for_domain "$PANEL_DOMAIN" "$CF_TOKEN" || { rollback_sni_stack_after_failure "$backup_dir"' dist/vps.sh
 grep -q 'issue_and_install_cert_for_domain "$site_domain" "$CF_TOKEN" || { rollback_sni_stack_after_failure "$backup_dir"' dist/vps.sh
 grep -q 'preflight_entry_mode_before_cutover "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir"' dist/vps.sh
+
+(
+    NGINX_LISTEN_PORT=443
+    systemctl_calls=$(mktemp /tmp/vpso-mux-systemctl-smoke.XXXXXX)
+    trap 'rm -f "$systemctl_calls"' EXIT
+    # shellcheck disable=SC1091
+    source src/tcp_peek_engine.sh
+    detect_443_listener() { printf '%s\n' 'unknown|none'; }
+    listener_info_has_entry() { return 1; }
+    print_vpso_mux_failure_context() { return 1; }
+    systemctl() {
+        printf '%s\n' "$*" >> "$systemctl_calls"
+        case "$1" in
+            cat) return 0 ;;
+            is-active|is-enabled) return 1 ;;
+            *) return 0 ;;
+        esac
+    }
+    stop_vpso_mux_service_if_public_443 >/dev/null
+    grep -Fq 'disable --now vpso-mux' "$systemctl_calls"
+)
+
 if awk '/if \[\[ "\$NGINX_LISTEN_ADDR" == "0\.0\.0\.0" \]\]/{flag=1; next} /elif \[\[ "\$NGINX_LISTEN_ADDR" == "::" \]\]/{flag=0} flag {print}' dist/vps.sh | grep -q '\[::\]:\${listen_port}'; then
     echo "vpso-mux must not emit both 0.0.0.0 and [::] listeners for one public port." >&2
     exit 1

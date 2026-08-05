@@ -397,20 +397,43 @@ stop_xray_entry_service_if_public_443() {
 
 stop_vpso_mux_service_if_public_443() {
     local listener
+    local had_public_listener=false
+
     listener=$(detect_443_listener)
-    listener_info_has_entry "$listener" "tcppeek" || return 0
-    if ! systemctl stop vpso-mux; then
+    if listener_info_has_entry "$listener" "tcppeek"; then
+        had_public_listener=true
+    fi
+
+    if ! systemctl cat vpso-mux.service >/dev/null 2>&1 && [[ ! -f /etc/systemd/system/vpso-mux.service ]]; then
+        $had_public_listener || return 0
+        echo -e "${RED}❌ 检测到 TCP Peek 占用公网 443，但未找到 vpso-mux.service。${PLAIN}"
+        print_vpso_mux_failure_context "$NGINX_LISTEN_PORT"
+        return 1
+    fi
+
+    systemctl stop vpso-mux-preflight >/dev/null 2>&1 || true
+    systemctl disable --now vpso-mux >/dev/null 2>&1 || true
+    if systemctl is-active --quiet vpso-mux; then
         echo -e "${RED}❌ 停止 vpso-mux 失败，公网 443 仍可能被 TCP Peek 占用。${PLAIN}"
         print_vpso_mux_failure_context "$NGINX_LISTEN_PORT"
         return 1
     fi
-    sleep 1
+    if systemctl is-enabled --quiet vpso-mux; then
+        echo -e "${RED}❌ 禁用 vpso-mux 开机启动失败，重启后可能再次抢占公网 443。${PLAIN}"
+        return 1
+    fi
+    systemctl reset-failed vpso-mux >/dev/null 2>&1 || true
+
+    if $had_public_listener; then
+        sleep 1
+    fi
     listener=$(detect_443_listener)
     if listener_info_has_entry "$listener" "tcppeek"; then
-        echo -e "${RED}❌ vpso-mux 已执行停止，但 TCP Peek 仍在监听公网 443，拒绝继续切换入口。${PLAIN}"
+        echo -e "${RED}❌ vpso-mux 已执行停止并禁用，但 TCP Peek 仍在监听公网 443，拒绝继续切换入口。${PLAIN}"
         print_vpso_mux_failure_context "$NGINX_LISTEN_PORT"
         return 1
     fi
+    echo -e "${YELLOW}ℹ️ 已停止并禁用 vpso-mux 开机启动；非 TCP Peek 模式重启后不会抢占公网 443。${PLAIN}"
 }
 
 stop_caddy_service_if_public_443() {
@@ -673,7 +696,10 @@ apply_nginx_stream_mode() {
     if [[ "$(current_web_proxy_engine)" == "caddy" ]]; then
         restart_web_proxy_for_single_443 || return 1
     fi
-    systemctl enable nginx >/dev/null 2>&1 || true
+    if ! systemctl enable nginx >/dev/null 2>&1; then
+        echo -e "${RED}❌ nginx 开机启动设置失败，拒绝将本次启动误报为可持久入口。${PLAIN}"
+        return 1
+    fi
     if ! systemctl restart nginx; then
         print_nginx_stream_failure_context "$NGINX_LISTEN_PORT"
         return 1
@@ -707,7 +733,10 @@ apply_tcppeek_mode() {
     run_vpso_mux_config_check "$tmp_config" || { quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true; return 1; }
     write_vpso_mux_systemd_service
     mv "$tmp_config" "$(vpso_mux_config_path)" || return 1
-    systemctl enable vpso-mux >/dev/null 2>&1 || true
+    if ! systemctl enable vpso-mux >/dev/null 2>&1; then
+        echo -e "${RED}❌ vpso-mux 开机启动设置失败，拒绝将本次启动误报为可持久入口。${PLAIN}"
+        return 1
+    fi
     if ! systemctl restart vpso-mux; then
         print_vpso_mux_failure_context "$NGINX_LISTEN_PORT"
         return 1
