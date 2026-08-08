@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://chunlion.github.io/VPS-Optimize/ru/">📚 Документация</a> · <a href="quick-start.md">Быстрый старт</a> · <a href="docs/443-single-entry.md">Общий порт 443</a>
+  <a href="https://chunlion.github.io/VPS-Optimize/ru/">📚 Документация</a> · <a href="https://chunlion.github.io/VPS-Optimize/ru/quick-start">Быстрый старт</a> · <a href="https://chunlion.github.io/VPS-Optimize/ru/docs/443-single-entry">Общий порт 443</a>
 </p>
 
 ## 🚀 Быстрый старт
@@ -57,9 +57,9 @@ cy
 
 ## 📚 Документация и поддержка
 
-- [Быстрый старт](quick-start.md)
-- [Диагностика и восстановление общего порта 443](docs/443-single-entry-troubleshooting.md)
-- [Восстановление и откат](docs/recovery-runbook.md)
+- [Быстрый старт](https://chunlion.github.io/VPS-Optimize/ru/quick-start)
+- [Диагностика и восстановление общего порта 443](https://chunlion.github.io/VPS-Optimize/ru/docs/443-single-entry-troubleshooting)
+- [Восстановление и откат](https://chunlion.github.io/VPS-Optimize/ru/docs/recovery-runbook)
 - [Создать Issue](https://github.com/Chunlion/VPS-Optimize/issues) · [Telegram](https://t.me/cutyy_github) · [GitHub](https://github.com/Chunlion)
 
 ## 📄 Лицензия

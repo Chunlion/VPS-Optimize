@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://chunlion.github.io/VPS-Optimize/en/">📚 Documentation</a> · <a href="quick-start.md">Quick Start</a> · <a href="docs/443-single-entry.md">Shared Port 443</a>
+  <a href="https://chunlion.github.io/VPS-Optimize/en/">📚 Documentation</a> · <a href="https://chunlion.github.io/VPS-Optimize/en/quick-start">Quick Start</a> · <a href="https://chunlion.github.io/VPS-Optimize/en/docs/443-single-entry">Shared Port 443</a>
 </p>
 
 ## 🚀 Quick Start
@@ -57,9 +57,9 @@ On the first interactive run, the installer asks in English whether to use Simpl
 
 ## 📚 Documentation and Support
 
-- [Quick Start](quick-start.md)
-- [Shared Port 443 Troubleshooting and Recovery](docs/443-single-entry-troubleshooting.md)
-- [Recovery and Rollback](docs/recovery-runbook.md)
+- [Quick Start](https://chunlion.github.io/VPS-Optimize/en/quick-start)
+- [Shared Port 443 Troubleshooting and Recovery](https://chunlion.github.io/VPS-Optimize/en/docs/443-single-entry-troubleshooting)
+- [Recovery and Rollback](https://chunlion.github.io/VPS-Optimize/en/docs/recovery-runbook)
 - [Open an Issue](https://github.com/Chunlion/VPS-Optimize/issues) · [Telegram](https://t.me/cutyy_github) · [GitHub](https://github.com/Chunlion)
 
 ## 📄 License

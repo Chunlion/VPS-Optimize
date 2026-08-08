@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://chunlion.github.io/VPS-Optimize/">📚 文档网站</a> · <a href="quick-start.md">快速开始</a> · <a href="docs/443-single-entry.md">443 单入口</a>
+  <a href="https://chunlion.github.io/VPS-Optimize/">📚 文档网站</a> · <a href="https://chunlion.github.io/VPS-Optimize/quick-start">快速开始</a> · <a href="https://chunlion.github.io/VPS-Optimize/docs/443-single-entry">443 单入口</a>
 </p>
 
 ## 🚀 快速开始
@@ -57,9 +57,9 @@ cy
 
 ## 📚 文档与反馈
 
-- [快速开始](quick-start.md)
-- [443 单入口排错与恢复](docs/443-single-entry-troubleshooting.md)
-- [失联与回滚急救](docs/recovery-runbook.md)
+- [快速开始](https://chunlion.github.io/VPS-Optimize/quick-start)
+- [443 单入口排错与恢复](https://chunlion.github.io/VPS-Optimize/docs/443-single-entry-troubleshooting)
+- [失联与回滚急救](https://chunlion.github.io/VPS-Optimize/docs/recovery-runbook)
 - [提交 Issue](https://github.com/Chunlion/VPS-Optimize/issues) · [Telegram](https://t.me/cutyy_github) · [GitHub](https://github.com/Chunlion)
 
 ## 📄 许可证
