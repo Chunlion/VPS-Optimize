@@ -13,15 +13,17 @@ hero:
       text: GitHub
       link: https://github.com/Chunlion/VPS-Optimize
 
+features:
+  - title: VPS Setup
+    details: Prepare the base environment, install common tools, and configure the timezone and package sources before bringing a new server online.
+  - title: System Environment Detection
+    details: Detect the OS version, CPU architecture, virtualization platform, network connectivity, and key service status before making changes.
+  - title: Network Parameter Tuning
+    details: Adjust common kernel network parameters for connection queues, forwarding, buffers, and general server networking.
+  - title: TCP Optimization
+    details: Configure congestion control, queue disciplines, and BBR-related options with snapshots and rollback preparation.
+  - title: Shared 443 Entry
+    details: Share public port 443 among panels, subscriptions, websites, and REALITY nodes while reducing exposed ports and conflicts.
+  - title: Maintenance and Rollback
+    details: Update, clean, inspect, back up, restore, and troubleshoot the server during routine maintenance.
 ---
-
-## Common Documentation
-
-| Goal | Documentation |
-|---|---|
-| Install and run | [Quick Start](quick-start.md) |
-| Configure shared port 443 | [Shared Port 443](docs/443-single-entry.md) |
-| Deploy 3x-ui + REALITY + 443 | [3x-ui + REALITY + 443](tutorials/01-3x-ui-reality-443.md) |
-| Connect subscription tools | [Subscription Tools on Port 443](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
-| Prepare for rollback | [Security and Rollback](docs/security-rollback.md) |
-| Troubleshoot common issues | [FAQ](docs/faq.md) |
