@@ -1,14 +1,22 @@
 # ⚡ VPS-Optimize
 
-[Китайский](https://github.com/Chunlion/VPS-Optimize/blob/main/README.md) · [Английский](https://github.com/Chunlion/VPS-Optimize/blob/main/en/README.md) · [🌐 Русский](README.md)
+<p align="center">
+  <a href="../README.md">Китайский</a> · <a href="../en/README.md">Английский</a> · <a href="README.md">🌐 Русский</a>
+</p>
 
-![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&logoColor=white)
-[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/Chunlion/VPS-Optimize/blob/main/LICENSE)
-[![Release](https://img.shields.io/badge/Release-latest-blue.svg)](https://github.com/Chunlion/VPS-Optimize/releases/latest)
+<p align="center">
+  <img alt="Shell" src="https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&amp;logoColor=white">
+  <a href="../LICENSE"><img alt="License" src="https://img.shields.io/badge/License-GPLv3-blue.svg"></a>
+  <a href="https://github.com/Chunlion/VPS-Optimize/releases/latest"><img alt="Release" src="https://img.shields.io/badge/Release-latest-blue.svg"></a>
+</p>
 
-Панель управления на Bash для повседневного администрирования VPS. Через `cy` можно выполнить первоначальную настройку системы, усиление безопасности, развёртывание панелей, настройку общего порта 443, сервисов подписок, резервного копирования, отката и диагностики неполадок.
+<p align="center">
+  Панель управления на Bash для повседневного администрирования VPS. Через <code>cy</code> можно выполнить первоначальную настройку системы, усиление безопасности, развёртывание панелей, настройку общего порта 443, сервисов подписок, резервного копирования, отката и диагностики неполадок.
+</p>
 
-[📚 Документация](https://chunlion.github.io/VPS-Optimize/ru/) · [Быстрый старт](quick-start.md) · [Общий порт 443](docs/443-single-entry.md)
+<p align="center">
+  <a href="https://chunlion.github.io/VPS-Optimize/ru/">📚 Документация</a> · <a href="quick-start.md">Быстрый старт</a> · <a href="docs/443-single-entry.md">Общий порт 443</a>
+</p>
 
 ## 🚀 Быстрый старт
 

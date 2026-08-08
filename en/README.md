@@ -1,14 +1,22 @@
 # ⚡ VPS-Optimize
 
-[Chinese](https://github.com/Chunlion/VPS-Optimize/blob/main/README.md) · [🌐 English](README.md) · [Russian](https://github.com/Chunlion/VPS-Optimize/blob/main/ru/README.md)
+<p align="center">
+  <a href="../README.md">Chinese</a> · <a href="README.md">🌐 English</a> · <a href="../ru/README.md">Russian</a>
+</p>
 
-![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&logoColor=white)
-[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/Chunlion/VPS-Optimize/blob/main/LICENSE)
-[![Release](https://img.shields.io/badge/Release-latest-blue.svg)](https://github.com/Chunlion/VPS-Optimize/releases/latest)
+<p align="center">
+  <img alt="Shell" src="https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&amp;logoColor=white">
+  <a href="../LICENSE"><img alt="License" src="https://img.shields.io/badge/License-GPLv3-blue.svg"></a>
+  <a href="https://github.com/Chunlion/VPS-Optimize/releases/latest"><img alt="Release" src="https://img.shields.io/badge/Release-latest-blue.svg"></a>
+</p>
 
-A Bash control panel for routine VPS administration. Use `cy` to handle system setup, security hardening, panel deployment, shared port 443, subscription tools, backup and rollback, and troubleshooting.
+<p align="center">
+  A Bash control panel for routine VPS administration. Use <code>cy</code> to handle system setup, security hardening, panel deployment, shared port 443, subscription tools, backup and rollback, and troubleshooting.
+</p>
 
-[📚 Documentation](https://chunlion.github.io/VPS-Optimize/en/) · [Quick Start](quick-start.md) · [Shared Port 443](docs/443-single-entry.md)
+<p align="center">
+  <a href="https://chunlion.github.io/VPS-Optimize/en/">📚 Documentation</a> · <a href="quick-start.md">Quick Start</a> · <a href="docs/443-single-entry.md">Shared Port 443</a>
+</p>
 
 ## 🚀 Quick Start
 
