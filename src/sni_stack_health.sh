@@ -302,7 +302,7 @@ check_sni_stack_subscription_hint() {
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     web_label=$(web_proxy_engine_label)
-    echo -e "$(localized_text "3x-ui v3.4.0 及之后：左侧侧边栏 -> Hosts / 主机 -> 新增 Host：" "3x-ui v3.4.0 and later: Left sidebar -> Hosts / Host -> New Host:" "3x-ui v3.4.0 и новее: Левая боковая панель -> Хосты/Хост -> Новый хост:")"
+    echo -e "$(localized_text "3x-ui v3.4.0 及之后：打开 Hosts / 主机，新增 Host：" "3x-ui v3.4.0 and later: Open Hosts / Host and add a Host:" "3x-ui v3.4.0 и новее: откройте Hosts / Хост и добавьте хост:")"
     echo -e "$(localized_text "  入站：选择对应的 REALITY 或本地 Xray 入站" "Inbound: Select the corresponding REALITY or local Xray for inbound" "Входящий: выберите соответствующий REALITY или локальный Xray для входящего подключения.")"
     echo -e "$(localized_text "  地址：你的节点域名或服务器 IP" "Address: your node domain or server IP" "Адрес: доменное имя вашего узла или IP-адрес сервера.")"
     echo -e "$(localized_text "  端口：${NGINX_LISTEN_PORT}" "Port: ${NGINX_LISTEN_PORT}" "Порт: ${NGINX_LISTEN_PORT}")"

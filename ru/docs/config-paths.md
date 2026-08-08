@@ -180,7 +180,7 @@ ls -l /root/.config/vps-panel/cloudflare.env 2>/dev/null
 
 | путь | Описание |
 |---|---|
-| `/etc/x-ui/x-ui.db` | Панель базы данных SQLite |
+| `/etc/x-ui/x-ui.db` | База SQLite панели; при PostgreSQL этот файл не используется |
 | `/etc/x-ui` | Каталог конфигурации панели |
 | `/usr/local/x-ui` | Каталог программ панели |
 | `x-ui` systemd Сервис | Общие имена служб |
@@ -359,7 +359,7 @@ fail2ban-client status sshd 2>/dev/null || fail2ban-client status ssh 2>/dev/nul
 |---|---|
 | Cloudflare Token | `/root/.config/vps-panel/cloudflare.env` |
 | Закрытый ключ сертификата | `/etc/caddy/certs/*.key`、`/root/cert/*.key` |
-| База данных 3x-ui | `/etc/x-ui/x-ui.db` |
+| База SQLite 3x-ui | `/etc/x-ui/x-ui.db`; при PostgreSQL этот путь не используется |
 | Ключ подписки | База данных панелей, ссылка на подписку |
 | Telegram Bot Token | Конфигурация Port Traffic Dog |
 | Закрытый ключ SSH | Собственный локальный компьютер или сервер пользователя |

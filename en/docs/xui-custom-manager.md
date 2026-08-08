@@ -15,11 +15,13 @@
 - `systemd timer` automatic check.
 - Health checks, log viewing and old backup cleaning.
 
-Important risk: It directly reads and writes 3x-ui SQLite database `/etc/x-ui/x-ui.db`. Before writing to the database, please create a VPS snapshot and back up the database.
+Important risk: this tool supports SQLite deployments only and directly reads and writes the 3x-ui SQLite database at `/etc/x-ui/x-ui.db`. Create a VPS snapshot and back up the database before any write.
 
 ## Version compatibility boundary
 
-Supports 3x-ui 2.9.x and 3.x. Before writing to the database, you must pass the read-only database schema check. Only if the key tables and fields have not changed can you continue.
+Supports SQLite-based 3x-ui 2.9.x and 3.x. Before writing to the database, the read-only schema check must pass and the required tables and fields must be unchanged.
+
+PostgreSQL is not supported. Do not use this tool to read or write the 3x-ui database when `XUI_DB_TYPE` in `/etc/default/x-ui`, `/etc/sysconfig/x-ui`, or `/etc/conf.d/x-ui` is `postgres`, `postgresql`, or `pg`.
 
 Other 3x-ui versions are not supported. When the version is not in the supported range or the schema check fails, it is only recommended to execute:
 
@@ -34,7 +36,7 @@ Don't force-write the library, skipping version ranges and schema checks. If the
 ## What you need to do before running
 
 1. Create a VPS snapshot.
-2. Back up database `/etc/x-ui/x-ui.db`.
+2. Confirm that SQLite is in use, then back up `/etc/x-ui/x-ui.db`.
 3. Confirm that the current 3x-ui version belongs to 2.9.x or 3.x.
 4. Confirm that the relevant inbound native `monthly` reset in the 3x-ui panel is turned off, or changed to `never` / no reset.
 5. Preserve the current SSH session.
@@ -167,7 +169,7 @@ Old backup cleanup should only delete explicitly selected files. Do not delete b
 
 ### Database does not exist
 
-Confirm whether 3x-ui has been installed and whether the database path is `/etc/x-ui/x-ui.db`. If the paths are different, `XUI_DB` needs to be overwritten by `/etc/xui-custom-manager.conf`, but do not write the library without confirming the structure compatibility.
+Confirm that 3x-ui uses SQLite and that the database path is `/etc/x-ui/x-ui.db`. For another SQLite file, override `XUI_DB` in `/etc/xui-custom-manager.conf`. PostgreSQL is not supported; never write an unverified schema.
 
 ### Database fields are incompatible
 

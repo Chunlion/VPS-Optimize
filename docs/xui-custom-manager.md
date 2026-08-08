@@ -15,11 +15,13 @@
 - `systemd timer` 自动检查。
 - 健康检查、日志查看和旧备份清理。
 
-重要风险：它会直接读取和写入 3x-ui SQLite 数据库 `/etc/x-ui/x-ui.db`。写库前请先创建 VPS 快照，并备份数据库。
+重要风险：它只支持 SQLite 部署，会直接读取和写入 3x-ui SQLite 数据库 `/etc/x-ui/x-ui.db`。写库前请先创建 VPS 快照，并备份数据库。
 
 ## 版本兼容边界
 
-支持 3x-ui 2.9.x 和 3.x。写库前必须通过只读数据库 schema 检查，关键表和字段未变化才允许继续。
+支持使用 SQLite 的 3x-ui 2.9.x 和 3.x。写库前必须通过只读数据库 schema 检查，关键表和字段未变化才允许继续。
+
+不支持 PostgreSQL。若 `/etc/default/x-ui`、`/etc/sysconfig/x-ui` 或 `/etc/conf.d/x-ui` 中的 `XUI_DB_TYPE` 为 `postgres`、`postgresql` 或 `pg`，不要使用本工具读写 3x-ui 数据库。
 
 其它 3x-ui 版本不在支持范围内。版本不在支持范围或 schema 检查失败时，只建议执行：
 
@@ -34,7 +36,7 @@
 ## 运行前必须做的事
 
 1. 创建 VPS 快照。
-2. 备份数据库 `/etc/x-ui/x-ui.db`。
+2. 确认使用 SQLite，并备份数据库 `/etc/x-ui/x-ui.db`。
 3. 确认当前 3x-ui 版本属于 2.9.x 或 3.x。
 4. 确认 3x-ui 面板里相关入站原生 `monthly` 重置已关闭，或改为 `never` / 不重置。
 5. 保留当前 SSH 会话。
@@ -167,7 +169,7 @@ timer 可以在菜单中启用或停用。版本不在支持范围或 schema 检
 
 ### 数据库不存在
 
-确认 3x-ui 是否已安装，数据库路径是否为 `/etc/x-ui/x-ui.db`。如果路径不同，需要通过 `/etc/xui-custom-manager.conf` 覆盖 `XUI_DB`，但不要在未确认结构兼容时写库。
+确认 3x-ui 是否使用 SQLite，数据库路径是否为 `/etc/x-ui/x-ui.db`。如果路径不同，可通过 `/etc/xui-custom-manager.conf` 覆盖 `XUI_DB`；PostgreSQL 不适用，未确认结构兼容时不要写库。
 
 ### 数据库字段不兼容
 

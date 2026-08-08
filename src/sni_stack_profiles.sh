@@ -47,6 +47,11 @@ update_xui_panel_domain_settings_for_single_443() {
     local db_path table_name backup_dir backup_file sql
     local checked=0 updated=0 failed=0 timestamp
 
+    if xui_uses_postgresql; then
+        echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL，跳过数据库自动同步。443 单入口已更新；请在 3x-ui 中手动确认订阅域名和公开节点地址。${PLAIN}" "${YELLOW}⚠️ 3x-ui is using PostgreSQL, so database synchronization is skipped. The 443 shared entry has been updated; manually verify the subscription domain and public node address in 3x-ui.${PLAIN}" "${YELLOW}⚠️ 3x-ui использует PostgreSQL, поэтому синхронизация базы данных пропущена. Общий вход 443 обновлён; вручную проверьте домен подписки и публичный адрес узла в 3x-ui.${PLAIN}")"
+        return 0
+    fi
+
     if ! command -v sqlite3 >/dev/null 2>&1; then
         echo -e "$(localized_text "${CYAN}▶ 正在安装 sqlite3，用于同步 3x-ui 面板域名设置...${PLAIN}" "${CYAN}▶ Installing sqlite3 for synchronization of 3x-ui panel domain settings...${PLAIN}" "${CYAN}▶ Установка sqlite3 для синхронизации настроек доменного имени панели 3x-ui...${PLAIN}")"
         install_pkg sqlite3 sqlite >/dev/null 2>&1 || true
@@ -107,7 +112,7 @@ edit_sni_stack_panel_subscription_profile() {
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     echo -e "$(localized_text "${YELLOW}适用于：你在 3x-ui 里修改了面板端口、订阅端口、普通订阅路径或 Clash/Mihomo 路径。${PLAIN}" "${YELLOW}Applies to: You modified the panel port, subscription port, normal subscription path or Clash/Mihomo path in 3x-ui.${PLAIN}" "${YELLOW}применяется к: Вы изменили порт панели, порт подписки, обычный путь подписки или путь Clash/Mihomo в 3x-ui.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}注意：3x-ui 3.x 新安装请选择 Skip SSL / 不申请 SSL；2.x 或旧配置仍需清空证书、订阅设置里的证书路径，Caddy 才能按 HTTP 反代。${PLAIN}" "${YELLOW}Note: For new installations of 3x-ui 3.x, please select Skip SSL / do not apply for SSL; for 2.x or old configurations, you still need to clear the certificate path in the certificate and subscription settings so that Caddy can be reversed as HTTP.${PLAIN}" "${YELLOW}Примечание. Для новых установок 3x-ui 3.x выберите Пропустить SSL / не применять для SSL; для конфигураций 2.x или старых вам все равно необходимо очистить путь к сертификату в настройках сертификата и подписки, чтобы Caddy можно было изменить на HTTP.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}注意：3x-ui 3.x 新安装选第 4 项 Skip SSL，再选 y 仅绑定 127.0.0.1；2.x 或旧配置仍需清空面板和订阅证书路径。${PLAIN}" "${YELLOW}Note: for a new 3x-ui 3.x installation, choose option 4, Skip SSL, then y to bind only to 127.0.0.1. For 2.x or existing installations, clear the panel and subscription certificate paths.${PLAIN}" "${YELLOW}Примечание: при новой установке 3x-ui 3.x выберите пункт 4 Skip SSL, затем y для привязки только к 127.0.0.1. В 2.x и существующих установках очистите пути сертификатов панели и подписки.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}修改前请先在 3x-ui 面板里保存对应设置，再来这里同步脚本。${PLAIN}" "${YELLOW}Before modifying , please save the corresponding settings in the 3x-ui panel, and then synchronize the script here.${PLAIN}" "${YELLOW}Перед изменением сохраните соответствующие настройки на панели 3x-ui, а затем синхронизируйте скрипт здесь.${PLAIN}")"
     echo -e "------------------------------------------------"
     echo -e "$(localized_text "当前面板后端：${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Current panel backend: ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Текущая панель управления: ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}.")"

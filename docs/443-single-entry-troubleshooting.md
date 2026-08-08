@@ -348,8 +348,7 @@ https://panel.example.com:2096/sub/xxxx
 
 ### 常见原因
 
-- 3x-ui 订阅反向代理 URI 没设置。
-- Public URL / External URL 仍输出内部端口。
+- `subDomain` 未设置或包含协议、端口、路径。
 - 如果是订阅内容里的节点仍带本地端口，按下一节检查 `Hosts / 主机` 或 `External Proxy`。
 
 ### 解决方法
@@ -357,21 +356,20 @@ https://panel.example.com:2096/sub/xxxx
 回到 3x-ui：
 
 ```text
-订阅设置 -> 反向代理 URI
+订阅设置中的 `subDomain`
 ```
 
 填写公网地址：
 
 ```text
-反向代理 URI：https://panel.example.com/sub/
-反向代理 URI (Clash)：https://panel.example.com/clash/
+subDomain：panel.example.com
 ```
 
 不要写：
 
 ```text
-https://panel.example.com:2096/sub/
-http://127.0.0.1:2096/sub/
+https://panel.example.com/sub/
+panel.example.com:2096
 ```
 
 保存并重启面板后，重新复制订阅链接。
@@ -609,7 +607,7 @@ grep -R "listen" /etc/nginx /etc/caddy 2>/dev/null
 
 - 3x-ui 订阅服务没有开启。
 - 订阅路径前缀与 Caddy 配置不一致。
-- Public URL 仍输出内部端口。
+- `subDomain` 未设置或不匹配访问域名。
 - 3x-ui v3.4.0+ 的 `Hosts / 主机` 或旧版 `External Proxy` 仍输出内部端口。
 
 ### 检查命令

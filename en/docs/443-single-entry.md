@@ -112,31 +112,25 @@ These settings are the same in the three modes: Nginx Stream, TCP Peek + Splice,
 
 | 3x-ui location | What should be filled in |
 | --- | --- |
-| Panel Settings -> General -> Panel Binding IP | `127.0.0.1` |
-| Panel Settings -> General -> Panel Ports | `40000`, or your actual panel port |
-| Panel Settings -> General -> url root path / webBasePath | `/panel/`, or your actual panel path |
-| Panel Settings -> General -> webDomain / Listening domain | Leave it blank; shared port 443 will be intentionally cleared 3x-ui `webDomain`, and the public domain will be taken over by the Web reverse proxy engine |
-| Panel Settings -> General -> Panel Certificate Path/Private Key Path | Clear |
-| Subscription Settings -> Listening IP | `127.0.0.1` |
-| Subscription Settings -> Listening Port | `2096`, or your actual subscription port |
-| Subscription Settings -> URI Path | `/sub/`, or your actual normal subscription path prefix |
-| Subscription settings -> Clash/Mihomo URI path | `/clash/`, or your actual Clash/Mihomo path prefix |
-| Subscription Settings -> Certificate Path/Private Key Path | Clear |
+| `webListen` | `127.0.0.1` |
+| `webPort` | `40000`, or your actual panel port |
+| `webBasePath` | `/panel/`, or your actual panel path |
+| `webDomain` | Leave blank; the web reverse proxy owns the public domain |
+| `webCertFile` / `webKeyFile` | Clear |
+| `subListen` | `127.0.0.1` |
+| `subPort` | `2096`, or your actual subscription port |
+| `subPath` | `/sub/`, or your actual normal subscription path prefix |
+| `subClashPath` | `/clash/`, or your actual Clash/Mihomo path prefix |
+| `subDomain` | Public subscription domain, e.g. `panel.example.com`; do not include a scheme, port, or path |
+| `subCertFile` / `subKeyFile` | Clear |
 
-After 443 runs through, it is recommended to fill in the public HTTPS address when subscribing to the reverse proxy URI:
-
-```text
-Ordinary subscription reverse proxy URI：https://panel.example.com/sub/
-Clash/Mihomo reverse proxy URI：https://panel.example.com/clash/
-```
-
-`panel.example.com`, `/sub/`, and `/clash/` are all example values. Please replace them with your actual panel domain and path.
+`panel.example.com`, `/sub/`, and `/clash/` are examples. Replace them with your actual public domain and paths.
 
 ### 3x-ui 3.4.0+ Hosts / Old Version External Proxy
 
-For 3x-ui v3.4.0 and later, the public internet address of the subscription node is configured in `Hosts / Host` on the left sidebar. The old version 3x-ui still uses `External Proxy` in the inbound.
+For 3x-ui v3.4.0 and later, configure the public node address in `Hosts / Host`. Older 3x-ui versions use the inbound `External Proxy`.
 
-3x-ui v3.4.0 and later: Left sidebar -> `Hosts / Host` -> New Host:
+3x-ui v3.4.0 and later: Open `Hosts / Host` and add a Host:
 
 ```text
 inbound：Select the corresponding REALITY or local Xray inbound
@@ -362,7 +356,7 @@ Cloudflare Suggestions:
 
 It is not recommended to enable the Cloudflare proxy for domains related to this plan. Gray Cloud direct connection is more suitable for Nginx stream to be diverted by SNI, and can also reduce exceptions in REALITY, subscription links and Hosts / External Proxy.
 
-REALITY disguises SNI. It is recommended to choose an external website that does not have CDN protection, is stable, and is easy to access at home and abroad. Do not choose your own panel domain, node domain, or subscription domain, nor do you choose a website that jumps frequently, intercepts abnormal requests, or forces human-machine verification.
+For a REALITY disguise SNI, choose a stable external HTTPS site without CDN protection that is easy to reach from your users' networks. Do not use your own panel, node, or subscription domain, or a site that frequently redirects, rejects unusual requests, or requires a CAPTCHA. In current 3x-ui, an empty `Min Client Ver` uses Xray core's built-in minimum version rather than allowing every version; update a failing third-party client first, and consider `1.0.0` only after accepting the risk of outdated fingerprints.
 
 If you use Cloudflare DNS to sign the certificate, the API Token needs at least:
 
@@ -378,20 +372,20 @@ Follow this order to avoid getting dizzy:
 ```text
 1. Prepare domain and Cloudflare Token
 2. Installation 3x-ui
-3. let 3x-ui Panel and subscription usage Skip SSL / local machine HTTP backend
-4. Configuration REALITY inbound
-5. enter `Main menu [19 443 shared entry manager] -> [2 initial setup/installation 443 shared entry]`
-6. return to 3x-ui Finishing：Confirm local listeners、Subscribe to reverse proxy URI、Hosts / External Proxy
-7. enter `Main menu [19 443 shared entry manager] -> [13 443 Connection health check]`
+3. Use 3x-ui as a local HTTP backend
+4. Configure the REALITY inbound
+5. Open `Main menu [19 443 shared entry manager] -> [2 initial setup/installation 443 shared entry]`
+6. Return to 3x-ui and confirm local listeners, subscription fields, and Hosts / External Proxy
+7. Open `Main menu [19 443 shared entry manager] -> [13 443 Connection health check]`
 ```
 
 ### 1. Install 3x-ui
 
-3x-ui 3.x New installation If asked about SSL certificate setup method, select `Skip SSL / Do not apply SSL`. 2.x or old configuration, if the SSL certificate has been set, clear the panel and subscription certificate path before accessing 443.
+When the current 3x-ui installer asks for SSL setup, choose option 4, `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)`, then enter `y` when asked to bind only to `127.0.0.1`. Use this only behind a reverse proxy or SSH tunnel; never expose an unencrypted public HTTP panel. For 2.x or existing installations with SSL configured, clear the panel and subscription certificate paths before using 443.
 
 | Installer options | Role in this tutorial | Follow-up processing |
 |---|---|---|
-| Skip SSL / Do not apply for SSL | Recommended, directly used as the local HTTP backend | Continue setting up native bindings |
+| Skip SSL | Recommended local HTTP backend | Bind only to `127.0.0.1` |
 | Apply for a certificate for a domain | Can be used to temporarily complete the 3x-ui installation | Clear the 3x-ui certificate path before accessing 443 |
 | Request a certificate for an IP | It is only used as a temporary transition and is not recommended as a formal public HTTPS | Clear the 3x-ui certificate path before accessing 443 |
 | Select an existing certificate path | Can be used to temporarily complete the installation | Clear the 3x-ui certificate path before accessing 443 |
@@ -430,7 +424,7 @@ As long as you are ready to access the shared port 443 of VPS-Optimize, you shou
 Enter:
 
 ```text
-Panel settings -> General -> Certificates
+The `webCertFile` and `webKeyFile` fields in Panel Settings
 ```
 
 Clear all the following paths:
@@ -459,7 +453,7 @@ The public internet only accesses shared port 443 address: `https://panel.exampl
 Enter:
 
 ```text
-Subscription settings -> Certificates
+The `subCertFile` and `subKeyFile` fields in Subscription Settings
 ```
 
 Also clear the certificate path and private key path. After accessing the shared port 443, the subscription to the public HTTPS is also uniformly processed by the current Web reverse proxy engine, and the 3x-ui subscription service only serves as the local HTTP backend.
@@ -467,16 +461,14 @@ Also clear the certificate path and private key path. After accessing the shared
 Then set up the subscription service:
 
 ```text
-listening IP：127.0.0.1
-Monitor domain：Leave blank
-listen port：2096
-URI path：/sub/
-reverse proxy URI：https://panel.example.com/sub/
-URI path (Clash)：/clash/
-reverse proxy URI (Clash)：https://panel.example.com/clash/
+subListen：127.0.0.1
+subDomain：panel.example.com
+subPort：2096
+subPath：/sub/
+subClashPath：/clash/
 ```
 
-Note: The URI path of 3x-ui will not automatically complement `/`. Please write:
+`subDomain` contains only the domain, not a scheme, port, or path. 3x-ui does not add `/` to subscription paths automatically. Use:
 
 ```text
 /sub/
@@ -582,26 +574,19 @@ panel listener IP：127.0.0.1
 subscription listener IP：127.0.0.1
 ```
 
-Then set the subscription reverse proxy URI:
+Confirm the current subscription fields:
 
 ```text
-URI path：/sub/
-reverse proxy URI：https://panel.example.com/sub/
-
-URI path (Clash)：/clash/
-reverse proxy URI (Clash)：https://panel.example.com/clash/
+subDomain：panel.example.com
+subPath：/sub/
+subClashPath：/clash/
 ```
 
-If your path is `/sublinkqq/` or `/mihomo/`, the reverse proxy URI must also be synchronized:
-
-```text
-https://panel.example.com/sublinkqq/
-https://panel.example.com/mihomo/
-```
+Do not put a scheme, port, or path in `subDomain`; when using custom paths, update the corresponding path prefixes saved by this script.
 
 Then set the node public internet address according to the 3x-ui version.
 
-3x-ui v3.4.0 and later: Left sidebar -> `Hosts / Host` -> New Host:
+3x-ui v3.4.0 and later: Open `Hosts / Host` and add a Host:
 
 ```text
 inbound：Select the corresponding REALITY or local Xray inbound

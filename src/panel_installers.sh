@@ -21,7 +21,7 @@ func_xpanel() {
         1|latest|最新版)
             install_desc="$(localized_text "安装 3x-ui / x-ui 面板（最新版）" "Install 3x-ui / x-ui panel (latest version)" "Установите панель 3x-ui/x-ui (последняя версия)")"
             install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
-            ssl_hint="$(localized_text "最新版 3.x 安装器如果询问 SSL certificate setup method，请选择 Skip SSL / 不申请 SSL。443 单入口会由本脚本的 Caddy + acme.sh 统一托管公网证书。" "If the latest version 3.x installer asks for SSL certificate setup method, please select Skip SSL / Do not apply for SSL. The 443 shared entry will be managed by the Caddy + acme.sh of this script to uniformly host the Internet certificate." "Если установщик последней версии 3.x запрашивает метод установки сертификата SSL, выберите «Пропустить SSL / Не применять для SSL». 443 будет управляться Caddy + acme.sh этого сценария для централизованного управления сертификатом публичной сети.")"
+            ssl_hint="$(localized_text "最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。443 单入口由本脚本的 Caddy + acme.sh 托管公网证书。" "When the latest 3.x installer asks about SSL, choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. The shared 443 entry uses this script's Caddy + acme.sh for public certificates." "Когда установщик 3.x спросит об SSL, выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Публичные сертификаты общей точки входа 443 обслуживают Caddy + acme.sh этого сценария.")"
             ;;
         2|2.9.4|v2.9.4)
             install_desc="$(localized_text "安装 3x-ui / x-ui 面板（v2.9.4）" "Install 3x-ui / x-ui panel (v2.9.4)" "Установите панель 3x-ui/x-ui (v2.9.4)")"

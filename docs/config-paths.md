@@ -180,7 +180,7 @@ ls -l /root/.config/vps-panel/cloudflare.env 2>/dev/null
 
 | 路径 | 说明 |
 |---|---|
-| `/etc/x-ui/x-ui.db` | 面板 SQLite 数据库 |
+| `/etc/x-ui/x-ui.db` | 面板 SQLite 数据库；PostgreSQL 部署不使用此文件 |
 | `/etc/x-ui` | 面板配置目录 |
 | `/usr/local/x-ui` | 面板程序目录 |
 | `x-ui` systemd 服务 | 常见服务名 |
@@ -359,7 +359,7 @@ fail2ban-client status sshd 2>/dev/null || fail2ban-client status ssh 2>/dev/nul
 |---|---|
 | Cloudflare Token | `/root/.config/vps-panel/cloudflare.env` |
 | 证书私钥 | `/etc/caddy/certs/*.key`、`/root/cert/*.key` |
-| 3x-ui 数据库 | `/etc/x-ui/x-ui.db` |
+| 3x-ui SQLite 数据库 | `/etc/x-ui/x-ui.db`；PostgreSQL 部署不使用此路径 |
 | 订阅密钥 | 面板数据库、订阅链接 |
 | Telegram Bot Token | Port Traffic Dog 配置 |
 | SSH 私钥 | 用户自己的本地机器或服务器 |

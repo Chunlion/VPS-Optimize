@@ -135,19 +135,20 @@ Enter:
 Main menu [5 panel、Nodes and subscription tools] -> [1 3x-ui panel script]
 ```
 
-If not installed, choose to install 3x-ui. The installer may force you to choose a certificate method, such as applying for a certificate for a domain, applying for a certificate for an IP, or selecting an existing certificate path. The selection here is only to complete the 3x-ui installation process, not the final certificate scheme used by shared port 443.
+If 3x-ui is not installed, install it. The current official installer provides option 4, `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)`. Choose it for this shared-443 setup; when asked whether to bind only to `127.0.0.1`, enter `y`.
 
-If the installer forces you to choose a certificate method, you can first follow the prompts to select a method to complete the installation. If you are not sure which one to choose, you can temporarily choose to apply for a certificate for the domain to complete the installation; before subsequently accessing the shared port 443, you need to clear the 3x-ui panel and subscription certificate path.
+Risk: choose Skip SSL only when a reverse proxy or SSH tunnel is already in use. Bind the panel to loopback during installation; never expose an unencrypted public HTTP panel port.
 
 | Installer options | Role in this tutorial | Follow-up processing |
 |---|---|---|
+| Skip SSL | Recommended local HTTP backend | Bind only to `127.0.0.1` |
 | Apply for a certificate for a domain | Can be used to temporarily complete the 3x-ui installation | Clear the 3x-ui certificate path before accessing 443 |
 | Request a certificate for an IP | It is only used as a temporary transition and is not recommended as a formal public HTTPS | Clear the 3x-ui certificate path before accessing 443 |
 | Select an existing certificate path | Can be used to temporarily complete the installation | Clear the 3x-ui certificate path before accessing 443 |
 
 The final architecture is: the public HTTPS is uniformly processed by the current Web reverse proxy engine (Caddy or Nginx), and the certificate is applied and installed by VPS-Optimize using `acme.sh + Cloudflare DNS API`; the 3x-ui panel and subscription are only used as local HTTP Backend, 3x-ui's own certificate is not used as the final public certificate solution.
 
-When installing, just let it run normally first, and then unify the listening address and certificate path before accessing 443.
+With Skip SSL, configure the loopback listener during installation; do not use a public panel port as a temporary workaround.
 
 It is recommended to record these values:
 
@@ -168,7 +169,7 @@ As long as you are ready to access the shared port 443 of VPS-Optimize, you shou
 Enter the 3x-ui panel:
 
 ```text
-Panel settings -> General -> Certificates
+The `webCertFile` and `webKeyFile` fields in Panel Settings
 ```
 
 Clear all similar fields:
@@ -190,10 +191,10 @@ A set of example values:
 
 | Project | Example value |
 |---|---|
-| Panel listening address | `127.0.0.1` |
-| Panel port | `40000` |
-| PanelPath/webBasePath | `/panel/` |
-| Panel HTTPS | close |
+| `webListen` | `127.0.0.1` |
+| `webPort` | `40000` |
+| `webBasePath` | `/panel/` |
+| `webCertFile` / `webKeyFile` | Clear |
 
 Before accessing the 443 shared entry, you should change it to `127.0.0.1`, bind it locally and close the panel HTTPS; Internet access only uses the 443 shared entry and the Web reverse proxy engine, and does not reserve the panel public port as a transition.
 
@@ -209,14 +210,14 @@ Example in 3x-ui subscription settings:
 
 | Project | Example value |
 |---|---|
-| Subscribe to listening address | `127.0.0.1` |
-| Subscription port | `2096` |
-| standard subscription path | `/sub/` |
-| Clash/Mihomo path | `/clash/` |
-| Subscription certificate path | Clear |
-| External URL / Public URL | `https://panel.example.com/sub/` |
+| `subListen` | `127.0.0.1` |
+| `subPort` | `2096` |
+| `subPath` | `/sub/` |
+| `subClashPath` | `/clash/` |
+| `subCertFile` / `subKeyFile` | Clear |
+| `subDomain` | `panel.example.com` |
 
-Note that the path should contain `/` before and after. Don't write:
+`subDomain` is only a domain: do not include `https://`, a port, or a path. Keep leading and trailing `/` in `subPath` and `subClashPath`. Do not use:
 
 ```text
 sub
@@ -265,6 +266,8 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 ```
 
 You can see the certificate output, indicating that the external SNI site is available.
+
+In current 3x-ui, leaving `Min Client Ver` empty does not mean unrestricted support; it uses Xray core's built-in minimum version. If a third-party client cannot connect, update its core first. Consider `1.0.0` only when the compatibility requirement is confirmed and you accept the risk of admitting outdated fingerprints.
 
 ### 7. initial setup of shared port 443
 
@@ -347,7 +350,7 @@ Subscription links should not appear:
 
 The node link needs to output the public port `443`.
 
-3x-ui v3.4.0 and later: Left sidebar -> `Hosts / Host` -> New Host:
+3x-ui v3.4.0 and later: Open `Hosts / Host` and add a Host:
 
 ```text
 inbound：select this REALITY inbound
@@ -443,6 +446,6 @@ Main menu [15 Service health overview]
 | REALITY Write your own domain to make SNI | Client connection failed | Change to external real HTTPS site |
 | The subscription path does not contain `/` | Subscribe 404 | Write uniformly `/sub/`, `/clash/` |
 | REALITY/node domain enabled Cloudflare Orange Cloud | Client cannot connect directly to VPS | The node domain is changed to DNS only / Gray Cloud; the DNS-01 certificate issue is individually checked for Token, zone and TXT propagation |
-| External URL output internal port | Client cannot subscribe | Change to `https://panel.example.com/sub/` |
+| `subDomain` includes a scheme, port, or path | Subscription returns 404 or the Host does not match | Use only `panel.example.com` |
 | Hosts / External Proxy output internal port | The client node cannot connect to the public port `443` | 3x-ui v3.4.0+ check `Hosts / Host`; old version check `External Proxy` |
 | Repeatedly rerun without backup | The configuration is getting messy | Make a backup first, then follow the troubleshooting manual to fix it item by item. |

@@ -348,8 +348,7 @@ https://panel.example.com:2096/sub/xxxx
 
 ### Common causes
 
-- 3x-ui Subscription reverse proxy URI is not set.
-- Public URL / External URL still outputs the internal port.
+- `subDomain` is unset or includes a scheme, port, or path.
 - If the node in the subscription content still has a local port, check `Hosts / Host` or `External Proxy` in the next section.
 
 ### Solution
@@ -357,21 +356,20 @@ https://panel.example.com:2096/sub/xxxx
 Return to 3x-ui:
 
 ```text
-Subscription settings -> Reverse proxy URI
+The `subDomain` field in Subscription Settings
 ```
 
 Fill in the public internet address:
 
 ```text
-reverse proxy URI：https://panel.example.com/sub/
-reverse proxy URI (Clash)：https://panel.example.com/clash/
+subDomain：panel.example.com
 ```
 
 Don't write:
 
 ```text
-https://panel.example.com:2096/sub/
-http://127.0.0.1:2096/sub/
+https://panel.example.com/sub/
+panel.example.com:2096
 ```
 
 After saving and restarting the panel, copy the subscription link again.
@@ -609,7 +607,7 @@ Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
 
 - 3x-ui The subscription service is not enabled.
 - The subscription path prefix is inconsistent with the Caddy configuration.
-- Public URL still outputs the internal port.
+- `subDomain` is unset or does not match the access domain.
 - 3x-ui v3.4.0+ of `Hosts / Host` or older `External Proxy` still output internal ports.
 
 ### check command

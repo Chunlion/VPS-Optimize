@@ -112,31 +112,25 @@ https://panel.example.com:1443/
 
 | 3x-ui 位置 | 应填写的内容 |
 | --- | --- |
-| 面板设置 -> 常规 -> 面板监听 IP | `127.0.0.1` |
-| 面板设置 -> 常规 -> 面板端口 | `40000`，或你的实际面板端口 |
-| 面板设置 -> 常规 -> url 根路径 / webBasePath | `/panel/`，或你的实际面板路径 |
-| 面板设置 -> 常规 -> webDomain / 监听域名 | 留空；443 单入口会有意清空 3x-ui `webDomain`，公网域名由 Web 反代引擎接管 |
-| 面板设置 -> 常规 -> 面板证书路径/私钥路径 | 清空 |
-| 订阅设置 -> 监听 IP | `127.0.0.1` |
-| 订阅设置 -> 监听端口 | `2096`，或你的实际订阅端口 |
-| 订阅设置 -> URI 路径 | `/sub/`，或你的实际普通订阅路径前缀 |
-| 订阅设置 -> Clash/Mihomo URI 路径 | `/clash/`，或你的实际 Clash/Mihomo 路径前缀 |
-| 订阅设置 -> 证书路径/私钥路径 | 清空 |
-
-443 跑通后，订阅反向代理 URI 建议填写公网 HTTPS 地址：
-
-```text
-普通订阅反向代理 URI：https://panel.example.com/sub/
-Clash/Mihomo 反向代理 URI：https://panel.example.com/clash/
-```
+| `webListen` | `127.0.0.1` |
+| `webPort` | `40000`，或你的实际面板端口 |
+| `webBasePath` | `/panel/`，或你的实际面板路径 |
+| `webDomain` | 留空；公网域名由 Web 反代引擎接管 |
+| `webCertFile` / `webKeyFile` | 清空 |
+| `subListen` | `127.0.0.1` |
+| `subPort` | `2096`，或你的实际订阅端口 |
+| `subPath` | `/sub/`，或你的实际普通订阅路径前缀 |
+| `subClashPath` | `/clash/`，或你的实际 Clash/Mihomo 路径前缀 |
+| `subDomain` | 公网订阅域名，例如 `panel.example.com`；不填协议、端口或路径 |
+| `subCertFile` / `subKeyFile` | 清空 |
 
 `panel.example.com`、`/sub/`、`/clash/` 都是示例值，请替换成你的实际面板域名和路径。
 
 ### 3x-ui 3.4.0+ Hosts / 旧版 External Proxy
 
-3x-ui v3.4.0 及之后，订阅节点公网地址在左侧侧边栏 `Hosts / 主机` 里配置。旧版 3x-ui 仍使用入站里的 `External Proxy`。
+3x-ui v3.4.0 及之后，订阅节点公网地址在 `Hosts / 主机` 中配置。旧版 3x-ui 仍使用入站里的 `External Proxy`。
 
-3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host：
+3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host：
 
 ```text
 入站：选择对应的 REALITY 或本地 Xray 入站
@@ -362,7 +356,7 @@ Cloudflare 建议：
 
 不推荐给本方案相关域名开启 Cloudflare 代理。灰云直连更适合 Nginx stream 按 SNI 分流，也能减少 REALITY、订阅链接和 Hosts / External Proxy 的异常。
 
-REALITY 伪装 SNI 建议选没有 CDN 防护、HTTPS 稳定、国内外都容易访问的外部网站。不要选自己的面板域名、节点域名、订阅域名，也不要选会频繁跳转、拦截异常请求或强制人机验证的网站。
+REALITY 伪装 SNI 建议选没有 CDN 防护、HTTPS 稳定、国内外都容易访问的外部网站。不要选自己的面板域名、节点域名、订阅域名，也不要选会频繁跳转、拦截异常请求或强制人机验证的网站。新版 3x-ui 的 `Min Client Ver` 留空并不代表不限版本，而是使用 Xray core 的内置最低版本；第三方客户端失败时先升级客户端核心，只有确认兼容性需求并接受旧指纹风险后才考虑设为 `1.0.0`。
 
 如果使用 Cloudflare DNS 签证书，API Token 至少需要：
 
@@ -381,17 +375,17 @@ Zone.DNS.Edit
 3. 让 3x-ui 面板和订阅使用 Skip SSL / 本机 HTTP 后端
 4. 配置 REALITY 入站
 5. 进入 `主菜单 [19 443 单入口管理中心] -> [2 首次配置 / 安装 443 单入口]`
-6. 回到 3x-ui 收尾：确认本机监听、订阅反代 URI、Hosts / External Proxy
+6. 回到 3x-ui 收尾：确认本机监听、订阅字段、Hosts / External Proxy
 7. 进入 `主菜单 [19 443 单入口管理中心] -> [13 443 链路体检]`
 ```
 
 ### 1. 安装 3x-ui
 
-3x-ui 3.x 新安装如果询问 SSL certificate setup method，选择 `Skip SSL / 不申请 SSL`。2.x 或旧配置如果已经设置过 SSL 证书，接入 443 前清空面板和订阅证书路径。
+当前 3x-ui 安装器询问 SSL 设置时，选择第 4 项 `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)`；随后询问是否仅绑定 `127.0.0.1` 时输入 `y`。这只适用于已使用反向代理或 SSH 隧道的场景，不能暴露未加密的公网 HTTP 面板。2.x 或旧配置若已设置 SSL，接入 443 前清空面板和订阅证书路径。
 
 | 安装器选项 | 在本教程中的作用 | 后续处理 |
 |---|---|---|
-| Skip SSL / 不申请 SSL | 推荐，直接作为本机 HTTP 后端 | 继续设置本机监听 |
+| Skip SSL | 推荐，作为本机 HTTP 后端 | 选择仅绑定 `127.0.0.1` |
 | 为域名申请证书 | 可用于临时完成 3x-ui 安装 | 接入 443 前清空 3x-ui 证书路径 |
 | 为 IP 申请证书 | 仅作为临时过渡，不推荐作为正式公网 HTTPS | 接入 443 前清空 3x-ui 证书路径 |
 | 选择已有证书路径 | 可用于临时完成安装 | 接入 443 前清空 3x-ui 证书路径 |
@@ -430,7 +424,7 @@ http://127.0.0.1:40000/panel/
 进入：
 
 ```text
-面板设置 -> 常规 -> 证书
+面板设置中的 `webCertFile` / `webKeyFile`
 ```
 
 把下面这类路径全部清空：
@@ -459,7 +453,7 @@ http://127.0.0.1:40000/panel/
 进入：
 
 ```text
-订阅设置 -> 证书
+订阅设置中的 `subCertFile` / `subKeyFile`
 ```
 
 同样清空证书路径和私钥路径。接入 443 单入口后，订阅公网 HTTPS 也由当前 Web 反代引擎统一处理，3x-ui 订阅服务只作为本地 HTTP 后端。
@@ -467,16 +461,14 @@ http://127.0.0.1:40000/panel/
 再设置订阅服务：
 
 ```text
-监听 IP：127.0.0.1
-监听域名：留空
-监听端口：2096
-URI 路径：/sub/
-反向代理 URI：https://panel.example.com/sub/
-URI 路径 (Clash)：/clash/
-反向代理 URI (Clash)：https://panel.example.com/clash/
+subListen：127.0.0.1
+subDomain：panel.example.com
+subPort：2096
+subPath：/sub/
+subClashPath：/clash/
 ```
 
-注意：3x-ui 的 URI 路径不会自动补 `/`。请写成：
+`subDomain` 只填域名，不填协议、端口或路径。订阅路径不会自动补 `/`，请写成：
 
 ```text
 /sub/
@@ -582,26 +574,19 @@ node.example.com:443
 订阅监听 IP：127.0.0.1
 ```
 
-再设置订阅反向代理 URI：
+确认新版订阅字段：
 
 ```text
-URI 路径：/sub/
-反向代理 URI：https://panel.example.com/sub/
-
-URI 路径 (Clash)：/clash/
-反向代理 URI (Clash)：https://panel.example.com/clash/
+subDomain：panel.example.com
+subPath：/sub/
+subClashPath：/clash/
 ```
 
-如果你的路径是 `/sublinkqq/` 或 `/mihomo/`，反向代理 URI 也要同步：
-
-```text
-https://panel.example.com/sublinkqq/
-https://panel.example.com/mihomo/
-```
+`subDomain` 不填协议、端口或路径；自定义订阅路径应同时更新脚本保存的路径前缀。
 
 然后按 3x-ui 版本设置节点公网地址。
 
-3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host：
+3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host：
 
 ```text
 入站：选择对应的 REALITY 或本地 Xray 入站

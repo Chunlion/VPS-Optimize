@@ -135,19 +135,20 @@ ss -lntp | grep ':443' || echo "443 未监听"
 主菜单 [5 面板、节点与订阅工具] -> [1 3x-ui 面板脚本]
 ```
 
-如果未安装，选择安装 3x-ui。安装器可能强制要求选择证书方式，例如为域名申请证书、为 IP 申请证书，或选择已有证书路径。这里的选择只是为了完成 3x-ui 安装流程，不是 443 单入口最终使用的证书方案。
+如果未安装，选择安装 3x-ui。当前官方安装器的第 4 项是 `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)`。本教程使用 443 单入口时，应选择该项；随后如果询问是否仅绑定 `127.0.0.1`，输入 `y`。
 
-如果安装器强制要求选择证书方式，可以先按提示选择一种方式完成安装。如果你不确定选哪个，可以临时选择为域名申请证书完成安装；后续接入 443 单入口前，需要清空 3x-ui 面板和订阅证书路径。
+风险：只有已使用反向代理或 SSH 隧道时才能选择 Skip SSL。这里应立即让面板只监听本机，不要暴露未加密的公网 HTTP 面板端口。
 
 | 安装器选项 | 在本教程中的作用 | 后续处理 |
 |---|---|---|
+| Skip SSL | 推荐，作为本机 HTTP 后端 | 选择仅绑定 `127.0.0.1` |
 | 为域名申请证书 | 可用于临时完成 3x-ui 安装 | 接入 443 前清空 3x-ui 证书路径 |
 | 为 IP 申请证书 | 仅作为临时过渡，不推荐作为正式公网 HTTPS | 接入 443 前清空 3x-ui 证书路径 |
 | 选择已有证书路径 | 可用于临时完成安装 | 接入 443 前清空 3x-ui 证书路径 |
 
 最终架构是：公网 HTTPS 由当前 Web 反代引擎（Caddy 或 Nginx）统一处理，证书由 VPS-Optimize 使用 `acme.sh + Cloudflare DNS API` 申请和安装；3x-ui 面板和订阅只作为本地 HTTP 后端，3x-ui 自带证书不作为最终公网证书方案。
 
-安装时先让它正常跑起来即可，后面接入 443 前再统一整理监听地址和证书路径。
+使用 Skip SSL 时，安装阶段就完成本机监听；不要把面板公网端口作为过渡。
 
 建议记录这些值：
 
@@ -168,7 +169,7 @@ ss -lntp | grep ':443' || echo "443 未监听"
 进入 3x-ui 面板：
 
 ```text
-面板设置 -> 常规 -> 证书
+面板设置中的 `webCertFile` / `webKeyFile`
 ```
 
 清空所有类似字段：
@@ -190,10 +191,10 @@ ss -lntp | grep ':443' || echo "443 未监听"
 
 | 项目 | 示例值 |
 |---|---|
-| 面板监听地址 | `127.0.0.1` |
-| 面板端口 | `40000` |
-| 面板路径 / webBasePath | `/panel/` |
-| 面板 HTTPS | 关闭 |
+| `webListen` | `127.0.0.1` |
+| `webPort` | `40000` |
+| `webBasePath` | `/panel/` |
+| `webCertFile` / `webKeyFile` | 清空 |
 
 接入 443 单入口前就应改成 `127.0.0.1` 本地监听并关闭面板 HTTPS；公网访问只走 443 单入口和 Web 反代引擎，不保留面板公网端口作为过渡。
 
@@ -209,14 +210,14 @@ curl -I http://127.0.0.1:40000/panel/
 
 | 项目 | 示例值 |
 |---|---|
-| 订阅监听地址 | `127.0.0.1` |
-| 订阅端口 | `2096` |
-| 普通订阅路径 | `/sub/` |
-| Clash/Mihomo 路径 | `/clash/` |
-| 订阅证书路径 | 清空 |
-| External URL / Public URL | `https://panel.example.com/sub/` |
+| `subListen` | `127.0.0.1` |
+| `subPort` | `2096` |
+| `subPath` | `/sub/` |
+| `subClashPath` | `/clash/` |
+| `subCertFile` / `subKeyFile` | 清空 |
+| `subDomain` | `panel.example.com` |
 
-注意路径要带前后 `/`。不要写成：
+`subDomain` 只填域名，不含 `https://`、端口或路径；`subPath` 和 `subClashPath` 要保留前后 `/`。不要写成：
 
 ```text
 sub
@@ -265,6 +266,8 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 ```
 
 能看到证书输出，说明外部 SNI 站点可用。
+
+新版 3x-ui 的 `Min Client Ver` 留空并不代表“不限版本”，而是使用 Xray core 的内置最低版本。第三方客户端无法连接时，先升级客户端核心；只有确认兼容性需求并接受旧指纹的风险后，再考虑设为 `1.0.0`。
 
 ### 7. 首次配置 443 单入口
 
@@ -347,7 +350,7 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 
 节点链接需要输出公网 `443`。
 
-3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host：
+3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host：
 
 ```text
 入站：选择这个 REALITY 入站
@@ -443,6 +446,6 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 | REALITY 写自己的域名做 SNI | 客户端连接失败 | 改成外部真实 HTTPS 站点 |
 | 订阅路径不带 `/` | 订阅 404 | 统一写 `/sub/`、`/clash/` |
 | REALITY/节点域名开启 Cloudflare 橙云 | 客户端无法直连 VPS | 节点域名改为 DNS only / 灰云；DNS-01 证书问题单独检查 Token、zone 和 TXT 传播 |
-| External URL 输出内部端口 | 客户端无法订阅 | 改成 `https://panel.example.com/sub/` |
+| `subDomain` 包含协议、端口或路径 | 订阅 404 或 Host 不匹配 | 只填 `panel.example.com` |
 | Hosts / External Proxy 输出内部端口 | 客户端节点连不上公网 `443` | 3x-ui v3.4.0+ 检查 `Hosts / 主机`；旧版检查 `External Proxy` |
 | 没备份就反复重跑 | 配置越来越乱 | 先备份，再按排错手册逐项修 |

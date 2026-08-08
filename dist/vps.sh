@@ -6390,6 +6390,38 @@ detect_xui_command() {
     fi
 }
 
+xui_database_backend() {
+    local env_file raw value
+    for env_file in /etc/default/x-ui /etc/sysconfig/x-ui /etc/conf.d/x-ui; do
+        [[ -r "$env_file" ]] || continue
+        raw=$(grep -E '^[[:space:]]*(export[[:space:]]+)?XUI_DB_TYPE[[:space:]]*=' "$env_file" | tail -n1 || true)
+        [[ -n "$raw" ]] || continue
+        value="${raw#*=}"
+        value="${value%%#*}"
+        value="$(trim_input "$value")"
+        value="${value#\"}"
+        value="${value%\"}"
+        value="${value#\'}"
+        value="${value%\'}"
+        value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+        case "$value" in
+            postgres|postgresql|pg)
+                printf '%s' "postgresql"
+                return 0
+                ;;
+        esac
+    done
+    printf '%s' "sqlite"
+}
+
+xui_uses_postgresql() {
+    [[ "$(xui_database_backend)" == "postgresql" ]]
+}
+
+xui_postgresql_manual_notice() {
+    echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL。VPS-Optimize 不会自动检查或修改 PostgreSQL；请在 3x-ui 中手动确认 webCertFile、webKeyFile、subCertFile、subKeyFile 已清空。${PLAIN}" "${YELLOW}⚠️ 3x-ui is configured to use PostgreSQL. VPS-Optimize does not inspect or modify PostgreSQL automatically; verify manually in 3x-ui that webCertFile, webKeyFile, subCertFile, and subKeyFile are empty.${PLAIN}" "${YELLOW}⚠️ Обнаружено, что 3x-ui использует PostgreSQL. VPS-Optimize не проверяет и не изменяет PostgreSQL автоматически; вручную убедитесь в 3x-ui, что webCertFile, webKeyFile, subCertFile и subKeyFile пусты.${PLAIN}")"
+}
+
 xui_cli_show_value() {
     local key="$1"
     local xui_bin info cli_key
@@ -6407,6 +6439,7 @@ xui_cli_show_value() {
 xui_db_setting_value() {
     local key="$1"
     local db_path value
+    xui_uses_postgresql && return 1
     command -v sqlite3 >/dev/null 2>&1 || return 1
     while IFS= read -r db_path; do
         [[ -n "$db_path" && -f "$db_path" ]] || continue
@@ -6465,6 +6498,10 @@ print_xui_single_443_detected_defaults() {
 
 clear_xui_cert_settings_for_single_443() {
     local xui_bin cert_cmd_done=false db_found=false cert_key_sql db_path service_name
+    if xui_uses_postgresql; then
+        xui_postgresql_manual_notice
+        return 1
+    fi
     xui_bin=$(detect_xui_command 2>/dev/null || true)
 
     if ! command -v sqlite3 >/dev/null 2>&1; then
@@ -6550,6 +6587,11 @@ find_xui_database_candidates() {
 check_xui_cert_settings_for_single_443() {
     local cert_key_sql db_path rows key value
     local checked=0 found=0
+
+    if xui_uses_postgresql; then
+        xui_postgresql_manual_notice
+        return 2
+    fi
 
     if ! command -v sqlite3 >/dev/null 2>&1; then
         echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 sqlite3，跳过 3x-ui 证书路径数据库检查。${PLAIN}" "${YELLOW}⚠️ sqlite3 not detected, skipping 3x-ui certificate path database check.${PLAIN}" "${YELLOW}⚠️ sqlite3 не обнаружен, проверка базы данных пути сертификата 3x-ui пропускается.${PLAIN}")"
@@ -9551,7 +9593,7 @@ check_sni_stack_subscription_hint() {
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     web_label=$(web_proxy_engine_label)
-    echo -e "$(localized_text "3x-ui v3.4.0 及之后：左侧侧边栏 -> Hosts / 主机 -> 新增 Host：" "3x-ui v3.4.0 and later: Left sidebar -> Hosts / Host -> New Host:" "3x-ui v3.4.0 и новее: Левая боковая панель -> Хосты/Хост -> Новый хост:")"
+    echo -e "$(localized_text "3x-ui v3.4.0 及之后：打开 Hosts / 主机，新增 Host：" "3x-ui v3.4.0 and later: Open Hosts / Host and add a Host:" "3x-ui v3.4.0 и новее: откройте Hosts / Хост и добавьте хост:")"
     echo -e "$(localized_text "  入站：选择对应的 REALITY 或本地 Xray 入站" "Inbound: Select the corresponding REALITY or local Xray for inbound" "Входящий: выберите соответствующий REALITY или локальный Xray для входящего подключения.")"
     echo -e "$(localized_text "  地址：你的节点域名或服务器 IP" "Address: your node domain or server IP" "Адрес: доменное имя вашего узла или IP-адрес сервера.")"
     echo -e "$(localized_text "  端口：${NGINX_LISTEN_PORT}" "Port: ${NGINX_LISTEN_PORT}" "Порт: ${NGINX_LISTEN_PORT}")"
@@ -9626,6 +9668,11 @@ update_xui_panel_domain_settings_for_single_443() {
     local db_path table_name backup_dir backup_file sql
     local checked=0 updated=0 failed=0 timestamp
 
+    if xui_uses_postgresql; then
+        echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL，跳过数据库自动同步。443 单入口已更新；请在 3x-ui 中手动确认订阅域名和公开节点地址。${PLAIN}" "${YELLOW}⚠️ 3x-ui is using PostgreSQL, so database synchronization is skipped. The 443 shared entry has been updated; manually verify the subscription domain and public node address in 3x-ui.${PLAIN}" "${YELLOW}⚠️ 3x-ui использует PostgreSQL, поэтому синхронизация базы данных пропущена. Общий вход 443 обновлён; вручную проверьте домен подписки и публичный адрес узла в 3x-ui.${PLAIN}")"
+        return 0
+    fi
+
     if ! command -v sqlite3 >/dev/null 2>&1; then
         echo -e "$(localized_text "${CYAN}▶ 正在安装 sqlite3，用于同步 3x-ui 面板域名设置...${PLAIN}" "${CYAN}▶ Installing sqlite3 for synchronization of 3x-ui panel domain settings...${PLAIN}" "${CYAN}▶ Установка sqlite3 для синхронизации настроек доменного имени панели 3x-ui...${PLAIN}")"
         install_pkg sqlite3 sqlite >/dev/null 2>&1 || true
@@ -9686,7 +9733,7 @@ edit_sni_stack_panel_subscription_profile() {
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     echo -e "$(localized_text "${YELLOW}适用于：你在 3x-ui 里修改了面板端口、订阅端口、普通订阅路径或 Clash/Mihomo 路径。${PLAIN}" "${YELLOW}Applies to: You modified the panel port, subscription port, normal subscription path or Clash/Mihomo path in 3x-ui.${PLAIN}" "${YELLOW}применяется к: Вы изменили порт панели, порт подписки, обычный путь подписки или путь Clash/Mihomo в 3x-ui.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}注意：3x-ui 3.x 新安装请选择 Skip SSL / 不申请 SSL；2.x 或旧配置仍需清空证书、订阅设置里的证书路径，Caddy 才能按 HTTP 反代。${PLAIN}" "${YELLOW}Note: For new installations of 3x-ui 3.x, please select Skip SSL / do not apply for SSL; for 2.x or old configurations, you still need to clear the certificate path in the certificate and subscription settings so that Caddy can be reversed as HTTP.${PLAIN}" "${YELLOW}Примечание. Для новых установок 3x-ui 3.x выберите Пропустить SSL / не применять для SSL; для конфигураций 2.x или старых вам все равно необходимо очистить путь к сертификату в настройках сертификата и подписки, чтобы Caddy можно было изменить на HTTP.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}注意：3x-ui 3.x 新安装选第 4 项 Skip SSL，再选 y 仅绑定 127.0.0.1；2.x 或旧配置仍需清空面板和订阅证书路径。${PLAIN}" "${YELLOW}Note: for a new 3x-ui 3.x installation, choose option 4, Skip SSL, then y to bind only to 127.0.0.1. For 2.x or existing installations, clear the panel and subscription certificate paths.${PLAIN}" "${YELLOW}Примечание: при новой установке 3x-ui 3.x выберите пункт 4 Skip SSL, затем y для привязки только к 127.0.0.1. В 2.x и существующих установках очистите пути сертификатов панели и подписки.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}修改前请先在 3x-ui 面板里保存对应设置，再来这里同步脚本。${PLAIN}" "${YELLOW}Before modifying , please save the corresponding settings in the 3x-ui panel, and then synchronize the script here.${PLAIN}" "${YELLOW}Перед изменением сохраните соответствующие настройки на панели 3x-ui, а затем синхронизируйте скрипт здесь.${PLAIN}")"
     echo -e "------------------------------------------------"
     echo -e "$(localized_text "当前面板后端：${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Current panel backend: ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Текущая панель управления: ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}.")"
@@ -10015,7 +10062,7 @@ collect_sni_stack_config() {
     echo -e "$(localized_text "${YELLOW}443 单入口需要 3x-ui 面板/订阅后端使用 HTTP，由 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 统一托管公网证书。${PLAIN}" "${YELLOW}443 shared entry requires the 3x-ui panel/subscription backend to use HTTP, which will centrally manage the public certificate.${PLAIN}" "${YELLOW}Для единого входа 443 требуется, чтобы бэкенд панели/подписки 3x-ui использовала HTTP, который будет централизованно управлять сертификатом публичной сети.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}本向导会让 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}" "${YELLOW}This wizard will allow $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") to connect ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} and ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} through HTTP.${PLAIN}" "${YELLOW}Этот мастер позволит $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") соединить ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} и ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} через HTTP.${PLAIN}")"
     echo -e "$(localized_text "${CYAN}证书处理分两种情况：${PLAIN}" "${CYAN}Certificate processing is divided into two situations:${PLAIN}" "${CYAN}Обработка сертификата делится на две ситуации:.${PLAIN}")"
-    echo -e "$(localized_text "  3x-ui 3.x 新安装：在官方安装器里选择 Skip SSL / 不申请 SSL，本步骤只做兜底检查。" "3x-ui 3.x new installation: Select Skip SSL / Do not apply for SSL in the official installer. This step is only a basic check." "Новая установка 3x-ui 3.x: выберите Пропустить SSL / Не применять для SSL в официальном установщике. Этот шаг представляет собой лишь базовую проверку.")"
+    echo -e "$(localized_text "  3x-ui 3.x 新安装：在官方安装器选第 4 项 Skip SSL，再选 y 仅绑定 127.0.0.1；本步骤只做兜底检查。" "  New 3x-ui 3.x installation: choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. This step is only a fallback check." "  Новая установка 3x-ui 3.x: выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Этот шаг выполняет только проверку.")"
     echo -e "$(localized_text "  3x-ui 2.x、升级旧配置、或曾经启用过 3x-ui SSL：继续按旧流程清空面板/订阅证书路径。" "3x-ui 2.x, upgrading old configuration, or 3x-ui SSL has been enabled: Continue to clear the panel/subscription certificate path according to the old process." "3x-ui 2.x, обновление старой конфигурации или 3x-ui SSL включен: продолжайте очищать путь сертификата панели/подписки в соответствии со старым процессом.")"
     local cert_clear_confirm
     read_trimmed cert_clear_confirm "$(localized_text "是否现在兜底清空 2.x/旧配置中的 3x-ui 面板/订阅证书路径？(Y/n，默认 yes): " "Do you want to clean up the 3x-ui panel/subscription certificate path in the 2.x/old configuration now? (Y/n, default yes):" "Хотите ли вы сейчас очистить путь к сертификату панели/подписки 3x-ui в конфигурации 2.x/old? (Да/нет, по умолчанию да):")"
@@ -10923,7 +10970,7 @@ print_sni_stack_result() {
     echo -e "$(localized_text "  面板监听地址：${PANEL_LISTEN_ADDR}" "Panel listening address: ${PANEL_LISTEN_ADDR}" "Адрес прослушивания панели: ${PANEL_LISTEN_ADDR}")"
     echo -e "$(localized_text "  面板端口：    ${PANEL_LISTEN_PORT}" "Panel port: ${PANEL_LISTEN_PORT}" "Порт панели: ${PANEL_LISTEN_PORT}")"
     echo -e "  webBasePath： ${PANEL_WEB_PATH}"
-    echo -e "$(localized_text "  3.x 新安装 SSL 选项：Skip SSL / 不申请 SSL" "3.x New installation SSL option: Skip SSL / Do not apply for SSL" "3.x Новая опция установки SSL: Пропустить SSL / Не применять для SSL")"
+    echo -e "$(localized_text "  3.x 新安装 SSL：第 4 项 Skip SSL，再选 y 仅绑定 127.0.0.1" "3.x new-install SSL: option 4, Skip SSL, then y to bind only to 127.0.0.1" "SSL при новой установке 3.x: пункт 4 Skip SSL, затем y для привязки только к 127.0.0.1")"
     echo -e "$(localized_text "  2.x/旧配置面板证书路径/私钥路径：清空" "2.x/old configuration panel certificate path/private key path: clear" "2.x/старый путь к сертификату панели конфигурации/путь к секретному ключу: очистить")"
     echo -e "$(localized_text "  Web 反代引擎后端连接：http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Web reverse proxy engine backend connection: http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Серверное соединение механизма веб-прокси: http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}")"
     echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
@@ -15697,7 +15744,7 @@ func_xpanel() {
         1|latest|最新版)
             install_desc="$(localized_text "安装 3x-ui / x-ui 面板（最新版）" "Install 3x-ui / x-ui panel (latest version)" "Установите панель 3x-ui/x-ui (последняя версия)")"
             install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
-            ssl_hint="$(localized_text "最新版 3.x 安装器如果询问 SSL certificate setup method，请选择 Skip SSL / 不申请 SSL。443 单入口会由本脚本的 Caddy + acme.sh 统一托管公网证书。" "If the latest version 3.x installer asks for SSL certificate setup method, please select Skip SSL / Do not apply for SSL. The 443 shared entry will be managed by the Caddy + acme.sh of this script to uniformly host the Internet certificate." "Если установщик последней версии 3.x запрашивает метод установки сертификата SSL, выберите «Пропустить SSL / Не применять для SSL». 443 будет управляться Caddy + acme.sh этого сценария для централизованного управления сертификатом публичной сети.")"
+            ssl_hint="$(localized_text "最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。443 单入口由本脚本的 Caddy + acme.sh 托管公网证书。" "When the latest 3.x installer asks about SSL, choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. The shared 443 entry uses this script's Caddy + acme.sh for public certificates." "Когда установщик 3.x спросит об SSL, выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Публичные сертификаты общей точки входа 443 обслуживают Caddy + acme.sh этого сценария.")"
             ;;
         2|2.9.4|v2.9.4)
             install_desc="$(localized_text "安装 3x-ui / x-ui 面板（v2.9.4）" "Install 3x-ui / x-ui panel (v2.9.4)" "Установите панель 3x-ui/x-ui (v2.9.4)")"

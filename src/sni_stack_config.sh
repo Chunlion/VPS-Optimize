@@ -194,6 +194,38 @@ detect_xui_command() {
     fi
 }
 
+xui_database_backend() {
+    local env_file raw value
+    for env_file in /etc/default/x-ui /etc/sysconfig/x-ui /etc/conf.d/x-ui; do
+        [[ -r "$env_file" ]] || continue
+        raw=$(grep -E '^[[:space:]]*(export[[:space:]]+)?XUI_DB_TYPE[[:space:]]*=' "$env_file" | tail -n1 || true)
+        [[ -n "$raw" ]] || continue
+        value="${raw#*=}"
+        value="${value%%#*}"
+        value="$(trim_input "$value")"
+        value="${value#\"}"
+        value="${value%\"}"
+        value="${value#\'}"
+        value="${value%\'}"
+        value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+        case "$value" in
+            postgres|postgresql|pg)
+                printf '%s' "postgresql"
+                return 0
+                ;;
+        esac
+    done
+    printf '%s' "sqlite"
+}
+
+xui_uses_postgresql() {
+    [[ "$(xui_database_backend)" == "postgresql" ]]
+}
+
+xui_postgresql_manual_notice() {
+    echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL。VPS-Optimize 不会自动检查或修改 PostgreSQL；请在 3x-ui 中手动确认 webCertFile、webKeyFile、subCertFile、subKeyFile 已清空。${PLAIN}" "${YELLOW}⚠️ 3x-ui is configured to use PostgreSQL. VPS-Optimize does not inspect or modify PostgreSQL automatically; verify manually in 3x-ui that webCertFile, webKeyFile, subCertFile, and subKeyFile are empty.${PLAIN}" "${YELLOW}⚠️ Обнаружено, что 3x-ui использует PostgreSQL. VPS-Optimize не проверяет и не изменяет PostgreSQL автоматически; вручную убедитесь в 3x-ui, что webCertFile, webKeyFile, subCertFile и subKeyFile пусты.${PLAIN}")"
+}
+
 xui_cli_show_value() {
     local key="$1"
     local xui_bin info cli_key
@@ -211,6 +243,7 @@ xui_cli_show_value() {
 xui_db_setting_value() {
     local key="$1"
     local db_path value
+    xui_uses_postgresql && return 1
     command -v sqlite3 >/dev/null 2>&1 || return 1
     while IFS= read -r db_path; do
         [[ -n "$db_path" && -f "$db_path" ]] || continue
@@ -269,6 +302,10 @@ print_xui_single_443_detected_defaults() {
 
 clear_xui_cert_settings_for_single_443() {
     local xui_bin cert_cmd_done=false db_found=false cert_key_sql db_path service_name
+    if xui_uses_postgresql; then
+        xui_postgresql_manual_notice
+        return 1
+    fi
     xui_bin=$(detect_xui_command 2>/dev/null || true)
 
     if ! command -v sqlite3 >/dev/null 2>&1; then
@@ -354,6 +391,11 @@ find_xui_database_candidates() {
 check_xui_cert_settings_for_single_443() {
     local cert_key_sql db_path rows key value
     local checked=0 found=0
+
+    if xui_uses_postgresql; then
+        xui_postgresql_manual_notice
+        return 2
+    fi
 
     if ! command -v sqlite3 >/dev/null 2>&1; then
         echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 sqlite3，跳过 3x-ui 证书路径数据库检查。${PLAIN}" "${YELLOW}⚠️ sqlite3 not detected, skipping 3x-ui certificate path database check.${PLAIN}" "${YELLOW}⚠️ sqlite3 не обнаружен, проверка базы данных пути сертификата 3x-ui пропускается.${PLAIN}")"

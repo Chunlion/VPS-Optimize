@@ -180,7 +180,7 @@ Common official installer paths:
 
 | path | Description |
 |---|---|
-| `/etc/x-ui/x-ui.db` | Panel SQLite database |
+| `/etc/x-ui/x-ui.db` | Panel SQLite database; PostgreSQL deployments do not use this file |
 | `/etc/x-ui` | Panel configuration directory |
 | `/usr/local/x-ui` | Panel program directory |
 | `x-ui` systemd Service | Common service names |
@@ -359,7 +359,7 @@ Don't share publicly:
 |---|---|
 | Cloudflare Token | `/root/.config/vps-panel/cloudflare.env` |
 | Certificate private key | `/etc/caddy/certs/*.key`、`/root/cert/*.key` |
-| 3x-ui database | `/etc/x-ui/x-ui.db` |
+| 3x-ui SQLite database | `/etc/x-ui/x-ui.db`; PostgreSQL deployments do not use this path |
 | Subscription key | Panel database, subscription link |
 | Telegram Bot Token | dog.sh traffic monitor configuration |
 | SSH private key | User's own local machine or server |
