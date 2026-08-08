@@ -1,6 +1,6 @@
 # VPS-Optimize
 
-[简体中文](https://github.com/Chunlion/VPS-Optimize/blob/main/README.md) · [English](https://github.com/Chunlion/VPS-Optimize/blob/main/en/README.md) · [Русский](README.md)
+[Китайский](https://github.com/Chunlion/VPS-Optimize/blob/main/README.md) · [Английский](https://github.com/Chunlion/VPS-Optimize/blob/main/en/README.md) · [Русский](README.md)
 
 ![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&logoColor=white)
 [![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/Chunlion/VPS-Optimize/blob/main/LICENSE)

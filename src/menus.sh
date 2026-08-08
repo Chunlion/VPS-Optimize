@@ -88,7 +88,7 @@ show_panel_help() {
     echo "$(localized_text "3 面板 SSL 修复，适合 443 接入前清空面板证书路径。" "3 Panel SSL repair, suitable for clearing the panel certificate path before 443 access." "3 Ремонт панели SSL, подходит для очистки пути сертификата панели перед доступом 443.")"
     echo "$(localized_text "4 S-UI 面板脚本：安装、官方菜单、卸载。" "4 S-UI panel script: installation, official menu, uninstallation." "4 Скрипт панели S-UI: установка, официальное меню, удаление.")"
     echo "$(localized_text "5/6 Sing-box 脚本和 Xray 脚本。" "5/6 Sing-box script and Xray script." "5/6 Скрипт Sing-box и скрипт Xray.")"
-    echo "$(localized_text "7/8/9 订阅栈，11 Dockge Compose，12 Compose 迁移；公网 HTTPS：未启用 443 单入口时用主菜单 [4 反代]，已启用时用主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription stacks; 11: Dockge Compose; 12: Compose migration. For public HTTPS, use main menu [4 Reverse proxy] before shared port 443 is enabled; afterwards use main menu [19 Shared port 443] -> [8 Manage Web domains/reverse proxy]." "7/8/9: стеки подписок; 11: Dockge Compose; 12: перенос Compose. Для публичного HTTPS до включения общего порта 443 используйте главное меню [4 Обратный прокси], а после включения — [19 Общий порт 443] -> [8 Управление Web-доменами и обратным прокси].")"
+    echo "$(localized_text "7/8/9 订阅栈，11 Dockge Compose，12 Compose 迁移；公网 HTTPS：未启用 443 单入口走主菜单 [4 反代]，已启用走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription stacks; 11: Dockge Compose; 12: Compose migration. For public HTTPS, use main menu [4 Reverse proxy] before shared port 443 is enabled; afterwards use main menu [19 Shared port 443] -> [8 Manage Web domains/reverse proxy]." "7/8/9: стеки подписок; 11: Dockge Compose; 12: перенос Compose. Для публичного HTTPS до включения общего порта 443 используйте главное меню [4 Обратный прокси], а после включения — [19 Общий порт 443] -> [8 Управление Web-доменами и обратным прокси].")"
     echo "$(localized_text "16 dog 流量计，只看已监控端口实际跑过的流量。" "16 dog traffic meter, only looks at the actual traffic of the monitored port." "16-метровый расходомер, смотрит только на фактический расход контролируемого порта.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
@@ -604,8 +604,6 @@ main_menu() {
             print_breadcrumb "Main menu"
             echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (shortcut: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
-            echo -e " ${YELLOW}Shortcuts: 443 entry manager, h health, b backup, u update, q exit.${PLAIN}"
-            echo -e " ${YELLOW}High-risk operations require typing yes. Create a [16] backup first when unsure.${PLAIN}"
             print_auto_update_notice
             echo -e "${CYAN}================================================${PLAIN}"
             echo -e " ${BOLD}${BLUE}▶ Entry modes${PLAIN}"
@@ -650,8 +648,6 @@ main_menu() {
         print_breadcrumb "主菜单"
         echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e " ${YELLOW}快捷输入：443 直达单入口，h 看健康，b 做备份，u 更新，q 退出。${PLAIN}"
-        echo -e " ${YELLOW}高风险操作需要输入 yes 确认，大小写均可；不确定时先做 [16] 备份。${PLAIN}"
         print_auto_update_notice
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${BOLD}${BLUE}▶ 模式入口${PLAIN}"

@@ -129,13 +129,12 @@ assert_file_contains .vitepress/config.mts "label: 'Русский'" "VitePress 
 assert_file_contains .github/workflows/pages.yml 'run: npm run build' "Pages workflow must build the VitePress site."
 assert_file_contains .github/workflows/pages.yml 'path: .vitepress/dist' "Pages workflow must upload the VitePress dist artifact."
 
-assert_file_contains index.md '](quick-start.md)' "Docs homepage must link to quick-start."
 assert_file_contains index.md 'layout: home' "Docs homepage must use the VitePress home layout."
 assert_file_contains en/index.md 'layout: home' "English docs homepage must use the VitePress home layout."
 assert_file_contains ru/index.md 'layout: home' "Russian docs homepage must use the VitePress home layout."
-assert_file_contains index.md '](docs/443-single-entry.md)' "Docs homepage must link to the 443 single-entry doc."
-assert_file_contains index.md '](tutorials/01-3x-ui-reality-443.md)' "Docs homepage must link to the 3x-ui REALITY 443 tutorial."
-assert_file_contains index.md '](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)' "Docs homepage must link to the subscription tools 443 tutorial."
+assert_file_not_contains index.md '## 常用文档' "Docs homepage must not render the removed document list."
+assert_file_not_contains en/index.md '## Common Documentation' "English docs homepage must not render the removed document list."
+assert_file_not_contains ru/index.md '## Основные документы' "Russian docs homepage must not render the removed document list."
 
 assert_file_contains quick-start.md '](docs/443-single-entry.md)' "Quick start must link to the 443 single-entry doc."
 assert_file_contains quick-start.md '](tutorials/01-3x-ui-reality-443.md)' "Quick start must link to the 3x-ui REALITY 443 tutorial."
