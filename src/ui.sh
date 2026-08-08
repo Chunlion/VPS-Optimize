@@ -8,7 +8,7 @@ print_breadcrumb() {
 pause_return() {
     local default_prompt
     if declare -F localized_text >/dev/null 2>&1; then
-        default_prompt="$(localized_text "按任意键继续..." "Press any key to continue...")"
+        default_prompt="$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
     else
         default_prompt="按任意键继续..."
     fi

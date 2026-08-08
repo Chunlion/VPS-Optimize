@@ -2,7 +2,23 @@
 # Help text plus top-level and second-level menu wiring.
 
 show_main_help() {
-    if [[ "$VPSO_LANGUAGE" == "en" ]]; then
+    if [[ "$VPSO_LANGUAGE" == "ru" ]]; then
+        echo -e "${CYAN}VPS-Optimize > Главное меню > Справка${PLAIN}"
+        echo "1/2 Проверка и первичная настройка нового сервера."
+        echo "3   Установка Docker, Python, WARP и распространённых инструментов."
+        echo "4   Настройка обратного прокси Caddy/Nginx для сайтов и панелей вне единого входа 443."
+        echo "5   Управление 3x-ui, S-UI, Sing-box, Xray и инструментами подписок."
+        echo "6   Управление портом SSH, открытыми ключами и входом только по ключу."
+        echo "8   Управление правилами брандмауэра, открытыми портами и лимитами соединений для каждого IP-адреса."
+        echo "10  Оптимизация сети и ядра: BBR, TCP, ZRAM и очистка старых ядер."
+        echo "15  Обзор состояния служб и создание диагностических данных для поиска неисправностей."
+        echo "16  Резервное копирование и откат конфигурации перед операциями с высоким риском."
+        echo "19  Управление единым публичным входом 443 для панелей, подписок и REALITY."
+        echo "20  Выбор языка интерфейса."
+        echo "10 -> 5  Защита от превышения лимита трафика с учётом расчётного периода."
+        echo "xcm открывает расширенный набор x-ui; он также доступен через 5 -> 2."
+        echo "? показывает справку; 0/q завершает работу."
+    elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
         echo -e "${CYAN}VPS-Optimize > Main menu > Help${PLAIN}"
         echo "1/2 Check and initialize a new server."
         echo "3   Install Docker, Python, WARP, and common tools."
@@ -14,9 +30,10 @@ show_main_help() {
         echo "15  View health status and generate diagnostic details for troubleshooting."
         echo "16  Create backups and roll back configuration before high-risk operations."
         echo "19  Manage the shared public 443 entry for panels, subscriptions, and REALITY."
+        echo "20  Select the interface language."
         echo "10 -> 5  Protect against traffic overages based on the billing cycle."
         echo "xcm opens the x-ui extension directly; it is also available through 5 -> 2."
-        echo "l switches the interface language. ? shows help; 0/q exits."
+        echo "? shows help; 0/q exits."
     else
         echo -e "${CYAN}VPS-Optimize > 主菜单 > 帮助${PLAIN}"
         echo "1/2 适合新机器先体检和初始化。"
@@ -29,14 +46,23 @@ show_main_help() {
         echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
         echo "16  备份与回滚，高风险操作前建议先跑。"
         echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
+        echo "20  选择界面语言。"
         echo "10 -> 5  流量达量保护，按账单周期防刷流量和超额账单。"
         echo "xcm 直达 x-ui 增强套件；也可走 5 -> 2。"
-        echo "l 切换界面语言，? 查看帮助，0/q 退出。"
+        echo "? 查看帮助，0/q 退出。"
     fi
 }
 
 show_beginner_help() {
-    if [[ "$VPSO_LANGUAGE" == "en" ]]; then
+    if [[ "$VPSO_LANGUAGE" == "ru" ]]; then
+        echo -e "${CYAN}VPS-Optimize > Руководство для начинающих > Справка${PLAIN}"
+        echo "1 Первичная настройка сервера в безопасном порядке: проверка, базовая настройка, SSH, ключи, Fail2ban, брандмауэр и резервная копия."
+        echo "2 Открыть меню панелей, узлов и инструментов подписок."
+        echo "3 Открыть управление единым входом 443 для панелей, подписок и REALITY."
+        echo "4 Проверить службы, порты и сертификаты или создать диагностические данные."
+        echo "5 Создать резервную копию или восстановить существующую."
+        echo "? показывает справку; 0/q возвращает в главное меню."
+    elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
         echo -e "${CYAN}VPS-Optimize > Beginner guide > Help${PLAIN}"
         echo "1 Initialize a new server in a safe order: preflight, base setup, SSH, keys, Fail2ban, firewall, and backup."
         echo "2 Open the panel, node, and subscription tools menu."
@@ -353,6 +379,7 @@ normalize_main_choice() {
         u|upd|update|更新) echo "17" ;;
         reboot|重启) echo "18" ;;
         sni|443|单入口) echo "19" ;;
+        l|lang|language|язык|语言) echo "20" ;;
         traffic|quota|bill|流量|达量|账单) echo "10" ;;
         *) echo "$choice" ;;
     esac
@@ -432,35 +459,41 @@ func_beginner_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "新手向导" "Beginner guide")"
+        print_breadcrumb "$(localized_text "新手向导" "Beginner guide" "Руководство для начинающих")"
         echo -e "${BOLD}VPS-Optimize ${SCRIPT_VERSION}${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         localized_echo \
             "${YELLOW}这是简化入口，只保留第一次部署最常用的路径；老用户可返回完整菜单。${PLAIN}" \
-            "${YELLOW}This simplified guide contains the most common first-deployment paths. Return to the full menu for all features.${PLAIN}"
+            "${YELLOW}This simplified guide contains the most common first-deployment paths. Return to the full menu for all features.${PLAIN}" \
+            "${YELLOW}Это упрощённый раздел с основными действиями для первого запуска. Все функции доступны в полном меню.${PLAIN}"
         echo -e "------------------------------------------------"
         localized_echo \
             "${GREEN}  1. 新机器初始化${PLAIN}       ${YELLOW}(预检 -> 初始化 -> SSH/公钥/Fail2ban/防火墙 -> 备份)${PLAIN}" \
-            "${GREEN}  1. Initialize a new server${PLAIN}  ${YELLOW}(preflight -> base setup -> SSH/keys/Fail2ban/firewall -> backup)${PLAIN}"
+            "${GREEN}  1. Initialize a new server${PLAIN}  ${YELLOW}(preflight -> base setup -> SSH/keys/Fail2ban/firewall -> backup)${PLAIN}" \
+            "${GREEN}  1. Первичная настройка сервера${PLAIN}  ${YELLOW}(проверка -> базовая настройка -> SSH/ключи/Fail2ban/брандмауэр -> резервная копия)${PLAIN}"
         localized_echo \
             "${GREEN}  2. 安装面板/节点${PLAIN}     ${YELLOW}(进入面板、节点与订阅工具菜单)${PLAIN}" \
-            "${GREEN}  2. Install a panel/node${PLAIN}    ${YELLOW}(open panel, node, and subscription tools)${PLAIN}"
+            "${GREEN}  2. Install a panel/node${PLAIN}    ${YELLOW}(open panel, node, and subscription tools)${PLAIN}" \
+            "${GREEN}  2. Установить панель/узел${PLAIN}     ${YELLOW}(открыть меню панелей, узлов и подписок)${PLAIN}"
         localized_echo \
             "${GREEN}  3. 配置 443 单入口${PLAIN}   ${YELLOW}(面板/订阅/REALITY 共用公网 443)${PLAIN}" \
-            "${GREEN}  3. Configure shared port 443${PLAIN} ${YELLOW}(panels, subscriptions, and REALITY share public port 443)${PLAIN}"
+            "${GREEN}  3. Configure shared port 443${PLAIN} ${YELLOW}(panels, subscriptions, and REALITY share public port 443)${PLAIN}" \
+            "${GREEN}  3. Настроить единый вход 443${PLAIN}   ${YELLOW}(общий публичный порт 443 для панелей, подписок и REALITY)${PLAIN}"
         localized_echo \
             "${GREEN}  4. 健康检查${PLAIN}          ${YELLOW}(服务状态、端口、证书、反馈诊断)${PLAIN}" \
-            "${GREEN}  4. Health check${PLAIN}              ${YELLOW}(services, ports, certificates, and diagnostics)${PLAIN}"
+            "${GREEN}  4. Health check${PLAIN}              ${YELLOW}(services, ports, certificates, and diagnostics)${PLAIN}" \
+            "${GREEN}  4. Проверка состояния${PLAIN}          ${YELLOW}(службы, порты, сертификаты и диагностика)${PLAIN}"
         localized_echo \
             "${GREEN}  5. 备份/回滚${PLAIN}         ${YELLOW}(创建备份或恢复配置)${PLAIN}" \
-            "${GREEN}  5. Backup/rollback${PLAIN}           ${YELLOW}(create a backup or restore configuration)${PLAIN}"
+            "${GREEN}  5. Backup/rollback${PLAIN}           ${YELLOW}(create a backup or restore configuration)${PLAIN}" \
+            "${GREEN}  5. Резервная копия/откат${PLAIN}       ${YELLOW}(создать копию или восстановить конфигурацию)${PLAIN}"
         echo -e "------------------------------------------------"
-        localized_echo "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}  ?. Help${PLAIN}"
-        localized_echo "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}  0. Main menu / q Back${PLAIN}"
+        localized_echo "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}  ?. Help${PLAIN}" "${BLUE}  ?. Справка${PLAIN}"
+        localized_echo "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}  0. Main menu / q Back${PLAIN}" "${RED}  0. Главное меню / q Назад${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local beginner_choice
-        read_trimmed beginner_choice "$(localized_text "👉 请选择操作: " "👉 Choose an action: ")"
+        read_trimmed beginner_choice "$(localized_text "👉 请选择操作: " "👉 Choose an action: " "👉 Выберите действие: ")"
         case "$beginner_choice" in
             1)
                 func_beginner_machine_init
@@ -471,7 +504,7 @@ func_beginner_menu() {
             5) func_backup_center ;;
             "?"|help|h) show_beginner_help; echo ""; pause_return ;;
             0|q|Q) break ;;
-            *) localized_echo "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid choice.${PLAIN}"; sleep 1 ;;
+            *) localized_echo "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid choice.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}"; sleep 1 ;;
         esac
     done
 }
@@ -483,18 +516,63 @@ main_menu() {
     create_shortcut
     while true; do
         clear
-        if [[ "$VPSO_LANGUAGE" == "en" ]]; then
+        if [[ "$VPSO_LANGUAGE" == "ru" ]]; then
+            echo -e "${CYAN}================================================${PLAIN}"
+            print_breadcrumb "Главное меню"
+            echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (команда: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
+            echo -e "${CYAN}================================================${PLAIN}"
+            echo -e " ${YELLOW}Быстрые команды: 443 — единый вход, h — состояние, b — резервная копия, u — обновление, q — выход.${PLAIN}"
+            echo -e " ${YELLOW}Для операций с высоким риском требуется ввести yes. Если не уверены, сначала создайте резервную копию [16].${PLAIN}"
+            print_auto_update_notice
+            echo -e "${CYAN}================================================${PLAIN}"
+            echo -e " ${BOLD}${BLUE}▶ Режимы работы${PLAIN}"
+            echo -e "  ${GREEN}n.${PLAIN} Руководство для начинающих  ${YELLOW}(только основные действия)${PLAIN}"
+            echo -e "  ${GREEN}?.${PLAIN} Справка по меню             ${YELLOW}(описание основных пунктов)${PLAIN}"
+            echo -e "${CYAN}================================================${PLAIN}"
+
+            echo -e " ${BOLD}${BLUE}▶ ① Рекомендуемый порядок для нового сервера${PLAIN}"
+            echo -e "  ${GREEN}1.${PLAIN} Предварительная проверка    ${YELLOW}(порты, система, службы и возможные риски)${PLAIN}"
+            echo -e "  ${GREEN}2.${PLAIN} Базовая настройка системы   ${YELLOW}(инструменты, часовой пояс, обновления и базовый BBR)${PLAIN}"
+            echo -e "  ${GREEN}3.${PLAIN} Компоненты и службы          ${YELLOW}(Docker, Python, WARP и распространённые инструменты)${PLAIN}"
+            echo -e "  ${GREEN}4.${PLAIN} Обратный прокси             ${YELLOW}(Caddy/Nginx вне единого входа 443)${PLAIN}"
+            echo -e "  ${GREEN}5.${PLAIN} Панели, узлы и подписки     ${YELLOW}(3x-ui, Sing-box, подписки и Dockge)${PLAIN}"
+
+            echo -e " ${BOLD}${BLUE}▶ ② Безопасность и контроль доступа${PLAIN}"
+            echo -e "  ${GREEN}6.${PLAIN} Центр безопасности SSH      ${YELLOW}(порт, открытые ключи и вход только по ключу)${PLAIN}"
+            echo -e "  ${GREEN}7.${PLAIN} Защита Fail2ban             ${YELLOW}(автоматическая блокировка перебора паролей SSH)${PLAIN}"
+            echo -e "  ${GREEN}8.${PLAIN} Управление брандмауэром     ${YELLOW}(разрешение, удаление и просмотр правил, лимиты соединений)${PLAIN}"
+            echo -e "  ${GREEN}9.${PLAIN} Системные настройки         ${YELLOW}(IPv6, приоритет IPv4, ping, имя хоста и очистка)${PLAIN}"
+
+            echo -e " ${BOLD}${BLUE}▶ ③ Производительность сети и контейнеры${PLAIN}"
+            echo -e " ${GREEN}10.${PLAIN} Оптимизация сети и ядра     ${YELLOW}(BBR, TCP, ZRAM, DNS и облегчённые ядра)${PLAIN}"
+            echo -e " ${GREEN}11.${PLAIN} Безопасность Docker         ${YELLOW}(блокировка или восстановление внешнего доступа)${PLAIN}"
+
+            echo -e " ${BOLD}${BLUE}▶ ④ Диагностика, резервное копирование и обслуживание${PLAIN}"
+            echo -e " ${GREEN}12.${PLAIN} Тест скорости и качества    ${YELLOW}(YABS, стриминг, маршруты и качество IP)${PLAIN}"
+            echo -e " ${GREEN}13.${PLAIN} Диагностика портов          ${YELLOW}(поиск слушающих процессов и принудительное завершение)${PLAIN}"
+            echo -e " ${GREEN}14.${PLAIN} Сведения о системе          ${YELLOW}(CPU, память, диски и сеть в реальном времени)${PLAIN}"
+            echo -e " ${GREEN}15.${PLAIN} Состояние служб            ${YELLOW}(службы, сертификаты и слушающие порты)${PLAIN}"
+            echo -e " ${GREEN}16.${PLAIN} Резервная копия и откат    ${YELLOW}(создание, просмотр, восстановление и очистка)${PLAIN}"
+            echo -e " ${BOLD}${YELLOW}17.${PLAIN} Обновить скрипт          ${CYAN}(команды: u / update / upd)${PLAIN}"
+            echo -e " ${RED}18.${PLAIN} Перезагрузить сервер"
+            echo -e ""
+            echo -e " ${BOLD}${BLUE}▶ ⑤ Часто используемые функции${PLAIN}"
+            echo -e " ${GREEN}19.${PLAIN} Единый вход 443            ${YELLOW}(настройка, сайты, диагностика и сертификаты)${PLAIN}"
+            echo -e " ${GREEN}20.${PLAIN} Язык интерфейса           ${YELLOW}(中文 / English / Русский)${PLAIN}"
+            echo -e "${CYAN}================================================${PLAIN}"
+            echo -e " ${RED} 0.${PLAIN} Выход"
+            echo -e "${CYAN}================================================${PLAIN}"
+        elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
             echo -e "${CYAN}================================================${PLAIN}"
             print_breadcrumb "Main menu"
             echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (shortcut: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
-            echo -e " ${YELLOW}Shortcuts: 443 entry manager, h health, b backup, u update, l language, q exit.${PLAIN}"
+            echo -e " ${YELLOW}Shortcuts: 443 entry manager, h health, b backup, u update, q exit.${PLAIN}"
             echo -e " ${YELLOW}High-risk operations require typing yes. Create a [16] backup first when unsure.${PLAIN}"
             print_auto_update_notice
             echo -e "${CYAN}================================================${PLAIN}"
             echo -e " ${BOLD}${BLUE}▶ Entry modes${PLAIN}"
             echo -e "  ${GREEN}n.${PLAIN} Beginner guide         ${YELLOW}(show only the essential paths)${PLAIN}"
-            echo -e "  ${GREEN}l.${PLAIN} 中文 / English        ${YELLOW}(switch interface language)${PLAIN}"
             echo -e "  ${GREEN}?.${PLAIN} Menu help             ${YELLOW}(explain key entries)${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
 
@@ -526,6 +604,7 @@ main_menu() {
             echo -e ""
             echo -e " ${BOLD}${BLUE}▶ ⑤ Frequently used${PLAIN}"
             echo -e " ${GREEN}19.${PLAIN} Shared 443 entry manager    ${YELLOW}(initialize, add sites, check health, and repair certificates)${PLAIN}"
+            echo -e " ${GREEN}20.${PLAIN} Interface language          ${YELLOW}(中文 / English / Русский)${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
             echo -e " ${RED} 0.${PLAIN} Exit"
             echo -e "${CYAN}================================================${PLAIN}"
@@ -540,7 +619,6 @@ main_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${BOLD}${BLUE}▶ 模式入口${PLAIN}"
         echo -e "  ${GREEN}n.${PLAIN} 新手向导              ${YELLOW}(只显示核心路径)${PLAIN}"
-        echo -e "  ${GREEN}l.${PLAIN} 中文 / English         ${YELLOW}(切换界面语言)${PLAIN}"
         echo -e "  ${GREEN}?.${PLAIN} 当前菜单帮助          ${YELLOW}(解释关键入口)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
@@ -572,19 +650,20 @@ main_menu() {
         echo -e ""
         echo -e " ${BOLD}${BLUE}▶ ⑤ 高频直达${PLAIN}"
         echo -e " ${GREEN}19.${PLAIN} 443 单入口管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
+        echo -e " ${GREEN}20.${PLAIN} 界面语言              ${YELLOW}(中文 / English / Русский)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${RED} 0.${PLAIN} 退出面板"
         echo -e "${CYAN}================================================${PLAIN}"
         fi
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请输入数字或快捷词选择功能: " "👉 Enter a number or shortcut: ")"
+        read_trimmed choice "$(localized_text "👉 请输入数字或快捷词选择功能: " "👉 Enter a number or shortcut: " "👉 Введите номер или команду: ")"
         choice=$(normalize_main_choice "$choice")
 
         case $choice in
             n|N|newbie|guide|新手|向导) func_beginner_menu ;;
             "?"|help|帮助) show_main_help; echo ""; pause_return ;;
-            l|L|lang|language|语言) toggle_ui_language; sleep 1 ;;
+            20|l|L|lang|language|язык|语言) select_ui_language; sleep 1 ;;
             xui-custom) func_xui_custom_manager ;;
             1) func_preflight_check ;;
             2) func_base_init ;;
@@ -609,7 +688,8 @@ main_menu() {
             *)
                 localized_echo \
                     "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}" \
-                    "${RED}❌ Invalid input. Enter a number or shortcut shown in the menu.${PLAIN}"
+                    "${RED}❌ Invalid input. Enter a number or shortcut shown in the menu.${PLAIN}" \
+                    "${RED}❌ Неверный ввод. Введите номер или команду из меню.${PLAIN}"
                 sleep 1
                 ;;
         esac

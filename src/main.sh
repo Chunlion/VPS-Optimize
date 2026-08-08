@@ -3,8 +3,9 @@
 
 # --- Main entrypoint ---
 main() {
-    ensure_runtime_root
     load_ui_language
+    ensure_runtime_root
+    prompt_initial_ui_language
     main_menu "$@"
 }
 

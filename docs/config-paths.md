@@ -20,6 +20,7 @@
 | 查看服务日志 | `主菜单 [15 服务健康总览] -> [s 服务恢复] -> [l 查看服务日志]` |
 | Docker 本地防穿透 | `主菜单 [11 Docker 安全管理] -> [3 开启 Docker 本地防穿透]` |
 | 端口并发连接限制 | `主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]` |
+| 切换界面语言 | `主菜单 [20 界面语言]` |
 
 “全量配置备份”是菜单名称，实际指脚本管理配置备份，不包含 Docker volume、容器业务数据、镜像和完整防火墙运行状态。
 
@@ -30,6 +31,7 @@
 | `/usr/local/bin/cy` | 主脚本快捷入口 |
 | 当前目录的 `vps.sh` | 手动下载运行时的脚本文件 |
 | `/etc/vps-optimize` | VPS-Optimize 配置、备份索引和隔离目录 |
+| `/etc/vps-optimize/language.conf` | 界面语言设置；支持 `LANGUAGE=zh`、`LANGUAGE=en`、`LANGUAGE=ru` |
 | `/etc/vps-optimize/backups` | 全量备份和 443 单入口备份目录 |
 | `/etc/vps-optimize/quarantine` | 隔离目录，脚本尽量把旧配置移入这里而不是直接删除 |
 

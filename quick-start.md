@@ -34,6 +34,19 @@ wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dis
 cy
 ```
 
+## 界面语言
+
+首次交互运行且尚无语言配置时，脚本会先用英文显示：
+
+```text
+Select interface language:
+  1. English
+  2. 简体中文 (Simplified Chinese)
+  3. Русский (Russian)
+```
+
+直接回车默认选择 English。以后可从主菜单 `[20 界面语言]` 重新选择。语言设置保存在 `/etc/vps-optimize/language.conf`；也可在单次运行前通过 `VPSO_LANG=zh`、`VPSO_LANG=en` 或 `VPSO_LANG=ru` 指定语言。
+
 ## 支持系统
 
 | 系统 | 支持状态 | 备注 |

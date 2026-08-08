@@ -138,7 +138,11 @@ print_auto_update_notice() {
     latest="${result#*|}"
     case "$status" in
         available)
-            if [[ "$VPSO_LANGUAGE" == "en" && "$latest" == "$SCRIPT_VERSION" ]]; then
+            if [[ "$VPSO_LANGUAGE" == "ru" && "$latest" == "$SCRIPT_VERSION" ]]; then
+                echo -e " ${BOLD}${YELLOW}Обновление:${PLAIN} содержимое версии ${CYAN}${latest}${PLAIN} изменилось; введите ${YELLOW}u${PLAIN}, чтобы обновить скрипт."
+            elif [[ "$VPSO_LANGUAGE" == "ru" ]]; then
+                echo -e " ${BOLD}${YELLOW}Обновление:${PLAIN} доступна версия ${CYAN}${latest}${PLAIN}; введите ${YELLOW}u${PLAIN}, чтобы обновить скрипт."
+            elif [[ "$VPSO_LANGUAGE" == "en" && "$latest" == "$SCRIPT_VERSION" ]]; then
                 echo -e " ${BOLD}${YELLOW}Update:${PLAIN} Content changed for ${CYAN}${latest}${PLAIN}; enter ${YELLOW}u${PLAIN} to update."
             elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
                 echo -e " ${BOLD}${YELLOW}Update:${PLAIN} ${CYAN}${latest}${PLAIN} is available; enter ${YELLOW}u${PLAIN} to update."
@@ -151,7 +155,8 @@ print_auto_update_notice() {
         current)
             localized_echo \
                 " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，脚本内容已是最新。" \
-                " ${BLUE}Update status:${PLAIN} ${SCRIPT_VERSION} is current."
+                " ${BLUE}Update status:${PLAIN} ${SCRIPT_VERSION} is current." \
+                " ${BLUE}Статус обновления:${PLAIN} установлена актуальная версия ${SCRIPT_VERSION}."
             ;;
     esac
 }
