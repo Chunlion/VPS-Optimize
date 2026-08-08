@@ -7,8 +7,8 @@ manage_sni_stack_sites() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}🌐 443 网站/反代域名管理${PLAIN}" "${BOLD}🌐 443 Web domain and reverse-proxy management${PLAIN}" "${BOLD}🌐 443 Управление Web-доменами и обратным прокси${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：为已完成 443 单入口配置的机器新增、删除或查看网站/反代域名。${PLAIN}" "${YELLOW}Use this menu to add, remove, or view Web domains and reverse proxies after shared port 443 is configured.${PLAIN}" "${YELLOW}Используйте это меню для добавления, удаления и просмотра Web-доменов и обратных прокси после настройки общего порта 443.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}后续新增网站不需要重跑首次配置，只需填写域名和本机后端端口。${PLAIN}" "${YELLOW}To add another site later, enter its domain and local backend port; do not rerun the initial setup.${PLAIN}" "${YELLOW}Чтобы добавить сайт позже, укажите его домен и локальный порт бэкенда; первоначальную настройку повторять не нужно.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}管理已配置 443 单入口的网站和反代域名。${PLAIN}" "${YELLOW}Manage Web domains and reverse proxies after shared port 443 is configured.${PLAIN}" "${YELLOW}Управляйте Web-доменами и обратными прокси после настройки общего порта 443.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}新增网站只需填写域名和本机后端端口，无需重跑首次配置。${PLAIN}" "${YELLOW}To add a site, enter its domain and local backend port; do not rerun initial setup.${PLAIN}" "${YELLOW}Для нового сайта укажите домен и локальный порт бэкенда; первоначальная настройка не нужна.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 查看当前网站/反代域名${PLAIN}" "${GREEN}1. View current Web domains/reverse proxies${PLAIN}" "${GREEN}1. Показать текущие Web-домены и обратные прокси${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 新增网站/反代域名${PLAIN}" "${GREEN}2. Add a Web domain/reverse proxy${PLAIN}" "${GREEN}2. Добавить Web-домен и обратный прокси${PLAIN}")"
@@ -25,7 +25,7 @@ manage_sni_stack_sites() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请输入菜单编号或 ?: " "👉 Please enter menu number or ?:" "👉 Пожалуйста, введите номер меню или ?:")"
+        read_trimmed choice "$(localized_text "请输入菜单编号或 ?: " "Select a menu number or ?:" "Выберите номер меню или ?:")"
         case "$choice" in
             1) list_sni_stack_sites ;;
             2) add_sni_stack_site ;;
