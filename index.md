@@ -13,19 +13,6 @@ hero:
       text: GitHub
       link: https://github.com/Chunlion/VPS-Optimize
 
-features:
-  - title: VPS 初始化
-    details: 快速完成基础环境配置、常用工具安装、时区与软件源准备。适合新服务器上线前统一环境。
-  - title: 系统环境检测
-    details: 检测系统版本、CPU 架构、虚拟化环境、网络连通性和关键服务状态，便于运行前预检。
-  - title: 网络参数优化
-    details: 提供常见内核网络参数调整入口，辅助优化连接队列、转发、缓冲区等服务器网络表现。
-  - title: TCP 优化
-    details: 辅助配置拥塞控制算法、队列管理策略和 BBR 相关选项，适合配合快照与回滚准备使用。
-  - title: 443 单入口
-    details: 统一公网 443 入口，辅助处理面板、订阅、网站和 REALITY 节点分流，减少端口暴露和冲突。
-  - title: 维护与回滚
-    details: 提供更新、清理、状态查看、配置备份、恢复回滚和故障排查入口，用于日常维护。
 ---
 
 ## 常用文档
