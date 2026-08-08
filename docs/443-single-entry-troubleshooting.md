@@ -395,7 +395,7 @@ panel.example.com:2096
 
 ### 解决方法
 
-3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host：
+3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host：
 
 ```text
 入站：选择对应的 REALITY 入站

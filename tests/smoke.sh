@@ -1086,6 +1086,7 @@ if command -v python3 >/dev/null 2>&1; then
     (
         source src/common.sh
         source src/sni_stack_profiles.sh
+        xui_uses_postgresql() { return 1; }
         xui_domain_smoke_tmp=$(mktemp -d /tmp/vps-xui-domain-smoke.XXXXXX)
         command mkdir -p "$xui_domain_smoke_tmp/bin" "$xui_domain_smoke_tmp/backups"
         xui_domain_db="$xui_domain_smoke_tmp/x-ui.db"
@@ -1408,7 +1409,7 @@ assert_file_not_contains src/caddy_cert_tools.sh '永久删除该域名的证书
     [[ "$CAPTURED_DESC" == "安装 3x-ui / x-ui 面板（最新版）" ]]
     [[ "$CAPTURED_URL" == "https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh" ]]
     [[ -z "$CAPTURED_ARGS" ]]
-    grep -Fq '最新版 3.x 安装器如果询问 SSL certificate setup method，请选择 Skip SSL / 不申请 SSL' "$panel_output"
+    grep -Fq '最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。' "$panel_output"
 
     CAPTURED_DESC=""
     CAPTURED_URL=""
@@ -1652,13 +1653,13 @@ for file in "${renumbered_sni_doc_files[@]}"; do
     assert_file_not_contains "$file" '主菜单 [19 443 单入口管理中心] -> [15 订阅链接 / External Proxy 提示]' "${file} must use [11 订阅链接 / External Proxy 提示]."
 done
 
-assert_file_contains "docs/443-single-entry.md" '3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host' "443 tutorial must document the 3x-ui v3.4.0+ Hosts path."
+assert_file_contains "docs/443-single-entry.md" '3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host' "443 tutorial must document the 3x-ui v3.4.0+ Hosts path."
 assert_file_contains "docs/443-single-entry.md" '3x-ui v3.3.1 及之前：在对应 REALITY 入站里打开 `External Proxy`' "443 tutorial must keep the legacy External Proxy path."
-assert_file_contains "tutorials/01-3x-ui-reality-443.md" '3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host' "REALITY tutorial must document the 3x-ui v3.4.0+ Hosts path."
+assert_file_contains "tutorials/01-3x-ui-reality-443.md" '3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host' "REALITY tutorial must document the 3x-ui v3.4.0+ Hosts path."
 assert_file_contains "tutorials/01-3x-ui-reality-443.md" '3x-ui v3.3.1 及之前：在 REALITY 入站里打开 `External Proxy`' "REALITY tutorial must keep the legacy External Proxy path."
-assert_file_contains "docs/443-single-entry-troubleshooting.md" '3x-ui v3.4.0 及之后：左侧侧边栏 -> `Hosts / 主机` -> 新增 Host' "Troubleshooting docs must document the 3x-ui v3.4.0+ Hosts path."
-assert_file_contains "src/sni_stack_health.sh" '3x-ui v3.4.0 及之后：左侧侧边栏 -> Hosts / 主机 -> 新增 Host：' "Subscription hint must mention the 3x-ui v3.4.0+ Hosts path."
-assert_dist_contains '3x-ui v3.4.0 及之后：左侧侧边栏 -> Hosts / 主机 -> 新增 Host：' "Built script must include the 3x-ui v3.4.0+ Hosts hint."
+assert_file_contains "docs/443-single-entry-troubleshooting.md" '3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host' "Troubleshooting docs must document the 3x-ui v3.4.0+ Hosts path."
+assert_file_contains "src/sni_stack_health.sh" '3x-ui v3.4.0 及之后：打开 Hosts / 主机，新增 Host：' "Subscription hint must mention the 3x-ui v3.4.0+ Hosts path."
+assert_dist_contains '3x-ui v3.4.0 及之后：打开 Hosts / 主机，新增 Host：' "Built script must include the 3x-ui v3.4.0+ Hosts hint."
 
 assert_file_not_contains "docs/443-single-entry.md" '主菜单 [3] -> [13] Caddy 反代' "443 tutorial must not point users to the old Caddy menu path."
 assert_file_not_contains "docs/443-single-entry.md" '[19] -> [2] -> [5]' "443 tutorial must not point Web whitelist users to the old nested whitelist path."
@@ -1677,8 +1678,8 @@ for file in "${tcp_peek_doc_files[@]}"; do
     assert_file_not_contains "$file" 'TCP Peek 专用回滚' "${file} should not recommend a TCP Peek-specific rollback path."
 done
 
-assert_file_contains ".github/ISSUE_TEMPLATE/bug_report.md" '主菜单 [19 443 单入口管理中心] -> [2 首次配置 / 安装 443 单入口]' "Bug report template must show the current 443 menu path."
-assert_file_contains ".github/ISSUE_TEMPLATE/bug_report.md" '主菜单 [15 服务健康总览]' "Bug report template must show the current health menu path."
+assert_file_contains ".github/ISSUE_TEMPLATE/bug_report.md" 'Start with the menu path or command you used.' "Bug report template must ask for the affected menu path or command."
+assert_file_contains ".github/ISSUE_TEMPLATE/bug_report.md" 'Main menu [15 Service Health Overview]' "Bug report template must show the current health menu path."
 assert_file_contains "docs/443-single-entry.md" 'TCP Peek 的优点' "443 tutorial must list TCP Peek advantages."
 assert_file_contains "docs/443-single-entry.md" '配置过程和 Nginx Stream 一样' "443 tutorial must say TCP Peek uses the same configuration flow."
 assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443 单入口管理中心] -> [5 切换到 TCP Peek + Splice 模式]' "443 tutorial must show the existing TCP Peek cutover entry [5]."
@@ -1726,7 +1727,7 @@ assert_file_not_contains "docs/dog.md" '账单级准确' "dog.sh docs must not c
 assert_file_not_contains "docs/dog.md" '可作为账单依据' "dog.sh docs must not present dog.sh data as billing evidence."
 assert_file_not_contains "docs/dog.md" '可替代商家账单' "dog.sh docs must not present dog.sh data as a provider-bill replacement."
 
-assert_file_contains "docs/xui-custom-manager.md" '支持 3x-ui 2.9.x 和 3.x。' "xui-custom-manager docs must state the supported version ranges."
+assert_file_contains "docs/xui-custom-manager.md" '支持使用 SQLite 的 3x-ui 2.9.x 和 3.x。' "xui-custom-manager docs must state the supported version ranges."
 assert_file_contains "docs/xui-custom-manager.md" '写库前必须通过只读数据库 schema 检查' "xui-custom-manager docs must require schema checks before writes."
 assert_file_contains "docs/xui-custom-manager.md" '不要跳过版本范围和 schema 检查强行写库' "xui-custom-manager docs must keep writes gated by version range and schema."
 assert_file_not_contains "docs/xui-custom-manager.md" '只有 3x-ui v2.9.4 验证过写库操作。' "xui-custom-manager docs must not keep the old single-version write gate."
@@ -1808,7 +1809,7 @@ grep -q 'xui_panel_status_compact' dist/vps.sh
 grep -q '3x-ui面板' dist/vps.sh
 grep -Fq '安装 3x-ui / x-ui 面板（最新版）' dist/vps.sh
 grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh' dist/vps.sh
-grep -Fq '最新版 3.x 安装器如果询问 SSL certificate setup method，请选择 Skip SSL / 不申请 SSL' dist/vps.sh
+grep -Fq '最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。' dist/vps.sh
 grep -Fq '安装 3x-ui / x-ui 面板（v2.9.4）' dist/vps.sh
 grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh' dist/vps.sh
 grep -Fq 'install_args=("v2.9.4")' dist/vps.sh
