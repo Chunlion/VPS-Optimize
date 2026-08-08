@@ -558,13 +558,7 @@ main_menu() {
             print_breadcrumb "Главное меню"
             echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (команда: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
-            echo -e " ${YELLOW}Быстрые команды: 443 — общий вход, h — состояние, b — резервная копия, u — обновление, q — выход.${PLAIN}"
-            echo -e " ${YELLOW}Для операций с высоким риском требуется ввести yes. Если не уверены, сначала создайте резервную копию [16].${PLAIN}"
             print_auto_update_notice
-            echo -e "${CYAN}================================================${PLAIN}"
-            echo -e " ${BOLD}${BLUE}▶ Режимы работы${PLAIN}"
-            echo -e "  ${GREEN}n.${PLAIN} Руководство для начинающих  ${YELLOW}(только основные действия)${PLAIN}"
-            echo -e "  ${GREEN}?.${PLAIN} Справка по меню             ${YELLOW}(описание основных пунктов)${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
 
             echo -e " ${BOLD}${BLUE}▶ ① Рекомендуемый порядок для нового сервера${PLAIN}"
@@ -606,10 +600,6 @@ main_menu() {
             echo -e "${CYAN}================================================${PLAIN}"
             print_auto_update_notice
             echo -e "${CYAN}================================================${PLAIN}"
-            echo -e " ${BOLD}${BLUE}▶ Entry modes${PLAIN}"
-            echo -e "  ${GREEN}n.${PLAIN} Beginner guide         ${YELLOW}(show only the essential paths)${PLAIN}"
-            echo -e "  ${GREEN}?.${PLAIN} Menu help             ${YELLOW}(explain key entries)${PLAIN}"
-            echo -e "${CYAN}================================================${PLAIN}"
 
             echo -e " ${BOLD}${BLUE}▶ ① Recommended setup for a new server${PLAIN}"
             echo -e "  ${GREEN}1.${PLAIN} Preflight and risk scan     ${YELLOW}(check ports, OS, and services before deployment)${PLAIN}"
@@ -649,10 +639,6 @@ main_menu() {
         echo -e " ${BOLD}🚀 VPS-Optimize ${SCRIPT_VERSION} (快捷键: ${YELLOW}cy${PLAIN}${BOLD})${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         print_auto_update_notice
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e " ${BOLD}${BLUE}▶ 模式入口${PLAIN}"
-        echo -e "  ${GREEN}n.${PLAIN} 新手向导              ${YELLOW}(只显示核心路径)${PLAIN}"
-        echo -e "  ${GREEN}?.${PLAIN} 当前菜单帮助          ${YELLOW}(解释关键入口)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ① 推荐流程：新机器先跑这里${PLAIN}"
