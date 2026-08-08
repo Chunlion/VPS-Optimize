@@ -1,14 +1,22 @@
 # ⚡ VPS-Optimize
 
-[🌐 简体中文](README.md) · [English](en/README.md) · [Русский](ru/README.md)
+<p align="center">
+  <a href="README.md">🌐 简体中文</a> · <a href="en/README.md">English</a> · <a href="ru/README.md">Русский</a>
+</p>
 
-![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&logoColor=white)
-[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-latest-blue.svg)](https://github.com/Chunlion/VPS-Optimize/releases/latest)
+<p align="center">
+  <img alt="Shell" src="https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&amp;logoColor=white">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-GPLv3-blue.svg"></a>
+  <a href="https://github.com/Chunlion/VPS-Optimize/releases/latest"><img alt="Release" src="https://img.shields.io/badge/Release-latest-blue.svg"></a>
+</p>
 
-面向 VPS 日常运维的 Bash 控制面板。通过 `cy` 集中完成系统初始化、安全加固、面板部署、443 单入口、订阅工具、备份回滚和故障排查。
+<p align="center">
+  面向 VPS 日常运维的 Bash 控制面板。通过 <code>cy</code> 集中完成系统初始化、安全加固、面板部署、443 单入口、订阅工具、备份回滚和故障排查。
+</p>
 
-[📚 文档网站](https://chunlion.github.io/VPS-Optimize/) · [快速开始](quick-start.md) · [443 单入口](docs/443-single-entry.md)
+<p align="center">
+  <a href="https://chunlion.github.io/VPS-Optimize/">📚 文档网站</a> · <a href="quick-start.md">快速开始</a> · <a href="docs/443-single-entry.md">443 单入口</a>
+</p>
 
 ## 🚀 快速开始
 
