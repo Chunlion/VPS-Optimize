@@ -113,6 +113,9 @@ assert_file_contains .vitepress/config.mts "link: '/tutorials/02-subscription-to
 assert_function_once dist/vps.sh main_menu
 assert_function_once dist/vps.sh ensure_runtime_root
 assert_function_once dist/vps.sh main
+assert_function_once dist/vps.sh load_ui_language
+assert_function_once dist/vps.sh save_ui_language
+assert_function_once dist/vps.sh toggle_ui_language
 assert_function_once dist/vps.sh func_net_kernel_menu
 assert_function_once dist/vps.sh func_health_dashboard
 assert_function_once dist/vps.sh render_menu
@@ -160,7 +163,7 @@ assert_file_contains src/common.sh '该来源不是 HTTPS，已拒绝下载和�
 assert_file_contains scripts/build.sh 'scripts/modules.list' "Release build must read the shared module list."
 assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read the shared module list."
 for module in \
-    common runtime firewall sni_stack_config vpso_mux_state vpso_mux_config \
+    common language runtime firewall sni_stack_config vpso_mux_state vpso_mux_config \
     vpso_mux_install tcp_peek_engine sni_stack_health compose_runtime \
     subscription_apps subscription_compose_manage subscription_service_menus \
     dockge_migration menus main; do
@@ -231,19 +234,31 @@ cleanup_compat_tmp() {
     rm -f "$compat_tmp_dir/large.log.1"
     rm -f "$compat_tmp_dir/large.log.2"
     rm -f "$compat_tmp_dir/large.log.3"
+    rm -f "$compat_tmp_dir/language.conf"
     rmdir "$compat_tmp_dir" 2>/dev/null || true
 }
 trap cleanup_compat_tmp EXIT
 
 source src/common.sh
+VPSO_LANGUAGE_CONFIG="$compat_tmp_dir/language.conf"
+source src/language.sh
 source src/ui.sh
 source src/input.sh
 source src/validate.sh
 source src/kernel_tuning.sh
 
-for function_name in render_menu dispatch_menu_choice rotate_log_file format_bytes; do
+for function_name in render_menu dispatch_menu_choice rotate_log_file format_bytes load_ui_language save_ui_language localized_text toggle_ui_language; do
     assert_function_loaded "$function_name"
 done
+
+[[ "$(localized_text "中文" "English")" == "中文" ]]
+save_ui_language en
+[[ "$VPSO_LANGUAGE" == "en" ]]
+[[ "$(localized_text "中文" "English")" == "English" ]]
+[[ "$(cat "$VPSO_LANGUAGE_CONFIG")" == "LANGUAGE=en" ]]
+VPSO_LANGUAGE="zh"
+load_ui_language
+[[ "$VPSO_LANGUAGE" == "en" ]]
 
 compat_menu_handler_called=0
 compat_menu_handler() {

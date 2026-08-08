@@ -138,14 +138,20 @@ print_auto_update_notice() {
     latest="${result#*|}"
     case "$status" in
         available)
-            if [[ "$latest" == "$SCRIPT_VERSION" ]]; then
+            if [[ "$VPSO_LANGUAGE" == "en" && "$latest" == "$SCRIPT_VERSION" ]]; then
+                echo -e " ${BOLD}${YELLOW}Update:${PLAIN} Content changed for ${CYAN}${latest}${PLAIN}; enter ${YELLOW}u${PLAIN} to update."
+            elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
+                echo -e " ${BOLD}${YELLOW}Update:${PLAIN} ${CYAN}${latest}${PLAIN} is available; enter ${YELLOW}u${PLAIN} to update."
+            elif [[ "$latest" == "$SCRIPT_VERSION" ]]; then
                 echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN} 的内容更新，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
             else
                 echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
             fi
             ;;
         current)
-            echo -e " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，脚本内容已是最新。"
+            localized_echo \
+                " ${BLUE}更新状态:${PLAIN} 当前 ${SCRIPT_VERSION}，脚本内容已是最新。" \
+                " ${BLUE}Update status:${PLAIN} ${SCRIPT_VERSION} is current."
             ;;
     esac
 }

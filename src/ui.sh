@@ -6,7 +6,13 @@ print_breadcrumb() {
 }
 
 pause_return() {
-    local prompt="${1:-按任意键继续...}"
+    local default_prompt
+    if declare -F localized_text >/dev/null 2>&1; then
+        default_prompt="$(localized_text "按任意键继续..." "Press any key to continue...")"
+    else
+        default_prompt="按任意键继续..."
+    fi
+    local prompt="${1:-$default_prompt}"
     read -n 1 -s -r -p "$prompt"
     echo ""
 }

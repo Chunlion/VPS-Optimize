@@ -109,7 +109,7 @@ validate_module_list_sync() {
         exit 1
     fi
 
-    assert_module_order common ui input validate rollback backup runtime
+    assert_module_order common language ui input validate rollback backup runtime
     assert_module_order sni_stack_config vpso_mux_state vpso_mux_config vpso_mux_install tcp_peek_engine sni_stack_health
     assert_module_order panel_installers compose_runtime subscription_apps subscription_compose_manage subscription_service_menus dockge_migration panel_rescue
     assert_module_order menus main

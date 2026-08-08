@@ -1,5 +1,6 @@
 # Release build/source module order. One module name per line, without .sh.
 common
+language
 ui
 input
 validate
