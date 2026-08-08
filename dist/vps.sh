@@ -21,7 +21,7 @@ CYAN='\033[1;36m'
 PLAIN='\033[0m'
 BOLD='\033[1m'
 
-SCRIPT_VERSION="v2.5"
+SCRIPT_VERSION="v2.6"
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
 UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
