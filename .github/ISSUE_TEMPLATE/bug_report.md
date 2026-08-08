@@ -1,67 +1,52 @@
 ---
 name: Bug report
-about: 反馈 VPS-Optimize 使用问题
+about: Report a reproducible problem in VPS-Optimize
 title: "[Bug] "
 labels: bug
 assignees: ""
 ---
 
-## 系统版本
+## Summary
 
-例如：Debian 12 / Ubuntu 22.04 / Rocky 9
+Describe the problem in one or two sentences.
 
-## VPS 厂商
+## Environment
 
-例如：Oracle / AWS / Vultr / 搬瓦工 / 其他
+- OS and version:
+- VPS provider:
+- VPS-Optimize version:
+- Entry mode, if relevant: `nginx-stream`, `xray-fallback`, or `tcp-peek`
 
-## 脚本版本
+## Steps to reproduce
 
-请填写主菜单顶部显示的 `VPS-Optimize` 版本。
+1. Start with the menu path or command you used.
+2. Describe the inputs or configuration used.
+3. State when the problem occurs.
 
-## 执行的菜单路径
+## Expected behavior
 
-例如：`主菜单 [19 443 单入口管理中心] -> [2 首次配置 / 安装 443 单入口]`
+What should happen?
 
-## 期望结果
+## Actual behavior
 
-请描述你希望发生什么。
+What happened instead?
 
-## 实际结果
+## Relevant logs
 
-请描述实际发生什么。
-
-## 错误日志
-
-请粘贴关键错误日志。不要粘贴 Token、私钥、完整订阅链接或密码。
+Remove tokens, private keys, passwords, and full subscription links.
 
 ```text
 
 ```
 
-## 是否已运行“生成反馈诊断信息”
+## 443 and Cloudflare details (if relevant)
 
-- [ ] 是，已粘贴脱敏后的诊断信息
-- [ ] 否
+- Is shared port 443 enabled?
+- Is Cloudflare proxy enabled for the affected domain?
 
-## 是否已创建快照
+## Diagnostic output (optional)
 
-- [ ] 是
-- [ ] 否
-
-## 是否使用 443 单入口
-
-- [ ] 是
-- [ ] 否
-
-## 是否使用 Cloudflare
-
-- [ ] 是，DNS only / 灰云
-- [ ] 是，开启代理 / 橙云
-- [ ] 否
-
-## 反馈诊断信息
-
-请在 `主菜单 [15 服务健康总览]` 中选择“生成反馈诊断信息”，粘贴脱敏后的输出。
+From `Main menu [15 Service Health Overview]`, paste sanitized diagnostic output.
 
 ```text
 
