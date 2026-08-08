@@ -117,6 +117,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+ExecCondition=/bin/grep -Fxq "ENTRY_MODE='tcp-peek'" /etc/vps-optimize/sni-stack.env
 ExecStart=/usr/local/bin/vpso-mux -config /etc/vps-optimize/vpso-mux.yaml
 Restart=on-failure
 RestartSec=3

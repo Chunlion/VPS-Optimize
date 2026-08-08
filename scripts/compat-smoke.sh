@@ -259,6 +259,7 @@ assert_file_not_contains docs/443-single-entry.md '首次临时登录通常是�
 assert_file_not_contains docs/443-single-entry.md '清空后，如果还需要临时从公网端口访问面板' "443 single-entry doc must not keep the old direct-public-port fallback."
 
 assert_file_contains dist/vps.sh '/var/lib/vps-optimize/vpso-mux/status.json'
+assert_file_contains dist/vps.sh 'ExecCondition=/bin/grep -Fxq "ENTRY_MODE='"'"'tcp-peek'"'"'" /etc/vps-optimize/sni-stack.env' "vpso-mux must not start outside TCP Peek mode."
 assert_file_contains dist/vps.sh '/var/log/vps-traffic-guard.log'
 assert_file_contains dist/vps.sh 'traffic_guard_install_checker_once'
 assert_file_contains dist/vps.sh 'traffic_guard_install_checker_or_report'

@@ -412,6 +412,7 @@ stop_vpso_mux_service_if_public_443() {
     fi
 
     systemctl stop vpso-mux-preflight >/dev/null 2>&1 || true
+    write_vpso_mux_systemd_service || return 1
     systemctl disable --now vpso-mux >/dev/null 2>&1 || true
     if systemctl is-active --quiet vpso-mux; then
         echo -e "$(localized_text "${RED}❌ 停止 vpso-mux 失败，公网 443 仍可能被 TCP Peek 占用。${PLAIN}" "${RED}❌ Failed to stop vpso-mux, public port 443 may still be occupied by TCP Peek.${PLAIN}" "${RED}❌ Не удалось остановить vpso-mux, публичный порт 443 всё ещё может быть занят TCP Peek.${PLAIN}")"
@@ -731,6 +732,7 @@ apply_tcppeek_mode() {
     tmp_config="/etc/vps-optimize/vpso-mux.yaml.tmp.$$"
     write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_config" || return 1
     run_vpso_mux_config_check "$tmp_config" || { quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true; return 1; }
+    set_entry_mode "tcp-peek" || return 1
     write_vpso_mux_systemd_service
     mv "$tmp_config" "$(vpso_mux_config_path)" || return 1
     if ! systemctl enable vpso-mux >/dev/null 2>&1; then

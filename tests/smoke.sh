@@ -1757,6 +1757,9 @@ grep -q 'if \[\[ "$assume_yes" != "--yes" \]\]; then' dist/vps.sh
 grep -q 'if ! restart_service_if_available nginx; then' dist/vps.sh
 grep -q 'stop_vpso_mux_service_if_public_443 || return 1' dist/vps.sh
 assert_file_contains src/tcp_peek_engine.sh 'systemctl disable --now vpso-mux' 'Leaving TCP Peek mode must disable vpso-mux boot startup even when it is not the current listener.'
+assert_file_contains src/tcp_peek_engine.sh 'write_vpso_mux_systemd_service || return 1' 'Leaving TCP Peek mode must refresh the guarded vpso-mux unit before disabling it.'
+assert_file_contains src/tcp_peek_engine.sh 'set_entry_mode "tcp-peek" || return 1' 'Entering TCP Peek mode must persist its entry mode before systemd evaluates the unit guard.'
+assert_file_contains src/vpso_mux_install.sh 'ExecCondition=/bin/grep -Fxq "ENTRY_MODE='"'"'tcp-peek'"'"'" /etc/vps-optimize/sni-stack.env' 'vpso-mux must refuse to start unless TCP Peek owns the public entry.'
 assert_file_contains src/tcp_peek_engine.sh 'if ! systemctl enable nginx' 'Nginx Stream mode must fail if nginx boot enablement fails.'
 assert_file_contains src/tcp_peek_engine.sh 'if ! systemctl enable vpso-mux' 'TCP Peek mode must fail if vpso-mux boot enablement fails.'
 assert_file_contains src/sni_stack_install.sh 'if ! systemctl enable nginx' 'The nginx Web proxy must be enabled persistently.'
@@ -1780,6 +1783,7 @@ grep -q 'preflight_entry_mode_before_cutover "$ENTRY_MODE" || { rollback_sni_sta
     detect_443_listener() { printf '%s\n' 'unknown|none'; }
     listener_info_has_entry() { return 1; }
     print_vpso_mux_failure_context() { return 1; }
+    write_vpso_mux_systemd_service() { return 0; }
     systemctl() {
         printf '%s\n' "$*" >> "$systemctl_calls"
         case "$1" in
