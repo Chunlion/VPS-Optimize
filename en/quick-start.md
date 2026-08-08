@@ -41,7 +41,7 @@ On the first interactive run, before any language has been saved, the installer 
 ```text
 Select interface language:
   1. English
-  2. Simplified Chinese (Simplified Chinese)
+  2. 简体中文 (Simplified Chinese)
   3. Русский (Russian)
 ```
 

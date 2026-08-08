@@ -1,69 +1,69 @@
 # Subscription Tools with Caddy/Nginx and Shared Port 443
 
-This tutorial talks about how to securely provide HTTPS access to subscription tools such as SublinkPro, Sub-Store, and Miaomiaowu Subscription Management. When the 443 shared entry is not enabled, you can use the Caddy or Nginx HTTPS reverse proxy in `Main menu [4 reverse proxy]`; after the 443 shared entry is enabled, you should uniformly go to the Web domain/reverse proxy portal of the 443 shared entry, and you can select Caddy or Caddy or Caddy in this portal. Nginx acts as a local web reverse proxy engine.
+Use this guide to publish subscription tools such as SublinkPro, Sub-Store, and Miaomiaowu Subscription Management over HTTPS. Before shared port 443 is enabled, use the Caddy or Nginx HTTPS reverse proxy in `Main menu [4 Reverse proxy]`. After it is enabled, add the domain through shared port 443's Web-domain/reverse-proxy menu, where you can choose Caddy or Nginx as the local Web reverse-proxy engine.
 
-Recommended choices:
+## Choose a path
 
 | Current status | Recommended method |
 |---|---|
-| The shared port 443 has not been enabled yet. I just want to access the subscription tool first. | `Main menu [4 reverse proxy]`, choose Caddy or Nginx HTTPS according to the existing environment |
-| shared port 443 enabled | `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy]` adds reverse proxy domain; use the same menu `[8 switch Web reverse proxy engine]` to switch between Caddy/Nginx when needed |
-| Subscription tools are for your own use only | The backend is only bound to the local machine or intranet address, and can be accessed externally through the Caddy/Nginx or 443 shared entry. |
-| Not sure which one to choose | First run `Main menu [1 Preflight and risk scan]` and `Main menu [15 Service health overview]` to confirm the port and service status |
+| Shared port 443 is not enabled; you only need domain access to the tool | Use `Main menu [4 Reverse proxy]` and choose Caddy or Nginx HTTPS for the current environment. |
+| Shared port 443 is enabled | Add the reverse-proxy domain in `Main menu [19 Shared port 443] -> [8 Manage Web domains/reverse proxy]`. Use its `[8 Switch Web reverse-proxy engine]` option to change between Caddy and Nginx. |
+| The tool is for personal use only | Bind its backend to localhost or a private-network address; expose it through Caddy, Nginx, or shared port 443. |
+| You are unsure which path applies | Run `Main menu [1 Preflight and risk scan]` and `Main menu [15 Service health overview]` to check port and service status. |
 
-## Suitable for whom
+## When to use this guide
 
-| situation | Is it suitable |
+| Situation | Suitable? |
 |---|---|
-| Want to deploy SublinkPro | suitable for |
-| Want to deploy Sub-Store | suitable for |
-| Want to deploy Miaomiaowu subscription management | suitable for |
-| The subscription tool is already running in Docker, and I want to add the domain HTTPS | suitable for |
-| Want to directly expose the internal port of the subscription tool to the public internet | Not recommended |
+| Deploy SublinkPro | Yes |
+| Deploy Sub-Store | Yes |
+| Deploy Miaomiaowu Subscription Management | Yes |
+| Add HTTPS to a subscription tool already running in Docker | Yes |
+| Expose the tool's internal port directly to the Internet | No |
 
-## Prepare materials
+## Prerequisites
 
 | Material | Example | Description |
 |---|---|---|
-| VPS Snapshot | cloud provider console creation | It is recommended to do this before modifying the reverse proxy and container |
-| Subscribe to domain | `sub.example.com` | DNS points to the current VPS |
-| Backend address/port | `127.0.0.1:3000`, `10.0.0.20:3000`, etc. | Example values for local machine or intranet backend, please replace them with actual values. |
-| Cloudflare API Token | `Zone.Zone.Read`、`Zone.DNS.Edit` | Used when DNS visa certificate is required |
-| Current SSH session | not closed | Facilitates recovery in case of failure |
-| Docker/Compose | The script will automatically check and install | Subscription tools are usually deployed with Docker Compose |
+| VPS snapshot | Create one in your cloud provider's console | Recommended before changing reverse-proxy or container configuration. |
+| Subscription domain | `sub.example.com` | Its DNS record points to this VPS. |
+| Backend address and port | `127.0.0.1:3000`, `10.0.0.20:3000` | Example local or private-network backends; replace them with your actual values. |
+| Cloudflare API Token | `Zone.Zone.Read`, `Zone.DNS.Edit` | Required when using DNS validation to issue certificates. |
+| Current SSH session | Keep open | Lets you recover from a failure. |
+| Docker/Compose | Checked and installed by the script when missing | Subscription tools are normally deployed with Docker Compose. |
 
-DNS Suggestions:
+DNS recommendations:
 
-| domain | Suggestions |
+| Domain | Recommendation |
 |---|---|
-| `sub.example.com` | DNS only / gray cloud |
-| shared port 443 point related domains | DNS only / gray cloud |
-| Just a regular website display | You can decide whether to be an agent based on actual needs, but this tutorial recommends running through Huiyun first. |
+| `sub.example.com` | DNS only / Cloudflare proxy disabled |
+| Domains used with shared port 443 | DNS only / Cloudflare proxy disabled |
+| Regular Web-only site | Choose whether to proxy it as needed, but start with the proxy disabled while completing this guide. |
 
 ## Estimated time
 
-| stage | Estimated time |
+| Stage | Estimated time |
 |---|---|
 | Preflight | 2-5 minutes |
 | Deploy subscription tools | 5-20 minutes |
 | Configure Caddy/Nginx or shared port 443 | 5-15 minutes |
 | Verify subscription output | 5-10 minutes |
-| backup | 1-3 minutes |
+| Backup | 1–3 minutes |
 
 ## What will be modified?
 
-| Project | Content may be modified | risk |
+| Component | Possible changes | Risk |
 |---|---|---|
 | Docker/Compose | Add new containers, networks, and deployment directories | Container port conflict or image pull failure |
-| Caddy | Added site configuration, certificate, and reverse proxy rules | Configuration errors can cause 404/502 |
-| Nginx HTTPS reverse proxy | When shared port 443 is not enabled, the HTTPS site configuration can be added | Configuration errors or port conflicts can cause 80/443 access exceptions |
-| Nginx stream | If shared port 443 is connected, SNI routing will be added | Configuration errors may affect the public port `443` |
-| firewall | It is recommended to expose only the entry port and not the backend port. | Misrelease can expose internal services |
-| backup | Generate configuration backup and quarantine directories | Occupies a small amount of disk |
+| Caddy | Site configuration, certificates, and reverse-proxy rules | A bad configuration can cause 404 or 502 errors. |
+| Nginx HTTPS reverse proxy | HTTPS site configuration when shared port 443 is disabled | A configuration error or port conflict can disrupt ports 80/443. |
+| Nginx Stream | SNI routing when using shared port 443 | A configuration error can affect public port `443`. |
+| Firewall | Only ingress ports should be public; backend ports should not be | An incorrect rule can expose internal services. |
+| Backups | Configuration backups and quarantine directories | Uses a small amount of disk space. |
 
-## Operation steps
+## Steps
 
-### 1. Precheck the current server
+### 1. Check the server first
 
 Enter:
 
@@ -71,15 +71,15 @@ Enter:
 Main menu [1 Preflight and risk scan]
 ```
 
-Key points to confirm:
+Confirm the following:
 
-| Project | Expectation |
+| Item | Expected state |
 |---|---|
-| Docker | If it is not installed, the subscription tool installation process will automatically install it. |
-| Port occupied | The subscription tool port should not conflict with existing services. |
-| DNS | The subscribed domain can be resolved to the current VPS |
-| firewall | SSH and the ingress port have been released |
-| system time | Certificate issuance requires accurate time |
+| Docker | If missing, the tool installer will install it. |
+| Port usage | The subscription-tool port does not conflict with an existing service. |
+| DNS | The subscription domain resolves to this VPS. |
+| Firewall | SSH and the ingress port are allowed. |
+| System time | Accurate time is required for certificate issuance. |
 
 Check the port manually:
 
@@ -97,14 +97,14 @@ Main menu [5 panel、Nodes and subscription tools]
 
 The installation process will automatically check Docker/Compose and install it first if missing.
 
-Common entrances:
+Common menu paths:
 
-| Tools | menu path | Suitable for the scene |
+| Tool | Menu path | Use case |
 |---|---|---|
-| SublinkPro | `Main menu [5 panel、Nodes and subscription tools] -> [7 SublinkPro subscription stack]` | Subscription conversion, aggregation, management |
-| Miaomiaowu Subscription Management | `Main menu [5 panel、Nodes and subscription tools] -> [8 Miaomiaowu subscription stack]` | Graphical subscription management |
-| Sub-Store | `Main menu [5 panel、Nodes and subscription tools] -> [9 Sub-Store subscription stack]` | Advanced subscription handling and scripting |
-| Dockge | `Main menu [5 panel、Nodes and subscription tools] -> [11 Dockge Compose]` | Manage multiple Compose projects |
+| SublinkPro | `Main menu [5 Panels, nodes, and subscription tools] -> [7 SublinkPro subscription stack]` | Convert, aggregate, and manage subscriptions. |
+| Miaomiaowu Subscription Management | `Main menu [5 Panels, nodes, and subscription tools] -> [8 Miaomiaowu subscription stack]` | Manage subscriptions through a graphical interface. |
+| Sub-Store | `Main menu [5 Panels, nodes, and subscription tools] -> [9 Sub-Store subscription stack]` | Advanced subscription processing and scripting. |
+| Dockge | `Main menu [5 Panels, nodes, and subscription tools] -> [11 Dockge Compose]` | Manage multiple Compose projects. |
 
 After installation, check the container status first:
 
@@ -112,15 +112,15 @@ After installation, check the container status first:
 docker ps
 ```
 
-If the script deploys the project to `/opt`, you can also enter the corresponding directory to view:
+If the script deploys the project under `/opt`, list that directory to locate it:
 
 ```bash
 ls /opt
 ```
 
-### 3. Confirm the backend binding method
+### 3. Check the backend listener
 
-It is recommended that the backend of the subscription tool is only bound to the local or intranet, and is not recommended to be directly exposed to the Internet. The following are all example values:
+Bind the subscription-tool backend to localhost or a private-network address rather than exposing it directly to the Internet. These are example values:
 
 ```text
 127.0.0.1:3000
@@ -129,7 +129,7 @@ It is recommended that the backend of the subscription tool is only bound to the
 
 Check:
 
-Select the corresponding command according to the actual backend address.
+Run the command that matches the backend address in use.
 
 ```bash
 ss -lntp | grep -E ':3000|:3001|:3002'
@@ -137,18 +137,18 @@ curl -I http://127.0.0.1:3000/
 curl -I http://10.0.0.20:3000/
 ```
 
-If the backend is bound to `0.0.0.0:3000`, it means that the Internet may be directly accessible. You can limit exposure through Docker local exposure protection or firewall:
+If the backend listens on `0.0.0.0:3000`, it may be reachable from the Internet. Limit exposure with Docker's local exposure protection or firewall rules:
 
 ```text
 Main menu [11 Docker Security management]
 Main menu [8 Firewall rules]
 ```
 
-Docker anti-penetration will modify the network behavior of Docker and restart Docker, which is a high-risk operation. Make sure that the container does not rely on the public internet direct connection port before continuing.
+Docker local exposure protection changes Docker networking and restarts Docker. Before using it, confirm that no container depends on a directly exposed public port.
 
-### 4A. Option 1: Use Caddy/Nginx reverse proxy when shared port 443 is not enabled
+### 4A. Option 1: Use Caddy or Nginx before shared port 443 is enabled
 
-It is suitable for those who have not enabled shared port 443 yet and just want to use the domain to access the subscription tool first.
+Use this option when shared port 443 is not enabled and you only need to access the subscription tool by domain.
 
 Enter:
 
@@ -156,20 +156,20 @@ Enter:
 Main menu [4 reverse proxy]
 ```
 
-Select according to current environment:
+Choose for the current environment:
 
-| entrance | Suitable for the situation |
+| Option | Use when |
 |---|---|
-| `[1 add Caddy reverse proxy]` | Already using Caddy, or want to have the site directly managed by Caddy? |
-| `[2 add Nginx HTTPS reverse proxy]` | The 443 shared entry is not enabled, and it is hoped that Nginx will be directly bound to the Internet 80/443 to provide HTTPS |
+| `[1 Add Caddy reverse proxy]` | You already use Caddy or want Caddy to manage the site. |
+| `[2 Add Nginx HTTPS reverse proxy]` | Shared port 443 is disabled and Nginx should listen publicly on ports 80/443 for HTTPS. |
 
-Fill in the example, replace the domain and port with your actual values:
+Use the following example values only as a reference; replace the domain and port with your actual values:
 
-| Project | Example |
+| Item | Example |
 |---|---|
-| domain | `sub.example.com` |
-| backend port | `3000` |
-| backend protocol | According to the actual situation of the tool, usually HTTP |
+| Domain | `sub.example.com` |
+| Backend port | `3000` |
+| Backend protocol | Depends on the tool; usually HTTP. |
 
 If you choose Nginx HTTPS reverse proxy, the script will reuse the existing `acme.sh + Cloudflare DNS API` certificate process and the certificate will still be installed to:
 
@@ -180,7 +180,7 @@ If you choose Nginx HTTPS reverse proxy, the script will reuse the existing `acm
 /root/cert/sub.example.com.key
 ```
 
-`sub.example.com` is an example value, please replace it with your actual subscription domain. Nginx HTTPS reverse proxy is only suitable for scenarios where shared port 443 is not enabled; if the script detects shared port 443 configuration, it will refuse to continue to prevent Nginx from seizing the public port `443`. Do not hand over the same domain to Caddy and Nginx at the same time.
+`sub.example.com` is an example; replace it with the actual subscription domain. Nginx HTTPS reverse proxy is available only while shared port 443 is disabled. If the script detects shared port 443 configuration, it stops to prevent Nginx from taking public port `443`. Do not assign the same domain to both Caddy and Nginx.
 
 If you use Caddy for reverse proxy, verify after configuration:
 
@@ -198,7 +198,7 @@ systemctl status nginx --no-pager
 curl -I https://sub.example.com/
 ```
 
-If 502:
+If you receive a 502 response:
 
 ```bash
 curl -I http://127.0.0.1:3000/
@@ -206,35 +206,35 @@ journalctl -u caddy -n 80 --no-pager
 journalctl -u nginx -n 80 --no-pager
 ```
 
-If the certificate fails, check the Cloudflare Token permissions, authorization zone, `_acme-challenge` TXT propagation, server time and acme.sh logs. The script uses DNS-01, and the Orange Cloud status is not the direct cause of the issuance failure.
+If certificate issuance fails, check Cloudflare token permissions, the authorized zone, `_acme-challenge` TXT propagation, server time, and the acme.sh logs. The script uses DNS-01; enabling Cloudflare proxying is not itself the direct cause of an issuance failure.
 
-### 4B. Option 2: Access shared port 443
+### 4B. Option 2: Add the service to shared port 443
 
-Suitable for already enabled:
+Use this option after you have enabled:
 
 ```text
 Main menu [19 443 shared entry manager] -> [2 initial setup/installation 443 shared entry]
 ```
 
-If you add a new subscription tool domain later, do not rerun the first configuration. Enter:
+To add another subscription-tool domain later, do not rerun initial setup. Use:
 
 ```text
 Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy]
 ```
 
-Fill in example:
+Use these example values:
 
-| Project | Example |
+| Item | Example |
 |---|---|
-| New website/reverse domain | `sub.example.com` |
+| New Web/reverse-proxy domain | `sub.example.com` |
 | Backend address | `127.0.0.1` |
-| backend port | `3000` |
+| Backend port | `3000` |
 
-The Docker service recommends publishing the container port to the host `127.0.0.1`, and then filling in the corresponding host port. When connecting to other intranet servers, you can fill in the actual intranet IP or hostname, but you must first confirm that the current VPS can be directly accessed.
+For a Docker service, publish the container port on host address `127.0.0.1`, then enter that host port. For another private-network server, enter its actual private IP address or hostname only after confirming that this VPS can reach it directly.
 
-The script will update the Caddy or Nginx local configuration according to the current web reverse proxy engine and apply for a certificate. When a high-risk confirmation occurs, confirm that the snapshot, DNS, Token, and backend port are all correct before entering uppercase `YES`.
+The script updates the local Caddy or Nginx configuration for the selected Web reverse-proxy engine and issues a certificate. When it shows a high-risk confirmation, verify the snapshot, DNS, token, and backend port before entering uppercase `YES`.
 
-If you have previously configured independent Caddy/Nginx HTTPS reverse proxy on `Main menu [4 reverse proxy]`, when enabling or reapplying shared port 443, the script will isolate the old configuration that may seize the public port `443`. In the future, the domain of the subscription tool should be re-recorded from `[19] -> [8]`. Do not let Nginx HTTPS of `[4 reverse proxy]` directly listens on the public port `443`.
+If you previously created an independent Caddy/Nginx HTTPS reverse proxy in `Main menu [4 Reverse proxy]`, enabling or reapplying shared port 443 isolates old configurations that could take public port `443`. Add future subscription-tool domains through `[19] -> [8]`; do not let the Nginx HTTPS reverse proxy in `[4 Reverse proxy]` listen directly on public port `443`.
 
 Verify:
 
@@ -243,7 +243,7 @@ curl -I https://sub.example.com/
 openssl s_client -connect serverIP:443 -servername sub.example.com </dev/null
 ```
 
-### 5. Configure the external access address of the subscription tool
+### 5. Set the tool's external URL
 
 Different tools have different names. Common fields include:
 
@@ -255,13 +255,13 @@ SUBSCRIPTION_DOMAIN
 External access address
 ```
 
-The public internet address HTTPS should be filled in:
+Set it to the public HTTPS URL:
 
 ```text
 https://sub.example.com/
 ```
 
-Do not fill in:
+Do not use:
 
 ```text
 http://127.0.0.1:3000/
@@ -269,17 +269,17 @@ http://serverIP:3000/
 https://sub.example.com:3000/
 ```
 
-If the link generated by the subscription tool still contains an internal port, the client may not be able to use it.
+If generated subscription links still contain an internal port, clients may not be able to use them.
 
-### 6. Verify subscription content
+### 6. Verify the subscription output
 
-Browser opens:
+Open in a browser:
 
 ```text
 https://sub.example.com/
 ```
 
-Command check:
+Or run:
 
 ```bash
 curl -I https://sub.example.com/
@@ -288,15 +288,15 @@ curl -L https://sub.example.com/ -o /tmp/sub-tool-home.html
 
 When inspecting the subscription output, focus on:
 
-| Project | Expectation |
+| Item | Expected value |
 |---|---|
-| domain | It is a public domain |
-| agreement | HTTPS |
-| port | Default `443`, do not bring internal port |
-| Token | Do not appear in public logs |
-| Node address | Do not be changed to `127.0.0.1` |
+| Domain | A public domain. |
+| Protocol | HTTPS. |
+| Port | Default `443`; do not include an internal port. |
+| Token | Does not appear in public logs. |
+| Node address | Is not changed to `127.0.0.1`. |
 
-### 7. Backup after success
+### 7. Back up after success
 
 Enter:
 
@@ -304,21 +304,21 @@ Enter:
 Main menu [16 Configuration backup and rollback] -> [1 Create full configuration backup]
 ```
 
-If the subscription tool is deployed with Docker Compose, additional records are also recommended:
+If the tool uses Docker Compose, also record:
 
-| content | location |
+| Item | Where to keep it |
 |---|---|
-| Compose Catalog | `/opt/<PROJECT_NAME>` |
-| Administrator account | Your own password manager |
-| External access domain | Operation and maintenance notes |
-| backend port | Operation and maintenance notes |
+| Compose directory | `/opt/<PROJECT_NAME>` |
+| Administrator account | Your password manager |
+| External domain | Operations notes |
+| Backend port | Operations notes |
 | Cloudflare Token permissions | Cloudflare console |
 
-## Verification method
+## Verification
 
-The Caddy/Nginx reverse proxy of the 443 shared entry is not enabled, verify according to the actual entry used.
+When shared port 443 is disabled, verify the Caddy or Nginx reverse proxy that you use.
 
-Caddy：
+Caddy:
 
 ```bash
 systemctl status caddy --no-pager
@@ -336,13 +336,13 @@ curl -I https://sub.example.com/
 curl -I http://127.0.0.1:3000/
 ```
 
-shared port 443 menu verification:
+Shared port 443 diagnostics:
 
 ```text
 Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
 ```
 
-You can also do it manually:
+You can also check manually:
 
 ```bash
 ss -lntp | grep -E ':443|:8443|:3000'
@@ -357,37 +357,37 @@ docker ps
 docker logs --tail=80 CONTAINER_NAME
 ```
 
-## How to roll back if failed
+## Rollback after a failure
 
-| question | Process |
+| Problem | Action |
 |---|---|
-| Caddy configuration error | Use Caddy backup and restore, or isolate the new site configuration and then reload |
-| Nginx HTTPS reverse proxy configuration error | Check the `nginx -t` output; the Nginx reverse proxy configuration created by the script will be placed in `/etc/nginx/conf.d/vps_proxy_${domain}.conf` |
-| 443 Failed to add domain to shared entry | Use scripts to automate backup rollback or delete the domain from `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy]` |
-| Certificate failed | `Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance]` Check Token, DNS, re-sign |
-| Container startup failed | Enter the corresponding tool management menu to view status, restart or rebuild |
-| Subscribe to output internal port | Modify tools External URL / Public URL |
-| Port exposed to public internet | `Main menu [11 Docker Security management]` or `Main menu [8 Firewall rules]` tighten access |
-| The overall configuration is confusing | `Main menu [16 Configuration backup and rollback] -> [3 Restore from backup]` Restore from backup |
+| Caddy configuration error | Restore a Caddy backup, or quarantine the new site configuration and reload Caddy. |
+| Nginx HTTPS reverse-proxy error | Check `nginx -t`; the script writes its Nginx reverse-proxy configuration to `/etc/nginx/conf.d/vps_proxy_${domain}.conf`. |
+| Unable to add a domain to shared port 443 | Roll back using the script's automatic backup, or remove the domain in `Main menu [19 Shared port 443] -> [8 Manage Web domains/reverse proxy]`. |
+| Certificate failure | In `Main menu [19 Shared port 443] -> [12 CF DNS / Caddy certificate maintenance]`, check the token and DNS, then reissue the certificate. |
+| Container will not start | Open the corresponding tool-management menu to check status, restart, or rebuild. |
+| Subscription output includes an internal port | Change the tool's External URL or Public URL. |
+| A port is public | Restrict access in `Main menu [11 Docker security management]` or `Main menu [8 Firewall rules]`. |
+| Configuration is inconsistent | Restore a backup in `Main menu [16 Configuration backup and rollback] -> [3 Restore from backup]`. |
 
-## Common mistakes
+## Common problems
 
-| Error | phenomenon | Process |
+| Problem | Symptom | Action |
 |---|---|---|
-| Backend cannot be connected | 502 | Start the service first, and then confirm that `curl http://127.0.0.1:port/` or `curl http://PRIVATE_ADDRESS:port/` is available according to the actual backend |
-| DNS did not resolve the VPS | The domain cannot be opened or the wrong server is accessed | Correct the A/AAAA record and wait for it to take effect |
-| REALITY/node domain enabled Cloudflare Orange Cloud | Client cannot connect directly to VPS | The node domain is changed to DNS only / Gray Cloud; whether the Web domain is a proxy is determined according to actual needs. |
-| Duplicate configuration of the same domain | Caddy/Nginx behaves erratically | Check existing sites first, then add new ones |
-| Direct access to internal ports | security exposure | Only the HTTPS domain can be accessed externally |
-| Subscription tool output `127.0.0.1` | Client is unavailable | Set external access address |
-| When deleting the container, I mistakenly thought that the data was also backed up. | Data loss risk | Confirm Compose data directory and volume before stopping/archiving |
+| Backend unreachable | 502 | Start the service, then confirm that `curl http://127.0.0.1:port/` or `curl http://PRIVATE_ADDRESS:port/` reaches the actual backend. |
+| DNS does not resolve to the VPS | The domain fails or opens the wrong server | Correct the A/AAAA record and wait for it to propagate. |
+| Cloudflare proxy enabled for a REALITY/node domain | Client cannot connect directly to the VPS | Set the node domain to DNS only; proxy Web domains only when appropriate. |
+| Duplicate configuration for one domain | Caddy/Nginx behaves inconsistently | Check existing sites before adding a new one. |
+| Direct access to an internal port | Security exposure | Expose only the HTTPS domain externally. |
+| Subscription output contains `127.0.0.1` | The client cannot use it | Set the external URL. |
+| Container removal was assumed to back up its data | Data-loss risk | Confirm the Compose data directory and volumes before stopping or archiving. |
 
-## Recommended maintenance habits
+## Ongoing maintenance
 
 | Maintenance action | Recommended frequency |
 |---|---|
-| `Main menu [15 Service health overview]` Health Check | After every change |
-| `Main menu [16 Configuration backup and rollback] -> [1 Create full configuration backup]` backup | After each successful configuration change |
-| Check `docker ps` | Every time you upgrade your subscription tool |
-| Check subscription output | After each modification of the External URL |
-| update script | Use `Main menu [17 Update script]` when there is a clear need |
+| Run `Main menu [15 Service health overview]` | After each reverse-proxy change. |
+| Back up in `Main menu [16 Configuration backup and rollback] -> [1 Create full configuration backup]` | After every successful configuration change. |
+| Check `docker ps` | Each time you update the subscription tool. |
+| Check subscription output | After changing the External URL. |
+| Update the script | Use `Main menu [17 Update script]` only when needed. |

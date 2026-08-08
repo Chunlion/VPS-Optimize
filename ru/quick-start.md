@@ -41,7 +41,7 @@ cy
 ```text
 Select interface language:
   1. English
-  2. Упрощённый китайский (Simplified Chinese)
+  2. 简体中文 (Simplified Chinese)
   3. Русский (Russian)
 ```
 
