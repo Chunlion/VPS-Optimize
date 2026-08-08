@@ -90,7 +90,7 @@ quarantine_legacy_caddy_443_configs() {
     done < <(find "$conf_dir" -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)
 
     if [[ "$moved_count" -gt 0 ]]; then
-        echo -e "${YELLOW}⚠️ 已自动隔离 ${moved_count} 个旧站点配置（可能抢占 443）到：${quarantine_dir}${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}⚠️ 已自动隔离 ${moved_count} 个旧站点配置（可能抢占 443）到：${quarantine_dir}${PLAIN}" "${YELLOW}⚠️ Automatically quarantined ${moved_count} old site configuration (possible preemption 443) to: ${quarantine_dir}${PLAIN}" "${YELLOW}⚠️ Автоматически помещает в карантин старую конфигурацию сайта ${moved_count} (возможное приоритетное вмешательство 443) в: ${quarantine_dir}${PLAIN}")"
     fi
 }
 
@@ -114,12 +114,12 @@ issue_cf_dns_cert_with_retry() {
     if ! prepare_acme_account "$acme_bin" "$acme_email" "$acme_log"; then
         mkdir -p /root/cert
         cp -f "$acme_log" /root/cert/acme_last_error.log >/dev/null 2>&1 || true
-        echo -e "${RED}❌ acme 账户初始化失败：${domain}${PLAIN}"
-        echo -e "${YELLOW}   最近错误日志: /root/cert/acme_last_error.log${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ acme 账户初始化失败：${domain}${PLAIN}" "${RED}❌ acme account initialization failed: ${domain}${PLAIN}" "${RED}❌ Ошибка инициализации учетной записи acme: ${domain}${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}   最近错误日志: /root/cert/acme_last_error.log${PLAIN}" "${YELLOW}Recent error log: /root/cert/acme_last_error.log${PLAIN}" "${YELLOW}Недавний журнал ошибок: /root/cert/acme_last_error.log${PLAIN}")"
         local account_hint
         account_hint=$(grep -Ei 'error|invalid|unauthorized|forbidden|failed|contact|account' "$acme_log" | tail -n 12)
         if [[ -n "$account_hint" ]]; then
-            echo -e "${YELLOW}   关键报错如下：${PLAIN}"
+            echo -e "$(localized_text "${YELLOW}   关键报错如下：${PLAIN}" "${YELLOW}The key error is as follows:${PLAIN}" "${YELLOW}Ошибка ключа следующая:${PLAIN}")"
             echo "$account_hint"
         fi
         return 1
@@ -144,16 +144,16 @@ issue_cf_dns_cert_with_retry() {
 
     mkdir -p /root/cert
     cp -f "$acme_log" /root/cert/acme_last_error.log >/dev/null 2>&1 || true
-    echo -e "${RED}❌ acme.sh 最终失败：${domain}${PLAIN}"
-    echo -e "${YELLOW}   最近错误日志: /root/cert/acme_last_error.log${PLAIN}"
+    echo -e "$(localized_text "${RED}❌ acme.sh 最终失败：${domain}${PLAIN}" "${RED}❌ acme.sh Final failure: ${domain}${PLAIN}" "${RED}❌ acme.sh Окончательный сбой: ${domain}${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}   最近错误日志: /root/cert/acme_last_error.log${PLAIN}" "${YELLOW}Recent error log: /root/cert/acme_last_error.log${PLAIN}" "${YELLOW}Недавний журнал ошибок: /root/cert/acme_last_error.log${PLAIN}")"
 
     local acme_hint
     acme_hint=$(grep -Ei 'error|invalid|unauthorized|forbidden|failed|timeout|SERVFAIL|NXDOMAIN|permission' "$acme_log" | tail -n 12)
     if [[ -n "$acme_hint" ]]; then
-        echo -e "${YELLOW}   关键报错如下：${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}   关键报错如下：${PLAIN}" "${YELLOW}The key error is as follows:${PLAIN}" "${YELLOW}Ошибка ключа следующая:${PLAIN}")"
         echo "$acme_hint"
     else
-        echo -e "${YELLOW}   未提取到关键错误，展示日志尾部：${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}   未提取到关键错误，展示日志尾部：${PLAIN}" "${YELLOW}The key error is not extracted, and the tail of the log is displayed:${PLAIN}" "${YELLOW}Ошибка ключа не извлекается, отображается хвост журнала:${PLAIN}")"
         tail -n 12 "$acme_log"
     fi
 
@@ -289,7 +289,7 @@ generate_caddy_cf_manifest() {
     local summary_file="/root/cert/caddy_cf_manifest.txt"
     mkdir -p /root/cert
     : > "$summary_file"
-    echo "Caddy CF DNS 自动化清单 - $(date '+%F %T')" >> "$summary_file"
+    echo "$(localized_text "Caddy CF DNS 自动化清单 - $(date '+%F %T')" "Caddy CF DNS Automation List - $(date '+%F %T')" "Caddy CF DNS Список автоматизации — $(date '+%F %T')")" >> "$summary_file"
     echo "------------------------------------------------" >> "$summary_file"
 
     local found=false
@@ -307,22 +307,22 @@ generate_caddy_cf_manifest() {
             listen_target=$(caddy_conf_site_listen_target "$conf_file")
             backend=$(caddy_conf_first_reverse_proxy_target "$conf_file")
 
-            [[ -z "$listen_target" ]] && listen_target="未知"
-            [[ -z "$backend" ]] && backend="未知"
+            [[ -z "$listen_target" ]] && listen_target="$(localized_text "未知" "unknown" "неизвестно")"
+            [[ -z "$backend" ]] && backend="$(localized_text "未知" "unknown" "неизвестно")"
 
-            echo "域名: ${domain}" >> "$summary_file"
-            echo "  后端: ${backend}" >> "$summary_file"
-            echo "  Caddy监听: ${listen_target}" >> "$summary_file"
-            echo "  证书CRT: /root/cert/${domain}.crt" >> "$summary_file"
-            echo "  证书KEY: /root/cert/${domain}.key" >> "$summary_file"
-            echo "  配置文件: ${conf_file}" >> "$summary_file"
+            echo "$(localized_text "域名: ${domain}" "domain: ${domain}" "Доменное имя: ${domain}")" >> "$summary_file"
+            echo "$(localized_text "  后端: ${backend}" "Backend: ${backend}" "Бэкенд: ${backend}")" >> "$summary_file"
+            echo "$(localized_text "  Caddy监听: ${listen_target}" "Caddy listening: ${listen_target}" "Caddy прослушивание: ${listen_target}")" >> "$summary_file"
+            echo "$(localized_text "  证书CRT: /root/cert/${domain}.crt" "Certificate CRT: /root/cert/${domain}.crt" "Сертификат ЭЛТ: /root/cert/${domain}.crt")" >> "$summary_file"
+            echo "$(localized_text "  证书KEY: /root/cert/${domain}.key" "Certificate KEY: /root/cert/${domain}.key" "КЛЮЧ сертификата: /root/cert/${domain}.key")" >> "$summary_file"
+            echo "$(localized_text "  配置文件: ${conf_file}" "Configuration file: ${conf_file}" "Файл конфигурации: ${conf_file}.")" >> "$summary_file"
             echo "------------------------------------------------" >> "$summary_file"
             found=true
         done < <(find /etc/caddy/conf.d -maxdepth 1 -type f -name "*.caddy" 2>/dev/null | sort)
     fi
 
     if ! $found; then
-        echo "当前未检测到可管理的 CF DNS 站点配置。" >> "$summary_file"
+        echo "$(localized_text "当前未检测到可管理的 CF DNS 站点配置。" "No manageable site configurations for CF DNS are currently detected." "В настоящее время не обнаружено управляемых конфигураций сайта для CF DNS.")" >> "$summary_file"
         echo "------------------------------------------------" >> "$summary_file"
     fi
 }

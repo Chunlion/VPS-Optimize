@@ -94,17 +94,17 @@ ask_with_default() {
     local default_value="$2"
     local input
     local value
-    read_trimmed input "${prompt} (默认: ${default_value}): "
+    read_trimmed input "$(localized_text "${prompt} (默认: ${default_value}): " "${prompt} (default: ${default_value}):" "${prompt} (по умолчанию: ${default_value}):")"
     value="${input:-$default_value}"
     case "$prompt" in
-        *路径*)
+        *路径*|*[Pp]ath*|*путь*|*Путь*)
             ;;
-        *端口*|*[Pp][Oo][Rr][Tt]*)
+        *端口*|*[Pp][Oo][Rr][Tt]*|*порт*|*Порт*)
             if declare -F normalize_port_input >/dev/null 2>&1; then
                 value="$(normalize_port_input "$value")"
             fi
             ;;
-        *监听地址*)
+        *监听地址*|*[Ll]isten*address*|*адрес*прослуш*|*Адрес*прослуш*)
             if declare -F normalize_ip_input >/dev/null 2>&1; then
                 value="$(normalize_ip_input "$value")"
             fi

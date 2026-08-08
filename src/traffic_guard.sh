@@ -105,19 +105,19 @@ traffic_guard_valid_iface() {
 
 traffic_guard_mode_label() {
     case "$1" in
-        tx) echo "出站 TX 计费" ;;
-        rx) echo "入站 RX 计费" ;;
-        total) echo "出入总量 RX+TX" ;;
-        max) echo "任一方向达量" ;;
+        tx) echo "$(localized_text "出站 TX 计费" "Outbound TX billing" "Биллинг за исходящую передачу")" ;;
+        rx) echo "$(localized_text "入站 RX 计费" "Inbound RX billing" "Биллинг входящего приема")" ;;
+        total) echo "$(localized_text "出入总量 RX+TX" "Total amount of incoming and outgoing RX+TX" "Общий объем входящих и исходящих RX+TX")" ;;
+        max) echo "$(localized_text "任一方向达量" "Amount in any direction" "Сумма в любом направлении")" ;;
         *) echo "$1" ;;
     esac
 }
 
 traffic_guard_action_label() {
     case "$1" in
-        poweroff) echo "立即关机" ;;
-        ssh-only) echo "仅保留 SSH，封锁其余公网业务流量" ;;
-        log) echo "只写日志" ;;
+        poweroff) echo "$(localized_text "立即关机" "Shut down immediately" "Немедленно выключить")" ;;
+        ssh-only) echo "$(localized_text "仅保留 SSH，封锁其余公网业务流量" "Only retain SSH and block other public business traffic." "Сохраните только SSH и заблокируйте другой бизнес-трафик публичной сети.")" ;;
+        log) echo "$(localized_text "只写日志" "Just write a log" "Просто напишите журнал")" ;;
         *) echo "$1" ;;
     esac
 }
@@ -402,11 +402,11 @@ traffic_guard_report_checker_install_failure() {
     local file="${2:-$TRAFFIC_GUARD_CHECKER}"
     local first_line_hex
     first_line_hex=$(traffic_guard_checker_first_line_hex "$file" 2>/dev/null || echo "unreadable")
-    echo -e "${RED}❌ Traffic Guard 检查器写入失败：${reason}${PLAIN}"
-    echo -e "${YELLOW}检查器路径：${TRAFFIC_GUARD_CHECKER}${PLAIN}"
-    echo -e "${YELLOW}待检查文件：${file}${PLAIN}"
-    echo -e "${YELLOW}首行实际字节：${first_line_hex:-empty}${PLAIN}"
-    echo -e "${YELLOW}日志路径：${TRAFFIC_GUARD_LOG}${PLAIN}"
+    echo -e "$(localized_text "${RED}❌ Traffic Guard 检查器写入失败：${reason}${PLAIN}" "${RED}❌ Traffic Guard checker write failure: ${reason}${PLAIN}" "${RED}❌ Ошибка записи средства проверки трафика: ${reason}${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}检查器路径：${TRAFFIC_GUARD_CHECKER}${PLAIN}" "${YELLOW}Inspector path: ${TRAFFIC_GUARD_CHECKER}${PLAIN}" "${YELLOW}Путь инспектора : ${TRAFFIC_GUARD_CHECKER}${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}待检查文件：${file}${PLAIN}" "${YELLOW}Files to be inspected: ${file}${PLAIN}" "${YELLOW}Файлы для проверки: ${file}${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}首行实际字节：${first_line_hex:-empty}${PLAIN}" "${YELLOW}Actual bytes in the first row of : ${first_line_hex:-empty}${PLAIN}" "${YELLOW}Фактические байты в первой строке : ${first_line_hex:-empty}.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}日志路径：${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}Log path: ${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}Путь журнала : ${TRAFFIC_GUARD_LOG}${PLAIN}")"
     traffic_guard_admin_log "checker install failed: ${reason}; file=${file}; first_line_hex=${first_line_hex:-empty}"
 }
 
@@ -427,7 +427,7 @@ traffic_guard_install_checker_once() {
     local first_line write_rc tmp_checker
     mkdir -p "$(dirname "$TRAFFIC_GUARD_CHECKER")" "$TRAFFIC_GUARD_STATE_DIR" "$(dirname "$TRAFFIC_GUARD_CONFIG")" || return 1
     tmp_checker=$(mktemp "${TRAFFIC_GUARD_CHECKER}.tmp.XXXXXX") || {
-        traffic_guard_mark_checker_install_failure "io" "无法创建临时检查器文件" "$TRAFFIC_GUARD_CHECKER"
+        traffic_guard_mark_checker_install_failure "io" "$(localized_text "无法创建临时检查器文件" "Unable to create temporary checker file" "Невозможно создать временный файл проверки")" "$TRAFFIC_GUARD_CHECKER"
         return 1
     }
     cat > "$tmp_checker" <<'GUARD_SCRIPT'
@@ -926,33 +926,33 @@ exit 0
 GUARD_SCRIPT
     write_rc=$?
     if (( write_rc != 0 )); then
-        traffic_guard_mark_checker_install_failure "io" "无法写入临时检查器文件" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "io" "$(localized_text "无法写入临时检查器文件" "Unable to write to temporary checker file" "Невозможно записать во временный файл проверки")" "$tmp_checker"
         rm -f "$tmp_checker" 2>/dev/null || true
         return 1
     fi
     if ! traffic_guard_normalize_generated_checker "$tmp_checker"; then
-        traffic_guard_mark_checker_install_failure "generated-content" "无法规范化检查器换行或文件头" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "generated-content" "$(localized_text "无法规范化检查器换行或文件头" "Unable to normalize checker newlines or file headers" "Невозможно нормализовать новую строку или заголовки файлов проверки.")" "$tmp_checker"
         return 1
     fi
     IFS= read -r first_line < "$tmp_checker" || first_line=""
     if [[ "${first_line%$'\r'}" != "#!/usr/bin/env bash" ]]; then
-        traffic_guard_mark_checker_install_failure "generated-content" "首行必须是 #!/usr/bin/env bash" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "generated-content" "$(localized_text "首行必须是 #!/usr/bin/env bash" "The first line must be #!/usr/bin/env bash" "Первая строка должна быть #!/usr/bin/env bash.")" "$tmp_checker"
         return 1
     fi
     if LC_ALL=C grep -q $'\r' "$tmp_checker"; then
-        traffic_guard_mark_checker_install_failure "generated-content" "检测到 CRLF/回车字符" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "generated-content" "$(localized_text "检测到 CRLF/回车字符" "CRLF/carriage return character detected" "Обнаружен символ CRLF/возврата каретки")" "$tmp_checker"
         return 1
     fi
     if ! bash -n "$tmp_checker"; then
-        traffic_guard_mark_checker_install_failure "generated-content" "Bash 语法检查未通过" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "generated-content" "$(localized_text "Bash 语法检查未通过" "Bash syntax check failed" "Проверка синтаксиса Bash не удалась")" "$tmp_checker"
         return 1
     fi
     if ! chmod 700 "$tmp_checker"; then
-        traffic_guard_mark_checker_install_failure "io" "权限设置失败：无法 chmod 700" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "io" "$(localized_text "权限设置失败：无法 chmod 700" "Permissions setup failed: Unable to chmod 700" "Не удалось настроить разрешения: невозможно выполнить chmod 700.")" "$tmp_checker"
         return 1
     fi
     if ! mv -f "$tmp_checker" "$TRAFFIC_GUARD_CHECKER"; then
-        traffic_guard_mark_checker_install_failure "io" "无法替换 ${TRAFFIC_GUARD_CHECKER}" "$tmp_checker"
+        traffic_guard_mark_checker_install_failure "io" "$(localized_text "无法替换 ${TRAFFIC_GUARD_CHECKER}" "Unable to replace ${TRAFFIC_GUARD_CHECKER}" "Невозможно заменить ${TRAFFIC_GUARD_CHECKER}.")" "$tmp_checker"
         return 1
     fi
     traffic_guard_admin_log "checker installed: ${TRAFFIC_GUARD_CHECKER}"
@@ -967,7 +967,7 @@ install_traffic_guard_checker() {
             return 0
         fi
         if [[ "$attempt" == "1" ]] && traffic_guard_checker_install_failure_is_generated; then
-            echo -e "${YELLOW}⚠️ 检查器生成内容异常，正在安全重装一次...${PLAIN}"
+            echo -e "$(localized_text "${YELLOW}⚠️ 检查器生成内容异常，正在安全重装一次...${PLAIN}" "${YELLOW}⚠️ The content generated by the checker is abnormal, reinstalling safely...${PLAIN}" "${YELLOW}⚠️ Содержимое, сгенерированное программой проверки, является ненормальным, безопасная переустановка...${PLAIN}")"
             traffic_guard_admin_log "retry checker install once after generated content validation failure"
             continue
         fi
@@ -987,7 +987,7 @@ traffic_guard_state_epoch() {
 }
 
 traffic_guard_print_timer_failure_context() {
-    echo -e "${YELLOW}▶ Traffic Guard 检查器/Timer 诊断上下文${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}▶ Traffic Guard 检查器/Timer 诊断上下文${PLAIN}" "${YELLOW}▶ Traffic Guard Inspector/Timer Diagnostic Context${PLAIN}" "${YELLOW}▶ Контекст диагностики инспектора трафика/таймера${PLAIN}")"
     echo -e "checker : ${TRAFFIC_GUARD_CHECKER}"
     ls -l "$TRAFFIC_GUARD_CHECKER" 2>/dev/null || true
     echo -e "config  : ${TRAFFIC_GUARD_CONFIG}"
@@ -999,15 +999,15 @@ traffic_guard_print_timer_failure_context() {
     systemctl list-timers --all vps-traffic-guard.timer --no-pager 2>/dev/null || true
     echo -e "${YELLOW}▶ systemd service:${PLAIN}"
     systemctl status vps-traffic-guard.service --no-pager -l 2>/dev/null || true
-    echo -e "${YELLOW}▶ 最近 journal:${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}▶ 最近 journal:${PLAIN}" "${YELLOW}▶ Recent journal:${PLAIN}" "${YELLOW}▶ Последний журнал:${PLAIN}")"
     journalctl -u vps-traffic-guard.service -u vps-traffic-guard.timer -n 80 --no-pager 2>/dev/null || true
-    echo -e "${YELLOW}▶ 最近脚本日志:${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}▶ 最近脚本日志:${PLAIN}" "${YELLOW}▶ Recent script log:${PLAIN}" "${YELLOW}▶ Журнал последних сценариев:${PLAIN}")"
     traffic_guard_recent_log_summary 20
 }
 
 traffic_guard_install_checker_or_report() {
     install_traffic_guard_checker && return 0
-    echo -e "${RED}❌ 安装检查脚本失败。下面是可直接排查的上下文：${PLAIN}"
+    echo -e "$(localized_text "${RED}❌ 安装检查脚本失败。下面是可直接排查的上下文：${PLAIN}" "${RED}❌ The installation check script failed. The following is the context that can be directly investigated:${PLAIN}" "${RED}❌ Не удалось выполнить сценарий проверки установки. Ниже приводится контекст, который можно непосредственно исследовать:.${PLAIN}")"
     traffic_guard_print_timer_failure_context
     return 1
 }
@@ -1018,7 +1018,7 @@ traffic_guard_run_checker_once() {
     runner="direct"
 
     if [[ ! -x "$TRAFFIC_GUARD_CHECKER" ]]; then
-        echo -e "${RED}❌ 检查器不存在或不可执行：${TRAFFIC_GUARD_CHECKER}${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 检查器不存在或不可执行：${TRAFFIC_GUARD_CHECKER}${PLAIN}" "${RED}❌ Checker does not exist or is not executable: ${TRAFFIC_GUARD_CHECKER}${PLAIN}" "${RED}❌ Программа проверки не существует или не является исполняемой: ${TRAFFIC_GUARD_CHECKER}${PLAIN}")"
         return 1
     fi
 
@@ -1032,22 +1032,22 @@ traffic_guard_run_checker_once() {
     reset_traffic_guard_failed_state
 
     if (( rc != 0 )); then
-        echo -e "${RED}❌ 已尝试通过 ${runner} 运行检查器，但执行失败 rc=${rc}。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 已尝试通过 ${runner} 运行检查器，但执行失败 rc=${rc}。${PLAIN}" "${RED}❌ An attempt was made to run the checker with ${runner}, but execution failed with rc=${rc}.${PLAIN}" "${RED}❌ Была предпринята попытка запустить программу проверки с помощью ${runner}, но выполнение не удалось с rc=${rc}.${PLAIN}")"
         return 1
     fi
 
     after_epoch=$(traffic_guard_state_epoch)
     age=$(traffic_guard_state_age_seconds 2>/dev/null || echo "")
     if [[ "$age" =~ ^[0-9]+$ && "$age" -le 120 ]]; then
-        echo -e "${GREEN}✅ 检查器已立即运行，状态文件已刷新。${PLAIN}"
+        echo -e "$(localized_text "${GREEN}✅ 检查器已立即运行，状态文件已刷新。${PLAIN}" "${GREEN}✅ The checker has been run immediately and the status file has been refreshed.${PLAIN}" "${GREEN}✅ Проверка была запущена немедленно, и файл состояния был обновлен.${PLAIN}")"
         return 0
     fi
     if [[ "$after_epoch" =~ ^[0-9]+$ && "$before_epoch" =~ ^[0-9]+$ && "$after_epoch" -gt "$before_epoch" ]]; then
-        echo -e "${GREEN}✅ 检查器已立即运行，状态时间已推进。${PLAIN}"
+        echo -e "$(localized_text "${GREEN}✅ 检查器已立即运行，状态时间已推进。${PLAIN}" "${GREEN}✅ The checker has been run immediately and the status time has been advanced.${PLAIN}" "${GREEN}. Проверка была запущена немедленно, а время статуса было увеличено.${PLAIN}")"
         return 0
     fi
 
-    echo -e "${RED}❌ 检查器执行结束但状态文件没有刷新。${PLAIN}"
+    echo -e "$(localized_text "${RED}❌ 检查器执行结束但状态文件没有刷新。${PLAIN}" "${RED}❌ Checker execution ended but the status file was not refreshed.${PLAIN}" "${RED}❌ Выполнение средства проверки завершилось, но файл состояния не был обновлен.${PLAIN}")"
     return 1
 }
 
@@ -1290,7 +1290,7 @@ traffic_guard_recent_log_summary() {
     (( lines > 0 )) || lines=5
 
     if [[ ! -r "$TRAFFIC_GUARD_LOG" ]]; then
-        echo "暂无日志"
+        echo "$(localized_text "暂无日志" "No logs yet" "Журналов пока нет")"
         return 0
     fi
 
@@ -1321,73 +1321,73 @@ print_traffic_guard_diagnostic_summary() {
     [[ -r "$TRAFFIC_GUARD_LOG" ]] && has_log="yes" || has_log="no"
 
     if [[ "$has_config" == "no" && "$has_state" == "no" && "$has_log" == "no" && "$timer_active" != "active" && "$timer_enabled" == "disabled" ]]; then
-        [[ "$show_unconfigured" == "yes" ]] && echo "流量达量保护摘要: 未配置"
+        [[ "$show_unconfigured" == "yes" ]] && echo "$(localized_text "流量达量保护摘要: 未配置" "Traffic volume protection summary: Not configured" "Сводная информация о защите объема трафика: не настроено")"
         return 0
     fi
 
-    echo "流量达量保护摘要:"
+    echo "$(localized_text "流量达量保护摘要:" "Traffic volume protection summary:" "Сводная информация о защите объема трафика:")"
     echo "- timer: vps-traffic-guard.timer active=${timer_active}; enabled=${timer_enabled}"
-    config_status="不可读或不存在"
-    state_status="不可读或不存在"
-    log_status="不可读或不存在"
-    [[ "$has_config" == "yes" ]] && config_status="存在"
-    [[ "$has_state" == "yes" ]] && state_status="存在"
-    [[ "$has_log" == "yes" ]] && log_status="存在"
-    echo "- 配置文件: ${TRAFFIC_GUARD_CONFIG} (${config_status})"
-    echo "- 状态文件: ${state_file} (${state_status})"
-    echo "- 日志文件: ${TRAFFIC_GUARD_LOG} (${log_status})"
+    config_status="$(localized_text "不可读或不存在" "Unreadable or does not exist" "Нечитабельно или не существует")"
+    state_status="$(localized_text "不可读或不存在" "Unreadable or does not exist" "Нечитабельно или не существует")"
+    log_status="$(localized_text "不可读或不存在" "Unreadable or does not exist" "Нечитабельно или не существует")"
+    [[ "$has_config" == "yes" ]] && config_status="$(localized_text "存在" "exist" "существовать")"
+    [[ "$has_state" == "yes" ]] && state_status="$(localized_text "存在" "exist" "существовать")"
+    [[ "$has_log" == "yes" ]] && log_status="$(localized_text "存在" "exist" "существовать")"
+    echo "$(localized_text "- 配置文件: ${TRAFFIC_GUARD_CONFIG} (${config_status})" "- Configuration file: ${TRAFFIC_GUARD_CONFIG} (${config_status})" "- Файл конфигурации: ${TRAFFIC_GUARD_CONFIG} (${config_status})")"
+    echo "$(localized_text "- 状态文件: ${state_file} (${state_status})" "- Status file: ${state_file} (${state_status})" "- Файл состояния: ${state_file} (${state_status})")"
+    echo "$(localized_text "- 日志文件: ${TRAFFIC_GUARD_LOG} (${log_status})" "- Log file: ${TRAFFIC_GUARD_LOG} (${log_status})" "- Файл журнала: ${TRAFFIC_GUARD_LOG} (${log_status})")"
 
     if [[ "$has_config" != "yes" ]]; then
-        echo "- 当前配置: 未配置或不可读"
+        echo "$(localized_text "- 当前配置: 未配置或不可读" "- Current configuration: Not configured or unreadable" "- Текущая конфигурация: не настроена или нечитаема.")"
     else
         # shellcheck disable=SC1090
         . "$TRAFFIC_GUARD_CONFIG"
         limit="${LIMIT_BYTES:-0}"
         if read -r usage live_rx live_tx < <(traffic_guard_live_usage_from_state 2>/dev/null); then
-            source_usage="实时估算"
+            source_usage="$(localized_text "实时估算" "Real-time estimation" "Оценка в реальном времени")"
         else
             usage=$(traffic_guard_usage_from_state 2>/dev/null || echo 0)
             live_rx=""
             live_tx=""
-            source_usage="上次状态"
+            source_usage="$(localized_text "上次状态" "last status" "последний статус")"
         fi
         [[ "$usage" =~ ^[0-9]+$ ]] || usage=0
         [[ "$limit" =~ ^[0-9]+$ ]] || limit=0
         if (( limit > 0 )); then
             pct=$(awk -v u="$usage" -v l="$limit" 'BEGIN { printf "%.2f", (u/l)*100 }')
             mode_label=$(traffic_guard_mode_label "${MODE:-tx}")
-            echo "- 当前配置: ENABLED=${ENABLED:-0}; 模式=${mode_label}; 动作=$(traffic_guard_action_label "${ACTION:-poweroff}"); 检查间隔=${CHECK_INTERVAL:-60}s"
+            echo "$(localized_text "- 当前配置: ENABLED=${ENABLED:-0}; 模式=${mode_label}; 动作=$(traffic_guard_action_label "${ACTION:-poweroff}"); 检查间隔=${CHECK_INTERVAL:-60}s" "- Current configuration: ENABLED=${ENABLED:-0}; mode=${mode_label}; action=$(traffic_guard_action_label \"${ACTION:-poweroff}\"); check interval=${CHECK_INTERVAL:-60}s" "- Текущая конфигурация: ENABLED=${ENABLED:-0}; режим = ${mode_label}; действие = $(traffic_guard_action_label \"${ACTION:-poweroff}\"); интервал проверки = ${CHECK_INTERVAL:-60}s")"
             echo "- ${source_usage}: $(traffic_guard_human_bytes "$usage") / $(traffic_guard_human_bytes "$limit") (${pct}%)"
         else
-            echo "- 当前配置: ENABLED=${ENABLED:-0}; 模式=$(traffic_guard_mode_label "${MODE:-tx}"); 阈值未设置或无效"
+            echo "$(localized_text "- 当前配置: ENABLED=${ENABLED:-0}; 模式=$(traffic_guard_mode_label "${MODE:-tx}"); 阈值未设置或无效" "- Current configuration: ENABLED=${ENABLED:-0}; Mode=$(traffic_guard_mode_label \"${MODE:-tx}\"); Threshold not set or invalid" "- Текущая конфигурация: ENABLED=${ENABLED:-0}; Режим = $(traffic_guard_mode_label \"${MODE:-tx}\"); Порог не установлен или недействителен.")"
         fi
         if [[ "$live_rx" =~ ^[0-9]+$ && "$live_tx" =~ ^[0-9]+$ ]]; then
-            echo "- 方向估算: RX $(traffic_guard_human_bytes "$live_rx") / TX $(traffic_guard_human_bytes "$live_tx")"
+            echo "$(localized_text "- 方向估算: RX $(traffic_guard_human_bytes "$live_rx") / TX $(traffic_guard_human_bytes "$live_tx")" "- Direction estimation: RX $(traffic_guard_human_bytes \"$live_rx\") / TX $(traffic_guard_human_bytes \"$live_tx\")" "- Оценка направления: RX $(traffic_guard_human_bytes \"$live_rx\") / TX $(traffic_guard_human_bytes \"$live_tx\").")"
         fi
     fi
 
     if [[ "$has_state" == "yes" ]]; then
-        last_checked=$(traffic_guard_state_last_checked_at 2>/dev/null || echo "未知")
+        last_checked=$(traffic_guard_state_last_checked_at 2>/dev/null || echo "$(localized_text "未知" "unknown" "неизвестно")")
         state_age=$(traffic_guard_state_age_seconds 2>/dev/null || echo "")
         stale_threshold=$(traffic_guard_stale_threshold_seconds)
         if [[ "$state_age" =~ ^[0-9]+$ ]]; then
-            echo "- 最近检查: ${last_checked} (${state_age}s 前; 超时阈值 ${stale_threshold}s)"
+            echo "$(localized_text "- 最近检查: ${last_checked} (${state_age}s 前; 超时阈值 ${stale_threshold}s)" "- Last checked: ${last_checked} (${state_age}s ago; timeout threshold ${stale_threshold}s)" "- Последняя проверка: ${last_checked} (${state_age}s назад; порог тайм-аута ${stale_threshold}s)")"
             if (( state_age > stale_threshold )); then
                 if [[ "$timer_active" == "active" ]]; then
-                    echo "- 异常提示: 最近检查超时，timer active 但状态文件已超过 ${state_age}s 未刷新，请查看日志或使用菜单 [10] -> [5] -> [6] 修复 timer"
+                    echo "$(localized_text "- 异常提示: 最近检查超时，timer active 但状态文件已超过 ${state_age}s 未刷新，请查看日志或使用菜单 [10] -> [5] -> [6] 修复 timer" "- Exception prompt: The latest check timed out, timer active but the status file has exceeded ${state_age}s and has not been refreshed, please check the log or use the menu [10] -> [5] -> [6] to repair the timer" "- Подсказка об исключении: время последней проверки истекло, таймер активен, но файл состояния превысил ${state_age} и не был обновлен. Проверьте журнал или воспользуйтесь меню [10] -> [5] -> [6] для восстановления таймера.")"
                 else
-                    echo "- 异常提示: 最近检查超时，状态文件已超过 ${state_age}s 未刷新，timer 当前为 ${timer_active}"
+                    echo "$(localized_text "- 异常提示: 最近检查超时，状态文件已超过 ${state_age}s 未刷新，timer 当前为 ${timer_active}" "- Exception prompt: The latest check has timed out, the status file has exceeded ${state_age}s and has not been refreshed, and the timer is currently ${timer_active}" "- Подсказка об исключении: время последней проверки истекло, файл состояния превысил ${state_age} и не был обновлен, а таймер в настоящее время равен ${timer_active}.")"
                 fi
             fi
         else
-            echo "- 最近检查: ${last_checked}"
+            echo "$(localized_text "- 最近检查: ${last_checked}" "- Last checked: ${last_checked}" "- Последняя проверка: ${last_checked}.")"
         fi
     else
-        echo "- 最近检查: 状态文件尚未生成"
+        echo "$(localized_text "- 最近检查: 状态文件尚未生成" "- Last checked: status file has not been generated yet" "- Последняя проверка: файл состояния еще не создан.")"
     fi
 
     if (( log_lines > 0 )); then
-        echo "- 最近 vps-traffic-guard 日志:"
+        echo "$(localized_text "- 最近 vps-traffic-guard 日志:" "- Recent vps-traffic-guard logs:" "- Последние журналы vps-traffic-guard:")"
         traffic_guard_recent_log_summary "$log_lines" | sed 's/^/  /'
     fi
 }
@@ -1395,13 +1395,13 @@ print_traffic_guard_diagnostic_summary() {
 show_traffic_guard_status() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "网络/内核优化 > 流量达量保护"
-    echo -e "${BOLD}🧯 流量达量保护状态${PLAIN}"
+    print_breadcrumb "$(localized_text "网络/内核优化 > 流量达量保护" "Network/Kernel Optimization > Traffic Volume Protection" "Оптимизация сети/ядра > Защита объема трафика")"
+    echo -e "$(localized_text "${BOLD}🧯 流量达量保护状态${PLAIN}" "${BOLD}🧯 Traffic volume protection status${PLAIN}" "${BOLD}🧯 Статус защиты объема трафика${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     if ! load_traffic_guard_config; then
-        echo -e "${YELLOW}当前未配置流量达量保护。${PLAIN}"
-        echo -e "${BLUE}建议先选择 [1] 配置，避免 VPS 被刷流量产生超额账单。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}当前未配置流量达量保护。${PLAIN}" "${YELLOW}Is currently not configured with traffic volume protection.${PLAIN}" "${YELLOW}в настоящее время не настроен с защитой объема трафика.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}建议先选择 [1] 配置，避免 VPS 被刷流量产生超额账单。${PLAIN}" "${BLUE}It is recommended to select [1] configuration first to avoid excessive bills caused by VPS traffic being brushed.${PLAIN}" "${BLUE}Рекомендуется сначала выбрать конфигурацию [1], чтобы избежать чрезмерных счетов, вызванных очисткой трафика VPS.${PLAIN}")"
         return 0
     fi
 
@@ -1425,67 +1425,67 @@ show_traffic_guard_status() {
     fi
     cycle_key=$(traffic_guard_current_cycle_key "${CYCLE_DAY:-1}")
 
-    echo -e "开关状态 : ${GREEN}${ENABLED:-0}${PLAIN}  timer: ${timer_state}/${service_state}"
-    echo -e "监控网卡 : ${CYAN}${IFACE:-未知}${PLAIN}"
-    echo -e "计费模式 : ${CYAN}$(traffic_guard_mode_label "${MODE:-tx}")${PLAIN}"
-    echo -e "本周期   : ${CYAN}${cycle_key}${PLAIN} 起，配置为每月 ${CYCLE_DAY:-1} 日重置（短月份按最后一天）"
-    echo -e "阈值     : ${YELLOW}${LIMIT_GB:-未知}GB${PLAIN} ($(traffic_guard_human_bytes "$limit"))"
-    echo -e "达量动作 : ${RED}$(traffic_guard_action_label "${ACTION:-poweroff}")${PLAIN}"
+    echo -e "$(localized_text "开关状态 : ${GREEN}${ENABLED:-0}${PLAIN}  timer: ${timer_state}/${service_state}" "Switch status: ${GREEN}${ENABLED:-0}${PLAIN} timer: ${timer_state}/${service_state}" "Статус переключателя: ${GREEN}${ENABLED:-0}${PLAIN}, таймер: ${timer_state}/${service_state}")"
+    echo -e "$(localized_text "监控网卡 : ${CYAN}${IFACE:-未知}${PLAIN}" "Monitored interface: ${CYAN}${IFACE:-未知}${PLAIN}" "Контролируемый сетевой интерфейс: ${CYAN}${IFACE:-未知}${PLAIN}")"
+    echo -e "$(localized_text "计费模式 : ${CYAN}$(traffic_guard_mode_label "${MODE:-tx}")${PLAIN}" "Billing mode: ${CYAN}$(traffic_guard_mode_label \"${MODE:-tx}\")${PLAIN}" "Режим выставления счетов: ${CYAN}$(traffic_guard_mode_label \"${MODE:-tx}\")${PLAIN}")"
+    echo -e "$(localized_text "本周期   : ${CYAN}${cycle_key}${PLAIN} 起，配置为每月 ${CYCLE_DAY:-1} 日重置（短月份按最后一天）" "This cycle: Starting from ${CYAN}${cycle_key}${PLAIN}, it is configured to be reset on ${CYCLE_DAY:-1} every month (short months are reset on the last day)" "Этот цикл: Начиная с ${CYAN}${cycle_key}${PLAIN}, он настроен на сброс в ${CYCLE_DAY:-1} каждый месяц (короткие месяцы сбрасываются в последний день).")"
+    echo -e "$(localized_text "阈值     : ${YELLOW}${LIMIT_GB:-未知}GB${PLAIN} ($(traffic_guard_human_bytes "$limit"))" "Threshold: ${YELLOW}${LIMIT_GB:-未知}GB${PLAIN} ($(traffic_guard_human_bytes \"$limit\"))" "Порог: ${YELLOW}${LIMIT_GB:-未知}GB${PLAIN} ($(traffic_guard_human_bytes \"$limit\"))")"
+    echo -e "$(localized_text "达量动作 : ${RED}$(traffic_guard_action_label "${ACTION:-poweroff}")${PLAIN}" "Limit action: ${RED}$(traffic_guard_action_label \"${ACTION:-poweroff}\")${PLAIN}" "Действие при достижении лимита: ${RED}$(traffic_guard_action_label \"${ACTION:-poweroff}\")${PLAIN}")"
     if [[ "${ACTION:-}" == "ssh-only" ]]; then
-        echo -e "保留 SSH : ${CYAN}${SSH_PORT:-未知}/tcp${PLAIN}；下个重置周期会自动移除临时封锁规则"
+        echo -e "$(localized_text "保留 SSH : ${CYAN}${SSH_PORT:-未知}/tcp${PLAIN}；下个重置周期会自动移除临时封锁规则" "Reserved SSH: ${CYAN}${SSH_PORT:-未知}/tcp${PLAIN}; the temporary blocking rule will be automatically removed in the next reset cycle" "Зарезервировано SSH: ${CYAN}${SSH_PORT:-未知}/tcp${PLAIN}; правило временной блокировки будет автоматически удалено при следующем цикле сброса")"
     fi
-    echo -e "本周期已用 : ${GREEN}$(traffic_guard_human_bytes "$usage")${PLAIN} / ${pct}%（按基线和初始已用实时估算）"
+    echo -e "$(localized_text "本周期已用 : ${GREEN}$(traffic_guard_human_bytes "$usage")${PLAIN} / ${pct}%（按基线和初始已用实时估算）" "Used this billing cycle: ${GREEN}$(traffic_guard_human_bytes \"$usage\")${PLAIN} / ${pct}% (estimated from the baseline and initial usage)" "Использовано за расчётный период: ${GREEN}$(traffic_guard_human_bytes \"$usage\")${PLAIN} / ${pct}% (оценка по базовому и начальному значениям)")"
     if [[ "$state_usage" =~ ^[0-9]+$ && "$state_usage" != "$usage" ]]; then
-        echo -e "状态记录 : ${YELLOW}$(traffic_guard_human_bytes "$state_usage")${PLAIN}（上次检查写入）"
+        echo -e "$(localized_text "状态记录 : ${YELLOW}$(traffic_guard_human_bytes "$state_usage")${PLAIN}（上次检查写入）" "Status record: ${YELLOW}$(traffic_guard_human_bytes \"$state_usage\")${PLAIN} (last check write)" "Запись состояния: ${YELLOW}$(traffic_guard_human_bytes \"$state_usage\")${PLAIN} (последняя проверка записи)")"
     fi
     if [[ "$live_rx" =~ ^[0-9]+$ && "$live_tx" =~ ^[0-9]+$ ]]; then
-        echo -e "本周期方向 : RX ${CYAN}$(traffic_guard_human_bytes "$live_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$live_tx")${PLAIN}（已减基线并包含初始已用）"
+        echo -e "$(localized_text "本周期方向 : RX ${CYAN}$(traffic_guard_human_bytes "$live_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$live_tx")${PLAIN}（已减基线并包含初始已用）" "Direction of this cycle: RX ${CYAN}$(traffic_guard_human_bytes \"$live_rx\")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes \"$live_tx\")${PLAIN} (baseline reduced and includes initial used)" "Направление этого цикла: RX ${CYAN}$(traffic_guard_human_bytes \"$live_rx\")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes \"$live_tx\")${PLAIN} (базовый уровень уменьшен и включает первоначально использованный)")"
     fi
-    echo -e "预警线   : ${WARN_PERCENT:-90}%  动作: ${ACTION:-poweroff}"
+    echo -e "$(localized_text "预警线   : ${WARN_PERCENT:-90}%  动作: ${ACTION:-poweroff}" "Warning line: ${WARN_PERCENT:-90}% Action: ${ACTION:-poweroff}" "Строка предупреждения: ${WARN_PERCENT:-90}% Действие: ${ACTION:-poweroff}")"
     if traffic_guard_valid_iface "${IFACE:-}"; then
         mapfile -t current_stats < <(traffic_guard_read_stats "$IFACE")
         current_rx="${current_stats[0]:-0}"
         current_tx="${current_stats[1]:-0}"
-        echo -e "网卡原始计数 : RX ${CYAN}$(traffic_guard_human_bytes "$current_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$current_tx")${PLAIN}（自开机累计，不等于本周期已用）"
-        echo -e "${BLUE}说明：保护触发只看“本周期已用”；原始计数只用于计算差量，开机久时可能明显更大。${PLAIN}"
+        echo -e "$(localized_text "网卡原始计数 : RX ${CYAN}$(traffic_guard_human_bytes "$current_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$current_tx")${PLAIN}（自开机累计，不等于本周期已用）" "Raw interface counters: RX ${CYAN}$(traffic_guard_human_bytes \"$current_rx\")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes \"$current_tx\")${PLAIN} (since boot; not billing-cycle usage)" "Исходные счётчики интерфейса: RX ${CYAN}$(traffic_guard_human_bytes \"$current_rx\")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes \"$current_tx\")${PLAIN} (с момента загрузки; это не расход за расчётный период)")"
+        echo -e "$(localized_text "${BLUE}说明：保护触发只看“本周期已用”；原始计数只用于计算差量，开机久时可能明显更大。${PLAIN}" "${BLUE}The protection threshold uses only the current billing-cycle usage. Raw counters are used only to calculate deltas and may be much larger after a long uptime.${PLAIN}" "${BLUE}Порог защиты учитывает только трафик за текущий расчётный период. Исходные счётчики нужны лишь для расчёта разницы и могут быть значительно больше после длительной работы.${PLAIN}")"
     fi
-    echo -e "配置文件 : ${CYAN}${TRAFFIC_GUARD_CONFIG}${PLAIN}"
-    echo -e "日志文件 : ${CYAN}${TRAFFIC_GUARD_LOG}${PLAIN}"
+    echo -e "$(localized_text "配置文件 : ${CYAN}${TRAFFIC_GUARD_CONFIG}${PLAIN}" "Configuration file: ${CYAN}${TRAFFIC_GUARD_CONFIG}${PLAIN}" "Файл конфигурации: ${CYAN}${TRAFFIC_GUARD_CONFIG}${PLAIN}")"
+    echo -e "$(localized_text "日志文件 : ${CYAN}${TRAFFIC_GUARD_LOG}${PLAIN}" "Log file: ${CYAN}${TRAFFIC_GUARD_LOG}${PLAIN}" "Файл журнала: ${CYAN}${TRAFFIC_GUARD_LOG}${PLAIN}")"
 
     state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
     if [[ -r "$state_file" ]]; then
-        last_checked=$(traffic_guard_state_last_checked_at 2>/dev/null || echo "未知")
-        echo -e "最近检查 : ${CYAN}${last_checked}${PLAIN}"
+        last_checked=$(traffic_guard_state_last_checked_at 2>/dev/null || echo "$(localized_text "未知" "unknown" "неизвестно")")
+        echo -e "$(localized_text "最近检查 : ${CYAN}${last_checked}${PLAIN}" "Last checked: ${CYAN}${last_checked}${PLAIN}" "Последняя проверка: ${CYAN}${last_checked}${PLAIN}")"
         state_age=$(traffic_guard_state_age_seconds 2>/dev/null || echo "")
         stale_threshold=$(traffic_guard_stale_threshold_seconds)
         if [[ "$state_age" =~ ^[0-9]+$ && "$state_age" -gt "$stale_threshold" ]]; then
-            echo -e "${RED}异常提示 : 最近检查已超过 ${state_age}s，timer 显示 active 也不能代表检查器真的在刷新。请用本菜单 [7] 立即同步/验证；如失败再用 [6] 重装 timer。${PLAIN}"
+            echo -e "$(localized_text "${RED}异常提示 : 最近检查已超过 ${state_age}s，timer 显示 active 也不能代表检查器真的在刷新。请用本菜单 [7] 立即同步/验证；如失败再用 [6] 重装 timer。${PLAIN}" "${RED}Exception prompt: The recent check has exceeded ${state_age}s, and the timer showing active does not mean that the checker is really refreshing. Please use this menu [7] to synchronize/verify immediately; if it fails, use [6] to reinstall the timer.${PLAIN}" "${RED}Подсказка об исключении : недавняя проверка превысила значение ${state_age}, и активный таймер не означает, что программа проверки действительно обновляется. Используйте это меню [7] для немедленной синхронизации/проверки; если это не помогло, используйте [6], чтобы переустановить таймер.${PLAIN}")"
         fi
     else
-        echo -e "${YELLOW}尚未生成状态文件，timer 首次运行后会自动初始化基线。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}尚未生成状态文件，timer 首次运行后会自动初始化基线。${PLAIN}" "${YELLOW}Has not generated a status file, and the timer will automatically initialize the baseline after running it for the first time.${PLAIN}" "${YELLOW}не создал файл состояния, и таймер автоматически инициализирует базовые показатели после первого запуска.${PLAIN}")"
     fi
 }
 
 sync_traffic_guard_now() {
     load_traffic_guard_config || {
-        echo -e "${YELLOW}尚未配置流量达量保护。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}尚未配置流量达量保护。${PLAIN}" "${YELLOW}Has not configured traffic volume protection.${PLAIN}" "${YELLOW}не настроил защиту объема трафика.${PLAIN}")"
         pause_return
         return 1
     }
 
     if [[ "${ACTION:-poweroff}" == "poweroff" ]]; then
-        confirm_danger "立即运行一次流量保护检查器" \
-            "会立刻读取 ${IFACE:-当前网卡} 流量并刷新 ${TRAFFIC_GUARD_STATE_DIR}/state；如果已经超过阈值，会按当前配置执行 poweroff。" \
-            "如只是 timer 未刷新，可在同步失败后查看诊断上下文并重新修复 timer；如阈值配置错误，请先停用或重设基线。" \
-            "当前低于阈值时这是最直接的同步方式；接近阈值时请先确认云厂商后台流量。" || return 1
+        confirm_danger "$(localized_text "立即运行一次流量保护检查器" "Run a traffic protection checker now" "Запустите проверку защиты трафика прямо сейчас")" \
+            "$(localized_text "会立刻读取 ${IFACE:-当前网卡} 流量并刷新 ${TRAFFIC_GUARD_STATE_DIR}/state；如果已经超过阈值，会按当前配置执行 poweroff。" "${IFACE:-当前网卡} traffic will be read immediately and ${TRAFFIC_GUARD_STATE_DIR}/state will be refreshed; if the threshold has been exceeded, poweroff will be performed according to the current configuration." "Трафик ${IFACE:-当前网卡} будет прочитан немедленно, а ${TRAFFIC_GUARD_STATE_DIR}/state будет обновлен; если порог превышен, выключение будет выполнено в соответствии с текущей конфигурацией.")" \
+            "$(localized_text "如只是 timer 未刷新，可在同步失败后查看诊断上下文并重新修复 timer；如阈值配置错误，请先停用或重设基线。" "If only the timer is not refreshed, you can check the diagnostic context and repair the timer after the synchronization fails; if the threshold is configured incorrectly, please disable or reset the baseline first." "Если не обновляется только таймер, вы можете проверить диагностический контекст и восстановить таймер после сбоя синхронизации; Если порог настроен неправильно, сначала отключите или сбросьте базовый уровень.")" \
+            "$(localized_text "当前低于阈值时这是最直接的同步方式；接近阈值时请先确认云厂商后台流量。" "When the current value is lower than the threshold, this is the most direct synchronization method; when it is close to the threshold, please first confirm the background traffic of the cloud provider." "Когда текущее значение ниже порогового значения, это самый прямой метод синхронизации; когда оно приближается к пороговому значению, сначала подтвердите фоновый трафик облачного провайдера.")" || return 1
     else
-        confirm_risk_action "立即运行一次流量保护检查器" \
-            "会立刻读取 ${IFACE:-当前网卡} 流量并刷新 ${TRAFFIC_GUARD_STATE_DIR}/state。" \
-            "同步失败时查看诊断上下文，或重新修复 timer。" \
-            "当前 ACTION=${ACTION:-log}，达到阈值时只按配置动作执行。" || return 1
+        confirm_risk_action "$(localized_text "立即运行一次流量保护检查器" "Run a traffic protection checker now" "Запустите проверку защиты трафика прямо сейчас")" \
+            "$(localized_text "会立刻读取 ${IFACE:-当前网卡} 流量并刷新 ${TRAFFIC_GUARD_STATE_DIR}/state。" "The ${IFACE:-当前网卡} traffic will be read immediately and ${TRAFFIC_GUARD_STATE_DIR}/state will be refreshed." "Трафик ${IFACE:-当前网卡} будет прочитан немедленно, а ${TRAFFIC_GUARD_STATE_DIR}/state будет обновлен.")" \
+            "$(localized_text "同步失败时查看诊断上下文，或重新修复 timer。" "Check the diagnostic context when synchronization fails, or repair the timer again." "Проверьте диагностический контекст в случае сбоя синхронизации или снова восстановите таймер.")" \
+            "$(localized_text "当前 ACTION=${ACTION:-log}，达到阈值时只按配置动作执行。" "Currently ACTION=${ACTION:-log}, when the threshold is reached, only the configured action will be executed." "В настоящее время ACTION=${ACTION:-log}, при достижении порога будет выполнено только настроенное действие.")" || return 1
     fi
 
-    echo -e "${CYAN}▶ 正在立即运行 vps-traffic-guard-check 并验证状态刷新...${PLAIN}"
+    echo -e "$(localized_text "${CYAN}▶ 正在立即运行 vps-traffic-guard-check 并验证状态刷新...${PLAIN}" "${CYAN}▶ Running vps-traffic-guard-check now and verifying status refresh...${PLAIN}" "${CYAN}▶ Запускаем vps-traffic-guard-check и проверяем обновление статуса...${PLAIN}")"
     if traffic_guard_run_checker_once; then
         show_traffic_guard_status
         return 0
@@ -1497,54 +1497,54 @@ sync_traffic_guard_now() {
 configure_traffic_guard() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "网络/内核优化 > 配置流量达量保护"
-    echo -e "${BOLD}🧯 配置流量达量保护${PLAIN}"
+    print_breadcrumb "$(localized_text "网络/内核优化 > 配置流量达量保护" "Network/Kernel Optimization > Configure Traffic Volume Protection" "Оптимизация сети/ядра > Настройка защиты объема трафика")"
+    echo -e "$(localized_text "${BOLD}🧯 配置流量达量保护${PLAIN}" "${BOLD}🧯 Configure traffic volume protection${PLAIN}" "${BOLD}🧯 Настройка защиты объема трафика${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}用途：定时读取网卡流量，达到阈值后自动关机，避免超额流量产生账单。${PLAIN}"
-    echo -e "${YELLOW}注意：脚本只能按本机网卡计数估算，云厂商后台统计可能有延迟或口径差异，请留安全余量。${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}用途：定时读取网卡流量，达到阈值后自动关机，避免超额流量产生账单。${PLAIN}" "${YELLOW}Purpose: Read the network card traffic regularly and automatically shut down after reaching the threshold to avoid excessive traffic bills.${PLAIN}" "${YELLOW}Назначение: регулярно считывать трафик сетевой карты и автоматически отключаться после достижения порогового значения, чтобы избежать чрезмерных счетов за трафик.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}注意：脚本只能按本机网卡计数估算，云厂商后台统计可能有延迟或口径差异，请留安全余量。${PLAIN}" "${YELLOW}Note: The script can only be estimated based on the local network card count. The cloud vendor's background statistics may have delays or caliber differences, so please leave a safety margin.${PLAIN}" "${YELLOW}Примечание. Сценарий можно оценить только на основе количества локальных сетевых карт. Справочная статистика поставщика облачных услуг может иметь задержки или различия в калибре, поэтому оставляйте запас прочности.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local default_iface iface limit_gb limit_bytes initial_used_gb initial_used_bytes
     local cycle_day cycle_default_day warn_percent action_choice action mode_choice mode interval ssh_port=""
     local current_stats current_rx current_tx detected_used_bytes detected_used_gb existing_used_bytes
     default_iface=$(traffic_guard_detect_iface)
-    iface=$(ask_with_default "监控网卡（自动推荐活跃公网网卡）" "${default_iface:-eth0}")
+    iface=$(ask_with_default "$(localized_text "监控网卡（自动推荐活跃公网网卡）" "Network interface to monitor (active public interface is suggested automatically)" "Сетевой интерфейс для контроля (активный публичный интерфейс предлагается автоматически)")" "${default_iface:-eth0}")
     if ! traffic_guard_valid_iface "$iface"; then
-        echo -e "${RED}❌ 网卡 ${iface} 不存在或无法读取统计数据。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 网卡 ${iface} 不存在或无法读取统计数据。${PLAIN}" "${RED}❌ Network card ${iface} does not exist or the statistics cannot be read.${PLAIN}" "${RED}❌ Сетевая карта ${iface} не существует или невозможно прочитать статистику.${PLAIN}")"
         pause_return
         return 1
     fi
     mapfile -t current_stats < <(traffic_guard_read_stats "$iface")
     current_rx="${current_stats[0]:-0}"
     current_tx="${current_stats[1]:-0}"
-    echo -e "${GREEN}✅ 已选择网卡：${iface}${PLAIN}"
-    echo -e "当前网卡原始计数（自开机累计，仅用于建立基线）：RX ${CYAN}$(traffic_guard_human_bytes "$current_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$current_tx")${PLAIN}"
-    echo -e "${YELLOW}说明：系统只能读取本机网卡计数；配置后会从当前计数建立基线，云厂商账单口径可能不同，请优先参考云后台并留余量。${PLAIN}"
+    echo -e "$(localized_text "${GREEN}✅ 已选择网卡：${iface}${PLAIN}" "${GREEN}✅ Network card selected: ${iface}${PLAIN}" "${GREEN}Выбрана сетевая карта: ${iface}${PLAIN}")"
+    echo -e "$(localized_text "当前网卡原始计数（自开机累计，仅用于建立基线）：RX ${CYAN}$(traffic_guard_human_bytes "$current_rx")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes "$current_tx")${PLAIN}" "Current interface counters (since boot; used only to establish the baseline): RX ${CYAN}$(traffic_guard_human_bytes \"$current_rx\")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes \"$current_tx\")${PLAIN}" "Текущие счётчики интерфейса (с момента загрузки; только для создания базового уровня): RX ${CYAN}$(traffic_guard_human_bytes \"$current_rx\")${PLAIN} / TX ${CYAN}$(traffic_guard_human_bytes \"$current_tx\")${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}说明：系统只能读取本机网卡计数；配置后会从当前计数建立基线，云厂商账单口径可能不同，请优先参考云后台并留余量。${PLAIN}" "${YELLOW}Description: The system can only read the local network card count; after configuration, a baseline will be established from the current count. The billing caliber of cloud vendors may be different. Please refer to the cloud background first and leave a margin.${PLAIN}" "${YELLOW}Описание: Система может только считывать количество локальных сетевых карт; после настройки базовый уровень будет установлен на основе текущего количества. Уровень выставления счетов у поставщиков облачных услуг может быть разным. Пожалуйста, сначала обратитесь к фону облаков и оставьте запас.${PLAIN}")"
 
     while true; do
-        limit_gb=$(ask_with_default "本周期流量阈值 GB（建议填套餐的 80%-95%）" "900")
+        limit_gb=$(ask_with_default "$(localized_text "本周期流量阈值 GB（建议填套餐的 80%-95%）" "Traffic threshold for this cycle GB (it is recommended to fill in 80%-95% of the package)" "Порог трафика для этого цикла ГБ (рекомендуется заполнить 80%-95% пакета)")" "900")
         if limit_bytes=$(traffic_guard_gb_to_bytes "$limit_gb" 2>/dev/null); then
             break
         fi
-        echo -e "${RED}❌ 阈值无效，请输入大于 0 的数字，例如 900 或 0.5。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 阈值无效，请输入大于 0 的数字，例如 900 或 0.5。${PLAIN}" "${RED}❌ Invalid threshold, please enter a number greater than 0, such as 900 or 0.5.${PLAIN}" "${RED}❌ Неверный порог. Введите число больше 0, например 900 или 0,5.${PLAIN}")"
     done
 
     while true; do
         cycle_default_day=$(date +%d)
         cycle_default_day=$((10#$cycle_default_day))
-        cycle_day=$(ask_with_default "每月套餐/账单重置日 1-31（短月份自动按最后一天）" "$cycle_default_day")
+        cycle_day=$(ask_with_default "$(localized_text "每月套餐/账单重置日 1-31（短月份自动按最后一天）" "Monthly package/bill reset date 1-31 (short months automatically reset to the last day)" "Дата сброса ежемесячного пакета/счета 1–31 (короткие месяцы автоматически сбрасываются до последнего дня)")" "$cycle_default_day")
         if [[ "$cycle_day" =~ ^[0-9]+$ ]] && (( 10#$cycle_day >= 1 && 10#$cycle_day <= 31 )); then
             break
         fi
-        echo -e "${RED}❌ 重置日只支持 1-31。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 重置日只支持 1-31。${PLAIN}" "${RED}❌ The reset date only supports 1-31.${PLAIN}" "${RED}❌ Дата сброса поддерживается только в диапазоне от 1 до 31.${PLAIN}")"
     done
 
-    echo -e "计费模式："
-    echo -e "  1. 出站 TX 计费"
-    echo -e "  2. 出入总量 RX+TX"
-    echo -e "  3. 任一方向达量"
-    echo -e "  4. 入站 RX 计费"
-    read_trimmed mode_choice "请选择计费模式 (默认 1): "
+    echo -e "$(localized_text "计费模式：" "Billing model:" "Модель выставления счетов:")"
+    echo -e "$(localized_text "  1. 出站 TX 计费" "1. Outbound TX billing" "1. Биллинг за исходящую передачу")"
+    echo -e "$(localized_text "  2. 出入总量 RX+TX" "2. Total deposits and withdrawals RX+TX" "2. Общая сумма депозитов и снятий RX+TX")"
+    echo -e "$(localized_text "  3. 任一方向达量" "3. Amount in any direction" "3. Сумма в любую сторону")"
+    echo -e "$(localized_text "  4. 入站 RX 计费" "4. Inbound RX billing" "4. Биллинг входящего приема")"
+    read_trimmed mode_choice "$(localized_text "请选择计费模式 (默认 1): " "Please select billing mode (default 1):" "Пожалуйста, выберите режим выставления счетов (по умолчанию 1):")"
     case "${mode_choice:-1}" in
         2) mode="total" ;;
         3) mode="max" ;;
@@ -1556,46 +1556,46 @@ configure_traffic_guard() {
     detected_used_gb=$(traffic_guard_bytes_to_gb "$detected_used_bytes")
     existing_used_bytes=$(traffic_guard_existing_state_usage "$iface" "$mode" "$cycle_day" 2>/dev/null || true)
     if [[ "$existing_used_bytes" =~ ^[0-9]+$ && "$existing_used_bytes" != "$detected_used_bytes" ]]; then
-        echo -e "检测到已有保护状态已用：${YELLOW}$(traffic_guard_human_bytes "$existing_used_bytes")${PLAIN}"
-        echo -e "${YELLOW}本次重新配置默认按当前网卡原始计数估算，启用后会重置基线，避免旧状态误导。${PLAIN}"
+        echo -e "$(localized_text "检测到已有保护状态已用：${YELLOW}$(traffic_guard_human_bytes "$existing_used_bytes")${PLAIN}" "Detected that the existing protection status has been used: ${YELLOW}$(traffic_guard_human_bytes \"$existing_used_bytes\")${PLAIN}" "Обнаружено, что использован существующий статус защиты: ${YELLOW}$(traffic_guard_human_bytes \"$existing_used_bytes\")${PLAIN}.")"
+        echo -e "$(localized_text "${YELLOW}本次重新配置默认按当前网卡原始计数估算，启用后会重置基线，避免旧状态误导。${PLAIN}" "${YELLOW}This reconfiguration defaults to the original count of the current network card. After being enabled, the baseline will be reset to avoid misleading the old status.${PLAIN}" "${YELLOW}При этой реконфигурации по умолчанию используется исходный счетчик текущей сетевой карты. После включения базовый уровень будет сброшен, чтобы не вводить в заблуждение старый статус.${PLAIN}")"
     fi
-    echo -e "默认初始已用按当前网卡原始计数和计费模式估算：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}（默认可直接回车）"
-    echo -e "${YELLOW}如果云厂商后台显示不同，请手动覆盖这里的 GB 数值。${PLAIN}"
+    echo -e "$(localized_text "默认初始已用按当前网卡原始计数和计费模式估算：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}（默认可直接回车）" "The default initial usage is estimated based on the original count and billing mode of the current network card: ${CYAN}$(traffic_guard_human_bytes \"$detected_used_bytes\")${PLAIN} (you can press Enter directly by default)" "Первоначальное использование по умолчанию оценивается на основе исходного количества и режима выставления счетов текущей сетевой карты: ${CYAN}$(traffic_guard_human_bytes \"$detected_used_bytes\")${PLAIN} (по умолчанию вы можете нажать Enter напрямую)")"
+    echo -e "$(localized_text "${YELLOW}如果云厂商后台显示不同，请手动覆盖这里的 GB 数值。${PLAIN}" "${YELLOW}If the cloud provider background display is different, please manually overwrite the GB value here.${PLAIN}" "${YELLOW}Если фоновое отображение облачного провайдера отличается, вручную перезапишите здесь значение ГБ.${PLAIN}")"
     while true; do
-        initial_used_gb=$(ask_with_default "本周期已用流量 GB" "$detected_used_gb")
+        initial_used_gb=$(ask_with_default "$(localized_text "本周期已用流量 GB" "Traffic used in this cycle GB" "Трафик, использованный в этом цикле, ГБ")" "$detected_used_gb")
         if initial_used_bytes=$(traffic_guard_gb_to_bytes_zero_ok "$initial_used_gb" 2>/dev/null); then
             break
         fi
-        echo -e "${RED}❌ 已用流量无效，请输入不小于 0 的数字。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 已用流量无效，请输入不小于 0 的数字。${PLAIN}" "${RED}❌ The used traffic is invalid, please enter a number not less than 0.${PLAIN}" "${RED}❌ Использованный трафик недействителен, введите число не меньше 0.${PLAIN}")"
     done
 
     while true; do
-        warn_percent=$(ask_with_default "预警百分比 1-99" "90")
+        warn_percent=$(ask_with_default "$(localized_text "预警百分比 1-99" "Warning percentage 1-99" "Процент предупреждений 1-99")" "90")
         if [[ "$warn_percent" =~ ^[0-9]+$ ]] && (( 10#$warn_percent >= 1 && 10#$warn_percent <= 99 )); then
             break
         fi
-        echo -e "${RED}❌ 预警百分比无效。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 预警百分比无效。${PLAIN}" "${RED}❌ The warning percentage is invalid.${PLAIN}" "${RED}❌ Недопустимый процент предупреждения.${PLAIN}")"
     done
 
-    interval=$(ask_with_default "检查间隔秒数（最低 30，默认 60）" "60")
+    interval=$(ask_with_default "$(localized_text "检查间隔秒数（最低 30，默认 60）" "Number of seconds between checks (minimum 30, default 60)" "Количество секунд между проверками (минимум 30, по умолчанию 60)")" "60")
     if ! [[ "$interval" =~ ^[0-9]+$ ]] || (( 10#$interval < 30 )); then
         interval=60
     fi
 
-    echo -e "触发动作："
-    echo -e "  1. 立即关机 ${YELLOW}(防止继续产生流量费用)${PLAIN}"
-    echo -e "  2. 仅保留 SSH 端口 ${YELLOW}(封锁其他公网业务流量，到重置日自动恢复)${PLAIN}"
-    echo -e "  3. 只写日志 ${YELLOW}(测试配置，不关机)${PLAIN}"
-    read_trimmed action_choice "请选择触发动作 (默认 1): "
+    echo -e "$(localized_text "触发动作：" "Trigger action:" "Триггерное действие:")"
+    echo -e "$(localized_text "  1. 立即关机 ${YELLOW}(防止继续产生流量费用)${PLAIN}" "1. Shut down immediately ${YELLOW}(to prevent continued traffic charges)${PLAIN}" "1. Немедленно выключите ${YELLOW}(во избежание продолжения оплаты трафика)${PLAIN}")"
+    echo -e "$(localized_text "  2. 仅保留 SSH 端口 ${YELLOW}(封锁其他公网业务流量，到重置日自动恢复)${PLAIN}" "2. Only reserve SSH port ${YELLOW}(block other public business traffic and automatically restore on the reset date)${PLAIN}" "2. Зарезервируйте только порт SSH ${YELLOW}(блокируйте другой бизнес-трафик публичной сети и автоматически восстанавливайте его в дату сброса)${PLAIN}")"
+    echo -e "$(localized_text "  3. 只写日志 ${YELLOW}(测试配置，不关机)${PLAIN}" "3. Only write log ${YELLOW}(test configuration, do not shut down)${PLAIN}" "3. Записывать только журнал ${YELLOW}(тестовая конфигурация, не выключать)${PLAIN}")"
+    read_trimmed action_choice "$(localized_text "请选择触发动作 (默认 1): " "Please select a trigger action (default 1):" "Пожалуйста, выберите действие триггера (по умолчанию 1):")"
     case "${action_choice:-1}" in
         2)
             traffic_guard_ssh_only_firewall_supported || {
-                echo -e "${RED}❌ 缺少 iptables，或启用 IPv6 时缺少 ip6tables，无法安全启用仅保留 SSH 模式。${PLAIN}"
+                echo -e "$(localized_text "${RED}❌ 缺少 iptables，或启用 IPv6 时缺少 ip6tables，无法安全启用仅保留 SSH 模式。${PLAIN}" "${RED}❌ Missing iptables, or missing ip6tables when enabling IPv6, cannot safely enable SSH-only mode.${PLAIN}" "${RED}❌ Отсутствие iptables или отсутствие ip6tables при включении IPv6 не позволяет безопасно включить режим только SSH.${PLAIN}")"
                 pause_return
                 return 1
             }
             ssh_port=$(traffic_guard_detect_ssh_port) || {
-                echo -e "${RED}❌ 未检测到唯一可用的 SSH 监听端口，无法安全启用仅保留 SSH 模式。${PLAIN}"
+                echo -e "$(localized_text "${RED}❌ 未检测到唯一可用的 SSH 监听端口，无法安全启用仅保留 SSH 模式。${PLAIN}" "${RED}❌ The only available listening port for SSH is not detected, and SSH-only mode cannot be safely enabled.${PLAIN}" "${RED}❌ Единственный доступный порт прослушивания для SSH не обнаружен, и режим только SSH не может быть безопасно включен.${PLAIN}")"
                 pause_return
                 return 1
             }
@@ -1606,33 +1606,33 @@ configure_traffic_guard() {
     esac
 
     echo -e "------------------------------------------------"
-    echo -e "网卡：${CYAN}${iface}${PLAIN}"
-    echo -e "阈值：${YELLOW}${limit_gb}GB${PLAIN}，本周期初始已用：${initial_used_gb}GB"
-    echo -e "模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}"
-    echo -e "周期：每月 ${cycle_day} 日重置（短月份按最后一天）；检查间隔：${interval}s；预警：${warn_percent}%"
-    echo -e "动作：${RED}$(traffic_guard_action_label "$action")${PLAIN}"
-    [[ "$action" == "ssh-only" ]] && echo -e "保留 SSH：${CYAN}${ssh_port}/tcp${PLAIN}；其余公网业务流量会被临时封锁，必要网络控制流量仍保留。"
+    echo -e "$(localized_text "网卡：${CYAN}${iface}${PLAIN}" "Network card: ${CYAN}${iface}${PLAIN}" "Сетевая карта: ${CYAN}${iface}${PLAIN}")"
+    echo -e "$(localized_text "阈值：${YELLOW}${limit_gb}GB${PLAIN}，本周期初始已用：${initial_used_gb}GB" "Threshold: ${YELLOW}${limit_gb}GB${PLAIN}, initially used in this cycle: ${initial_used_gb}GB" "Порог: ${YELLOW}${limit_gb}GB${PLAIN}, первоначально используемый в этом цикле: ${initial_used_gb}GB")"
+    echo -e "$(localized_text "模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}" "Mode: ${CYAN}$(traffic_guard_mode_label \"$mode\")${PLAIN}" "Режим: ${CYAN}$(traffic_guard_mode_label \"$mode\")${PLAIN}")"
+    echo -e "$(localized_text "周期：每月 ${cycle_day} 日重置（短月份按最后一天）；检查间隔：${interval}s；预警：${warn_percent}%" "Period: ${cycle_day} daily reset every month (short months are based on the last day); check interval: ${interval}s; early warning: ${warn_percent}%" "Период: ${cycle_day} ежедневно сбрасывается каждый месяц (короткие месяцы основаны на последнем дне); интервал проверки: ${interval}s; раннее предупреждение: ${warn_percent}%")"
+    echo -e "$(localized_text "动作：${RED}$(traffic_guard_action_label "$action")${PLAIN}" "Action: ${RED}$(traffic_guard_action_label \"$action\")${PLAIN}" "Действие: ${RED}$(traffic_guard_action_label \"$action\")${PLAIN}")"
+    [[ "$action" == "ssh-only" ]] && echo -e "$(localized_text "保留 SSH：${CYAN}${ssh_port}/tcp${PLAIN}；其余公网业务流量会被临时封锁，必要网络控制流量仍保留。" "Reserved SSH: ${CYAN}${ssh_port}/tcp${PLAIN}; other public business traffic will be temporarily blocked, and necessary network control traffic will still be retained." "Зарезервировано SSH: ${CYAN}${ssh_port}/tcp${PLAIN}; другой бизнес-трафик публичной сети будет временно заблокирован, а необходимый трафик управления сетью по-прежнему будет сохраняться.")"
 
     if [[ "$action" == "poweroff" ]]; then
-        confirm_danger "启用流量达量自动关机" \
-            "安装 vps-traffic-guard systemd timer；达到阈值会执行 systemctl poweroff。" \
-            "从云厂商控制台手动开机；开机后进入本菜单调整阈值、重置基线或停用保护。" \
-            "建议阈值低于套餐上限，并确认云厂商后台流量口径。" || return 1
+        confirm_danger "$(localized_text "启用流量达量自动关机" "Enable automatic shutdown when traffic reaches high volume" "Включить автоматическое отключение, когда трафик достигает большого объема")" \
+            "$(localized_text "安装 vps-traffic-guard systemd timer；达到阈值会执行 systemctl poweroff。" "Install vps-traffic-guard systemd timer; systemctl poweroff will be executed when the threshold is reached." "Установите таймер vps-traffic-guard systemd; systemctl poweroff будет выполнен при достижении порога.")" \
+            "$(localized_text "从云厂商控制台手动开机；开机后进入本菜单调整阈值、重置基线或停用保护。" "Manually boot from the cloud vendor console; after booting, enter this menu to adjust the threshold, reset the baseline, or disable protection." "Загрузка вручную из консоли поставщика облака; после загрузки войдите в это меню, чтобы настроить пороговое значение, сбросить базовый уровень или отключить защиту.")" \
+            "$(localized_text "建议阈值低于套餐上限，并确认云厂商后台流量口径。" "It is recommended that the threshold be lower than the upper limit of the package and confirm the backend traffic caliber of the cloud vendor." "Рекомендуется, чтобы порог был ниже верхнего предела пакета и подтверждал уровень внутреннего трафика поставщика облака.")" || return 1
     elif [[ "$action" == "ssh-only" ]]; then
-        confirm_danger "启用达量后仅保留 SSH" \
-            "达到阈值后，保留 ${ssh_port}/tcp 的 SSH 和必要网络控制流量；其他公网业务流量会被临时封锁。" \
-            "下个账单重置日自动解除封锁；也可在本菜单重置基线或停用保护来立即解除。" \
-            "SSH 端口必须保持可用；云厂商安全组和 SSH 服务异常仍可能导致无法登录。" || return 1
+        confirm_danger "$(localized_text "启用达量后仅保留 SSH" "After enabling the amount, only SSH will be retained." "После включения суммы сохранится только SSH.")" \
+            "$(localized_text "达到阈值后，保留 ${ssh_port}/tcp 的 SSH 和必要网络控制流量；其他公网业务流量会被临时封锁。" "After reaching the threshold, SSH and necessary network control traffic of ${ssh_port}/tcp are retained; other public business traffic will be temporarily blocked." "После достижения порога SSH и необходимый трафик управления сетью ${ssh_port}/tcp сохраняются; другой бизнес-трафик публичной сети будет временно заблокирован.")" \
+            "$(localized_text "下个账单重置日自动解除封锁；也可在本菜单重置基线或停用保护来立即解除。" "The block will be automatically unblocked on the next bill reset date; you can also reset the baseline or disable protection in this menu to unblock it immediately." "Блокировка будет автоматически разблокирована в следующую дату обнуления счета; вы также можете сбросить базовый уровень или отключить защиту в этом меню, чтобы немедленно разблокировать ее.")" \
+            "$(localized_text "SSH 端口必须保持可用；云厂商安全组和 SSH 服务异常仍可能导致无法登录。" "The SSH port must remain available; abnormalities in the cloud vendor security group and SSH service may still result in the inability to log in." "Порт SSH должен оставаться доступным; отклонения в группе безопасности поставщика облака и службе SSH по-прежнему могут приводить к невозможности входа в систему.")" || return 1
     fi
 
     traffic_guard_restore_ssh_only_firewall || {
-        echo -e "${RED}❌ 无法解除上一周期的仅保留 SSH 封锁规则，已取消重新配置。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 无法解除上一周期的仅保留 SSH 封锁规则，已取消重新配置。${PLAIN}" "${RED}❌ Unable to unblock the previous cycle's keep-only SSH blocking rule, reconfiguration canceled.${PLAIN}" "${RED}❌ Невозможно разблокировать правило блокировки SSH предыдущего цикла только для сохранения, реконфигурация отменена.${PLAIN}")"
         pause_return
         return 1
     }
 
     write_traffic_guard_config "$iface" "$mode" "$limit_gb" "$limit_bytes" "$cycle_day" "$warn_percent" "$action" "$initial_used_gb" "$initial_used_bytes" "$interval" "$ssh_port" || {
-        echo -e "${RED}❌ 写入配置失败。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 写入配置失败。${PLAIN}" "${RED}❌ Failed to write configuration.${PLAIN}" "${RED}❌ Не удалось записать конфигурацию.${PLAIN}")"
         pause_return
         return 1
     }
@@ -1641,20 +1641,20 @@ configure_traffic_guard() {
         return 1
     }
     traffic_guard_write_state_baseline "$iface" "$cycle_day" "$initial_used_bytes" "$mode" || {
-        echo -e "${RED}❌ 写入流量保护基线失败。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 写入流量保护基线失败。${PLAIN}" "${RED}❌ Failed to write traffic protection baseline.${PLAIN}" "${RED}❌ Не удалось записать базовый уровень защиты трафика.${PLAIN}")"
         pause_return
         return 1
     }
     install_traffic_guard_units "$interval" || {
-        echo -e "${RED}❌ 启用 systemd timer 失败，请检查 systemd 状态。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 启用 systemd timer 失败，请检查 systemd 状态。${PLAIN}" "${RED}❌ Failed to enable systemd timer, please check systemd status.${PLAIN}" "${RED}❌ Не удалось включить таймер systemd, проверьте статус systemd.${PLAIN}")"
         pause_return
         return 1
     }
 
     /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || true
     reset_traffic_guard_failed_state
-    echo -e "${GREEN}✅ 流量达量保护已启用。${PLAIN}"
-    echo -e "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}"
+    echo -e "$(localized_text "${GREEN}✅ 流量达量保护已启用。${PLAIN}" "${GREEN}✅ Traffic volume protection is enabled.${PLAIN}" "${GREEN}✅ Включена защита объема трафика.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}The status can be viewed in this menu [2]; log: ${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}Статус можно просмотреть в этом меню [2]; журнал: ${TRAFFIC_GUARD_LOG}${PLAIN}")"
     pause_return
 }
 
@@ -1662,7 +1662,7 @@ reset_traffic_guard_baseline() {
     local iface mode cycle_day initial_used_gb initial_used_bytes
     local detected_used_bytes detected_used_gb
     load_traffic_guard_config || {
-        echo -e "${YELLOW}尚未配置流量达量保护。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}尚未配置流量达量保护。${PLAIN}" "${YELLOW}Has not configured traffic volume protection.${PLAIN}" "${YELLOW}не настроил защиту объема трафика.${PLAIN}")"
         pause_return
         return 1
     }
@@ -1670,43 +1670,43 @@ reset_traffic_guard_baseline() {
     mode="${MODE:-tx}"
     cycle_day="${CYCLE_DAY:-1}"
     traffic_guard_valid_iface "$iface" || {
-        echo -e "${RED}❌ 当前配置的网卡 ${iface} 不可读。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 当前配置的网卡 ${iface} 不可读。${PLAIN}" "${RED}❌ The currently configured network card ${iface} is unreadable.${PLAIN}" "${RED}❌ Текущая настроенная сетевая карта ${iface} не читается.${PLAIN}")"
         pause_return
         return 1
     }
     detected_used_bytes=$(traffic_guard_detect_initial_used_bytes "$iface" "$mode" "$cycle_day")
     detected_used_gb=$(traffic_guard_bytes_to_gb "$detected_used_bytes")
-    echo -e "默认初始已用按当前网卡原始计数和计费模式估算：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}"
-    initial_used_gb=$(ask_with_default "重置后本周期已用流量 GB" "$detected_used_gb")
+    echo -e "$(localized_text "默认初始已用按当前网卡原始计数和计费模式估算：${CYAN}$(traffic_guard_human_bytes "$detected_used_bytes")${PLAIN}" "The default initial usage is estimated based on the original count and billing mode of the current network card: ${CYAN}$(traffic_guard_human_bytes \"$detected_used_bytes\")${PLAIN}" "Первоначальное использование по умолчанию оценивается на основе исходного счетчика и режима выставления счетов текущей сетевой карты: ${CYAN}$(traffic_guard_human_bytes \"$detected_used_bytes\")${PLAIN}.")"
+    initial_used_gb=$(ask_with_default "$(localized_text "重置后本周期已用流量 GB" "Used traffic GB in this cycle after reset" "Использовано ГБ трафика в этом цикле после сброса")" "$detected_used_gb")
     if ! initial_used_bytes=$(traffic_guard_gb_to_bytes_zero_ok "$initial_used_gb" 2>/dev/null); then
-        echo -e "${RED}❌ 已用流量无效。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 已用流量无效。${PLAIN}" "${RED}❌ The used traffic is invalid.${PLAIN}" "${RED}❌ Используемый трафик недействителен.${PLAIN}")"
         pause_return
         return 1
     fi
-    confirm_risk_action "重置流量保护基线" \
-        "本周期统计会从当前网卡计数重新开始，初始已用设置为 ${initial_used_gb}GB。" \
-        "重新进入本菜单再次重置基线，或参考云厂商后台手动修正已用流量。" \
-        "请只在账单周期开始、刚配置完成或确认云厂商统计后执行。" || return 1
+    confirm_risk_action "$(localized_text "重置流量保护基线" "Reset traffic protection baseline" "Сбросить базовый уровень защиты трафика")" \
+        "$(localized_text "本周期统计会从当前网卡计数重新开始，初始已用设置为 ${initial_used_gb}GB。" "Statistics for this cycle will restart from the current network card count, and the initial used setting is ${initial_used_gb}GB." "Статистика для этого цикла будет перезапущена с текущего количества сетевых карт, а исходная используемая настройка — ${initial_used_gb}GB.")" \
+        "$(localized_text "重新进入本菜单再次重置基线，或参考云厂商后台手动修正已用流量。" "Re-enter this menu to reset the baseline again, or refer to the cloud provider's backend to manually correct the used traffic." "Повторно войдите в это меню, чтобы снова сбросить базовый уровень, или обратитесь к серверной части поставщика облачных услуг, чтобы вручную скорректировать использованный трафик.")" \
+        "$(localized_text "请只在账单周期开始、刚配置完成或确认云厂商统计后执行。" "Please only execute it at the beginning of the billing cycle, after the configuration has just been completed, or after confirming the cloud provider's statistics." "Пожалуйста, выполняйте его только в начале платежного цикла, после завершения настройки или после подтверждения статистики облачного провайдера.")" || return 1
 
     traffic_guard_restore_ssh_only_firewall || {
-        echo -e "${RED}❌ 无法解除仅保留 SSH 封锁规则，未重置统计基线。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 无法解除仅保留 SSH 封锁规则，未重置统计基线。${PLAIN}" "${RED}❌ Unable to unblock only SSH blocking rule, the statistical baseline is not reset.${PLAIN}" "${RED}❌ Невозможно разблокировать только правило блокировки SSH, базовый статистический показатель не сбрасывается.${PLAIN}")"
         pause_return
         return 1
     }
     traffic_guard_write_state_baseline "$iface" "$cycle_day" "$initial_used_bytes" "$mode" || {
-        echo -e "${RED}❌ 写入流量保护基线失败。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 写入流量保护基线失败。${PLAIN}" "${RED}❌ Failed to write traffic protection baseline.${PLAIN}" "${RED}❌ Не удалось записать базовый уровень защиты трафика.${PLAIN}")"
         pause_return
         return 1
     }
-    echo -e "${GREEN}✅ 已重置 ${iface} 的流量统计基线。${PLAIN}"
-    echo -e "当前模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}；本周期已用：$(traffic_guard_human_bytes "$initial_used_bytes")"
+    echo -e "$(localized_text "${GREEN}✅ 已重置 ${iface} 的流量统计基线。${PLAIN}" "${GREEN}✅ The traffic statistics baseline of ${iface} has been reset.${PLAIN}" "${GREEN}✅ Базовая статистика трафика ${iface} была сброшена.${PLAIN}")"
+    echo -e "$(localized_text "当前模式：${CYAN}$(traffic_guard_mode_label "$mode")${PLAIN}；本周期已用：$(traffic_guard_human_bytes "$initial_used_bytes")" "Current mode: ${CYAN}$(traffic_guard_mode_label \"$mode\")${PLAIN}; used in this cycle: $(traffic_guard_human_bytes \"$initial_used_bytes\")" "Текущий режим: ${CYAN}$(traffic_guard_mode_label \"$mode\")${PLAIN}; используется в этом цикле: $(traffic_guard_human_bytes \"$initial_used_bytes\")")"
     pause_return
 }
 
 repair_traffic_guard_timer() {
     local interval
     load_traffic_guard_config || {
-        echo -e "${YELLOW}尚未配置流量达量保护。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}尚未配置流量达量保护。${PLAIN}" "${YELLOW}Has not configured traffic volume protection.${PLAIN}" "${YELLOW}не настроил защиту объема трафика.${PLAIN}")"
         pause_return
         return 1
     }
@@ -1716,15 +1716,15 @@ repair_traffic_guard_timer() {
     fi
 
     if [[ "${ACTION:-poweroff}" == "poweroff" ]]; then
-        confirm_danger "修复流量保护自动检查 timer" \
-            "会重新安装 vps-traffic-guard-check 和 systemd timer，恢复后会按 ${interval}s 周期检查。" \
-            "如果当前实时估算已经达到阈值，下一次检查可能会执行 systemctl poweroff。" \
-            "请先确认云厂商后台流量、阈值和当前 SSH/控制台救援方式。" || return 1
+        confirm_danger "$(localized_text "修复流量保护自动检查 timer" "Fix traffic protection automatic check timer" "Исправить таймер автоматической проверки защиты трафика")" \
+            "$(localized_text "会重新安装 vps-traffic-guard-check 和 systemd timer，恢复后会按 ${interval}s 周期检查。" "vps-traffic-guard-check and systemd timer will be reinstalled, and they will be checked at the ${interval}s period after recovery." "vps-traffic-guard-check и таймер systemd будут переустановлены, и после восстановления они будут проверены в период ${interval}s.")" \
+            "$(localized_text "如果当前实时估算已经达到阈值，下一次检查可能会执行 systemctl poweroff。" "If the current live estimate has reached the threshold, the next check may perform a systemctl poweroff." "Если текущая оперативная оценка достигла порога, следующая проверка может выполнить отключение systemctl.")" \
+            "$(localized_text "请先确认云厂商后台流量、阈值和当前 SSH/控制台救援方式。" "Please first confirm the cloud provider's background traffic, threshold and current SSH/console rescue method." "Сначала подтвердите фоновый трафик облачного провайдера, пороговое значение и текущий метод восстановления SSH/консоли.")" || return 1
     else
-        confirm_risk_action "修复流量保护自动检查 timer" \
-            "会重新安装 vps-traffic-guard-check 和 systemd timer，恢复后会按 ${interval}s 周期检查。" \
-            "当前动作是 ${ACTION:-log}，达到阈值时只按配置动作执行。" \
-            "修复后请回到状态页确认最近检查时间开始刷新。" || return 1
+        confirm_risk_action "$(localized_text "修复流量保护自动检查 timer" "Fix traffic protection automatic check timer" "Исправить таймер автоматической проверки защиты трафика")" \
+            "$(localized_text "会重新安装 vps-traffic-guard-check 和 systemd timer，恢复后会按 ${interval}s 周期检查。" "vps-traffic-guard-check and systemd timer will be reinstalled, and they will be checked at the ${interval}s period after recovery." "vps-traffic-guard-check и таймер systemd будут переустановлены, и после восстановления они будут проверены в период ${interval}s.")" \
+            "$(localized_text "当前动作是 ${ACTION:-log}，达到阈值时只按配置动作执行。" "The current action is ${ACTION:-log}. When the threshold is reached, only the configured action will be executed." "Текущее действие — ${ACTION:-log}. При достижении порогового значения будет выполнено только настроенное действие.")" \
+            "$(localized_text "修复后请回到状态页确认最近检查时间开始刷新。" "After repair, please return to the status page to confirm that the last check time has started to refresh." "После ремонта вернитесь на страницу состояния и убедитесь, что время последней проверки начало обновляться.")" || return 1
     fi
 
     traffic_guard_install_checker_or_report || {
@@ -1732,39 +1732,39 @@ repair_traffic_guard_timer() {
         return 1
     }
     install_traffic_guard_units "$interval" || {
-        echo -e "${RED}❌ 启用 systemd timer 失败，请检查 systemd 状态。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 启用 systemd timer 失败，请检查 systemd 状态。${PLAIN}" "${RED}❌ Failed to enable systemd timer, please check systemd status.${PLAIN}" "${RED}❌ Не удалось включить таймер systemd, проверьте статус systemd.${PLAIN}")"
         pause_return
         return 1
     }
     systemctl restart vps-traffic-guard.timer >/dev/null 2>&1 || true
     reset_traffic_guard_failed_state
-    echo -e "${GREEN}✅ 已重装并重启 vps-traffic-guard.timer。${PLAIN}"
-    echo -e "${CYAN}▶ 正在立即运行一次检查器，验证状态文件是否刷新...${PLAIN}"
+    echo -e "$(localized_text "${GREEN}✅ 已重装并重启 vps-traffic-guard.timer。${PLAIN}" "${GREEN}✅ vps-traffic-guard.timer has been reinstalled and restarted.${PLAIN}" "${GREEN}вещество vps-traffic-guard.timer переустановлено и перезапущено.${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}▶ 正在立即运行一次检查器，验证状态文件是否刷新...${PLAIN}" "${CYAN}▶ Running a checker immediately to verify whether the status file is refreshed...${PLAIN}" "${CYAN}▶ Немедленный запуск проверки, чтобы проверить, обновлен ли файл состояния...${PLAIN}")"
     if traffic_guard_run_checker_once; then
-        echo -e "${GREEN}✅ 已重装 timer，并确认检查器可以刷新状态。${PLAIN}"
+        echo -e "$(localized_text "${GREEN}✅ 已重装 timer，并确认检查器可以刷新状态。${PLAIN}" "${GREEN}✅ Timer has been reinstalled and the checker has been confirmed to refresh the status.${PLAIN}" "${GREEN}✅ Таймер переустановлен и чекером подтверждено обновление статуса.${PLAIN}")"
     else
-        echo -e "${RED}❌ timer 已重装，但检查器仍未刷新状态。下面是可直接排查的上下文：${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ timer 已重装，但检查器仍未刷新状态。下面是可直接排查的上下文：${PLAIN}" "${RED}❌ timer has been reinstalled, but the checker still has not refreshed status. The following is the context that can be directly investigated:${PLAIN}" "${RED}Таймер ❌ переустановлен, но статус чекера все еще не обновился. Ниже приводится контекст, который можно непосредственно исследовать:.${PLAIN}")"
         traffic_guard_print_timer_failure_context
         pause_return
         return 1
     fi
-    echo -e "${YELLOW}后续可回到 [2] 查看状态；如果再次过期，用 [7] 可立即验证检查器。${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}后续可回到 [2] 查看状态；如果再次过期，用 [7] 可立即验证检查器。${PLAIN}" "${YELLOW}Can return to [2] to check the status later; if it expires again, use [7] to verify the checker immediately.${PLAIN}" "${YELLOW}может вернуться к [2], чтобы позже проверить статус; если срок его действия снова истечет, используйте [7] для немедленной проверки чекера.${PLAIN}")"
     systemctl list-timers --all vps-traffic-guard.timer --no-pager 2>/dev/null || true
     pause_return
 }
 
 disable_traffic_guard() {
     if ! systemctl list-unit-files vps-traffic-guard.timer >/dev/null 2>&1 && [[ ! -f "$TRAFFIC_GUARD_CONFIG" ]]; then
-        echo -e "${YELLOW}未检测到流量保护配置。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}未检测到流量保护配置。${PLAIN}" "${YELLOW}No traffic protection configuration detected.${PLAIN}" "${YELLOW}Конфигурация защиты трафика не обнаружена.${PLAIN}")"
         pause_return
         return 0
     fi
-    confirm_risk_action "停用流量达量保护" \
-        "vps-traffic-guard.timer 会停止，达到流量阈值后不再执行配置的动作。" \
-        "重新进入本菜单选择 [1] 启用保护。" \
-        "停用后请自行监控云厂商流量，避免超额账单。" || return 1
+    confirm_risk_action "$(localized_text "停用流量达量保护" "Disable traffic volume protection" "Отключить защиту объема трафика")" \
+        "$(localized_text "vps-traffic-guard.timer 会停止，达到流量阈值后不再执行配置的动作。" "vps-traffic-guard.timer will stop and will no longer perform configured actions after the traffic threshold is reached." "vps-traffic-guard.timer остановится и больше не будет выполнять настроенные действия после достижения порога трафика.")" \
+        "$(localized_text "重新进入本菜单选择 [1] 启用保护。" "Re-enter this menu and select [1] to enable protection." "Снова войдите в это меню и выберите [1], чтобы включить защиту.")" \
+        "$(localized_text "停用后请自行监控云厂商流量，避免超额账单。" "After deactivation, please monitor the cloud provider's traffic yourself to avoid excessive bills." "После деактивации следите за трафиком облачного провайдера самостоятельно, чтобы избежать чрезмерных счетов.")" || return 1
     traffic_guard_restore_ssh_only_firewall || {
-        echo -e "${RED}❌ 无法解除仅保留 SSH 封锁规则，未停用保护。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 无法解除仅保留 SSH 封锁规则，未停用保护。${PLAIN}" "${RED}❌ Unable to unblock only SSH blocking rule, protection is not disabled.${PLAIN}" "${RED}❌ Невозможно разблокировать только правило блокировки SSH, защита не отключена.${PLAIN}")"
         pause_return
         return 1
     }
@@ -1774,7 +1774,7 @@ disable_traffic_guard() {
     if [[ -f "$TRAFFIC_GUARD_CONFIG" ]]; then
         sed -i 's/^ENABLED=.*/ENABLED=0/' "$TRAFFIC_GUARD_CONFIG" 2>/dev/null || true
     fi
-    echo -e "${GREEN}✅ 已停用流量达量保护，配置文件仍保留：${TRAFFIC_GUARD_CONFIG}${PLAIN}"
+    echo -e "$(localized_text "${GREEN}✅ 已停用流量达量保护，配置文件仍保留：${TRAFFIC_GUARD_CONFIG}${PLAIN}" "${GREEN}✅ Traffic volume protection has been disabled, the configuration file remains: ${TRAFFIC_GUARD_CONFIG}${PLAIN}" "${GREEN}✅ Защита объема трафика отключена, файл конфигурации остался: ${TRAFFIC_GUARD_CONFIG}${PLAIN}")"
     pause_return
 }
 
@@ -1782,25 +1782,25 @@ func_traffic_guard_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "网络/内核优化 > 流量达量保护"
-        echo -e "${BOLD}🧯 流量达量保护${PLAIN}"
+        print_breadcrumb "$(localized_text "网络/内核优化 > 流量达量保护" "Network/Kernel Optimization > Traffic Volume Protection" "Оптимизация сети/ядра > Защита объема трафика")"
+        echo -e "$(localized_text "${BOLD}🧯 流量达量保护${PLAIN}" "${BOLD}🧯 Traffic volume protection${PLAIN}" "${BOLD}🧯 Защита объема трафика${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}达到套餐安全阈值后可自动关机或仅保留 SSH，优先防止刷流量造成天价账单。${PLAIN}"
-        echo -e "${YELLOW}推荐阈值低于云厂商套餐上限，并按出站 TX 或总量模式保守配置。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}达到套餐安全阈值后可自动关机或仅保留 SSH，优先防止刷流量造成天价账单。${PLAIN}" "${YELLOW}After reaches the package security threshold, it can automatically shut down or only keep SSH, giving priority to preventing excessive traffic from causing sky-high bills.${PLAIN}" "${YELLOW}После того, как достигает порога безопасности пакета, он может автоматически отключиться или оставить только SSH, отдавая приоритет предотвращению чрезмерного трафика, вызывающего заоблачные счета.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}推荐阈值低于云厂商套餐上限，并按出站 TX 或总量模式保守配置。${PLAIN}" "${YELLOW}The recommended threshold for is lower than the upper limit of the cloud vendor's package, and is configured conservatively in outbound TX or total mode.${PLAIN}" "${YELLOW}Рекомендуемый порог для ниже верхнего предела пакета поставщика облака и настраивается консервативно в исходящей передаче или общем режиме.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 配置 / 启用保护${PLAIN}"
-        echo -e "${GREEN}  2. 查看状态与已用量${PLAIN}"
-        echo -e "${GREEN}  3. 重置本周期统计基线${PLAIN}"
-        echo -e "${YELLOW}  4. 停用保护${PLAIN}"
-        echo -e "${GREEN}  5. 查看最近日志${PLAIN}"
-        echo -e "${GREEN}  6. 修复/重装自动检查 timer${PLAIN}"
-        echo -e "${GREEN}  7. 立即同步/验证检查器${PLAIN}"
+        echo -e "$(localized_text "${GREEN}  1. 配置 / 启用保护${PLAIN}" "${GREEN}1. Configure / enable protection${PLAIN}" "${GREEN}1. Настроить/включить защиту${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 查看状态与已用量${PLAIN}" "${GREEN}2. Check the status and usage${PLAIN}" "${GREEN}2. Проверьте состояние и использование.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 重置本周期统计基线${PLAIN}" "${GREEN}3. Reset the statistical baseline of this period${PLAIN}" "${GREEN}3. Сброс статистической базовой линии за этот период${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}  4. 停用保护${PLAIN}" "${YELLOW}4. Disable protection${PLAIN}" "${YELLOW}4. Отключить защиту${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 查看最近日志${PLAIN}" "${GREEN}5. View the latest log${PLAIN}" "${GREEN}5. Просмотр последнего журнала${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  6. 修复/重装自动检查 timer${PLAIN}" "${GREEN}6. Repair/reinstall automatic check timer${PLAIN}" "${GREEN}6. Отремонтируйте/переустановите таймер автоматической проверки${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. 立即同步/验证检查器${PLAIN}" "${GREEN}7. Immediate synchronization/verification checker${PLAIN}" "${GREEN}7. Немедленная проверка синхронизации/проверки${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
+        echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "👉 请选择操作: "
+        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
         case "$choice" in
             1) configure_traffic_guard ;;
             2) show_traffic_guard_status; pause_return ;;
@@ -1808,13 +1808,13 @@ func_traffic_guard_menu() {
             4) disable_traffic_guard ;;
             5)
                 echo -e "${CYAN}--- ${TRAFFIC_GUARD_LOG} ---${PLAIN}"
-                tail -n 30 "$TRAFFIC_GUARD_LOG" 2>/dev/null || echo "暂无日志"
+                tail -n 30 "$TRAFFIC_GUARD_LOG" 2>/dev/null || echo "$(localized_text "暂无日志" "No logs yet" "Журналов пока нет")"
                 pause_return
                 ;;
             6) repair_traffic_guard_timer ;;
             7) sync_traffic_guard_now; pause_return ;;
             0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac
     done
 }

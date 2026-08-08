@@ -114,20 +114,20 @@ check_script_update_status() {
     if latest=$(fetch_latest_script_version) && latest_sha256=$(fetch_latest_script_sha256); then
         if version_is_newer "$latest" "$SCRIPT_VERSION"; then
             status="available"
-            message="发现新版本 ${latest}"
+            message="$(localized_text "发现新版本 ${latest}" "Found new version ${latest}" "Нашёл новую версию ${latest}")"
         elif [[ -n "$current_sha256" && "$current_sha256" != "$latest_sha256" ]]; then
             status="available"
-            message="检测到同版本内容更新"
+            message="$(localized_text "检测到同版本内容更新" "Content updates of the same version detected" "Обнаружены обновления контента той же версии")"
         else
             status="current"
-            message="当前脚本内容已是最新"
+            message="$(localized_text "当前脚本内容已是最新" "The current script content is up to date" "Текущее содержимое сценария актуально.")"
         fi
         write_script_update_cache "$status" "$latest" "$latest_sha256" "$message"
         printf '%s|%s\n' "$status" "$latest"
         return 0
     fi
 
-    write_script_update_cache "error" "unknown" "unknown" "无法检查更新"
+    write_script_update_cache "error" "unknown" "unknown" "$(localized_text "无法检查更新" "Unable to check for updates" "Невозможно проверить наличие обновлений")"
     printf 'error|unknown\n'
 }
 
@@ -147,9 +147,9 @@ print_auto_update_notice() {
             elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
                 echo -e " ${BOLD}${YELLOW}Update:${PLAIN} ${CYAN}${latest}${PLAIN} is available; enter ${YELLOW}u${PLAIN} to update."
             elif [[ "$latest" == "$SCRIPT_VERSION" ]]; then
-                echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN} 的内容更新，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
+                echo -e "$(localized_text " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN} 的内容更新，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。" "${BOLD}${YELLOW}Update prompt:${PLAIN} detects the content update of ${CYAN}${latest}${PLAIN}. Enter ${YELLOW}U${PLAIN} to update the current script." "Запрос на обновление ${BOLD}${YELLOW}:${PLAIN} обнаруживает обновление содержимого ${CYAN}${latest}${PLAIN}. Введите ${YELLOW}u${PLAIN}, чтобы обновить текущий скрипт.")"
             else
-                echo -e " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。"
+                echo -e "$(localized_text " ${BOLD}${YELLOW}更新提示:${PLAIN} 检测到 ${CYAN}${latest}${PLAIN}，输入 ${YELLOW}u${PLAIN} 可更新当前脚本。" "${BOLD}${YELLOW}Update prompt:${PLAIN} detects ${CYAN}${latest}${PLAIN}. Enter ${YELLOW}U${PLAIN} to update the current script." "${BOLD}${YELLOW}Приглашение к обновлению:${PLAIN} обнаруживает ${CYAN}${latest}${PLAIN}. Введите ${YELLOW}u${PLAIN}, чтобы обновить текущий скрипт.")"
             fi
             ;;
         current)
@@ -165,24 +165,24 @@ func_update_script() {
     clear
     local tmp_file
     tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh) || {
-        echo -e "${RED}❌ 临时文件创建失败，更新已取消。${PLAIN}"
-        read -n 1 -s -r -p "按任意键返回..."
+        echo -e "$(localized_text "${RED}❌ 临时文件创建失败，更新已取消。${PLAIN}" "${RED}❌ Temporary file creation failed, update canceled.${PLAIN}" "${RED}❌ Не удалось создать временный файл, обновление отменено.${PLAIN}")"
+        read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
         return 1
     }
-    echo -e "${CYAN}👉 正在从 GitHub 源地址拉取最新版本...${PLAIN}"
+    echo -e "$(localized_text "${CYAN}👉 正在从 GitHub 源地址拉取最新版本...${PLAIN}" "${CYAN}👉 Pulling the latest version from the GitHub source address...${PLAIN}" "${CYAN}👉 Получение последней версии с исходного адреса GitHub...${PLAIN}")"
     if download_verified_update_script "$tmp_file" \
         && grep -q "func_sni_stack_quick_menu" "$tmp_file" 2>/dev/null \
         && grep -q "main_menu" "$tmp_file" 2>/dev/null \
         && ! grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' "$tmp_file" 2>/dev/null \
-        && copy_shortcut_candidate "$tmp_file" /usr/local/bin/cy "已验证更新脚本"; then
+        && copy_shortcut_candidate "$tmp_file" /usr/local/bin/cy "$(localized_text "已验证更新脚本" "Verified update script" "Проверенный скрипт обновления")"; then
         rm -f "$tmp_file" "$SCRIPT_UPDATE_CACHE"
-        echo -e "${GREEN}✅ 更新下载并覆盖完成！正在重启面板...${PLAIN}"
+        echo -e "$(localized_text "${GREEN}✅ 更新下载并覆盖完成！正在重启面板...${PLAIN}" "${GREEN}✅ Update download and coverage completed! Restarting panel...${PLAIN}" "${GREEN}✅ Загрузка обновления и покрытие завершены! Перезапуск панели...${PLAIN}")"
         sleep 1
         exec bash /usr/local/bin/cy
     else
         rm -f "$tmp_file"
-        echo -e "${RED}❌ 更新失败：下载、脚本标识、语法或 sha256 校验未全部通过。${PLAIN}"
-        read -n 1 -s -r -p "按任意键返回..."
+        echo -e "$(localized_text "${RED}❌ 更新失败：下载、脚本标识、语法或 sha256 校验未全部通过。${PLAIN}" "${RED}❌ Update failed: The download, script identifier, syntax, or sha256 check did not all pass.${PLAIN}" "${RED}❌ Обновление не выполнено: проверка загрузки, идентификатора сценария, синтаксиса или sha256 не прошла успешно.${PLAIN}")"
+        read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
     fi
 }
 

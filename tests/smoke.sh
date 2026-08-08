@@ -271,8 +271,10 @@ assert_dist_contains '15. Tailscale 组网' "Basic components menu must include 
 assert_dist_contains 'https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh' "Release script must include the FLVX installer."
 assert_dist_contains 'https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh' "Release script must include the EasyTier installer."
 assert_dist_contains 'https://tailscale.com/install.sh' "Release script must include the Tailscale installer."
-assert_function_body_contains src/environment.sh func_env_install '13) run_remote_script "安装 FLVX 哆啦转发面板" "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh"' "FLVX menu entry must use the selected project installer."
-assert_function_body_contains src/environment.sh func_env_install '14) run_remote_script "安装 EasyTier 组网" "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh" install' "EasyTier menu entry must use the official installer."
+assert_function_body_contains src/environment.sh func_env_install '13) run_remote_script "$(localized_text "安装 FLVX 哆啦转发面板"' "FLVX menu entry must localize the selected project installer label."
+assert_function_body_contains src/environment.sh func_env_install 'https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh' "FLVX menu entry must use the selected project installer."
+assert_function_body_contains src/environment.sh func_env_install '14) run_remote_script "$(localized_text "安装 EasyTier 组网"' "EasyTier menu entry must localize the official installer label."
+assert_function_body_contains src/environment.sh func_env_install 'https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh" install' "EasyTier menu entry must use the official installer."
 assert_function_body_contains src/environment.sh func_env_install '15)' "Tailscale menu entry must be wired."
 assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [13 FLVX 哆啦转发面板]' "Config paths doc must document the FLVX menu path."
 assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [14 EasyTier 组网]' "Config paths doc must document the EasyTier menu path."
@@ -281,6 +283,7 @@ assert_function_body_contains src/health_dashboard.sh health_show_failed_unit_lo
 assert_function_body_contains src/health_dashboard.sh func_health_service_recovery_menu 'l. 查看服务日志' "Health recovery menu must use a clear Chinese log label."
 (
     CYAN='' GREEN='' YELLOW='' RED='' BLUE='' PLAIN=''
+    source src/language.sh
     source src/input.sh
     source src/health_dashboard.sh
     collect_failed_service_units() { printf '%s\n' caddy.service nginx.service; }
@@ -303,8 +306,8 @@ assert_dist_contains '# Module: firewall.sh' "Release script must include src/fi
 assert_dist_contains 'func_port_connlimit_menu' "Release script is missing the port connlimit menu."
 assert_dist_contains 'VPSO_CONN_LIMIT_PORT_' "Release script is missing the connlimit rule marker."
 assert_dist_contains 'func_save_port_connlimit_persistence' "Release script is missing the connlimit persistence save action."
-assert_dist_contains 'auto_save_port_connlimit_persistence_after_change "添加规则"' "Adding connlimit rules must trigger automatic persistence refresh."
-assert_dist_contains 'auto_save_port_connlimit_persistence_after_change "删除规则"' "Deleting connlimit rules must trigger automatic persistence refresh."
+assert_dist_contains 'auto_save_port_connlimit_persistence_after_change "$(localized_text "添加规则"' "Adding connlimit rules must trigger automatic persistence refresh."
+assert_dist_contains 'auto_save_port_connlimit_persistence_after_change "$(localized_text "删除规则"' "Deleting connlimit rules must trigger automatic persistence refresh."
 assert_dist_contains 'netfilter-persistent save' "Release script must use the existing netfilter-persistent save path for connlimit persistence."
 assert_dist_contains '/etc/iptables/rules.v4' "Release script must verify the IPv4 persistent rules file."
 assert_dist_contains '/etc/sysconfig/iptables' "Release script must support the existing RHEL iptables-services persistence file."
@@ -443,9 +446,9 @@ while IFS= read -r function_name; do
 done <<< "$expected_entry_mode_shadow_functions"
 assert_file_contains src/README.md '443/TCP Peek ownership:' "Source README must document 443/TCP Peek module ownership."
 assert_file_contains src/README.md 'Do not reintroduce split shadow modules' "Source README must warn against stale split 443/TCP Peek modules."
-assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites 'read_trimmed choice "👉 请输入菜单编号或 ?: "' "443 Web/SNI submenu must prompt for a menu number or help."
-assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile 'read_trimmed choice "👉 请输入菜单编号或 ?: "' "443 shared-parameter submenu must prompt for a menu number or help."
-assert_function_body_contains src/menus.sh func_sni_stack_quick_menu 'read_trimmed sni_choice "👉 请输入菜单编号或 ?: "' "443 single-entry menu must prompt for a menu number or help."
+assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '请输入菜单编号或 ?: ' "443 Web/SNI submenu must prompt for a menu number or help."
+assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '请输入菜单编号或 ?: ' "443 shared-parameter submenu must prompt for a menu number or help."
+assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '请输入菜单编号或 ?: ' "443 single-entry menu must prompt for a menu number or help."
 assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '"?"|help) show_sni_help; pause_return; continue ;;' "443 Web/SNI submenu must accept ? help."
 assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '"?"|help) show_sni_help; pause_return; continue ;;' "443 shared-parameter submenu must accept ? help."
 assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '"?"|help) show_sni_help; pause_return; continue ;;' "443 single-entry menu must accept ? help."
@@ -479,6 +482,7 @@ if grep -En "$dangerous_patterns" dist/vps.sh dog.sh; then
     exit 1
 fi
 
+source src/language.sh
 source src/common.sh
 vps_smoke_script_version="$SCRIPT_VERSION"
 (
@@ -754,7 +758,7 @@ assert_file_contains src/preflight.sh 'command -v sudo >/dev/null 2>&1 || cmd_mi
 assert_file_contains src/preflight.sh '▶ [1/9] 检查系统运行状态' "Preflight progress must consistently use nine checks."
 assert_file_not_contains src/preflight.sh '[1/8]' "Preflight progress must not keep the stale eight-step denominator."
 assert_function_body_contains src/preflight.sh func_preflight_check 'return 1' "Preflight must return failure when blocking errors remain."
-assert_function_body_contains src/system_core.sh func_base_init 'failed_steps+=("系统软件包更新")' "Base init must preserve package update failures."
+assert_function_body_contains src/system_core.sh func_base_init 'failed_steps+=("$(localized_text "系统软件包更新"' "Base init must preserve package update failures."
 assert_function_body_contains src/system_core.sh func_base_init 'BBR 状态验证' "Base init must verify BBR runtime state before reporting success."
 assert_function_body_contains src/menus.sh func_beginner_machine_init '预检存在异常，新机器初始化已停止' "Beginner initialization must stop when preflight fails."
 assert_function_body_contains src/menus.sh func_beginner_machine_init '已跳过：${skipped[*]}' "Beginner initialization must summarize skipped steps."
@@ -763,7 +767,7 @@ assert_function_body_contains src/firewall.sh func_firewall_manage 'systemctl en
 assert_function_body_contains src/firewall.sh func_firewall_manage 'firewall_build_minimum_plan' "Firewall enable flow must build a least-privilege plan."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'firewall_print_minimum_plan' "Firewall enable flow must preview the least-privilege plan."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'Docker 映射可能绕过普通 UFW/firewalld 规则' "Firewall plan must not imply that excluding Docker mappings closes them."
-assert_function_body_contains src/firewall.sh func_firewall_manage 'confirm_risk_action "启用防火墙并应用最小权限放行计划"' "Firewall enable flow must require confirmation after plan selection."
+assert_function_body_contains src/firewall.sh func_firewall_manage '启用防火墙并应用最小权限放行计划' "Firewall enable flow must require confirmation after plan selection."
 
 (
     source src/common.sh
@@ -1262,13 +1266,20 @@ EOF
     fi
 )
 
-assert_function_body_contains src/sni_stack_sites.sh add_sni_stack_site 'confirm_backend_target_or_continue "网站/反代后端 ${site_domain}" "$site_addr" "$site_port"' "Adding a Web backend must probe the exact target before saving."
-assert_function_body_contains src/sni_stack_sites.sh edit_sni_stack_site_backend 'confirm_backend_target_or_continue "网站/反代后端 ${domain}" "$new_addr" "$new_port"' "Editing a Web backend must probe the exact target before saving."
-assert_file_contains src/sni_stack_install.sh 'confirm_backend_target_or_continue "网站/反代后端 ${SITE_DOMAINS[$site_idx]}" "${SITE_BACKEND_ADDRS[$site_idx]}" "${SITE_BACKEND_PORTS[$site_idx]}"' "Initial 443 setup must probe configured Web backends before saving."
-assert_function_body_contains src/caddy_maintenance.sh func_caddy_cf_health_check 'probe_backend_target "    后端状态" "$backend_addr" "$backend_port"' "Caddy health must probe the configured backend address and port."
-assert_function_body_contains src/caddy_cf_checks.sh func_caddy_cf_health_check 'probe_backend_target "    后端状态" "$backend_addr" "$backend_port"' "Compatibility Caddy health must probe the configured backend address and port."
-assert_file_contains src/sni_stack_config.sh 'check_backend "网站后端 ${SITE_DOMAINS[$i]}" "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}"' "Nginx-stream health must probe configured Web backends instead of local ports."
-assert_function_body_contains src/sni_stack_health.sh sni_stack_health_check_enhanced 'probe_backend_target "网站后端 ${domain}" "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}"' "Enhanced 443 health must probe configured Web backends."
+assert_function_body_contains src/sni_stack_sites.sh add_sni_stack_site 'confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${site_domain}"' "Adding a Web backend must probe the exact target before saving."
+assert_function_body_contains src/sni_stack_sites.sh add_sni_stack_site '"$site_addr" "$site_port"' "Adding a Web backend must pass the configured address and port to the probe."
+assert_function_body_contains src/sni_stack_sites.sh edit_sni_stack_site_backend 'confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${domain}"' "Editing a Web backend must probe the exact target before saving."
+assert_function_body_contains src/sni_stack_sites.sh edit_sni_stack_site_backend '"$new_addr" "$new_port"' "Editing a Web backend must pass the configured address and port to the probe."
+assert_file_contains src/sni_stack_install.sh 'confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${SITE_DOMAINS[$site_idx]}"' "Initial 443 setup must probe configured Web backends before saving."
+assert_file_contains src/sni_stack_install.sh '"${SITE_BACKEND_ADDRS[$site_idx]}" "${SITE_BACKEND_PORTS[$site_idx]}"' "Initial 443 setup must pass the configured backend address and port to the probe."
+assert_function_body_contains src/caddy_maintenance.sh func_caddy_cf_health_check 'probe_backend_target "$(localized_text "    后端状态"' "Caddy health must probe the configured backend address and port."
+assert_function_body_contains src/caddy_maintenance.sh func_caddy_cf_health_check '"$backend_addr" "$backend_port"' "Caddy health must pass the configured backend address and port to the probe."
+assert_function_body_contains src/caddy_cf_checks.sh func_caddy_cf_health_check 'probe_backend_target "$(localized_text "    后端状态"' "Compatibility Caddy health must probe the configured backend address and port."
+assert_function_body_contains src/caddy_cf_checks.sh func_caddy_cf_health_check '"$backend_addr" "$backend_port"' "Compatibility Caddy health must pass the configured backend address and port to the probe."
+assert_file_contains src/sni_stack_config.sh 'check_backend "$(localized_text "网站后端 ${SITE_DOMAINS[$i]}"' "Nginx-stream health must probe configured Web backends instead of local ports."
+assert_file_contains src/sni_stack_config.sh '"${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}"' "Nginx-stream health must pass configured Web backend targets to the probe."
+assert_function_body_contains src/sni_stack_health.sh sni_stack_health_check_enhanced 'probe_backend_target "$(localized_text "网站后端 ${domain}"' "Enhanced 443 health must probe configured Web backends."
+assert_function_body_contains src/sni_stack_health.sh sni_stack_health_check_enhanced '"${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}"' "Enhanced 443 health must pass configured Web backend targets to the probe."
 assert_function_body_contains src/diagnostics_network.sh tcp_probe_once 'tcp_target_reachable "$host" "$port"' "Network diagnostics must reuse the shared exact-target TCP probe."
 
 assert_file_not_contains src/caddy_maintenance.sh 'reverse_proxy[[:space:]]+127.0.0.1' "Caddy health check must read the configured backend target, not only 127.0.0.1."
@@ -1737,7 +1748,7 @@ grep -q 'systemctl stop vpso-mux-preflight' dist/vps.sh
 grep -q 'tcp_probe_once' dist/vps.sh
 grep -q 'local_listen_socket_matches_probe "$host" "$port"' dist/vps.sh
 grep -q 'is_loopback_probe_host "$host"' dist/vps.sh
-grep -q 'Xray/REALITY 本地入站" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1' dist/vps.sh
+grep -q 'Xray/REALITY 本地入站" "Xray/REALITY local inbound".*" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1' dist/vps.sh
 grep -q 'nginx -T .*grep -Fq "$conf_file"' dist/vps.sh
 grep -q 'apply_nginx_stream_mode "$backup_dir"' dist/vps.sh
 grep -q 'local current_mode backup_dir planned_backup_dir assume_yes' dist/vps.sh

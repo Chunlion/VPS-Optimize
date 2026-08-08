@@ -92,7 +92,7 @@ issue_and_install_cert_for_domain() {
     fi
     prepare_acme_account "$acme_bin" "$acme_email" || return 1
     mkdir -p /etc/caddy/certs /root/cert
-    echo -e "${CYAN}▶ 正在为 ${domain} 申请 Cloudflare DNS 证书...${PLAIN}"
+    echo -e "$(localized_text "${CYAN}▶ 正在为 ${domain} 申请 Cloudflare DNS 证书...${PLAIN}" "${CYAN}▶ Applying for Cloudflare DNS certificate for ${domain}...${PLAIN}" "${CYAN}▶ Подача заявки на сертификат Cloudflare DNS для ${domain}...${PLAIN}")"
     issue_cf_dns_cert_with_retry "$domain" "$cf_token" "$acme_bin" || return 1
     "$acme_bin" --install-cert -d "$domain" --ecc \
         --fullchain-file "/etc/caddy/certs/${domain}.crt" \

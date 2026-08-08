@@ -1,40 +1,40 @@
-# VPS-Optimize 文档
+---
+layout: home
 
-VPS-Optimize 是一个面向 VPS 日常运维的 Bash 控制面板，通过 `cy` 命令集中处理系统初始化、安全加固、面板部署、443 单入口、订阅工具、备份回滚和故障排查。
+hero:
+  name: VPS-Optimize
+  text: VPS 初始化与服务器维护指南
+  tagline: 面向 VPS 初始化、系统优化、网络参数调整与服务器维护的脚本工具。
+  actions:
+    - theme: brand
+      text: 快速开始
+      link: /quick-start
+    - theme: alt
+      text: GitHub
+      link: https://github.com/Chunlion/VPS-Optimize
 
-## 快速入口
+features:
+  - title: VPS 初始化
+    details: 快速完成基础环境配置、常用工具安装、时区与软件源准备。适合新服务器上线前统一环境。
+  - title: 系统环境检测
+    details: 检测系统版本、CPU 架构、虚拟化环境、网络连通性和关键服务状态，便于运行前预检。
+  - title: 网络参数优化
+    details: 提供常见内核网络参数调整入口，辅助优化连接队列、转发、缓冲区等服务器网络表现。
+  - title: TCP 优化
+    details: 辅助配置拥塞控制算法、队列管理策略和 BBR 相关选项，适合配合快照与回滚准备使用。
+  - title: 443 单入口
+    details: 统一公网 443 入口，辅助处理面板、订阅、网站和 REALITY 节点分流，减少端口暴露和冲突。
+  - title: 维护与回滚
+    details: 提供更新、清理、状态查看、配置备份、恢复回滚和故障排查入口，用于日常维护。
+---
+
+## 常用文档
 
 | 目标 | 文档 |
 |---|---|
-| 直接安装运行 | [快速开始](quick-start.md) |
-| 运行前确认风险 | [使用前必读](docs/before-use.md) |
-| 查看支持系统 | [支持系统](docs/supported-systems.md) |
-| 更新或卸载 | [更新与卸载](docs/update-uninstall.md) |
-| 常见问题 | [常见问题](docs/faq.md) |
-
-## 443 单入口
-
-| 目标 | 文档 |
-|---|---|
-| 配置 443 单入口 | [443 单入口分流教程](docs/443-single-entry.md) |
-| 排查 443 问题 | [443 单入口排错手册](docs/443-single-entry-troubleshooting.md) |
-| 了解 TCP Peek / vpso-mux | [443 单入口技术实现](docs/443-tcp-peek-engine.md) |
-| 迁移已有服务器 | [已有服务器迁移到 443 单入口](docs/existing-server-migration.md) |
-
-## 场景教程
-
-| 场景 | 文档 |
-|---|---|
-| 3x-ui + REALITY + 443 | [3x-ui + REALITY + 443 单入口部署](tutorials/01-3x-ui-reality-443.md) |
-| 订阅工具 HTTPS 接入 | [订阅工具接入 Caddy/Nginx 反代与 443 单入口](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
-
-## 工具与维护
-
-| 目标 | 文档 |
-|---|---|
-| 查看配置路径 | [配置文件与数据目录](docs/config-paths.md) |
-| 管理订阅与节点工具 | [订阅管理与节点工具](docs/subscription-tools.md) |
-| 查看端口流量 | [端口流量狗 dog.sh](docs/dog.md) |
-| 使用 x-ui 增强套件 | [x-ui 增强套件 xui-custom-manager.sh 使用说明](docs/xui-custom-manager.md) |
+| 安装并运行 | [快速开始](quick-start.md) |
+| 配置 443 单入口 | [443 单入口](docs/443-single-entry.md) |
+| 部署 3x-ui + REALITY + 443 | [3x-ui + REALITY + 443](tutorials/01-3x-ui-reality-443.md) |
+| 接入订阅工具 | [订阅工具接入 443](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
 | 处理安全与回滚 | [安全与回滚](docs/security-rollback.md) |
-| 失联或复杂故障急救 | [失联与回滚急救手册](docs/recovery-runbook.md) |
+| 排查常见问题 | [常见问题](docs/faq.md) |

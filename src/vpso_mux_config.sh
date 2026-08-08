@@ -68,7 +68,7 @@ write_vpso_mux_config_from_sni_stack() {
     ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
     append_vpso_mux_route_yaml "$output_file" "panel" "$PANEL_DOMAIN" "$web_backend" "$ranges"
     if [[ -z "$ranges" ]]; then
-        echo -e "${YELLOW}⚠️ 面板域名 ${PANEL_DOMAIN} 当前未配置 IP 白名单；切换前请确认这是你想要的行为。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}⚠️ 面板域名 ${PANEL_DOMAIN} 当前未配置 IP 白名单；切换前请确认这是你想要的行为。${PLAIN}" "${YELLOW}⚠️ Panel domain ${PANEL_DOMAIN} currently does not have an IP whitelist configured; please confirm that this is the behavior you want before switching.${PLAIN}" "${YELLOW}⚠️ Для доменного имени панели ${PANEL_DOMAIN} в настоящее время не настроен белый список IP-адресов; перед переключением подтвердите, что это именно то поведение, которое вам нужно.${PLAIN}")"
     fi
 
     for i in "${!SITE_DOMAINS[@]}"; do
@@ -111,13 +111,13 @@ EOF
 generate_tcp_peek_config() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}重新应用 TCP Peek + Splice 配置${PLAIN}"
+    echo -e "$(localized_text "${BOLD}重新应用 TCP Peek + Splice 配置${PLAIN}" "${BOLD}Reapply TCP Peek + Splice configure${PLAIN}" "${BOLD}повторно применить TCP Peek + Splice настроить${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "${YELLOW}只生成 TCP Peek + Splice 分流规则，不改服务，不改端口，不接管 443。${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}只生成 TCP Peek + Splice 分流规则，不改服务，不改端口，不接管 443。${PLAIN}" "${YELLOW}Only generates TCP Peek + Splice routing rules, does not change the service, does not change the port, and does not take over 443.${PLAIN}" "${YELLOW}генерирует только правила маршрутизации TCP Peek + Splice, не меняя службу, порт и не перенимая управление 443.${PLAIN}")"
     write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$(vpso_mux_config_path)" || return 1
-    echo -e "${GREEN}✅ 已生成：$(vpso_mux_config_path)${PLAIN}"
-    echo -e "默认后端：$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")"
-    echo -e "Web 反代后端：$(web_proxy_engine_label) $(web_proxy_backend)"
-    echo -e "${YELLOW}下一步建议先校验配置，再使用 TCP Peek + Splice 测试入口监听 8444。${PLAIN}"
+    echo -e "$(localized_text "${GREEN}✅ 已生成：$(vpso_mux_config_path)${PLAIN}" "${GREEN}✅ Generated: $(vpso_mux_config_path)${PLAIN}" "${GREEN}✅ Сгенерировано: $(vpso_mux_config_path)${PLAIN}")"
+    echo -e "$(localized_text "默认后端：$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")" "Default backend: $(format_hostport \"$XRAY_LISTEN_ADDR\" \"$XRAY_LISTEN_PORT\")" "бэкенд по умолчанию: $(format_hostport \"$XRAY_LISTEN_ADDR\" \"$XRAY_LISTEN_PORT\").")"
+    echo -e "$(localized_text "Web 反代后端：$(web_proxy_engine_label) $(web_proxy_backend)" "Web reverse proxy backend: $(web_proxy_engine_label) $(web_proxy_backend)" "бэкенд веб-прокси: $(web_proxy_engine_label) $(web_proxy_backend)")"
+    echo -e "$(localized_text "${YELLOW}下一步建议先校验配置，再使用 TCP Peek + Splice 测试入口监听 8444。${PLAIN}" "${YELLOW}The next step is to verify the configuration first, and then use TCP Peek + Splice to test entry listening 8444.${PLAIN}" "${YELLOW}Следующий шаг — сначала проверить конфигурацию, а затем использовать TCP Peek + Splice для проверки контроля входа 8444.${PLAIN}")"
 }

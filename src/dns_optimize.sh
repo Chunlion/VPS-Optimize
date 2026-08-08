@@ -29,10 +29,10 @@ dns_apply_profile() {
     local v6_servers="$3"
     local backup_dir all_servers resolved_active resolv_target
 
-    confirm_risk_action "更改系统 DNS 为 ${profile_name}" \
-        "/etc/resolv.conf 和 systemd-resolved DNS 配置" \
-        "进入本菜单选择 [5] 恢复最近一次 DNS 备份，或手动恢复 ${DNS_OPTIMIZE_BACKUP_DIR}" \
-        "DNS 写错会导致域名解析失败；当前 SSH 连接通常不会立即断开。" || return 1
+    confirm_risk_action "$(localized_text "更改系统 DNS 为 ${profile_name}" "Change system DNS to ${profile_name}" "Измените систему DNS на ${profile_name}.")" \
+        "$(localized_text "/etc/resolv.conf 和 systemd-resolved DNS 配置" "/etc/resolv.conf and systemd-resolved DNS configurations" "Конфигурации /etc/resolv.conf и systemd с разрешением DNS")" \
+        "$(localized_text "进入本菜单选择 [5] 恢复最近一次 DNS 备份，或手动恢复 ${DNS_OPTIMIZE_BACKUP_DIR}" "Enter this menu and select [5] to restore the latest DNS backup, or manually restore ${DNS_OPTIMIZE_BACKUP_DIR}" "Войдите в это меню и выберите [5], чтобы восстановить последнюю резервную копию DNS или вручную восстановить ${DNS_OPTIMIZE_BACKUP_DIR}.")" \
+        "$(localized_text "DNS 写错会导致域名解析失败；当前 SSH 连接通常不会立即断开。" "Wrong writing of DNS will cause domain resolution to fail; the current SSH connection is usually not disconnected immediately." "Неправильная запись DNS приведет к сбою разрешения доменного имени; текущее соединение SSH обычно не разрывается сразу.")" || return 1
 
     backup_dir=$(dns_backup_current_config)
     all_servers="${v4_servers} ${v6_servers}"
@@ -49,7 +49,7 @@ dns_apply_profile() {
             echo "DNS=${all_servers}"
             echo "FallbackDNS="
         } > "$DNS_OPTIMIZE_RESOLVED_DROPIN"
-        systemctl restart systemd-resolved >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ systemd-resolved 重启失败，已继续写入静态 resolv.conf。${PLAIN}"
+        systemctl restart systemd-resolved >/dev/null 2>&1 || echo -e "$(localized_text "${YELLOW}⚠️ systemd-resolved 重启失败，已继续写入静态 resolv.conf。${PLAIN}" "${YELLOW}⚠️ systemd-resolved Restart failed and static resolv.conf has been written.${PLAIN}" "${YELLOW}⚠️ systemd решено. Не удалось перезапустить, и был записан статический файл resolv.conf.${PLAIN}")"
 
         resolv_target=$(readlink -f /etc/resolv.conf 2>/dev/null || true)
         if [[ "$resolv_target" != /run/systemd/resolve/* ]]; then
@@ -59,15 +59,15 @@ dns_apply_profile() {
         dns_write_static_resolv_conf "$v4_servers" "$v6_servers" || return 1
     fi
 
-    echo -e "${GREEN}✅ DNS 已切换为 ${profile_name}${PLAIN}"
+    echo -e "$(localized_text "${GREEN}✅ DNS 已切换为 ${profile_name}${PLAIN}" "${GREEN}✅ DNS has been switched to ${profile_name}${PLAIN}" "${GREEN}✅ DNS заменен на ${profile_name}.${PLAIN}")"
     echo -e "IPv4 DNS: ${CYAN}${v4_servers}${PLAIN}"
     echo -e "IPv6 DNS: ${CYAN}${v6_servers}${PLAIN}"
-    echo -e "${YELLOW}已备份旧配置：${backup_dir}${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}已备份旧配置：${backup_dir}${PLAIN}" "${YELLOW}Has backed up the old configuration: ${backup_dir}${PLAIN}" "${YELLOW}создал резервную копию старой конфигурации: ${backup_dir}.${PLAIN}")"
 
     if getent hosts raw.githubusercontent.com >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ DNS 解析测试通过。${PLAIN}"
+        echo -e "$(localized_text "${GREEN}✅ DNS 解析测试通过。${PLAIN}" "${GREEN}✅ DNS analysis test passed.${PLAIN}" "${GREEN}✅ Анализ DNS пройден.${PLAIN}")"
     else
-        echo -e "${YELLOW}⚠️ DNS 解析测试未通过，请检查网络、IPv6 可用性或 DNS 服务器连通性。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}⚠️ DNS 解析测试未通过，请检查网络、IPv6 可用性或 DNS 服务器连通性。${PLAIN}" "${YELLOW}⚠️ DNS parsing test failed, please check network, IPv6 availability or DNS server connectivity.${PLAIN}" "${YELLOW}⚠️ Тест анализа DNS не пройден, проверьте сеть, доступность IPv6 или подключение к серверу DNS.${PLAIN}")"
     fi
 }
 
@@ -76,46 +76,46 @@ func_dns_optimize() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "网络/内核优化 > DNS 更改优化"
-        echo -e "${BOLD}DNS 更改优化${PLAIN}"
+        print_breadcrumb "$(localized_text "网络/内核优化 > DNS 更改优化" "Network/Kernel Optimization > DNS Change Optimization" "Оптимизация сети/ядра > Оптимизация изменений DNS")"
+        echo -e "$(localized_text "${BOLD}DNS 更改优化${PLAIN}" "${BOLD}DNS Change and optimize${PLAIN}" "${BOLD}DNS Изменение и оптимизация${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}国内默认：IPv4 223.5.5.5 / 119.29.29.29，IPv6 2400:3200::1 / 2402:4e00::${PLAIN}"
-        echo -e "${YELLOW}国外默认：IPv4 1.1.1.1 / 8.8.8.8，IPv6 2606:4700:4700::1111 / 2001:4860:4860::8888${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}国内默认：IPv4 223.5.5.5 / 119.29.29.29，IPv6 2400:3200::1 / 2402:4e00::${PLAIN}" "${YELLOW}Domestic default: IPv4 223.5.5.5 / 119.29.29.29, IPv6 2400:3200::1 / 2402:4e00::${PLAIN}" "${YELLOW}Внутреннее значение по умолчанию: IPv4 223.5.5.5 / 119.29.29.29, IPv6 2400:3200::1 / 2402:4e00::${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}国外默认：IPv4 1.1.1.1 / 8.8.8.8，IPv6 2606:4700:4700::1111 / 2001:4860:4860::8888${PLAIN}" "${YELLOW}Foreign default: IPv4 1.1.1.1 / 8.8.8.8, IPv6 2606:4700:4700::1111 / 2001:4860:4860::8888${PLAIN}" "${YELLOW}внешнее значение по умолчанию: IPv4 1.1.1.1/8.8.8.8, IPv6 2606:4700:4700::1111 / 2001:4860:4860::8888${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 使用国内 DNS${PLAIN}       ${YELLOW}(阿里 DNS + DNSPod)${PLAIN}"
-        echo -e "${GREEN}  2. 使用国外 DNS${PLAIN}       ${YELLOW}(Cloudflare + Google)${PLAIN}"
-        echo -e "${GREEN}  3. 自定义 DNS${PLAIN}         ${YELLOW}(分别输入 IPv4 / IPv6)${PLAIN}"
-        echo -e "${GREEN}  4. 查看当前 DNS${PLAIN}"
-        echo -e "${GREEN}  5. 恢复最近一次 DNS 备份${PLAIN}"
+        echo -e "$(localized_text "${GREEN}  1. 使用国内 DNS${PLAIN}       ${YELLOW}(阿里 DNS + DNSPod)${PLAIN}" "${GREEN}1. Use domestic DNS (Alibaba DNS + DNSPod)${PLAIN}" "${GREEN}1. Используйте отечественный DNS (Alibaba DNS + DNSPod)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 使用国外 DNS${PLAIN}       ${YELLOW}(Cloudflare + Google)${PLAIN}" "${GREEN}2. Use foreign DNS (Cloudflare + Google)${PLAIN}" "${GREEN}2. Используйте зарубежный DNS (Cloudflare + Google)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 自定义 DNS${PLAIN}         ${YELLOW}(分别输入 IPv4 / IPv6)${PLAIN}" "${GREEN}3. Customize DNS (input IPv4 / IPv6 respectively)${PLAIN}" "${GREEN}3. Настройте DNS (вход IPv4 / IPv6 соответственно)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 查看当前 DNS${PLAIN}" "${GREEN}4. View current DNS${PLAIN}" "${GREEN}4. Просмотр текущего DNS${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 恢复最近一次 DNS 备份${PLAIN}" "${GREEN}5. Restore the latest DNS backup${PLAIN}" "${GREEN}5. Восстановите последнюю резервную копию DNS.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}"
+        echo -e "$(localized_text "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}" "${BLUE}0. Return to the previous menu / q Return to${PLAIN}" "${BLUE}0. Возврат в предыдущее меню / q Возврат в${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice v4_servers v6_servers raw_v4 raw_v6
-        read_trimmed choice "👉 请选择操作: "
+        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
         case "$choice" in
             1)
-                dns_apply_profile "国内 DNS" "223.5.5.5 119.29.29.29" "2400:3200::1 2402:4e00::"
+                dns_apply_profile "$(localized_text "国内 DNS" "Domestic DNS" "Внутренний DNS")" "223.5.5.5 119.29.29.29" "2400:3200::1 2402:4e00::"
                 pause_return
                 ;;
             2)
-                dns_apply_profile "国外 DNS" "1.1.1.1 8.8.8.8" "2606:4700:4700::1111 2001:4860:4860::8888"
+                dns_apply_profile "$(localized_text "国外 DNS" "Foreign DNS" "Иностранный DNS")" "1.1.1.1 8.8.8.8" "2606:4700:4700::1111 2001:4860:4860::8888"
                 pause_return
                 ;;
             3)
-                read_trimmed raw_v4 "请输入 IPv4 DNS（用逗号或空格分隔）: "
-                read_trimmed raw_v6 "请输入 IPv6 DNS（用逗号或空格分隔）: "
+                read_trimmed raw_v4 "$(localized_text "请输入 IPv4 DNS（用逗号或空格分隔）: " "Please enter IPv4 DNS (separated by commas or spaces):" "Введите IPv4 DNS (через запятую или пробел):")"
+                read_trimmed raw_v6 "$(localized_text "请输入 IPv6 DNS（用逗号或空格分隔）: " "Please enter IPv6 DNS (separated by commas or spaces):" "Введите IPv6 DNS (через запятую или пробел):")"
                 v4_servers=$(dns_normalize_servers 4 "$raw_v4") || {
-                    echo -e "${RED}❌ IPv4 DNS 格式无效。${PLAIN}"
+                    echo -e "$(localized_text "${RED}❌ IPv4 DNS 格式无效。${PLAIN}" "${RED}❌ IPv4 DNS The format is invalid.${PLAIN}" "${RED}❌ IPv4 DNS Неверный формат.${PLAIN}")"
                     pause_return
                     continue
                 }
                 v6_servers=$(dns_normalize_servers 6 "$raw_v6") || {
-                    echo -e "${RED}❌ IPv6 DNS 格式无效。${PLAIN}"
+                    echo -e "$(localized_text "${RED}❌ IPv6 DNS 格式无效。${PLAIN}" "${RED}❌ IPv6 DNS The format is invalid.${PLAIN}" "${RED}❌ IPv6 DNS Неверный формат.${PLAIN}")"
                     pause_return
                     continue
                 }
-                dns_apply_profile "自定义 DNS" "$v4_servers" "$v6_servers"
+                dns_apply_profile "$(localized_text "自定义 DNS" "Custom DNS" "Пользовательский DNS")" "$v4_servers" "$v6_servers"
                 pause_return
                 ;;
             4)
@@ -129,7 +129,7 @@ func_dns_optimize() {
                 ;;
             5) dns_restore_latest_backup; pause_return ;;
             0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac
     done
 }

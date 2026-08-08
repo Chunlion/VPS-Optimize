@@ -2,24 +2,26 @@
 # SSH hardening menus and high-level security workflows.
 
 func_ssh_login_mode_menu() {
+    local unknown_label
+    unknown_label="$(localized_text "未知" "Unknown" "Неизвестно")"
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "SSH 安全中心 > 用户密钥登录模式"
-        echo -e "${BOLD}🔐 用户密钥登录模式${PLAIN}"
+        print_breadcrumb "$(localized_text "SSH 安全中心 > 用户密钥登录模式" "SSH Security Center > User Key Login Mode" "SSH Центр безопасности > Режим входа в систему с помощью ключа пользователя")"
+        echo -e "$(localized_text "${BOLD}🔐 用户密钥登录模式${PLAIN}" "${BOLD}🔐 User key login mode${PLAIN}" "${BOLD}🔐 Режим входа в систему с помощью ключа пользователя${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "PubkeyAuthentication      : ${CYAN}$(ssh_effective_setting PubkeyAuthentication || echo 未知)${PLAIN}"
-        echo -e "PasswordAuthentication    : ${CYAN}$(ssh_effective_setting PasswordAuthentication || echo 未知)${PLAIN}"
-        echo -e "KbdInteractiveAuthentication: ${CYAN}$(ssh_effective_setting KbdInteractiveAuthentication || echo 未知)${PLAIN}"
+        echo -e "PubkeyAuthentication       : ${CYAN}$(ssh_effective_setting PubkeyAuthentication || echo "$unknown_label")${PLAIN}"
+        echo -e "PasswordAuthentication     : ${CYAN}$(ssh_effective_setting PasswordAuthentication || echo "$unknown_label")${PLAIN}"
+        echo -e "KbdInteractiveAuthentication: ${CYAN}$(ssh_effective_setting KbdInteractiveAuthentication || echo "$unknown_label")${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 添加/更新用户 SSH 公钥（不改登录方式）${PLAIN}"
-        echo -e "${GREEN}  2. 密钥 + 密码登录（保留/恢复密码）${PLAIN}"
-        echo -e "${RED}  3. 仅密钥登录，禁用密码登录${PLAIN}"
+        echo -e "$(localized_text "${GREEN}  1. 添加/更新用户 SSH 公钥（不改登录方式）${PLAIN}" "${GREEN}1. Add/update user SSH public key (do not change login method)${PLAIN}" "${GREEN}1. Добавьте/обновите открытый ключ пользователя SSH (не меняйте метод входа в систему)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 密钥 + 密码登录（保留/恢复密码）${PLAIN}" "${GREEN}2. Key + password login (retain/recover password)${PLAIN}" "${GREEN}2. Ключ + пароль для входа (сохранить/восстановить пароль)${PLAIN}")"
+        echo -e "$(localized_text "${RED}  3. 仅密钥登录，禁用密码登录${PLAIN}" "${RED}3. Only key login, password login is disabled${PLAIN}" "${RED}3. Вход только по ключу, вход по паролю отключен${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回上一级 / q 返回${PLAIN}"
+        echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         local choice user key_count
-        read_trimmed choice "👉 请选择操作: "
+        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
         case "$choice" in
             1)
                 user=$(ssh_choose_user) || { pause_return; continue; }
@@ -31,17 +33,17 @@ func_ssh_login_mode_menu() {
                 user=$(ssh_choose_user) || { pause_return; continue; }
                 key_count=$(ssh_authorized_key_count "$user")
                 if [[ "$key_count" -eq 0 ]]; then
-                    echo -e "${RED}❌ 用户 ${user} 还没有 authorized_keys，不能切到仅密钥登录。${PLAIN}"
-                    echo -e "${YELLOW}请先用本菜单 [1] 添加公钥，并用新 SSH 窗口测试成功。${PLAIN}"
+                    echo -e "$(localized_text "${RED}❌ 用户 ${user} 还没有 authorized_keys，不能切到仅密钥登录。${PLAIN}" "${RED}❌ User ${user} has no authorized_keys and cannot switch to key-only login.${PLAIN}" "${RED}❌ У пользователя ${user} нет authorized_keys, поэтому вход только по ключу включить нельзя.${PLAIN}")"
+                    echo -e "$(localized_text "${YELLOW}请先用本菜单 [1] 添加公钥，并用新 SSH 窗口测试成功。${PLAIN}" "${YELLOW}Please use this menu [1] to add the public key first, and test successfully with the new SSH window.${PLAIN}" "${YELLOW}Используйте это меню [1], чтобы сначала добавить открытый ключ и успешно протестировать его в новом окне SSH.${PLAIN}")"
                     pause_return
                     continue
                 fi
-                echo -e "${YELLOW}检测到 ${user} 已有 ${key_count} 条公钥。切换后密码登录会被禁用。${PLAIN}"
+                echo -e "$(localized_text "${YELLOW}检测到 ${user} 已有 ${key_count} 条公钥。切换后密码登录会被禁用。${PLAIN}" "${YELLOW}${user} has ${key_count} public key(s). Password login will be disabled.${PLAIN}" "${YELLOW}У пользователя ${user} есть открытые ключи: ${key_count}. Вход по паролю будет отключён.${PLAIN}")"
                 ssh_apply_auth_mode key_only
                 pause_return
                 ;;
             0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac
     done
 }
@@ -50,21 +52,21 @@ func_ssh_security_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "SSH 安全中心"
-        echo -e "${BOLD}🛡️ SSH 安全中心${PLAIN}"
+        print_breadcrumb "$(localized_text "SSH 安全中心" "SSH Security Center" "SSH Центр безопасности")"
+        echo -e "$(localized_text "${BOLD}🛡️ SSH 安全中心${PLAIN}" "${BOLD}🛡️ SSH Security Center${PLAIN}" "${BOLD}🛡️ SSH Центр безопасности${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${GREEN}  1. 修改 SSH 端口${PLAIN}             ${YELLOW}(防失联校验和回滚)${PLAIN}"
-        echo -e "${GREEN}  2. 用户密钥登录模式${PLAIN}         ${YELLOW}(添加公钥 / 切换密钥或密码登录)${PLAIN}"
+        echo -e "$(localized_text "${GREEN}  1. 修改 SSH 端口${PLAIN}             ${YELLOW}(防失联校验和回滚)${PLAIN}" "${GREEN}1. Modify SSH port (lockout checks and rollback)${PLAIN}" "${GREEN}1. Измените порт SSH (проверки защиты от потери доступа и откат)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 用户密钥登录模式${PLAIN}         ${YELLOW}(添加公钥 / 切换密钥或密码登录)${PLAIN}" "${GREEN}2. User key login mode (add public key / switch key or password login)${PLAIN}" "${GREEN}2. Режим входа в систему с помощью ключа пользователя (добавление открытого ключа/переключение ключа или вход с паролем)${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单 / q 返回${PLAIN}"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         local choice
-        read_trimmed choice "👉 请选择操作: "
+        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
         case "$choice" in
             1) func_security ;;
             2) func_ssh_login_mode_menu ;;
             0|q|Q) break ;;
-            *) echo -e "${RED}❌ 无效选择！${PLAIN}"; sleep 1 ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac
     done
 }
@@ -72,9 +74,9 @@ func_ssh_security_menu() {
 func_security() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🛡️ SSH 安全加固 (端口修改与防失联)${PLAIN}"
+    echo -e "$(localized_text "${BOLD}🛡️ SSH 安全加固 (端口修改与防失联)${PLAIN}" "${BOLD}🛡️ SSH hardening (port change with lockout prevention)${PLAIN}" "${BOLD}🛡️ Защита SSH (смена порта с защитой от потери доступа)${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}功能介绍：该脚本将修改 SSH 端口并配置防失联机制，确保服务稳定。${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}功能介绍：该脚本将修改 SSH 端口并配置防失联机制，确保服务稳定。${PLAIN}" "${YELLOW}Purpose: change the SSH port safely, validate the configuration, and roll back on failure.${PLAIN}" "${YELLOW}Назначение: безопасно сменить порт SSH, проверить конфигурацию и выполнить откат при ошибке.${PLAIN}")"
     echo -e "------------------------------------------------"
     
     # 1. 极致精准：读取内存和进程，获取当前真实生效的 SSH 端口
@@ -89,45 +91,45 @@ func_security() {
 
     local final_p
     # 交互提示优化：引导用户使用高位端口避开特权冲突
-    read_trimmed final_p "👉 当前生效的 SSH 端口为 $current_p, 请输入新端口 [10000-65535] (回车保持不变): "
+    read_trimmed final_p "$(localized_text "👉 当前生效的 SSH 端口为 $current_p, 请输入新端口 [10000-65535] (回车保持不变): " "👉 The currently effective SSH port is $current_p, please enter the new port [10000-65535] (press Enter to remain unchanged):" "👉 В настоящее время действующим портом SSH является $current_p. Введите новый порт [10000-65535] (нажмите Enter, чтобы сохранить изменения):")"
     final_p=${final_p:-$current_p}
 
     if [[ "$final_p" != "$current_p" ]]; then
         if [[ -z "$sshd_bin" ]]; then
-            echo -e "${RED}❌ 未找到 sshd 命令，无法安全校验 SSH 配置，已取消。${PLAIN}"
-            read -n 1 -s -r -p "按任意键返回..."
+            echo -e "$(localized_text "${RED}❌ 未找到 sshd 命令，无法安全校验 SSH 配置，已取消。${PLAIN}" "${RED}❌ The sshd command was not found. The SSH configuration cannot be safely verified and has been cancelled.${PLAIN}" "${RED}❌ Команда sshd не найдена. Конфигурацию SSH невозможно безопасно проверить, и она была отменена.${PLAIN}")"
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         fi
         if ! command -v systemctl >/dev/null 2>&1; then
-            echo -e "${RED}❌ 未检测到 systemctl，无法安全重启 SSH 服务，已取消。${PLAIN}"
-            read -n 1 -s -r -p "按任意键返回..."
+            echo -e "$(localized_text "${RED}❌ 未检测到 systemctl，无法安全重启 SSH 服务，已取消。${PLAIN}" "${RED}❌ systemctl not detected, cannot safely restart SSH service, canceled.${PLAIN}" "${RED}❌ systemctl не обнаружен, невозможно безопасно перезапустить службу SSH, отменено.${PLAIN}")"
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         fi
         if ! ssh_prepare_runtime_dir; then
-            echo -e "${RED}❌ 无法创建 /run/sshd，sshd 无法完成语法检查。请确认当前为 root 权限。${PLAIN}"
-            read -n 1 -s -r -p "按任意键返回..."
+            echo -e "$(localized_text "${RED}❌ 无法创建 /run/sshd，sshd 无法完成语法检查。请确认当前为 root 权限。${PLAIN}" "${RED}❌ Unable to create /run/sshd, sshd Unable to complete syntax check. Please confirm that you currently have root privileges.${PLAIN}" "${RED}❌ Невозможно создать /run/sshd, sshd Невозможно завершить проверку синтаксиса. Пожалуйста, подтвердите, что у вас есть root-права.${PLAIN}")"
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         fi
         # [严格检验] 端口合法性
         if ! [[ "$final_p" =~ ^[0-9]+$ ]] || (( 10#$final_p < 10000 || 10#$final_p > 65535 )); then
-            echo -e "${RED}❌ 错误：无效的端口号！必须是 10000-65535 之间的纯数字。${PLAIN}"
-            read -n 1 -s -r -p "按任意键返回..."
+            echo -e "$(localized_text "${RED}❌ 错误：无效的端口号！必须是 10000-65535 之间的纯数字。${PLAIN}" "${RED}❌ Error: Invalid port number! Must be a number between 10000-65535.${PLAIN}" "${RED}❌ Ошибка: неверный номер порта! Должно быть чистым числом в диапазоне 10000–65535.${PLAIN}")"
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         fi
 
-        echo -e "${YELLOW}即将修改：/etc/ssh/sshd_config、/etc/ssh/sshd_config.d、SSH systemd socket/服务、系统防火墙放行规则。${PLAIN}"
-        echo -e "${YELLOW}请先确认云厂商安全组已经放行 ${final_p}/tcp，并保留当前 SSH 会话。${PLAIN}"
-        confirm_danger "修改 SSH 端口为 ${final_p}" "新端口未放行会导致后续无法重新连接 SSH。" "脚本会先备份 sshd_config，校验语法失败或服务重启失败时自动回滚。" || {
-            echo -e "${BLUE}已取消 SSH 端口修改。${PLAIN}"
-            read -n 1 -s -r -p "按任意键返回..."
+        echo -e "$(localized_text "${YELLOW}即将修改：/etc/ssh/sshd_config、/etc/ssh/sshd_config.d、SSH systemd socket/服务、系统防火墙放行规则。${PLAIN}" "${YELLOW}The following will be changed: /etc/ssh/sshd_config、/etc/ssh/sshd_config.d、SSH systemd socket/service, system firewall allow rules.${PLAIN}" "${YELLOW}скоро будет изменен: /etc/ssh/sshd_config、/etc/ssh/sshd_config.d、SSH systemd сокет/сервис, правила выпуска системного брандмауэра.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}请先确认云厂商安全组已经放行 ${final_p}/tcp，并保留当前 SSH 会话。${PLAIN}" "${YELLOW}Please first confirm that the cloud vendor security group allows ${final_p}/tcp and retain the current SSH session.${PLAIN}" "${YELLOW}Сначала подтвердите, что группа безопасности поставщика облака разрешила ${final_p}/tcp и сохраните текущий сеанс SSH.${PLAIN}")"
+        confirm_danger "$(localized_text "修改 SSH 端口为 ${final_p}" "Modify the SSH port to ${final_p}" "Измените порт SSH на ${final_p}.")" "$(localized_text "新端口未放行会导致后续无法重新连接 SSH。" "If the new port is not released, SSH cannot be reconnected later." "Если новый порт не разрешён, SSH нельзя будет повторно подключить позже.")" "$(localized_text "脚本会先备份 sshd_config，校验语法失败或服务重启失败时自动回滚。" "The script will first back up sshd_config and automatically roll back when the syntax verification fails or the service restart fails." "Сценарий сначала создаст резервную копию sshd_config и автоматически откатится назад, если проверка синтаксиса не удалась или перезапуск службы не удался.")" || {
+            echo -e "$(localized_text "${BLUE}已取消 SSH 端口修改。${PLAIN}" "${BLUE}Canceled the SSH port modification.${PLAIN}" "${BLUE}отменил модификацию порта SSH.${PLAIN}")"
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         }
 
-        echo -e "${CYAN}▶ 正在备份原生 SSH 配置文件...${PLAIN}"
+        echo -e "$(localized_text "${CYAN}▶ 正在备份原生 SSH 配置文件...${PLAIN}" "${CYAN}▶ Backing up the native SSH configuration file...${PLAIN}" "${CYAN}▶ Резервное копирование собственного файла конфигурации SSH...${PLAIN}")"
         local backup_file="/etc/ssh/sshd_config.bak_$(date +%s)"
         if ! cp -p /etc/ssh/sshd_config "$backup_file"; then
-            echo -e "${RED}❌ SSH 配置备份失败，已取消修改。${PLAIN}"
-            read -n 1 -s -r -p "按任意键返回..."
+            echo -e "$(localized_text "${RED}❌ SSH 配置备份失败，已取消修改。${PLAIN}" "${RED}❌ SSH The configuration backup failed and the modification has been cancelled.${PLAIN}" "${RED}❌ SSH Не удалось выполнить резервное копирование конфигурации, и изменение было отменено.${PLAIN}")"
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         fi
 
@@ -135,36 +137,36 @@ func_security() {
         # - 先安全删除所有带 Port 的行 (忽略注释符和空格)
         # - 然后在文件绝对第一行 (1i) 插入新端口，秒杀所有 include 配置覆盖！
         if ! sed -i '/^[[:space:]]*#\?Port /d' /etc/ssh/sshd_config || ! sed -i "1i Port $final_p" /etc/ssh/sshd_config; then
-            echo -e "${RED}❌ 写入 SSH 配置失败，正在恢复备份。${PLAIN}"
+            echo -e "$(localized_text "${RED}❌ 写入 SSH 配置失败，正在恢复备份。${PLAIN}" "${RED}❌ Writing to SSH configuration failed and the backup is being restored.${PLAIN}" "${RED}❌ Не удалось записать конфигурацию SSH, резервная копия восстанавливается.${PLAIN}")"
             ssh_rollback_port_change "$backup_file" "$current_p" false
-            read -n 1 -s -r -p "按任意键返回..."
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         fi
         if ! ssh_write_sshd_port_dropin "$final_p"; then
-            echo -e "${RED}❌ 写入 SSH drop-in 端口配置失败，正在恢复备份。${PLAIN}"
+            echo -e "$(localized_text "${RED}❌ 写入 SSH drop-in 端口配置失败，正在恢复备份。${PLAIN}" "${RED}❌ Write SSH drop-in port configuration failed and backup is being restored.${PLAIN}" "${RED}❌ Не удалось записать конфигурацию вставного порта SSH, и резервная копия восстанавливается.${PLAIN}")"
             ssh_rollback_port_change "$backup_file" "$current_p" false
-            read -n 1 -s -r -p "按任意键返回..."
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         fi
 
         # 3. [CentOS 专属] SELinux 放行
         if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce)" == "Enforcing" ]]; then
-            echo -e "${YELLOW}检测到 SELinux 开启，正在配置底层端口安全策略...${PLAIN}"
+            echo -e "$(localized_text "${YELLOW}检测到 SELinux 开启，正在配置底层端口安全策略...${PLAIN}" "${YELLOW}Detects that SELinux is turned on, and the underlying port security policy is being configured...${PLAIN}" "${YELLOW}обнаруживает, что SELinux включен и базовая политика безопасности порта настраивается...${PLAIN}")"
             if command -v semanage >/dev/null 2>&1; then
                 semanage port -a -t ssh_port_t -p tcp "$final_p" 2>/dev/null || semanage port -m -t ssh_port_t -p tcp "$final_p" 2>/dev/null
             else
-                echo -e "${RED}❌ 致命错误：缺少 semanage 工具！已触发安全回滚。${PLAIN}"
+                echo -e "$(localized_text "${RED}❌ 致命错误：缺少 semanage 工具！已触发安全回滚。${PLAIN}" "${RED}❌ Fatal error: Missing semanage tool! Safe rollback has been triggered.${PLAIN}" "${RED}❌ Неустранимая ошибка: отсутствует инструмент Semanage! Безопасный откат запущен.${PLAIN}")"
                 ssh_rollback_port_change "$backup_file" "$current_p" false
-                read -n 1 -s -r -p "按任意键返回..."
+                read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 return
             fi
         fi
 
         # 4. 防失联核心：验证新配置语法
         if ! "$sshd_bin" -t; then
-            echo -e "${RED}❌ 致命错误：SSH 配置存在语法异常！正在全盘恢复...${PLAIN}"
+            echo -e "$(localized_text "${RED}❌ 致命错误：SSH 配置存在语法异常！正在全盘恢复...${PLAIN}" "${RED}❌ Fatal error: There is a syntax exception in the SSH configuration! Full recovery in progress...${PLAIN}" "${RED}❌ Неустранимая ошибка: в конфигурации SSH имеется синтаксическое исключение! Выполняется полное восстановление...${PLAIN}")"
             ssh_rollback_port_change "$backup_file" "$current_p" false
-            read -n 1 -s -r -p "按任意键返回..."
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         fi
         
@@ -182,20 +184,20 @@ func_security() {
         local socket_managed=false socket_units
         socket_units=$(ssh_socket_units_for_host | tr '\n' ' ')
         if [[ -n "$socket_units" ]]; then
-            echo -e "${YELLOW}检测到 SSH socket (${socket_units})，正在同步底层监听端口...${PLAIN}"
+            echo -e "$(localized_text "${YELLOW}检测到 SSH socket (${socket_units})，正在同步底层监听端口...${PLAIN}" "${YELLOW}Detects SSH socket (${socket_units}) and is synchronizing the underlying listening port...${PLAIN}" "${YELLOW}обнаруживает сокет SSH (${socket_units}) и синхронизирует базовый порт прослушивания...${PLAIN}")"
             if ssh_write_socket_port_dropins "$final_p"; then
                 socket_managed=true
                 systemctl daemon-reload >/dev/null 2>&1 || true
             else
-                echo -e "${RED}❌ 写入 SSH socket drop-in 失败，正在回滚。${PLAIN}"
+                echo -e "$(localized_text "${RED}❌ 写入 SSH socket drop-in 失败，正在回滚。${PLAIN}" "${RED}❌ Writing to SSH socket drop-in failed and is being rolled back.${PLAIN}" "${RED}❌ Не удалось выполнить запись в сокет SSH, и выполняется откат.${PLAIN}")"
                 ssh_rollback_port_change "$backup_file" "$current_p" false
-                read -n 1 -s -r -p "按任意键返回..."
+                read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 return
             fi
         fi
         
         # 7. 严格隔离的服务重启逻辑
-        echo -e "${CYAN}▶ 正在重启底层 SSH 引擎...${PLAIN}"
+        echo -e "$(localized_text "${CYAN}▶ 正在重启底层 SSH 引擎...${PLAIN}" "${CYAN}▶ Restarting the underlying SSH engine...${PLAIN}" "${CYAN}▶ Перезапуск базового механизма SSH...${PLAIN}")"
         local restart_ok=false
         if $socket_managed; then
             if ssh_restart_socket_units; then
@@ -207,24 +209,24 @@ func_security() {
         fi
         
         if $restart_ok; then
-            echo -e "${GREEN}✅ SSH 端口已成功更改为 $final_p 并自动放行！${PLAIN}"
-            echo -e "${CYAN}配置备份已保留：${backup_file}${PLAIN}"
+            echo -e "$(localized_text "${GREEN}✅ SSH 端口已成功更改为 $final_p 并自动放行！${PLAIN}" "${GREEN}✅ The SSH port has been successfully changed to $final_p and automatically released!${PLAIN}" "${GREEN}. Порт SSH был успешно изменен на $final_p и автоматически освобожден!${PLAIN}")"
+            echo -e "$(localized_text "${CYAN}配置备份已保留：${backup_file}${PLAIN}" "${CYAN}Configuration backup has been retained: ${backup_file}${PLAIN}" "${CYAN}Резервная копия конфигурации сохранена: ${backup_file}.${PLAIN}")"
         else
-            echo -e "${RED}❌ 致命错误：重启 SSH 服务失败！正在回滚至原端口...${PLAIN}"
+            echo -e "$(localized_text "${RED}❌ 致命错误：重启 SSH 服务失败！正在回滚至原端口...${PLAIN}" "${RED}❌ Fatal error: Restart SSH service failed! Rolling back to original port...${PLAIN}" "${RED}❌ Неустранимая ошибка: не удалось перезапустить службу SSH! Откат к исходному порту...${PLAIN}")"
             ssh_rollback_port_change "$backup_file" "$current_p" "$socket_managed"
-            read -n 1 -s -r -p "按任意键返回..."
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         fi
         echo -e "${RED}${BOLD}======================================================${PLAIN}"
-        echo -e "${YELLOW}⚠️ 终极保命提示：${PLAIN}"
-        echo -e "现在的这扇 SSH 窗口【千万不要关闭】！"
-        echo -e "请立刻使用新端口 $final_p 新建一个连接进行测试。"
-        echo -e "如果云平台有【安全组】，请确保也已放行 $final_p 端口！"
+        echo -e "$(localized_text "${YELLOW}⚠️ 终极保命提示：${PLAIN}" "${YELLOW}⚠️ The ultimate life-saving tip:${PLAIN}" "${YELLOW}⚠️ Главный совет по спасению жизни:${PLAIN}")"
+        echo -e "$(localized_text "现在的这扇 SSH 窗口【千万不要关闭】！" "The current SSH window [Never close it]!" "Текущее окно SSH [Никогда не закрывайте]!")"
+        echo -e "$(localized_text "请立刻使用新端口 $final_p 新建一个连接进行测试。" "Please immediately use the new port $final_p to create a new connection for testing." "Пожалуйста, немедленно используйте новый порт $final_p, чтобы создать новое соединение для тестирования.")"
+        echo -e "$(localized_text "如果云平台有【安全组】，请确保也已放行 $final_p 端口！" "If the cloud platform has a [security group], please ensure that the $final_p port has also been released!" "Если у облачной платформы есть [группа безопасности], убедитесь, что порт $final_p также освобожден!")"
         echo -e "${RED}${BOLD}======================================================${PLAIN}"
     else
-        echo -e "${BLUE}端口未做更改。${PLAIN}"
+        echo -e "$(localized_text "${BLUE}端口未做更改。${PLAIN}" "${BLUE}The port has not been changed.${PLAIN}" "${BLUE}Порт не был изменен.${PLAIN}")"
     fi
-    read -n 1 -s -r -p "按任意键继续..."
+    read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
 }
 # ---------------------------------------------------------
 # 新增：Fail2ban 防爆破系统管理 (抽象精简版)
@@ -233,22 +235,22 @@ func_security() {
 func_add_ssh_key() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🔑 添加 SSH 公钥登录 (免密安全认证)${PLAIN}"
+    echo -e "$(localized_text "${BOLD}🔑 添加 SSH 公钥登录 (免密安全认证)${PLAIN}" "${BOLD}🔑 Add SSH public key login (password-free security authentication)${PLAIN}" "${BOLD}🔑 Добавить вход с открытым ключом SSH (безопасная аутентификация без пароля)${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}使用 SSH 密钥登录不仅免去输密码的烦恼，更能彻底免疫密码爆破！${PLAIN}"
-    echo -e "请准备好您的公钥 (通常以 ssh-rsa, ssh-ed25519、ecdsa 或 sk-* 开头)。"
+    echo -e "$(localized_text "${YELLOW}使用 SSH 密钥登录不仅免去输密码的烦恼，更能彻底免疫密码爆破！${PLAIN}" "${YELLOW}Using the SSH key to log in not only eliminates the trouble of entering passwords, but also provides complete immunity to password blasting!${PLAIN}" "${YELLOW}Использование ключа SSH для входа в систему не только избавляет от проблем с вводом паролей, но и обеспечивает полную невосприимчивость к взлому паролей!${PLAIN}")"
+    echo -e "$(localized_text "请准备好您的公钥 (通常以 ssh-rsa, ssh-ed25519、ecdsa 或 sk-* 开头)。" "Please have your public key ready (usually starting with ssh-rsa, ssh-ed25519, ecdsa or sk-*)." "Подготовьте свой открытый ключ (обычно начинающийся с ssh-rsa, ssh-ed25519, ecdsa или sk-*).")"
     echo -e "------------------------------------------------"
     local user enable_mode
-    user=$(ssh_choose_user) || { read -n 1 -s -r -p "按任意键继续..."; return; }
+    user=$(ssh_choose_user) || { read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"; return; }
     if ssh_add_public_key_for_user "$user"; then
-        echo -e "${GREEN}✅ 公钥添加完成。请立刻新开一个 SSH 窗口测试私钥登录。${PLAIN}"
-        read_trimmed enable_mode "是否同时写入“密钥 + 密码登录（保留/恢复密码）”模式？(Y/n): "
+        echo -e "$(localized_text "${GREEN}✅ 公钥添加完成。请立刻新开一个 SSH 窗口测试私钥登录。${PLAIN}" "${GREEN}✅ The public key has been added. Please open a new SSH window immediately to test private key login.${PLAIN}" "${GREEN}✅ Открытый ключ добавлен. Немедленно откройте новое окно SSH, чтобы проверить вход в систему с закрытым ключом.${PLAIN}")"
+        read_trimmed enable_mode "$(localized_text "是否同时写入“密钥 + 密码登录（保留/恢复密码）”模式？(Y/n): " "Also write \"Key + Password Login (Keep/Recover Password)\" mode? (Y/n):" "Также пишется режим «Ключ + Пароль (Сохранить/Восстановить пароль)»? (Да/Нет):")"
         if [[ "$enable_mode" =~ ^[Yy]$ ]]; then
             ssh_apply_auth_mode key_preferred || true
         fi
-        echo -e "${YELLOW}确认私钥登录 100% 成功后，可进入 [6 SSH 安全中心] -> [2 用户密钥登录模式] 禁用密码登录。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}确认私钥登录 100% 成功后，可进入 [6 SSH 安全中心] -> [2 用户密钥登录模式] 禁用密码登录。${PLAIN}" "${YELLOW}After confirms that private key login is 100% successful, you can enter [6 SSH Security Center] -> [2 User Key Login Mode] to disable password login.${PLAIN}" "${YELLOW}После того, как подтвердит, что вход с закрытым ключом прошел на 100% успешно, вы можете ввести [6 SSH Центр безопасности] -> [2 Режим входа с помощью ключа пользователя], чтобы отключить вход с паролем.${PLAIN}")"
     fi
-    read -n 1 -s -r -p "按任意键继续..."
+    read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
 }
 # ---------------------------------------------------------
 # 5. Docker 深度管理 (重构版：非破坏性修改与防宕机回滚)

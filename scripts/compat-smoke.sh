@@ -91,12 +91,48 @@ for doc_entry in \
     assert_file_exists "$doc_entry"
 done
 
+for locale in en ru; do
+    for localized_doc in \
+        index.md \
+        quick-start.md \
+        docs/443-single-entry.md \
+        docs/443-single-entry-troubleshooting.md \
+        docs/443-tcp-peek-engine.md \
+        docs/before-use.md \
+        docs/config-paths.md \
+        docs/dog.md \
+        docs/existing-server-migration.md \
+        docs/faq.md \
+        docs/recovery-runbook.md \
+        docs/security-rollback.md \
+        docs/subscription-tools.md \
+        docs/supported-systems.md \
+        docs/update-uninstall.md \
+        docs/xui-custom-manager.md \
+        tutorials/01-3x-ui-reality-443.md \
+        tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md; do
+        assert_file_exists "${locale}/${localized_doc}"
+    done
+done
+
+unexpected_han=$(grep -RInP '[\x{3400}-\x{9fff}]' en ru --include='*.md' | grep -v 'quick-start.md:.*简体中文 (Simplified Chinese)' || true)
+if [[ -n "$unexpected_han" ]]; then
+    echo "English/Russian docs contain untranslated Chinese text:" >&2
+    echo "$unexpected_han" >&2
+    exit 1
+fi
+
 assert_file_contains README.md 'https://chunlion.github.io/VPS-Optimize/' "README must keep the GitHub Pages docs entry."
 assert_file_contains .vitepress/config.mts "base: '/VPS-Optimize/'" "VitePress base must match the GitHub Pages project path."
+assert_file_contains .vitepress/config.mts "label: 'English'" "VitePress must expose the English locale."
+assert_file_contains .vitepress/config.mts "label: 'Русский'" "VitePress must expose the Russian locale."
 assert_file_contains .github/workflows/pages.yml 'run: npm run build' "Pages workflow must build the VitePress site."
 assert_file_contains .github/workflows/pages.yml 'path: .vitepress/dist' "Pages workflow must upload the VitePress dist artifact."
 
 assert_file_contains index.md '](quick-start.md)' "Docs homepage must link to quick-start."
+assert_file_contains index.md 'layout: home' "Docs homepage must use the VitePress home layout."
+assert_file_contains en/index.md 'layout: home' "English docs homepage must use the VitePress home layout."
+assert_file_contains ru/index.md 'layout: home' "Russian docs homepage must use the VitePress home layout."
 assert_file_contains index.md '](docs/443-single-entry.md)' "Docs homepage must link to the 443 single-entry doc."
 assert_file_contains index.md '](tutorials/01-3x-ui-reality-443.md)' "Docs homepage must link to the 3x-ui REALITY 443 tutorial."
 assert_file_contains index.md '](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)' "Docs homepage must link to the subscription tools 443 tutorial."
@@ -144,8 +180,8 @@ assert_file_contains src/menus.sh '三网回程路由测试已在主菜单 [12 �
 assert_file_contains src/diagnostics_network.sh '9. TcpQuality TCP 质量测试' "TcpQuality must be exposed in the benchmark menu."
 assert_file_contains src/diagnostics_network.sh 'https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh' "TcpQuality must use the requested upstream entry script."
 assert_file_contains src/common.sh 'https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh' "TcpQuality must be recognized as a built-in remote script source."
-assert_file_contains src/menus.sh 'echo "3 面板 SSL 修复，适合 443 接入前清空面板证书路径。"' "Panel help item 3 must use the current menu label."
-assert_file_contains dist/vps.sh 'echo "3 面板 SSL 修复，适合 443 接入前清空面板证书路径。"' "Built panel help item 3 must use the current menu label."
+assert_file_contains src/menus.sh '3 面板 SSL 修复，适合 443 接入前清空面板证书路径。' "Panel help item 3 must use the current menu label."
+assert_file_contains dist/vps.sh '3 面板 SSL 修复，适合 443 接入前清空面板证书路径。' "Built panel help item 3 must use the current menu label."
 assert_file_contains src/panel_rescue.sh '面板 SSL 修复${PLAIN}' "Panel SSL repair page title must use the current menu label."
 assert_file_contains dist/vps.sh '面板 SSL 修复${PLAIN}' "Built panel SSL repair page title must use the current menu label."
 assert_file_not_contains src/panel_rescue.sh '面板紧急救砖 / SSL 清理工具' "Panel SSL repair page title must not keep the old rescue/cleanup label."

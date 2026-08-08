@@ -7,7 +7,7 @@ quarantine_path() {
     local resolved base dest
 
     if [[ -z "$target" || "$target" == *"*"* || "$target" == *"?"* ]]; then
-        echo -e "${RED}❌ 拒绝隔离空路径或通配符路径：${target}${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 拒绝隔离空路径或通配符路径：${target}${PLAIN}" "${RED}❌ Deny quarantine of empty or wildcard paths: ${target}${PLAIN}" "${RED}❌ Запретить карантин пустых путей или путей с подстановочными знаками: ${target}.${PLAIN}")"
         return 1
     fi
 
@@ -16,7 +16,7 @@ quarantine_path() {
     resolved=$(readlink -f -- "$target" 2>/dev/null || realpath -m -- "$target" 2>/dev/null || printf '%s' "$target")
     case "$resolved" in
         /|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/opt|/proc|/root|/run|/sbin|/sys|/tmp|/usr|/var)
-            echo -e "${RED}❌ 拒绝隔离系统根级目录：${resolved}${PLAIN}"
+            echo -e "$(localized_text "${RED}❌ 拒绝隔离系统根级目录：${resolved}${PLAIN}" "${RED}❌ Refuse to isolate the system root directory: ${resolved}${PLAIN}" "${RED}❌ Отказаться от изоляции корневого каталога системы: ${resolved}${PLAIN}")"
             return 1
             ;;
     esac
@@ -30,7 +30,7 @@ quarantine_path() {
     done
 
     mv -- "$target" "$dest"
-    echo -e "${YELLOW}已隔离：${resolved} -> ${dest}${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}已隔离：${resolved} -> ${dest}${PLAIN}" "${YELLOW}Has been isolated: ${resolved} -> ${dest}${PLAIN}" "${YELLOW}изолирован: ${resolved} -> ${dest}${PLAIN}")"
 }
 
 restore_sni_stack_backup_files() {
@@ -68,18 +68,18 @@ restore_sni_stack_backup_files() {
 
 rollback_sni_stack_after_failure() {
     local backup_dir="$1"
-    local reason="${2:-配置应用失败}"
+    local reason="$(localized_text "${2:-配置应用失败}" "${2:-配置应用失败}" "${2:-配置应用失败}")"
     echo -e "${RED}❌ ${reason}${PLAIN}"
-    echo -e "${YELLOW}▶ 正在从本次操作前备份回滚 Nginx/Caddy 配置...${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}▶ 正在从本次操作前备份回滚 Nginx/Caddy 配置...${PLAIN}" "${YELLOW}▶ Rolling back from the backup before this operation Nginx/Caddy configuration...${PLAIN}" "${YELLOW}▶ Откат из резервной копии перед этой операцией. Конфигурация Nginx/Caddy...${PLAIN}")"
     if restore_sni_stack_backup_files "$backup_dir"; then
-        nginx -t >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ Nginx 回滚后语法检查仍未通过，请手动检查 /etc/nginx/nginx.conf。${PLAIN}"
-        caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 || echo -e "${YELLOW}⚠️ Caddy 回滚后配置检查仍未通过，请手动检查 /etc/caddy/Caddyfile。${PLAIN}"
+        nginx -t >/dev/null 2>&1 || echo -e "$(localized_text "${YELLOW}⚠️ Nginx 回滚后语法检查仍未通过，请手动检查 /etc/nginx/nginx.conf。${PLAIN}" "${YELLOW}⚠️ Nginx The syntax check still fails after rollback. Please check /etc/nginx/nginx.conf manually.${PLAIN}" "${YELLOW}⚠️ Nginx Проверка синтаксиса по-прежнему не выполняется после отката. Пожалуйста, проверьте /etc/nginx/nginx.conf вручную.${PLAIN}")"
+        caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 || echo -e "$(localized_text "${YELLOW}⚠️ Caddy 回滚后配置检查仍未通过，请手动检查 /etc/caddy/Caddyfile。${PLAIN}" "${YELLOW}⚠️ Caddy The configuration check still fails after rollback. Please check /etc/caddy/Caddyfile manually.${PLAIN}" "${YELLOW}⚠️ Caddy Проверка конфигурации после отката по-прежнему не выполняется. Пожалуйста, проверьте /etc/caddy/Caddyfile вручную.${PLAIN}")"
         restart_service_if_available nginx >/dev/null 2>&1 || true
         restart_service_if_available caddy >/dev/null 2>&1 || true
         systemctl daemon-reload >/dev/null 2>&1 || true
-        echo -e "${YELLOW}已回滚到：${backup_dir}${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}已回滚到：${backup_dir}${PLAIN}" "${YELLOW}Has been rolled back to: ${backup_dir}${PLAIN}" "${YELLOW}откатился до: ${backup_dir}.${PLAIN}")"
     else
-        echo -e "${RED}❌ 自动回滚失败，请手动使用备份目录恢复：${backup_dir}${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 自动回滚失败，请手动使用备份目录恢复：${backup_dir}${PLAIN}" "${RED}❌ Automatic rollback failed, please manually use the backup directory to restore: ${backup_dir}${PLAIN}" "${RED}❌ Не удалось выполнить автоматический откат. Для восстановления вручную используйте каталог резервной копии: ${backup_dir}.${PLAIN}")"
     fi
     return 1
 }
@@ -91,23 +91,23 @@ rollback_sni_stack_config() {
         backup_dir=$(find /etc/vps-optimize/backups -maxdepth 1 -type d -name 'sni-stack_*' 2>/dev/null | sort | tail -n1)
     fi
     if [[ -z "$backup_dir" || ! -d "$backup_dir" ]]; then
-        echo -e "${RED}❌ 未找到可回滚的 SNI stack 备份。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 未找到可回滚的 SNI stack 备份。${PLAIN}" "${RED}❌ No rollbackable SNI stack backup found.${PLAIN}" "${RED}❌ Не найдена резервная копия стека SNI, допускающая откат.${PLAIN}")"
         return 1
     fi
-    echo -e "${YELLOW}即将回滚到备份：${backup_dir}${PLAIN}"
-    confirm_risk_action "回滚覆盖 Nginx/Caddy 443 配置" \
-        "当前 Nginx/Caddy/443 单入口相关配置" \
-        "如回滚后仍异常，请用云厂商控制台或手动恢复备份目录" \
-        "回滚会覆盖当前配置，请确认已选中正确备份。" || return 1
+    echo -e "$(localized_text "${YELLOW}即将回滚到备份：${backup_dir}${PLAIN}" "${YELLOW}Is about to be rolled back to backup: ${backup_dir}${PLAIN}" "${YELLOW}собирается вернуться к резервной копии: ${backup_dir}${PLAIN}")"
+    confirm_risk_action "$(localized_text "回滚覆盖 Nginx/Caddy 443 配置" "Rollback coverage Nginx/Caddy 443 configuration" "Покрытие отката конфигурации Nginx/Caddy 443")" \
+        "$(localized_text "当前 Nginx/Caddy/443 单入口相关配置" "Current Nginx/Caddy/443 shared entry related configuration" "Текущая конфигурация, связанная с одним входом Nginx/Caddy/443")" \
+        "$(localized_text "如回滚后仍异常，请用云厂商控制台或手动恢复备份目录" "If the exception persists after rollback, please use the cloud provider console or manually restore the backup directory." "Если исключение сохраняется после отката, воспользуйтесь консолью облачного провайдера или вручную восстановите каталог резервной копии.")" \
+        "$(localized_text "回滚会覆盖当前配置，请确认已选中正确备份。" "Rolling back will overwrite the current configuration, please confirm that correct backup is selected." "При откате текущая конфигурация будет перезаписана. Убедитесь, что выбрана правильная резервная копия.")" || return 1
 
-    restore_sni_stack_backup_files "$backup_dir" || { echo -e "${RED}❌ 回滚文件恢复失败。${PLAIN}"; return 1; }
+    restore_sni_stack_backup_files "$backup_dir" || { echo -e "$(localized_text "${RED}❌ 回滚文件恢复失败。${PLAIN}" "${RED}❌ Rollback file recovery failed.${PLAIN}" "${RED}❌ Не удалось выполнить откат восстановления файла.${PLAIN}")"; return 1; }
 
     if nginx -t && caddy validate --config /etc/caddy/Caddyfile; then
         restart_service_if_available nginx >/dev/null 2>&1 || true
         restart_service_if_available caddy >/dev/null 2>&1 || true
-        echo -e "${GREEN}✅ 回滚完成。${PLAIN}"
+        echo -e "$(localized_text "${GREEN}✅ 回滚完成。${PLAIN}" "${GREEN}✅ Rollback completed.${PLAIN}" "${GREEN}✅ Откат завершен.${PLAIN}")"
     else
-        echo -e "${RED}❌ 回滚文件已恢复，但配置校验失败，请手动检查备份：${backup_dir}${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 回滚文件已恢复，但配置校验失败，请手动检查备份：${backup_dir}${PLAIN}" "${RED}❌ The rollback file has been restored, but the configuration validation failed. Please check the backup manually: ${backup_dir}${PLAIN}" "${RED}❌ Файл отката восстановлен, но проверка конфигурации не удалась. Пожалуйста, проверьте резервную копию вручную: ${backup_dir}.${PLAIN}")"
         return 1
     fi
 }
@@ -138,14 +138,14 @@ dns_restore_latest_backup() {
     local backup_dir
     backup_dir=$(cat "${DNS_OPTIMIZE_BACKUP_DIR}/last" 2>/dev/null || true)
     if [[ -z "$backup_dir" || ! -d "$backup_dir" ]]; then
-        echo -e "${YELLOW}⚠️ 未找到最近一次 DNS 备份。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}⚠️ 未找到最近一次 DNS 备份。${PLAIN}" "${YELLOW}⚠️ The most recent DNS backup was not found.${PLAIN}" "${YELLOW}⚠️ Самая последняя резервная копия DNS не найдена.${PLAIN}")"
         return 1
     fi
 
-    confirm_risk_action "恢复最近一次 DNS 备份" \
-        "/etc/resolv.conf 和 VPS-Optimize 写入的 systemd-resolved DNS 配置" \
-        "重新进入 DNS 优化菜单选择国内/国外/自定义 DNS" \
-        "恢复后如果解析异常，请重新选择一个 DNS 配置。" || return 1
+    confirm_risk_action "$(localized_text "恢复最近一次 DNS 备份" "Restore the most recent DNS backup" "Восстановите самую последнюю резервную копию DNS.")" \
+        "$(localized_text "/etc/resolv.conf 和 VPS-Optimize 写入的 systemd-resolved DNS 配置" "systemd-resolved DNS configuration written by /etc/resolv.conf and VPS-Optimize" "Конфигурация DNS с разрешением systemd, написанная /etc/resolv.conf и VPS-Optimize")" \
+        "$(localized_text "重新进入 DNS 优化菜单选择国内/国外/自定义 DNS" "Re-enter DNS optimization menu and select domestic/foreign/customized DNS" "Снова войдите в меню оптимизации DNS и выберите отечественный/иностранный/индивидуальный DNS.")" \
+        "$(localized_text "恢复后如果解析异常，请重新选择一个 DNS 配置。" "If the parsing is abnormal after recovery, please select a DNS configuration again." "Если после восстановления анализ происходит ненормально, выберите конфигурацию DNS еще раз.")" || return 1
 
     if [[ -e "$backup_dir/resolv.conf" || -L "$backup_dir/resolv.conf" ]]; then
         [[ -e /etc/resolv.conf || -L /etc/resolv.conf ]] && quarantine_path /etc/resolv.conf "/etc/vps-optimize/quarantine/dns" >/dev/null 2>&1 || true
@@ -161,5 +161,5 @@ dns_restore_latest_backup() {
     fi
 
     systemctl restart systemd-resolved >/dev/null 2>&1 || true
-    echo -e "${GREEN}✅ 已恢复 DNS 备份：${backup_dir}${PLAIN}"
+    echo -e "$(localized_text "${GREEN}✅ 已恢复 DNS 备份：${backup_dir}${PLAIN}" "${GREEN}✅ Restored DNS Backup: ${backup_dir}${PLAIN}" "${GREEN}✅ Восстановлена резервная копия DNS: ${backup_dir}${PLAIN}")"
 }

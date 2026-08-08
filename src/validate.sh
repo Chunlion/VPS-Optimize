@@ -48,35 +48,35 @@ is_valid_domain() {
 }
 
 print_domain_validation_error() {
-    local label="${1:-域名}"
+    local label="$(localized_text "${1:-域名}" "${1:-域名}" "${1:-域名}")"
     local raw="${2:-}"
     local normalized="${3:-}"
     local trimmed display_value
 
     [[ -z "$normalized" && -n "$raw" ]] && normalized=$(normalize_domain_input "$raw")
-    display_value="${normalized:-（空）}"
-    echo -e "${RED}❌ ${label}格式无效：${display_value}${PLAIN}"
-    echo -e "${YELLOW}提示：请只粘贴纯域名，例如 panel.example.com；不要带协议、路径、端口或中文/全角标点。${PLAIN}"
+    display_value="$(localized_text "${normalized:-（空）}" "${normalized:-（空）}" "${normalized:-（空）}")"
+    echo -e "$(localized_text "${RED}❌ ${label}格式无效：${display_value}${PLAIN}" "${RED}❌ ${label} Invalid format: ${display_value}${PLAIN}" "${RED}❌ ${label} Неверный формат: ${display_value}${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}提示：请只粘贴纯域名，例如 panel.example.com；不要带协议、路径、端口或中文/全角标点。${PLAIN}" "${YELLOW}Tip: Please paste only the pure domain, such as panel.example.com; do not include the protocol, path, port or Chinese/full-width punctuation.${PLAIN}" "${YELLOW}Совет. Вставьте только чистое доменное имя, например Panel.example.com; не включайте протокол, путь, порт или знаки препинания на китайском языке или во всю ширину.${PLAIN}")"
 
     if [[ -z "$raw" ]]; then
-        echo -e "${YELLOW}脚本规范化后用于校验的值：${display_value}${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}脚本规范化后用于校验的值：${display_value}${PLAIN}" "${YELLOW}The value used for verification after the script is normalized: ${display_value}${PLAIN}" "${YELLOW}Значение, используемое для проверки после нормализации сценария : ${display_value}.${PLAIN}")"
         return 0
     fi
 
     trimmed=$(trim_input "$raw")
     if [[ "$trimmed" != "$raw" || "$raw" =~ [[:space:]] ]]; then
-        echo -e "${YELLOW}检测到空白字符：请确认没有复制到换行、制表符、不可见空格或多余空格。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}检测到空白字符：请确认没有复制到换行、制表符、不可见空格或多余空格。${PLAIN}" "${YELLOW}Whitespace characters detected: Please confirm that no newlines, tabs, invisible spaces, or extra spaces are copied.${PLAIN}" "${YELLOW}Обнаружены пробельные символы: убедитесь, что не копируются символы новой строки, табуляции, невидимые пробелы или дополнительные пробелы.${PLAIN}")"
     fi
     if [[ "$trimmed" =~ ^[Hh][Tt][Tt][Pp][Ss]?:// || "$trimmed" == *"://"* || "$trimmed" == */* || "$trimmed" == *\?* || "$trimmed" == *#* || "$trimmed" == *:* ]]; then
-        echo -e "${YELLOW}检测到类似 URL 的内容：请去掉 http(s)://、路径、查询参数、#片段或 :端口。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}检测到类似 URL 的内容：请去掉 http(s)://、路径、查询参数、#片段或 :端口。${PLAIN}" "${YELLOW}Detected URL-like content: Please remove http(s)://, path, query parameters, # fragment or :port.${PLAIN}" "${YELLOW}обнаружил содержимое, похожее на URL-адрес: удалите http(s)://, путь, параметры запроса, # фрагмент или :port.${PLAIN}")"
     fi
     if printf '%s' "$trimmed" | grep -q '[：，。／、；？＃＠　]'; then
-        echo -e "${YELLOW}检测到中文/全角标点：请改成英文半角的 . , / : 等字符；域名里的点必须是英文句点。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}检测到中文/全角标点：请改成英文半角的 . , / : 等字符；域名里的点必须是英文句点。${PLAIN}" "${YELLOW}Detected Chinese/full-width punctuation: please change it to English half-width . , / : and other characters; the dots in the domain must be English periods.${PLAIN}" "${YELLOW}обнаружил китайскую/полноширинную пунктуацию: измените ее на английскую половинную ширину. , / : и другие символы; точки в доменном имени должны быть английскими точками.${PLAIN}")"
     fi
     if printf '%s' "$trimmed" | LC_ALL=C grep -q '[^ -~]'; then
-        echo -e "${YELLOW}检测到非 ASCII 字符：可能包含零宽空格、全角字符或复制来源带入的隐藏字符。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}检测到非 ASCII 字符：可能包含零宽空格、全角字符或复制来源带入的隐藏字符。${PLAIN}" "${YELLOW}Non-ASCII characters detected: may contain zero-width spaces, full-width characters, or hidden characters brought in from the copy source.${PLAIN}" "${YELLOW}Обнаружены символы, отличные от ASCII: могут содержать пробелы нулевой ширины, символы полной ширины или скрытые символы, полученные из источника копирования.${PLAIN}")"
     fi
-    echo -e "${YELLOW}脚本规范化后用于校验的值：${display_value}${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}脚本规范化后用于校验的值：${display_value}${PLAIN}" "${YELLOW}The value used for verification after the script is normalized: ${display_value}${PLAIN}" "${YELLOW}Значение, используемое для проверки после нормализации сценария : ${display_value}.${PLAIN}")"
 }
 
 normalize_path_prefix() {
@@ -165,30 +165,30 @@ resolve_domain_a_records() {
 
 check_domain_dns_sanity() {
     local domain="$1"
-    local label="${2:-域名}"
+    local label="$(localized_text "${2:-域名}" "${2:-域名}" "${2:-域名}")"
     local mode="${3:-warn}"
     local ips ip suspect=0 confirm
 
     ips=$(resolve_domain_a_records "$domain")
     if [[ -z "$ips" ]]; then
-        echo -e "${YELLOW}⚠️ ${label} ${domain} 未解析到 A 记录；如果只配置了 IPv6/AAAA，请确认客户端和 VPS 都支持 IPv6。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}⚠️ ${label} ${domain} 未解析到 A 记录；如果只配置了 IPv6/AAAA，请确认客户端和 VPS 都支持 IPv6。${PLAIN}" "${YELLOW}⚠️ ${label} ${domain} is not resolved to the A record; if only IPv6/AAAA is configured, please confirm that both the client and VPS support IPv6.${PLAIN}" "${YELLOW}⚠️ ${label} ${domain} не разрешается в запись A; если настроен только IPv6/AAAA, убедитесь, что и клиент, и VPS поддерживают IPv6.${PLAIN}")"
         return 1
     fi
 
-    echo -e "${CYAN}▶ ${label} ${domain} 当前 A 记录: $(echo "$ips" | tr '\n' ' ')${PLAIN}"
+    echo -e "$(localized_text "${CYAN}▶ ${label} ${domain} 当前 A 记录: $(echo "$ips" | tr '\n' ' ')${PLAIN}" "${CYAN}▶ ${label} ${domain} Current A record: $(echo \"$ips\" | tr '\n' ' ')${PLAIN}" "${CYAN}▶ ${label} ${domain} Текущая запись A: $(echo \"$ips\" | tr '\n' ' ')${PLAIN}")"
     while IFS= read -r ip; do
         [[ -z "$ip" ]] && continue
         if is_suspicious_public_ipv4 "$ip"; then
-            echo -e "${RED}❌ ${label} ${domain} 解析到可疑地址 ${ip}，这不是正常公网 VPS 地址。${PLAIN}"
+            echo -e "$(localized_text "${RED}❌ ${label} ${domain} 解析到可疑地址 ${ip}，这不是正常公网 VPS 地址。${PLAIN}" "${RED}❌ ${label} ${domain} resolves to the suspicious address ${ip}, which is not a normal public VPS address.${PLAIN}" "${RED}❌ ${label} ${domain} разрешается в подозрительный адрес ${ip}, который не является обычным VPS-адресом публичной сети.${PLAIN}")"
             suspect=1
         fi
     done <<< "$ips"
 
     if [[ "$suspect" -eq 1 ]]; then
-        echo -e "${YELLOW}请在 VPS 上复查 DNS。若只在本地电脑开启了 fake-ip，198.18.x.x 可能只是本地代理映射；若 VPS/公共 DNS 也看到此地址，请把 A 记录改成真实 VPS 公网 IP。${PLAIN}"
-        echo -e "${YELLOW}如果使用 Cloudflare 小云朵，公共 DNS 应看到 Cloudflare 边缘 IP，而不是 198.18/10/127/192.168 等地址。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}请在 VPS 上复查 DNS。若只在本地电脑开启了 fake-ip，198.18.x.x 可能只是本地代理映射；若 VPS/公共 DNS 也看到此地址，请把 A 记录改成真实 VPS 公网 IP。${PLAIN}" "${YELLOW}Please review DNS on VPS. If fake-ip is only enabled on the local computer, 198.18.x.x may only be local proxy mapping; if VPS/public DNS also sees this address, please change the A record to the real VPS public IP.${PLAIN}" "${YELLOW}Пожалуйста, просмотрите DNS на VPS. Если поддельный IP-адрес включен только на локальном компьютере, 198.18.x.x может быть сопоставлением только локального прокси-сервера; если VPS/public DNS также видит этот адрес, измените запись A на реальный IP-адрес VPS в Интернете.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}如果使用 Cloudflare 小云朵，公共 DNS 应看到 Cloudflare 边缘 IP，而不是 198.18/10/127/192.168 等地址。${PLAIN}" "${YELLOW}If using the Cloudflare cloudlet, the public DNS should see the Cloudflare edge IP instead of 198.18/10/127/192.168 etc. addresses.${PLAIN}" "${YELLOW}При использовании облака Cloudflare общедоступный DNS должен видеть граничный IP-адрес Cloudflare вместо адресов 198.18/10/127/192.168 и т. д.${PLAIN}")"
         if [[ "$mode" == "prompt" ]]; then
-            read_trimmed confirm "仍要继续？(Y/n，不推荐): "
+            read_trimmed confirm "$(localized_text "仍要继续？(Y/n，不推荐): " "Still want to continue? (Y/n, not recommended):" "Все еще хотите продолжить? (Да/нет, не рекомендуется):")"
             is_yes "$confirm" || return 1
         else
             return 1
@@ -352,7 +352,7 @@ normalize_ip_whitelist_input() {
         fi
         [[ -z "$normalized" ]] && continue
         if ! is_valid_ip_cidr "$normalized"; then
-            echo -e "${RED}❌ IP/CIDR 格式无效：${normalized}${PLAIN}"
+            echo -e "$(localized_text "${RED}❌ IP/CIDR 格式无效：${normalized}${PLAIN}" "${RED}❌ Invalid IP/CIDR format: ${normalized}${PLAIN}" "${RED}❌ Неверный формат IP/CIDR: ${normalized}.${PLAIN}")"
             return 1
         fi
         if [[ "$seen" != *" ${normalized} "* ]]; then
@@ -468,7 +468,7 @@ probe_backend_target() {
     local probe_rc
 
     if ! is_valid_backend_addr "$addr" || ! is_valid_port "$port"; then
-        echo -e "${RED}❌ ${label}：后端地址或端口无效（$(format_hostport "$addr" "$port")）${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ ${label}：后端地址或端口无效（$(format_hostport "$addr" "$port")）${PLAIN}" "${RED}❌ ${label}: Invalid backend address or port ($(format_hostport \"$addr\" \"$port\"))${PLAIN}" "${RED}❌ ${label}: Неверный внутренний адрес или порт ($(format_hostport \"$addr\" \"$port\"))${PLAIN}")"
         return 1
     fi
 
@@ -477,23 +477,23 @@ probe_backend_target() {
     else
         probe_rc=$?
         if [[ "$probe_rc" -eq 2 ]]; then
-            echo -e "${YELLOW}⚠️ ${label}：缺少地址解析工具，未检查 $(format_hostport "$addr" "$port")${PLAIN}"
+            echo -e "$(localized_text "${YELLOW}⚠️ ${label}：缺少地址解析工具，未检查 $(format_hostport "$addr" "$port")${PLAIN}" "${YELLOW}⚠️ ${label}: Missing address resolution tool, not checked $(format_hostport \"$addr\" \"$port\")${PLAIN}" "${YELLOW}⚠️ ${label}: Отсутствует инструмент разрешения адресов, не отмечен $(format_hostport \"$addr\" \"$port\")${PLAIN}")"
             return 2
         fi
-        echo -e "${RED}❌ ${label}：无法解析后端地址 ${addr}${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ ${label}：无法解析后端地址 ${addr}${PLAIN}" "${RED}❌ ${label}: Unable to resolve backend address ${addr}${PLAIN}" "${RED}❌ ${label}: невозможно разрешить внутренний адрес ${addr}${PLAIN}")"
         return 1
     fi
 
     if tcp_target_reachable "$addr" "$port"; then
-        echo -e "${GREEN}✅ ${label}：$(format_hostport "$addr" "$port") 可连接${PLAIN}"
+        echo -e "$(localized_text "${GREEN}✅ ${label}：$(format_hostport "$addr" "$port") 可连接${PLAIN}" "${GREEN}✅ ${label}: $(format_hostport \"$addr\" \"$port\") is reachable${PLAIN}" "${GREEN}✅ ${label}: $(format_hostport \"$addr\" \"$port\") доступен${PLAIN}")"
         return 0
     fi
     probe_rc=$?
     if [[ "$probe_rc" -eq 2 ]]; then
-        echo -e "${YELLOW}⚠️ ${label}：缺少 nc、timeout 或 curl，未检查 $(format_hostport "$addr" "$port")${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}⚠️ ${label}：缺少 nc、timeout 或 curl，未检查 $(format_hostport "$addr" "$port")${PLAIN}" "${YELLOW}⚠️ ${label}: missing nc, timeout or curl, not checked $(format_hostport \"$addr\" \"$port\")${PLAIN}" "${YELLOW}⚠️ ${label}: отсутствует NC, тайм-аут или curl, не проверено $(format_hostport \"$addr\" \"$port\")${PLAIN}")"
         return 2
     fi
-    echo -e "${RED}❌ ${label}：$(format_hostport "$addr" "$port") 当前不可连接${PLAIN}"
+    echo -e "$(localized_text "${RED}❌ ${label}：$(format_hostport "$addr" "$port") 当前不可连接${PLAIN}" "${RED}❌ ${label}: $(format_hostport \"$addr\" \"$port\") is unreachable${PLAIN}" "${RED}❌ ${label}: $(format_hostport \"$addr\" \"$port\") недоступен${PLAIN}")"
     return 1
 }
 
@@ -509,12 +509,12 @@ confirm_backend_target_or_continue() {
     probe_rc=$?
     [[ "$probe_rc" -eq 2 ]] && return 0
 
-    read_trimmed continue_confirm "后端当前不可连接，仍要继续保存吗？(Y/n，默认 y): "
+    read_trimmed continue_confirm "$(localized_text "后端当前不可连接，仍要继续保存吗？(Y/n，默认 y): " "The backend is currently unavailable. Do you still want to save? (Y/n, default y):" "бэкенд в настоящее время недоступна. Вы все еще хотите сэкономить? (Да/нет, по умолчанию y):")"
     if is_yes "$continue_confirm"; then
-        echo -e "${YELLOW}⚠️ 已选择继续；保存后请检查后端服务、地址和端口。${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}⚠️ 已选择继续；保存后请检查后端服务、地址和端口。${PLAIN}" "${YELLOW}⚠️ Selected to continue; please check the backend service, address and port after saving.${PLAIN}" "${YELLOW}⚠️ Выбрано для продолжения; пожалуйста, проверьте серверную службу, адрес и порт после сохранения.${PLAIN}")"
         return 0
     fi
-    echo -e "${BLUE}已取消保存。${PLAIN}"
+    echo -e "$(localized_text "${BLUE}已取消保存。${PLAIN}" "${BLUE}Has been canceled.${PLAIN}" "${BLUE}отменен.${PLAIN}")"
     return 1
 }
 
@@ -595,10 +595,10 @@ warn_if_public_bind() {
     local listen_port="$3"
     local confirm
     if [[ "$listen_addr" == "0.0.0.0" || "$listen_addr" == "::" ]]; then
-        confirm_risk_action "${service_name} 监听公网 ${listen_addr}:${listen_port}" \
-            "${service_name} 监听地址将从本地模型改为公网可访问" \
-            "改回 127.0.0.1 后重新应用配置并重启相关服务" \
-            "仅在你明确需要公网直连该服务时继续。" || return 1
+        confirm_risk_action "$(localized_text "${service_name} 监听公网 ${listen_addr}:${listen_port}" "${service_name} listens on the public ${listen_addr}:${listen_port}" "${service_name} прослушивает публичную сеть ${listen_addr}:${listen_port}")" \
+            "$(localized_text "${service_name} 监听地址将从本地模型改为公网可访问" "${service_name} listening address will be changed from local model to public accessible" "Адрес прослушивания ${service_name} будет изменен с локальной модели на доступную публичную сеть.")" \
+            "$(localized_text "改回 127.0.0.1 后重新应用配置并重启相关服务" "Change back to 127.0.0.1 and then reapply the configuration and restart related services." "Вернитесь к 127.0.0.1, затем повторно примените конфигурацию и перезапустите соответствующие службы.")" \
+            "$(localized_text "仅在你明确需要公网直连该服务时继续。" "Only continue if you clearly need a direct public connection to the service." "Продолжайте только в том случае, если вам явно необходимо прямое подключение к службе через публичную сеть.")" || return 1
     fi
     return 0
 }

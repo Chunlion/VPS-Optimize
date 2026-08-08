@@ -4,7 +4,7 @@
 load_sni_stack_env() {
     local env_file="/etc/vps-optimize/sni-stack.env"
     if [[ ! -f "$env_file" ]]; then
-        echo -e "${RED}❌ 未找到 ${env_file}，请先运行主菜单 [19] -> [2] 首次配置 443 单入口。${PLAIN}"
+        echo -e "$(localized_text "${RED}❌ 未找到 ${env_file}，请先运行主菜单 [19] -> [2] 首次配置 443 单入口。${PLAIN}" "${RED}❌ ${env_file} not found, please run the main menu [19] -> [2] for the first time to configure 443 shared entry.${PLAIN}" "${RED}❌ ${env_file} не найден, запустите главное меню [19] -> [2] в первый раз, чтобы настроить общий вход 443.${PLAIN}")"
         return 1
     fi
     # shellcheck disable=SC1090
@@ -24,7 +24,7 @@ get_listen_line_by_port() {
     local port="$1"
     local line
     line=$(ss -lntp 2>/dev/null | grep ":${port}[[:space:]]" | head -n1 || true)
-    echo "${line:-未监听}"
+    echo "$(localized_text "${line:-未监听}" "${line:-未监听}" "${line:-未监听}")"
 }
 
 print_sni_stack_current_summary() {
@@ -37,10 +37,10 @@ print_sni_stack_current_summary() {
     web_label=$(web_proxy_engine_label "$web_engine")
     web_backend=$(web_proxy_backend)
 
-    echo -e "${BOLD}当前保存的 443 分流配置${PLAIN} ${CYAN}(${env_file})${PLAIN}"
-    echo -e "面板：      https://${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}"
-    echo -e "普通订阅：  https://${PANEL_DOMAIN}${SUB_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
-    echo -e "Clash 订阅：https://${PANEL_DOMAIN}${CLASH_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}"
+    echo -e "$(localized_text "${BOLD}当前保存的 443 分流配置${PLAIN} ${CYAN}(${env_file})${PLAIN}" "${BOLD}Currently saved 443 routing configuration (${env_file})${PLAIN}" "${BOLD}На данный момент сохранено 443 конфигурации маршрутизации (${env_file})${PLAIN}")"
+    echo -e "$(localized_text "面板：      https://${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Panel: https://${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Панель: https://${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}")"
+    echo -e "$(localized_text "普通订阅：  https://${PANEL_DOMAIN}${SUB_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}" "Ordinary subscription: https://${PANEL_DOMAIN}${SUB_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}" "Обычная подписка: https://${PANEL_DOMAIN}${SUB_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}")"
+    echo -e "$(localized_text "Clash 订阅：https://${PANEL_DOMAIN}${CLASH_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}" "Clash Subscribe: https://${PANEL_DOMAIN}${CLASH_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}" "Clash Подписаться: https://${PANEL_DOMAIN}${CLASH_URI_PATH} -> ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}")"
     echo -e "REALITY：   ${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
     if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
         local tcp_i
@@ -51,12 +51,12 @@ print_sni_stack_current_summary() {
     if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
         local xray_route_i
         for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
-            echo -e "Xray 入站：  ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}"
+            echo -e "$(localized_text "Xray 入站：  ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}" "Xray Inbound: ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}" "Xray Входящий: ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}")"
         done
     fi
-    echo -e "Web 反代：  ${web_label} (${web_backend})"
-    echo -e "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${web_label} ${web_backend}"
-    echo -e "配置文件：  Nginx ${nginx_conf}"
+    echo -e "$(localized_text "Web 反代：  ${web_label} (${web_backend})" "Web reverse proxy: ${web_label} (${web_backend})" "веб-прокси: ${web_label} (${web_backend})")"
+    echo -e "$(localized_text "公网入口：  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${web_label} ${web_backend}" "public entry: ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${web_label} ${web_backend}" "Вход в публичную сеть: ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${web_label} ${web_backend}")"
+    echo -e "$(localized_text "配置文件：  Nginx ${nginx_conf}" "Configuration file: Nginx ${nginx_conf}" "Файл конфигурации: Nginx ${nginx_conf}")"
     if [[ "$web_engine" == "nginx" ]]; then
         echo -e "           Nginx Web ${nginx_web_conf}"
     else
@@ -64,22 +64,22 @@ print_sni_stack_current_summary() {
     fi
     print_sni_ip_whitelist_summary
     echo -e "------------------------------------------------"
-    echo -e "${BOLD}当前实际监听状态${PLAIN}"
-    echo -e "Nginx 入口：  $(get_listen_line_by_port "$NGINX_LISTEN_PORT")"
+    echo -e "$(localized_text "${BOLD}当前实际监听状态${PLAIN}" "${BOLD}Current actual listening status${PLAIN}" "${BOLD}Текущий фактический статус прослушивания${PLAIN}")"
+    echo -e "$(localized_text "Nginx 入口：  $(get_listen_line_by_port "$NGINX_LISTEN_PORT")" "Nginx entry: $(get_listen_line_by_port \"$NGINX_LISTEN_PORT\")" "Nginx Вход: $(get_listen_line_by_port \"$NGINX_LISTEN_PORT\")")"
     echo -e "${web_label}：$(get_listen_line_by_port "$CADDY_LISTEN_PORT")"
-    echo -e "面板后端：    $(get_listen_line_by_port "$PANEL_LISTEN_PORT")"
-    echo -e "订阅后端：    $(get_listen_line_by_port "$SUB_LISTEN_PORT")"
-    echo -e "REALITY 后端：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")"
+    echo -e "$(localized_text "面板后端：    $(get_listen_line_by_port "$PANEL_LISTEN_PORT")" "Panel backend: $(get_listen_line_by_port \"$PANEL_LISTEN_PORT\")" "бэкенд панели: $(get_listen_line_by_port \"$PANEL_LISTEN_PORT\")")"
+    echo -e "$(localized_text "订阅后端：    $(get_listen_line_by_port "$SUB_LISTEN_PORT")" "Subscription backend: $(get_listen_line_by_port \"$SUB_LISTEN_PORT\")" "Сервер подписки: $(get_listen_line_by_port \"$SUB_LISTEN_PORT\")")"
+    echo -e "$(localized_text "REALITY 后端：$(get_listen_line_by_port "$XRAY_LISTEN_PORT")" "REALITY Backend: $(get_listen_line_by_port \"$XRAY_LISTEN_PORT\")" "REALITY бэкенд: $(get_listen_line_by_port \"$XRAY_LISTEN_PORT\")")"
     if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
         local tcp_i
         for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
-            echo -e "TCP/SNI 后端 ${TCP_ROUTE_SNIS[$tcp_i]}：$(get_listen_line_by_port "${TCP_ROUTE_PORTS[$tcp_i]}")"
+            echo -e "$(localized_text "TCP/SNI 后端 ${TCP_ROUTE_SNIS[$tcp_i]}：$(get_listen_line_by_port "${TCP_ROUTE_PORTS[$tcp_i]}")" "TCP/SNI backend ${TCP_ROUTE_SNIS[$tcp_i]}: $(get_listen_line_by_port \"${TCP_ROUTE_PORTS[$tcp_i]}\")" "TCP/SNI бэкенд ${TCP_ROUTE_SNIS[$tcp_i]}: $(get_listen_line_by_port \"${TCP_ROUTE_PORTS[$tcp_i]}\")")"
         done
     fi
     if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
         local xray_route_i
         for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
-            echo -e "Xray 入站后端 ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}：$(get_listen_line_by_port "${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}")"
+            echo -e "$(localized_text "Xray 入站后端 ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}：$(get_listen_line_by_port "${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}")" "Xray Inbound backend ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}: $(get_listen_line_by_port \"${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}\")" "Xray Входящая бэкенд ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}: $(get_listen_line_by_port \"${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}\")")"
         done
     fi
 }
