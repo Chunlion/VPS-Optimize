@@ -8,6 +8,7 @@ rollback
 backup
 runtime
 system_core
+system_reinstall
 firewall
 caddy_certificates
 caddy_proxy

@@ -468,6 +468,7 @@ func_system_tweaks() {
         echo -e "$(localized_text "${GREEN}  5. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}5. Modify the host name${PLAIN} Current: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}5. Измените имя хоста${PLAIN} Текущее: [ ${CYAN}${current_hostname}${PLAIN} ]")"
         echo -e "$(localized_text "${GREEN}  6. 自动安全更新开关${PLAIN}       当前: [ $str_update ]" "${GREEN}6. Automatic security update switch${PLAIN} Current: [ $str_update ]" "${GREEN}6. Переключатель автоматического обновления безопасности${PLAIN} Текущая версия: [ $str_update ]")"
         echo -e "$(localized_text "${GREEN}  7. 清理系统垃圾${PLAIN}           (日志/缓存/无用包)" "${GREEN}7. Clean up system garbage${PLAIN} (log/cache/useless packages)" "${GREEN}7. Очистка системного мусора${PLAIN} (журнал/кеш/бесполезные пакеты)")"
+        echo -e "$(localized_text "${RED}  8. 系统重装${PLAIN}               (重启后清空主硬盘；高风险)" "${RED}8. System reinstallation${PLAIN} (erases the main disk after reboot; high risk)" "${RED}8. Переустановка системы${PLAIN} (очистит основной диск после перезагрузки; высокий риск)")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -543,6 +544,7 @@ func_system_tweaks() {
                 journalctl --vacuum-time=1d > /dev/null 2>&1
                 echo -e "$(localized_text "${GREEN}✅ 清理完成！${PLAIN}" "${GREEN}✅ Cleanup completed!${PLAIN}" "${GREEN}✅ Очистка завершена!${PLAIN}")"
                 sleep 1 ;;
+            8) func_system_reinstall ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac

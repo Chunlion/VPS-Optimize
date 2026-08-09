@@ -641,6 +641,28 @@ is_valid_port "https://panel.example.com:４４３/path"
     [[ "${host_names_smoke[2]}" == "vps01" ]]
 )
 (
+    source src/system_reinstall.sh
+    assert_dist_contains "func_system_reinstall" "Release script is missing system reinstallation support."
+    VPSO_LANGUAGE="zh"
+    system_reinstall_set_target 1
+    [[ "$SYSTEM_REINSTALL_LABEL" == "Debian 13" ]]
+    [[ "${SYSTEM_REINSTALL_TARGET[*]}" == "debian 13" ]]
+    system_reinstall_set_target 41
+    [[ "$SYSTEM_REINSTALL_LABEL" == "Windows 11 Pro" ]]
+    [[ "${SYSTEM_REINSTALL_TARGET[*]}" == "windows --image-name Windows 11 Pro --lang zh-cn" ]]
+    for reinstall_target in 2 3 4 11 12 13 14 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 42 44 45 46 47; do
+        system_reinstall_set_target "$reinstall_target"
+        [[ -n "$SYSTEM_REINSTALL_LABEL" && "${#SYSTEM_REINSTALL_TARGET[@]}" -gt 0 ]]
+    done
+    system_reinstall_set_windows7_target "https://example.com/windows7.iso"
+    [[ "$SYSTEM_REINSTALL_LABEL" == "Windows 7 Ultimate" ]]
+    [[ "${SYSTEM_REINSTALL_TARGET[*]}" == "windows --image-name Windows 7 Ultimate --lang zh-cn --iso https://example.com/windows7.iso" ]]
+    if system_reinstall_set_windows7_target "file:///tmp/windows7.iso"; then
+        echo "Windows 7 target must reject local ISO paths." >&2
+        exit 1
+    fi
+)
+(
     source src/system_hosts.sh
     declare -a host_names_smoke=()
     hosts_normalize_names 'Panel。Example。COM、node.example.com;vps01 panel.example.com' host_names_smoke
