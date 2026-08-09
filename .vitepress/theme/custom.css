@@ -302,6 +302,9 @@ html[lang="zh-CN"] .VPHome .text {
 }
 
 .VPHome .VPButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 46px;
   padding: 0 23px;
   border-radius: 10px;

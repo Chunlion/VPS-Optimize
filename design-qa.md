@@ -5,7 +5,7 @@
 - Source visual truth: `C:\Users\Cuty\.codex\generated_images\019fe29b-d831-7c10-98b6-244c91b0c264\exec-3c743eca-113a-4a54-8335-7bd305c20229.png`
 - Final implementation: `C:\Users\Cuty\.codex\visualizations\2026\08\09\vps-optimize-design-qa\implementation-home-refined-final.png`
 - Side-by-side comparison: `C:\Users\Cuty\.codex\visualizations\2026\08\09\vps-optimize-design-qa\comparison-home-refined-final.png`
-- Additional evidence: `implementation-doc-refined-final.png`, `implementation-home-refined-dark.png`, `implementation-home-refined-mobile.png`, and the focused `comparison-theme-toggle-dpi-final.png` in the same directory.
+- Additional evidence: `implementation-doc-refined-final.png`, `implementation-home-refined-dark.png`, `implementation-home-refined-mobile.png`, `comparison-theme-toggle-dpi-final.png`, and the focused `comparison-cta-centered-final.png` in the same directory.
 - State: Chinese home route, light theme, 1488 × 1058 CSS viewport.
 - Source pixels: 1487 × 1058. Implementation capture: 1473 × 1047. The implementation was normalized to the source size only for the side-by-side comparison.
 
@@ -17,6 +17,7 @@
 - The 443 routing visual includes the gateway, Web, Xray, TCP Peek, routing lines, state indicators, localized labels, and dedicated light/dark assets.
 - Navigation, controls, cards, status colors, shadows, borders, and background gradients use one shared visual system across home and documentation pages.
 - The appearance control uses a 44 × 44 px target and an 18 × 18 px vector icon. Its light and dark icons remain centered instead of inheriting the horizontal offset from VitePress's compact switch track.
+- Both hero CTA labels and their icons use flex alignment. The measured text-center offset is under 0.5 px for each button.
 - Homepage copy is adapted to verified project behavior instead of repeating unsupported marketing claims.
 - Chinese, English, and Russian editions keep the same structure and meaning.
 
@@ -36,6 +37,7 @@
 2. The refined build added self-hosted fonts, localized detailed routing assets, a five-step workflow, a status-focused editorial section, and shared documentation tokens.
 3. Final desktop, dark, mobile, multilingual, documentation, and side-by-side checks found no remaining P0/P1/P2 issues.
 4. The appearance control was rechecked as a focused region after its DPI correction. The inherited switch-track offset was removed, the target and icon were resized, and the center delta measured 0 px on both axes.
+5. The hero CTA labels were 3.67 px above the button center under the inherited inline layout. Switching both buttons to inline flex reduced the measured offset to 0.33 px without changing their size or position.
 
 ## Implementation checklist
 
