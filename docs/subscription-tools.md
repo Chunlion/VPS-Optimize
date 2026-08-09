@@ -14,17 +14,17 @@
 
 订阅工具建议按“本地监听 + Caddy/Nginx/443 对外”的方式部署。新部署的订阅工具默认优先绑定 `127.0.0.1`。
 
-启用 443 单入口后，公网 HTTPS 域名建议通过以下入口添加：
+启用 443端口复用后，公网 HTTPS 域名建议通过以下入口添加：
 
 ```text
-主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]
+主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]
 ```
 
-未启用 443 单入口时，可以使用独立反代入口：
+未启用 443端口复用时，可以使用独立反代入口：
 
 ```text
 主菜单 [4 反代]
 ```
 
-详细场景见 [订阅工具接入 Caddy/Nginx 反代与 443 单入口](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。
+详细场景见 [订阅工具接入 Caddy/Nginx 反代与 443端口复用](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。
 

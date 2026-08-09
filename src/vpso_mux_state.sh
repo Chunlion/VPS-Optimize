@@ -128,7 +128,7 @@ EOF
 show_single_443_engine_status() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🔎 当前 443 入口状态 / 单入口引擎${PLAIN}" "${BOLD}🔎 Current 443 entry status / shared entry engine${PLAIN}" "${BOLD}🔎 Текущий статус записи 443 / общая система записи${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🔎 当前 443 入口状态 / 端口复用引擎${PLAIN}" "${BOLD}🔎 Current 443 entry status / Port 443 Reuse engine${PLAIN}" "${BOLD}🔎 Текущий статус записи 443 / система повторного использования порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     local engine state_file mux_config
     engine=$(single_443_current_engine)
@@ -148,7 +148,7 @@ show_single_443_engine_status() {
     if [[ -f /etc/vps-optimize/sni-stack.env ]]; then
         load_sni_stack_env >/dev/null 2>&1 && print_sni_stack_current_summary
     else
-        echo -e "$(localized_text "${YELLOW}未检测到 sni-stack.env，尚未完成 443 单入口初始化。${PLAIN}" "${YELLOW}Did not detect sni-stack.env, and the 443 shared entry initialization has not been completed.${PLAIN}" "${YELLOW}не обнаружил sni-stack.env, и инициализация одной записи 443 не завершена.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 sni-stack.env，尚未完成 443端口复用初始化。${PLAIN}" "${YELLOW}Did not detect sni-stack.env, and the Port 443 Reuse initialization has not been completed.${PLAIN}" "${YELLOW}не обнаружил sni-stack.env, и инициализация повторного использования порта 443 не завершена.${PLAIN}")"
     fi
     echo -e "------------------------------------------------"
     echo -e "$(localized_text "公网 443 监听：" "public port 443 listening:" "прослушивание публичной сети 443:")"

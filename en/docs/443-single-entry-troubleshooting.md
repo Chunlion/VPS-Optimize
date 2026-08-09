@@ -1,9 +1,9 @@
-# Shared Port 443 Troubleshooting
+# Port 443 Reuse Troubleshooting
 
 Before troubleshooting, run:
 
 ```text
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 If you want to submit an issue, run:
@@ -34,7 +34,7 @@ systemctl status nginx --no-pager
 systemctl status caddy --no-pager
 ```
 
-Internet `443` should only be bound by the shared entry service corresponding to the current `ENTRY_MODE`:
+Internet `443` should only be bound by the Port 443 Reuse service corresponding to the current `ENTRY_MODE`:
 
 ```text
 nginx-stream   -> nginx
@@ -74,15 +74,15 @@ curl -I http://127.0.0.1:40000/panel/
 
 - Clear the 3x-ui panel certificate path and restart the panel.
 - Let the web generation engine backend to the local HTTP backend.
-- shared port 443 point related domains are recommended to use DNS only / Gray Cloud.
+- Port 443 Reuse point related domains are recommended to use DNS only / Gray Cloud.
 - If you just cleared the certificate and the browser still jumps in a loop, try again with an incognito window.
 
 ### Related menu entry
 
 ```text
 Main menu [5 panel、Nodes and subscription tools] -> [3 panel SSL Repair]
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ## ERR_EMPTY_RESPONSE
@@ -128,8 +128,8 @@ https://panel.example.com:40000/
 ### Related menu entry
 
 ```text
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [5 Reapply saved configuration]
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings] -> [5 Reapply saved configuration]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ## ERR_CONNECTION_CLOSED / ERR_SSL_PROTOCOL_ERROR
@@ -154,7 +154,7 @@ systemctl status caddy --no-pager
 
 ### Solution
 
-- Confirm that the Internet `443` is only bound by the single ingress service corresponding to the current `ENTRY_MODE`: `nginx-stream` corresponds to `nginx`, `xray-fallback` corresponds to the Xray main inbound connection, and `tcp-peek` corresponds to `tcppeek` / `vpso-mux`.
+- Confirm that the Internet `443` is only bound by the Port 443 Reuse service corresponding to the current `ENTRY_MODE`: `nginx-stream` corresponds to `nginx`, `xray-fallback` corresponds to the Xray main inbound connection, and `tcp-peek` corresponds to `tcppeek` / `vpso-mux`.
 - Caddy Use `127.0.0.1:8443`.
 - REALITY / Xray local inbound connections that are not connected to the `xray-fallback` primary inbound connection use local bindings such as `127.0.0.1:1443`.
 - The panel and subscription backends only serve as native HTTP.
@@ -163,8 +163,8 @@ systemctl status caddy --no-pager
 
 ```text
 Main menu [13 Inspect and release ports]
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]
-Main menu [19 443 shared entry manager] -> [6 Reapply current entry mode]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
+Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
 ```
 
 ## Port concurrent connection limit accidental damage
@@ -184,7 +184,7 @@ A certain node, subscription or website occasionally fails to connect, the hands
 Let’s first look at the “Port Concurrent Connection Limitation” paragraph in the 443 link health check:
 
 ```text
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 If the public port `443` has the connlimit rule added by this script, it can only be applied to the entire public port `443`, and cannot be precise to a certain SNI, Xray/3x-ui inbound, UUID or user. Don't think of it as a precise limit on an individual node, an inbound, or a user.
@@ -197,7 +197,7 @@ If the public port `443` has the connlimit rule added by this script, it can onl
 ### Related menu entry
 
 ```text
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 Main menu [8 Firewall rules] -> [5 Port concurrent connection limit]
 ```
 
@@ -220,7 +220,7 @@ If the status page also displays an old naming compatibility prompt, such as `ng
 First run:
 
 ```text
-Main menu [19 443 shared entry manager] -> [6 Reapply current entry mode]
+Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
 ```
 
 Reapplying will force the generation of the Nginx Stream configuration and check that `nginx -T` actually loads `/etc/nginx/stream.d/vps_sni_443.conf`. If it still fails, the script prints the Nginx status, recent logs, stream include, and port listening clues.
@@ -288,10 +288,10 @@ systemctl reload caddy || systemctl restart caddy
 ### Related menu entry
 
 ```text
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [1 Edit panel/subscription ports and paths]
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]
-Main menu [19 443 shared entry manager] -> [6 Reapply current entry mode]
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings] -> [1 Edit panel/subscription ports and paths]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
+Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ## 502
@@ -322,8 +322,8 @@ curl -I http://10.0.0.20:3000/
 ### Solution
 
 - Start or restart 3x-ui / x-ui.
-- Panel/Subscription Backend: Fixed listening address and port at `Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]`.
-- Custom website/reverse backend: Corrected backend address and port at `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy] -> [3 Edit website/reverse proxy backend]`.
+- Panel/Subscription Backend: Fixed listening address and port at `Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]`.
+- Custom website/reverse backend: Corrected backend address and port at `Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy] -> [3 Edit website/reverse proxy backend]`.
 - Reapply the configuration and perform a health check.
 
 If the test works according to the actual backend address, but the Internet is still 502, it is usually Caddy/Nginx. The reverse proxy address or port is inconsistent with the actual binding.
@@ -332,8 +332,8 @@ If the test works according to the actual backend address, but the Internet is s
 
 ```text
 Main menu [5 panel、Nodes and subscription tools] -> [1 3x-ui panel script]
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ## The subscription link still has:2096
@@ -377,8 +377,8 @@ After saving and restarting the panel, copy the subscription link again.
 ### Related menu entry
 
 ```text
-Main menu [19 443 shared entry manager] -> [11 Subscription link / External Proxy Tips]
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]
+Main menu [19 Port 443 Reuse manager] -> [11 Subscription link / External Proxy Tips]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
 ```
 
 ## Node link still has:1443
@@ -418,8 +418,8 @@ If the node domain is Cloudflare, it must be Huiyun/DNS only.
 ### Related menu entry
 
 ```text
-Main menu [19 443 shared entry manager] -> [11 Subscription link / External Proxy Tips]
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]
+Main menu [19 Port 443 Reuse manager] -> [11 Subscription link / External Proxy Tips]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
 ```
 
 ## Certificate application failed
@@ -464,8 +464,8 @@ Recommended order:
 
 ```text
 Main menu [1 Preflight and risk scan]
-Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance]
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ## Cloudflare Token permission issue
@@ -497,7 +497,7 @@ Do not post the original Token text to the Issue.
 ### Related menu entry
 
 ```text
-Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance]
+Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance]
 ```
 
 ## DNS is not a gray cloud / DNS only
@@ -527,7 +527,7 @@ dig +short A node.example.com @1.1.1.1
 ### Related menu entry
 
 ```text
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ## Port 443 is occupied
@@ -551,7 +551,7 @@ systemctl status caddy --no-pager
 
 ### Solution
 
-- Let the public port `443` only hand over the single ingress service corresponding to the current `ENTRY_MODE`; when switching to `nginx-stream`, it is Nginx stream, when switching to `tcp-peek`, it is `vpso-mux`, and when switching to `xray-fallback`, it is the main inbound service of Xray.
+- Let the public port `443` only hand over the Port 443 Reuse service corresponding to the current `ENTRY_MODE`; when switching to `nginx-stream`, it is Nginx stream, when switching to `tcp-peek`, it is `vpso-mux`, and when switching to `xray-fallback`, it is the main inbound service of Xray.
 - Caddy is changed to `127.0.0.1:8443`.
 - REALITY / Xray local inbound connections that are not `xray-fallback` primary inbound connections are changed to `127.0.0.1:1443` such local bindings.
 
@@ -559,8 +559,8 @@ systemctl status caddy --no-pager
 
 ```text
 Main menu [13 Inspect and release ports]
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]
-Main menu [19 443 shared entry manager] -> [6 Reapply current entry mode]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
+Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
 ```
 
 ## Caddy/Nginx/REALITY wrong listening address
@@ -592,9 +592,9 @@ grep -R "listen" /etc/nginx /etc/caddy 2>/dev/null
 ### Related menu entry
 
 ```text
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]
-Main menu [19 443 shared entry manager] -> [6 Reapply current entry mode]
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
+Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ## Panel can be opened but subscription is not available
@@ -626,9 +626,9 @@ curl -I https://panel.example.com/sub/
 ### Related menu entry
 
 ```text
-Main menu [19 443 shared entry manager] -> [11 Subscription link / External Proxy Tips]
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Subscription link / External Proxy Tips]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ## REALITY connection failed
@@ -661,7 +661,7 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 ### Related menu entry
 
 ```text
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]
-Main menu [19 443 shared entry manager] -> [6 Reapply current entry mode]
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
+Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```

@@ -114,7 +114,7 @@ print_sni_stack_result() {
     done
 
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${GREEN}✅ 443 单入口分流配置完成${PLAIN}" "${GREEN}✅ 443 Shared entry route configuration completed${PLAIN}" "${GREEN}443 Конфигурация маршрутизации с одним входом завершена${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}✅ 443端口复用配置完成${PLAIN}" "${GREEN}✅ Port 443 Reuse route configuration completed${PLAIN}" "${GREEN}Конфигурация маршрутизации повторного использования порта 443 завершена${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "当前入口模式：${entry_label} (${entry_mode})" "Current entry mode: ${entry_label} (${entry_mode})" "Текущий режим ввода: ${entry_label} (${entry_mode})")"
     echo -e "$(localized_text "${BOLD}一、以后从外面只访问这些地址${PLAIN}" "${BOLD}1. In the future, only these addresses will be accessed from the outside.${PLAIN}" "${BOLD}1. В дальнейшем доступ извне будет осуществляться только по этим адресам.${PLAIN}")"
@@ -234,7 +234,7 @@ apply_sni_stack_runtime_config() {
 
     create_sni_stack_backup
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
-    guard_current_ssh_not_on_entry_port "$(localized_text "重新应用 443 单入口运行参数" "Reapply 443 Shared Entry Run Parameters" "Повторно применить 443 отдельных рабочих параметра")" || return 1
+    guard_current_ssh_not_on_entry_port "$(localized_text "重新应用 443端口复用运行参数" "Reapply Port 443 Reuse Run Parameters" "Повторно применить 443 отдельных рабочих параметра")" || return 1
     check_entry_mode_dependencies "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式依赖检查失败" "Entry mode dependency check failed" "Проверка зависимости режима входа не удалась")"; return 1; }
     preflight_entry_mode_before_cutover "$current_mode" || { echo -e "$(localized_text "${RED}❌ 入口模式 ${current_mode} 预检失败，公网 443 未重新应用。${PLAIN}" "${RED}❌ entry mode ${current_mode} Preflight failed, public port 443 was not reapplied.${PLAIN}" "${RED}❌ Режим входа ${current_mode} Не удалось выполнить предварительную проверку, конфигурация публичного порта 443 не была применена повторно.${PLAIN}")"; return 1; }
     stop_public_443_entry_services_for_target "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "停止旧公网 443 入口服务失败" "Stop the old public port 443 entry service failed" "Остановить старую публичную сеть 443, служба входа не удалась")"; return 1; }

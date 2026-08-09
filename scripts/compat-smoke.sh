@@ -136,12 +136,12 @@ assert_file_not_contains index.md '## 常用文档' "Docs homepage must not rend
 assert_file_not_contains en/index.md '## Common Documentation' "English docs homepage must not render the removed document list."
 assert_file_not_contains ru/index.md '## Основные документы' "Russian docs homepage must not render the removed document list."
 
-assert_file_contains quick-start.md '](docs/443-single-entry.md)' "Quick start must link to the 443 single-entry doc."
+assert_file_contains quick-start.md '](docs/443-single-entry.md)' "Quick start must link to the Port 443 Reuse doc."
 assert_file_contains quick-start.md '](tutorials/01-3x-ui-reality-443.md)' "Quick start must link to the 3x-ui REALITY 443 tutorial."
 assert_file_contains quick-start.md '](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)' "Quick start must link to the subscription tools 443 tutorial."
 
 assert_file_contains .vitepress/config.mts "link: '/quick-start'" "VitePress nav/sidebar must expose quick start."
-assert_file_contains .vitepress/config.mts "link: '/docs/443-single-entry'" "VitePress nav/sidebar must expose the 443 single-entry doc."
+assert_file_contains .vitepress/config.mts "link: '/docs/443-single-entry'" "VitePress nav/sidebar must expose the Port 443 Reuse doc."
 assert_file_contains .vitepress/config.mts "link: '/tutorials/01-3x-ui-reality-443'" "VitePress nav/sidebar must expose the 3x-ui REALITY 443 tutorial."
 assert_file_contains .vitepress/config.mts "link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry'" "VitePress nav/sidebar must expose the subscription tools 443 tutorial."
 
@@ -187,7 +187,7 @@ assert_file_not_contains src/panel_rescue.sh '面板紧急救砖 / SSL 清理工
 assert_file_not_contains dist/vps.sh '面板紧急救砖 / SSL 清理工具' "Built panel SSL repair page title must not keep the old rescue/cleanup label."
 assert_file_contains dist/vps.sh '10) func_net_kernel_menu ;;' "Main menu item 10 must still route to network/kernel optimization."
 assert_file_contains dist/vps.sh '15) func_health_dashboard ;;' "Main menu item 15 must still route to health dashboard."
-assert_file_contains dist/vps.sh '19) func_sni_stack_quick_menu ;;' "Main menu item 19 must still route to 443 single-entry center."
+assert_file_contains dist/vps.sh '19) func_sni_stack_quick_menu ;;' "Main menu item 19 must still route to Port 443 Reuse center."
 assert_file_contains src/menus.sh '${GREEN}20.${PLAIN} 界面语言' "Main menu item 20 must expose language selection."
 assert_file_contains dist/vps.sh '20|l|L|lang|language|язык|语言) select_ui_language' "Main menu item 20 must open language selection."
 assert_file_contains README.md '主菜单 `[20 界面语言]`' "README must document the language menu number."
@@ -251,15 +251,15 @@ assert_file_contains xui-custom-manager.sh 'answer="${answer:-yes}"' "xui shell 
 assert_file_contains xui-custom-manager.sh '.strip().lower() or "y"' "xui embedded confirmations must default to yes."
 assert_file_contains aliyun-cdt-watchdog.sh 'answer=${answer:-yes}' "Aliyun watchdog uninstall confirmation must default to yes."
 
-assert_file_contains docs/443-single-entry.md 'Skip SSL (advanced — behind reverse proxy / SSH tunnel only)' "443 single-entry doc must explain the current 3x-ui Skip SSL flow."
-assert_file_contains docs/443-single-entry.md '监听 IP：127.0.0.1' "443 single-entry doc must keep 3x-ui listeners on loopback."
+assert_file_contains docs/443-single-entry.md 'Skip SSL (advanced — behind reverse proxy / SSH tunnel only)' "Port 443 Reuse doc must explain the current 3x-ui Skip SSL flow."
+assert_file_contains docs/443-single-entry.md '监听 IP：127.0.0.1' "Port 443 Reuse doc must keep 3x-ui listeners on loopback."
 assert_file_contains src/sni_stack_config.sh 'xui_database_backend()' "443 helpers must detect the configured 3x-ui database backend."
 assert_file_contains src/sni_stack_config.sh 'xui_uses_postgresql && return 1' "443 helpers must not query PostgreSQL through sqlite3."
 assert_file_contains src/sni_stack_profiles.sh 'xui_uses_postgresql' "443 profile updates must skip PostgreSQL database synchronization."
-assert_file_not_contains docs/443-single-entry.md '监听 IP：首次安装阶段可以先留空或用默认' "443 single-entry doc must not tell users to leave the panel listen IP blank first."
-assert_file_not_contains docs/443-single-entry.md '监听 IP：先留空或用默认，443 跑通后再改 127.0.0.1' "443 single-entry doc must not defer subscription loopback binding until after 443 works."
-assert_file_not_contains docs/443-single-entry.md '首次临时登录通常是：' "443 single-entry doc must not recommend temporary direct public panel access."
-assert_file_not_contains docs/443-single-entry.md '清空后，如果还需要临时从公网端口访问面板' "443 single-entry doc must not keep the old direct-public-port fallback."
+assert_file_not_contains docs/443-single-entry.md '监听 IP：首次安装阶段可以先留空或用默认' "Port 443 Reuse doc must not tell users to leave the panel listen IP blank first."
+assert_file_not_contains docs/443-single-entry.md '监听 IP：先留空或用默认，443 跑通后再改 127.0.0.1' "Port 443 Reuse doc must not defer subscription loopback binding until after 443 works."
+assert_file_not_contains docs/443-single-entry.md '首次临时登录通常是：' "Port 443 Reuse doc must not recommend temporary direct public panel access."
+assert_file_not_contains docs/443-single-entry.md '清空后，如果还需要临时从公网端口访问面板' "Port 443 Reuse doc must not keep the old direct-public-port fallback."
 
 assert_file_contains dist/vps.sh '/var/lib/vps-optimize/vpso-mux/status.json'
 assert_file_contains dist/vps.sh 'ExecCondition=/bin/grep -Fxq "ENTRY_MODE='"'"'tcp-peek'"'"'" /etc/vps-optimize/sni-stack.env' "vpso-mux must not start outside TCP Peek mode."

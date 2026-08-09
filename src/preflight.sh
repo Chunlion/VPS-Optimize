@@ -331,7 +331,7 @@ print_443_single_entry_issue_summary() {
     local env_file="/etc/vps-optimize/sni-stack.env"
     local web_backend web_label xray_backend panel_backend sub_backend listener_consistency
 
-    echo "$(localized_text "443 单入口摘要:" "443 Shared entry summary:" "443 Сводная информация по однократной записи:")"
+    echo "$(localized_text "443端口复用摘要:" "Port 443 Reuse summary:" "Сводка по повторному использованию порта 443:")"
     if ! load_sni_stack_env >/dev/null 2>&1; then
         detect_current_entry_status
         echo "$(localized_text "- 配置文件: 未检测到 ${env_file}" "- Profile: ${env_file} not detected" "- Профиль: ${env_file} не обнаружен.")"

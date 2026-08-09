@@ -1759,7 +1759,7 @@ rollback_sni_stack_config() {
     fi
     echo -e "$(localized_text "${YELLOW}即将回滚到备份：${backup_dir}${PLAIN}" "${YELLOW}Is about to be rolled back to backup: ${backup_dir}${PLAIN}" "${YELLOW}собирается вернуться к резервной копии: ${backup_dir}${PLAIN}")"
     confirm_risk_action "$(localized_text "回滚覆盖 Nginx/Caddy 443 配置" "Rollback coverage Nginx/Caddy 443 configuration" "Покрытие отката конфигурации Nginx/Caddy 443")" \
-        "$(localized_text "当前 Nginx/Caddy/443 单入口相关配置" "Current Nginx/Caddy/443 shared entry related configuration" "Текущая конфигурация, связанная с одним входом Nginx/Caddy/443")" \
+        "$(localized_text "当前 Nginx/Caddy/443端口复用相关配置" "Current Nginx/Caddy/Port 443 Reuse related configuration" "Текущая конфигурация, связанная повторного использования порта 443 Nginx/Caddy/443")" \
         "$(localized_text "如回滚后仍异常，请用云厂商控制台或手动恢复备份目录" "If the exception persists after rollback, please use the cloud provider console or manually restore the backup directory." "Если исключение сохраняется после отката, воспользуйтесь консолью облачного провайдера или вручную восстановите каталог резервной копии.")" \
         "$(localized_text "回滚会覆盖当前配置，请确认已选中正确备份。" "Rolling back will overwrite the current configuration, please confirm that correct backup is selected." "При откате текущая конфигурация будет перезаписана. Убедитесь, что выбрана правильная резервная копия.")" || return 1
 
@@ -1987,7 +1987,7 @@ collect_applied_config_files() {
     for conf_file in /etc/nginx/stream.d/*.conf; do
         [[ -f "$conf_file" ]] && append_applied_config_file "Nginx stream.d $(basename "$conf_file")" "$conf_file" "nginx"
     done
-    append_applied_config_file "$(localized_text "443 共享参数" "443 Shared parameters" "443 Общие параметры")" "/etc/vps-optimize/sni-stack.env" "entry-mode"
+    append_applied_config_file "$(localized_text "443端口复用参数" "Port 443 Reuse Parameters" "Параметры повторного использования порта 443")" "/etc/vps-optimize/sni-stack.env" "entry-mode"
     append_applied_config_file "$(localized_text "443 引擎状态" "443 Engine status" "443 Статус двигателя")" "/etc/vps-optimize/443-engine.conf" "entry-mode"
     append_applied_config_file "$(localized_text "Xray SNI 分流记录" "Xray SNI routing record" "Xray SNI маршрутизирующая пластинка")" "/etc/vps-optimize/xray-sni-routes.conf" "xray-routes"
     append_applied_config_file "$(localized_text "TCP Peek vpso-mux 配置" "TCP Peek vpso-mux configuration" "Конфигурация TCP Peek vpso-mux")" "/etc/vps-optimize/vpso-mux.yaml" "vpso-mux"
@@ -2216,7 +2216,7 @@ reload_applied_config_kind() {
         vpso-mux)
             if confirm_risk_action "$(localized_text "重启 vpso-mux" "Restart vpso-mux" "Перезагрузите vpso-mux.")" \
                 "$(localized_text "TCP Peek/vpso-mux 分流器运行进程" "TCP Peek/vpso-mux routing running process" "Процесс работы маршрутизации TCP Peek/vpso-mux")" \
-                "$(localized_text "使用当前未断开的 SSH 会话恢复 ${target_file}.bak_*，或回到 443 单入口菜单重新应用/回滚入口模式" "Restore ${target_file}.bak_* using the currently undisconnected SSH session, or return to the 443 shared entry menu to reapply/rollback entry mode" "Восстановите ${target_file}.bak_*, используя текущий неотключенный сеанс SSH, или вернитесь в меню 443 с одним входом, чтобы повторно применить/откатить режим входа.")" \
+                "$(localized_text "使用当前未断开的 SSH 会话恢复 ${target_file}.bak_*，或回到 443端口复用菜单重新应用/回滚入口模式" "Restore ${target_file}.bak_* using the currently undisconnected SSH session, or return to the Port 443 Reuse menu to reapply/rollback entry mode" "Восстановите ${target_file}.bak_*, используя текущий неотключенный сеанс SSH, или вернитесь в меню повторное использование порта 443, чтобы повторно применить/откатить режим входа.")" \
                 "$(localized_text "确认公网 443 当前入口模式和本机后端端口都正常。" "Confirm that the current entry mode of public port 443 and the local backend port are normal." "Убедитесь, что текущий режим входа в публичный порт 443 и локальный внутренний порт являются нормальными.")"; then
                 restart_named_service_if_available vpso-mux
             else
@@ -2234,7 +2234,7 @@ reload_applied_config_kind() {
                     echo -e "$(localized_text "${YELLOW}⚠️ 已保存配置，但未重新应用 443 入口模式。${PLAIN}" "${YELLOW}⚠️ Configuration saved, but 443 entry mode was not reapplied.${PLAIN}" "${YELLOW}⚠️ Конфигурация сохранена, но режим входа 443 не был применен повторно.${PLAIN}")"
                 fi
             else
-                echo -e "$(localized_text "${YELLOW}⚠️ 已保存配置；请回到 443 单入口菜单重新应用当前入口模式。${PLAIN}" "${YELLOW}⚠️ The configuration has been saved; please return to the 443 shared entry menu to reapply the current entry mode.${PLAIN}" "${YELLOW}⚠️ Конфигурация сохранена; вернитесь в меню единого входа 443, чтобы повторно применить текущий режим ввода.${PLAIN}")"
+                echo -e "$(localized_text "${YELLOW}⚠️ 已保存配置；请回到 443端口复用菜单重新应用当前入口模式。${PLAIN}" "${YELLOW}⚠️ The configuration has been saved; please return to the Port 443 Reuse menu to reapply the current entry mode.${PLAIN}" "${YELLOW}⚠️ Конфигурация сохранена; вернитесь в меню повторного использования порта 443, чтобы повторно применить текущий режим ввода.${PLAIN}")"
             fi
             ;;
         traffic-guard)
@@ -2295,7 +2295,7 @@ reload_applied_config_kind() {
             if confirm_risk_action "$(localized_text "重启 x-ui/3x-ui" "Restart x-ui/3x-ui" "Перезагрузите x-ui/3x-ui.")" \
                 "$(localized_text "x-ui/3x-ui 面板进程和 config.json 运行配置" "x-ui/3x-ui panel process and config.json running configuration" "Процесс и конфигурация панели x-ui/3x-ui. Текущая конфигурация json")" \
                 "$(localized_text "恢复 ${target_file}.bak_* 后重启面板，或用官方 x-ui/3x-ui 命令进入管理菜单修复" "Restore ${target_file}.bak_* and then restart the panel, or use the official x-ui/3x-ui command to enter the management menu to repair" "Восстановите ${target_file}.bak_*, а затем перезапустите панель или используйте официальную команду x-ui/3x-ui, чтобы войти в меню управления для восстановления.")" \
-                "$(localized_text "确认面板端口、证书路径和 443 单入口设置匹配。" "Verify that the panel port, certificate path, and 443 share entry settings match." "Убедитесь, что порт панели, путь к сертификату и настройки записи общего ресурса 443 совпадают.")"; then
+                "$(localized_text "确认面板端口、证书路径和 443端口复用设置匹配。" "Verify that the panel port, certificate path, and Port 443 Reuse settings match." "Убедитесь, что порт панели, путь к сертификату и настройки записи общего ресурса 443 совпадают.")"; then
                 restart_named_service_if_available x-ui
                 restart_named_service_if_available 3x-ui
             else
@@ -4297,7 +4297,7 @@ print_port_connlimit_scope_notice() {
     echo -e "$(localized_text "${YELLOW}添加/删除后会自动尝试刷新持久化快照；系统不支持时会明确提示只在本次运行期生效。${PLAIN}" "${YELLOW}After is added/deleted, it will automatically try to refresh the persistent snapshot; if the system does not support it, it will clearly prompt that it will only take effect during this running period.${PLAIN}" "${YELLOW}После добавления/удаления он автоматически попытается обновить постоянный снимок; если система его не поддерживает, она четко сообщит, что оно вступит в силу только в течение этого периода работы.${PLAIN}")"
 
     if [[ "$port" == "443" ]]; then
-        echo -e "$(localized_text "${RED}⚠️ 443 强提醒：如果当前启用了 443 单入口/端口复用，本限制会作用于整个公网 443。${PLAIN}" "${RED}⚠️ 443 strong reminder: If 443 shared entry/port reuse is currently enabled, this restriction will apply to the entire public port 443.${PLAIN}" "${RED}⚠️ 443 Настоятельное напоминание: если в настоящее время включено мультиплексирование одной записи/порта 443, это ограничение будет применяться ко всей публичного порта 443.${PLAIN}")"
+        echo -e "$(localized_text "${RED}⚠️ 443 强提醒：如果当前启用了 443端口复用/端口复用，本限制会作用于整个公网 443。${PLAIN}" "${RED}⚠️ 443 strong reminder: If Port 443 Reuse/port reuse is currently enabled, this restriction will apply to the entire public port 443.${PLAIN}" "${RED}⚠️ 443 Настоятельное напоминание: если в настоящее время включено мультиплексирование одной записи/порта 443, это ограничение будет применяться ко всей публичного порта 443.${PLAIN}")"
         echo -e "$(localized_text "${RED}它不能精准限制某一个 Xray/3x-ui 入站、某一个 SNI、某一个 UUID 或某一个用户。${PLAIN}" "${RED}Cannot accurately restrict the inbound of a certain Xray/3x-ui, a certain SNI, a certain UUID or a certain user.${PLAIN}" "${RED}не может точно ограничить входящее подключение определенного Xray/3x-ui, определенного SNI, определенного UUID или определенного пользователя.${PLAIN}")"
     fi
 
@@ -4666,7 +4666,7 @@ show_firewall_menu_help() {
     echo "$(localized_text "端口并发连接限制优先使用 nftables ct count；不支持时回退到 iptables/ip6tables connlimit。" "Port concurrency limits prefer nftables ct count and fall back to iptables/ip6tables connlimit when unavailable." "Ограничение подключений предпочитает nftables ct count и при недоступности переходит на iptables/ip6tables connlimit.")"
     echo "$(localized_text "该限制是额外连接数限制规则，不等同于 UFW/firewalld 的端口放行规则；两者可能并存。" "This restriction is an additional connection limit rule and is not equivalent to the UFW/firewalld port access rule; the two may coexist." "Это ограничение является дополнительным правилом ограничения подключений и не эквивалентно правилу освобождения порта UFW/firewalld; они могут сосуществовать.")"
     echo "$(localized_text "添加/删除 connlimit 后会自动尝试刷新持久化快照；[5] 可手动检查或再次保存。系统不支持时会提示当前规则只在本次运行期生效。" "After adding/removing connlimit, it will automatically try to refresh the persistent snapshot; [5] it can be checked manually or saved again. If the system does not support it, it will prompt that the current rule will only take effect during this running period." "После добавления/удаления connlimit он автоматически попытается обновить постоянный снимок; [5] его можно проверить вручную или сохранить снова. Если система его не поддерживает, она предложит, что текущее правило вступит в силу только в течение этого периода работы.")"
-    echo "$(localized_text "如果限制公网 443 且当前启用了 443 单入口/端口复用，限制粒度只能是整个公网 443，不能精准到某个入站、SNI、UUID 或用户。" "If public port 443 is restricted and 443 shared entry/port reuse is currently enabled, the restriction granularity can only be the entire public port 443, and cannot be precise to a specific inbound connection, SNI, UUID, or user." "Если публичный порт 443 ограничена и в настоящее время включено повторное использование одной записи/порта 443, степень детализации ограничения может охватывать только всю публичный порт 443 и не может быть точной для конкретного входящего подключения, SNI, UUID или пользователя.")"
+    echo "$(localized_text "如果限制公网 443 且当前启用了 443端口复用/端口复用，限制粒度只能是整个公网 443，不能精准到某个入站、SNI、UUID 或用户。" "If public port 443 is restricted and Port 443 Reuse/port reuse is currently enabled, the restriction granularity can only be the entire public port 443, and cannot be precise to a specific inbound connection, SNI, UUID, or user." "Если публичный порт 443 ограничена и в настоящее время включено повторное использование одной записи/порта 443, степень детализации ограничения может охватывать только всю публичный порт 443 и не может быть точной для конкретного входящего подключения, SNI, UUID или пользователя.")"
 }
 
 func_port_connlimit_menu() {
@@ -5623,7 +5623,7 @@ generate_caddy_cf_manifest() {
 # Module: caddy_proxy.sh
 # ---------------------------------------------------------
 # shellcheck shell=bash
-# Ordinary Caddy/Nginx reverse proxy workflows outside the 443 single entry point stack.
+# Ordinary Caddy/Nginx reverse proxy workflows outside the Port 443 Reuse stack.
 
 write_caddy_reverse_proxy_conf() {
     local domain="$1"
@@ -5885,8 +5885,8 @@ nginx_proxy_domain_exists() {
 
 nginx_proxy_warn_if_single_entry_enabled() {
     if [[ -f /etc/vps-optimize/sni-stack.env || -f /etc/vps-optimize/443-engine.conf ]]; then
-        echo -e "$(localized_text "${RED}❌ 已检测到 443 单入口配置。Nginx HTTPS 反代会抢占公网 443，已拒绝继续。${PLAIN}" "${RED}❌ 443 shared entry configuration detected. Nginx HTTPS The reverse proxy will seize public port 443 and has refused to continue.${PLAIN}" "${RED}❌ Обнаружена 443 общая конфигурация входа. Nginx HTTPS Обратный прокси-сервер задействует публичный порт 443 и отказывается продолжать работу.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}请改用：主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。${PLAIN}" "${YELLOW}Please use: Main menu [19 443 shared entry Management Center] -> [8 Management Web domain/Reverse Proxy].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 443 центр управления общей точкой входа] -> [8 Имя веб-домена управления/обратный прокси].${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ 已检测到 443端口复用配置。Nginx HTTPS 反代会抢占公网 443，已拒绝继续。${PLAIN}" "${RED}❌ Port 443 Reuse configuration detected. Nginx HTTPS The reverse proxy will seize public port 443 and has refused to continue.${PLAIN}" "${RED}❌ Обнаружена конфигурация повторного использования порта 443. Nginx HTTPS Обратный прокси-сервер задействует публичный порт 443 и отказывается продолжать работу.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}请改用：主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [8 Management Web domain/Reverse Proxy].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [8 Имя веб-домена управления/обратный прокси].${PLAIN}")"
         return 1
     fi
     return 0
@@ -6062,7 +6062,7 @@ func_nginx_add_reverse_proxy() {
         echo -e "$(localized_text "${CYAN}配置文件：${conf_file}${PLAIN}" "${CYAN}Configuration file: ${conf_file}${PLAIN}" "${CYAN}Файл конфигурации : ${conf_file}${PLAIN}")"
         echo -e "$(localized_text "${CYAN}证书路径：/etc/caddy/certs/${domain}.crt 和 /etc/caddy/certs/${domain}.key${PLAIN}" "${CYAN}Certificate path: /etc/caddy/certs/${domain}.crt and /etc/caddy/certs/${domain}.key${PLAIN}" "${CYAN}Путь сертификата : /etc/caddy/certs/${domain}.crt и /etc/caddy/certs/${domain}.key.${PLAIN}")"
     else
-        echo -e "$(localized_text "${RED}❌ Nginx 配置校验通过，但 reload/restart 失败。可能是 Caddy、443 单入口或其他服务占用了 80/443。${PLAIN}" "${RED}❌ Nginx configuration validation passed, but reload/restart failed. It may be that Caddy, 443 shared entry or other services occupy 80/443.${PLAIN}" "${RED}❌ Nginx Проверка конфигурации пройдена, но перезагрузка/перезапуск не удалось. Возможно, Caddy, общий вход 443 или другие службы занимают 80/443.${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ Nginx 配置校验通过，但 reload/restart 失败。可能是 Caddy、443端口复用或其他服务占用了 80/443。${PLAIN}" "${RED}❌ Nginx configuration validation passed, but reload/restart failed. It may be that Caddy, Port 443 Reuse or other services occupy 80/443.${PLAIN}" "${RED}❌ Nginx Проверка конфигурации пройдена, но перезагрузка/перезапуск не удалось. Возможно, Caddy, повторное использование порта 443 или другие службы занимают 80/443.${PLAIN}")"
         quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-proxy" >/dev/null 2>&1 || true
         return 1
     fi
@@ -6145,8 +6145,8 @@ func_nginx_manage_ip_whitelist() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}🔐 Nginx 域名 IP 白名单${PLAIN}" "${BOLD}🔐 Nginx domain IP whitelist${PLAIN}" "${BOLD}🔐 Nginx доменное имя Белый список IP-адресов${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}适用于未启用 443 单入口、由 Nginx HTTPS 反代直接对外服务的域名。${PLAIN}" "${YELLOW}Suitable for domains that do not enable the 443 shared entry and are directly served externally by the Nginx HTTPS reverse proxy.${PLAIN}" "${YELLOW}подходит для доменных имен, которые не поддерживают общий вход 443 и обслуживаются непосредственно извне обратным прокси-сервером Nginx HTTPS.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443 单入口，请用主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]，不要在 Nginx HTTP 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to 443 shared entry, please use the main menu [19 443 shared entry management center] -> [8 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Nginx HTTP layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к общей точке входа 443, используйте главное меню [19 443 центр управления общей точкой входа] -> [8 Управление именем веб-домена/обратным прокси] -> [5 Управление белым списком IP-адресов доменного имени] и не ограничивайте его на уровне Nginx HTTP.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}适用于未启用 443端口复用、由 Nginx HTTPS 反代直接对外服务的域名。${PLAIN}" "${YELLOW}Suitable for domains that do not enable the Port 443 Reuse and are directly served externally by the Nginx HTTPS reverse proxy.${PLAIN}" "${YELLOW}подходит для доменных имен, которые не поддерживают повторное использование порта 443 и обслуживаются непосредственно извне обратным прокси-сервером Nginx HTTPS.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443端口复用，请用主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]，不要在 Nginx HTTP 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to Port 443 Reuse, please use the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Nginx HTTP layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к повторном использовании порта 443, используйте главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси] -> [5 Управление белым списком IP-адресов доменного имени] и не ограничивайте его на уровне Nginx HTTP.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local domain domain_input conf_file action backup_file
@@ -6255,7 +6255,7 @@ func_nginx_clear_proxy_config() {
     echo -e "$(localized_text "${BOLD}🧹 清空 Nginx HTTPS 反代配置${PLAIN}" "${BOLD}🧹 Clear Nginx HTTPS reverse proxy configuration${PLAIN}" "${BOLD}🧹 Очистить Nginx HTTPS Конфигурация обратного прокси${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}只隔离 VPS-Optimize 创建的 /etc/nginx/conf.d/vps_proxy_*.conf 和 00-vps-proxy-map.conf。${PLAIN}" "${YELLOW}Only isolates /etc/nginx/conf.d/vps_proxy_*.conf and 00-vps-proxy-map.conf created by VPS-Optimize.${PLAIN}" "${YELLOW}изолирует только /etc/nginx/conf.d/vps_proxy_*.conf и 00-vps-proxy-map.conf, созданные VPS-Optimize.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}不会清理 /etc/nginx/stream.d，也不会影响 443 单入口配置。${PLAIN}" "${YELLOW}Will not clean up /etc/nginx/stream.d, nor will it affect the 443 shared entry configuration.${PLAIN}" "${YELLOW}не очистит /etc/nginx/stream.d и не повлияет на конфигурацию с общей точкой входа 443.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}不会清理 /etc/nginx/stream.d，也不会影响 443端口复用配置。${PLAIN}" "${YELLOW}Will not clean up /etc/nginx/stream.d, nor will it affect the Port 443 Reuse configuration.${PLAIN}" "${YELLOW}не очистит /etc/nginx/stream.d и не повлияет на конфигурацию с повторным использованием порта 443.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local -a files=()
@@ -6480,7 +6480,7 @@ func_caddy_reverse_proxy_menu() {
         print_breadcrumb "$(localized_text "反代" "reverse proxyal" "обратный прокси")"
         echo -e "$(localized_text "${BOLD}🌐 反代（Caddy / Nginx）${PLAIN}" "${BOLD}🌐 reverse proxy (Caddy / Nginx)${PLAIN}" "${BOLD}🌐 обратный прокси (Caddy / Nginx)${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：管理未接入 443 单入口的域名反代。443 单入口请只走主菜单 [19]。${PLAIN}" "${YELLOW}Purpose: Manage domain reverse proxy that is not connected to the 443 shared entry. 443 For shared entry, please only go to the main menu [19].${PLAIN}" "${YELLOW}Назначение: Управление обратным прокси-сервером доменного имени, который не подключен к общему входу 443. 443 Для общего входа зайдите только в главное меню [19].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}用途：管理未接入 443端口复用的域名反代。443端口复用请只走主菜单 [19]。${PLAIN}" "${YELLOW}Purpose: Manage domain reverse proxy that is not connected to the Port 443 Reuse. 443 For Port 443 Reuse, please only go to the main menu [19].${PLAIN}" "${YELLOW}Назначение: Управление обратным прокси-сервером доменного имени, который не подключен к повторному использованию порта 443. 443 Для общего входа зайдите только в главное меню [19].${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 添加 Caddy 反代${PLAIN}" "${GREEN}1. Add Caddy to replace${PLAIN}" "${GREEN}1. Добавьте Caddy вместо.${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 添加 Nginx HTTPS 反代${PLAIN} ${YELLOW}(复用 acme.sh + CF DNS 证书)${PLAIN}" "${GREEN}2. Add Nginx HTTPS to reverse proxy (reuse acme.sh + CF DNS certificate)${PLAIN}" "${GREEN}2. Добавьте Nginx HTTPS в обратный прокси (повторное использование сертификата acme.sh + CF DNS)${PLAIN}")"
@@ -6526,7 +6526,7 @@ func_env_install() {
         print_breadcrumb "$(localized_text "基础组件与常用服务" "Basic components and common services" "Базовые компоненты и общие услуги")"
         echo -e "$(localized_text "${BOLD}📦 基础组件与常用服务${PLAIN}" "${BOLD}📦 Basic components and common services${PLAIN}" "${BOLD}📦 Базовые компоненты и общие службы${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：安装基础组件、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]，443 单入口只走主菜单 [19]。${PLAIN}" "${YELLOW}Purpose: Install basic components, forwarding tunnels and common services. Caddy/Nginx reverse proxy goes to the main menu [4], 443 shared entry only goes to the main menu [19].${PLAIN}" "${YELLOW}Назначение: Установка основных компонентов, туннелей пересылки и общих служб. Caddy/Nginx наоборот использует главное меню [4], а 443 с однократным вводом использует только главное меню [19].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}用途：安装基础组件、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]，443端口复用只走主菜单 [19]。${PLAIN}" "${YELLOW}Purpose: Install basic components, forwarding tunnels and common services. Caddy/Nginx reverse proxy goes to the main menu [4], Port 443 Reuse only goes to the main menu [19].${PLAIN}" "${YELLOW}Назначение: Установка основных компонентов, туннелей пересылки и общих служб. Caddy/Nginx наоборот использует главное меню [4], а повторное использование порта 443 использует только главное меню [19].${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 基础运行环境${PLAIN}" "${BOLD}▶ Basic operating environment${PLAIN}" "${BOLD}▶ Базовая операционная среда${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  1. Docker 引擎        ${YELLOW}  2. Python 环境        ${GREEN}  3. iperf3 测速工具${PLAIN}" "${GREEN}1. Docker engine 2. Python environment 3. iperf3 speed measurement tool${PLAIN}" "${GREEN}1. Двигатель Docker 2. Python Окружающая среда 3. iperf3 Инструмент измерения скорости${PLAIN}")"
@@ -6565,7 +6565,7 @@ func_env_install() {
                     echo -e "$(localized_text "${GREEN}✅ 安装完成后运行 tailscale up，按提示登录并加入网络。${PLAIN}" "${GREEN}✅ After the installation is complete, run tailscale up, follow the prompts to log in and join the network.${PLAIN}" "${GREEN}. После завершения установки запустите Tailscale Up, следуйте инструкциям, чтобы войти в систему и присоединиться к сети.${PLAIN}")"
                 fi
                 ;;
-            "?"|help) echo "$(localized_text "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443 单入口走主菜单 [19]。" "The basic component menu only installs Docker, Python, WARP, forwarding tunnel and common services. Caddy/Nginx reverse proxy goes to the main menu [4]; 443 shared entry goes to the main menu [19]." "Меню базового компонента устанавливает только Docker, Python, WARP, туннель пересылки и общие службы. Caddy/Nginx осуществляет обратный доступ к главному меню [4]; 443 однократного входа обеспечивает доступ к главному меню [19].")"; pause_return ;;
+            "?"|help) echo "$(localized_text "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443端口复用走主菜单 [19]。" "The basic component menu only installs Docker, Python, WARP, forwarding tunnel and common services. Caddy/Nginx reverse proxy goes to the main menu [4]; Port 443 Reuse goes to the main menu [19]." "Меню базового компонента устанавливает только Docker, Python, WARP, туннель пересылки и общие службы. Caddy/Nginx осуществляет обратный доступ к главному меню [4]; 443 повторного использования порта 443 обеспечивает доступ к главному меню [19].")"; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效的输入！${PLAIN}" "${RED}❌ Invalid input!${PLAIN}" "${RED}❌ Неверный ввод!${PLAIN}")" ;;
         esac
@@ -6791,7 +6791,7 @@ EOF
 # Module: sni_stack_config.sh
 # ---------------------------------------------------------
 # shellcheck shell=bash
-# 443 single entry point shared environment, route, listener, and whitelist helpers.
+# Port 443 Reuse shared environment, route, listener, and whitelist helpers.
 
 detect_vps_public_ip_by_family() {
     local family="$1"
@@ -7140,7 +7140,7 @@ clear_xui_cert_settings_for_single_443() {
         echo -e "$(localized_text "${YELLOW}⚠️ 未找到可自动清空的 3x-ui 证书设置，请在面板里手动清空证书路径并重启。${PLAIN}" "${YELLOW}⚠️ The 3x-ui certificate setting that can be automatically cleared was not found. Please manually clear the certificate path in the panel and restart.${PLAIN}" "${YELLOW}⚠️ Параметр сертификата 3x-ui, который можно автоматически очистить, не найден. Пожалуйста, вручную очистите путь к сертификату на панели и перезапустите.${PLAIN}")"
         return 1
     fi
-    echo -e "$(localized_text "${GREEN}✅ 已尝试清空 3x-ui 面板/订阅证书路径，443 单入口将由 Web 反代引擎托管证书。${PLAIN}" "${GREEN}✅ Tried clearing the 3x-ui panel/subscription certificate path, 443 the shared entry will have the certificate hosted by the web reverse proxy engine.${PLAIN}" "${GREEN}. Попробовал очистить путь сертификата панели/подписки 3x-ui, 443 общий вход будет иметь сертификат, размещенный в механизме обратного веб-прокси.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}✅ 已尝试清空 3x-ui 面板/订阅证书路径，443端口复用将由 Web 反代引擎托管证书。${PLAIN}" "${GREEN}✅ Tried clearing the 3x-ui panel/subscription certificate path, 443 the Port 443 Reuse will have the certificate hosted by the web reverse proxy engine.${PLAIN}" "${GREEN}. Попробовал очистить путь сертификата панели/подписки 3x-ui, повторное использование порта 443 будет иметь сертификат, размещенный в механизме обратного веб-прокси.${PLAIN}")"
 }
 
 
@@ -7202,7 +7202,7 @@ check_xui_cert_settings_for_single_443() {
         [[ -n "$rows" ]] || continue
 
         found=1
-        echo -e "$(localized_text "${YELLOW}⚠️ ${db_path} 仍有 3x-ui 面板/订阅证书路径。3.x 新安装应选择 Skip SSL；2.x/旧配置在 443 单入口下建议清空：${PLAIN}" "${YELLOW}⚠️ ${db_path} still has the 3x-ui panel/subscription certificate path. 3.x new installation should select Skip SSL; 2.x/old configuration is recommended to clear under the 443 shared entry:${PLAIN}" "${YELLOW}⚠️ ${db_path} по-прежнему имеет путь сертификата панели/подписки 3x-ui. 3.x при новой установке следует выбрать Пропустить SSL; Конфигурацию 2.x/old рекомендуется очистить под общей записью 443: .${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ ${db_path} 仍有 3x-ui 面板/订阅证书路径。3.x 新安装应选择 Skip SSL；2.x/旧配置在 443端口复用下建议清空：${PLAIN}" "${YELLOW}⚠️ ${db_path} still has the 3x-ui panel/subscription certificate path. 3.x new installation should select Skip SSL; 2.x/old configuration is recommended to clear under the Port 443 Reuse:${PLAIN}" "${YELLOW}⚠️ ${db_path} по-прежнему имеет путь сертификата панели/подписки 3x-ui. 3.x при новой установке следует выбрать Пропустить SSL; Конфигурацию 2.x/old рекомендуется очистить под общей записью 443: .${PLAIN}")"
         while IFS='|' read -r key value; do
             [[ -n "$key" ]] || continue
             echo -e "  ${key}=${value}"
@@ -7271,7 +7271,7 @@ print_sni_stack_preview() {
     esac
 
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}即将写入的 443 单入口分流配置预览${PLAIN}" "${BOLD}Preview of 443 shared entry route configuration to be written${PLAIN}" "${BOLD}Предварительный просмотр конфигурации маршрутизации с одним входом 443, которая будет записана${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}即将写入的 443端口复用配置预览${PLAIN}" "${BOLD}Preview of Port 443 Reuse route configuration to be written${PLAIN}" "${BOLD}Предварительный просмотр конфигурации маршрутизации повторного использования порта 443, которая будет записана${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "配置模式 ENTRY_MODE：${entry_mode}" "Configuration mode ENTRY_MODE: ${entry_mode}" "Режим конфигурации ENTRY_MODE: ${entry_mode}")"
     echo -e "$(localized_text "Web 反代引擎 WEB_PROXY_ENGINE：${web_engine} (${web_label})" "Web reverse proxy engine WEB_PROXY_ENGINE: ${web_engine} (${web_label})" "механизм веб-прокси WEB_PROXY_ENGINE: ${web_engine} (${web_label})")"
@@ -7314,7 +7314,7 @@ print_sni_stack_preview() {
     fi
     echo -e ""
     echo -e "$(localized_text "${YELLOW}确认后会备份现有配置，并按所选 ENTRY_MODE 生成入口配置。${PLAIN}" "${YELLOW}After confirms, it will back up the existing configuration and generate the entry configuration according to the selected ENTRY_MODE.${PLAIN}" "${YELLOW}После подтверждения он создаст резервную копию существующей конфигурации и сгенерирует конфигурацию записи в соответствии с выбранным ENTRY_MODE.${PLAIN}")"
-    confirm_risk_action "$(localized_text "写入 443 单入口共享配置" "Write 443 shared entry shared configuration" "Запишите общую конфигурацию с общей точкой входа 443.")" \
+    confirm_risk_action "$(localized_text "写入 443端口复用配置" "Write Port 443 Reuse configuration" "Запишите общую конфигурацию с повторным использованием порта 443.")" \
         "$(localized_text "${entry_label}、${web_label}配置和 443 分流规则" "${entry_label}, ${web_label} configuration and 443 routing rules" "Конфигурация ${entry_label}, ${web_label} и 443 правила маршрутизации")" \
         "$(localized_text "使用本次自动备份目录恢复，或进入 443 维护菜单回滚" "Use this automatic backup directory to restore, or enter the 443 maintenance menu to roll back" "Используйте этот каталог автоматического резервного копирования для восстановления или войдите в меню обслуживания 443 для отката.")" \
         "$(localized_text "确认公网 443 没有其他服务需要直接占用。" "Confirm that no other services on public port 443 need to be directly occupied." "Убедитесь, что никакие другие службы для публичного порта 443 не должны быть заняты напрямую.")"
@@ -7496,7 +7496,7 @@ entry_listener_display_name() {
         nginx) echo "Nginx Stream (nginx)" ;;
         xray) echo "Xray Fallback (xray/3x-ui/x-ui)" ;;
         tcppeek) echo "$(localized_text "TCP Peek + Splice 模式 (vpso-mux 分流器)" "TCP Peek + Splice mode (vpso-mux routing)" "Режим TCP Peek + Splice (маршрутизация vpso-mux)")" ;;
-        caddy) echo "$(localized_text "Caddy（不应直接接管 443 单入口）" "Caddy (should not take over the 443 shared entry directly)" "Caddy (не должен напрямую контролировать общий вход 443)")" ;;
+        caddy) echo "$(localized_text "Caddy（不应直接接管 443端口复用）" "Caddy (should not take over the Port 443 Reuse directly)" "Caddy (не должен напрямую контролировать повторное использование порта 443)")" ;;
         none) echo "$(localized_text "未监听" "Not listening" "Не слушаю")" ;;
         multiple) echo "$(localized_text "多个进程监听/匹配" "Multiple process listening/matching" "Прослушивание/сопоставление нескольких процессов")" ;;
         unknown) echo "$(localized_text "已监听，但进程不可见" "Listened but the process is not visible" "Слушал но процесса не видно")" ;;
@@ -8171,7 +8171,7 @@ print_sni_ip_whitelist_summary() {
 sni_stack_health_check() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧪 443 单入口分流链路体检${PLAIN}" "${BOLD}🧪 443 shared entry routing link health check${PLAIN}" "${BOLD}🧪 443 проверка состояния маршрутизации с одним входом${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧪 443端口复用链路体检${PLAIN}" "${BOLD}🧪 Port 443 Reuse routing link health check${PLAIN}" "${BOLD}🧪 Проверка маршрутизации повторного использования порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
 
@@ -8460,7 +8460,7 @@ EOF
 show_single_443_engine_status() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🔎 当前 443 入口状态 / 单入口引擎${PLAIN}" "${BOLD}🔎 Current 443 entry status / shared entry engine${PLAIN}" "${BOLD}🔎 Текущий статус записи 443 / общая система записи${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🔎 当前 443 入口状态 / 端口复用引擎${PLAIN}" "${BOLD}🔎 Current 443 entry status / Port 443 Reuse engine${PLAIN}" "${BOLD}🔎 Текущий статус записи 443 / система повторного использования порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     local engine state_file mux_config
     engine=$(single_443_current_engine)
@@ -8480,7 +8480,7 @@ show_single_443_engine_status() {
     if [[ -f /etc/vps-optimize/sni-stack.env ]]; then
         load_sni_stack_env >/dev/null 2>&1 && print_sni_stack_current_summary
     else
-        echo -e "$(localized_text "${YELLOW}未检测到 sni-stack.env，尚未完成 443 单入口初始化。${PLAIN}" "${YELLOW}Did not detect sni-stack.env, and the 443 shared entry initialization has not been completed.${PLAIN}" "${YELLOW}не обнаружил sni-stack.env, и инициализация одной записи 443 не завершена.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 sni-stack.env，尚未完成 443端口复用初始化。${PLAIN}" "${YELLOW}Did not detect sni-stack.env, and the Port 443 Reuse initialization has not been completed.${PLAIN}" "${YELLOW}не обнаружил sni-stack.env, и инициализация повторного использования порта 443 не завершена.${PLAIN}")"
     fi
     echo -e "------------------------------------------------"
     echo -e "$(localized_text "公网 443 监听：" "public port 443 listening:" "прослушивание публичной сети 443:")"
@@ -9251,7 +9251,7 @@ show_entry_mode_cutover_diff() {
     fi
 
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}443 单入口切换 diff 预览${PLAIN}" "${BOLD}443 Shared entry switch diff preview${PLAIN}" "${BOLD}443 Предварительный просмотр дифференциала переключения одной записи${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}443端口复用切换 diff 预览${PLAIN}" "${BOLD}Port 443 Reuse switch diff preview${PLAIN}" "${BOLD}443 Предварительный просмотр дифференциала переключения одной записи${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     print_preview_file_diff "/etc/caddy/Caddyfile" "$target_caddyfile" "Caddyfile"
     print_preview_file_diff "/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy" "${target_caddy_dir}/${PANEL_DOMAIN}.caddy" "$(localized_text "Caddy 面板域名" "Caddy panel domain" "Доменное имя панели Caddy")"
@@ -9282,7 +9282,7 @@ preview_entry_mode_cutover() {
 
     while true; do
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}443 单入口切换变更预览${PLAIN}" "${BOLD}443 shared entry switching change preview${PLAIN}" "${BOLD}443 Предварительный просмотр изменений коммутации на один вход${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}443端口复用切换变更预览${PLAIN}" "${BOLD}Port 443 Reuse switching change preview${PLAIN}" "${BOLD}443 Предварительный просмотр изменений коммутации на один вход${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "当前 ENTRY_MODE：${current_mode}" "Current ENTRY_MODE: ${current_mode}" "Текущий ENTRY_MODE: ${current_mode}")"
         echo -e "$(localized_text "目标 ENTRY_MODE：${target_mode}" "Target ENTRY_MODE: ${target_mode}" "Цель ENTRY_MODE: ${target_mode}")"
@@ -9433,7 +9433,7 @@ disable_nginx_stream_public_443() {
             return 1
         fi
         if systemctl is-active --quiet nginx; then
-            echo -e "$(localized_text "${YELLOW}ℹ️ nginx 服务仍在运行，但已不监听公网 ${NGINX_LISTEN_PORT}；这是允许的，单入口只要求公网 443 由目标入口独占。${PLAIN}" "${YELLOW}ℹ️ nginx The service is still running, but it is no longer listening on the public ${NGINX_LISTEN_PORT}; this is allowed, and the shared entry only requires that public port 443 be exclusively occupied by the target entry.${PLAIN}" "${YELLOW}ℹ️ nginx Служба все еще работает, но больше не прослушивает публичную сеть ${NGINX_LISTEN_PORT}; это разрешено, и для общей точки входа требуется только, чтобы публичный порт 443 был занята исключительно целевым входом.${PLAIN}")"
+            echo -e "$(localized_text "${YELLOW}ℹ️ nginx 服务仍在运行，但已不监听公网 ${NGINX_LISTEN_PORT}；这是允许的，端口复用只要求公网 443 由目标入口独占。${PLAIN}" "${YELLOW}ℹ️ nginx The service is still running, but it is no longer listening on the public ${NGINX_LISTEN_PORT}; this is allowed, and the Port 443 Reuse only requires that public port 443 be exclusively occupied by the target entry.${PLAIN}" "${YELLOW}ℹ️ nginx Служба все еще работает, но больше не прослушивает публичную сеть ${NGINX_LISTEN_PORT}; это разрешено, и для повторного использования порта 443 требуется только, чтобы публичный порт 443 был занята исключительно целевым входом.${PLAIN}")"
         fi
     fi
 }
@@ -9941,7 +9941,7 @@ entry_mode_supports_xray_sni_routes() {
 # Module: sni_stack_health.sh
 # ---------------------------------------------------------
 # shellcheck shell=bash
-# 443 single entry point health checks, HTTP/TLS probes, and subscription hints.
+# Port 443 Reuse health checks, HTTP/TLS probes, and subscription hints.
 
 print_443_health_status_code_hints() {
     echo -e "$(localized_text "${BOLD}状态码提示${PLAIN}" "${BOLD}Status code prompt${PLAIN}" "${BOLD}подсказка кода состояния${PLAIN}")"
@@ -10271,7 +10271,7 @@ check_sni_stack_subscription_hint() {
 # Module: sni_stack_profiles.sh
 # ---------------------------------------------------------
 # shellcheck shell=bash
-# 443 single entry point profile editing and reapply helpers.
+# Port 443 Reuse profile editing and reapply helpers.
 
 save_and_offer_reapply_sni_stack() {
     local yn env_file env_backup
@@ -10282,7 +10282,7 @@ save_and_offer_reapply_sni_stack() {
         cp -p "$env_file" "$env_backup" 2>/dev/null || env_backup=""
     fi
     save_sni_stack_env
-    echo -e "$(localized_text "${GREEN}✅ 已保存新的 443 单入口运行参数。${PLAIN}" "${GREEN}✅ New 443 shared entry operating parameters have been saved.${PLAIN}" "${GREEN}. Сохранены новые 443 отдельных рабочих параметра.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}✅ 已保存新的 443端口复用运行参数。${PLAIN}" "${GREEN}✅ New Port 443 Reuse operating parameters have been saved.${PLAIN}" "${GREEN}. Сохранены новые 443 отдельных рабочих параметра.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的域名、端口或路径。${PLAIN}" "${YELLOW}Tips: You need to reapply after saving, so that Nginx/Caddy will use the new domain, port or path.${PLAIN}" "${YELLOW}Советы: вам необходимо повторно подать заявку после сохранения, чтобы Nginx/Caddy использовал новое имя домена, порт или путь.${PLAIN}")"
     read_trimmed yn "$(localized_text "是否现在重新应用并重启 Nginx/Caddy？直接回车继续，输入 n 取消（大小写均可）: " "Do you want to reapply and restart Nginx/Caddy now? Just press Enter to continue, enter n to cancel (both uppercase and lowercase are acceptable):" "Хотите повторно подать заявку и перезапустить Nginx/Caddy сейчас? Просто нажмите Enter, чтобы продолжить, введите n для отмены (допускаются как прописные, так и строчные буквы):")"
     if is_yes "$yn"; then
@@ -10320,7 +10320,7 @@ update_xui_panel_domain_settings_for_single_443() {
     local checked=0 updated=0 failed=0 timestamp
 
     if xui_uses_postgresql; then
-        echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL，跳过数据库自动同步。443 单入口已更新；请在 3x-ui 中手动确认订阅域名和公开节点地址。${PLAIN}" "${YELLOW}⚠️ 3x-ui is using PostgreSQL, so database synchronization is skipped. The 443 shared entry has been updated; manually verify the subscription domain and public node address in 3x-ui.${PLAIN}" "${YELLOW}⚠️ 3x-ui использует PostgreSQL, поэтому синхронизация базы данных пропущена. Общий вход 443 обновлён; вручную проверьте домен подписки и публичный адрес узла в 3x-ui.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL，跳过数据库自动同步。443端口复用已更新；请在 3x-ui 中手动确认订阅域名和公开节点地址。${PLAIN}" "${YELLOW}⚠️ 3x-ui is using PostgreSQL, so database synchronization is skipped. The Port 443 Reuse has been updated; manually verify the subscription domain and public node address in 3x-ui.${PLAIN}" "${YELLOW}⚠️ 3x-ui использует PostgreSQL, поэтому синхронизация базы данных пропущена. Повторное использование порта 443 обновлён; вручную проверьте домен подписки и публичный адрес узла в 3x-ui.${PLAIN}")"
         return 0
     fi
 
@@ -10522,7 +10522,7 @@ edit_sni_stack_panel_domain_profile() {
     check_domain_dns_sanity "$new_domain" "$(localized_text "新的面板域名" "New panel domain" "Новое доменное имя панели")" "prompt" || return 1
     confirm_risk_action "$(localized_text "替换 443 面板域名为 ${new_domain}" "Replace the 443 panel domain with ${new_domain}" "Замените доменное имя панели 443 на ${new_domain}.")" \
         "$(localized_text "面板域名、证书和 Caddy/Nginx 相关配置" "Panel domain, certificate and Caddy/Nginx related configuration" "Доменное имя панели, сертификат и конфигурация, связанная с Caddy/Nginx.")" \
-        "$(localized_text "使用 443 单入口备份恢复旧域名配置" "Use 443 shared entry backup to restore the old domain configuration" "Восстановите старую конфигурацию доменного имени с помощью резервной копии 443 с общей точкой входа.")" \
+        "$(localized_text "使用 443端口复用备份恢复旧域名配置" "Use Port 443 Reuse backup to restore the old domain configuration" "Восстановите старую конфигурацию доменного имени с помощью резервной копии повторного использования порта 443.")" \
         "$(localized_text "确认新域名 DNS 已解析到当前 VPS，且 Token 有该 zone 权限。" "Confirm that the new domain DNS has been resolved to the current VPS, and the Token has the zone permissions." "Убедитесь, что новое доменное имя DNS разрешено текущему VPS, а токен имеет разрешения зоны.")" || return 1
 
     issue_and_install_cert_for_domain "$new_domain" "$CF_Token" || return 1
@@ -10541,7 +10541,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "$(localized_text "${BOLD}🧭 修改 443 分流参数${PLAIN}" "${BOLD}🧭 Modify 443 routing parameters${PLAIN}" "${BOLD}🧭 Изменение 443 параметров маршрутизации${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}用途：后续修改面板端口/路径、订阅端口/路径、REALITY SNI、入口端口时使用。${PLAIN}" "${YELLOW}Purpose: Used when subsequently modifying the panel port/path, subscription port/path, REALITY, SNI, and entry port.${PLAIN}" "${YELLOW}Назначение: используется при последующем изменении порта/пути панели, порта/пути подписки, REALITY, SNI и входного порта.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 443 shared entry Management Center] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 443 центр управления общей точкой входа] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}新增网站请走 [19] -> [8]，不用重跑首次配置。${PLAIN}" "${YELLOW}Please go to [19] -> [8] to add a new website. There is no need to rerun the first configuration.${PLAIN}" "${YELLOW}Пожалуйста, перейдите в [19] -> [8], чтобы добавить новый веб-сайт. Нет необходимости повторно запускать первую конфигурацию.${PLAIN}")"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
@@ -10567,7 +10567,7 @@ edit_sni_stack_runtime_profile() {
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;
             3) edit_sni_stack_entry_profile ;;
-            4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 443 shared entry Management Center] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 443 центр управления общей точкой входа] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
+            4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
             5) reapply_sni_stack_from_env ;;
             "?"|help) show_sni_help; pause_return; continue ;;
             0) break ;;
@@ -10590,12 +10590,12 @@ reapply_sni_stack_from_env() {
 # Module: sni_stack_install.sh
 # ---------------------------------------------------------
 # shellcheck shell=bash
-# 443 single entry point collection, installation, rendering, certificates, and runtime apply flows.
+# Port 443 Reuse collection, installation, rendering, certificates, and runtime apply flows.
 
 collect_sni_stack_config() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}443 单入口共享配置${PLAIN}" "${BOLD}443 shared entry shared configuration${PLAIN}" "${BOLD}443 Общая конфигурация с одним входом${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}443端口复用配置${PLAIN}" "${BOLD}Port 443 Reuse configuration${PLAIN}" "${BOLD}Конфигурация повторного использования порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}公网 443 将由你选择的入口模式监听；Web 域名、反代引擎、证书和白名单为三种模式共享。${PLAIN}" "${YELLOW}Public port 443 will be monitored by the entry mode you choose; the web domain, reverse proxy engine, certificate and whitelist are shared by the three modes.${PLAIN}" "${YELLOW}Публичный порт  443 будет контролироваться выбранным вами режимом входа; имя веб-домена, механизм обратного прокси-сервера, сертификат и белый список являются общими для всех трех режимов.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}Web 反代引擎、Xray/3x-ui 本地后端默认绑定 127.0.0.1。${PLAIN}" "${YELLOW}Web reverse proxy engine and Xray/3x-ui local backend are bound to 127.0.0.1 by default.${PLAIN}" "${YELLOW}Механизм обратный прокси Web и локальный бэкэнд Xray/3x-ui по умолчанию привязаны к 127.0.0.1.${PLAIN}")"
@@ -10626,8 +10626,8 @@ collect_sni_stack_config() {
     PANEL_DOMAIN="$panel_domain_input"
     local web_engine_choice
     WEB_PROXY_ENGINE="caddy"
-    echo -e "$(localized_text "${CYAN}请选择 443 单入口 Web 反代引擎：${PLAIN}" "${CYAN}Please select 443 shared entry Web reverse proxy engine:${PLAIN}" "${CYAN}Выберите механизм веб-прокси с общей точкой входа 443:${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}  1. Caddy 本地 HTTPS 反代${PLAIN} ${YELLOW}(默认，兼容现有 443 单入口配置)${PLAIN}" "${GREEN}1. Caddy local HTTPS reverse proxy   (default, compatible with existing 443 shared entry configuration)${PLAIN}" "${GREEN}1. Caddy локальный HTTPS обратный прокси (по умолчанию, совместимо с существующей конфигурацией 443 с общей точкой входа)${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}请选择 443端口复用 Web 反代引擎：${PLAIN}" "${CYAN}Please select Port 443 Reuse Web reverse proxy engine:${PLAIN}" "${CYAN}Выберите механизм веб-прокси с повторным использованием порта 443:${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  1. Caddy 本地 HTTPS 反代${PLAIN} ${YELLOW}(默认，兼容现有 443端口复用配置)${PLAIN}" "${GREEN}1. Caddy local HTTPS reverse proxy   (default, compatible with existing Port 443 Reuse configuration)${PLAIN}" "${GREEN}1. Caddy локальный HTTPS обратный прокси (по умолчанию, совместимо с существующей конфигурацией повторного использования порта 443)${PLAIN}")"
     echo -e "$(localized_text "${GREEN}  2. Nginx 本地 HTTPS 反代${PLAIN} ${YELLOW}(只监听本地端口，不抢公网 443)${PLAIN}" "${GREEN}2. Nginx local HTTPS reverse proxy (only listens to the local port, does not grab the public port 443)${PLAIN}" "${GREEN}2. Nginx локальный HTTPS обратный прокси-сервер   (прослушивает только локальный порт и не захватывает публичный порт 443)${PLAIN}")"
     read_trimmed web_engine_choice "$(localized_text "请选择 Web 反代引擎（默认 1）: " "Please select a web reverse proxy engine (default 1):" "Пожалуйста, выберите механизм веб-прокси (по умолчанию 1):")"
     case "${web_engine_choice:-1}" in
@@ -10710,7 +10710,7 @@ collect_sni_stack_config() {
         done
     fi
 
-    echo -e "$(localized_text "${YELLOW}443 单入口需要 3x-ui 面板/订阅后端使用 HTTP，由 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 统一托管公网证书。${PLAIN}" "${YELLOW}443 shared entry requires the 3x-ui panel/subscription backend to use HTTP, which will centrally manage the public certificate.${PLAIN}" "${YELLOW}Для единого входа 443 требуется, чтобы бэкенд панели/подписки 3x-ui использовала HTTP, который будет централизованно управлять сертификатом публичной сети.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}443端口复用需要 3x-ui 面板/订阅后端使用 HTTP，由 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 统一托管公网证书。${PLAIN}" "${YELLOW}Port 443 Reuse requires the 3x-ui panel/subscription backend to use HTTP, which will centrally manage the public certificate.${PLAIN}" "${YELLOW}Для повторного использования порта 443 требуется, чтобы бэкенд панели/подписки 3x-ui использовала HTTP, который будет централизованно управлять сертификатом публичной сети.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}本向导会让 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}" "${YELLOW}This wizard will allow $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") to connect ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} and ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} through HTTP.${PLAIN}" "${YELLOW}Этот мастер позволит $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") соединить ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} и ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} через HTTP.${PLAIN}")"
     echo -e "$(localized_text "${CYAN}证书处理分两种情况：${PLAIN}" "${CYAN}Certificate processing is divided into two situations:${PLAIN}" "${CYAN}Обработка сертификата делится на две ситуации:.${PLAIN}")"
     echo -e "$(localized_text "  3x-ui 3.x 新安装：在官方安装器选第 4 项 Skip SSL，再选 y 仅绑定 127.0.0.1；本步骤只做兜底检查。" "  New 3x-ui 3.x installation: choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. This step is only a fallback check." "  Новая установка 3x-ui 3.x: выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Этот шаг выполняет только проверку.")"
@@ -11258,7 +11258,7 @@ write_nginx_single_443_web_config() {
     mkdir -p "$(dirname "$conf_file")" || return 1
 
     cat <<EOF > "$conf_file"
-# Managed by VPS-Optimize 443 single-entry. Local HTTPS Web proxy only.
+# Managed by VPS-Optimize Port 443 Reuse. Local HTTPS Web proxy only.
 server {
 $(nginx_http_listen_directive "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
     server_name ${PANEL_DOMAIN};
@@ -11586,7 +11586,7 @@ print_sni_stack_result() {
     done
 
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${GREEN}✅ 443 单入口分流配置完成${PLAIN}" "${GREEN}✅ 443 Shared entry route configuration completed${PLAIN}" "${GREEN}443 Конфигурация маршрутизации с одним входом завершена${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}✅ 443端口复用配置完成${PLAIN}" "${GREEN}✅ Port 443 Reuse route configuration completed${PLAIN}" "${GREEN}Конфигурация маршрутизации повторного использования порта 443 завершена${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "当前入口模式：${entry_label} (${entry_mode})" "Current entry mode: ${entry_label} (${entry_mode})" "Текущий режим ввода: ${entry_label} (${entry_mode})")"
     echo -e "$(localized_text "当前 Web 反代引擎：${web_label} (${web_engine})" "Current web reverse proxy engine: ${web_label} (${web_engine})" "Текущий движок веб-прокси: ${web_label} (${web_engine})")"
@@ -11711,7 +11711,7 @@ apply_sni_stack_runtime_config() {
 
     create_sni_stack_backup
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
-    guard_current_ssh_not_on_entry_port "$(localized_text "重新应用 443 单入口运行参数" "Reapply 443 Shared Entry Run Parameters" "Повторно применить 443 отдельных рабочих параметра")" || return 1
+    guard_current_ssh_not_on_entry_port "$(localized_text "重新应用 443端口复用运行参数" "Reapply Port 443 Reuse Run Parameters" "Повторно применить 443 отдельных рабочих параметра")" || return 1
     check_entry_mode_dependencies "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式依赖检查失败" "Entry mode dependency check failed" "Проверка зависимости режима входа не удалась")"; return 1; }
     preflight_entry_mode_before_cutover "$current_mode" || { echo -e "$(localized_text "${RED}❌ 入口模式 ${current_mode} 预检失败，公网 443 未重新应用。${PLAIN}" "${RED}❌ entry mode ${current_mode} Preflight failed, public port 443 was not reapplied.${PLAIN}" "${RED}❌ Режим входа ${current_mode} Не удалось выполнить предварительную проверку, конфигурация публичного порта 443 не была применена повторно.${PLAIN}")"; return 1; }
     stop_public_443_entry_services_for_target "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "停止旧公网 443 入口服务失败" "Stop the old public port 443 entry service failed" "Остановить старую публичную сеть 443, служба входа не удалась")"; return 1; }
@@ -11726,7 +11726,7 @@ apply_sni_stack_runtime_config() {
 # Module: sni_stack_sites.sh
 # ---------------------------------------------------------
 # shellcheck shell=bash
-# 443 single entry point web-domain and custom TCP-route CRUD workflows.
+# Port 443 Reuse web-domain and custom TCP-route CRUD workflows.
 
 list_sni_stack_sites() {
     load_sni_stack_env || return 1
@@ -11734,7 +11734,7 @@ list_sni_stack_sites() {
     web_engine=$(current_web_proxy_engine)
     web_label=$(web_proxy_engine_label "$web_engine")
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}当前 443 单入口网站/反代域名${PLAIN}" "${BOLD}Currently 443 shared entry/reverse proxy domain${PLAIN}" "${BOLD}в настоящее время 443 веб-сайта с общей точкой входа / доменное имя обратного прокси${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}当前 443端口复用网站/反代域名${PLAIN}" "${BOLD}Currently Port 443 Reuse/reverse proxy domain${PLAIN}" "${BOLD}в настоящее время 443 веб-сайта с повторным использованием порта 443 / доменное имя обратного прокси${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "Web 反代引擎：${web_label} (${web_engine}) -> $(web_proxy_backend)" "Web reverse proxy engine: ${web_label} (${web_engine}) -> $(web_proxy_backend)" "механизм веб-прокси: ${web_label} (${web_engine}) -> $(web_proxy_backend)")"
     echo -e "$(localized_text "面板域名：${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Panel domain: ${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Доменное имя панели: ${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}")"
@@ -11859,7 +11859,7 @@ add_sni_stack_site() {
     [[ -n "${whitelist_ranges:-}" ]] && echo -e "$(localized_text "${YELLOW}IP 白名单：${whitelist_ranges}${PLAIN}" "${YELLOW}IP whitelist: ${whitelist_ranges}${PLAIN}" "${YELLOW}Белый список IP: ${whitelist_ranges}${PLAIN}")"
     confirm_risk_action "$(localized_text "新增 443 网站/反代域名 ${site_domain}" "Added 443 websites/reverse domain ${site_domain}" "Добавлено 443 веб-сайта/обратное доменное имя ${site_domain}.")" \
         "$(localized_text "证书、Web 反代引擎配置和 443 入口分流配置" "Certificate, Web reverse proxy engine configuration and 443 entry routing configuration" "Сертификат, конфигурация механизма веб-прокси и конфигурация перенаправления входа 443.")" \
-        "$(localized_text "使用 443 单入口备份恢复，或从网站管理菜单删除该域名" "Use the 443 share entry backup and restore, or delete the domain from the website management menu" "Используйте резервную копию 443 с общей точкой входа для восстановления или удаления домена из меню управления веб-сайтом.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或从网站管理菜单删除该域名" "Use the Port 443 Reuse backup and restore, or delete the domain from the website management menu" "Используйте резервную копию повторного использования порта 443 для восстановления или удаления домена из меню управления веб-сайтом.")" \
         "$(localized_text "确认域名已解析到当前 VPS，后端端口可从本机访问。" "Confirm that the domain has been resolved to the current VPS and the backend port can be accessed from this machine." "Убедитесь, что доменное имя было преобразовано в текущий VPS и доступ к внутреннему порту возможен с этого компьютера.")" || return 1
 
     idx=${#SITE_DOMAINS[@]}
@@ -11918,7 +11918,7 @@ edit_sni_stack_site_backend() {
     echo -e "$(localized_text "${CYAN}即将修改：${domain} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}The following will be changed: ${domain} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}скоро будет изменен: ${domain} -> ${new_addr}:${new_port}${PLAIN}")"
     confirm_risk_action "$(localized_text "修改 443 网站/反代后端" "Modify 443 website/reverse proxy backend" "Изменить веб-сайт 443 / бэкенд обратный прокси")" \
         "$(localized_text "Web 反代引擎后端和 443 入口分流配置" "Web reverse proxy engine backend and 443 entry routing configuration" "бэкенд механизма веб-прокси и конфигурация перенаправления входа 443")" \
-        "$(localized_text "使用 443 单入口备份恢复修改前配置" "Use 443 shared entry backup to restore the configuration before modification" "Используйте однократную резервную копию 443 для восстановления конфигурации до изменения.")" \
+        "$(localized_text "使用 443端口复用备份恢复修改前配置" "Use Port 443 Reuse backup to restore the configuration before modification" "Используйте резервную копию повторного использования порта 443 для восстановления конфигурации до изменения.")" \
         "$(localized_text "确认当前 VPS 能访问新的后端地址和端口。" "Confirm that the current VPS can access the new backend address and port." "Убедитесь, что текущий VPS может получить доступ к новому внутреннему адресу и порту.")" || return 1
 
     SITE_BACKEND_ADDRS[$idx]="$new_addr"
@@ -11960,7 +11960,7 @@ remove_sni_stack_site() {
     domain="${SITE_DOMAINS[$idx]}"
     confirm_risk_action "$(localized_text "从 443 分流中移除 ${domain}" "Remove ${domain} from 443 routing" "Снимите ${domain} с маршрутизации 443.")" \
         "$(localized_text "该域名的 Web 反代引擎配置和 443 入口分流规则" "Web reverse proxy engine configuration and 443 entry routing rules for this domain" "Конфигурация механизма веб-прокси и правила перенаправления входа 443 для этого доменного имени.")" \
-        "$(localized_text "使用 443 单入口备份恢复，或重新新增该网站/反代域名" "Use 443 shared entry backup and restore, or re-add the website/reverse proxy domain" "Используйте однократное резервное копирование и восстановление 443 или повторно добавьте доменное имя веб-сайта/обратного прокси-сервера.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或重新新增该网站/反代域名" "Use Port 443 Reuse backup and restore, or re-add the website/reverse proxy domain" "Используйте резервное копирование и восстановление повторного использования порта 443 или повторно добавьте доменное имя веб-сайта/обратного прокси-сервера.")" \
         "$(localized_text "确认该域名不再承载线上面板、订阅或网站。" "Confirm that the domain no longer hosts the online panel, subscription, or website." "Убедитесь, что в домене больше нет онлайн-панели, подписки или веб-сайта.")" || return 1
 
     new_domains=()
@@ -12008,7 +12008,7 @@ switch_sni_stack_web_proxy_engine() {
     echo -e "$(localized_text "当前入口模式：${entry_mode}" "Current entry mode: ${entry_mode}" "Текущий режим ввода: ${entry_mode}.")"
     echo -e "$(localized_text "当前 Web 反代引擎：${current_label} (${current_engine})" "Current web reverse proxy engine: ${current_label} (${current_engine})" "Текущий движок веб-прокси: ${current_label} (${current_engine})")"
     echo -e "$(localized_text "本地 TLS 后端：$(web_proxy_backend)" "Local TLS Backend: $(web_proxy_backend)" "Локальный сервер TLS: $(web_proxy_backend)")"
-    echo -e "$(localized_text "读取来源：/etc/vps-optimize/sni-stack.env（脚本保存的 443 共享配置）" "Read source: /etc/vps-optimize/sni-stack.env（脚本保存的 443 shared configuration)" "Источник чтения: общая конфигурация /etc/vps-optimize/sni-stack.env（脚本保存的 443)")"
+    echo -e "$(localized_text "读取来源：/etc/vps-optimize/sni-stack.env（脚本保存的 443 共享配置）" "Read source: /etc/vps-optimize/sni-stack.env（脚本保存的 Port 443 Reuse configuration)" "Источник чтения: общая конфигурация /etc/vps-optimize/sni-stack.env（脚本保存的 443)")"
     echo -e "$(localized_text "${YELLOW}切换时会按当前域名、证书、后端和白名单重新渲染所选引擎，并隔离另一套 443 本地 Web 反代配置。${PLAIN}" "${YELLOW}When switching, the selected engine will be re-rendered according to the current domain, certificate, backend and whitelist, and another set of 443 local web reverse proxy configuration will be isolated.${PLAIN}" "${YELLOW}При переключении выбранный движок будет перерисован в соответствии с текущим именем домена, сертификатом, бэкенд и белым списком, а другой набор из 443 локальных конфигураций веб-прокси будет изолирован.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}如果你手工改过 Caddy/Nginx 文件但没有通过本菜单保存，请先在 [8]/[10] 同步脚本保存值后再切换。${PLAIN}" "${YELLOW}If you manually modified the Caddy/Nginx file but did not save it through this menu, please save the value in the [8]/[10] synchronization script before switching.${PLAIN}" "${YELLOW}Если вы вручную изменили файл Caddy/Nginx, но не сохранили его через это меню, сохраните значение в сценарии синхронизации [8]/[10] перед переключением.${PLAIN}")"
     echo -e "------------------------------------------------"
@@ -12047,7 +12047,7 @@ switch_sni_stack_web_proxy_engine() {
 
     confirm_risk_action "$(localized_text "切换 443 Web 反代引擎为 ${new_label}" "Switch the 443 Web reverse proxy engine to ${new_label}" "Переключите механизм обратный прокси 443 Web на ${new_label}.")" \
         "$(localized_text "重新生成 ${new_label} 配置，并隔离旧的 443 本地 Web 反代配置；公网 443 入口模式保持 ${entry_mode}" "Regenerate the ${new_label} configuration and isolate the old 443 local Web reverse proxy configuration; the public port 443 entry mode remains ${entry_mode}" "Восстановите конфигурацию ${new_label} и изолируйте старую локальную конфигурацию обратный прокси веб-страницы 443; режим входа в публичную сеть 443 остается ${entry_mode}")" \
-        "$(localized_text "使用 443 单入口备份恢复，或切回 ${current_label} 后重新应用" "Use 443 shared entry backup and restore, or switch back to ${current_label} and reapply" "Используйте однократное резервное копирование и восстановление 443 или вернитесь к ${current_label} и повторите заявку.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或切回 ${current_label} 后重新应用" "Use Port 443 Reuse backup and restore, or switch back to ${current_label} and reapply" "Используйте резервное копирование и восстановление повторного использования порта 443 или вернитесь к ${current_label} и повторите заявку.")" \
         "$(localized_text "确认本机 ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} 未被其他服务占用，且证书文件仍在 /etc/caddy/certs/。" "Confirm that the local machine ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} is not occupied by other services, and the certificate file is still in /etc/caddy/certs/." "Убедитесь, что локальный компьютер ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} не занят другими службами и файл сертификата все еще находится в /etc/caddy/certs/.")" || return 1
 
     WEB_PROXY_ENGINE="$new_engine"
@@ -12124,7 +12124,7 @@ add_sni_stack_tcp_route() {
     echo -e "$(localized_text "${YELLOW}说明：Web 白名单只保护 Web 域名，不会应用到 TCP/SNI 或 Xray 节点流量。${PLAIN}" "${YELLOW}Note: The Web whitelist only protects Web domains and will not be applied to TCP/SNI or Xray node traffic.${PLAIN}" "${YELLOW}Примечание. Белый список веб-сайтов защищает только имена веб-доменов и не будет применяться к трафику узлов TCP/SNI или Xray.${PLAIN}")"
     confirm_risk_action "$(localized_text "新增 443 TCP/SNI 入站 ${route_sni}" "Added 443 TCP/SNI inbound ${route_sni}" "Добавлен 443 TCP/SNI входящий ${route_sni}.")" \
         "$(localized_text "Nginx stream SNI 分流规则，会把该 SNI 直通到本地 3x-ui 入站" "Nginx stream SNI routing rule will pass the SNI directly to the local 3x-ui inbound connection" "Правило маршрутизации Nginx stream SNI передаст SNI непосредственно локальному входящему соединению 3x-ui.")" \
-        "$(localized_text "使用 443 单入口备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" "Restore using a 443 share entry backup, or delete the route from the TCP/SNI inbound connection management menu" "Восстановите резервную копию общей точки входа 443 или удалите маршрут в меню управления входящими подключениями TCP/SNI.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" "Restore using a Port 443 Reuse backup, or delete the route from the TCP/SNI inbound connection management menu" "Восстановите резервную копию повторного использования порта 443 или удалите маршрут в меню управления входящими подключениями TCP/SNI.")" \
         "$(localized_text "确认后端只监听本地地址，不要在安全组或防火墙开放 ${route_port}。" "Confirm that the backend only listens to the local address and does not open ${route_port} in the security group or firewall." "Убедитесь, что бэкенд прослушивает только локальный адрес и не открывает ${route_port} в группе безопасности или брандмауэре.")" || return 1
 
     idx=${#TCP_ROUTE_SNIS[@]}
@@ -12195,7 +12195,7 @@ edit_sni_stack_tcp_route() {
     echo -e "$(localized_text "${CYAN}即将修改：${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}Is about to be modified: ${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}скоро будет изменен: ${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}")"
     confirm_risk_action "$(localized_text "修改 443 TCP/SNI 入站 ${old_sni}" "Modify 443 TCP/SNI inbound ${old_sni}" "Изменить 443 TCP/SNI входящий ${old_sni}")" \
         "$(localized_text "Nginx stream SNI 分流规则和本地后端端口" "Nginx stream SNI Offload rules and local backend ports" "Nginx stream SNI Правила разгрузки и локальные серверные порты")" \
-        "$(localized_text "使用 443 单入口备份恢复修改前配置" "Use 443 shared entry backup to restore the configuration before modification" "Используйте однократную резервную копию 443 для восстановления конфигурации до изменения.")" \
+        "$(localized_text "使用 443端口复用备份恢复修改前配置" "Use Port 443 Reuse backup to restore the configuration before modification" "Используйте резервную копию повторного использования порта 443 для восстановления конфигурации до изменения.")" \
         "$(localized_text "确认 3x-ui 入站已按新地址和端口监听，且未开放该内部端口。" "Confirm that 3x-ui inbound is listening at the new address and port, and the internal port is not open." "Убедитесь, что 3x-ui прослушивает входящее подключение по новому адресу и порту, а внутренний порт не открыт.")" || return 1
 
     TCP_ROUTE_SNIS[$idx]="$new_sni"
@@ -12241,7 +12241,7 @@ remove_sni_stack_tcp_route() {
     route_sni="${TCP_ROUTE_SNIS[$idx]}"
     confirm_risk_action "$(localized_text "从 443 分流中移除 TCP/SNI 入站 ${route_sni}" "Remove TCP/SNI from 443 routing inbound ${route_sni}" "Удалить входящее подключение TCP/SNI из маршрутизации 443 ${route_sni}.")" \
         "$(localized_text "该 SNI 的 Nginx stream 直通规则" "The Nginx stream pass-through rule for SNI" "Правило прохождения Nginx stream для SNI")" \
-        "$(localized_text "使用 443 单入口备份恢复，或重新新增该 TCP/SNI 入站" "Use 443 shared entry backup and restore, or re-add the TCP/SNI inbound connection" "Используйте однократное резервное копирование и восстановление 443 или повторно добавьте входящий TCP/SNI.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或重新新增该 TCP/SNI 入站" "Use Port 443 Reuse backup and restore, or re-add the TCP/SNI inbound connection" "Используйте резервное копирование и восстановление повторного использования порта 443 или повторно добавьте входящий TCP/SNI.")" \
         "$(localized_text "确认没有客户端仍依赖该 SNI 连接。" "Confirm that no clients are still relying on the SNI connection." "Убедитесь, что ни один клиент по-прежнему не использует соединение SNI.")" || return 1
 
     for i in "${!TCP_ROUTE_SNIS[@]}"; do
@@ -12312,7 +12312,7 @@ add_xray_sni_route() {
     echo -e "$(localized_text "${BOLD}添加 Xray 入站分流规则${PLAIN}" "${BOLD}Adds Xray inbound connection routing rule${PLAIN}" "${BOLD}добавляет правило входящей рассылки Xray${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "$(localized_text "${YELLOW}本菜单只记录 SNI -> 本地地址:端口；用于当前支持的单入口模式渲染分流规则，不会创建、删除或修改 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}This menu only records SNI -> local address: port; used for the currently supported shared entry mode rendering routing rules, and will not create, delete or modify the internal configuration of the 3x-ui/Xray inbound connection.${PLAIN}" "${YELLOW}Это меню записывает только SNI -> локальный адрес: порт; используется для поддерживаемых в настоящее время правил маршрутизации в режиме общего входа и не будет создавать, удалять или изменять внутреннюю конфигурацию входящего соединения 3x-ui/Xray.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}本菜单只记录 SNI -> 本地地址:端口；用于当前支持的端口复用模式渲染分流规则，不会创建、删除或修改 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}This menu only records SNI -> local address: port; used for the currently supported Port 443 Reuse mode rendering routing rules, and will not create, delete or modify the internal configuration of the 3x-ui/Xray inbound connection.${PLAIN}" "${YELLOW}Это меню записывает только SNI -> локальный адрес: порт; используется для поддерживаемых в настоящее время правил маршрутизации в режиме повторного использования порта 443 и не будет создавать, удалять или изменять внутреннюю конфигурацию входящего соединения 3x-ui/Xray.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local route_sni route_sni_input route_addr route_port existing idx
@@ -12511,7 +12511,7 @@ manage_xray_inbound_routes() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}Xray 入站管理${PLAIN}" "${BOLD}Xray Inbound management${PLAIN}" "${BOLD}Управление входящими подключениями Xray${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}只管理 SNI -> 本地地址:端口 分流记录，用于当前支持的单入口模式渲染分流规则；不编辑 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}Only manages the SNI -> local address:port routing record, which is used for the currently supported shared entry mode rendering routing rules; it does not edit the 3x-ui/Xray inbound connection internal configuration.${PLAIN}" "${YELLOW}управляет только SNI -> локальный адрес: записи маршрутизирования порта, которые используются для поддерживаемых в настоящее время правил маршрутизирования рендеринга в однозаходном режиме; он не редактирует входящую внутреннюю конфигурацию 3x-ui/Xray.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}只管理 SNI -> 本地地址:端口 分流记录，用于当前支持的端口复用模式渲染分流规则；不编辑 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}Only manages the SNI -> local address:port routing record, which is used for the currently supported Port 443 Reuse mode rendering routing rules; it does not edit the 3x-ui/Xray inbound connection internal configuration.${PLAIN}" "${YELLOW}управляет только SNI -> локальный адрес: записи маршрутизирования порта, которые используются для поддерживаемых в настоящее время правил маршрутизирования рендеринга в однозаходном режиме; он не редактирует входящую внутреннюю конфигурацию 3x-ui/Xray.${PLAIN}")"
         echo -e "$(localized_text "配置文件：$(xray_sni_routes_path)" "Configuration file: $(xray_sni_routes_path)" "Файл конфигурации: $(xray_sni_routes_path).")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 查看入站分流规则${PLAIN}" "${GREEN}1. View the inbound routing rule${PLAIN}" "${GREEN}1. Просмотреть правила маршрутизации входящих подключений${PLAIN}")"
@@ -12546,7 +12546,7 @@ manage_sni_stack_tcp_routes() {
         echo -e "$(localized_text "${BOLD}Xray 入站管理${PLAIN}" "${BOLD}Xray Inbound management${PLAIN}" "${BOLD}Управление входящими подключениями Xray${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}用途：记录你已在 3x-ui/Xray 配好的本地入站：SNI -> 本地地址:端口。${PLAIN}" "${YELLOW}Purpose: record the local inbound you have configured in 3x-ui/Xray: SNI -> local address: port.${PLAIN}" "${YELLOW}Назначение: записать локальное входящее подключение, который вы настроили в 3x-ui/Xray: SNI -> локальный адрес: порт.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}这些记录用于当前支持的单入口模式渲染分流规则；脚本不开放新端口，不改 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}These records are used for the currently supported shared entry mode rendering routing rules; the script does not open new ports and does not change the internal configuration of the 3x-ui/Xray inbound connection.${PLAIN}" "${YELLOW}Эти записи используются для поддерживаемых в настоящее время правил разгрузки рендеринга в режиме с общей точкой входа; сценарий не открывает новые порты и не изменяет внутреннюю конфигурацию входящего подключения 3x-ui/Xray.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}这些记录用于当前支持的端口复用模式渲染分流规则；脚本不开放新端口，不改 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}These records are used for the currently supported Port 443 Reuse mode rendering routing rules; the script does not open new ports and does not change the internal configuration of the 3x-ui/Xray inbound connection.${PLAIN}" "${YELLOW}Эти записи используются для поддерживаемых в настоящее время правил разгрузки рендеринга в режиме с повторным использованием порта 443; сценарий не открывает новые порты и не изменяет внутреннюю конфигурацию входящего подключения 3x-ui/Xray.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 查看当前 TCP/SNI 入站${PLAIN}" "${GREEN}1. View current TCP/SNI inbound${PLAIN}" "${GREEN}1. Просмотр текущего входящего TCP/SNI${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 新增 TCP/SNI 入站${PLAIN}" "${GREEN}2. Add TCP/SNI inbound${PLAIN}" "${GREEN}2. Добавьте входящий TCP/SNI.${PLAIN}")"
@@ -12554,7 +12554,7 @@ manage_sni_stack_tcp_routes() {
         echo -e "$(localized_text "${GREEN}  4. 删除 TCP/SNI 入站${PLAIN}" "${GREEN}4. Delete TCP/SNI inbound${PLAIN}" "${GREEN}4. Удалить TCP/SNI входящий${PLAIN}")"
         echo -e "$(localized_text "${BLUE}  5. 查看 Web 白名单适用范围${PLAIN}" "${BLUE}5. View the applicable scope of the Web whitelist${PLAIN}" "${BLUE}5. Просмотрите применимую область белого веб-списка.${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}" "${GREEN}6. Reapply and restart Nginx/Caddy${PLAIN}" "${GREEN}6. Повторно примените и перезапустите Nginx/Caddy.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. 443 单入口链路体检${PLAIN}" "${GREEN}7. 443 shared entry link health check${PLAIN}" "${GREEN}7. 443 проверка состояния с одним входом${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. 443端口复用链路体检${PLAIN}" "${GREEN}7. Port 443 Reuse link health check${PLAIN}" "${GREEN}7. Проверка состояния повторного использования порта 443${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -12658,7 +12658,7 @@ manage_sni_stack_ip_whitelist() {
                 whitelist_ranges=$(join_array_by_space "${whitelist_array[@]}")
                 confirm_risk_action "$(localized_text "为 ${domain} 启用 IP 白名单" "Enable IP whitelisting for ${domain}" "Включить белый список IP-адресов для ${domain}")" \
                     "$(localized_text "443 入口层会仅对该 SNI 做源 IP 限制" "443 The entry layer will only restrict the source IP of SNI." "443 Входной уровень будет ограничивать только исходный IP-адрес SNI.")" \
-                    "$(localized_text "使用 443 单入口自动备份回滚，或清除该域名白名单后重新应用" "Use the 443 shared entry to automatically back up and roll back, or clear the domain whitelist and reapply it." "Используйте однократное автоматическое резервное копирование и откат 443 или очистите белый список доменных имен и примените его повторно.")" \
+                    "$(localized_text "使用 443端口复用自动备份回滚，或清除该域名白名单后重新应用" "Use the Port 443 Reuse to automatically back up and roll back, or clear the domain whitelist and reapply it." "Используйте автоматическое резервное копирование и откат повторного использования порта 443 или очистите белый список доменных имен и примените его повторно.")" \
                     "$(localized_text "确认你的管理 IP 已包含在白名单中，且该域名不是 Cloudflare 橙云代理访问。" "Confirm that your management IP is included in the whitelist and the domain is not Cloudflare Orange Cloud proxy access." "Убедитесь, что ваш IP-адрес управления включен в белый список, а имя домена не является Cloudflare для доступа к прокси-серверу Orange Cloud.")" || continue
                 set_sni_ip_whitelist_for_domain "$domain" "$whitelist_ranges"
                 save_and_offer_reapply_sni_stack
@@ -12690,7 +12690,7 @@ manage_sni_stack_ip_whitelist() {
 # Module: sni_stack_menus.sh
 # ---------------------------------------------------------
 # shellcheck shell=bash
-# 443 single entry point secondary menus for sites, routes, and web whitelist controls.
+# Port 443 Reuse secondary menus for sites, routes, and web whitelist controls.
 
 manage_sni_stack_sites() {
     while true; do
@@ -12698,7 +12698,7 @@ manage_sni_stack_sites() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}🌐 443 网站/反代域名管理${PLAIN}" "${BOLD}🌐 443 Web domain and reverse-proxy management${PLAIN}" "${BOLD}🌐 443 Управление Web-доменами и обратным прокси${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}管理已配置 443 单入口的网站和反代域名。${PLAIN}" "${YELLOW}Manage Web domains and reverse proxies after shared port 443 is configured.${PLAIN}" "${YELLOW}Управляйте Web-доменами и обратными прокси после настройки общего порта 443.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}管理已配置 443端口复用的网站和反代域名。${PLAIN}" "${YELLOW}Manage Web domains and reverse proxies after Port 443 Reuse is configured.${PLAIN}" "${YELLOW}Управляйте Web-доменами и обратными прокси после настройки повторного использования порта 443.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}新增网站只需填写域名和本机后端端口，无需重跑首次配置。${PLAIN}" "${YELLOW}To add a site, enter its domain and local backend port; do not rerun initial setup.${PLAIN}" "${YELLOW}Для нового сайта укажите домен и локальный порт бэкенда; первоначальная настройка не нужна.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 查看当前网站/反代域名${PLAIN}" "${GREEN}1. View current Web domains/reverse proxies${PLAIN}" "${GREEN}1. Показать текущие Web-домены и обратные прокси${PLAIN}")"
@@ -12707,7 +12707,7 @@ manage_sni_stack_sites() {
         echo -e "$(localized_text "${GREEN}  4. 删除网站/反代域名${PLAIN}" "${GREEN}4. Remove a Web domain/reverse proxy${PLAIN}" "${GREEN}4. Удалить Web-домен и обратный прокси${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  5. 管理域名 IP 白名单${PLAIN}       ${YELLOW}(只限制被选择的域名)${PLAIN}" "${GREEN}5. Manage domain IP allowlists (selected domains only)${PLAIN}" "${GREEN}5. Управление IP-белым списком доменов (только выбранные домены)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}" "${GREEN}6. Reapply configuration and restart Nginx/Caddy${PLAIN}" "${GREEN}6. Повторно применить конфигурацию и перезапустить Nginx/Caddy${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. 443 单入口链路体检${PLAIN}" "${GREEN}7. Shared port 443 diagnostics${PLAIN}" "${GREEN}7. Диагностика общего порта 443${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. 443端口复用链路体检${PLAIN}" "${GREEN}7. Port 443 Reuse diagnostics${PLAIN}" "${GREEN}7. Диагностика повторного использования порта 443${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  8. 切换 Web 反代引擎${PLAIN}       ${YELLOW}(Caddy / Nginx 本地反代)${PLAIN}" "${GREEN}8. Switch the Web reverse-proxy engine (local Caddy/Nginx)${PLAIN}" "${GREEN}8. Сменить Web-движок обратного прокси (локальный Caddy/Nginx)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  9. 修改面板域名${PLAIN}" "${GREEN}9. Change the panel domain${PLAIN}" "${GREEN}9. Изменить домен панели${PLAIN}")"
         echo -e "------------------------------------------------"
@@ -12746,20 +12746,20 @@ func_caddy_cf_reality_wizard() {
     if [[ -f /etc/vps-optimize/sni-stack.env ]]; then
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}检测到已有 443 单入口配置${PLAIN}" "${BOLD}Detects that there are already 443 shared entry configurations${PLAIN}" "${BOLD}обнаружил, что существует 443 конфигурации с общей точкой входа.${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}检测到已有 443端口复用配置${PLAIN}" "${BOLD}Detects that there are already Port 443 Reuse configurations${PLAIN}" "${BOLD}обнаружил, что существует 443 конфигурации с повторным использованием порта 443.${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}如果只是新增网站或反代域名，请返回并选择 [8] 管理 Web 域名/反代。${PLAIN}" "${YELLOW}If you are just adding a new website or reverse proxy domain, please go back and select [8] Manage Web domain/Reverse proxy.${PLAIN}" "${YELLOW}Если вы просто добавляете новый веб-сайт или доменное имя обратного прокси, вернитесь назад и выберите [8] Управление именем веб-домена/обратным прокси.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}继续首次配置会重写 443 入口、Web 反代引擎和 Xray 分流相关核心配置。${PLAIN}" "${YELLOW}Continuing initial setup will rewrite the port 443 entry, Web reverse proxy, and Xray routing configuration.${PLAIN}" "${YELLOW}Продолжение первоначальной настройки перезапишет конфигурацию входа 443, веб-прокси и маршрутизации Xray.${PLAIN}")"
         echo -e "------------------------------------------------"
         grep -E '^(PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null || true
         echo -e "------------------------------------------------"
-        confirm_danger "$(localized_text "重新执行 443 首次配置" "Re-execute 443 initial setup" "Повторно выполнить конфигурацию 443 при первом запуске.")" "$(localized_text "将基于新输入重写 443 单入口核心配置，并重启入口服务/Caddy。" "The 443 shared-entry core configuration will be rewritten based on the new input and the entry service/Caddy will be restarted." "Конфигурация ядра общей точки входа 443 будет переписана на основе новых входных данных, а служба входа/Caddy будет перезапущена.")" "$(localized_text "脚本会先创建备份，可从 443 维护菜单或备份目录回滚。" "The script will first create a backup, which can be rolled back from the 443 maintenance menu or the backup directory." "Скрипт сначала создаст резервную копию, откат которой можно выполнить из меню обслуживания 443 или каталога резервных копий.")" || return 1
+        confirm_danger "$(localized_text "重新执行 443 首次配置" "Re-execute 443 initial setup" "Повторно выполнить конфигурацию 443 при первом запуске.")" "$(localized_text "将基于新输入重写 443端口复用核心配置，并重启入口服务/Caddy。" "The Port 443 Reuse core configuration will be rewritten based on the new input and the entry service/Caddy will be restarted." "Конфигурация ядра повторного использования порта 443 будет переписана на основе новых входных данных, а служба входа/Caddy будет перезапущена.")" "$(localized_text "脚本会先创建备份，可从 443 维护菜单或备份目录回滚。" "The script will first create a backup, which can be rolled back from the 443 maintenance menu or the backup directory." "Скрипт сначала создаст резервную копию, откат которой можно выполнить из меню обслуживания 443 или каталога резервных копий.")" || return 1
     fi
     select_initial_entry_mode || return 1
     collect_sni_stack_config || return 1
     probe_reality_sni "$REALITY_SNI" || return 1
     print_sni_stack_preview || return 1
-    guard_current_ssh_not_on_entry_port "$(localized_text "首次配置 443 单入口" "Initial shared 443 entry setup" "Первоначальная настройка общей точки входа 443")" || return 1
+    guard_current_ssh_not_on_entry_port "$(localized_text "首次配置 443端口复用" "Initial Port 443 Reuse setup" "Первоначальная настройка повторного использования порта 443")" || return 1
     local cf_env_dir="/root/.config/vps-panel"
     local cf_env_file="${cf_env_dir}/cloudflare.env"
     local escaped_token
@@ -13129,13 +13129,13 @@ func_caddy_cf_maintenance_menu() {
         echo -e "$(localized_text "${YELLOW}用途：排查 443 链路、重签证书、修复软链接、隔离旧配置和回滚。${PLAIN}" "${YELLOW}Purpose: troubleshooting 443 links, re-signing certificates, repairing symlinks, isolating old configurations and rolling back.${PLAIN}" "${YELLOW}Назначение: устранение неполадок 443 ссылок, переподписка сертификатов, восстановление программных ссылок, изоляция старых конфигураций и откат.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}建议顺序：先 [1] 体检，再按异常选择证书或 Caddy 修复项。${PLAIN}" "${YELLOW}Recommended order: [1] health check first, then select the certificate or Caddy repair item according to the abnormality.${PLAIN}" "${YELLOW}Рекомендуемый порядок: [1] Сначала проверка состояния, затем выберите сертификат или элемент ремонта Caddy в соответствии с неисправностью.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 443 单入口常用${PLAIN}" "${BOLD}▶ 443 shared entry commonly used${PLAIN}" "${BOLD}▶ 443 Обычно используется с одним входом${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 443端口复用常用${PLAIN}" "${BOLD}▶ Port 443 Reuse commonly used${PLAIN}" "${BOLD}▶ 443 Обычно используется повторного использования порта 443${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  1. 443 链路与安全体检${PLAIN}       ${YELLOW}(Nginx/Caddy/REALITY/面板/版本隐藏)${PLAIN}" "${GREEN}1. 443 Link and security health check (Nginx/Caddy/REALITY/panel/version hidden)${PLAIN}" "${GREEN}1. 443 проверка состояния канала и безопасности (Nginx/Caddy/REALITY/панель/версия скрыта)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 管理 443 网站/反代域名${PLAIN}    ${YELLOW}(新增/删除/查看，最常用)${PLAIN}" "${GREEN}2. Management 443 website/reverse domain (add/delete/view, most commonly used)${PLAIN}" "${GREEN}2. Веб-сайт Management 443/обратное доменное имя (добавление/удаление/просмотр, наиболее часто используемый)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  3. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}" "${GREEN}3. Modify 443 routing parameters   (Panel/Subscription/REALITY/Entry Port and Path)${PLAIN}" "${GREEN}3. Измените 443 параметра маршрутизации   (Панель/Подписка/REALITY/Входной порт и путь)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  4. 重新应用上次 443 配置${PLAIN}     ${YELLOW}(读取 sni-stack.env 重建配置)${PLAIN}" "${GREEN}4. Reapply the last 443 configuration (read sni-stack.env and rebuild the configuration)${PLAIN}" "${GREEN}4. Повторно примените последнюю конфигурацию 443 (прочитайте sni-stack.env и перестройте конфигурацию)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  5. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}" "${GREEN}5. Subscription link / External Proxy prompt (check whether the node link outputs public port 443)${PLAIN}" "${GREEN}5. Ссылка на подписку/запрос внешнего прокси (проверьте, выводит ли ссылка узла публичный порт 443)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  6. 回滚 443 单入口配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}" "${RED}6. Rollback 443 Shared entry configuration   (restore from recent backup)${PLAIN}" "${RED}6. Откат 443 Конфигурация с общей точкой входа (восстановление из последней резервной копии)${PLAIN}")"
+        echo -e "$(localized_text "${RED}  6. 回滚 443端口复用配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}" "${RED}6. Rollback Port 443 Reuse configuration   (restore from recent backup)${PLAIN}" "${RED}6. Откат 443 Конфигурация с повторным использованием порта 443 (восстановление из последней резервной копии)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 证书与 Cloudflare${PLAIN}" "${BOLD}▶ Certificate and Cloudflare${PLAIN}" "${BOLD}▶ Сертификат и Cloudflare${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  7. 查看已管理域名 / 证书路径${PLAIN}" "${GREEN}7. View the managed domain/certificate path${PLAIN}" "${GREEN}7. Просмотрите имя управляемого домена/путь сертификата.${PLAIN}")"
@@ -13560,8 +13560,8 @@ func_caddy_manage_ip_whitelist() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}🔐 Caddy 域名 IP 白名单${PLAIN}" "${BOLD}🔐 Caddy domain IP whitelist${PLAIN}" "${BOLD}🔐 Caddy доменное имя Белый список IP-адресов${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}适用于未启用 443 单入口、由 Caddy 直接对外服务的域名。${PLAIN}" "${YELLOW}Suitable for domains that do not enable the 443 shared entry and are directly served externally by Caddy.${PLAIN}" "${YELLOW}подходит для доменных имен, которые не поддерживают общий вход 443 и обслуживаются напрямую извне Caddy.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443 单入口，请用主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]，不要在 Caddy 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to 443 shared entry, please use the main menu [19 443 shared entry management center] -> [8 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Caddy layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к 443 единому входу, используйте главное меню [19 443 центр управления общим входом] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменного имени], не ограничивайте его на уровне Caddy.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}适用于未启用 443端口复用、由 Caddy 直接对外服务的域名。${PLAIN}" "${YELLOW}Suitable for domains that do not enable the Port 443 Reuse and are directly served externally by Caddy.${PLAIN}" "${YELLOW}подходит для доменных имен, которые не поддерживают повторное использование порта 443 и обслуживаются напрямую извне Caddy.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443端口复用，请用主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]，不要在 Caddy 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to Port 443 Reuse, please use the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Caddy layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к повторному использованию порта 443, используйте главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменного имени], не ограничивайте его на уровне Caddy.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     if ! command -v caddy >/dev/null 2>&1 || [[ ! -f /etc/caddy/Caddyfile ]]; then
@@ -13593,7 +13593,7 @@ func_caddy_manage_ip_whitelist() {
         return
     fi
     if [[ "$first_site_line" =~ ^https://[^[:space:]]+:[0-9]+[[:space:]]*\{ ]]; then
-        echo -e "$(localized_text "${RED}❌ 这个配置看起来属于 443 单入口本地 Caddy TLS 站点。请改用主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]。${PLAIN}" "${RED}❌ This configuration appears to belong to the 443 shared entry local Caddy TLS site. Please use the main menu instead [19 443 shared entry Management Center] -> [8 Manage Web domain/Reverse Proxy] -> [5 Manage domain IP Whitelist].${PLAIN}" "${RED}❌ Похоже, эта конфигурация принадлежит локальному сайту Caddy TLS с общей точкой входа 443. Вместо этого используйте главное меню [19 443 Центр управления общим входом] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменных имен].${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ 这个配置看起来属于 443端口复用本地 Caddy TLS 站点。请改用主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]。${PLAIN}" "${RED}❌ This configuration appears to belong to the Port 443 Reuse local Caddy TLS site. Please use the main menu instead [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [5 Manage domain IP Whitelist].${PLAIN}" "${RED}❌ Похоже, эта конфигурация принадлежит локальному сайту Caddy TLS с повторным использованием порта 443. Вместо этого используйте главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменных имен].${PLAIN}")"
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
         return
     fi
@@ -13680,7 +13680,7 @@ sync_sni_stack_state_after_caddy_domain_delete() {
     load_sni_stack_env >/dev/null 2>&1 || return 0
 
     if [[ "$domain" == "${PANEL_DOMAIN:-}" ]]; then
-        echo -e "$(localized_text "${YELLOW}⚠️ ${domain} 是当前 443 单入口面板域名，保存状态仍会引用它；重新应用前必须重新签发证书或更换面板域名。${PLAIN}" "${YELLOW}⚠️ ${domain} is the current 443 shared entry panel domain, and the saved state will still refer to it; the certificate must be re-issued or the panel domain must be changed before re-applying.${PLAIN}" "${YELLOW}⚠️ ${domain} — это текущее доменное имя панели с единым вводом 443, и сохраненное состояние по-прежнему будет ссылаться на него; сертификат необходимо перевыпустить или изменить доменное имя панели перед повторной подачей заявки.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ ${domain} 是当前 443端口复用面板域名，保存状态仍会引用它；重新应用前必须重新签发证书或更换面板域名。${PLAIN}" "${YELLOW}⚠️ ${domain} is the current Port 443 Reuse panel domain, and the saved state will still refer to it; the certificate must be re-issued or the panel domain must be changed before re-applying.${PLAIN}" "${YELLOW}⚠️ ${domain} — это текущее доменное имя панели с единым вводом 443, и сохраненное состояние по-прежнему будет ссылаться на него; сертификат необходимо перевыпустить или изменить доменное имя панели перед повторной подачей заявки.${PLAIN}")"
         return 0
     fi
 
@@ -13700,7 +13700,7 @@ sync_sni_stack_state_after_caddy_domain_delete() {
     SITE_BACKEND_PORTS=("${new_ports[@]}")
     remove_sni_ip_whitelist_for_domain "$domain"
     save_sni_stack_env
-    echo -e "$(localized_text "${GREEN}✅ 已同步移除 443 单入口保存状态中的 Web 域名：${domain}${PLAIN}" "${GREEN}✅ The web domain in the saved status of 443 shared entries has been removed simultaneously: ${domain}${PLAIN}" "${GREEN}. Имя веб-домена в сохраненном состоянии 443 с общей точкой входа было одновременно удалено: ${domain}.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}✅ 已同步移除 443端口复用保存状态中的 Web 域名：${domain}${PLAIN}" "${GREEN}✅ The web domain in the saved status of Port 443 Reuse has been removed simultaneously: ${domain}${PLAIN}" "${GREEN}. Имя веб-домена в сохраненном состоянии повторного использования порта 443 было одновременно удалено: ${domain}.${PLAIN}")"
 }
 
 func_caddy_delete_cert() {
@@ -14740,7 +14740,7 @@ func_docker_443_exposure_audit() {
     print_breadcrumb "$(localized_text "Docker 管理 > 443 暴露审计" "Docker Management > 443 Exposure Audit" "Docker > Аудит публикации порта 443")"
     echo -e "$(localized_text "${BOLD}🔎 Docker 端口暴露审计${PLAIN}" "${BOLD}🔎 Docker Port exposure audit${PLAIN}" "${BOLD}🔎 Docker Аудит воздействия порта${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}目标：启用 443 单入口后，订阅工具和管理面板应尽量只绑定 127.0.0.1，再由 Caddy/Nginx 对外。${PLAIN}" "${YELLOW}Goal: After enabling the 443 shared entry, the subscription tool and management panel should only be bound to 127.0.0.1, and then Caddy/Nginx should be externalized.${PLAIN}" "${YELLOW}Назначение: после включения общего входа 443 инструмент подписки и панель управления должны быть привязаны только к 127.0.0.1, а затем Caddy/Nginx должны быть экспортированы.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}目标：启用 443端口复用后，订阅工具和管理面板应尽量只绑定 127.0.0.1，再由 Caddy/Nginx 对外。${PLAIN}" "${YELLOW}Goal: After enabling the Port 443 Reuse, the subscription tool and management panel should only be bound to 127.0.0.1, and then Caddy/Nginx should be externalized.${PLAIN}" "${YELLOW}Назначение: после включения повторного использования порта 443 инструмент подписки и панель управления должны быть привязаны только к 127.0.0.1, а затем Caddy/Nginx должны быть экспортированы.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local found_public=false
@@ -16230,7 +16230,7 @@ print_project_runtime_overview() {
         echo -e "$(localized_text "443 入口 : ${YELLOW}检测到配置文件，但读取失败，请运行 [19] -> [13] 体检。${PLAIN}" "Port 443 entry: ${YELLOW}configuration found but could not be read; run [19] -> [13] Health check.${PLAIN}" "Точка входа 443: ${YELLOW}конфигурация найдена, но не читается; запустите [19] -> [13] Проверка состояния.${PLAIN}")"
         fi
     else
-        echo -e "$(localized_text "443 入口 : ${BLUE}尚未配置；需要面板/订阅/REALITY 共用 443 时进入 [19]。${PLAIN}" "Port 443 entry: ${BLUE}not configured; open [19] to share port 443 between the panel, subscriptions, and REALITY.${PLAIN}" "Точка входа 443: ${BLUE}не настроена; откройте [19], чтобы панель, подписки и REALITY использовали общий порт 443.${PLAIN}")"
+        echo -e "$(localized_text "443 入口 : ${BLUE}尚未配置；需要面板/订阅/REALITY 共用 443 时进入 [19]。${PLAIN}" "Port 443 entry: ${BLUE}not configured; open [19] to share port 443 between the panel, subscriptions, and REALITY.${PLAIN}" "Точка входа 443: ${BLUE}не настроена; откройте [19], чтобы панель, подписки и REALITY использовали повторное использование порта 443.${PLAIN}")"
     fi
 
     if command -v docker >/dev/null 2>&1; then
@@ -16438,12 +16438,12 @@ tls_sni_probe_local() {
 func_443_network_test() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "测速与质量检测 > 443 单入口测试" "Speed Test and Quality Test > 443 Shared Entry Test" "Тестирование скорости и качества > Тест 443 с одним входом")"
-    echo -e "$(localized_text "${BOLD}🧪 443 单入口网络访问测试${PLAIN}" "${BOLD}🧪 443 shared entry network access test${PLAIN}" "${BOLD}🧪 443 Тест доступа к сети с одним входом${PLAIN}")"
+    print_breadcrumb "$(localized_text "测速与质量检测 > 443端口复用测试" "Speed Test and Quality Test > Port 443 Reuse Test" "Тестирование скорости и качества > Тест повторное использование порта 443")"
+    echo -e "$(localized_text "${BOLD}🧪 443端口复用网络访问测试${PLAIN}" "${BOLD}🧪 Port 443 Reuse network access test${PLAIN}" "${BOLD}🧪 443 Тест доступа к сети повторного использования порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     if [[ ! -f /etc/vps-optimize/sni-stack.env ]]; then
-        echo -e "$(localized_text "${YELLOW}未检测到 443 单入口配置。请先进入 [19] -> [2] 安装入口。${PLAIN}" "${YELLOW}No shared 443 entry configuration was found. Use [19] -> [2] to install it first.${PLAIN}" "${YELLOW}Конфигурация общего входа 443 не найдена. Сначала установите её через [19] -> [2].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 443端口复用配置。请先进入 [19] -> [2] 安装入口。${PLAIN}" "${YELLOW}No Port 443 Reuse configuration was found. Use [19] -> [2] to install it first.${PLAIN}" "${YELLOW}Конфигурация повторного использования порта 443 не найдена. Сначала установите её через [19] -> [2].${PLAIN}")"
         read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
         return
     fi
@@ -16645,13 +16645,13 @@ func_xpanel() {
         1|latest|最新版)
             install_desc="$(localized_text "安装 3x-ui / x-ui 面板（最新版）" "Install 3x-ui / x-ui panel (latest version)" "Установите панель 3x-ui/x-ui (последняя версия)")"
             install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
-            ssl_hint="$(localized_text "最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。443 单入口由本脚本的 Caddy + acme.sh 托管公网证书。" "When the latest 3.x installer asks about SSL, choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. The shared 443 entry uses this script's Caddy + acme.sh for public certificates." "Когда установщик 3.x спросит об SSL, выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Публичные сертификаты общей точки входа 443 обслуживают Caddy + acme.sh этого сценария.")"
+            ssl_hint="$(localized_text "最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。443端口复用由本脚本的 Caddy + acme.sh 托管公网证书。" "When the latest 3.x installer asks about SSL, choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. The Port 443 Reuse uses this script's Caddy + acme.sh for public certificates." "Когда установщик 3.x спросит об SSL, выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Публичные сертификаты повторного использования порта 443 обслуживают Caddy + acme.sh этого сценария.")"
             ;;
         2|2.9.4|v2.9.4)
             install_desc="$(localized_text "安装 3x-ui / x-ui 面板（v2.9.4）" "Install 3x-ui / x-ui panel (v2.9.4)" "Установите панель 3x-ui/x-ui (v2.9.4)")"
             install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh"
             install_args=("v2.9.4")
-            ssl_hint="$(localized_text "v2.9.4 属于 2.x 老流程：如果安装器或面板里已经设置过 SSL 证书，后续 443 单入口向导会继续按旧方式清空面板/订阅证书路径。" "v2.9.4 belongs to the 2.x old process: if the SSL certificate has been set in the installer or panel, the subsequent 443 Shared Entry Wizard will continue to clear the panel/subscription certificate path in the old way." "Версия 2.9.4 принадлежит старому процессу 2.x: если сертификат SSL был установлен в установщике или панели, последующие 443 мастера с общей точкой входа продолжат очищать путь к сертификату панели/подписки старым способом.")"
+            ssl_hint="$(localized_text "v2.9.4 属于 2.x 老流程：如果安装器或面板里已经设置过 SSL 证书，后续 443端口复用向导会继续按旧方式清空面板/订阅证书路径。" "v2.9.4 belongs to the 2.x old process: if the SSL certificate has been set in the installer or panel, the subsequent Port 443 Reuse Wizard will continue to clear the panel/subscription certificate path in the old way." "Версия 2.9.4 принадлежит старому процессу 2.x: если сертификат SSL был установлен в установщике или панели, последующие 443 мастера с повторным использованием порта 443 продолжат очищать путь к сертификату панели/подписки старым способом.")"
             ;;
         0|q|Q)
             echo -e "$(localized_text "${BLUE}已取消安装。${PLAIN}" "${BLUE}Installation has been canceled.${PLAIN}" "${BLUE}Установка отменена.${PLAIN}")"
@@ -17091,7 +17091,7 @@ generate_random_secret() {
 }
 
 print_public_https_reverse_proxy_hint() {
-    echo -e "$(localized_text "${YELLOW}公网 HTTPS 访问建议：未启用 443 单入口时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时，请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。${PLAIN}" "${YELLOW}Public HTTPS Access Suggestions: When 443 shared entry is not enabled, please go to Caddy or Nginx HTTPS in the main menu [4 reverse proxy]; when 443 shared entry is enabled, please go to the main menu [19 443 shared entry Management Center] -> [8 Managing Web Domains/reverse proxies].${PLAIN}" "${YELLOW}публичную сеть HTTPS Доступ к предложениям: Если общий вход 443 не включен, перейдите к Caddy или Nginx HTTPS в главном меню [4 обратный прокси]; Когда включен общий вход 443, перейдите в главное меню [19 Центр управления общим входом 443] -> [8 Управление веб-доменами/обратными прокси].${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}公网 HTTPS 访问建议：未启用 443端口复用时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443端口复用时，请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。${PLAIN}" "${YELLOW}Public HTTPS Access Suggestions: When Port 443 Reuse is not enabled, please go to Caddy or Nginx HTTPS in the main menu [4 reverse proxy]; when Port 443 Reuse is enabled, please go to the main menu [19 Port 443 Reuse Manager] -> [8 Managing Web Domains/reverse proxies].${PLAIN}" "${YELLOW}публичную сеть HTTPS Доступ к предложениям: Если повторное использование порта 443 не включен, перейдите к Caddy или Nginx HTTPS в главном меню [4 обратный прокси]; Когда включен повторное использование порта 443, перейдите в главное меню [19 Центр управления повторным использованием порта 443] -> [8 Управление веб-доменами/обратными прокси].${PLAIN}")"
 }
 
 func_sublinkpro() {
@@ -18585,7 +18585,7 @@ print_443_single_entry_issue_summary() {
     local env_file="/etc/vps-optimize/sni-stack.env"
     local web_backend web_label xray_backend panel_backend sub_backend listener_consistency
 
-    echo "$(localized_text "443 单入口摘要:" "443 Shared entry summary:" "443 Сводная информация по однократной записи:")"
+    echo "$(localized_text "443端口复用摘要:" "Port 443 Reuse summary:" "Сводка по повторному использованию порта 443:")"
     if ! load_sni_stack_env >/dev/null 2>&1; then
         detect_current_entry_status
         echo "$(localized_text "- 配置文件: 未检测到 ${env_file}" "- Profile: ${env_file} not detected" "- Профиль: ${env_file} не обнаружен.")"
@@ -21377,7 +21377,7 @@ show_main_help() {
         echo -e "${CYAN}VPS-Optimize > Главное меню > Справка${PLAIN}"
         echo "1/2 Проверка и первичная настройка нового сервера."
         echo "3   Установка Docker, Python, WARP и распространённых инструментов."
-        echo "4   Настройка обратного прокси Caddy/Nginx для сайтов и панелей вне единого входа 443."
+        echo "4   Настройка обратного прокси Caddy/Nginx для сайтов и панелей вне повторного использования порта 443."
         echo "5   Управление 3x-ui, S-UI, Sing-box, Xray и инструментами подписок."
         echo "6   Управление портом SSH, открытыми ключами и входом только по ключу."
         echo "8   Управление правилами брандмауэра, открытыми портами и лимитами соединений для каждого IP-адреса."
@@ -21393,14 +21393,14 @@ show_main_help() {
         echo -e "${CYAN}VPS-Optimize > Main menu > Help${PLAIN}"
         echo "1/2 Check and initialize a new server."
         echo "3   Install Docker, Python, WARP, and common tools."
-        echo "4   Configure Caddy/Nginx reverse proxies not using the shared 443 entry."
+        echo "4   Configure Caddy/Nginx reverse proxies not using the Port 443 Reuse."
         echo "5   Manage 3x-ui, S-UI, Sing-box, Xray, and subscription tools."
         echo "6   Manage the SSH port, public keys, and key-only login modes."
         echo "8   Manage firewall rules, allowed ports, and per-source IP connection limits."
         echo "10  Tune networking and the kernel, including BBR, TCP, ZRAM, and kernel cleanup."
         echo "15  View health status and generate diagnostic details for troubleshooting."
         echo "16  Create backups and roll back configuration before high-risk operations."
-        echo "19  Manage the shared public 443 entry for panels, subscriptions, and REALITY."
+        echo "19  Manage Port 443 Reuse for panels, subscriptions, and REALITY."
         echo "20  Select the interface language."
         echo "10 -> 5  Protect against traffic overages based on the billing cycle."
         echo "xcm opens the x-ui extension directly; it is also available through 5 -> 2."
@@ -21409,14 +21409,14 @@ show_main_help() {
         echo -e "${CYAN}VPS-Optimize > 主菜单 > 帮助${PLAIN}"
         echo "1/2 适合新机器先体检和初始化。"
         echo "3   基础组件与常用服务；安装 Docker、Python、WARP 和常用工具。"
-        echo "4   反代（Caddy/Nginx）；适合未接入 443 单入口的网站/面板反代。"
+        echo "4   反代（Caddy/Nginx）；适合未接入 443端口复用的网站/面板反代。"
         echo "5   管理 3x-ui、S-UI、Sing-box、Xray 和订阅工具。"
         echo "6   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
         echo "8   管理系统防火墙；支持端口放行、删除和每来源 IP 连接数限制。"
         echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
         echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
         echo "16  备份与回滚，高风险操作前建议先跑。"
-        echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
+        echo "19  443端口复用管理中心，面板/订阅/REALITY 共用公网 443。"
         echo "20  选择界面语言。"
         echo "10 -> 5  流量达量保护，按账单周期防刷流量和超额账单。"
         echo "xcm 直达 x-ui 增强套件；也可走 5 -> 2。"
@@ -21429,7 +21429,7 @@ show_beginner_help() {
         echo -e "${CYAN}VPS-Optimize > Руководство для начинающих > Справка${PLAIN}"
         echo "1 Первичная настройка сервера в безопасном порядке: проверка, базовая настройка, SSH, ключи, Fail2ban, брандмауэр и резервная копия."
         echo "2 Открыть меню панелей, узлов и инструментов подписок."
-        echo "3 Открыть управление общим входом 443 для панелей, подписок и REALITY."
+        echo "3 Открыть управление повторным использованием порта 443 для панелей, подписок и REALITY."
         echo "4 Проверить службы, порты и сертификаты или создать диагностические данные."
         echo "5 Создать резервную копию или восстановить существующую."
         echo "? показывает справку; 0/q возвращает в главное меню."
@@ -21437,7 +21437,7 @@ show_beginner_help() {
         echo -e "${CYAN}VPS-Optimize > Beginner guide > Help${PLAIN}"
         echo "1 Initialize a new server in a safe order: preflight, base setup, SSH, keys, Fail2ban, firewall, and backup."
         echo "2 Open the panel, node, and subscription tools menu."
-        echo "3 Open the shared 443 entry manager for panels, subscriptions, and REALITY."
+        echo "3 Open the Port 443 Reuse manager for panels, subscriptions, and REALITY."
         echo "4 Check services, ports, and certificates, or generate diagnostic details."
         echo "5 Create a backup or restore an existing backup."
         echo "? shows help; 0/q returns to the main menu."
@@ -21445,7 +21445,7 @@ show_beginner_help() {
         echo -e "${CYAN}VPS-Optimize > 新手向导 > 帮助${PLAIN}"
         echo "1 新机器初始化：按安全顺序引导预检、初始化、SSH、公钥、Fail2ban、防火墙、备份。"
         echo "2 安装面板/节点：进入面板、节点与订阅工具菜单。"
-        echo "3 配置 443 单入口：进入 443 管理中心，适合面板、订阅和 REALITY 共用 443。"
+        echo "3 配置 443端口复用：进入 443 管理中心，适合面板、订阅和 REALITY 共用 443。"
         echo "4 健康检查：查看服务、端口、证书，并可生成反馈诊断信息。"
         echo "5 备份/回滚：创建备份或从已有备份恢复。"
         echo "? 查看帮助，0/q 返回主菜单。"
@@ -21456,31 +21456,31 @@ show_panel_help() {
     echo -e "$(localized_text "${CYAN}VPS-Optimize > 面板、节点与订阅工具 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Panels, Nodes and Subscription Tools > Help${PLAIN}" "${CYAN}VPS-Optimize > Панели, узлы и инструменты подписки > Справка${PLAIN}")"
     echo "$(localized_text "1 3x-ui：安装、官方菜单、面板修复。" "1 3x-ui: install, open the official menu, or repair the panel." "1 3x-ui: установка, официальное меню и восстановление панели.")"
     echo "$(localized_text "2 x-ui 增强：重置日期、校准流量、备份恢复、日志。" "2 x-ui extension: reset date, calibrate traffic, back up, restore, and view logs." "2 Расширение x-ui: сброс даты, калибровка трафика, резервное копирование, восстановление и журналы.")"
-    echo "$(localized_text "3 面板 SSL 修复：443 接入前清空面板证书路径。" "3 Panel SSL repair: clear panel certificate paths before using shared port 443." "3 Исправление SSL панели: очистить пути сертификатов панели перед настройкой общего порта 443.")"
+    echo "$(localized_text "3 面板 SSL 修复：443 接入前清空面板证书路径。" "3 Panel SSL repair: clear panel certificate paths before using Port 443 Reuse." "3 Исправление SSL панели: очистить пути сертификатов панели перед настройкой повторного использования порта 443.")"
     echo "$(localized_text "4 S-UI：安装、官方菜单、卸载。" "4 S-UI: install, open the official menu, or uninstall." "4 S-UI: установка, официальное меню и удаление.")"
     echo "$(localized_text "5/6 Sing-box 与 Xray 脚本。" "5/6 Sing-box and Xray scripts." "5/6 Скрипты Sing-box и Xray.")"
-    echo "$(localized_text "7/8/9 订阅栈，11 Dockge Compose，12 Compose 迁移；公网 HTTPS：未启用 443 单入口走主菜单 [4 反代]，已启用走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription stacks; 11: Dockge Compose; 12: Compose migration. For public HTTPS, use [4 Reverse proxy] before shared port 443; afterwards use [19 Shared port 443] -> [8 Manage Web domains/reverse proxy]." "7/8/9: стеки подписок; 11: Dockge Compose; 12: перенос Compose. Для публичного HTTPS до общего порта 443 используйте [4 Обратный прокси], после — [19 Общий порт 443] -> [8 Управление Web-доменами и обратным прокси].")"
+    echo "$(localized_text "7/8/9 订阅栈，11 Dockge Compose，12 Compose 迁移；公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription stacks; 11: Dockge Compose; 12: Compose migration. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [8 Manage Web domains/reverse proxy]." "7/8/9: стеки подписок; 11: Dockge Compose; 12: перенос Compose. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [8 Управление Web-доменами и обратным прокси].")"
     echo "$(localized_text "16 dog 流量计：仅统计已监控端口的实际流量。" "16 dog traffic monitor: shows traffic only for monitored ports." "16 Монитор трафика dog: показывает трафик только отслеживаемых портов.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
 
 show_sni_help() {
-    echo -e "$(localized_text "${CYAN}VPS-Optimize > 443 单入口管理中心 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > 443 shared entry Management Center > Help${PLAIN}" "${CYAN}VPS-Optimize > 443 Центр управления общим входом > Справка${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}VPS-Optimize > 443端口复用管理中心 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Port 443 Reuse Manager > Help${PLAIN}" "${CYAN}VPS-Optimize > Управление повторным использованием порта 443 > Справка${PLAIN}")"
     echo "$(localized_text "1 查看入口与监听：公网 443、Web 反代、Xray 和服务状态。" "1 View entry and listener status: public 443, Web proxy, Xray, and services." "1 Состояние входа и прослушивания: публичный 443, Web-прокси, Xray и службы.")"
     echo "$(localized_text "2 安装 / 切换入口模式：选择 Nginx Stream、Xray Fallback 或 TCP Peek + Splice。" "2 Install / switch entry mode: select Nginx Stream, Xray Fallback, or TCP Peek + Splice." "2 Установка / смена режима: Nginx Stream, Xray Fallback или TCP Peek + Splice.")"
     echo "$(localized_text "6 重新应用：按当前 ENTRY_MODE 重新生成并启动入口配置。" "6 Reapply: regenerate and start the entry configuration for the current ENTRY_MODE." "6 Повторно применить: заново сформировать и запустить конфигурацию для текущего ENTRY_MODE.")"
     echo "$(localized_text "7 回滚：恢复上一次入口模式切换前的备份。" "7 Rollback: Restore the backup before the last entry mode switch." "7 Откат: восстановление резервной копии перед последним переключением режима входа.")"
     echo "$(localized_text "8 管理 Web 域名/反代：后续新增或删除网站，不需要重跑首次配置。" "8 Manage Web domains/reverse proxy: add or remove sites without rerunning the initial setup." "8 Управление Web-доменами и обратным прокси: добавляйте и удаляйте сайты без повторной первоначальной настройки.")"
     echo "$(localized_text "9 Web 域名 IP 白名单：只限制 Web 域名，不影响 Xray 节点。" "9 Web domain IP whitelist: only restricts Web domains and does not affect the Xray node." "9 Белый список IP-адресов имен веб-доменов: ограничивает только имена веб-доменов и не влияет на узел Xray.")"
-    echo "$(localized_text "10 修改共享参数：面板、订阅、REALITY、入口端口和路径。" "10 Edit shared settings: panel, subscription, REALITY, entry ports, and paths." "10 Изменить общие параметры: панель, подписка, REALITY, порты входа и пути.")"
+    echo "$(localized_text "10 修改共享参数：面板、订阅、REALITY、入口端口和路径。" "10 Edit Port 443 Reuse settings: panel, subscription, REALITY, entry ports, and paths." "10 Изменить общие параметры: панель, подписка, REALITY, порты входа и пути.")"
     echo "$(localized_text "11 订阅链接 / External Proxy：检查节点是否使用公网 443。" "11 Subscription link / External Proxy: verify that node links use public port 443." "11 Ссылка подписки / External Proxy: проверьте, используют ли ссылки узлов публичный порт 443.")"
     echo "$(localized_text "12 CF DNS / Caddy 证书维护：重签证书、修复软链接、清理和回滚。" "12 CF DNS / Caddy certificate maintenance: reissue certificates, repair symlinks, clean up, or roll back." "12 Обслуживание сертификатов CF DNS / Caddy: перевыпуск сертификатов, восстановление символьных ссылок, очистка и откат.")"
     echo "$(localized_text "13 链路体检：检查 ENTRY_MODE、监听、证书、Web 和 Xray 路由。" "13 Connection diagnostics: check ENTRY_MODE, listeners, certificates, Web, and Xray routing." "13 Диагностика соединения: ENTRY_MODE, прослушивание, сертификаты, Web и маршрутизация Xray.")"
     echo "$(localized_text "14 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅响应。" "14 Network access test: check DNS, TCP, TLS SNI, panel, and subscription responses." "14 Проверка доступа: DNS, TCP, TLS SNI, ответы панели и подписки.")"
     echo "$(localized_text "15 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。" "15 Manage Xray routes: record SNI -> local address:port without editing 3x-ui/Xray inbounds." "15 Маршруты Xray: запись SNI -> локальный адрес:порт без изменения входящих подключений 3x-ui/Xray.")"
     echo "$(localized_text "16 当前入口日志：按 ENTRY_MODE 查看 Nginx、Xray/3x-ui 或 vpso-mux。" "16 Current entry logs: show Nginx, Xray/3x-ui, or vpso-mux based on ENTRY_MODE." "16 Журналы текущего входа: Nginx, Xray/3x-ui или vpso-mux согласно ENTRY_MODE.")"
-    echo "$(localized_text "修改面板域名请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。" "To modify the panel domain, please go to the main menu [19 443 shared entry Management Center] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain]." "Чтобы изменить имя домена панели, перейдите в главное меню [19 443 центр управления общей точкой входа] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].")"
-    echo "$(localized_text "未接入 443 单入口时，用主菜单 [4 反代] -> [5] 管理 Caddy/Nginx 域名 IP 白名单。" "When the 443 shared entry is not connected, use the main menu [4 reverse proxy] -> [5] to manage the Caddy/Nginx domain IP whitelist." "Если общий вход 443 не подключен, используйте главное меню [4 обратный прокси] -> [5] для управления белым списком IP-адресов доменного имени Caddy/Nginx.")"
+    echo "$(localized_text "修改面板域名请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。" "To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain]." "Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].")"
+    echo "$(localized_text "未接入 443端口复用时，用主菜单 [4 反代] -> [5] 管理 Caddy/Nginx 域名 IP 白名单。" "When the Port 443 Reuse is not connected, use the main menu [4 reverse proxy] -> [5] to manage the Caddy/Nginx domain IP whitelist." "Если повторное использование порта 443 не подключен, используйте главное меню [4 обратный прокси] -> [5] для управления белым списком IP-адресов доменного имени Caddy/Nginx.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
 
@@ -21693,8 +21693,8 @@ func_sni_stack_quick_menu() {
         show_current_entry_summary
         echo -e "------------------------------------------------"
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "443 单入口管理中心" "Shared 443 Entry Manager" "Управление общей точкой входа 443")"
-        echo -e "$(localized_text "${BOLD}🧩 443 单入口管理中心${PLAIN}" "${BOLD}🧩 Shared 443 Entry Manager${PLAIN}" "${BOLD}🧩 Управление общей точкой входа 443${PLAIN}")"
+        print_breadcrumb "$(localized_text "443端口复用管理中心" "Port 443 Reuse Manager" "Управление повторным использованием порта 443")"
+        echo -e "$(localized_text "${BOLD}🧩 443端口复用管理中心${PLAIN}" "${BOLD}🧩 Port 443 Reuse Manager${PLAIN}" "${BOLD}🧩 Управление повторным использованием порта 443${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 当前状态与入口模式${PLAIN}" "${BOLD}▶ Current status and entry mode${PLAIN}" "${BOLD}▶ Текущее состояние и режим входа${PLAIN}")"
@@ -21706,7 +21706,7 @@ func_sni_stack_quick_menu() {
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 网站与证书${PLAIN}" "${BOLD}▶ Websites and certificates${PLAIN}" "${BOLD}▶ Сайты и сертификаты${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  8. 管理 Web 域名/反代${PLAIN}        ${YELLOW}(新增/删除/查看网站，最常用)${PLAIN}" "${GREEN}8. Manage Web domains and reverse proxies (add, delete, or view sites)${PLAIN}" "${GREEN}8. Управление веб-доменами и обратным прокси (добавить, удалить или просмотреть сайт)${PLAIN}")"
         echo -e "$(localized_text "${CYAN}  9. 管理 Web 域名 IP 白名单${PLAIN}   ${YELLOW}(只限制 Web 域名)${PLAIN}" "${CYAN}9. Manage the Web-domain IP whitelist (applies only to Web domains)${PLAIN}" "${CYAN}9. Белый список IP-адресов веб-доменов (только для веб-доменов)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN} 10. 修改 443 共享参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}" "${CYAN}10. Change shared 443 settings (panel, subscription, REALITY, entry port, and paths)${PLAIN}" "${CYAN}10. Изменить общие параметры 443 (панель, подписка, REALITY, входной порт и пути)${PLAIN}")"
+        echo -e "$(localized_text "${CYAN} 10. 修改 443端口复用参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}" "${CYAN}10. Change Port 443 Reuse settings (panel, subscription, REALITY, entry port, and paths)${PLAIN}" "${CYAN}10. Изменить параметры повторного использования порта 443 (панель, подписка, REALITY, входной порт и пути)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 11. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}" "${CYAN}11. Subscription link / External Proxy guidance (check whether node links use public port 443)${PLAIN}" "${CYAN}11. Подсказки для ссылок подписки / External Proxy (проверка публичного порта 443 в ссылках узлов)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 12. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}" "${CYAN}12. CF DNS / Caddy certificate maintenance (renew, symlink, clean, repair, or roll back)${PLAIN}" "${CYAN}12. Обслуживание сертификатов CF DNS / Caddy (перевыпуск, ссылки, очистка, восстановление, откат)${PLAIN}")"
         echo -e "------------------------------------------------"
@@ -21771,7 +21771,7 @@ normalize_main_choice() {
         b|backup|bak|备份) echo "16" ;;
         u|upd|update|更新) echo "17" ;;
         reboot|重启) echo "18" ;;
-        sni|443|单入口) echo "19" ;;
+        sni|443|端口复用) echo "19" ;;
         l|lang|language|язык|语言) echo "20" ;;
         traffic|quota|bill|流量|达量|账单) echo "10" ;;
         *) echo "$choice" ;;
@@ -21869,9 +21869,9 @@ func_beginner_menu() {
             "${GREEN}  2. Install a panel/node${PLAIN}    ${YELLOW}(open panel, node, and subscription tools)${PLAIN}" \
             "${GREEN}  2. Установить панель/узел${PLAIN}     ${YELLOW}(открыть меню панелей, узлов и подписок)${PLAIN}"
         localized_echo \
-            "${GREEN}  3. 配置 443 单入口${PLAIN}   ${YELLOW}(面板/订阅/REALITY 共用公网 443)${PLAIN}" \
-            "${GREEN}  3. Configure shared port 443${PLAIN} ${YELLOW}(panels, subscriptions, and REALITY share public port 443)${PLAIN}" \
-            "${GREEN}  3. Настроить общий вход 443${PLAIN}   ${YELLOW}(общий публичный порт 443 для панелей, подписок и REALITY)${PLAIN}"
+            "${GREEN}  3. 配置 443端口复用${PLAIN}   ${YELLOW}(面板/订阅/REALITY 共用公网 443)${PLAIN}" \
+            "${GREEN}  3. Configure Port 443 Reuse${PLAIN} ${YELLOW}(panels, subscriptions, and REALITY share public port 443)${PLAIN}" \
+            "${GREEN}  3. Настроить повторное использование порта 443${PLAIN}   ${YELLOW}(общий публичный порт 443 для панелей, подписок и REALITY)${PLAIN}"
         localized_echo \
             "${GREEN}  4. 健康检查${PLAIN}          ${YELLOW}(服务状态、端口、证书、反馈诊断)${PLAIN}" \
             "${GREEN}  4. Health check${PLAIN}              ${YELLOW}(services, ports, certificates, and diagnostics)${PLAIN}" \
@@ -21921,7 +21921,7 @@ main_menu() {
             echo -e "  ${GREEN}1.${PLAIN} Предварительная проверка    ${YELLOW}(порты, система, службы и возможные риски)${PLAIN}"
             echo -e "  ${GREEN}2.${PLAIN} Базовая настройка системы   ${YELLOW}(инструменты, часовой пояс, обновления и базовый BBR)${PLAIN}"
             echo -e "  ${GREEN}3.${PLAIN} Компоненты и службы          ${YELLOW}(Docker, Python, WARP и распространённые инструменты)${PLAIN}"
-            echo -e "  ${GREEN}4.${PLAIN} Обратный прокси             ${YELLOW}(Caddy/Nginx вне единого входа 443)${PLAIN}"
+            echo -e "  ${GREEN}4.${PLAIN} Обратный прокси             ${YELLOW}(Caddy/Nginx вне повторного использования порта 443)${PLAIN}"
             echo -e "  ${GREEN}5.${PLAIN} Панели, узлы и подписки     ${YELLOW}(3x-ui, Sing-box, подписки и Dockge)${PLAIN}"
 
             echo -e " ${BOLD}${BLUE}▶ ② Безопасность и контроль доступа${PLAIN}"
@@ -21944,7 +21944,7 @@ main_menu() {
             echo -e " ${RED}18.${PLAIN} Перезагрузить сервер"
             echo -e ""
             echo -e " ${BOLD}${BLUE}▶ ⑤ Часто используемые функции${PLAIN}"
-            echo -e " ${GREEN}19.${PLAIN} общий вход 443            ${YELLOW}(настройка, сайты, диагностика и сертификаты)${PLAIN}"
+            echo -e " ${GREEN}19.${PLAIN} повторное использование порта 443            ${YELLOW}(настройка, сайты, диагностика и сертификаты)${PLAIN}"
             echo -e " ${GREEN}20.${PLAIN} Язык интерфейса           ${YELLOW}(中文 / English / Русский)${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
             echo -e " ${RED} 0.${PLAIN} Выход"
@@ -21961,7 +21961,7 @@ main_menu() {
             echo -e "  ${GREEN}1.${PLAIN} Preflight and risk scan     ${YELLOW}(check ports, OS, and services before deployment)${PLAIN}"
             echo -e "  ${GREEN}2.${PLAIN} Base system initialization  ${YELLOW}(tools, timezone, updates, and basic BBR)${PLAIN}"
             echo -e "  ${GREEN}3.${PLAIN} Components and services      ${YELLOW}(Docker, Python, WARP, and common tools)${PLAIN}"
-            echo -e "  ${GREEN}4.${PLAIN} Reverse proxy               ${YELLOW}(Caddy/Nginx sites outside the shared 443 entry)${PLAIN}"
+            echo -e "  ${GREEN}4.${PLAIN} Reverse proxy               ${YELLOW}(Caddy/Nginx sites outside the Port 443 Reuse)${PLAIN}"
             echo -e "  ${GREEN}5.${PLAIN} Panels, nodes, subscriptions ${YELLOW}(3x-ui, Sing-box, subscriptions, and Dockge)${PLAIN}"
 
             echo -e " ${BOLD}${BLUE}▶ ② Security and access control${PLAIN}"
@@ -21984,7 +21984,7 @@ main_menu() {
             echo -e " ${RED}18.${PLAIN} Reboot server"
             echo -e ""
             echo -e " ${BOLD}${BLUE}▶ ⑤ Frequently used${PLAIN}"
-            echo -e " ${GREEN}19.${PLAIN} Shared 443 entry manager    ${YELLOW}(initialize, add sites, check health, and repair certificates)${PLAIN}"
+            echo -e " ${GREEN}19.${PLAIN} Port 443 Reuse manager    ${YELLOW}(initialize, add sites, check health, and repair certificates)${PLAIN}"
             echo -e " ${GREEN}20.${PLAIN} Interface language          ${YELLOW}(中文 / English / Русский)${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
             echo -e " ${RED} 0.${PLAIN} Exit"
@@ -22001,7 +22001,7 @@ main_menu() {
         echo -e "  ${GREEN}1.${PLAIN} 运维预检与风险扫描    ${YELLOW}(部署前先看端口/系统/服务状态)${PLAIN}"
         echo -e "  ${GREEN}2.${PLAIN} 基础环境初始化        ${YELLOW}(工具/时区/系统更新/基础 BBR)${PLAIN}"
         echo -e "  ${GREEN}3.${PLAIN} 基础组件与常用服务    ${YELLOW}(Docker/Python/WARP/常用工具)${PLAIN}"
-        echo -e "  ${GREEN}4.${PLAIN} 反代（Caddy/Nginx）   ${YELLOW}(未接入 443 单入口的网站/面板反代)${PLAIN}"
+        echo -e "  ${GREEN}4.${PLAIN} 反代（Caddy/Nginx）   ${YELLOW}(未接入 443端口复用的网站/面板反代)${PLAIN}"
         echo -e "  ${GREEN}5.${PLAIN} 面板、节点与订阅工具  ${YELLOW}(3x-ui/Sing-box/订阅管理/Dockge)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ② 安全与访问控制${PLAIN}"
@@ -22024,7 +22024,7 @@ main_menu() {
         echo -e " ${RED}18.${PLAIN} 重启服务器"
         echo -e ""
         echo -e " ${BOLD}${BLUE}▶ ⑤ 高频直达${PLAIN}"
-        echo -e " ${GREEN}19.${PLAIN} 443 单入口管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
+        echo -e " ${GREEN}19.${PLAIN} 443端口复用管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
         echo -e " ${GREEN}20.${PLAIN} 界面语言              ${YELLOW}(中文 / English / Русский)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${RED} 0.${PLAIN} 退出面板"

@@ -21,7 +21,7 @@ systemctl status ssh --no-pager || systemctl status sshd --no-pager
 
 The SSH service name may be `ssh` or `sshd` in different releases.
 
-## 443 The rear panel cannot be opened after shared entry point configuration.
+## 443 The rear panel cannot be opened after Port 443 Reuse configuration.
 
 Priority checks:
 
@@ -32,11 +32,11 @@ Priority checks:
 - Whether the cloud security group allows `443/tcp`.
 - Whether the domain DNS is resolved to the current server.
 
-For detailed troubleshooting, see [Shared Port 443 Troubleshooting](443-single-entry-troubleshooting.md).
+For detailed troubleshooting, see [Port 443 Reuse Troubleshooting](443-single-entry-troubleshooting.md).
 
 ## Browser reports error when accessing internal port
 
-443 In shared entry point mode, the browser only accesses the standard HTTPS address:
+443 In Port 443 Reuse mode, the browser only accesses the standard HTTPS address:
 
 ```text
 https://panel.example.com/panel/

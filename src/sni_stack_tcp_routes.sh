@@ -71,7 +71,7 @@ add_sni_stack_tcp_route() {
     echo -e "$(localized_text "${YELLOW}说明：Web 白名单只保护 Web 域名，不会应用到 TCP/SNI 或 Xray 节点流量。${PLAIN}" "${YELLOW}Note: The Web whitelist only protects Web domains and will not be applied to TCP/SNI or Xray node traffic.${PLAIN}" "${YELLOW}Примечание. Белый список веб-сайтов защищает только имена веб-доменов и не будет применяться к трафику узлов TCP/SNI или Xray.${PLAIN}")"
     confirm_risk_action "$(localized_text "新增 443 TCP/SNI 入站 ${route_sni}" "Added 443 TCP/SNI inbound ${route_sni}" "Добавлен 443 TCP/SNI входящий ${route_sni}.")" \
         "$(localized_text "Nginx stream SNI 分流规则，会把该 SNI 直通到本地 3x-ui 入站" "Nginx stream SNI routing rule will pass the SNI directly to the local 3x-ui inbound connection" "Правило маршрутизации Nginx stream SNI передаст SNI непосредственно локальному входящему соединению 3x-ui.")" \
-        "$(localized_text "使用 443 单入口备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" "Restore using a 443 share entry backup, or delete the route from the TCP/SNI inbound connection management menu" "Восстановите резервную копию общей точки входа 443 или удалите маршрут в меню управления входящими подключениями TCP/SNI.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" "Restore using a Port 443 Reuse backup, or delete the route from the TCP/SNI inbound connection management menu" "Восстановите резервную копию повторного использования порта 443 или удалите маршрут в меню управления входящими подключениями TCP/SNI.")" \
         "$(localized_text "确认后端只监听本地地址，不要在安全组或防火墙开放 ${route_port}。" "Confirm that the backend only listens to the local address and does not open ${route_port} in the security group or firewall." "Убедитесь, что бэкенд прослушивает только локальный адрес и не открывает ${route_port} в группе безопасности или брандмауэре.")" || return 1
 
     idx=${#TCP_ROUTE_SNIS[@]}
@@ -141,7 +141,7 @@ edit_sni_stack_tcp_route() {
     echo -e "$(localized_text "${CYAN}即将修改：${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}Is about to be modified: ${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}скоро будет изменен: ${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}")"
     confirm_risk_action "$(localized_text "修改 443 TCP/SNI 入站 ${old_sni}" "Modify 443 TCP/SNI inbound ${old_sni}" "Изменить 443 TCP/SNI входящий ${old_sni}")" \
         "$(localized_text "Nginx stream SNI 分流规则和本地后端端口" "Nginx stream SNI Offload rules and local backend ports" "Nginx stream SNI Правила разгрузки и локальные серверные порты")" \
-        "$(localized_text "使用 443 单入口备份恢复修改前配置" "Use 443 shared entry backup to restore the configuration before modification" "Используйте однократную резервную копию 443 для восстановления конфигурации до изменения.")" \
+        "$(localized_text "使用 443端口复用备份恢复修改前配置" "Use Port 443 Reuse backup to restore the configuration before modification" "Используйте резервную копию повторного использования порта 443 для восстановления конфигурации до изменения.")" \
         "$(localized_text "确认 3x-ui 入站已按新地址和端口监听，且未开放该内部端口。" "Confirm that 3x-ui inbound is listening at the new address and port, and the internal port is not open." "Убедитесь, что 3x-ui прослушивает входящее подключение по новому адресу и порту, а внутренний порт не открыт.")" || return 1
 
     TCP_ROUTE_SNIS[$idx]="$new_sni"
@@ -187,7 +187,7 @@ remove_sni_stack_tcp_route() {
     route_sni="${TCP_ROUTE_SNIS[$idx]}"
     confirm_risk_action "$(localized_text "从 443 分流中移除 TCP/SNI 入站 ${route_sni}" "Remove TCP/SNI from 443 routing inbound ${route_sni}" "Удалить входящее подключение TCP/SNI из маршрутизации 443 ${route_sni}.")" \
         "$(localized_text "该 SNI 的 Nginx stream 直通规则" "The Nginx stream pass-through rule for SNI" "Правило прохождения Nginx stream для SNI")" \
-        "$(localized_text "使用 443 单入口备份恢复，或重新新增该 TCP/SNI 入站" "Use 443 shared entry backup and restore, or re-add the TCP/SNI inbound connection" "Используйте однократное резервное копирование и восстановление 443 или повторно добавьте входящий TCP/SNI.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或重新新增该 TCP/SNI 入站" "Use Port 443 Reuse backup and restore, or re-add the TCP/SNI inbound connection" "Используйте резервное копирование и восстановление повторного использования порта 443 или повторно добавьте входящий TCP/SNI.")" \
         "$(localized_text "确认没有客户端仍依赖该 SNI 连接。" "Confirm that no clients are still relying on the SNI connection." "Убедитесь, что ни один клиент по-прежнему не использует соединение SNI.")" || return 1
 
     for i in "${!TCP_ROUTE_SNIS[@]}"; do

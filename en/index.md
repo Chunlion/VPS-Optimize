@@ -59,7 +59,7 @@ story:
       value: Healthy
     - label: Configuration backup
       value: Available
-    - label: Shared port 443
+    - label: Port 443 Reuse
       value: Running
     - label: Key services
       value: Running

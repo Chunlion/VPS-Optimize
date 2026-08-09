@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# 443 single entry point profile editing and reapply helpers.
+# Port 443 Reuse profile editing and reapply helpers.
 
 save_and_offer_reapply_sni_stack() {
     local yn env_file env_backup
@@ -10,7 +10,7 @@ save_and_offer_reapply_sni_stack() {
         cp -p "$env_file" "$env_backup" 2>/dev/null || env_backup=""
     fi
     save_sni_stack_env
-    echo -e "$(localized_text "${GREEN}✅ 已保存新的 443 单入口运行参数。${PLAIN}" "${GREEN}✅ New 443 shared entry operating parameters have been saved.${PLAIN}" "${GREEN}. Сохранены новые 443 отдельных рабочих параметра.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}✅ 已保存新的 443端口复用运行参数。${PLAIN}" "${GREEN}✅ New Port 443 Reuse operating parameters have been saved.${PLAIN}" "${GREEN}. Сохранены новые 443 отдельных рабочих параметра.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的域名、端口或路径。${PLAIN}" "${YELLOW}Tips: You need to reapply after saving, so that Nginx/Caddy will use the new domain, port or path.${PLAIN}" "${YELLOW}Советы: вам необходимо повторно подать заявку после сохранения, чтобы Nginx/Caddy использовал новое имя домена, порт или путь.${PLAIN}")"
     read_trimmed yn "$(localized_text "是否现在重新应用并重启 Nginx/Caddy？直接回车继续，输入 n 取消（大小写均可）: " "Do you want to reapply and restart Nginx/Caddy now? Just press Enter to continue, enter n to cancel (both uppercase and lowercase are acceptable):" "Хотите повторно подать заявку и перезапустить Nginx/Caddy сейчас? Просто нажмите Enter, чтобы продолжить, введите n для отмены (допускаются как прописные, так и строчные буквы):")"
     if is_yes "$yn"; then
@@ -48,7 +48,7 @@ update_xui_panel_domain_settings_for_single_443() {
     local checked=0 updated=0 failed=0 timestamp
 
     if xui_uses_postgresql; then
-        echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL，跳过数据库自动同步。443 单入口已更新；请在 3x-ui 中手动确认订阅域名和公开节点地址。${PLAIN}" "${YELLOW}⚠️ 3x-ui is using PostgreSQL, so database synchronization is skipped. The 443 shared entry has been updated; manually verify the subscription domain and public node address in 3x-ui.${PLAIN}" "${YELLOW}⚠️ 3x-ui использует PostgreSQL, поэтому синхронизация базы данных пропущена. Общий вход 443 обновлён; вручную проверьте домен подписки и публичный адрес узла в 3x-ui.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL，跳过数据库自动同步。443端口复用已更新；请在 3x-ui 中手动确认订阅域名和公开节点地址。${PLAIN}" "${YELLOW}⚠️ 3x-ui is using PostgreSQL, so database synchronization is skipped. The Port 443 Reuse has been updated; manually verify the subscription domain and public node address in 3x-ui.${PLAIN}" "${YELLOW}⚠️ 3x-ui использует PostgreSQL, поэтому синхронизация базы данных пропущена. Повторное использование порта 443 обновлён; вручную проверьте домен подписки и публичный адрес узла в 3x-ui.${PLAIN}")"
         return 0
     fi
 
@@ -250,7 +250,7 @@ edit_sni_stack_panel_domain_profile() {
     check_domain_dns_sanity "$new_domain" "$(localized_text "新的面板域名" "New panel domain" "Новое доменное имя панели")" "prompt" || return 1
     confirm_risk_action "$(localized_text "替换 443 面板域名为 ${new_domain}" "Replace the 443 panel domain with ${new_domain}" "Замените доменное имя панели 443 на ${new_domain}.")" \
         "$(localized_text "面板域名、证书和 Caddy/Nginx 相关配置" "Panel domain, certificate and Caddy/Nginx related configuration" "Доменное имя панели, сертификат и конфигурация, связанная с Caddy/Nginx.")" \
-        "$(localized_text "使用 443 单入口备份恢复旧域名配置" "Use 443 shared entry backup to restore the old domain configuration" "Восстановите старую конфигурацию доменного имени с помощью резервной копии 443 с общей точкой входа.")" \
+        "$(localized_text "使用 443端口复用备份恢复旧域名配置" "Use Port 443 Reuse backup to restore the old domain configuration" "Восстановите старую конфигурацию доменного имени с помощью резервной копии повторного использования порта 443.")" \
         "$(localized_text "确认新域名 DNS 已解析到当前 VPS，且 Token 有该 zone 权限。" "Confirm that the new domain DNS has been resolved to the current VPS, and the Token has the zone permissions." "Убедитесь, что новое доменное имя DNS разрешено текущему VPS, а токен имеет разрешения зоны.")" || return 1
 
     issue_and_install_cert_for_domain "$new_domain" "$CF_Token" || return 1
@@ -269,7 +269,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "$(localized_text "${BOLD}🧭 修改 443 分流参数${PLAIN}" "${BOLD}🧭 Modify 443 routing parameters${PLAIN}" "${BOLD}🧭 Изменение 443 параметров маршрутизации${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}用途：后续修改面板端口/路径、订阅端口/路径、REALITY SNI、入口端口时使用。${PLAIN}" "${YELLOW}Purpose: Used when subsequently modifying the panel port/path, subscription port/path, REALITY, SNI, and entry port.${PLAIN}" "${YELLOW}Назначение: используется при последующем изменении порта/пути панели, порта/пути подписки, REALITY, SNI и входного порта.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 443 shared entry Management Center] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 443 центр управления общей точкой входа] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}新增网站请走 [19] -> [8]，不用重跑首次配置。${PLAIN}" "${YELLOW}Please go to [19] -> [8] to add a new website. There is no need to rerun the first configuration.${PLAIN}" "${YELLOW}Пожалуйста, перейдите в [19] -> [8], чтобы добавить новый веб-сайт. Нет необходимости повторно запускать первую конфигурацию.${PLAIN}")"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
@@ -295,7 +295,7 @@ edit_sni_stack_runtime_profile() {
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;
             3) edit_sni_stack_entry_profile ;;
-            4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 443 shared entry Management Center] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 443 центр управления общей точкой входа] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
+            4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
             5) reapply_sni_stack_from_env ;;
             "?"|help) show_sni_help; pause_return; continue ;;
             0) break ;;

@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# 443 single entry point shared environment, route, listener, and whitelist helpers.
+# Port 443 Reuse shared environment, route, listener, and whitelist helpers.
 
 detect_vps_public_ip_by_family() {
     local family="$1"
@@ -348,7 +348,7 @@ clear_xui_cert_settings_for_single_443() {
         echo -e "$(localized_text "${YELLOW}⚠️ 未找到可自动清空的 3x-ui 证书设置，请在面板里手动清空证书路径并重启。${PLAIN}" "${YELLOW}⚠️ The 3x-ui certificate setting that can be automatically cleared was not found. Please manually clear the certificate path in the panel and restart.${PLAIN}" "${YELLOW}⚠️ Параметр сертификата 3x-ui, который можно автоматически очистить, не найден. Пожалуйста, вручную очистите путь к сертификату на панели и перезапустите.${PLAIN}")"
         return 1
     fi
-    echo -e "$(localized_text "${GREEN}✅ 已尝试清空 3x-ui 面板/订阅证书路径，443 单入口将由 Web 反代引擎托管证书。${PLAIN}" "${GREEN}✅ Tried clearing the 3x-ui panel/subscription certificate path, 443 the shared entry will have the certificate hosted by the web reverse proxy engine.${PLAIN}" "${GREEN}. Попробовал очистить путь сертификата панели/подписки 3x-ui, 443 общий вход будет иметь сертификат, размещенный в механизме обратного веб-прокси.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}✅ 已尝试清空 3x-ui 面板/订阅证书路径，443端口复用将由 Web 反代引擎托管证书。${PLAIN}" "${GREEN}✅ Tried clearing the 3x-ui panel/subscription certificate path, 443 the Port 443 Reuse will have the certificate hosted by the web reverse proxy engine.${PLAIN}" "${GREEN}. Попробовал очистить путь сертификата панели/подписки 3x-ui, повторное использование порта 443 будет иметь сертификат, размещенный в механизме обратного веб-прокси.${PLAIN}")"
 }
 
 
@@ -410,7 +410,7 @@ check_xui_cert_settings_for_single_443() {
         [[ -n "$rows" ]] || continue
 
         found=1
-        echo -e "$(localized_text "${YELLOW}⚠️ ${db_path} 仍有 3x-ui 面板/订阅证书路径。3.x 新安装应选择 Skip SSL；2.x/旧配置在 443 单入口下建议清空：${PLAIN}" "${YELLOW}⚠️ ${db_path} still has the 3x-ui panel/subscription certificate path. 3.x new installation should select Skip SSL; 2.x/old configuration is recommended to clear under the 443 shared entry:${PLAIN}" "${YELLOW}⚠️ ${db_path} по-прежнему имеет путь сертификата панели/подписки 3x-ui. 3.x при новой установке следует выбрать Пропустить SSL; Конфигурацию 2.x/old рекомендуется очистить под общей записью 443: .${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ ${db_path} 仍有 3x-ui 面板/订阅证书路径。3.x 新安装应选择 Skip SSL；2.x/旧配置在 443端口复用下建议清空：${PLAIN}" "${YELLOW}⚠️ ${db_path} still has the 3x-ui panel/subscription certificate path. 3.x new installation should select Skip SSL; 2.x/old configuration is recommended to clear under the Port 443 Reuse:${PLAIN}" "${YELLOW}⚠️ ${db_path} по-прежнему имеет путь сертификата панели/подписки 3x-ui. 3.x при новой установке следует выбрать Пропустить SSL; Конфигурацию 2.x/old рекомендуется очистить под общей записью 443: .${PLAIN}")"
         while IFS='|' read -r key value; do
             [[ -n "$key" ]] || continue
             echo -e "  ${key}=${value}"
@@ -479,7 +479,7 @@ print_sni_stack_preview() {
     esac
 
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}即将写入的 443 单入口分流配置预览${PLAIN}" "${BOLD}Preview of 443 shared entry route configuration to be written${PLAIN}" "${BOLD}Предварительный просмотр конфигурации маршрутизации с одним входом 443, которая будет записана${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}即将写入的 443端口复用配置预览${PLAIN}" "${BOLD}Preview of Port 443 Reuse route configuration to be written${PLAIN}" "${BOLD}Предварительный просмотр конфигурации маршрутизации повторного использования порта 443, которая будет записана${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "配置模式 ENTRY_MODE：${entry_mode}" "Configuration mode ENTRY_MODE: ${entry_mode}" "Режим конфигурации ENTRY_MODE: ${entry_mode}")"
     echo -e "$(localized_text "Web 反代引擎 WEB_PROXY_ENGINE：${web_engine} (${web_label})" "Web reverse proxy engine WEB_PROXY_ENGINE: ${web_engine} (${web_label})" "механизм веб-прокси WEB_PROXY_ENGINE: ${web_engine} (${web_label})")"
@@ -522,7 +522,7 @@ print_sni_stack_preview() {
     fi
     echo -e ""
     echo -e "$(localized_text "${YELLOW}确认后会备份现有配置，并按所选 ENTRY_MODE 生成入口配置。${PLAIN}" "${YELLOW}After confirms, it will back up the existing configuration and generate the entry configuration according to the selected ENTRY_MODE.${PLAIN}" "${YELLOW}После подтверждения он создаст резервную копию существующей конфигурации и сгенерирует конфигурацию записи в соответствии с выбранным ENTRY_MODE.${PLAIN}")"
-    confirm_risk_action "$(localized_text "写入 443 单入口共享配置" "Write 443 shared entry shared configuration" "Запишите общую конфигурацию с общей точкой входа 443.")" \
+    confirm_risk_action "$(localized_text "写入 443端口复用配置" "Write Port 443 Reuse configuration" "Запишите общую конфигурацию с повторным использованием порта 443.")" \
         "$(localized_text "${entry_label}、${web_label}配置和 443 分流规则" "${entry_label}, ${web_label} configuration and 443 routing rules" "Конфигурация ${entry_label}, ${web_label} и 443 правила маршрутизации")" \
         "$(localized_text "使用本次自动备份目录恢复，或进入 443 维护菜单回滚" "Use this automatic backup directory to restore, or enter the 443 maintenance menu to roll back" "Используйте этот каталог автоматического резервного копирования для восстановления или войдите в меню обслуживания 443 для отката.")" \
         "$(localized_text "确认公网 443 没有其他服务需要直接占用。" "Confirm that no other services on public port 443 need to be directly occupied." "Убедитесь, что никакие другие службы для публичного порта 443 не должны быть заняты напрямую.")"
@@ -704,7 +704,7 @@ entry_listener_display_name() {
         nginx) echo "Nginx Stream (nginx)" ;;
         xray) echo "Xray Fallback (xray/3x-ui/x-ui)" ;;
         tcppeek) echo "$(localized_text "TCP Peek + Splice 模式 (vpso-mux 分流器)" "TCP Peek + Splice mode (vpso-mux routing)" "Режим TCP Peek + Splice (маршрутизация vpso-mux)")" ;;
-        caddy) echo "$(localized_text "Caddy（不应直接接管 443 单入口）" "Caddy (should not take over the 443 shared entry directly)" "Caddy (не должен напрямую контролировать общий вход 443)")" ;;
+        caddy) echo "$(localized_text "Caddy（不应直接接管 443端口复用）" "Caddy (should not take over the Port 443 Reuse directly)" "Caddy (не должен напрямую контролировать повторное использование порта 443)")" ;;
         none) echo "$(localized_text "未监听" "Not listening" "Не слушаю")" ;;
         multiple) echo "$(localized_text "多个进程监听/匹配" "Multiple process listening/matching" "Прослушивание/сопоставление нескольких процессов")" ;;
         unknown) echo "$(localized_text "已监听，但进程不可见" "Listened but the process is not visible" "Слушал но процесса не видно")" ;;
@@ -1379,7 +1379,7 @@ print_sni_ip_whitelist_summary() {
 sni_stack_health_check() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧪 443 单入口分流链路体检${PLAIN}" "${BOLD}🧪 443 shared entry routing link health check${PLAIN}" "${BOLD}🧪 443 проверка состояния маршрутизации с одним входом${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧪 443端口复用链路体检${PLAIN}" "${BOLD}🧪 Port 443 Reuse routing link health check${PLAIN}" "${BOLD}🧪 Проверка маршрутизации повторного использования порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
 

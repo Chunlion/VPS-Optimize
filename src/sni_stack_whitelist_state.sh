@@ -132,7 +132,7 @@ print_sni_ip_whitelist_summary() {
 sni_stack_health_check() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧪 443 单入口分流链路体检${PLAIN}" "${BOLD}🧪 443 shared entry routing link health check${PLAIN}" "${BOLD}🧪 443 проверка состояния маршрутизации с одним входом${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧪 443端口复用链路体检${PLAIN}" "${BOLD}🧪 Port 443 Reuse routing link health check${PLAIN}" "${BOLD}🧪 Проверка маршрутизации повторного использования порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
 

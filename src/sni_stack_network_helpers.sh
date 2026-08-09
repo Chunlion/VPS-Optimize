@@ -152,7 +152,7 @@ check_xui_cert_settings_for_single_443() {
         [[ -n "$rows" ]] || continue
 
         found=1
-        echo -e "$(localized_text "${YELLOW}⚠️ ${db_path} 仍有 3x-ui 面板/订阅证书路径，443 单入口下建议清空：${PLAIN}" "${YELLOW}⚠️ ${db_path} still has the 3x-ui panel/subscription certificate path, and it is recommended to clear it under the 443 sharing entry:${PLAIN}" "${YELLOW}⚠️ ${db_path} по-прежнему имеет путь к сертификату панели/подписки 3x-ui, рекомендуется очистить одну запись 443:${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ ${db_path} 仍有 3x-ui 面板/订阅证书路径，443端口复用下建议清空：${PLAIN}" "${YELLOW}⚠️ ${db_path} still has the 3x-ui panel/subscription certificate path, and it is recommended to clear it under the Port 443 Reuse:${PLAIN}" "${YELLOW}⚠️ ${db_path} по-прежнему имеет путь к сертификату панели/подписки 3x-ui, рекомендуется очистить одну запись 443:${PLAIN}")"
         while IFS='|' read -r key value; do
             [[ -n "$key" ]] || continue
             echo -e "  ${key}=${value}"
@@ -214,7 +214,7 @@ print_sni_stack_preview() {
     esac
 
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}即将写入的 443 单入口分流配置预览${PLAIN}" "${BOLD}Preview of 443 shared entry route configuration to be written${PLAIN}" "${BOLD}Предварительный просмотр конфигурации маршрутизации с одним входом 443, которая будет записана${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}即将写入的 443端口复用配置预览${PLAIN}" "${BOLD}Preview of Port 443 Reuse route configuration to be written${PLAIN}" "${BOLD}Предварительный просмотр конфигурации маршрутизации повторного использования порта 443, которая будет записана${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "配置模式 ENTRY_MODE：${entry_mode}" "Configuration mode ENTRY_MODE: ${entry_mode}" "Режим конфигурации ENTRY_MODE: ${entry_mode}")"
     echo -e "$(localized_text "公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${entry_label}" "public entry: ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${entry_label}" "Вход в публичную сеть: ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${entry_label}.")"
@@ -256,7 +256,7 @@ print_sni_stack_preview() {
     fi
     echo -e ""
     echo -e "$(localized_text "${YELLOW}确认后会备份现有配置，并按所选 ENTRY_MODE 生成入口配置。${PLAIN}" "${YELLOW}After confirms, it will back up the existing configuration and generate the entry configuration according to the selected ENTRY_MODE.${PLAIN}" "${YELLOW}После подтверждения он создаст резервную копию существующей конфигурации и сгенерирует конфигурацию записи в соответствии с выбранным ENTRY_MODE.${PLAIN}")"
-    confirm_risk_action "$(localized_text "写入 443 单入口共享配置" "Write 443 shared entry shared configuration" "Запишите общую конфигурацию с общей точкой входа 443.")" \
+    confirm_risk_action "$(localized_text "写入 443端口复用配置" "Write Port 443 Reuse configuration" "Запишите общую конфигурацию с повторным использованием порта 443.")" \
         "$(localized_text "${entry_label}、Caddy 配置和 443 分流规则" "${entry_label}, Caddy configuration and 443 routing rules" "Конфигурация ${entry_label}, Caddy и 443 правила маршрутизирования")" \
         "$(localized_text "使用本次自动备份目录恢复，或进入 443 维护菜单回滚" "Use this automatic backup directory to restore, or enter the 443 maintenance menu to roll back" "Используйте этот каталог автоматического резервного копирования для восстановления или войдите в меню обслуживания 443 для отката.")" \
         "$(localized_text "确认公网 443 没有其他服务需要直接占用。" "Confirm that no other services on public port 443 need to be directly occupied." "Убедитесь, что никакие другие службы для публичного порта 443 не должны быть заняты напрямую.")"

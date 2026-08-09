@@ -2,7 +2,7 @@
 
 VPS-Optimize 是一个面向 VPS 日常维护的 Bash 脚本入口，适合用于新服务器初始化、系统优化、网络参数调整、基础安全配置、节点部署辅助和常见故障排查。
 
-脚本会修改 SSH、防火墙、内核参数、Nginx/Caddy 配置、Docker 配置、证书文件和 443 单入口相关服务。运行前先创建 VPS 快照，保留当前 SSH 会话，并确认云厂商安全组已放行 SSH 端口。
+脚本会修改 SSH、防火墙、内核参数、Nginx/Caddy 配置、Docker 配置、证书文件和 443端口复用相关服务。运行前先创建 VPS 快照，保留当前 SSH 会话，并确认云厂商安全组已放行 SSH 端口。
 
 ## 运行前检查
 
@@ -61,7 +61,7 @@ Select interface language:
 
 | 目标 | 文档 |
 |---|---|
-| 配置 443 单入口 | [443 单入口](docs/443-single-entry.md) |
+| 配置 443端口复用 | [443端口复用](docs/443-single-entry.md) |
 | 部署 3x-ui + REALITY + 443 | [3x-ui + REALITY + 443](tutorials/01-3x-ui-reality-443.md) |
 | 接入订阅工具 | [订阅工具接入 443](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
 | 查看端口流量 | [端口流量狗](docs/dog.md) |

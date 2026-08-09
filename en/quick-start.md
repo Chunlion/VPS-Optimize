@@ -2,7 +2,7 @@
 
 VPS-Optimize is a Bash-based control panel for routine VPS administration. It covers new-server setup, system and network tuning, basic security, node deployment, and common troubleshooting.
 
-The script can change SSH and firewall settings, kernel parameters, Nginx/Caddy and Docker configuration, certificates, and services that use the shared public port 443. Before running it, create a VPS snapshot, keep the current SSH session open, and make sure your cloud provider's security group allows the SSH port.
+The script can change SSH and firewall settings, kernel parameters, Nginx/Caddy and Docker configuration, certificates, and Port 443 Reuse services. Before running it, create a VPS snapshot, keep the current SSH session open, and make sure your cloud provider's security group allows the SSH port.
 
 ## Before You Begin
 
@@ -61,7 +61,7 @@ Press Enter to select English by default. You can change the language later from
 
 | Goal | Documentation |
 |---|---|
-| Configure the shared public port 443 | [Shared Port 443](docs/443-single-entry.md) |
+| Configure Port 443 Reuse | [Port 443 Reuse](docs/443-single-entry.md) |
 | Deploy 3x-ui + REALITY + 443 | [3x-ui + REALITY + 443](tutorials/01-3x-ui-reality-443.md) |
 | Publish subscription tools | [Subscription Tools on Port 443](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
 | Monitor port traffic | [dog.sh Traffic Monitor](docs/dog.md) |

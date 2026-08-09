@@ -96,7 +96,7 @@ rollback_sni_stack_config() {
     fi
     echo -e "$(localized_text "${YELLOW}即将回滚到备份：${backup_dir}${PLAIN}" "${YELLOW}Is about to be rolled back to backup: ${backup_dir}${PLAIN}" "${YELLOW}собирается вернуться к резервной копии: ${backup_dir}${PLAIN}")"
     confirm_risk_action "$(localized_text "回滚覆盖 Nginx/Caddy 443 配置" "Rollback coverage Nginx/Caddy 443 configuration" "Покрытие отката конфигурации Nginx/Caddy 443")" \
-        "$(localized_text "当前 Nginx/Caddy/443 单入口相关配置" "Current Nginx/Caddy/443 shared entry related configuration" "Текущая конфигурация, связанная с одним входом Nginx/Caddy/443")" \
+        "$(localized_text "当前 Nginx/Caddy/443端口复用相关配置" "Current Nginx/Caddy/Port 443 Reuse related configuration" "Текущая конфигурация, связанная повторного использования порта 443 Nginx/Caddy/443")" \
         "$(localized_text "如回滚后仍异常，请用云厂商控制台或手动恢复备份目录" "If the exception persists after rollback, please use the cloud provider console or manually restore the backup directory." "Если исключение сохраняется после отката, воспользуйтесь консолью облачного провайдера или вручную восстановите каталог резервной копии.")" \
         "$(localized_text "回滚会覆盖当前配置，请确认已选中正确备份。" "Rolling back will overwrite the current configuration, please confirm that correct backup is selected." "При откате текущая конфигурация будет перезаписана. Убедитесь, что выбрана правильная резервная копия.")" || return 1
 

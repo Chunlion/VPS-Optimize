@@ -155,7 +155,7 @@ collect_applied_config_files() {
     for conf_file in /etc/nginx/stream.d/*.conf; do
         [[ -f "$conf_file" ]] && append_applied_config_file "Nginx stream.d $(basename "$conf_file")" "$conf_file" "nginx"
     done
-    append_applied_config_file "$(localized_text "443 共享参数" "443 Shared parameters" "443 Общие параметры")" "/etc/vps-optimize/sni-stack.env" "entry-mode"
+    append_applied_config_file "$(localized_text "443端口复用参数" "Port 443 Reuse Parameters" "Параметры повторного использования порта 443")" "/etc/vps-optimize/sni-stack.env" "entry-mode"
     append_applied_config_file "$(localized_text "443 引擎状态" "443 Engine status" "443 Статус двигателя")" "/etc/vps-optimize/443-engine.conf" "entry-mode"
     append_applied_config_file "$(localized_text "Xray SNI 分流记录" "Xray SNI routing record" "Xray SNI маршрутизирующая пластинка")" "/etc/vps-optimize/xray-sni-routes.conf" "xray-routes"
     append_applied_config_file "$(localized_text "TCP Peek vpso-mux 配置" "TCP Peek vpso-mux configuration" "Конфигурация TCP Peek vpso-mux")" "/etc/vps-optimize/vpso-mux.yaml" "vpso-mux"
@@ -384,7 +384,7 @@ reload_applied_config_kind() {
         vpso-mux)
             if confirm_risk_action "$(localized_text "重启 vpso-mux" "Restart vpso-mux" "Перезагрузите vpso-mux.")" \
                 "$(localized_text "TCP Peek/vpso-mux 分流器运行进程" "TCP Peek/vpso-mux routing running process" "Процесс работы маршрутизации TCP Peek/vpso-mux")" \
-                "$(localized_text "使用当前未断开的 SSH 会话恢复 ${target_file}.bak_*，或回到 443 单入口菜单重新应用/回滚入口模式" "Restore ${target_file}.bak_* using the currently undisconnected SSH session, or return to the 443 shared entry menu to reapply/rollback entry mode" "Восстановите ${target_file}.bak_*, используя текущий неотключенный сеанс SSH, или вернитесь в меню 443 с одним входом, чтобы повторно применить/откатить режим входа.")" \
+                "$(localized_text "使用当前未断开的 SSH 会话恢复 ${target_file}.bak_*，或回到 443端口复用菜单重新应用/回滚入口模式" "Restore ${target_file}.bak_* using the currently undisconnected SSH session, or return to the Port 443 Reuse menu to reapply/rollback entry mode" "Восстановите ${target_file}.bak_*, используя текущий неотключенный сеанс SSH, или вернитесь в меню повторное использование порта 443, чтобы повторно применить/откатить режим входа.")" \
                 "$(localized_text "确认公网 443 当前入口模式和本机后端端口都正常。" "Confirm that the current entry mode of public port 443 and the local backend port are normal." "Убедитесь, что текущий режим входа в публичный порт 443 и локальный внутренний порт являются нормальными.")"; then
                 restart_named_service_if_available vpso-mux
             else
@@ -402,7 +402,7 @@ reload_applied_config_kind() {
                     echo -e "$(localized_text "${YELLOW}⚠️ 已保存配置，但未重新应用 443 入口模式。${PLAIN}" "${YELLOW}⚠️ Configuration saved, but 443 entry mode was not reapplied.${PLAIN}" "${YELLOW}⚠️ Конфигурация сохранена, но режим входа 443 не был применен повторно.${PLAIN}")"
                 fi
             else
-                echo -e "$(localized_text "${YELLOW}⚠️ 已保存配置；请回到 443 单入口菜单重新应用当前入口模式。${PLAIN}" "${YELLOW}⚠️ The configuration has been saved; please return to the 443 shared entry menu to reapply the current entry mode.${PLAIN}" "${YELLOW}⚠️ Конфигурация сохранена; вернитесь в меню единого входа 443, чтобы повторно применить текущий режим ввода.${PLAIN}")"
+                echo -e "$(localized_text "${YELLOW}⚠️ 已保存配置；请回到 443端口复用菜单重新应用当前入口模式。${PLAIN}" "${YELLOW}⚠️ The configuration has been saved; please return to the Port 443 Reuse menu to reapply the current entry mode.${PLAIN}" "${YELLOW}⚠️ Конфигурация сохранена; вернитесь в меню повторного использования порта 443, чтобы повторно применить текущий режим ввода.${PLAIN}")"
             fi
             ;;
         traffic-guard)
@@ -463,7 +463,7 @@ reload_applied_config_kind() {
             if confirm_risk_action "$(localized_text "重启 x-ui/3x-ui" "Restart x-ui/3x-ui" "Перезагрузите x-ui/3x-ui.")" \
                 "$(localized_text "x-ui/3x-ui 面板进程和 config.json 运行配置" "x-ui/3x-ui panel process and config.json running configuration" "Процесс и конфигурация панели x-ui/3x-ui. Текущая конфигурация json")" \
                 "$(localized_text "恢复 ${target_file}.bak_* 后重启面板，或用官方 x-ui/3x-ui 命令进入管理菜单修复" "Restore ${target_file}.bak_* and then restart the panel, or use the official x-ui/3x-ui command to enter the management menu to repair" "Восстановите ${target_file}.bak_*, а затем перезапустите панель или используйте официальную команду x-ui/3x-ui, чтобы войти в меню управления для восстановления.")" \
-                "$(localized_text "确认面板端口、证书路径和 443 单入口设置匹配。" "Verify that the panel port, certificate path, and 443 share entry settings match." "Убедитесь, что порт панели, путь к сертификату и настройки записи общего ресурса 443 совпадают.")"; then
+                "$(localized_text "确认面板端口、证书路径和 443端口复用设置匹配。" "Verify that the panel port, certificate path, and Port 443 Reuse settings match." "Убедитесь, что порт панели, путь к сертификату и настройки записи общего ресурса 443 совпадают.")"; then
                 restart_named_service_if_available x-ui
                 restart_named_service_if_available 3x-ui
             else

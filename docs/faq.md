@@ -21,7 +21,7 @@ systemctl status ssh --no-pager || systemctl status sshd --no-pager
 
 不同发行版 SSH 服务名可能是 `ssh` 或 `sshd`。
 
-## 443 单入口配置后面板打不开
+## 443端口复用配置后面板打不开
 
 优先检查：
 
@@ -32,11 +32,11 @@ systemctl status ssh --no-pager || systemctl status sshd --no-pager
 - 云安全组是否放行 `443/tcp`。
 - 域名 DNS 是否解析到当前服务器。
 
-详细排查见 [共享 443 排错指南](443-single-entry-troubleshooting.md)。
+详细排查见 [443端口复用排错指南](443-single-entry-troubleshooting.md)。
 
 ## 浏览器访问内部端口报错
 
-443 单入口模式下，浏览器只访问标准 HTTPS 地址：
+443端口复用模式下，浏览器只访问标准 HTTPS 地址：
 
 ```text
 https://panel.example.com/panel/

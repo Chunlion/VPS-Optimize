@@ -1,6 +1,6 @@
 # Recovery and Rollback Runbook
 
-This manual is used to deal with problems that have already occurred: SSH disconnection, firewall error blocking, shared port 443 corruption, Nginx entry or Caddy/Nginx Web reverse proxy engine cannot start, certificate failure, panel cannot be opened. Its goal is to first restore control and then troubleshoot the root cause.
+This manual is used to deal with problems that have already occurred: SSH disconnection, firewall error blocking, Port 443 Reuse corruption, Nginx entry or Caddy/Nginx Web reverse proxy engine cannot start, certificate failure, panel cannot be opened. Its goal is to first restore control and then troubleshoot the root cause.
 
 The menu paths in this article are written in the format of "main menu [number menu copy] -> [sub-number menu copy]", and shortcut commands are not written into each path.
 
@@ -44,10 +44,10 @@ Main menu [15 Service health overview] -> [s Service recovery] -> [f Restart fai
 Main menu [15 Service health overview] -> [s Service recovery] -> [l View service logs]
 ```
 
-If it is a shared port 443 point problem, priority:
+If it is a Port 443 Reuse point problem, priority:
 
 ```text
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 If you are ready to roll back:
@@ -155,7 +155,7 @@ Do not delete the current SSH port. Turning off the firewall and deleting rules 
 
 ### Port concurrent connection limit is blocked by mistake
 
-`Main menu [8 Firewall rules] -> [5 Port concurrent connection limit]` writes additional `iptables` / `ip6tables` connlimit restriction rules, which are not equivalent to UFW/firewalld's port access rules. It will limit the number of TCP concurrent connections per source IP by public port; if you limit the Internet `443` and enable the 443 shared entry, you can only limit the entire Internet `443`, and cannot be precise to a specific Xray/3x-ui inbound connection, SNI, UUID or user. Don't choose `[6 Disable firewall]` by mistake.
+`Main menu [8 Firewall rules] -> [5 Port concurrent connection limit]` writes additional `iptables` / `ip6tables` connlimit restriction rules, which are not equivalent to UFW/firewalld's port access rules. It will limit the number of TCP concurrent connections per source IP by public port; if you limit the Internet `443` and enable the Port 443 Reuse, you can only limit the entire Internet `443`, and cannot be precise to a specific Xray/3x-ui inbound connection, SNI, UUID or user. Don't choose `[6 Disable firewall]` by mistake.
 
 When you can still enter the menu, go first:
 
@@ -176,7 +176,7 @@ ip6tables -S INPUT | grep 'VPSO_CONN_LIMIT_PORT_'
 
 Only delete a single rule that is confirmed to belong to this script and whose port and connection number match. The method is to copy the entire `-A INPUT... VPSO_CONN_LIMIT_PORT_port...` in the output, change the `-A INPUT` at the beginning to `-D INPUT` and then execute it; the IPv6 rule uses `ip6tables` in the same way. Do not clear INPUT chains in batches, and do not mix UFW/firewalld access rules and connlimit restriction rules.
 
-## shared port 443 modification
+## Port 443 Reuse modification
 
 ### phenomenon
 
@@ -201,7 +201,7 @@ caddy validate --config /etc/caddy/Caddyfile
 Then enter:
 
 ```text
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ### Do not rerun the first configuration first
@@ -210,18 +210,18 @@ When adding a new website, changing the backend port, or revising the certificat
 
 | target | menu path |
 |---|---|
-| Add or delete sites | `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy]` |
-| Switch Caddy/Nginx Web reverse proxy engine | `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy] -> [8 switch Web reverse proxy engine]` |
-| Rebuild configuration | `Main menu [19 443 shared entry manager] -> [6 Reapply current entry mode]` |
-| Modify panel/subscription/REALITY parameters | `Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings]` |
-| Caddy/Certificate Maintenance | `Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance]` |
-| Rollback 443 configuration | `Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [6 rollback shared port 443 configuration]` |
+| Add or delete sites | `Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy]` |
+| Switch Caddy/Nginx Web reverse proxy engine | `Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy] -> [8 switch Web reverse proxy engine]` |
+| Rebuild configuration | `Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]` |
+| Modify panel/subscription/REALITY parameters | `Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]` |
+| Caddy/Certificate Maintenance | `Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance]` |
+| Rollback 443 configuration | `Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [6 rollback Port 443 Reuse configuration]` |
 
 ### Broken after switching Caddy/Nginx Web reverse proxy engine
 
 The 443 configuration of script management is subject to `/etc/vps-optimize/sni-stack.env`. When switching the web reverse proxy engine through `[19] -> [8] -> [8]`, the saved panel, subscription, website, certificate, whitelist and backend parameters will be read to rebuild the target engine configuration; the handwritten Caddy/Nginx configuration will not be reversely parsed.
 
-If you have manually changed `/etc/caddy/conf.d`, `/etc/nginx/conf.d/vps_sni_web_*.conf` or `/etc/nginx/conf.d/vps_proxy_*.conf` generated by the old `[4 reverse proxy]` before, synchronize the parameters to the script through `[8 management Web domains / reverse proxy]` or `[10 Modify 443 shared settings]` first, and then switch. Switching to the Nginx local web reverse proxy isolates the script-managed Caddy 443 web configuration; switching back to Caddy isolates the script-managed Nginx local web configuration. When 443 is reapplied, the old Nginx HTTPS public internet reverse proxy configuration will also be isolated to avoid continuing to grab the public port `443`.
+If you have manually changed `/etc/caddy/conf.d`, `/etc/nginx/conf.d/vps_sni_web_*.conf` or `/etc/nginx/conf.d/vps_proxy_*.conf` generated by the old `[4 reverse proxy]` before, synchronize the parameters to the script through `[8 management Web domains / reverse proxy]` or `[10 Modify Port 443 Reuse settings]` first, and then switch. Switching to the Nginx local web reverse proxy isolates the script-managed Caddy 443 web configuration; switching back to Caddy isolates the script-managed Nginx local web configuration. When 443 is reapplied, the old Nginx HTTPS public internet reverse proxy configuration will also be isolated to avoid continuing to grab the public port `443`.
 
 `ENTRY_MODE=xray-fallback` does not support web whitelisting, regardless of whether the local web reverse proxy engine selects Caddy or Nginx. The reason is that after Xray fallback, the local web reverse proxy engine cannot reliably obtain the real client source IP. If you need Web whitelist, switch to Nginx Stream or TCP Peek, and press `SNI + source IP` limit at the Internet entry layer.
 
@@ -231,7 +231,7 @@ If you have manually changed `/etc/caddy/conf.d`, `/etc/nginx/conf.d/vps_sni_web
 
 - `443` is occupied by Apache, old Nginx server, 3x-ui, Xray or non-current entry service.
 - `stream` configuration syntax error for `/etc/nginx/nginx.conf`.
-- The old public HTTPS reverse proxy configuration and shared port 443 point configuration are duplicated.
+- The old public HTTPS reverse proxy configuration and Port 443 Reuse point configuration are duplicated.
 - After selecting Nginx as the web reverse proxy engine, the `/etc/nginx/conf.d/vps_sni_web_*.conf` syntax or certificate path is abnormal.
 
 ### Check
@@ -265,8 +265,8 @@ nginx -t
 Re-enter:
 
 ```text
-Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [15 isolate old Caddy Configuration]
-Main menu [19 443 shared entry manager] -> [6 Reapply current entry mode]
+Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [15 isolate old Caddy Configuration]
+Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
 ```
 
 ## Web reverse proxy engine cannot start or 502
@@ -298,12 +298,12 @@ curl -I http://127.0.0.1:2096/sub/
 
 | question | menu path |
 |---|---|
-| Just a Caddy syntax or overloading issue | `Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [12 Check and reload Caddy]` |
-| Nginx Local Web reverse syntax or overloading problem | `Main menu [19 443 shared entry manager] -> [6 Reapply current entry mode]` |
-| Need to switch Caddy/Nginx Web reverse proxy engine | `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy] -> [8 switch Web reverse proxy engine]` |
-| The backend port or path is incorrectly written | `Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [1 Edit panel/subscription ports and paths]` |
-| Certificate file or symlink is abnormal | `Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [10 rebuild /root/cert Certificate symlink]` |
-| I don’t know what kind of problem it is | `Main menu [19 443 shared entry manager] -> [13 443 Connection health check]` |
+| Just a Caddy syntax or overloading issue | `Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [12 Check and reload Caddy]` |
+| Nginx Local Web reverse syntax or overloading problem | `Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]` |
+| Need to switch Caddy/Nginx Web reverse proxy engine | `Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy] -> [8 switch Web reverse proxy engine]` |
+| The backend port or path is incorrectly written | `Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings] -> [1 Edit panel/subscription ports and paths]` |
+| Certificate file or symlink is abnormal | `Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [10 rebuild /root/cert Certificate symlink]` |
+| I don’t know what kind of problem it is | `Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]` |
 
 ## Certificate failed
 
@@ -331,9 +331,9 @@ The script uses Cloudflare DNS-01 to issue the certificate. Orange cloud is not 
 ### handle entry
 
 ```text
-Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [8 update Cloudflare API Token]
-Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [9 Reissue a domain certificate]
-Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [13 Caddy/Certificate one-click health check]
+Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [8 update Cloudflare API Token]
+Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [9 Reissue a domain certificate]
+Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [13 Caddy/Certificate one-click health check]
 ```
 
 Retaining Caddy in the menu name is a historical naming; no matter whether the web reverse proxy engine selects Caddy or Nginx, the certificate is still issued by `acme.sh + Cloudflare DNS API`, and `/etc/caddy/certs/${domain}.crt|key` and `/root/cert/${domain}.crt|key` continue to be used.
@@ -368,8 +368,8 @@ Common entrances:
 
 ```text
 Main menu [5 panel、Nodes and subscription tools] -> [3 panel SSL Repair]
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [1 Edit panel/subscription ports and paths]
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings] -> [1 Edit panel/subscription ports and paths]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ## Subscription not available
@@ -394,8 +394,8 @@ Subscription links should not appear:
 Processing entry:
 
 ```text
-Main menu [19 443 shared entry manager] -> [11 Subscription link / External Proxy Tips]
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [1 Edit panel/subscription ports and paths]
+Main menu [19 Port 443 Reuse manager] -> [11 Subscription link / External Proxy Tips]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings] -> [1 Edit panel/subscription ports and paths]
 ```
 
 ## REALITY connection failed
@@ -420,9 +420,9 @@ Key points to confirm:
 Processing entry:
 
 ```text
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [2 Modify REALITY local listener / camouflage SNI]
-Main menu [19 443 shared entry manager] -> [6 Reapply current entry mode]
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings] -> [2 Modify REALITY local listener / camouflage SNI]
+Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ## Restore from backup
@@ -442,12 +442,12 @@ Backups are usually located at:
 /etc/vps-optimize/backups
 ```
 
-### shared port 443 Backup
+### Port 443 Reuse Backup
 
 Suitable for rolling back only ingress services, web reverse proxy and 443 configurations:
 
 ```text
-Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [6 rollback shared port 443 configuration]
+Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [6 rollback Port 443 Reuse configuration]
 ```
 
 Related paths:

@@ -1,4 +1,4 @@
-# 3x-ui + REALITY: Shared Port 443 Deployment Guide
+# 3x-ui + REALITY: Port 443 Reuse Deployment Guide
 
 This guide shows how to run the 3x-ui panel, subscription, websites, and REALITY through one public port, `443`.
 
@@ -10,8 +10,8 @@ Only one service listens on public port `443` at a time:
 
 Local backends should listen on `127.0.0.1` whenever possible.
 
-- [Shared Port 443 Configuration Guide](../docs/443-single-entry.md)
-- [Shared Port 443 Troubleshooting](../docs/443-single-entry-troubleshooting.md)
+- [Port 443 Reuse Configuration Guide](../docs/443-single-entry.md)
+- [Port 443 Reuse Troubleshooting](../docs/443-single-entry-troubleshooting.md)
 
 ## Example description
 
@@ -56,7 +56,7 @@ Cloudflare Suggestions:
 | Pre-check and basic preparation | 5-10 minutes |
 | Install/Configure 3x-ui | 10-20 minutes |
 | Configure REALITY inbound | 5-10 minutes |
-| initial setup shared port 443 | 10-20 minutes |
+| initial setup Port 443 Reuse | 10-20 minutes |
 | Verification and backup | 5-10 minutes |
 
 ## What will be modified?
@@ -64,7 +64,7 @@ Cloudflare Suggestions:
 | Project | Modify content | risk |
 |---|---|---|
 | 3x-ui | Panel port, path, certificate path, subscription settings, REALITY inbound | If the panel path or certificate is set incorrectly, it will not open. |
-| Currently 443 entrance services | Internet `443` Shared Ingress Takeover and Routing | Port conflicts will cause the current entry mode to switch or fail to start. |
+| Current Port 443 Reuse service | Handles public port `443` and routes traffic | Port conflicts can prevent the current entry mode from starting or switching. |
 | Current web reverse proxy engine | Local HTTPS reverse proxy and certificate | Configuration error will result in 404/502/certificate failure |
 | Xray/REALITY | Local binding and masquerading SNI | If SNI is written incorrectly, the connection will fail. |
 | firewall | It is recommended to keep only SSH and public port `443` | Deleting the port by mistake will cause the connection to be disconnected |
@@ -96,7 +96,7 @@ Key principles:
 
 `Xray Inbound connection management` only records `SNI -> local address:port`, not the 3x-ui inbound connection editor; the local inbound connection needs to be created and enabled in 3x-ui first. Nginx Stream mode and TCP Peek + Splice mode support multiple local Xray inbound connections routed by SNI; Xray itself can have multiple inbound connections, but in xray-fallback mode the Internet `443` defaults to one Xray The main inbound connection connection takes over, and the script currently does not support continuing to route multiple local Xray inbound connections by multiple SNI in this mode.
 
-Ordinary TLS and REALITY should be judged separately: Ordinary TLS pays more attention to whether the local certificate, Web fallback, and Host/SNI match; REALITY pays more attention to whether the external target site is truly accessible and whether the TLS characteristics are stable. REALITY is not required. `serverName` joins the Web reverse proxy engine and does not require the local certificate to cover REALITY `serverName`. The certificate policy still uses `acme.sh + Cloudflare DNS API`, does not use the Caddy DNS module, and does not require `xcaddy`. The certificate selected during the 3x-ui installation phase is only used to complete the installation process and is not the certificate scheme ultimately used by shared port 443.
+Ordinary TLS and REALITY should be judged separately: Ordinary TLS pays more attention to whether the local certificate, Web fallback, and Host/SNI match; REALITY pays more attention to whether the external target site is truly accessible and whether the TLS characteristics are stable. REALITY is not required. `serverName` joins the Web reverse proxy engine and does not require the local certificate to cover REALITY `serverName`. The certificate policy still uses `acme.sh + Cloudflare DNS API`, does not use the Caddy DNS module, and does not require `xcaddy`. The certificate selected during the 3x-ui installation phase is only used to complete the installation process and is not the certificate scheme ultimately used by Port 443 Reuse.
 
 ## Operation steps
 
@@ -124,7 +124,7 @@ Check the public port `443`:
 ss -lntp | grep ':443' || echo "443 not listening"
 ```
 
-If Caddy/Nginx/Apache already occupies the public port `443`, first record the existing site domain and back-end port, and then re-register it through `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy]`.
+If Caddy/Nginx/Apache already occupies the public port `443`, first record the existing site domain and back-end port, and then re-register it through `Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy]`.
 
 ### 2. Install or enter 3x-ui
 
@@ -134,7 +134,7 @@ Enter:
 Main menu [5 panel、Nodes and subscription tools] -> [1 3x-ui panel script]
 ```
 
-If 3x-ui is not installed, install it. The current official installer provides option 4, `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)`. Choose it for this shared-443 setup; when asked whether to bind only to `127.0.0.1`, enter `y`.
+If 3x-ui is not installed, install it. The current official installer provides option 4, `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)`. Choose it for this Port 443 Reuse setup; when asked whether to bind only to `127.0.0.1`, enter `y`.
 
 Risk: choose Skip SSL only when a reverse proxy or SSH tunnel is already in use. Bind the panel to loopback during installation; never expose an unencrypted public HTTP panel port.
 
@@ -163,7 +163,7 @@ It is recommended to record these values:
 
 ### 3. Clear the 3x-ui panel certificate path
 
-As long as you are ready to access the shared port 443 of VPS-Optimize, you should clear the 3x-ui panel and subscription certificate path and let the Web reverse proxy engine take over the public HTTPS.
+As long as you are ready to access the Port 443 Reuse of VPS-Optimize, you should clear the 3x-ui panel and subscription certificate path and let the Web reverse proxy engine take over the public HTTPS.
 
 Enter the 3x-ui panel:
 
@@ -182,7 +182,7 @@ Private key file path
 
 Save and restart the panel.
 
-Reason: After accessing the shared port 443, the public HTTPS is processed by the Web reverse proxy engine, and the 3x-ui panel only uses the local HTTP backend. If not cleared, it may result in 502 Bad Gateway, HTTP/HTTPS backend protocol mismatch, redirect loop, certificate path confusion, panel or subscription exception.
+Reason: After accessing the Port 443 Reuse, the public HTTPS is processed by the Web reverse proxy engine, and the 3x-ui panel only uses the local HTTP backend. If not cleared, it may result in 502 Bad Gateway, HTTP/HTTPS backend protocol mismatch, redirect loop, certificate path confusion, panel or subscription exception.
 
 ### 4. Set up panel binding
 
@@ -195,7 +195,7 @@ A set of example values:
 | `webBasePath` | `/panel/` |
 | `webCertFile` / `webKeyFile` | Clear |
 
-Before accessing the 443 shared entry, you should change it to `127.0.0.1`, bind it locally and close the panel HTTPS; Internet access only uses the 443 shared entry and the Web reverse proxy engine, and does not reserve the panel public port as a transition.
+Before accessing the Port 443 Reuse, you should change it to `127.0.0.1`, bind it locally and close the panel HTTPS; Internet access only uses the Port 443 Reuse and the Web reverse proxy engine, and does not reserve the panel public port as a transition.
 
 Verify local backend:
 
@@ -268,12 +268,12 @@ You can see the certificate output, indicating that the external SNI site is ava
 
 In current 3x-ui, leaving `Min Client Ver` empty does not mean unrestricted support; it uses Xray core's built-in minimum version. If a third-party client cannot connect, update its core first. Consider `1.0.0` only when the compatibility requirement is confirmed and you accept the risk of admitting outdated fingerprints.
 
-### 7. initial setup of shared port 443
+### 7. initial setup of Port 443 Reuse
 
 Enter:
 
 ```text
-Main menu [19 443 shared entry manager] -> [2 initial setup/installation 443 shared entry]
+Main menu [19 Port 443 Reuse manager] -> [2 initial setup/installation Port 443 Reuse]
 ```
 
 Example to fill in:
@@ -283,7 +283,7 @@ Example to fill in:
 | Panel domain | `panel.example.com` |
 | REALITY disguise SNI | `www.microsoft.com` |
 | 443 Entry mode | `nginx-stream` / `xray-fallback` / `tcp-peek` |
-| public port `443` listener | Taken over by a shared entry service corresponding to the current entry mode |
+| public port `443` listener | Taken over by a Port 443 Reuse service corresponding to the current entry mode |
 | Web reverse proxy engine local listening address | `127.0.0.1` |
 | Web reverse proxy engine local listening port | `8443` |
 | Xray REALITY local listening address | `127.0.0.1` |
@@ -311,7 +311,7 @@ When a high-risk confirmation card appears in the script, confirm that the follo
 Enter:
 
 ```text
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 The health check will check the current entry service, web reverse proxy engine, REALITY, panel backend, 3x-ui panel/subscription certificate path residue and security items.
@@ -329,7 +329,7 @@ Expectations:
 
 | Check items | Expectation |
 |---|---|
-| public port `443` | Only bound by a shared entry service corresponding to the current `ENTRY_MODE` |
+| public port `443` | Only bound by a Port 443 Reuse service corresponding to the current `ENTRY_MODE` |
 | Web reverse proxy engine | `127.0.0.1:8443`, subject to the current configuration of the script |
 | REALITY | `127.0.0.1:1443` |
 | panel | `127.0.0.1:40000` |
@@ -420,7 +420,7 @@ openssl s_client -connect serverIP:443 -servername panel.example.com </dev/null
 Menu verification:
 
 ```text
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 Main menu [15 Service health overview]
 ```
 
@@ -430,7 +430,7 @@ Main menu [15 Service health overview]
 |---|---|
 | Nginx/Caddy failed after configuration writing | The script will try its best to automatically roll back to this backup. |
 | Panel cannot be opened | `Main menu [5 panel、Nodes and subscription tools] -> [3 panel SSL Repair]` Clean the panel SSL, then check the local port |
-| Certificate failed | `Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance]` Check Token, DNS, and re-sign certificate |
+| Certificate failed | `Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance]` Check Token, DNS, and re-sign certificate |
 | 443 occupied | `ss -lntp | grep ':443''` to find the occupier, and then adjust it to local binding |
 | Subscribe 404 | Check whether the 3x-ui subscription path is consistent with the current web reverse proxy engine path |
 | REALITY failed | Check REALITY local listening, SNI, dest and client node ports |

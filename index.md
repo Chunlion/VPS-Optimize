@@ -59,7 +59,7 @@ story:
       value: 正常
     - label: 配置备份
       value: 可用
-    - label: 443 单入口
+    - label: 443端口复用
       value: 运行中
     - label: 关键服务
       value: 运行中

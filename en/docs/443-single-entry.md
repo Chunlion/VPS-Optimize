@@ -1,13 +1,13 @@
-# Shared Port 443 Configuration Guide
+# Port 443 Reuse Configuration Guide
 
-When encountering panel failure to open, subscription 404, certificate failure, or REALITY connection failure, first read: [Shared Port 443 Troubleshooting](443-single-entry-troubleshooting.md).
+When encountering panel failure to open, subscription 404, certificate failure, or REALITY connection failure, first read: [Port 443 Reuse Troubleshooting](443-single-entry-troubleshooting.md).
 
-This document teaches you how to connect the VPS Internet `443` to the 443 shared entry of VPS-Optimize. Nginx Stream is recommended by default, and you can also switch to TCP Peek + Splice or Xray Fallback after the configuration is completed. No matter which entry mode is selected, Internet `443` is only bound by a single service corresponding to the current `ENTRY_MODE` at the same time.
+This document teaches you how to connect the VPS Internet `443` to the Port 443 Reuse of VPS-Optimize. Nginx Stream is recommended by default, and you can also switch to TCP Peek + Splice or Xray Fallback after the configuration is completed. No matter which entry mode is selected, Internet `443` is only bound by a single service corresponding to the current `ENTRY_MODE` at the same time.
 
-The current shared port 443 link is:
+The current Port 443 Reuse link is:
 
 ```text
-public port `443` -> current ENTRY_MODE Corresponding shared entry service
+public port `443` -> current ENTRY_MODE Corresponding Port 443 Reuse service
   nginx-stream  -> nginx route by SNI routing
   tcp-peek      -> vpso-mux route by SNI routing
   xray-fallback -> Xray main inbound takeover 443, And fallback Ordinary HTTPS
@@ -96,15 +96,15 @@ The three entry modes share the panel domain, subscription path, website reverse
 
 ### Web reverse proxy engine selection
 
-When configuring `[2 initial setup/installation 443 shared entry]` for the first time, you can select Caddy or Nginx as the local Web reverse proxy engine under shared port 443. You can also follow from:
+When configuring `[2 initial setup/installation Port 443 Reuse]` for the first time, you can select Caddy or Nginx as the local Web reverse proxy engine under Port 443 Reuse. You can also follow from:
 
 ```text
-Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy] -> [8 switch Web reverse proxy engine]
+Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy] -> [8 switch Web reverse proxy engine]
 ```
 
 The script will reuse the current domain, certificate, and backend when switching; the web whitelist will also be reused in the entry mode that supports whitelisting. The script will re-render the selected engine configuration and isolate another set of 443 local Web reverse proxy configurations to prevent Caddy/Nginx from processing the same batch of 443 Web domains at the same time. The certificate paths remain `/etc/caddy/certs/${domain}.crt|key` and `/root/cert/${domain}.crt|key`, and the certificate policy does not change.
 
-If `Main menu [4 reverse proxy]` has previously been configured with independent Caddy/Nginx HTTPS reverse proxy, when enabling or re-applying shared port 443, the script will isolate these old configurations that may seize the public port `443`. Please use `[19] -> [8 management Web domains / reverse proxy]` to add new websites later.
+If `Main menu [4 reverse proxy]` has previously been configured with independent Caddy/Nginx HTTPS reverse proxy, when enabling or re-applying Port 443 Reuse, the script will isolate these old configurations that may seize the public port `443`. Please use `[19] -> [8 management Web domains / reverse proxy]` to add new websites later.
 
 ### Same 3x-ui settings for all three modes
 
@@ -167,10 +167,10 @@ This is the default stable mode. The inbound nodes of 3x-ui/Xray do not listen t
 If you want multiple local Xray inbounds to share the public port `443`, first create multiple local inbounds in 3x-ui, each inbound uses a different `127.0.0.1:port`, and then:
 
 ```text
-Main menu [19 443 shared entry manager] -> [15 Xray inbound management]
+Main menu [19 Port 443 Reuse manager] -> [15 Xray inbound management]
 ```
 
-Only record `SNI -> local address:port` for currently supported shared entry mode rendering routing rules. The script does not create, delete, or modify the 3x-ui/Xray inbound connection internal configuration.
+Only record `SNI -> local address:port` for currently supported Port 443 Reuse mode rendering routing rules. The script does not create, delete, or modify the 3x-ui/Xray inbound connection internal configuration.
 
 ### Mode 2: TCP Peek + Splice
 
@@ -201,7 +201,7 @@ Check before switching:
 4. If the current SSH session itself is connected to an Internet ingress port, such as `443`, the script will refuse the switch. Please use the cloud provider VNC/Serial Console instead, or log in first using the non-entry port SSH.
 5. Before TCP Peek is switched, the local port of the Web reverse proxy engine and the local inbound connection of Xray/REALITY must be connected; if the local inbound connection of `127.0.0.1:1443` is not bound, first enable the corresponding inbound connection on 3x-ui or change the port saved in the script to the actual value.
 
-For first-time configuration, you only need to run the same set of `[2 initial setup/installation 443 Shared entry]` wizards. After the shared configuration, certificate, Web reverse proxy engine and 3x-ui local port are all connected, follow the `[16] -> [17] -> [5]` process above to switch the Internet entry process to TCP Peek.
+For first-time configuration, you only need to run the same set of `[2 initial setup/installation Port 443 Reuse]` wizards. After the shared configuration, certificate, Web reverse proxy engine and 3x-ui local port are all connected, follow the `[16] -> [17] -> [5]` process above to switch the Internet entry process to TCP Peek.
 
 ### Mode 3: Xray Fallback
 
@@ -236,7 +236,7 @@ If your primary inbound connection is REALITY, please confirm that the 3x-ui/Xra
 | TCP Peek + Splice -> Nginx Stream | Usually there is no need to change 3x-ui. After switching back, Internet `443` is bound by Nginx stream. |
 | Nginx Stream or TCP Peek + Splice -> Xray Fallback | First change a primary inbound in 3x-ui to the public port `443`, configure fallback to the local port of the web reverse proxy engine, and then execute the script switch. |
 | Xray Fallback -> Nginx Stream or TCP Peek + Splice | First move the 3x-ui/Xray main inbound from the public port `443`, change it back to a local port like `127.0.0.1:1443`, or disable the public port `443` main inbound first, and then execute the script switch. |
-| Reapply the current pattern | If you just rebuild the configuration, you do not need to change 3x-ui; if you have changed the panel port, subscription path or Xray local port, save the value in the `[10 Modify 443 shared settings]` synchronization script first. |
+| Reapply the current pattern | If you just rebuild the configuration, you do not need to change 3x-ui; if you have changed the panel port, subscription path or Xray local port, save the value in the `[10 Modify Port 443 Reuse settings]` synchronization script first. |
 
 Before switching back to Nginx Stream or TCP Peek + Splice from xray-fallback, the most common mistake is to forget to move the 3x-ui/Xray main inbound from the public port `443`. Otherwise, Nginx or `vpso-mux` will grab the same public internet port as Xray, and the switch will fail or automatically roll back.
 
@@ -245,25 +245,25 @@ Before switching back to Nginx Stream or TCP Peek + Splice from xray-fallback, t
 Check before switching:
 
 ```text
-Main menu [19 443 shared entry manager] -> [1 View current portal status/listener details]
+Main menu [19 Port 443 Reuse manager] -> [1 View current portal status/listener details]
 ss -lntp | grep ':443'
 ```
 
 TCP Peek + Splice switching check:
 
 ```text
-Main menu [19 443 shared entry manager] -> [16 View TCP Peek + Splice Status / 8444 Preflight]
-Main menu [19 443 shared entry manager] -> [17 TCP Peek routing rule validation]
-Main menu [19 443 shared entry manager] -> [5 switch to TCP Peek + Splice mode]
+Main menu [19 Port 443 Reuse manager] -> [16 View TCP Peek + Splice Status / 8444 Preflight]
+Main menu [19 Port 443 Reuse manager] -> [17 TCP Peek routing rule validation]
+Main menu [19 Port 443 Reuse manager] -> [5 switch to TCP Peek + Splice mode]
 ```
 
-Only after the `8444` pre-check and routing rule verification passes, `[5] switch to TCP Peek + Splice mode` can be executed. To undo the latest entry mode switch, use `Main menu [19 443 shared entry manager] -> [7 Roll back the last entry-mode switch]`.
+Only after the `8444` pre-check and routing rule verification passes, `[5] switch to TCP Peek + Splice mode` can be executed. To undo the latest entry mode switch, use `Main menu [19 Port 443 Reuse manager] -> [7 Roll back the last entry-mode switch]`.
 
 Check after switching:
 
 ```text
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
-Main menu [19 443 shared entry manager] -> [14 443 Network access test]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [14 443 Network access test]
 ```
 
 Expected listeners:
@@ -280,7 +280,7 @@ Regardless of the mode, do not allow the web reverse proxy engine, 3x-ui panel p
 
 ## Xray Inbound Management Boundary
 
-`Xray inbound management` only records `SNI -> local address:port` routing records for currently supported shared entry point mode rendering routing rules, it is not the 3x-ui/Xray inbound editor. Users need to first create and enable local inbound in 3x-ui/Xray, and then write the corresponding SNI, local listening address and port into the script.
+`Xray inbound management` only records `SNI -> local address:port` routing records for currently supported Port 443 Reuse mode rendering routing rules, it is not the 3x-ui/Xray inbound editor. Users need to first create and enable local inbound in 3x-ui/Xray, and then write the corresponding SNI, local listening address and port into the script.
 
 TCP Peek + Splice mode: Read SNI in TLS ClientHello based on MSG_PEEK, without consuming the first packet, and routing the connection to the Web reverse proxy engine or Xray local backend based on SNI; splice zero copy is preferred when forwarding, and ordinary copy is automatically rolled back when it fails. The actual running routing program is vpso-mux.
 
@@ -300,11 +300,11 @@ REALITY nodes are different. REALITY pays more attention to whether the external
 
 ## Certificate policy
 
-shared port 443 continues to use `acme.sh + Cloudflare DNS API` to issue and install web domain certificates. Do not use the Caddy DNS module, do not require `xcaddy`, and do not let Caddy be responsible for the DNS-01 certificate application.
+Port 443 Reuse continues to use `acme.sh + Cloudflare DNS API` to issue and install web domain certificates. Do not use the Caddy DNS module, do not require `xcaddy`, and do not let Caddy be responsible for the DNS-01 certificate application.
 
 DNS-01 Verifies domain control through the `_acme-challenge` TXT record. Cloudflare Chengyun itself is not the direct cause of the `dns_cf` issuance failure; if the issuance fails, you should first check the Token permissions, authorization zone, TXT propagation, server time and acme.sh logs. Orange Cloud will still change the source IP of web requests, and is not suitable for REALITY/node domains that need to be directly connected to VPS, so "certificate issuance" and "public internet access link" must be checked separately.
 
-The certificate selection that appears during the 3x-ui installation phase is only to complete the 3x-ui installation process; it is not the certificate scheme ultimately used by shared port 443. The final architecture is: the public HTTPS is uniformly processed by the current Web reverse proxy engine, and the 3x-ui panel and subscription only serve as the local HTTP backend.
+The certificate selection that appears during the 3x-ui installation phase is only to complete the 3x-ui installation process; it is not the certificate scheme ultimately used by Port 443 Reuse. The final architecture is: the public HTTPS is uniformly processed by the current Web reverse proxy engine, and the 3x-ui panel and subscription only serve as the local HTTP backend.
 
 ## domain IP whitelist
 
@@ -314,9 +314,9 @@ The implementation of the two deployment methods is different:
 
 | Deployment method | Use the entrance | Effective position | Scope of influence |
 | --- | --- | --- | --- |
-| shared port 443 is not enabled, only Caddy/Nginx is used for reverse proxy | Use `Main menu [4 reverse proxy] -> [1 add Caddy reverse proxy]` or `[2 add Nginx HTTPS reverse proxy]` when adding a new domain; use `[4] -> [5 domain IP whitelist]` for existing domains; use `[4] -> [6 View or edit applied configuration files]` for direct editing and configuration | Caddy The current domain site block uses `remote_ip` for matching; Nginx HTTPS uses `allow/deny` for reverse proxy | Only affects the current Caddy/Nginx web domain |
-| Enabled 443 Nginx Stream shared entry | `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy] -> [5 Manage domains IP whitelist]` | Nginx stream entrance layer, judge by `SNI + source IP` | Only affects the selected SNI domain |
-| Enabled 443 TCP Peek + Splice shared entry | `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy] -> [5 Manage domains IP whitelist]` | vpso-mux entrance layer, judge by `SNI + source IP` | Only affects the selected SNI domain |
+| Port 443 Reuse is not enabled, only Caddy/Nginx is used for reverse proxy | Use `Main menu [4 reverse proxy] -> [1 add Caddy reverse proxy]` or `[2 add Nginx HTTPS reverse proxy]` when adding a new domain; use `[4] -> [5 domain IP whitelist]` for existing domains; use `[4] -> [6 View or edit applied configuration files]` for direct editing and configuration | Caddy The current domain site block uses `remote_ip` for matching; Nginx HTTPS uses `allow/deny` for reverse proxy | Only affects the current Caddy/Nginx web domain |
+| Enabled 443 Nginx Stream Port 443 Reuse | `Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy] -> [5 Manage domains IP whitelist]` | Nginx stream entrance layer, judge by `SNI + source IP` | Only affects the selected SNI domain |
+| Enabled 443 TCP Peek + Splice Port 443 Reuse | `Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy] -> [5 Manage domains IP whitelist]` | vpso-mux entrance layer, judge by `SNI + source IP` | Only affects the selected SNI domain |
 | `xray-fallback`, whether using Caddy or Nginx local web reverse proxy | Do not allow new, retained or applied web whitelists | Use is prohibited; the local web reverse proxy engine cannot reliably obtain the real client source IP after Xray fallback | For whitelist, please switch to Nginx Stream or TCP Peek |
 
 Whitelisting supports individual IPs and CIDRs, such as:
@@ -374,9 +374,9 @@ Follow this order to avoid getting dizzy:
 2. Installation 3x-ui
 3. Use 3x-ui as a local HTTP backend
 4. Configure the REALITY inbound
-5. Open `Main menu [19 443 shared entry manager] -> [2 initial setup/installation 443 shared entry]`
+5. Open `Main menu [19 Port 443 Reuse manager] -> [2 initial setup/installation Port 443 Reuse]`
 6. Return to 3x-ui and confirm local listeners, subscription fields, and Hosts / External Proxy
-7. Open `Main menu [19 443 shared entry manager] -> [13 443 Connection health check]`
+7. Open `Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]`
 ```
 
 ### 1. Install 3x-ui
@@ -397,7 +397,7 @@ Certificate domain：panel.example.com
 Whether to set it to the panel：You can choose to be
 ```
 
-The above values are just examples, please replace them with your actual domains. When the shared port 443 is officially connected later, the certificate path of 3x-ui needs to be cleared and the web reverse proxy engine can take over the public HTTPS.
+The above values are just examples, please replace them with your actual domains. When the Port 443 Reuse is officially connected later, the certificate path of 3x-ui needs to be cleared and the web reverse proxy engine can take over the public HTTPS.
 
 It is recommended to customize these values and write them down:
 
@@ -419,7 +419,7 @@ If your port or path is different, replace it with your own value. The panel pat
 
 ### 2. Clear the 3x-ui panel certificate
 
-As long as you are ready to access the shared port 443 of VPS-Optimize, you should clear the 3x-ui panel and subscription certificate path and let the Web reverse proxy engine take over the public HTTPS.
+As long as you are ready to access the Port 443 Reuse of VPS-Optimize, you should clear the 3x-ui panel and subscription certificate path and let the Web reverse proxy engine take over the public HTTPS.
 
 Enter:
 
@@ -446,7 +446,7 @@ After clearing, the 3x-ui panel only serves as the native HTTP backend:
 http://127.0.0.1:40000/panel/
 ```
 
-The public internet only accesses shared port 443 address: `https://panel.example.com/panel/`.
+The public internet only accesses Port 443 Reuse address: `https://panel.example.com/panel/`.
 
 ### 3. Clear 3x-ui subscription certificate
 
@@ -456,7 +456,7 @@ Enter:
 The `subCertFile` and `subKeyFile` fields in Subscription Settings
 ```
 
-Also clear the certificate path and private key path. After accessing the shared port 443, the subscription to the public HTTPS is also uniformly processed by the current Web reverse proxy engine, and the 3x-ui subscription service only serves as the local HTTP backend.
+Also clear the certificate path and private key path. After accessing the Port 443 Reuse, the subscription to the public HTTPS is also uniformly processed by the current Web reverse proxy engine, and the 3x-ui subscription service only serves as the local HTTP backend.
 
 Then set up the subscription service:
 
@@ -515,7 +515,7 @@ node.example.com:443
 To modify REALITY SNI later, you can do:
 
 ```text
-Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [2 Modify REALITY local listener / camouflage SNI]
+Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings] -> [2 Modify REALITY local listener / camouflage SNI]
 ```
 
 ### 5. Run 443 First Configuration
@@ -523,7 +523,7 @@ Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [2
 After confirming that the panel certificate and subscription certificate are cleared, run:
 
 ```text
-Main menu [19 443 shared entry manager] -> [2 initial setup/installation 443 shared entry]
+Main menu [19 Port 443 Reuse manager] -> [2 initial setup/installation Port 443 Reuse]
 ```
 
 Example to fill in:
@@ -609,7 +609,7 @@ After saving, copy the node link again. The port should be `:443`. If it is stil
 Finally run:
 
 ```text
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 ## Follow-up maintenance
@@ -618,16 +618,16 @@ Don't rerun the first configuration just for small changes. Commonly used entran
 
 | what do you want to do | entrance |
 | --- | --- |
-| Add a new website or reverse domain | `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy]` |
-| Switch Caddy/Nginx Web reverse proxy engine | `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy] -> [8 switch Web reverse proxy engine]` |
-| Check 443 link | `Main menu [19 443 shared entry manager] -> [13 443 Connection health check]` |
-| Modify panel/subscription port and path | `Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [1 Edit panel/subscription ports and paths]` |
-| Modify REALITY local binding/disguise SNI | `Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [2 Modify REALITY local listener / camouflage SNI]` |
-| Modify Nginx/Web reverse proxy binding | `Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [3 Modify Nginx public internet entry / Web anti-local TLS]` |
-| Modify panel domain | `Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy] -> [9 Edit panel domain]` |
-| Reapply current configuration | `Main menu [19 443 shared entry manager] -> [10 Modify 443 shared settings] -> [5 Reapply saved configuration]` |
-| Certificate maintenance | `Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance]` |
-| Rollback shared port 443 configuration | Rollback entry in `Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance]` |
+| Add a new website or reverse domain | `Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy]` |
+| Switch Caddy/Nginx Web reverse proxy engine | `Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy] -> [8 switch Web reverse proxy engine]` |
+| Check 443 link | `Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]` |
+| Modify panel/subscription port and path | `Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings] -> [1 Edit panel/subscription ports and paths]` |
+| Modify REALITY local binding/disguise SNI | `Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings] -> [2 Modify REALITY local listener / camouflage SNI]` |
+| Modify Nginx/Web reverse proxy binding | `Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings] -> [3 Modify Nginx public internet entry / Web anti-local TLS]` |
+| Modify panel domain | `Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy] -> [9 Edit panel domain]` |
+| Reapply current configuration | `Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings] -> [5 Reapply saved configuration]` |
+| Certificate maintenance | `Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance]` |
+| Rollback Port 443 Reuse configuration | Rollback entry in `Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance]` |
 
 When adding a new website/reverse proxy, fill in the backend accessible to the current VPS. The Docker service can first publish the container port to `127.0.0.1`:
 
@@ -649,7 +649,7 @@ Services suitable for integration include SublinkPro, Sub-Store, Dockge, Komari,
 
 ## Debug entry
 
-If you encounter panel failure to open, subscription 404, certificate failure, a port conflict, or REALITY connection failure, see [Shared Port 443 Troubleshooting](443-single-entry-troubleshooting.md).
+If you encounter panel failure to open, subscription 404, certificate failure, a port conflict, or REALITY connection failure, see [Port 443 Reuse Troubleshooting](443-single-entry-troubleshooting.md).
 
 ## A complete set of examples for reference only
 

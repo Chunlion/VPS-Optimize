@@ -21,13 +21,13 @@ func_xpanel() {
         1|latest|最新版)
             install_desc="$(localized_text "安装 3x-ui / x-ui 面板（最新版）" "Install 3x-ui / x-ui panel (latest version)" "Установите панель 3x-ui/x-ui (последняя версия)")"
             install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
-            ssl_hint="$(localized_text "最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。443 单入口由本脚本的 Caddy + acme.sh 托管公网证书。" "When the latest 3.x installer asks about SSL, choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. The shared 443 entry uses this script's Caddy + acme.sh for public certificates." "Когда установщик 3.x спросит об SSL, выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Публичные сертификаты общей точки входа 443 обслуживают Caddy + acme.sh этого сценария.")"
+            ssl_hint="$(localized_text "最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。443端口复用由本脚本的 Caddy + acme.sh 托管公网证书。" "When the latest 3.x installer asks about SSL, choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. The Port 443 Reuse uses this script's Caddy + acme.sh for public certificates." "Когда установщик 3.x спросит об SSL, выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Публичные сертификаты повторного использования порта 443 обслуживают Caddy + acme.sh этого сценария.")"
             ;;
         2|2.9.4|v2.9.4)
             install_desc="$(localized_text "安装 3x-ui / x-ui 面板（v2.9.4）" "Install 3x-ui / x-ui panel (v2.9.4)" "Установите панель 3x-ui/x-ui (v2.9.4)")"
             install_url="https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh"
             install_args=("v2.9.4")
-            ssl_hint="$(localized_text "v2.9.4 属于 2.x 老流程：如果安装器或面板里已经设置过 SSL 证书，后续 443 单入口向导会继续按旧方式清空面板/订阅证书路径。" "v2.9.4 belongs to the 2.x old process: if the SSL certificate has been set in the installer or panel, the subsequent 443 Shared Entry Wizard will continue to clear the panel/subscription certificate path in the old way." "Версия 2.9.4 принадлежит старому процессу 2.x: если сертификат SSL был установлен в установщике или панели, последующие 443 мастера с общей точкой входа продолжат очищать путь к сертификату панели/подписки старым способом.")"
+            ssl_hint="$(localized_text "v2.9.4 属于 2.x 老流程：如果安装器或面板里已经设置过 SSL 证书，后续 443端口复用向导会继续按旧方式清空面板/订阅证书路径。" "v2.9.4 belongs to the 2.x old process: if the SSL certificate has been set in the installer or panel, the subsequent Port 443 Reuse Wizard will continue to clear the panel/subscription certificate path in the old way." "Версия 2.9.4 принадлежит старому процессу 2.x: если сертификат SSL был установлен в установщике или панели, последующие 443 мастера с повторным использованием порта 443 продолжат очищать путь к сертификату панели/подписки старым способом.")"
             ;;
         0|q|Q)
             echo -e "$(localized_text "${BLUE}已取消安装。${PLAIN}" "${BLUE}Installation has been canceled.${PLAIN}" "${BLUE}Установка отменена.${PLAIN}")"

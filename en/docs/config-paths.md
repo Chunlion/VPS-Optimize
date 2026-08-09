@@ -12,8 +12,8 @@ The menu path in this article is written in the format of "main menu [number men
 | View backup list | `Main menu [16 Configuration backup and rollback] -> [2 View existing backups]` |
 | Rollback from backup | `Main menu [16 Configuration backup and rollback] -> [3 Restore from backup]` |
 | View/edit script applied configuration | `Main menu [16 Configuration backup and rollback] -> [5 View or edit applied configuration]` |
-| 443 Link health check | `Main menu [19 443 shared entry manager] -> [13 443 Connection health check]` |
-| Caddy/certificate health check | `Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [13 Caddy/Certificate one-click health check]` |
+| 443 Link health check | `Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]` |
+| Caddy/certificate health check | `Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [13 Caddy/Certificate one-click health check]` |
 | Generate feedback diagnostic information | `Main menu [15 Service health overview]` |
 | Restart common services | `Main menu [15 Service health overview] -> [s Service recovery] -> [r Restart a common service]` |
 | Restart failed service | `Main menu [15 Service health overview] -> [s Service recovery] -> [f Restart failed services]` |
@@ -32,7 +32,7 @@ The menu path in this article is written in the format of "main menu [number men
 | `vps.sh` of the current directory | Manually download the runtime script file |
 | `/etc/vps-optimize` | VPS-Optimize configuration, backup index and quarantine directory |
 | `/etc/vps-optimize/language.conf` | Interface language setting; supports `LANGUAGE=zh`, `LANGUAGE=en`, `LANGUAGE=ru` |
-| `/etc/vps-optimize/backups` | Full backup and shared port 443 point backup directories |
+| `/etc/vps-optimize/backups` | Full backup and Port 443 Reuse point backup directories |
 | `/etc/vps-optimize/quarantine` | Isolate directory. The script tries to move old configurations here instead of deleting them directly. |
 
 Commonly used checks:
@@ -43,15 +43,15 @@ find /etc/vps-optimize/backups -maxdepth 2 -type d 2>/dev/null
 find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 ```
 
-## shared port 443
+## Port 443 Reuse
 
 | path | Description |
 |---|---|
-| `/etc/vps-optimize/sni-stack.env` | shared port 443 point saved core parameters, `ENTRY_MODE` uses `nginx-stream` / `xray-fallback` / `tcp-peek` |
-| `/etc/vps-optimize/443-engine.conf` | Current shared port 443 point engine status, default `nginx-stream` |
+| `/etc/vps-optimize/sni-stack.env` | Port 443 Reuse point saved core parameters, `ENTRY_MODE` uses `nginx-stream` / `xray-fallback` / `tcp-peek` |
+| `/etc/vps-optimize/443-engine.conf` | Current Port 443 Reuse point engine status, default `nginx-stream` |
 | `/etc/vps-optimize/vpso-mux.yaml` | `tcp-peek` / `vpso-mux` routing configuration |
-| `/etc/vps-optimize/sni-stack.last-backup` | The most recent shared port 443 point backup path record |
-| `/etc/vps-optimize/backups/sni-stack_*` | shared port 443 automatic backup directory |
+| `/etc/vps-optimize/sni-stack.last-backup` | The most recent Port 443 Reuse point backup path record |
+| `/etc/vps-optimize/backups/sni-stack_*` | Port 443 Reuse automatic backup directory |
 | `/etc/nginx/stream.d/vps_sni_*.conf` | Nginx stream SNI routing configuration |
 | `/etc/caddy/conf.d/<domain>.caddy` | Caddy single domain reverse proxy configuration |
 | `/etc/caddy/certs/<domain>.crt` | Certificate chain used by Caddy |
@@ -83,9 +83,9 @@ Related entrances:
 
 ```text
 Main menu [16 Configuration backup and rollback] -> [5 View or edit applied configuration]
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
-Main menu [19 443 shared entry manager] -> [6 Reapply current entry mode]
-Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
+Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance]
 ```
 
 ## Caddy
@@ -116,10 +116,10 @@ Main menu [4 reverse proxy] -> [2 add Nginx HTTPS reverse proxy]
 Main menu [4 reverse proxy] -> [6 View or edit applied configuration files]
 ```
 
-If the 443 shared entry has been enabled, the new website portal is:
+If the Port 443 Reuse has been enabled, the new website portal is:
 
 ```text
-Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy]
+Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy]
 ```
 
 ## Nginx
@@ -127,8 +127,8 @@ Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse p
 | path | Description |
 |---|---|
 | `/etc/nginx/nginx.conf` | Nginx main configuration |
-| `/etc/nginx/stream.d` | shared port 443 stream configuration directory |
-| `/etc/nginx/stream.d/vps_sni_*.conf` | shared port 443 SNI split configuration |
+| `/etc/nginx/stream.d` | Port 443 Reuse stream configuration directory |
+| `/etc/nginx/stream.d/vps_sni_*.conf` | Port 443 Reuse SNI split configuration |
 | `/etc/nginx/conf.d/00-vps-default-drop.conf` | Default discard site configuration, used to reduce default site exposure when present |
 | `/etc/nginx/conf.d/00-vps-proxy-map.conf` | Nginx HTTPS Reverse WebSocket Connection variable mapping |
 | `/etc/nginx/conf.d/vps_proxy_*.conf` | Nginx HTTPS reverse proxy site configuration |
@@ -145,7 +145,7 @@ journalctl -u nginx -n 100 --no-pager
 grep -R "listen" /etc/nginx 2>/dev/null
 ```
 
-443 In shared entry mode, Internet `443` should only be bound by the shared entry service corresponding to the current `ENTRY_MODE`: `nginx-stream` corresponds to `nginx`, and `xray-fallback` corresponds to Xray / 3x-ui / x-ui hosted Xray, `tcp-peek` correspond to `tcppeek` / `vpso-mux`. If `/etc/vps-optimize/sni-stack.env` does not have `ENTRY_MODE`, the script reads compatible with `nginx-stream`.
+443 In Port 443 Reuse mode, Internet `443` should only be bound by the Port 443 Reuse service corresponding to the current `ENTRY_MODE`: `nginx-stream` corresponds to `nginx`, and `xray-fallback` corresponds to Xray / 3x-ui / x-ui hosted Xray, `tcp-peek` correspond to `tcppeek` / `vpso-mux`. If `/etc/vps-optimize/sni-stack.env` does not have `ENTRY_MODE`, the script reads compatible with `nginx-stream`.
 
 ## Cloudflare Token
 
@@ -171,7 +171,7 @@ Do not post file content to Issues or public chats.
 Update entry:
 
 ```text
-Main menu [19 443 shared entry manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [8 update Cloudflare API Token]
+Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [8 update Cloudflare API Token]
 ```
 
 ## 3x-ui / x-ui

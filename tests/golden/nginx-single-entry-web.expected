@@ -1,4 +1,4 @@
-# Managed by VPS-Optimize 443 single-entry. Local HTTPS Web proxy only.
+# Managed by VPS-Optimize Port 443 Reuse. Local HTTPS Web proxy only.
 server {
     listen 127.0.0.1:8443 ssl http2;
     server_name panel.example.com;

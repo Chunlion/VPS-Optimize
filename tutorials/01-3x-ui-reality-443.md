@@ -1,4 +1,4 @@
-# 3x-ui + REALITY：共享 443 部署指南
+# 3x-ui + REALITY：443端口复用部署指南
 
 本教程说明如何让 3x-ui 面板、订阅、网站和 REALITY 共用公网 `443`。
 
@@ -10,8 +10,8 @@
 
 本地后端尽量只监听 `127.0.0.1`。
 
-- [共享 443 配置指南](../docs/443-single-entry.md)
-- [共享 443 排错指南](../docs/443-single-entry-troubleshooting.md)
+- [443端口复用配置指南](../docs/443-single-entry.md)
+- [443端口复用排错指南](../docs/443-single-entry-troubleshooting.md)
 
 ## 示例说明
 
@@ -56,7 +56,7 @@ Cloudflare 建议：
 | 预检和基础准备 | 5-10 分钟 |
 | 安装/配置 3x-ui | 10-20 分钟 |
 | 配置 REALITY 入站 | 5-10 分钟 |
-| 首次配置 443 单入口 | 10-20 分钟 |
+| 首次配置 443端口复用 | 10-20 分钟 |
 | 验证和备份 | 5-10 分钟 |
 
 ## 会修改哪些东西
@@ -64,7 +64,7 @@ Cloudflare 建议：
 | 项目 | 修改内容 | 风险 |
 |---|---|---|
 | 3x-ui | 面板端口、路径、证书路径、订阅设置、REALITY 入站 | 面板路径或证书设置错会打不开 |
-| 当前 443 入口服务 | 公网 `443` 单入口接管和分流 | 端口冲突会导致当前入口模式切换或启动失败 |
+| 当前 443 入口服务 | 公网 `443` 端口复用接管和分流 | 端口冲突会导致当前入口模式切换或启动失败 |
 | 当前 Web 反代引擎 | 本地 HTTPS 反代和证书 | 配置错会 404/502/证书失败 |
 | Xray/REALITY | 本地监听和伪装 SNI | SNI 写错会连接失败 |
 | 防火墙 | 建议只保留 SSH 和公网 `443` | 误删端口会断连 |
@@ -96,7 +96,7 @@ site.example.com -> Caddy/Nginx 本地 Web 反代 -> 本地网站后端
 
 `Xray 入站管理` 只记录 `SNI -> 本地地址:端口`，不是 3x-ui 入站编辑器；需要先在 3x-ui 中创建并启用本地入站。Nginx Stream 模式和 TCP Peek + Splice 模式支持多个本地 Xray 入站按 SNI 分流；Xray 本身可以有多个入站，但 xray-fallback 模式下公网 `443` 默认由一个 Xray 主入站接管，脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。
 
-普通 TLS 和 REALITY 要分开判断：普通 TLS 更关注本机证书、Web fallback、Host/SNI 是否匹配；REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定，不要求 REALITY `serverName` 加入 Web 反代引擎，也不要求本机证书覆盖 REALITY `serverName`。证书策略仍然使用 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。3x-ui 安装阶段选择的证书只用于完成安装流程，不是 443 单入口最终使用的证书方案。
+普通 TLS 和 REALITY 要分开判断：普通 TLS 更关注本机证书、Web fallback、Host/SNI 是否匹配；REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定，不要求 REALITY `serverName` 加入 Web 反代引擎，也不要求本机证书覆盖 REALITY `serverName`。证书策略仍然使用 `acme.sh + Cloudflare DNS API`，不使用 Caddy DNS 模块，也不需要 `xcaddy`。3x-ui 安装阶段选择的证书只用于完成安装流程，不是 443端口复用最终使用的证书方案。
 
 ## 操作步骤
 
@@ -124,7 +124,7 @@ site.example.com -> Caddy/Nginx 本地 Web 反代 -> 本地网站后端
 ss -lntp | grep ':443' || echo "443 未监听"
 ```
 
-如果已有 Caddy/Nginx/Apache 占用公网 `443`，先记录现有站点域名和后端端口，后续通过 `主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]` 重新补录。
+如果已有 Caddy/Nginx/Apache 占用公网 `443`，先记录现有站点域名和后端端口，后续通过 `主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]` 重新补录。
 
 ### 2. 安装或进入 3x-ui
 
@@ -134,7 +134,7 @@ ss -lntp | grep ':443' || echo "443 未监听"
 主菜单 [5 面板、节点与订阅工具] -> [1 3x-ui 面板脚本]
 ```
 
-如果未安装，选择安装 3x-ui。当前官方安装器的第 4 项是 `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)`。本教程使用 443 单入口时，应选择该项；随后如果询问是否仅绑定 `127.0.0.1`，输入 `y`。
+如果未安装，选择安装 3x-ui。当前官方安装器的第 4 项是 `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)`。本教程使用 443端口复用时，应选择该项；随后如果询问是否仅绑定 `127.0.0.1`，输入 `y`。
 
 风险：只有已使用反向代理或 SSH 隧道时才能选择 Skip SSL。这里应立即让面板只监听本机，不要暴露未加密的公网 HTTP 面板端口。
 
@@ -163,7 +163,7 @@ ss -lntp | grep ':443' || echo "443 未监听"
 
 ### 3. 清空 3x-ui 面板证书路径
 
-只要你准备接入 VPS-Optimize 的 443 单入口，就应清空 3x-ui 面板和订阅证书路径，让 Web 反代引擎接管公网 HTTPS。
+只要你准备接入 VPS-Optimize 的 443端口复用，就应清空 3x-ui 面板和订阅证书路径，让 Web 反代引擎接管公网 HTTPS。
 
 进入 3x-ui 面板：
 
@@ -182,7 +182,7 @@ ss -lntp | grep ':443' || echo "443 未监听"
 
 保存并重启面板。
 
-原因：接入 443 单入口后，公网 HTTPS 由 Web 反代引擎处理，3x-ui 面板只做本地 HTTP 后端。如果不清空，可能导致 502 Bad Gateway、HTTP/HTTPS 后端协议不匹配、重定向循环、证书路径混乱、面板或订阅异常。
+原因：接入 443端口复用后，公网 HTTPS 由 Web 反代引擎处理，3x-ui 面板只做本地 HTTP 后端。如果不清空，可能导致 502 Bad Gateway、HTTP/HTTPS 后端协议不匹配、重定向循环、证书路径混乱、面板或订阅异常。
 
 ### 4. 设置面板监听
 
@@ -195,7 +195,7 @@ ss -lntp | grep ':443' || echo "443 未监听"
 | `webBasePath` | `/panel/` |
 | `webCertFile` / `webKeyFile` | 清空 |
 
-接入 443 单入口前就应改成 `127.0.0.1` 本地监听并关闭面板 HTTPS；公网访问只走 443 单入口和 Web 反代引擎，不保留面板公网端口作为过渡。
+接入 443端口复用前就应改成 `127.0.0.1` 本地监听并关闭面板 HTTPS；公网访问只走 443端口复用和 Web 反代引擎，不保留面板公网端口作为过渡。
 
 验证本地后端：
 
@@ -268,12 +268,12 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 
 新版 3x-ui 的 `Min Client Ver` 留空并不代表“不限版本”，而是使用 Xray core 的内置最低版本。第三方客户端无法连接时，先升级客户端核心；只有确认兼容性需求并接受旧指纹的风险后，再考虑设为 `1.0.0`。
 
-### 7. 首次配置 443 单入口
+### 7. 首次配置 443端口复用
 
 进入：
 
 ```text
-主菜单 [19 443 单入口管理中心] -> [2 安装 / 切换 443 入口模式]
+主菜单 [19 443端口复用管理中心] -> [2 安装 / 切换 443 入口模式]
 ```
 
 示例填写：
@@ -311,7 +311,7 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 进入：
 
 ```text
-主菜单 [19 443 单入口管理中心] -> [13 443 链路体检]
+主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]
 ```
 
 体检会检查当前入口服务、Web 反代引擎、REALITY、面板后端、3x-ui 面板/订阅证书路径残留和安全项。
@@ -420,7 +420,7 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 菜单验证：
 
 ```text
-主菜单 [19 443 单入口管理中心] -> [13 443 链路体检]
+主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]
 主菜单 [15 服务健康总览]
 ```
 
@@ -430,7 +430,7 @@ openssl s_client -connect 服务器IP:443 -servername panel.example.com </dev/nu
 |---|---|
 | Nginx/Caddy 配置写入后失败 | 脚本会尽量自动回滚到本次备份 |
 | 面板打不开 | `主菜单 [5 面板、节点与订阅工具] -> [3 面板 SSL 修复]` 清理面板 SSL，再检查本地端口 |
-| 证书失败 | `主菜单 [19 443 单入口管理中心] -> [12 CF DNS / Caddy 证书维护]` 检查 Token、DNS、重签证书 |
+| 证书失败 | `主菜单 [19 443端口复用管理中心] -> [12 CF DNS / Caddy 证书维护]` 检查 Token、DNS、重签证书 |
 | 443 被占用 | `ss -lntp | grep ':443'` 找占用方，再调整为本地监听 |
 | 订阅 404 | 检查 3x-ui 订阅路径和当前 Web 反代引擎路径是否一致 |
 | REALITY 失败 | 检查 REALITY 本地监听、SNI、dest 和客户端节点端口 |

@@ -1,10 +1,10 @@
 # shellcheck shell=bash
-# 443 single entry point collection, installation, rendering, certificates, and runtime apply flows.
+# Port 443 Reuse collection, installation, rendering, certificates, and runtime apply flows.
 
 collect_sni_stack_config() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}443 单入口共享配置${PLAIN}" "${BOLD}443 shared entry shared configuration${PLAIN}" "${BOLD}443 Общая конфигурация с одним входом${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}443端口复用配置${PLAIN}" "${BOLD}Port 443 Reuse configuration${PLAIN}" "${BOLD}Конфигурация повторного использования порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}公网 443 将由你选择的入口模式监听；Web 域名、反代引擎、证书和白名单为三种模式共享。${PLAIN}" "${YELLOW}Public port 443 will be monitored by the entry mode you choose; the web domain, reverse proxy engine, certificate and whitelist are shared by the three modes.${PLAIN}" "${YELLOW}Публичный порт  443 будет контролироваться выбранным вами режимом входа; имя веб-домена, механизм обратного прокси-сервера, сертификат и белый список являются общими для всех трех режимов.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}Web 反代引擎、Xray/3x-ui 本地后端默认绑定 127.0.0.1。${PLAIN}" "${YELLOW}Web reverse proxy engine and Xray/3x-ui local backend are bound to 127.0.0.1 by default.${PLAIN}" "${YELLOW}Механизм обратный прокси Web и локальный бэкэнд Xray/3x-ui по умолчанию привязаны к 127.0.0.1.${PLAIN}")"
@@ -35,8 +35,8 @@ collect_sni_stack_config() {
     PANEL_DOMAIN="$panel_domain_input"
     local web_engine_choice
     WEB_PROXY_ENGINE="caddy"
-    echo -e "$(localized_text "${CYAN}请选择 443 单入口 Web 反代引擎：${PLAIN}" "${CYAN}Please select 443 shared entry Web reverse proxy engine:${PLAIN}" "${CYAN}Выберите механизм веб-прокси с общей точкой входа 443:${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}  1. Caddy 本地 HTTPS 反代${PLAIN} ${YELLOW}(默认，兼容现有 443 单入口配置)${PLAIN}" "${GREEN}1. Caddy local HTTPS reverse proxy   (default, compatible with existing 443 shared entry configuration)${PLAIN}" "${GREEN}1. Caddy локальный HTTPS обратный прокси (по умолчанию, совместимо с существующей конфигурацией 443 с общей точкой входа)${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}请选择 443端口复用 Web 反代引擎：${PLAIN}" "${CYAN}Please select Port 443 Reuse Web reverse proxy engine:${PLAIN}" "${CYAN}Выберите механизм веб-прокси с повторным использованием порта 443:${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  1. Caddy 本地 HTTPS 反代${PLAIN} ${YELLOW}(默认，兼容现有 443端口复用配置)${PLAIN}" "${GREEN}1. Caddy local HTTPS reverse proxy   (default, compatible with existing Port 443 Reuse configuration)${PLAIN}" "${GREEN}1. Caddy локальный HTTPS обратный прокси (по умолчанию, совместимо с существующей конфигурацией повторного использования порта 443)${PLAIN}")"
     echo -e "$(localized_text "${GREEN}  2. Nginx 本地 HTTPS 反代${PLAIN} ${YELLOW}(只监听本地端口，不抢公网 443)${PLAIN}" "${GREEN}2. Nginx local HTTPS reverse proxy (only listens to the local port, does not grab the public port 443)${PLAIN}" "${GREEN}2. Nginx локальный HTTPS обратный прокси-сервер   (прослушивает только локальный порт и не захватывает публичный порт 443)${PLAIN}")"
     read_trimmed web_engine_choice "$(localized_text "请选择 Web 反代引擎（默认 1）: " "Please select a web reverse proxy engine (default 1):" "Пожалуйста, выберите механизм веб-прокси (по умолчанию 1):")"
     case "${web_engine_choice:-1}" in
@@ -119,7 +119,7 @@ collect_sni_stack_config() {
         done
     fi
 
-    echo -e "$(localized_text "${YELLOW}443 单入口需要 3x-ui 面板/订阅后端使用 HTTP，由 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 统一托管公网证书。${PLAIN}" "${YELLOW}443 shared entry requires the 3x-ui panel/subscription backend to use HTTP, which will centrally manage the public certificate.${PLAIN}" "${YELLOW}Для единого входа 443 требуется, чтобы бэкенд панели/подписки 3x-ui использовала HTTP, который будет централизованно управлять сертификатом публичной сети.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}443端口复用需要 3x-ui 面板/订阅后端使用 HTTP，由 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 统一托管公网证书。${PLAIN}" "${YELLOW}Port 443 Reuse requires the 3x-ui panel/subscription backend to use HTTP, which will centrally manage the public certificate.${PLAIN}" "${YELLOW}Для повторного использования порта 443 требуется, чтобы бэкенд панели/подписки 3x-ui использовала HTTP, который будет централизованно управлять сертификатом публичной сети.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}本向导会让 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}" "${YELLOW}This wizard will allow $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") to connect ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} and ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} through HTTP.${PLAIN}" "${YELLOW}Этот мастер позволит $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") соединить ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} и ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} через HTTP.${PLAIN}")"
     echo -e "$(localized_text "${CYAN}证书处理分两种情况：${PLAIN}" "${CYAN}Certificate processing is divided into two situations:${PLAIN}" "${CYAN}Обработка сертификата делится на две ситуации:.${PLAIN}")"
     echo -e "$(localized_text "  3x-ui 3.x 新安装：在官方安装器选第 4 项 Skip SSL，再选 y 仅绑定 127.0.0.1；本步骤只做兜底检查。" "  New 3x-ui 3.x installation: choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. This step is only a fallback check." "  Новая установка 3x-ui 3.x: выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Этот шаг выполняет только проверку.")"
@@ -667,7 +667,7 @@ write_nginx_single_443_web_config() {
     mkdir -p "$(dirname "$conf_file")" || return 1
 
     cat <<EOF > "$conf_file"
-# Managed by VPS-Optimize 443 single-entry. Local HTTPS Web proxy only.
+# Managed by VPS-Optimize Port 443 Reuse. Local HTTPS Web proxy only.
 server {
 $(nginx_http_listen_directive "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
     server_name ${PANEL_DOMAIN};
@@ -995,7 +995,7 @@ print_sni_stack_result() {
     done
 
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${GREEN}✅ 443 单入口分流配置完成${PLAIN}" "${GREEN}✅ 443 Shared entry route configuration completed${PLAIN}" "${GREEN}443 Конфигурация маршрутизации с одним входом завершена${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}✅ 443端口复用配置完成${PLAIN}" "${GREEN}✅ Port 443 Reuse route configuration completed${PLAIN}" "${GREEN}Конфигурация маршрутизации повторного использования порта 443 завершена${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "当前入口模式：${entry_label} (${entry_mode})" "Current entry mode: ${entry_label} (${entry_mode})" "Текущий режим ввода: ${entry_label} (${entry_mode})")"
     echo -e "$(localized_text "当前 Web 反代引擎：${web_label} (${web_engine})" "Current web reverse proxy engine: ${web_label} (${web_engine})" "Текущий движок веб-прокси: ${web_label} (${web_engine})")"
@@ -1120,7 +1120,7 @@ apply_sni_stack_runtime_config() {
 
     create_sni_stack_backup
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
-    guard_current_ssh_not_on_entry_port "$(localized_text "重新应用 443 单入口运行参数" "Reapply 443 Shared Entry Run Parameters" "Повторно применить 443 отдельных рабочих параметра")" || return 1
+    guard_current_ssh_not_on_entry_port "$(localized_text "重新应用 443端口复用运行参数" "Reapply Port 443 Reuse Run Parameters" "Повторно применить 443 отдельных рабочих параметра")" || return 1
     check_entry_mode_dependencies "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式依赖检查失败" "Entry mode dependency check failed" "Проверка зависимости режима входа не удалась")"; return 1; }
     preflight_entry_mode_before_cutover "$current_mode" || { echo -e "$(localized_text "${RED}❌ 入口模式 ${current_mode} 预检失败，公网 443 未重新应用。${PLAIN}" "${RED}❌ entry mode ${current_mode} Preflight failed, public port 443 was not reapplied.${PLAIN}" "${RED}❌ Режим входа ${current_mode} Не удалось выполнить предварительную проверку, конфигурация публичного порта 443 не была применена повторно.${PLAIN}")"; return 1; }
     stop_public_443_entry_services_for_target "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "停止旧公网 443 入口服务失败" "Stop the old public port 443 entry service failed" "Остановить старую публичную сеть 443, служба входа не удалась")"; return 1; }

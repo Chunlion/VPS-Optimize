@@ -41,7 +41,7 @@ Remove tokens, private keys, passwords, and full subscription links.
 
 ## 443 and Cloudflare details (if relevant)
 
-- Is shared port 443 enabled?
+- Is Port 443 Reuse enabled?
 - Is Cloudflare proxy enabled for the affected domain?
 
 ## Diagnostic output (optional)

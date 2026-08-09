@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# 443 single entry point secondary menus for sites, routes, and web whitelist controls.
+# Port 443 Reuse secondary menus for sites, routes, and web whitelist controls.
 
 manage_sni_stack_sites() {
     while true; do
@@ -7,7 +7,7 @@ manage_sni_stack_sites() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}🌐 443 网站/反代域名管理${PLAIN}" "${BOLD}🌐 443 Web domain and reverse-proxy management${PLAIN}" "${BOLD}🌐 443 Управление Web-доменами и обратным прокси${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}管理已配置 443 单入口的网站和反代域名。${PLAIN}" "${YELLOW}Manage Web domains and reverse proxies after shared port 443 is configured.${PLAIN}" "${YELLOW}Управляйте Web-доменами и обратными прокси после настройки общего порта 443.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}管理已配置 443端口复用的网站和反代域名。${PLAIN}" "${YELLOW}Manage Web domains and reverse proxies after Port 443 Reuse is configured.${PLAIN}" "${YELLOW}Управляйте Web-доменами и обратными прокси после настройки повторного использования порта 443.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}新增网站只需填写域名和本机后端端口，无需重跑首次配置。${PLAIN}" "${YELLOW}To add a site, enter its domain and local backend port; do not rerun initial setup.${PLAIN}" "${YELLOW}Для нового сайта укажите домен и локальный порт бэкенда; первоначальная настройка не нужна.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 查看当前网站/反代域名${PLAIN}" "${GREEN}1. View current Web domains/reverse proxies${PLAIN}" "${GREEN}1. Показать текущие Web-домены и обратные прокси${PLAIN}")"
@@ -16,7 +16,7 @@ manage_sni_stack_sites() {
         echo -e "$(localized_text "${GREEN}  4. 删除网站/反代域名${PLAIN}" "${GREEN}4. Remove a Web domain/reverse proxy${PLAIN}" "${GREEN}4. Удалить Web-домен и обратный прокси${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  5. 管理域名 IP 白名单${PLAIN}       ${YELLOW}(只限制被选择的域名)${PLAIN}" "${GREEN}5. Manage domain IP allowlists (selected domains only)${PLAIN}" "${GREEN}5. Управление IP-белым списком доменов (только выбранные домены)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}" "${GREEN}6. Reapply configuration and restart Nginx/Caddy${PLAIN}" "${GREEN}6. Повторно применить конфигурацию и перезапустить Nginx/Caddy${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. 443 单入口链路体检${PLAIN}" "${GREEN}7. Shared port 443 diagnostics${PLAIN}" "${GREEN}7. Диагностика общего порта 443${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. 443端口复用链路体检${PLAIN}" "${GREEN}7. Port 443 Reuse diagnostics${PLAIN}" "${GREEN}7. Диагностика повторного использования порта 443${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  8. 切换 Web 反代引擎${PLAIN}       ${YELLOW}(Caddy / Nginx 本地反代)${PLAIN}" "${GREEN}8. Switch the Web reverse-proxy engine (local Caddy/Nginx)${PLAIN}" "${GREEN}8. Сменить Web-движок обратного прокси (локальный Caddy/Nginx)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  9. 修改面板域名${PLAIN}" "${GREEN}9. Change the panel domain${PLAIN}" "${GREEN}9. Изменить домен панели${PLAIN}")"
         echo -e "------------------------------------------------"

@@ -6,7 +6,7 @@ show_main_help() {
         echo -e "${CYAN}VPS-Optimize > Главное меню > Справка${PLAIN}"
         echo "1/2 Проверка и первичная настройка нового сервера."
         echo "3   Установка Docker, Python, WARP и распространённых инструментов."
-        echo "4   Настройка обратного прокси Caddy/Nginx для сайтов и панелей вне единого входа 443."
+        echo "4   Настройка обратного прокси Caddy/Nginx для сайтов и панелей вне повторного использования порта 443."
         echo "5   Управление 3x-ui, S-UI, Sing-box, Xray и инструментами подписок."
         echo "6   Управление портом SSH, открытыми ключами и входом только по ключу."
         echo "8   Управление правилами брандмауэра, открытыми портами и лимитами соединений для каждого IP-адреса."
@@ -22,14 +22,14 @@ show_main_help() {
         echo -e "${CYAN}VPS-Optimize > Main menu > Help${PLAIN}"
         echo "1/2 Check and initialize a new server."
         echo "3   Install Docker, Python, WARP, and common tools."
-        echo "4   Configure Caddy/Nginx reverse proxies not using the shared 443 entry."
+        echo "4   Configure Caddy/Nginx reverse proxies not using the Port 443 Reuse."
         echo "5   Manage 3x-ui, S-UI, Sing-box, Xray, and subscription tools."
         echo "6   Manage the SSH port, public keys, and key-only login modes."
         echo "8   Manage firewall rules, allowed ports, and per-source IP connection limits."
         echo "10  Tune networking and the kernel, including BBR, TCP, ZRAM, and kernel cleanup."
         echo "15  View health status and generate diagnostic details for troubleshooting."
         echo "16  Create backups and roll back configuration before high-risk operations."
-        echo "19  Manage the shared public 443 entry for panels, subscriptions, and REALITY."
+        echo "19  Manage Port 443 Reuse for panels, subscriptions, and REALITY."
         echo "20  Select the interface language."
         echo "10 -> 5  Protect against traffic overages based on the billing cycle."
         echo "xcm opens the x-ui extension directly; it is also available through 5 -> 2."
@@ -38,14 +38,14 @@ show_main_help() {
         echo -e "${CYAN}VPS-Optimize > 主菜单 > 帮助${PLAIN}"
         echo "1/2 适合新机器先体检和初始化。"
         echo "3   基础组件与常用服务；安装 Docker、Python、WARP 和常用工具。"
-        echo "4   反代（Caddy/Nginx）；适合未接入 443 单入口的网站/面板反代。"
+        echo "4   反代（Caddy/Nginx）；适合未接入 443端口复用的网站/面板反代。"
         echo "5   管理 3x-ui、S-UI、Sing-box、Xray 和订阅工具。"
         echo "6   SSH 安全中心；管理端口、公钥和用户密钥登录模式。"
         echo "8   管理系统防火墙；支持端口放行、删除和每来源 IP 连接数限制。"
         echo "10  网络/内核优化；涉及 BBR、TCP、ZRAM 和内核清理。"
         echo "15  健康总览和反馈诊断信息，用于排错或提交 Issue。"
         echo "16  备份与回滚，高风险操作前建议先跑。"
-        echo "19  443 单入口管理中心，面板/订阅/REALITY 共用公网 443。"
+        echo "19  443端口复用管理中心，面板/订阅/REALITY 共用公网 443。"
         echo "20  选择界面语言。"
         echo "10 -> 5  流量达量保护，按账单周期防刷流量和超额账单。"
         echo "xcm 直达 x-ui 增强套件；也可走 5 -> 2。"
@@ -58,7 +58,7 @@ show_beginner_help() {
         echo -e "${CYAN}VPS-Optimize > Руководство для начинающих > Справка${PLAIN}"
         echo "1 Первичная настройка сервера в безопасном порядке: проверка, базовая настройка, SSH, ключи, Fail2ban, брандмауэр и резервная копия."
         echo "2 Открыть меню панелей, узлов и инструментов подписок."
-        echo "3 Открыть управление общим входом 443 для панелей, подписок и REALITY."
+        echo "3 Открыть управление повторным использованием порта 443 для панелей, подписок и REALITY."
         echo "4 Проверить службы, порты и сертификаты или создать диагностические данные."
         echo "5 Создать резервную копию или восстановить существующую."
         echo "? показывает справку; 0/q возвращает в главное меню."
@@ -66,7 +66,7 @@ show_beginner_help() {
         echo -e "${CYAN}VPS-Optimize > Beginner guide > Help${PLAIN}"
         echo "1 Initialize a new server in a safe order: preflight, base setup, SSH, keys, Fail2ban, firewall, and backup."
         echo "2 Open the panel, node, and subscription tools menu."
-        echo "3 Open the shared 443 entry manager for panels, subscriptions, and REALITY."
+        echo "3 Open the Port 443 Reuse manager for panels, subscriptions, and REALITY."
         echo "4 Check services, ports, and certificates, or generate diagnostic details."
         echo "5 Create a backup or restore an existing backup."
         echo "? shows help; 0/q returns to the main menu."
@@ -74,7 +74,7 @@ show_beginner_help() {
         echo -e "${CYAN}VPS-Optimize > 新手向导 > 帮助${PLAIN}"
         echo "1 新机器初始化：按安全顺序引导预检、初始化、SSH、公钥、Fail2ban、防火墙、备份。"
         echo "2 安装面板/节点：进入面板、节点与订阅工具菜单。"
-        echo "3 配置 443 单入口：进入 443 管理中心，适合面板、订阅和 REALITY 共用 443。"
+        echo "3 配置 443端口复用：进入 443 管理中心，适合面板、订阅和 REALITY 共用 443。"
         echo "4 健康检查：查看服务、端口、证书，并可生成反馈诊断信息。"
         echo "5 备份/回滚：创建备份或从已有备份恢复。"
         echo "? 查看帮助，0/q 返回主菜单。"
@@ -85,31 +85,31 @@ show_panel_help() {
     echo -e "$(localized_text "${CYAN}VPS-Optimize > 面板、节点与订阅工具 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Panels, Nodes and Subscription Tools > Help${PLAIN}" "${CYAN}VPS-Optimize > Панели, узлы и инструменты подписки > Справка${PLAIN}")"
     echo "$(localized_text "1 3x-ui：安装、官方菜单、面板修复。" "1 3x-ui: install, open the official menu, or repair the panel." "1 3x-ui: установка, официальное меню и восстановление панели.")"
     echo "$(localized_text "2 x-ui 增强：重置日期、校准流量、备份恢复、日志。" "2 x-ui extension: reset date, calibrate traffic, back up, restore, and view logs." "2 Расширение x-ui: сброс даты, калибровка трафика, резервное копирование, восстановление и журналы.")"
-    echo "$(localized_text "3 面板 SSL 修复：443 接入前清空面板证书路径。" "3 Panel SSL repair: clear panel certificate paths before using shared port 443." "3 Исправление SSL панели: очистить пути сертификатов панели перед настройкой общего порта 443.")"
+    echo "$(localized_text "3 面板 SSL 修复：443 接入前清空面板证书路径。" "3 Panel SSL repair: clear panel certificate paths before using Port 443 Reuse." "3 Исправление SSL панели: очистить пути сертификатов панели перед настройкой повторного использования порта 443.")"
     echo "$(localized_text "4 S-UI：安装、官方菜单、卸载。" "4 S-UI: install, open the official menu, or uninstall." "4 S-UI: установка, официальное меню и удаление.")"
     echo "$(localized_text "5/6 Sing-box 与 Xray 脚本。" "5/6 Sing-box and Xray scripts." "5/6 Скрипты Sing-box и Xray.")"
-    echo "$(localized_text "7/8/9 订阅栈，11 Dockge Compose，12 Compose 迁移；公网 HTTPS：未启用 443 单入口走主菜单 [4 反代]，已启用走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription stacks; 11: Dockge Compose; 12: Compose migration. For public HTTPS, use [4 Reverse proxy] before shared port 443; afterwards use [19 Shared port 443] -> [8 Manage Web domains/reverse proxy]." "7/8/9: стеки подписок; 11: Dockge Compose; 12: перенос Compose. Для публичного HTTPS до общего порта 443 используйте [4 Обратный прокси], после — [19 Общий порт 443] -> [8 Управление Web-доменами и обратным прокси].")"
+    echo "$(localized_text "7/8/9 订阅栈，11 Dockge Compose，12 Compose 迁移；公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription stacks; 11: Dockge Compose; 12: Compose migration. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [8 Manage Web domains/reverse proxy]." "7/8/9: стеки подписок; 11: Dockge Compose; 12: перенос Compose. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [8 Управление Web-доменами и обратным прокси].")"
     echo "$(localized_text "16 dog 流量计：仅统计已监控端口的实际流量。" "16 dog traffic monitor: shows traffic only for monitored ports." "16 Монитор трафика dog: показывает трафик только отслеживаемых портов.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
 
 show_sni_help() {
-    echo -e "$(localized_text "${CYAN}VPS-Optimize > 443 单入口管理中心 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > 443 shared entry Management Center > Help${PLAIN}" "${CYAN}VPS-Optimize > 443 Центр управления общим входом > Справка${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}VPS-Optimize > 443端口复用管理中心 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Port 443 Reuse Manager > Help${PLAIN}" "${CYAN}VPS-Optimize > Управление повторным использованием порта 443 > Справка${PLAIN}")"
     echo "$(localized_text "1 查看入口与监听：公网 443、Web 反代、Xray 和服务状态。" "1 View entry and listener status: public 443, Web proxy, Xray, and services." "1 Состояние входа и прослушивания: публичный 443, Web-прокси, Xray и службы.")"
     echo "$(localized_text "2 安装 / 切换入口模式：选择 Nginx Stream、Xray Fallback 或 TCP Peek + Splice。" "2 Install / switch entry mode: select Nginx Stream, Xray Fallback, or TCP Peek + Splice." "2 Установка / смена режима: Nginx Stream, Xray Fallback или TCP Peek + Splice.")"
     echo "$(localized_text "6 重新应用：按当前 ENTRY_MODE 重新生成并启动入口配置。" "6 Reapply: regenerate and start the entry configuration for the current ENTRY_MODE." "6 Повторно применить: заново сформировать и запустить конфигурацию для текущего ENTRY_MODE.")"
     echo "$(localized_text "7 回滚：恢复上一次入口模式切换前的备份。" "7 Rollback: Restore the backup before the last entry mode switch." "7 Откат: восстановление резервной копии перед последним переключением режима входа.")"
     echo "$(localized_text "8 管理 Web 域名/反代：后续新增或删除网站，不需要重跑首次配置。" "8 Manage Web domains/reverse proxy: add or remove sites without rerunning the initial setup." "8 Управление Web-доменами и обратным прокси: добавляйте и удаляйте сайты без повторной первоначальной настройки.")"
     echo "$(localized_text "9 Web 域名 IP 白名单：只限制 Web 域名，不影响 Xray 节点。" "9 Web domain IP whitelist: only restricts Web domains and does not affect the Xray node." "9 Белый список IP-адресов имен веб-доменов: ограничивает только имена веб-доменов и не влияет на узел Xray.")"
-    echo "$(localized_text "10 修改共享参数：面板、订阅、REALITY、入口端口和路径。" "10 Edit shared settings: panel, subscription, REALITY, entry ports, and paths." "10 Изменить общие параметры: панель, подписка, REALITY, порты входа и пути.")"
+    echo "$(localized_text "10 修改共享参数：面板、订阅、REALITY、入口端口和路径。" "10 Edit Port 443 Reuse settings: panel, subscription, REALITY, entry ports, and paths." "10 Изменить общие параметры: панель, подписка, REALITY, порты входа и пути.")"
     echo "$(localized_text "11 订阅链接 / External Proxy：检查节点是否使用公网 443。" "11 Subscription link / External Proxy: verify that node links use public port 443." "11 Ссылка подписки / External Proxy: проверьте, используют ли ссылки узлов публичный порт 443.")"
     echo "$(localized_text "12 CF DNS / Caddy 证书维护：重签证书、修复软链接、清理和回滚。" "12 CF DNS / Caddy certificate maintenance: reissue certificates, repair symlinks, clean up, or roll back." "12 Обслуживание сертификатов CF DNS / Caddy: перевыпуск сертификатов, восстановление символьных ссылок, очистка и откат.")"
     echo "$(localized_text "13 链路体检：检查 ENTRY_MODE、监听、证书、Web 和 Xray 路由。" "13 Connection diagnostics: check ENTRY_MODE, listeners, certificates, Web, and Xray routing." "13 Диагностика соединения: ENTRY_MODE, прослушивание, сертификаты, Web и маршрутизация Xray.")"
     echo "$(localized_text "14 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅响应。" "14 Network access test: check DNS, TCP, TLS SNI, panel, and subscription responses." "14 Проверка доступа: DNS, TCP, TLS SNI, ответы панели и подписки.")"
     echo "$(localized_text "15 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。" "15 Manage Xray routes: record SNI -> local address:port without editing 3x-ui/Xray inbounds." "15 Маршруты Xray: запись SNI -> локальный адрес:порт без изменения входящих подключений 3x-ui/Xray.")"
     echo "$(localized_text "16 当前入口日志：按 ENTRY_MODE 查看 Nginx、Xray/3x-ui 或 vpso-mux。" "16 Current entry logs: show Nginx, Xray/3x-ui, or vpso-mux based on ENTRY_MODE." "16 Журналы текущего входа: Nginx, Xray/3x-ui или vpso-mux согласно ENTRY_MODE.")"
-    echo "$(localized_text "修改面板域名请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。" "To modify the panel domain, please go to the main menu [19 443 shared entry Management Center] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain]." "Чтобы изменить имя домена панели, перейдите в главное меню [19 443 центр управления общей точкой входа] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].")"
-    echo "$(localized_text "未接入 443 单入口时，用主菜单 [4 反代] -> [5] 管理 Caddy/Nginx 域名 IP 白名单。" "When the 443 shared entry is not connected, use the main menu [4 reverse proxy] -> [5] to manage the Caddy/Nginx domain IP whitelist." "Если общий вход 443 не подключен, используйте главное меню [4 обратный прокси] -> [5] для управления белым списком IP-адресов доменного имени Caddy/Nginx.")"
+    echo "$(localized_text "修改面板域名请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。" "To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain]." "Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].")"
+    echo "$(localized_text "未接入 443端口复用时，用主菜单 [4 反代] -> [5] 管理 Caddy/Nginx 域名 IP 白名单。" "When the Port 443 Reuse is not connected, use the main menu [4 reverse proxy] -> [5] to manage the Caddy/Nginx domain IP whitelist." "Если повторное использование порта 443 не подключен, используйте главное меню [4 обратный прокси] -> [5] для управления белым списком IP-адресов доменного имени Caddy/Nginx.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
 
@@ -322,8 +322,8 @@ func_sni_stack_quick_menu() {
         show_current_entry_summary
         echo -e "------------------------------------------------"
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "443 单入口管理中心" "Shared 443 Entry Manager" "Управление общей точкой входа 443")"
-        echo -e "$(localized_text "${BOLD}🧩 443 单入口管理中心${PLAIN}" "${BOLD}🧩 Shared 443 Entry Manager${PLAIN}" "${BOLD}🧩 Управление общей точкой входа 443${PLAIN}")"
+        print_breadcrumb "$(localized_text "443端口复用管理中心" "Port 443 Reuse Manager" "Управление повторным использованием порта 443")"
+        echo -e "$(localized_text "${BOLD}🧩 443端口复用管理中心${PLAIN}" "${BOLD}🧩 Port 443 Reuse Manager${PLAIN}" "${BOLD}🧩 Управление повторным использованием порта 443${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 当前状态与入口模式${PLAIN}" "${BOLD}▶ Current status and entry mode${PLAIN}" "${BOLD}▶ Текущее состояние и режим входа${PLAIN}")"
@@ -335,7 +335,7 @@ func_sni_stack_quick_menu() {
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 网站与证书${PLAIN}" "${BOLD}▶ Websites and certificates${PLAIN}" "${BOLD}▶ Сайты и сертификаты${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  8. 管理 Web 域名/反代${PLAIN}        ${YELLOW}(新增/删除/查看网站，最常用)${PLAIN}" "${GREEN}8. Manage Web domains and reverse proxies (add, delete, or view sites)${PLAIN}" "${GREEN}8. Управление веб-доменами и обратным прокси (добавить, удалить или просмотреть сайт)${PLAIN}")"
         echo -e "$(localized_text "${CYAN}  9. 管理 Web 域名 IP 白名单${PLAIN}   ${YELLOW}(只限制 Web 域名)${PLAIN}" "${CYAN}9. Manage the Web-domain IP whitelist (applies only to Web domains)${PLAIN}" "${CYAN}9. Белый список IP-адресов веб-доменов (только для веб-доменов)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN} 10. 修改 443 共享参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}" "${CYAN}10. Change shared 443 settings (panel, subscription, REALITY, entry port, and paths)${PLAIN}" "${CYAN}10. Изменить общие параметры 443 (панель, подписка, REALITY, входной порт и пути)${PLAIN}")"
+        echo -e "$(localized_text "${CYAN} 10. 修改 443端口复用参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}" "${CYAN}10. Change Port 443 Reuse settings (panel, subscription, REALITY, entry port, and paths)${PLAIN}" "${CYAN}10. Изменить параметры повторного использования порта 443 (панель, подписка, REALITY, входной порт и пути)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 11. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}" "${CYAN}11. Subscription link / External Proxy guidance (check whether node links use public port 443)${PLAIN}" "${CYAN}11. Подсказки для ссылок подписки / External Proxy (проверка публичного порта 443 в ссылках узлов)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 12. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}" "${CYAN}12. CF DNS / Caddy certificate maintenance (renew, symlink, clean, repair, or roll back)${PLAIN}" "${CYAN}12. Обслуживание сертификатов CF DNS / Caddy (перевыпуск, ссылки, очистка, восстановление, откат)${PLAIN}")"
         echo -e "------------------------------------------------"
@@ -400,7 +400,7 @@ normalize_main_choice() {
         b|backup|bak|备份) echo "16" ;;
         u|upd|update|更新) echo "17" ;;
         reboot|重启) echo "18" ;;
-        sni|443|单入口) echo "19" ;;
+        sni|443|端口复用) echo "19" ;;
         l|lang|language|язык|语言) echo "20" ;;
         traffic|quota|bill|流量|达量|账单) echo "10" ;;
         *) echo "$choice" ;;
@@ -498,9 +498,9 @@ func_beginner_menu() {
             "${GREEN}  2. Install a panel/node${PLAIN}    ${YELLOW}(open panel, node, and subscription tools)${PLAIN}" \
             "${GREEN}  2. Установить панель/узел${PLAIN}     ${YELLOW}(открыть меню панелей, узлов и подписок)${PLAIN}"
         localized_echo \
-            "${GREEN}  3. 配置 443 单入口${PLAIN}   ${YELLOW}(面板/订阅/REALITY 共用公网 443)${PLAIN}" \
-            "${GREEN}  3. Configure shared port 443${PLAIN} ${YELLOW}(panels, subscriptions, and REALITY share public port 443)${PLAIN}" \
-            "${GREEN}  3. Настроить общий вход 443${PLAIN}   ${YELLOW}(общий публичный порт 443 для панелей, подписок и REALITY)${PLAIN}"
+            "${GREEN}  3. 配置 443端口复用${PLAIN}   ${YELLOW}(面板/订阅/REALITY 共用公网 443)${PLAIN}" \
+            "${GREEN}  3. Configure Port 443 Reuse${PLAIN} ${YELLOW}(panels, subscriptions, and REALITY share public port 443)${PLAIN}" \
+            "${GREEN}  3. Настроить повторное использование порта 443${PLAIN}   ${YELLOW}(общий публичный порт 443 для панелей, подписок и REALITY)${PLAIN}"
         localized_echo \
             "${GREEN}  4. 健康检查${PLAIN}          ${YELLOW}(服务状态、端口、证书、反馈诊断)${PLAIN}" \
             "${GREEN}  4. Health check${PLAIN}              ${YELLOW}(services, ports, certificates, and diagnostics)${PLAIN}" \
@@ -550,7 +550,7 @@ main_menu() {
             echo -e "  ${GREEN}1.${PLAIN} Предварительная проверка    ${YELLOW}(порты, система, службы и возможные риски)${PLAIN}"
             echo -e "  ${GREEN}2.${PLAIN} Базовая настройка системы   ${YELLOW}(инструменты, часовой пояс, обновления и базовый BBR)${PLAIN}"
             echo -e "  ${GREEN}3.${PLAIN} Компоненты и службы          ${YELLOW}(Docker, Python, WARP и распространённые инструменты)${PLAIN}"
-            echo -e "  ${GREEN}4.${PLAIN} Обратный прокси             ${YELLOW}(Caddy/Nginx вне единого входа 443)${PLAIN}"
+            echo -e "  ${GREEN}4.${PLAIN} Обратный прокси             ${YELLOW}(Caddy/Nginx вне повторного использования порта 443)${PLAIN}"
             echo -e "  ${GREEN}5.${PLAIN} Панели, узлы и подписки     ${YELLOW}(3x-ui, Sing-box, подписки и Dockge)${PLAIN}"
 
             echo -e " ${BOLD}${BLUE}▶ ② Безопасность и контроль доступа${PLAIN}"
@@ -573,7 +573,7 @@ main_menu() {
             echo -e " ${RED}18.${PLAIN} Перезагрузить сервер"
             echo -e ""
             echo -e " ${BOLD}${BLUE}▶ ⑤ Часто используемые функции${PLAIN}"
-            echo -e " ${GREEN}19.${PLAIN} общий вход 443            ${YELLOW}(настройка, сайты, диагностика и сертификаты)${PLAIN}"
+            echo -e " ${GREEN}19.${PLAIN} повторное использование порта 443            ${YELLOW}(настройка, сайты, диагностика и сертификаты)${PLAIN}"
             echo -e " ${GREEN}20.${PLAIN} Язык интерфейса           ${YELLOW}(中文 / English / Русский)${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
             echo -e " ${RED} 0.${PLAIN} Выход"
@@ -590,7 +590,7 @@ main_menu() {
             echo -e "  ${GREEN}1.${PLAIN} Preflight and risk scan     ${YELLOW}(check ports, OS, and services before deployment)${PLAIN}"
             echo -e "  ${GREEN}2.${PLAIN} Base system initialization  ${YELLOW}(tools, timezone, updates, and basic BBR)${PLAIN}"
             echo -e "  ${GREEN}3.${PLAIN} Components and services      ${YELLOW}(Docker, Python, WARP, and common tools)${PLAIN}"
-            echo -e "  ${GREEN}4.${PLAIN} Reverse proxy               ${YELLOW}(Caddy/Nginx sites outside the shared 443 entry)${PLAIN}"
+            echo -e "  ${GREEN}4.${PLAIN} Reverse proxy               ${YELLOW}(Caddy/Nginx sites outside the Port 443 Reuse)${PLAIN}"
             echo -e "  ${GREEN}5.${PLAIN} Panels, nodes, subscriptions ${YELLOW}(3x-ui, Sing-box, subscriptions, and Dockge)${PLAIN}"
 
             echo -e " ${BOLD}${BLUE}▶ ② Security and access control${PLAIN}"
@@ -613,7 +613,7 @@ main_menu() {
             echo -e " ${RED}18.${PLAIN} Reboot server"
             echo -e ""
             echo -e " ${BOLD}${BLUE}▶ ⑤ Frequently used${PLAIN}"
-            echo -e " ${GREEN}19.${PLAIN} Shared 443 entry manager    ${YELLOW}(initialize, add sites, check health, and repair certificates)${PLAIN}"
+            echo -e " ${GREEN}19.${PLAIN} Port 443 Reuse manager    ${YELLOW}(initialize, add sites, check health, and repair certificates)${PLAIN}"
             echo -e " ${GREEN}20.${PLAIN} Interface language          ${YELLOW}(中文 / English / Русский)${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
             echo -e " ${RED} 0.${PLAIN} Exit"
@@ -630,7 +630,7 @@ main_menu() {
         echo -e "  ${GREEN}1.${PLAIN} 运维预检与风险扫描    ${YELLOW}(部署前先看端口/系统/服务状态)${PLAIN}"
         echo -e "  ${GREEN}2.${PLAIN} 基础环境初始化        ${YELLOW}(工具/时区/系统更新/基础 BBR)${PLAIN}"
         echo -e "  ${GREEN}3.${PLAIN} 基础组件与常用服务    ${YELLOW}(Docker/Python/WARP/常用工具)${PLAIN}"
-        echo -e "  ${GREEN}4.${PLAIN} 反代（Caddy/Nginx）   ${YELLOW}(未接入 443 单入口的网站/面板反代)${PLAIN}"
+        echo -e "  ${GREEN}4.${PLAIN} 反代（Caddy/Nginx）   ${YELLOW}(未接入 443端口复用的网站/面板反代)${PLAIN}"
         echo -e "  ${GREEN}5.${PLAIN} 面板、节点与订阅工具  ${YELLOW}(3x-ui/Sing-box/订阅管理/Dockge)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ② 安全与访问控制${PLAIN}"
@@ -653,7 +653,7 @@ main_menu() {
         echo -e " ${RED}18.${PLAIN} 重启服务器"
         echo -e ""
         echo -e " ${BOLD}${BLUE}▶ ⑤ 高频直达${PLAIN}"
-        echo -e " ${GREEN}19.${PLAIN} 443 单入口管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
+        echo -e " ${GREEN}19.${PLAIN} 443端口复用管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
         echo -e " ${GREEN}20.${PLAIN} 界面语言              ${YELLOW}(中文 / English / Русский)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${RED} 0.${PLAIN} 退出面板"

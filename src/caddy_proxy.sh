@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Ordinary Caddy/Nginx reverse proxy workflows outside the 443 single entry point stack.
+# Ordinary Caddy/Nginx reverse proxy workflows outside the Port 443 Reuse stack.
 
 write_caddy_reverse_proxy_conf() {
     local domain="$1"
@@ -261,8 +261,8 @@ nginx_proxy_domain_exists() {
 
 nginx_proxy_warn_if_single_entry_enabled() {
     if [[ -f /etc/vps-optimize/sni-stack.env || -f /etc/vps-optimize/443-engine.conf ]]; then
-        echo -e "$(localized_text "${RED}❌ 已检测到 443 单入口配置。Nginx HTTPS 反代会抢占公网 443，已拒绝继续。${PLAIN}" "${RED}❌ 443 shared entry configuration detected. Nginx HTTPS The reverse proxy will seize public port 443 and has refused to continue.${PLAIN}" "${RED}❌ Обнаружена 443 общая конфигурация входа. Nginx HTTPS Обратный прокси-сервер задействует публичный порт 443 и отказывается продолжать работу.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}请改用：主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。${PLAIN}" "${YELLOW}Please use: Main menu [19 443 shared entry Management Center] -> [8 Management Web domain/Reverse Proxy].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 443 центр управления общей точкой входа] -> [8 Имя веб-домена управления/обратный прокси].${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ 已检测到 443端口复用配置。Nginx HTTPS 反代会抢占公网 443，已拒绝继续。${PLAIN}" "${RED}❌ Port 443 Reuse configuration detected. Nginx HTTPS The reverse proxy will seize public port 443 and has refused to continue.${PLAIN}" "${RED}❌ Обнаружена конфигурация повторного использования порта 443. Nginx HTTPS Обратный прокси-сервер задействует публичный порт 443 и отказывается продолжать работу.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}请改用：主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [8 Management Web domain/Reverse Proxy].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [8 Имя веб-домена управления/обратный прокси].${PLAIN}")"
         return 1
     fi
     return 0
@@ -438,7 +438,7 @@ func_nginx_add_reverse_proxy() {
         echo -e "$(localized_text "${CYAN}配置文件：${conf_file}${PLAIN}" "${CYAN}Configuration file: ${conf_file}${PLAIN}" "${CYAN}Файл конфигурации : ${conf_file}${PLAIN}")"
         echo -e "$(localized_text "${CYAN}证书路径：/etc/caddy/certs/${domain}.crt 和 /etc/caddy/certs/${domain}.key${PLAIN}" "${CYAN}Certificate path: /etc/caddy/certs/${domain}.crt and /etc/caddy/certs/${domain}.key${PLAIN}" "${CYAN}Путь сертификата : /etc/caddy/certs/${domain}.crt и /etc/caddy/certs/${domain}.key.${PLAIN}")"
     else
-        echo -e "$(localized_text "${RED}❌ Nginx 配置校验通过，但 reload/restart 失败。可能是 Caddy、443 单入口或其他服务占用了 80/443。${PLAIN}" "${RED}❌ Nginx configuration validation passed, but reload/restart failed. It may be that Caddy, 443 shared entry or other services occupy 80/443.${PLAIN}" "${RED}❌ Nginx Проверка конфигурации пройдена, но перезагрузка/перезапуск не удалось. Возможно, Caddy, общий вход 443 или другие службы занимают 80/443.${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ Nginx 配置校验通过，但 reload/restart 失败。可能是 Caddy、443端口复用或其他服务占用了 80/443。${PLAIN}" "${RED}❌ Nginx configuration validation passed, but reload/restart failed. It may be that Caddy, Port 443 Reuse or other services occupy 80/443.${PLAIN}" "${RED}❌ Nginx Проверка конфигурации пройдена, но перезагрузка/перезапуск не удалось. Возможно, Caddy, повторное использование порта 443 или другие службы занимают 80/443.${PLAIN}")"
         quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-proxy" >/dev/null 2>&1 || true
         return 1
     fi
@@ -521,8 +521,8 @@ func_nginx_manage_ip_whitelist() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}🔐 Nginx 域名 IP 白名单${PLAIN}" "${BOLD}🔐 Nginx domain IP whitelist${PLAIN}" "${BOLD}🔐 Nginx доменное имя Белый список IP-адресов${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}适用于未启用 443 单入口、由 Nginx HTTPS 反代直接对外服务的域名。${PLAIN}" "${YELLOW}Suitable for domains that do not enable the 443 shared entry and are directly served externally by the Nginx HTTPS reverse proxy.${PLAIN}" "${YELLOW}подходит для доменных имен, которые не поддерживают общий вход 443 и обслуживаются непосредственно извне обратным прокси-сервером Nginx HTTPS.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443 单入口，请用主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]，不要在 Nginx HTTP 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to 443 shared entry, please use the main menu [19 443 shared entry management center] -> [8 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Nginx HTTP layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к общей точке входа 443, используйте главное меню [19 443 центр управления общей точкой входа] -> [8 Управление именем веб-домена/обратным прокси] -> [5 Управление белым списком IP-адресов доменного имени] и не ограничивайте его на уровне Nginx HTTP.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}适用于未启用 443端口复用、由 Nginx HTTPS 反代直接对外服务的域名。${PLAIN}" "${YELLOW}Suitable for domains that do not enable the Port 443 Reuse and are directly served externally by the Nginx HTTPS reverse proxy.${PLAIN}" "${YELLOW}подходит для доменных имен, которые не поддерживают повторное использование порта 443 и обслуживаются непосредственно извне обратным прокси-сервером Nginx HTTPS.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443端口复用，请用主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]，不要在 Nginx HTTP 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to Port 443 Reuse, please use the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Nginx HTTP layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к повторном использовании порта 443, используйте главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси] -> [5 Управление белым списком IP-адресов доменного имени] и не ограничивайте его на уровне Nginx HTTP.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local domain domain_input conf_file action backup_file
@@ -631,7 +631,7 @@ func_nginx_clear_proxy_config() {
     echo -e "$(localized_text "${BOLD}🧹 清空 Nginx HTTPS 反代配置${PLAIN}" "${BOLD}🧹 Clear Nginx HTTPS reverse proxy configuration${PLAIN}" "${BOLD}🧹 Очистить Nginx HTTPS Конфигурация обратного прокси${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}只隔离 VPS-Optimize 创建的 /etc/nginx/conf.d/vps_proxy_*.conf 和 00-vps-proxy-map.conf。${PLAIN}" "${YELLOW}Only isolates /etc/nginx/conf.d/vps_proxy_*.conf and 00-vps-proxy-map.conf created by VPS-Optimize.${PLAIN}" "${YELLOW}изолирует только /etc/nginx/conf.d/vps_proxy_*.conf и 00-vps-proxy-map.conf, созданные VPS-Optimize.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}不会清理 /etc/nginx/stream.d，也不会影响 443 单入口配置。${PLAIN}" "${YELLOW}Will not clean up /etc/nginx/stream.d, nor will it affect the 443 shared entry configuration.${PLAIN}" "${YELLOW}не очистит /etc/nginx/stream.d и не повлияет на конфигурацию с общей точкой входа 443.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}不会清理 /etc/nginx/stream.d，也不会影响 443端口复用配置。${PLAIN}" "${YELLOW}Will not clean up /etc/nginx/stream.d, nor will it affect the Port 443 Reuse configuration.${PLAIN}" "${YELLOW}не очистит /etc/nginx/stream.d и не повлияет на конфигурацию с повторным использованием порта 443.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local -a files=()
@@ -856,7 +856,7 @@ func_caddy_reverse_proxy_menu() {
         print_breadcrumb "$(localized_text "反代" "reverse proxyal" "обратный прокси")"
         echo -e "$(localized_text "${BOLD}🌐 反代（Caddy / Nginx）${PLAIN}" "${BOLD}🌐 reverse proxy (Caddy / Nginx)${PLAIN}" "${BOLD}🌐 обратный прокси (Caddy / Nginx)${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：管理未接入 443 单入口的域名反代。443 单入口请只走主菜单 [19]。${PLAIN}" "${YELLOW}Purpose: Manage domain reverse proxy that is not connected to the 443 shared entry. 443 For shared entry, please only go to the main menu [19].${PLAIN}" "${YELLOW}Назначение: Управление обратным прокси-сервером доменного имени, который не подключен к общему входу 443. 443 Для общего входа зайдите только в главное меню [19].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}用途：管理未接入 443端口复用的域名反代。443端口复用请只走主菜单 [19]。${PLAIN}" "${YELLOW}Purpose: Manage domain reverse proxy that is not connected to the Port 443 Reuse. 443 For Port 443 Reuse, please only go to the main menu [19].${PLAIN}" "${YELLOW}Назначение: Управление обратным прокси-сервером доменного имени, который не подключен к повторному использованию порта 443. 443 Для общего входа зайдите только в главное меню [19].${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 添加 Caddy 反代${PLAIN}" "${GREEN}1. Add Caddy to replace${PLAIN}" "${GREEN}1. Добавьте Caddy вместо.${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 添加 Nginx HTTPS 反代${PLAIN} ${YELLOW}(复用 acme.sh + CF DNS 证书)${PLAIN}" "${GREEN}2. Add Nginx HTTPS to reverse proxy (reuse acme.sh + CF DNS certificate)${PLAIN}" "${GREEN}2. Добавьте Nginx HTTPS в обратный прокси (повторное использование сертификата acme.sh + CF DNS)${PLAIN}")"

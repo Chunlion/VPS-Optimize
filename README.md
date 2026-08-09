@@ -11,11 +11,11 @@
 </p>
 
 <p align="center">
-  面向 VPS 日常运维的 Bash 控制面板。通过 <code>cy</code> 集中完成系统初始化、安全加固、面板部署、443 单入口、订阅工具、备份回滚和故障排查。
+  面向 VPS 日常运维的 Bash 控制面板。通过 <code>cy</code> 集中完成系统初始化、安全加固、面板部署、443端口复用、订阅工具、备份回滚和故障排查。
 </p>
 
 <p align="center">
-  <a href="https://chunlion.github.io/VPS-Optimize/">📚 文档网站</a> · <a href="https://chunlion.github.io/VPS-Optimize/quick-start">快速开始</a> · <a href="https://chunlion.github.io/VPS-Optimize/docs/443-single-entry">443 单入口</a>
+  <a href="https://chunlion.github.io/VPS-Optimize/">📚 文档网站</a> · <a href="https://chunlion.github.io/VPS-Optimize/quick-start">快速开始</a> · <a href="https://chunlion.github.io/VPS-Optimize/docs/443-single-entry">443端口复用</a>
 </p>
 
 ## 🚀 快速开始
@@ -52,13 +52,13 @@ cy
 | 安全加固 | SSH、公钥登录、Fail2ban、防火墙、端口并发限制 |
 | 面板与订阅 | 3x-ui、S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari |
 | 转发与组网 | Realm、Gost、FLVX 哆啦转发面板、EasyTier、Tailscale |
-| 443 单入口 | Web、面板、订阅和节点共用公网 `443`，按 SNI 路由 |
+| 443端口复用 | Web、面板、订阅和节点共用公网 `443`，按 SNI 路由 |
 | 诊断与回滚 | 服务健康、443 链路体检、配置备份、恢复和隔离归档 |
 
 ## 📚 文档与反馈
 
 - [快速开始](https://chunlion.github.io/VPS-Optimize/quick-start)
-- [443 单入口排错与恢复](https://chunlion.github.io/VPS-Optimize/docs/443-single-entry-troubleshooting)
+- [443端口复用排错与恢复](https://chunlion.github.io/VPS-Optimize/docs/443-single-entry-troubleshooting)
 - [失联与回滚急救](https://chunlion.github.io/VPS-Optimize/docs/recovery-runbook)
 - [提交 Issue](https://github.com/Chunlion/VPS-Optimize/issues) · [Telegram](https://t.me/cutyy_github) · [GitHub](https://github.com/Chunlion)
 

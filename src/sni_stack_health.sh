@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# 443 single entry point health checks, HTTP/TLS probes, and subscription hints.
+# Port 443 Reuse health checks, HTTP/TLS probes, and subscription hints.
 
 print_443_health_status_code_hints() {
     echo -e "$(localized_text "${BOLD}状态码提示${PLAIN}" "${BOLD}Status code prompt${PLAIN}" "${BOLD}подсказка кода состояния${PLAIN}")"

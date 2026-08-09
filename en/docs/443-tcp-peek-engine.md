@@ -1,6 +1,6 @@
-# Shared Port 443 Entry Implementations
+# Port 443 Reuse Entry Implementations
 
-This article explains three shared port 443 point implementations of VPS-Optimize: Nginx Stream default stable implementation, TCP Peek + Splice / vpso-mux same configuration implementation, Xray Fallback special implementation.
+This article explains three Port 443 Reuse point implementations of VPS-Optimize: Nginx Stream default stable implementation, TCP Peek + Splice / vpso-mux same configuration implementation, Xray Fallback special implementation.
 
 `panel.example.com`, `site.example.com`, `node.example.com`, `SERVER_IP`, `8443`, `8444`, and `1443` in the example are all example values and are only used to illustrate the link relationship. During actual deployment, please replace it with your real domain, server IP and port where the script is currently saved.
 
@@ -11,7 +11,7 @@ The three entry modes share the same set of public configurations:
 - Web domains, Web reverse proxy engine backend mappings, and certificates are shared; the Web whitelist is only shared between Nginx Stream and TCP Peek.
 - The certificate still uses the existing `acme.sh + Cloudflare DNS API` process, does not introduce the Caddy DNS module, and does not use `xcaddy`.
 - The web whitelist only protects web domains and is not used to limit Xray node traffic.
-- 443 The Web reverse proxy engine under shared entry can choose Caddy or Nginx, and the same configuration can be reused when switching the entry mode.
+- 443 The Web reverse proxy engine under Port 443 Reuse can choose Caddy or Nginx, and the same configuration can be reused when switching the entry mode.
 - When using Nginx Stream or TCP Peek, the web whitelist takes effect at the entry layer as `SNI + source IP`; `xray-fallback` does not allow new, reserved or applied web whitelists regardless of whether Caddy or Nginx local web reverse proxy is selected.
 - Only one service can listen to the public port `443`: `nginx`, `xray` or `vpso-mux`.
 - If `/etc/vps-optimize/sni-stack.env` does not have `ENTRY_MODE`, it will be processed as `nginx-stream` compatible.
@@ -20,8 +20,8 @@ The three entry modes share the same set of public configurations:
 Common menu paths:
 
 ```text
-Main menu [19 443 shared entry manager]
-  -> [2] initial setup/installation 443 shared entry
+Main menu [19 Port 443 Reuse manager]
+  -> [2] initial setup/installation Port 443 Reuse
   -> [3] switch to Nginx Stream mode
   -> [4] switch to Xray Fallback mode
   -> [5] switch to TCP Peek + Splice mode
@@ -31,7 +31,7 @@ Main menu [19 443 shared entry manager]
   -> [18] View TCP Peek + Splice Log
 ```
 
-For the specific filling methods of 3x-ui panel, subscription and Xray inbound, please refer to "3x-ui Three Entry Mode Configuration Quick Check" of [shared port 443 routing Tutorial](443-single-entry.md). Here is the conclusion first:
+For 3x-ui panel, subscription, and Xray inbound settings, see [Port 443 Reuse Configuration Guide](443-single-entry.md), section "3x-ui Three Entry Mode Configuration Quick Check".
 
 | ENTRY_MODE | How to bind 3x-ui/Xray | The most important considerations when switching |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ This implementation has the most complete coverage and is suitable as a long-ter
 
 ## TCP Peek + Splice / vpso-mux implementation
 
-TCP Peek + Splice / vpso-mux and Nginx Stream use the same set of 443 shared entry configuration. There is no need to create a new set of web domains, certificates, web reverse proxy engine backends, web whitelists, and Xray SNI routing records; 3x-ui panels, subscriptions, and Xray inbound connections are still filled in according to local bindings. When using it for the first time, run `Main menu [19 443 Shared entry management center] -> [16] View TCP Peek + Splice Status / 8444 Check before switching` first to confirm that `vpso-mux` can start and forward in `8444`; then run `[17] TCP Peek Routing rule verification`. Only when the user subsequently executes `[5] switch to TCP Peek + Splice mode` will the Internet `443` be switched from Nginx Stream to `vpso-mux`.
+TCP Peek + Splice / vpso-mux and Nginx Stream use the same set of Port 443 Reuse configuration. There is no need to create a new set of web domains, certificates, web reverse proxy engine backends, web whitelists, and Xray SNI routing records; 3x-ui panels, subscriptions, and Xray inbound connections are still filled in according to local bindings. When using it for the first time, run `Main menu [19 Port 443 Reuse Manager] -> [16] View TCP Peek + Splice Status / 8444 Check before switching` first to confirm that `vpso-mux` can start and forward in `8444`; then run `[17] TCP Peek Routing rule verification`. Only when the user subsequently executes `[5] switch to TCP Peek + Splice mode` will the Internet `443` be switched from Nginx Stream to `vpso-mux`.
 
 `vpso-mux` uses `MSG_PEEK` to view SNI in TLS ClientHello without consuming the first packet; the ClientHello received by the backend is still consistent with the client's original data. For forwarding, splice is used first, and ordinary copy is fallbacked when it fails or is unavailable.
 
@@ -101,7 +101,7 @@ This is why this solution is suitable for HTTPS/TLS/SNI traffic, but not suitabl
 
 ### routing rules
 
-The script generates `/etc/vps-optimize/vpso-mux.yaml` based on the shared port 443 shared configuration. The generated routes are roughly divided into several categories:
+The script generates `/etc/vps-optimize/vpso-mux.yaml` based on the Port 443 Reuse configuration. The generated routes are roughly divided into several categories:
 
 | Route source | target backend | Whether to use web whitelist |
 | --- | --- | --- |
@@ -178,7 +178,7 @@ Core differences from Nginx Stream:
 
 | Project | Nginx Stream | TCP Peek + Splice / vpso-mux |
 | --- | --- | --- |
-| Configuration process | Use shared port 443 shared configuration | Use the same shared port 443 shared configuration |
+| Configuration process | Use Port 443 Reuse configuration | Use the same Port 443 Reuse configuration |
 | Entry process | `nginx` | `vpso-mux` |
 | SNI Get | `ssl_preread` | `MSG_PEEK` parsing ClientHello |
 | TLS processing | Do not terminate TLS | Do not terminate TLS |
@@ -189,7 +189,7 @@ Core differences from Nginx Stream:
 View status and logs:
 
 ```text
-Main menu [19 443 shared entry manager]
+Main menu [19 Port 443 Reuse manager]
   -> [18] View TCP Peek + Splice Log
 ```
 
@@ -227,7 +227,7 @@ In xray-fallback mode, the `Xray Inbound connection management` menu is not avai
 Switch to TCP Peek + Splice:
 
 ```text
-Main menu [19 443 shared entry manager]
+Main menu [19 Port 443 Reuse manager]
   -> [16] View TCP Peek + Splice Status / 8444 Preflight
   -> [17] TCP Peek routing rule validation
   -> [5] switch to TCP Peek + Splice mode
@@ -244,7 +244,7 @@ If the current SSH session is connected to the ingress port, such as `443`, the 
 Roll back the previous round of entry mode switching:
 
 ```text
-Main menu [19 443 shared entry manager]
+Main menu [19 Port 443 Reuse manager]
   -> [7] Roll back the last entry-mode switch
 ```
 

@@ -10,7 +10,7 @@ generate_random_secret() {
 }
 
 print_public_https_reverse_proxy_hint() {
-    echo -e "$(localized_text "${YELLOW}公网 HTTPS 访问建议：未启用 443 单入口时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443 单入口时，请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]。${PLAIN}" "${YELLOW}Public HTTPS Access Suggestions: When 443 shared entry is not enabled, please go to Caddy or Nginx HTTPS in the main menu [4 reverse proxy]; when 443 shared entry is enabled, please go to the main menu [19 443 shared entry Management Center] -> [8 Managing Web Domains/reverse proxies].${PLAIN}" "${YELLOW}публичную сеть HTTPS Доступ к предложениям: Если общий вход 443 не включен, перейдите к Caddy или Nginx HTTPS в главном меню [4 обратный прокси]; Когда включен общий вход 443, перейдите в главное меню [19 Центр управления общим входом 443] -> [8 Управление веб-доменами/обратными прокси].${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}公网 HTTPS 访问建议：未启用 443端口复用时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443端口复用时，请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。${PLAIN}" "${YELLOW}Public HTTPS Access Suggestions: When Port 443 Reuse is not enabled, please go to Caddy or Nginx HTTPS in the main menu [4 reverse proxy]; when Port 443 Reuse is enabled, please go to the main menu [19 Port 443 Reuse Manager] -> [8 Managing Web Domains/reverse proxies].${PLAIN}" "${YELLOW}публичную сеть HTTPS Доступ к предложениям: Если повторное использование порта 443 не включен, перейдите к Caddy или Nginx HTTPS в главном меню [4 обратный прокси]; Когда включен повторное использование порта 443, перейдите в главное меню [19 Центр управления повторным использованием порта 443] -> [8 Управление веб-доменами/обратными прокси].${PLAIN}")"
 }
 
 func_sublinkpro() {

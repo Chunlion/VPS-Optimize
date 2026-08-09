@@ -102,7 +102,7 @@ print_project_runtime_overview() {
         echo -e "$(localized_text "443 入口 : ${YELLOW}检测到配置文件，但读取失败，请运行 [19] -> [13] 体检。${PLAIN}" "Port 443 entry: ${YELLOW}configuration found but could not be read; run [19] -> [13] Health check.${PLAIN}" "Точка входа 443: ${YELLOW}конфигурация найдена, но не читается; запустите [19] -> [13] Проверка состояния.${PLAIN}")"
         fi
     else
-        echo -e "$(localized_text "443 入口 : ${BLUE}尚未配置；需要面板/订阅/REALITY 共用 443 时进入 [19]。${PLAIN}" "Port 443 entry: ${BLUE}not configured; open [19] to share port 443 between the panel, subscriptions, and REALITY.${PLAIN}" "Точка входа 443: ${BLUE}не настроена; откройте [19], чтобы панель, подписки и REALITY использовали общий порт 443.${PLAIN}")"
+        echo -e "$(localized_text "443 入口 : ${BLUE}尚未配置；需要面板/订阅/REALITY 共用 443 时进入 [19]。${PLAIN}" "Port 443 entry: ${BLUE}not configured; open [19] to share port 443 between the panel, subscriptions, and REALITY.${PLAIN}" "Точка входа 443: ${BLUE}не настроена; откройте [19], чтобы панель, подписки и REALITY использовали повторное использование порта 443.${PLAIN}")"
     fi
 
     if command -v docker >/dev/null 2>&1; then

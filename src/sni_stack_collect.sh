@@ -4,7 +4,7 @@
 collect_sni_stack_config() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}443 单入口共享配置${PLAIN}" "${BOLD}443 shared entry shared configuration${PLAIN}" "${BOLD}443 Общая конфигурация с одним входом${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}443端口复用配置${PLAIN}" "${BOLD}Port 443 Reuse configuration${PLAIN}" "${BOLD}Конфигурация повторного использования порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}公网 443 将由你选择的入口模式监听；Web 域名、Web 反代引擎、证书和白名单为三种模式共享。${PLAIN}" "${YELLOW}Public port 443 will be monitored by the entry mode you choose; the Web domain, Web reverse proxy engine, certificate and whitelist are shared by the three modes.${PLAIN}" "${YELLOW}публичный порт 443 будет контролироваться в выбранном вами режиме входа; имя веб-домена, механизм веб-прокси, сертификат и белый список являются общими для всех трех режимов.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}Caddy/Xray/3x-ui 本地后端默认绑定 127.0.0.1。${PLAIN}" "${YELLOW}Caddy/Xray/3x-ui The local backend is bound to 127.0.0.1 by default.${PLAIN}" "${YELLOW}Caddy/Xray/3x-ui По умолчанию локальный сервер привязан к 127.0.0.1.${PLAIN}")"

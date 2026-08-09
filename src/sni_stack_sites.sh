@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# 443 single entry point web-domain and custom TCP-route CRUD workflows.
+# Port 443 Reuse web-domain and custom TCP-route CRUD workflows.
 
 list_sni_stack_sites() {
     load_sni_stack_env || return 1
@@ -7,7 +7,7 @@ list_sni_stack_sites() {
     web_engine=$(current_web_proxy_engine)
     web_label=$(web_proxy_engine_label "$web_engine")
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}当前 443 单入口网站/反代域名${PLAIN}" "${BOLD}Currently 443 shared entry/reverse proxy domain${PLAIN}" "${BOLD}в настоящее время 443 веб-сайта с общей точкой входа / доменное имя обратного прокси${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}当前 443端口复用网站/反代域名${PLAIN}" "${BOLD}Currently Port 443 Reuse/reverse proxy domain${PLAIN}" "${BOLD}в настоящее время 443 веб-сайта с повторным использованием порта 443 / доменное имя обратного прокси${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "Web 反代引擎：${web_label} (${web_engine}) -> $(web_proxy_backend)" "Web reverse proxy engine: ${web_label} (${web_engine}) -> $(web_proxy_backend)" "механизм веб-прокси: ${web_label} (${web_engine}) -> $(web_proxy_backend)")"
     echo -e "$(localized_text "面板域名：${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Panel domain: ${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Доменное имя панели: ${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}")"
@@ -132,7 +132,7 @@ add_sni_stack_site() {
     [[ -n "${whitelist_ranges:-}" ]] && echo -e "$(localized_text "${YELLOW}IP 白名单：${whitelist_ranges}${PLAIN}" "${YELLOW}IP whitelist: ${whitelist_ranges}${PLAIN}" "${YELLOW}Белый список IP: ${whitelist_ranges}${PLAIN}")"
     confirm_risk_action "$(localized_text "新增 443 网站/反代域名 ${site_domain}" "Added 443 websites/reverse domain ${site_domain}" "Добавлено 443 веб-сайта/обратное доменное имя ${site_domain}.")" \
         "$(localized_text "证书、Web 反代引擎配置和 443 入口分流配置" "Certificate, Web reverse proxy engine configuration and 443 entry routing configuration" "Сертификат, конфигурация механизма веб-прокси и конфигурация перенаправления входа 443.")" \
-        "$(localized_text "使用 443 单入口备份恢复，或从网站管理菜单删除该域名" "Use the 443 share entry backup and restore, or delete the domain from the website management menu" "Используйте резервную копию 443 с общей точкой входа для восстановления или удаления домена из меню управления веб-сайтом.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或从网站管理菜单删除该域名" "Use the Port 443 Reuse backup and restore, or delete the domain from the website management menu" "Используйте резервную копию повторного использования порта 443 для восстановления или удаления домена из меню управления веб-сайтом.")" \
         "$(localized_text "确认域名已解析到当前 VPS，后端端口可从本机访问。" "Confirm that the domain has been resolved to the current VPS and the backend port can be accessed from this machine." "Убедитесь, что доменное имя было преобразовано в текущий VPS и доступ к внутреннему порту возможен с этого компьютера.")" || return 1
 
     idx=${#SITE_DOMAINS[@]}
@@ -191,7 +191,7 @@ edit_sni_stack_site_backend() {
     echo -e "$(localized_text "${CYAN}即将修改：${domain} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}The following will be changed: ${domain} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}скоро будет изменен: ${domain} -> ${new_addr}:${new_port}${PLAIN}")"
     confirm_risk_action "$(localized_text "修改 443 网站/反代后端" "Modify 443 website/reverse proxy backend" "Изменить веб-сайт 443 / бэкенд обратный прокси")" \
         "$(localized_text "Web 反代引擎后端和 443 入口分流配置" "Web reverse proxy engine backend and 443 entry routing configuration" "бэкенд механизма веб-прокси и конфигурация перенаправления входа 443")" \
-        "$(localized_text "使用 443 单入口备份恢复修改前配置" "Use 443 shared entry backup to restore the configuration before modification" "Используйте однократную резервную копию 443 для восстановления конфигурации до изменения.")" \
+        "$(localized_text "使用 443端口复用备份恢复修改前配置" "Use Port 443 Reuse backup to restore the configuration before modification" "Используйте резервную копию повторного использования порта 443 для восстановления конфигурации до изменения.")" \
         "$(localized_text "确认当前 VPS 能访问新的后端地址和端口。" "Confirm that the current VPS can access the new backend address and port." "Убедитесь, что текущий VPS может получить доступ к новому внутреннему адресу и порту.")" || return 1
 
     SITE_BACKEND_ADDRS[$idx]="$new_addr"
@@ -233,7 +233,7 @@ remove_sni_stack_site() {
     domain="${SITE_DOMAINS[$idx]}"
     confirm_risk_action "$(localized_text "从 443 分流中移除 ${domain}" "Remove ${domain} from 443 routing" "Снимите ${domain} с маршрутизации 443.")" \
         "$(localized_text "该域名的 Web 反代引擎配置和 443 入口分流规则" "Web reverse proxy engine configuration and 443 entry routing rules for this domain" "Конфигурация механизма веб-прокси и правила перенаправления входа 443 для этого доменного имени.")" \
-        "$(localized_text "使用 443 单入口备份恢复，或重新新增该网站/反代域名" "Use 443 shared entry backup and restore, or re-add the website/reverse proxy domain" "Используйте однократное резервное копирование и восстановление 443 или повторно добавьте доменное имя веб-сайта/обратного прокси-сервера.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或重新新增该网站/反代域名" "Use Port 443 Reuse backup and restore, or re-add the website/reverse proxy domain" "Используйте резервное копирование и восстановление повторного использования порта 443 или повторно добавьте доменное имя веб-сайта/обратного прокси-сервера.")" \
         "$(localized_text "确认该域名不再承载线上面板、订阅或网站。" "Confirm that the domain no longer hosts the online panel, subscription, or website." "Убедитесь, что в домене больше нет онлайн-панели, подписки или веб-сайта.")" || return 1
 
     new_domains=()
@@ -281,7 +281,7 @@ switch_sni_stack_web_proxy_engine() {
     echo -e "$(localized_text "当前入口模式：${entry_mode}" "Current entry mode: ${entry_mode}" "Текущий режим ввода: ${entry_mode}.")"
     echo -e "$(localized_text "当前 Web 反代引擎：${current_label} (${current_engine})" "Current web reverse proxy engine: ${current_label} (${current_engine})" "Текущий движок веб-прокси: ${current_label} (${current_engine})")"
     echo -e "$(localized_text "本地 TLS 后端：$(web_proxy_backend)" "Local TLS Backend: $(web_proxy_backend)" "Локальный сервер TLS: $(web_proxy_backend)")"
-    echo -e "$(localized_text "读取来源：/etc/vps-optimize/sni-stack.env（脚本保存的 443 共享配置）" "Read source: /etc/vps-optimize/sni-stack.env（脚本保存的 443 shared configuration)" "Источник чтения: общая конфигурация /etc/vps-optimize/sni-stack.env（脚本保存的 443)")"
+    echo -e "$(localized_text "读取来源：/etc/vps-optimize/sni-stack.env（脚本保存的 443 共享配置）" "Read source: /etc/vps-optimize/sni-stack.env（脚本保存的 Port 443 Reuse configuration)" "Источник чтения: общая конфигурация /etc/vps-optimize/sni-stack.env（脚本保存的 443)")"
     echo -e "$(localized_text "${YELLOW}切换时会按当前域名、证书、后端和白名单重新渲染所选引擎，并隔离另一套 443 本地 Web 反代配置。${PLAIN}" "${YELLOW}When switching, the selected engine will be re-rendered according to the current domain, certificate, backend and whitelist, and another set of 443 local web reverse proxy configuration will be isolated.${PLAIN}" "${YELLOW}При переключении выбранный движок будет перерисован в соответствии с текущим именем домена, сертификатом, бэкенд и белым списком, а другой набор из 443 локальных конфигураций веб-прокси будет изолирован.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}如果你手工改过 Caddy/Nginx 文件但没有通过本菜单保存，请先在 [8]/[10] 同步脚本保存值后再切换。${PLAIN}" "${YELLOW}If you manually modified the Caddy/Nginx file but did not save it through this menu, please save the value in the [8]/[10] synchronization script before switching.${PLAIN}" "${YELLOW}Если вы вручную изменили файл Caddy/Nginx, но не сохранили его через это меню, сохраните значение в сценарии синхронизации [8]/[10] перед переключением.${PLAIN}")"
     echo -e "------------------------------------------------"
@@ -320,7 +320,7 @@ switch_sni_stack_web_proxy_engine() {
 
     confirm_risk_action "$(localized_text "切换 443 Web 反代引擎为 ${new_label}" "Switch the 443 Web reverse proxy engine to ${new_label}" "Переключите механизм обратный прокси 443 Web на ${new_label}.")" \
         "$(localized_text "重新生成 ${new_label} 配置，并隔离旧的 443 本地 Web 反代配置；公网 443 入口模式保持 ${entry_mode}" "Regenerate the ${new_label} configuration and isolate the old 443 local Web reverse proxy configuration; the public port 443 entry mode remains ${entry_mode}" "Восстановите конфигурацию ${new_label} и изолируйте старую локальную конфигурацию обратный прокси веб-страницы 443; режим входа в публичную сеть 443 остается ${entry_mode}")" \
-        "$(localized_text "使用 443 单入口备份恢复，或切回 ${current_label} 后重新应用" "Use 443 shared entry backup and restore, or switch back to ${current_label} and reapply" "Используйте однократное резервное копирование и восстановление 443 или вернитесь к ${current_label} и повторите заявку.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或切回 ${current_label} 后重新应用" "Use Port 443 Reuse backup and restore, or switch back to ${current_label} and reapply" "Используйте резервное копирование и восстановление повторного использования порта 443 или вернитесь к ${current_label} и повторите заявку.")" \
         "$(localized_text "确认本机 ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} 未被其他服务占用，且证书文件仍在 /etc/caddy/certs/。" "Confirm that the local machine ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} is not occupied by other services, and the certificate file is still in /etc/caddy/certs/." "Убедитесь, что локальный компьютер ${CADDY_LISTEN_ADDR}:${CADDY_LISTEN_PORT} не занят другими службами и файл сертификата все еще находится в /etc/caddy/certs/.")" || return 1
 
     WEB_PROXY_ENGINE="$new_engine"
@@ -397,7 +397,7 @@ add_sni_stack_tcp_route() {
     echo -e "$(localized_text "${YELLOW}说明：Web 白名单只保护 Web 域名，不会应用到 TCP/SNI 或 Xray 节点流量。${PLAIN}" "${YELLOW}Note: The Web whitelist only protects Web domains and will not be applied to TCP/SNI or Xray node traffic.${PLAIN}" "${YELLOW}Примечание. Белый список веб-сайтов защищает только имена веб-доменов и не будет применяться к трафику узлов TCP/SNI или Xray.${PLAIN}")"
     confirm_risk_action "$(localized_text "新增 443 TCP/SNI 入站 ${route_sni}" "Added 443 TCP/SNI inbound ${route_sni}" "Добавлен 443 TCP/SNI входящий ${route_sni}.")" \
         "$(localized_text "Nginx stream SNI 分流规则，会把该 SNI 直通到本地 3x-ui 入站" "Nginx stream SNI routing rule will pass the SNI directly to the local 3x-ui inbound connection" "Правило маршрутизации Nginx stream SNI передаст SNI непосредственно локальному входящему соединению 3x-ui.")" \
-        "$(localized_text "使用 443 单入口备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" "Restore using a 443 share entry backup, or delete the route from the TCP/SNI inbound connection management menu" "Восстановите резервную копию общей точки входа 443 или удалите маршрут в меню управления входящими подключениями TCP/SNI.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" "Restore using a Port 443 Reuse backup, or delete the route from the TCP/SNI inbound connection management menu" "Восстановите резервную копию повторного использования порта 443 или удалите маршрут в меню управления входящими подключениями TCP/SNI.")" \
         "$(localized_text "确认后端只监听本地地址，不要在安全组或防火墙开放 ${route_port}。" "Confirm that the backend only listens to the local address and does not open ${route_port} in the security group or firewall." "Убедитесь, что бэкенд прослушивает только локальный адрес и не открывает ${route_port} в группе безопасности или брандмауэре.")" || return 1
 
     idx=${#TCP_ROUTE_SNIS[@]}
@@ -468,7 +468,7 @@ edit_sni_stack_tcp_route() {
     echo -e "$(localized_text "${CYAN}即将修改：${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}Is about to be modified: ${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}скоро будет изменен: ${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}")"
     confirm_risk_action "$(localized_text "修改 443 TCP/SNI 入站 ${old_sni}" "Modify 443 TCP/SNI inbound ${old_sni}" "Изменить 443 TCP/SNI входящий ${old_sni}")" \
         "$(localized_text "Nginx stream SNI 分流规则和本地后端端口" "Nginx stream SNI Offload rules and local backend ports" "Nginx stream SNI Правила разгрузки и локальные серверные порты")" \
-        "$(localized_text "使用 443 单入口备份恢复修改前配置" "Use 443 shared entry backup to restore the configuration before modification" "Используйте однократную резервную копию 443 для восстановления конфигурации до изменения.")" \
+        "$(localized_text "使用 443端口复用备份恢复修改前配置" "Use Port 443 Reuse backup to restore the configuration before modification" "Используйте резервную копию повторного использования порта 443 для восстановления конфигурации до изменения.")" \
         "$(localized_text "确认 3x-ui 入站已按新地址和端口监听，且未开放该内部端口。" "Confirm that 3x-ui inbound is listening at the new address and port, and the internal port is not open." "Убедитесь, что 3x-ui прослушивает входящее подключение по новому адресу и порту, а внутренний порт не открыт.")" || return 1
 
     TCP_ROUTE_SNIS[$idx]="$new_sni"
@@ -514,7 +514,7 @@ remove_sni_stack_tcp_route() {
     route_sni="${TCP_ROUTE_SNIS[$idx]}"
     confirm_risk_action "$(localized_text "从 443 分流中移除 TCP/SNI 入站 ${route_sni}" "Remove TCP/SNI from 443 routing inbound ${route_sni}" "Удалить входящее подключение TCP/SNI из маршрутизации 443 ${route_sni}.")" \
         "$(localized_text "该 SNI 的 Nginx stream 直通规则" "The Nginx stream pass-through rule for SNI" "Правило прохождения Nginx stream для SNI")" \
-        "$(localized_text "使用 443 单入口备份恢复，或重新新增该 TCP/SNI 入站" "Use 443 shared entry backup and restore, or re-add the TCP/SNI inbound connection" "Используйте однократное резервное копирование и восстановление 443 или повторно добавьте входящий TCP/SNI.")" \
+        "$(localized_text "使用 443端口复用备份恢复，或重新新增该 TCP/SNI 入站" "Use Port 443 Reuse backup and restore, or re-add the TCP/SNI inbound connection" "Используйте резервное копирование и восстановление повторного использования порта 443 или повторно добавьте входящий TCP/SNI.")" \
         "$(localized_text "确认没有客户端仍依赖该 SNI 连接。" "Confirm that no clients are still relying on the SNI connection." "Убедитесь, что ни один клиент по-прежнему не использует соединение SNI.")" || return 1
 
     for i in "${!TCP_ROUTE_SNIS[@]}"; do

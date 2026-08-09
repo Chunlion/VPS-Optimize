@@ -149,12 +149,12 @@ tls_sni_probe_local() {
 func_443_network_test() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "测速与质量检测 > 443 单入口测试" "Speed Test and Quality Test > 443 Shared Entry Test" "Тестирование скорости и качества > Тест 443 с одним входом")"
-    echo -e "$(localized_text "${BOLD}🧪 443 单入口网络访问测试${PLAIN}" "${BOLD}🧪 443 shared entry network access test${PLAIN}" "${BOLD}🧪 443 Тест доступа к сети с одним входом${PLAIN}")"
+    print_breadcrumb "$(localized_text "测速与质量检测 > 443端口复用测试" "Speed Test and Quality Test > Port 443 Reuse Test" "Тестирование скорости и качества > Тест повторное использование порта 443")"
+    echo -e "$(localized_text "${BOLD}🧪 443端口复用网络访问测试${PLAIN}" "${BOLD}🧪 Port 443 Reuse network access test${PLAIN}" "${BOLD}🧪 443 Тест доступа к сети повторного использования порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     if [[ ! -f /etc/vps-optimize/sni-stack.env ]]; then
-        echo -e "$(localized_text "${YELLOW}未检测到 443 单入口配置。请先进入 [19] -> [2] 安装入口。${PLAIN}" "${YELLOW}No shared 443 entry configuration was found. Use [19] -> [2] to install it first.${PLAIN}" "${YELLOW}Конфигурация общего входа 443 не найдена. Сначала установите её через [19] -> [2].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 443端口复用配置。请先进入 [19] -> [2] 安装入口。${PLAIN}" "${YELLOW}No Port 443 Reuse configuration was found. Use [19] -> [2] to install it first.${PLAIN}" "${YELLOW}Конфигурация повторного использования порта 443 не найдена. Сначала установите её через [19] -> [2].${PLAIN}")"
         read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
         return
     fi

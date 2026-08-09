@@ -303,7 +303,7 @@ show_entry_mode_cutover_diff() {
     fi
 
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}443 单入口切换 diff 预览${PLAIN}" "${BOLD}443 Shared entry switch diff preview${PLAIN}" "${BOLD}443 Предварительный просмотр дифференциала переключения одной записи${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}443端口复用切换 diff 预览${PLAIN}" "${BOLD}Port 443 Reuse switch diff preview${PLAIN}" "${BOLD}443 Предварительный просмотр дифференциала переключения одной записи${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     print_preview_file_diff "/etc/caddy/Caddyfile" "$target_caddyfile" "Caddyfile"
     print_preview_file_diff "/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy" "${target_caddy_dir}/${PANEL_DOMAIN}.caddy" "$(localized_text "Caddy 面板域名" "Caddy panel domain" "Доменное имя панели Caddy")"
@@ -334,7 +334,7 @@ preview_entry_mode_cutover() {
 
     while true; do
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}443 单入口切换变更预览${PLAIN}" "${BOLD}443 shared entry switching change preview${PLAIN}" "${BOLD}443 Предварительный просмотр изменений коммутации на один вход${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}443端口复用切换变更预览${PLAIN}" "${BOLD}Port 443 Reuse switching change preview${PLAIN}" "${BOLD}443 Предварительный просмотр изменений коммутации на один вход${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "当前 ENTRY_MODE：${current_mode}" "Current ENTRY_MODE: ${current_mode}" "Текущий ENTRY_MODE: ${current_mode}")"
         echo -e "$(localized_text "目标 ENTRY_MODE：${target_mode}" "Target ENTRY_MODE: ${target_mode}" "Цель ENTRY_MODE: ${target_mode}")"
@@ -485,7 +485,7 @@ disable_nginx_stream_public_443() {
             return 1
         fi
         if systemctl is-active --quiet nginx; then
-            echo -e "$(localized_text "${YELLOW}ℹ️ nginx 服务仍在运行，但已不监听公网 ${NGINX_LISTEN_PORT}；这是允许的，单入口只要求公网 443 由目标入口独占。${PLAIN}" "${YELLOW}ℹ️ nginx The service is still running, but it is no longer listening on the public ${NGINX_LISTEN_PORT}; this is allowed, and the shared entry only requires that public port 443 be exclusively occupied by the target entry.${PLAIN}" "${YELLOW}ℹ️ nginx Служба все еще работает, но больше не прослушивает публичную сеть ${NGINX_LISTEN_PORT}; это разрешено, и для общей точки входа требуется только, чтобы публичный порт 443 был занята исключительно целевым входом.${PLAIN}")"
+            echo -e "$(localized_text "${YELLOW}ℹ️ nginx 服务仍在运行，但已不监听公网 ${NGINX_LISTEN_PORT}；这是允许的，端口复用只要求公网 443 由目标入口独占。${PLAIN}" "${YELLOW}ℹ️ nginx The service is still running, but it is no longer listening on the public ${NGINX_LISTEN_PORT}; this is allowed, and the Port 443 Reuse only requires that public port 443 be exclusively occupied by the target entry.${PLAIN}" "${YELLOW}ℹ️ nginx Служба все еще работает, но больше не прослушивает публичную сеть ${NGINX_LISTEN_PORT}; это разрешено, и для повторного использования порта 443 требуется только, чтобы публичный порт 443 был занята исключительно целевым входом.${PLAIN}")"
         fi
     fi
 }

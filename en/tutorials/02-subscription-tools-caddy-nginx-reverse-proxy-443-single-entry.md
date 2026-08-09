@@ -1,14 +1,14 @@
-# Subscription Tools with Caddy/Nginx and Shared Port 443
+# Subscription Tools with Caddy/Nginx and Port 443 Reuse
 
-Use this guide to publish subscription tools such as SublinkPro, Sub-Store, and Miaomiaowu Subscription Management over HTTPS. Before shared port 443 is enabled, use the Caddy or Nginx HTTPS reverse proxy in `Main menu [4 Reverse proxy]`. After it is enabled, add the domain through shared port 443's Web-domain/reverse-proxy menu, where you can choose Caddy or Nginx as the local Web reverse-proxy engine.
+Use this guide to publish subscription tools such as SublinkPro, Sub-Store, and Miaomiaowu Subscription Management over HTTPS. Before Port 443 Reuse is enabled, use the Caddy or Nginx HTTPS reverse proxy in `Main menu [4 Reverse proxy]`. After it is enabled, add the domain through Port 443 Reuse's Web-domain/reverse-proxy menu, where you can choose Caddy or Nginx as the local Web reverse-proxy engine.
 
 ## Choose a path
 
 | Current status | Recommended method |
 |---|---|
-| Shared port 443 is not enabled; you only need domain access to the tool | Use `Main menu [4 Reverse proxy]` and choose Caddy or Nginx HTTPS for the current environment. |
-| Shared port 443 is enabled | Add the reverse-proxy domain in `Main menu [19 Shared port 443] -> [8 Manage Web domains/reverse proxy]`. Use its `[8 Switch Web reverse-proxy engine]` option to change between Caddy and Nginx. |
-| The tool is for personal use only | Bind its backend to localhost or a private-network address; expose it through Caddy, Nginx, or shared port 443. |
+| Port 443 Reuse is not enabled; you only need domain access to the tool | Use `Main menu [4 Reverse proxy]` and choose Caddy or Nginx HTTPS for the current environment. |
+| Port 443 Reuse is enabled | Add the reverse-proxy domain in `Main menu [19 Port 443 Reuse] -> [8 Manage Web domains/reverse proxy]`. Use its `[8 Switch Web reverse-proxy engine]` option to change between Caddy and Nginx. |
+| The tool is for personal use only | Bind its backend to localhost or a private-network address; expose it through Caddy, Nginx, or Port 443 Reuse. |
 | You are unsure which path applies | Run `Main menu [1 Preflight and risk scan]` and `Main menu [15 Service health overview]` to check port and service status. |
 
 ## When to use this guide
@@ -37,7 +37,7 @@ DNS recommendations:
 | Domain | Recommendation |
 |---|---|
 | `sub.example.com` | DNS only / Cloudflare proxy disabled |
-| Domains used with shared port 443 | DNS only / Cloudflare proxy disabled |
+| Domains used with Port 443 Reuse | DNS only / Cloudflare proxy disabled |
 | Regular Web-only site | Choose whether to proxy it as needed, but start with the proxy disabled while completing this guide. |
 
 ## Estimated time
@@ -46,7 +46,7 @@ DNS recommendations:
 |---|---|
 | Preflight | 2-5 minutes |
 | Deploy subscription tools | 5-20 minutes |
-| Configure Caddy/Nginx or shared port 443 | 5-15 minutes |
+| Configure Caddy/Nginx or Port 443 Reuse | 5-15 minutes |
 | Verify subscription output | 5-10 minutes |
 | Backup | 1–3 minutes |
 
@@ -56,8 +56,8 @@ DNS recommendations:
 |---|---|---|
 | Docker/Compose | Add new containers, networks, and deployment directories | Container port conflict or image pull failure |
 | Caddy | Site configuration, certificates, and reverse-proxy rules | A bad configuration can cause 404 or 502 errors. |
-| Nginx HTTPS reverse proxy | HTTPS site configuration when shared port 443 is disabled | A configuration error or port conflict can disrupt ports 80/443. |
-| Nginx Stream | SNI routing when using shared port 443 | A configuration error can affect public port `443`. |
+| Nginx HTTPS reverse proxy | HTTPS site configuration when Port 443 Reuse is disabled | A configuration error or port conflict can disrupt ports 80/443. |
+| Nginx Stream | SNI routing when using Port 443 Reuse | A configuration error can affect public port `443`. |
 | Firewall | Only ingress ports should be public; backend ports should not be | An incorrect rule can expose internal services. |
 | Backups | Configuration backups and quarantine directories | Uses a small amount of disk space. |
 
@@ -146,9 +146,9 @@ Main menu [8 Firewall rules]
 
 Docker local exposure protection changes Docker networking and restarts Docker. Before using it, confirm that no container depends on a directly exposed public port.
 
-### 4A. Option 1: Use Caddy or Nginx before shared port 443 is enabled
+### 4A. Option 1: Use Caddy or Nginx before Port 443 Reuse is enabled
 
-Use this option when shared port 443 is not enabled and you only need to access the subscription tool by domain.
+Use this option when Port 443 Reuse is not enabled and you only need to access the subscription tool by domain.
 
 Enter:
 
@@ -161,7 +161,7 @@ Choose for the current environment:
 | Option | Use when |
 |---|---|
 | `[1 Add Caddy reverse proxy]` | You already use Caddy or want Caddy to manage the site. |
-| `[2 Add Nginx HTTPS reverse proxy]` | Shared port 443 is disabled and Nginx should listen publicly on ports 80/443 for HTTPS. |
+| `[2 Add Nginx HTTPS reverse proxy]` | Port 443 Reuse is disabled and Nginx should listen publicly on ports 80/443 for HTTPS. |
 
 Use the following example values only as a reference; replace the domain and port with your actual values:
 
@@ -180,7 +180,7 @@ If you choose Nginx HTTPS reverse proxy, the script will reuse the existing `acm
 /root/cert/sub.example.com.key
 ```
 
-`sub.example.com` is an example; replace it with the actual subscription domain. Nginx HTTPS reverse proxy is available only while shared port 443 is disabled. If the script detects shared port 443 configuration, it stops to prevent Nginx from taking public port `443`. Do not assign the same domain to both Caddy and Nginx.
+`sub.example.com` is an example; replace it with the actual subscription domain. Nginx HTTPS reverse proxy is available only while Port 443 Reuse is disabled. If the script detects Port 443 Reuse configuration, it stops to prevent Nginx from taking public port `443`. Do not assign the same domain to both Caddy and Nginx.
 
 If you use Caddy for reverse proxy, verify after configuration:
 
@@ -208,18 +208,18 @@ journalctl -u nginx -n 80 --no-pager
 
 If certificate issuance fails, check Cloudflare token permissions, the authorized zone, `_acme-challenge` TXT propagation, server time, and the acme.sh logs. The script uses DNS-01; enabling Cloudflare proxying is not itself the direct cause of an issuance failure.
 
-### 4B. Option 2: Add the service to shared port 443
+### 4B. Option 2: Add the service to Port 443 Reuse
 
 Use this option after you have enabled:
 
 ```text
-Main menu [19 443 shared entry manager] -> [2 initial setup/installation 443 shared entry]
+Main menu [19 Port 443 Reuse manager] -> [2 initial setup/installation Port 443 Reuse]
 ```
 
 To add another subscription-tool domain later, do not rerun initial setup. Use:
 
 ```text
-Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy]
+Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy]
 ```
 
 Use these example values:
@@ -234,7 +234,7 @@ For a Docker service, publish the container port on host address `127.0.0.1`, th
 
 The script updates the local Caddy or Nginx configuration for the selected Web reverse-proxy engine and issues a certificate. When it shows a high-risk confirmation, verify the snapshot, DNS, token, and backend port before entering uppercase `YES`.
 
-If you previously created an independent Caddy/Nginx HTTPS reverse proxy in `Main menu [4 Reverse proxy]`, enabling or reapplying shared port 443 isolates old configurations that could take public port `443`. Add future subscription-tool domains through `[19] -> [8]`; do not let the Nginx HTTPS reverse proxy in `[4 Reverse proxy]` listen directly on public port `443`.
+If you previously created an independent Caddy/Nginx HTTPS reverse proxy in `Main menu [4 Reverse proxy]`, enabling or reapplying Port 443 Reuse isolates old configurations that could take public port `443`. Add future subscription-tool domains through `[19] -> [8]`; do not let the Nginx HTTPS reverse proxy in `[4 Reverse proxy]` listen directly on public port `443`.
 
 Verify:
 
@@ -316,7 +316,7 @@ If the tool uses Docker Compose, also record:
 
 ## Verification
 
-When shared port 443 is disabled, verify the Caddy or Nginx reverse proxy that you use.
+When Port 443 Reuse is disabled, verify the Caddy or Nginx reverse proxy that you use.
 
 Caddy:
 
@@ -336,10 +336,10 @@ curl -I https://sub.example.com/
 curl -I http://127.0.0.1:3000/
 ```
 
-Shared port 443 diagnostics:
+Port 443 Reuse diagnostics:
 
 ```text
-Main menu [19 443 shared entry manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
 
 You can also check manually:
@@ -363,8 +363,8 @@ docker logs --tail=80 CONTAINER_NAME
 |---|---|
 | Caddy configuration error | Restore a Caddy backup, or quarantine the new site configuration and reload Caddy. |
 | Nginx HTTPS reverse-proxy error | Check `nginx -t`; the script writes its Nginx reverse-proxy configuration to `/etc/nginx/conf.d/vps_proxy_${domain}.conf`. |
-| Unable to add a domain to shared port 443 | Roll back using the script's automatic backup, or remove the domain in `Main menu [19 Shared port 443] -> [8 Manage Web domains/reverse proxy]`. |
-| Certificate failure | In `Main menu [19 Shared port 443] -> [12 CF DNS / Caddy certificate maintenance]`, check the token and DNS, then reissue the certificate. |
+| Unable to add a domain to Port 443 Reuse | Roll back using the script's automatic backup, or remove the domain in `Main menu [19 Port 443 Reuse] -> [8 Manage Web domains/reverse proxy]`. |
+| Certificate failure | In `Main menu [19 Port 443 Reuse] -> [12 CF DNS / Caddy certificate maintenance]`, check the token and DNS, then reissue the certificate. |
 | Container will not start | Open the corresponding tool-management menu to check status, restart, or rebuild. |
 | Subscription output includes an internal port | Change the tool's External URL or Public URL. |
 | A port is public | Restrict access in `Main menu [11 Docker security management]` or `Main menu [8 Firewall rules]`. |

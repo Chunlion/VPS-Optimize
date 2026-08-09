@@ -14,16 +14,16 @@ This entrance is used to manage related tools such as 3x-ui, S-UI, Sing-box, Xra
 
 The subscription tool is recommended to be deployed in the manner of "local binding + Caddy/Nginx/443 external". Newly deployed subscription tools are bound to `127.0.0.1` first by default.
 
-After enabling the 443 sharing entry, it is recommended to add the Internet HTTPS domain through the following entry:
+After enabling the Port 443 Reuse, it is recommended to add the Internet HTTPS domain through the following entry:
 
 ```text
-Main menu [19 443 shared entry manager] -> [8 management Web domains / reverse proxy]
+Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy]
 ```
 
-When the 443 shared entry is not enabled, a standalone reverse proxy portal can be used:
+When the Port 443 Reuse is not enabled, a standalone reverse proxy portal can be used:
 
 ```text
 Main menu [4 reverse proxy]
 ```
 
-For detailed scenarios, see [Subscription Tool Access Caddy/Nginx reverse proxy and shared port 443](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md).
+For detailed scenarios, see [Subscription Tool Access Caddy/Nginx reverse proxy and Port 443 Reuse](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md).

@@ -4,7 +4,7 @@
 
 本文菜单路径按“主菜单 [编号 菜单文案] -> [子编号 菜单文案]”格式书写。
 
-## 先看菜单入口
+## 先看菜端口复用
 
 | 目标 | 菜单路径 |
 |---|---|
@@ -12,8 +12,8 @@
 | 查看备份列表 | `主菜单 [16 配置备份与回滚] -> [2 查看现有备份列表]` |
 | 从备份回滚 | `主菜单 [16 配置备份与回滚] -> [3 从备份一键回滚]` |
 | 查看/编辑脚本已应用配置 | `主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]` |
-| 443 链路体检 | `主菜单 [19 443 单入口管理中心] -> [13 443 链路体检]` |
-| Caddy/证书体检 | `主菜单 [19 443 单入口管理中心] -> [12 CF DNS / Caddy 证书维护] -> [13 Caddy/证书一键体检]` |
+| 443 链路体检 | `主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]` |
+| Caddy/证书体检 | `主菜单 [19 443端口复用管理中心] -> [12 CF DNS / Caddy 证书维护] -> [13 Caddy/证书一键体检]` |
 | 生成反馈诊断信息 | `主菜单 [15 服务健康总览]` |
 | 重启常用服务 | `主菜单 [15 服务健康总览] -> [s 服务恢复] -> [r 重启一个常用服务]` |
 | 重启失败服务 | `主菜单 [15 服务健康总览] -> [s 服务恢复] -> [f 重启失败服务]` |
@@ -32,7 +32,7 @@
 | 当前目录的 `vps.sh` | 手动下载运行时的脚本文件 |
 | `/etc/vps-optimize` | VPS-Optimize 配置、备份索引和隔离目录 |
 | `/etc/vps-optimize/language.conf` | 界面语言设置；支持 `LANGUAGE=zh`、`LANGUAGE=en`、`LANGUAGE=ru` |
-| `/etc/vps-optimize/backups` | 全量备份和 443 单入口备份目录 |
+| `/etc/vps-optimize/backups` | 全量备份和 443端口复用备份目录 |
 | `/etc/vps-optimize/quarantine` | 隔离目录，脚本尽量把旧配置移入这里而不是直接删除 |
 
 常用检查：
@@ -43,15 +43,15 @@ find /etc/vps-optimize/backups -maxdepth 2 -type d 2>/dev/null
 find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 ```
 
-## 443 单入口
+## 443端口复用
 
 | 路径 | 说明 |
 |---|---|
-| `/etc/vps-optimize/sni-stack.env` | 443 单入口保存的核心参数，`ENTRY_MODE` 使用 `nginx-stream` / `xray-fallback` / `tcp-peek` |
-| `/etc/vps-optimize/443-engine.conf` | 当前 443 单入口引擎状态，默认 `nginx-stream` |
+| `/etc/vps-optimize/sni-stack.env` | 443端口复用保存的核心参数，`ENTRY_MODE` 使用 `nginx-stream` / `xray-fallback` / `tcp-peek` |
+| `/etc/vps-optimize/443-engine.conf` | 当前 443端口复用引擎状态，默认 `nginx-stream` |
 | `/etc/vps-optimize/vpso-mux.yaml` | `tcp-peek` / `vpso-mux` 分流器配置 |
-| `/etc/vps-optimize/sni-stack.last-backup` | 最近一次 443 单入口备份路径记录 |
-| `/etc/vps-optimize/backups/sni-stack_*` | 443 单入口自动备份目录 |
+| `/etc/vps-optimize/sni-stack.last-backup` | 最近一次 443端口复用备份路径记录 |
+| `/etc/vps-optimize/backups/sni-stack_*` | 443端口复用自动备份目录 |
 | `/etc/nginx/stream.d/vps_sni_*.conf` | Nginx stream SNI 分流配置 |
 | `/etc/caddy/conf.d/<domain>.caddy` | Caddy 单域名反代配置 |
 | `/etc/caddy/certs/<domain>.crt` | Caddy 使用的证书链 |
@@ -83,9 +83,9 @@ ss -lntp | grep -E ':443|:8443|:1443|:40000|:2096'
 
 ```text
 主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]
-主菜单 [19 443 单入口管理中心] -> [13 443 链路体检]
-主菜单 [19 443 单入口管理中心] -> [6 重新应用当前入口模式]
-主菜单 [19 443 单入口管理中心] -> [12 CF DNS / Caddy 证书维护]
+主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]
+主菜单 [19 443端口复用管理中心] -> [6 重新应用当前入口模式]
+主菜单 [19 443端口复用管理中心] -> [12 CF DNS / Caddy 证书维护]
 ```
 
 ## Caddy
@@ -116,10 +116,10 @@ find /etc/caddy -maxdepth 3 -type f
 主菜单 [4 反代] -> [6 查看/编辑已应用配置文件]
 ```
 
-如果已经启用 443 单入口，新增网站入口是：
+如果已经启用 443端口复用，新增网站入口是：
 
 ```text
-主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代]
+主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]
 ```
 
 ## Nginx
@@ -127,8 +127,8 @@ find /etc/caddy -maxdepth 3 -type f
 | 路径 | 说明 |
 |---|---|
 | `/etc/nginx/nginx.conf` | Nginx 主配置 |
-| `/etc/nginx/stream.d` | 443 单入口 stream 配置目录 |
-| `/etc/nginx/stream.d/vps_sni_*.conf` | 443 单入口 SNI 分流配置 |
+| `/etc/nginx/stream.d` | 443端口复用 stream 配置目录 |
+| `/etc/nginx/stream.d/vps_sni_*.conf` | 443端口复用 SNI 分流配置 |
 | `/etc/nginx/conf.d/00-vps-default-drop.conf` | 默认丢弃站点配置，存在时用于减少默认站点暴露 |
 | `/etc/nginx/conf.d/00-vps-proxy-map.conf` | Nginx HTTPS 反代的 WebSocket Connection 变量映射 |
 | `/etc/nginx/conf.d/vps_proxy_*.conf` | Nginx HTTPS 反代站点配置 |
@@ -145,7 +145,7 @@ journalctl -u nginx -n 100 --no-pager
 grep -R "listen" /etc/nginx 2>/dev/null
 ```
 
-443 单入口模式下，公网 `443` 只应由当前 `ENTRY_MODE` 对应的单个入口服务监听：`nginx-stream` 对应 `nginx`，`xray-fallback` 对应 Xray / 3x-ui / x-ui 托管的 Xray，`tcp-peek` 对应 `tcppeek` / `vpso-mux`。如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本按 `nginx-stream` 兼容读取。
+443端口复用模式下，公网 `443` 只应由当前 `ENTRY_MODE` 对应的单个入口服务监听：`nginx-stream` 对应 `nginx`，`xray-fallback` 对应 Xray / 3x-ui / x-ui 托管的 Xray，`tcp-peek` 对应 `tcppeek` / `vpso-mux`。如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本按 `nginx-stream` 兼容读取。
 
 ## Cloudflare Token
 
@@ -171,7 +171,7 @@ ls -l /root/.config/vps-panel/cloudflare.env 2>/dev/null
 更新入口：
 
 ```text
-主菜单 [19 443 单入口管理中心] -> [12 CF DNS / Caddy 证书维护] -> [8 更新 Cloudflare API Token]
+主菜单 [19 443端口复用管理中心] -> [12 CF DNS / Caddy 证书维护] -> [8 更新 Cloudflare API Token]
 ```
 
 ## 3x-ui / x-ui

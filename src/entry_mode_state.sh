@@ -167,7 +167,7 @@ entry_listener_display_name() {
         nginx) echo "Nginx Stream (nginx)" ;;
         xray) echo "Xray Fallback (xray/3x-ui/x-ui)" ;;
         tcppeek) echo "$(localized_text "TCP Peek + Splice 模式 (vpso-mux 分流器)" "TCP Peek + Splice mode (vpso-mux routing)" "Режим TCP Peek + Splice (маршрутизация vpso-mux)")" ;;
-        caddy) echo "$(localized_text "Caddy（不应直接接管 443 单入口）" "Caddy (should not take over the 443 shared entry directly)" "Caddy (не должен напрямую контролировать общий вход 443)")" ;;
+        caddy) echo "$(localized_text "Caddy（不应直接接管 443端口复用）" "Caddy (should not take over the Port 443 Reuse directly)" "Caddy (не должен напрямую контролировать повторное использование порта 443)")" ;;
         none) echo "$(localized_text "未监听" "Not listening" "Не слушаю")" ;;
         multiple) echo "$(localized_text "多个进程监听/匹配" "Multiple process listening/matching" "Прослушивание/сопоставление нескольких процессов")" ;;
         unknown) echo "$(localized_text "已监听，但进程不可见" "Listened but the process is not visible" "Слушал но процесса не видно")" ;;

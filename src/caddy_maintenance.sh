@@ -5,20 +5,20 @@ func_caddy_cf_reality_wizard() {
     if [[ -f /etc/vps-optimize/sni-stack.env ]]; then
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}检测到已有 443 单入口配置${PLAIN}" "${BOLD}Detects that there are already 443 shared entry configurations${PLAIN}" "${BOLD}обнаружил, что существует 443 конфигурации с общей точкой входа.${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}检测到已有 443端口复用配置${PLAIN}" "${BOLD}Detects that there are already Port 443 Reuse configurations${PLAIN}" "${BOLD}обнаружил, что существует 443 конфигурации с повторным использованием порта 443.${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}如果只是新增网站或反代域名，请返回并选择 [8] 管理 Web 域名/反代。${PLAIN}" "${YELLOW}If you are just adding a new website or reverse proxy domain, please go back and select [8] Manage Web domain/Reverse proxy.${PLAIN}" "${YELLOW}Если вы просто добавляете новый веб-сайт или доменное имя обратного прокси, вернитесь назад и выберите [8] Управление именем веб-домена/обратным прокси.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}继续首次配置会重写 443 入口、Web 反代引擎和 Xray 分流相关核心配置。${PLAIN}" "${YELLOW}Continuing initial setup will rewrite the port 443 entry, Web reverse proxy, and Xray routing configuration.${PLAIN}" "${YELLOW}Продолжение первоначальной настройки перезапишет конфигурацию входа 443, веб-прокси и маршрутизации Xray.${PLAIN}")"
         echo -e "------------------------------------------------"
         grep -E '^(PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null || true
         echo -e "------------------------------------------------"
-        confirm_danger "$(localized_text "重新执行 443 首次配置" "Re-execute 443 initial setup" "Повторно выполнить конфигурацию 443 при первом запуске.")" "$(localized_text "将基于新输入重写 443 单入口核心配置，并重启入口服务/Caddy。" "The 443 shared-entry core configuration will be rewritten based on the new input and the entry service/Caddy will be restarted." "Конфигурация ядра общей точки входа 443 будет переписана на основе новых входных данных, а служба входа/Caddy будет перезапущена.")" "$(localized_text "脚本会先创建备份，可从 443 维护菜单或备份目录回滚。" "The script will first create a backup, which can be rolled back from the 443 maintenance menu or the backup directory." "Скрипт сначала создаст резервную копию, откат которой можно выполнить из меню обслуживания 443 или каталога резервных копий.")" || return 1
+        confirm_danger "$(localized_text "重新执行 443 首次配置" "Re-execute 443 initial setup" "Повторно выполнить конфигурацию 443 при первом запуске.")" "$(localized_text "将基于新输入重写 443端口复用核心配置，并重启入口服务/Caddy。" "The Port 443 Reuse core configuration will be rewritten based on the new input and the entry service/Caddy will be restarted." "Конфигурация ядра повторного использования порта 443 будет переписана на основе новых входных данных, а служба входа/Caddy будет перезапущена.")" "$(localized_text "脚本会先创建备份，可从 443 维护菜单或备份目录回滚。" "The script will first create a backup, which can be rolled back from the 443 maintenance menu or the backup directory." "Скрипт сначала создаст резервную копию, откат которой можно выполнить из меню обслуживания 443 или каталога резервных копий.")" || return 1
     fi
     select_initial_entry_mode || return 1
     collect_sni_stack_config || return 1
     probe_reality_sni "$REALITY_SNI" || return 1
     print_sni_stack_preview || return 1
-    guard_current_ssh_not_on_entry_port "$(localized_text "首次配置 443 单入口" "Initial shared 443 entry setup" "Первоначальная настройка общей точки входа 443")" || return 1
+    guard_current_ssh_not_on_entry_port "$(localized_text "首次配置 443端口复用" "Initial Port 443 Reuse setup" "Первоначальная настройка повторного использования порта 443")" || return 1
     local cf_env_dir="/root/.config/vps-panel"
     local cf_env_file="${cf_env_dir}/cloudflare.env"
     local escaped_token
@@ -388,13 +388,13 @@ func_caddy_cf_maintenance_menu() {
         echo -e "$(localized_text "${YELLOW}用途：排查 443 链路、重签证书、修复软链接、隔离旧配置和回滚。${PLAIN}" "${YELLOW}Purpose: troubleshooting 443 links, re-signing certificates, repairing symlinks, isolating old configurations and rolling back.${PLAIN}" "${YELLOW}Назначение: устранение неполадок 443 ссылок, переподписка сертификатов, восстановление программных ссылок, изоляция старых конфигураций и откат.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}建议顺序：先 [1] 体检，再按异常选择证书或 Caddy 修复项。${PLAIN}" "${YELLOW}Recommended order: [1] health check first, then select the certificate or Caddy repair item according to the abnormality.${PLAIN}" "${YELLOW}Рекомендуемый порядок: [1] Сначала проверка состояния, затем выберите сертификат или элемент ремонта Caddy в соответствии с неисправностью.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 443 单入口常用${PLAIN}" "${BOLD}▶ 443 shared entry commonly used${PLAIN}" "${BOLD}▶ 443 Обычно используется с одним входом${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 443端口复用常用${PLAIN}" "${BOLD}▶ Port 443 Reuse commonly used${PLAIN}" "${BOLD}▶ 443 Обычно используется повторного использования порта 443${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  1. 443 链路与安全体检${PLAIN}       ${YELLOW}(Nginx/Caddy/REALITY/面板/版本隐藏)${PLAIN}" "${GREEN}1. 443 Link and security health check (Nginx/Caddy/REALITY/panel/version hidden)${PLAIN}" "${GREEN}1. 443 проверка состояния канала и безопасности (Nginx/Caddy/REALITY/панель/версия скрыта)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 管理 443 网站/反代域名${PLAIN}    ${YELLOW}(新增/删除/查看，最常用)${PLAIN}" "${GREEN}2. Management 443 website/reverse domain (add/delete/view, most commonly used)${PLAIN}" "${GREEN}2. Веб-сайт Management 443/обратное доменное имя (добавление/удаление/просмотр, наиболее часто используемый)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  3. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}" "${GREEN}3. Modify 443 routing parameters   (Panel/Subscription/REALITY/Entry Port and Path)${PLAIN}" "${GREEN}3. Измените 443 параметра маршрутизации   (Панель/Подписка/REALITY/Входной порт и путь)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  4. 重新应用上次 443 配置${PLAIN}     ${YELLOW}(读取 sni-stack.env 重建配置)${PLAIN}" "${GREEN}4. Reapply the last 443 configuration (read sni-stack.env and rebuild the configuration)${PLAIN}" "${GREEN}4. Повторно примените последнюю конфигурацию 443 (прочитайте sni-stack.env и перестройте конфигурацию)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  5. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}" "${GREEN}5. Subscription link / External Proxy prompt (check whether the node link outputs public port 443)${PLAIN}" "${GREEN}5. Ссылка на подписку/запрос внешнего прокси (проверьте, выводит ли ссылка узла публичный порт 443)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  6. 回滚 443 单入口配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}" "${RED}6. Rollback 443 Shared entry configuration   (restore from recent backup)${PLAIN}" "${RED}6. Откат 443 Конфигурация с общей точкой входа (восстановление из последней резервной копии)${PLAIN}")"
+        echo -e "$(localized_text "${RED}  6. 回滚 443端口复用配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}" "${RED}6. Rollback Port 443 Reuse configuration   (restore from recent backup)${PLAIN}" "${RED}6. Откат 443 Конфигурация с повторным использованием порта 443 (восстановление из последней резервной копии)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 证书与 Cloudflare${PLAIN}" "${BOLD}▶ Certificate and Cloudflare${PLAIN}" "${BOLD}▶ Сертификат и Cloudflare${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  7. 查看已管理域名 / 证书路径${PLAIN}" "${GREEN}7. View the managed domain/certificate path${PLAIN}" "${GREEN}7. Просмотрите имя управляемого домена/путь сертификата.${PLAIN}")"
@@ -819,8 +819,8 @@ func_caddy_manage_ip_whitelist() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}🔐 Caddy 域名 IP 白名单${PLAIN}" "${BOLD}🔐 Caddy domain IP whitelist${PLAIN}" "${BOLD}🔐 Caddy доменное имя Белый список IP-адресов${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}适用于未启用 443 单入口、由 Caddy 直接对外服务的域名。${PLAIN}" "${YELLOW}Suitable for domains that do not enable the 443 shared entry and are directly served externally by Caddy.${PLAIN}" "${YELLOW}подходит для доменных имен, которые не поддерживают общий вход 443 и обслуживаются напрямую извне Caddy.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443 单入口，请用主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]，不要在 Caddy 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to 443 shared entry, please use the main menu [19 443 shared entry management center] -> [8 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Caddy layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к 443 единому входу, используйте главное меню [19 443 центр управления общим входом] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменного имени], не ограничивайте его на уровне Caddy.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}适用于未启用 443端口复用、由 Caddy 直接对外服务的域名。${PLAIN}" "${YELLOW}Suitable for domains that do not enable the Port 443 Reuse and are directly served externally by Caddy.${PLAIN}" "${YELLOW}подходит для доменных имен, которые не поддерживают повторное использование порта 443 и обслуживаются напрямую извне Caddy.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443端口复用，请用主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]，不要在 Caddy 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to Port 443 Reuse, please use the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Caddy layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к повторному использованию порта 443, используйте главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменного имени], не ограничивайте его на уровне Caddy.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     if ! command -v caddy >/dev/null 2>&1 || [[ ! -f /etc/caddy/Caddyfile ]]; then
@@ -852,7 +852,7 @@ func_caddy_manage_ip_whitelist() {
         return
     fi
     if [[ "$first_site_line" =~ ^https://[^[:space:]]+:[0-9]+[[:space:]]*\{ ]]; then
-        echo -e "$(localized_text "${RED}❌ 这个配置看起来属于 443 单入口本地 Caddy TLS 站点。请改用主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]。${PLAIN}" "${RED}❌ This configuration appears to belong to the 443 shared entry local Caddy TLS site. Please use the main menu instead [19 443 shared entry Management Center] -> [8 Manage Web domain/Reverse Proxy] -> [5 Manage domain IP Whitelist].${PLAIN}" "${RED}❌ Похоже, эта конфигурация принадлежит локальному сайту Caddy TLS с общей точкой входа 443. Вместо этого используйте главное меню [19 443 Центр управления общим входом] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменных имен].${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ 这个配置看起来属于 443端口复用本地 Caddy TLS 站点。请改用主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]。${PLAIN}" "${RED}❌ This configuration appears to belong to the Port 443 Reuse local Caddy TLS site. Please use the main menu instead [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [5 Manage domain IP Whitelist].${PLAIN}" "${RED}❌ Похоже, эта конфигурация принадлежит локальному сайту Caddy TLS с повторным использованием порта 443. Вместо этого используйте главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменных имен].${PLAIN}")"
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
         return
     fi
@@ -939,7 +939,7 @@ sync_sni_stack_state_after_caddy_domain_delete() {
     load_sni_stack_env >/dev/null 2>&1 || return 0
 
     if [[ "$domain" == "${PANEL_DOMAIN:-}" ]]; then
-        echo -e "$(localized_text "${YELLOW}⚠️ ${domain} 是当前 443 单入口面板域名，保存状态仍会引用它；重新应用前必须重新签发证书或更换面板域名。${PLAIN}" "${YELLOW}⚠️ ${domain} is the current 443 shared entry panel domain, and the saved state will still refer to it; the certificate must be re-issued or the panel domain must be changed before re-applying.${PLAIN}" "${YELLOW}⚠️ ${domain} — это текущее доменное имя панели с единым вводом 443, и сохраненное состояние по-прежнему будет ссылаться на него; сертификат необходимо перевыпустить или изменить доменное имя панели перед повторной подачей заявки.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ ${domain} 是当前 443端口复用面板域名，保存状态仍会引用它；重新应用前必须重新签发证书或更换面板域名。${PLAIN}" "${YELLOW}⚠️ ${domain} is the current Port 443 Reuse panel domain, and the saved state will still refer to it; the certificate must be re-issued or the panel domain must be changed before re-applying.${PLAIN}" "${YELLOW}⚠️ ${domain} — это текущее доменное имя панели с единым вводом 443, и сохраненное состояние по-прежнему будет ссылаться на него; сертификат необходимо перевыпустить или изменить доменное имя панели перед повторной подачей заявки.${PLAIN}")"
         return 0
     fi
 
@@ -959,7 +959,7 @@ sync_sni_stack_state_after_caddy_domain_delete() {
     SITE_BACKEND_PORTS=("${new_ports[@]}")
     remove_sni_ip_whitelist_for_domain "$domain"
     save_sni_stack_env
-    echo -e "$(localized_text "${GREEN}✅ 已同步移除 443 单入口保存状态中的 Web 域名：${domain}${PLAIN}" "${GREEN}✅ The web domain in the saved status of 443 shared entries has been removed simultaneously: ${domain}${PLAIN}" "${GREEN}. Имя веб-домена в сохраненном состоянии 443 с общей точкой входа было одновременно удалено: ${domain}.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}✅ 已同步移除 443端口复用保存状态中的 Web 域名：${domain}${PLAIN}" "${GREEN}✅ The web domain in the saved status of Port 443 Reuse has been removed simultaneously: ${domain}${PLAIN}" "${GREEN}. Имя веб-домена в сохраненном состоянии повторного использования порта 443 было одновременно удалено: ${domain}.${PLAIN}")"
 }
 
 func_caddy_delete_cert() {
