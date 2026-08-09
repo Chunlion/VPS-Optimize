@@ -11,6 +11,10 @@ import (
 var (
 	ErrSpliceUnavailable = errors.New("splice unavailable")
 	ErrIdleTimeout       = errors.New("idle timeout")
+	copyBufferPool       = sync.Pool{New: func() any {
+		buffer := make([]byte, 32*1024)
+		return &buffer
+	}}
 )
 
 type TransferOptions struct {
@@ -84,7 +88,10 @@ func copyDirection(dst, src net.Conn, opts TransferOptions) (string, int64, erro
 }
 
 func copyWithIdleDeadline(dst, src net.Conn, idle time.Duration) (int64, error) {
-	buf := make([]byte, 32*1024)
+	buffer := copyBufferPool.Get().(*[]byte)
+	buf := *buffer
+	defer copyBufferPool.Put(buffer)
+
 	var total int64
 	for {
 		if idle > 0 {

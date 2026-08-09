@@ -67,10 +67,13 @@ type statusError struct {
 
 type statusTracker struct {
 	mu                sync.Mutex
+	writeMu           sync.Mutex
 	path              string
 	data              runtimeStatus
 	dirty             bool
+	revision          uint64
 	lastWriteErrorLog time.Time
+	writePayload      func([]byte) error
 }
 
 type backendRetryStats struct {
@@ -242,36 +245,55 @@ func (s *statusTracker) Start(ctx context.Context, interval time.Duration, wg *s
 }
 
 func (s *statusTracker) Write() {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.writeLocked(); err != nil {
-		s.logWriteErrorLocked(err)
-		return
-	}
-	s.dirty = false
+	s.write(true)
 }
 
 func (s *statusTracker) Flush() {
+	s.write(false)
+}
+
+func (s *statusTracker) write(force bool) {
 	if s == nil {
 		return
 	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.dirty {
+	if !force && !s.dirty {
+		s.mu.Unlock()
 		return
 	}
-	if err := s.writeLocked(); err != nil {
+	s.data.UpdatedAt = time.Now().Format(time.RFC3339)
+	revision := s.revision
+	payload, err := json.MarshalIndent(s.data, "", "  ")
+	if err == nil {
+		payload = append(payload, '\n')
+	}
+	s.mu.Unlock()
+
+	if err == nil {
+		if s.writePayload != nil {
+			err = s.writePayload(payload)
+		} else {
+			err = writeStatusPayload(s.path, payload)
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err != nil {
 		s.logWriteErrorLocked(err)
 		return
 	}
-	s.dirty = false
+	if revision == s.revision {
+		s.dirty = false
+	}
 }
 
 func (s *statusTracker) markDirtyLocked() {
 	s.dirty = true
+	s.revision++
 }
 
 func (s *statusTracker) RecordAccepted() {
@@ -407,16 +429,11 @@ func (s *statusTracker) addErrorLocked(message, sni, routeName string) {
 	}
 }
 
-func (s *statusTracker) writeLocked() error {
-	if s == nil || s.path == "" {
+func writeStatusPayload(path string, payload []byte) error {
+	if path == "" {
 		return nil
 	}
-	s.data.UpdatedAt = time.Now().Format(time.RFC3339)
-	payload, err := json.MarshalIndent(s.data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal status: %w", err)
-	}
-	dir := filepath.Dir(s.path)
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create status directory %s: %w", dir, err)
 	}
@@ -425,9 +442,7 @@ func (s *statusTracker) writeLocked() error {
 		return fmt.Errorf("create temporary status file in %s: %w", dir, err)
 	}
 	tmpName := tmp.Name()
-	if _, err = tmp.Write(payload); err == nil {
-		_, err = tmp.Write([]byte("\n"))
-	}
+	_, err = tmp.Write(payload)
 	if closeErr := tmp.Close(); err == nil {
 		err = closeErr
 	}
@@ -435,11 +450,11 @@ func (s *statusTracker) writeLocked() error {
 		err = os.Chmod(tmpName, 0644)
 	}
 	if err == nil {
-		err = os.Rename(tmpName, s.path)
+		err = os.Rename(tmpName, path)
 	}
 	if err != nil {
 		_ = os.Remove(tmpName)
-		return fmt.Errorf("write status file %s: %w", s.path, err)
+		return fmt.Errorf("write status file %s: %w", path, err)
 	}
 	return nil
 }

@@ -100,3 +100,50 @@ func TestStatusWriteFailureIsRateLimitedAndNonFatal(t *testing.T) {
 		t.Fatalf("status should remain dirty after write failure")
 	}
 }
+
+func TestStatusWriteDoesNotBlockConcurrentUpdates(t *testing.T) {
+	status := newStatusTracker([]string{"127.0.0.1:443"}, 10)
+	writeStarted := make(chan struct{})
+	releaseWrite := make(chan struct{})
+	writeDone := make(chan struct{})
+	status.writePayload = func([]byte) error {
+		close(writeStarted)
+		<-releaseWrite
+		return nil
+	}
+
+	go func() {
+		status.Write()
+		close(writeDone)
+	}()
+	<-writeStarted
+
+	updateDone := make(chan struct{})
+	go func() {
+		status.RecordAccepted()
+		close(updateDone)
+	}()
+	select {
+	case <-updateDone:
+	case <-time.After(time.Second):
+		t.Fatal("status update blocked by status file write")
+	}
+
+	close(releaseWrite)
+	select {
+	case <-writeDone:
+	case <-time.After(time.Second):
+		t.Fatal("status write did not finish")
+	}
+
+	status.mu.Lock()
+	dirty := status.dirty
+	active := status.data.ActiveConnections
+	status.mu.Unlock()
+	if !dirty {
+		t.Fatal("concurrent update must remain dirty after older snapshot is written")
+	}
+	if active != 1 {
+		t.Fatalf("active connections = %d, want 1", active)
+	}
+}
