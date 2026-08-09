@@ -115,9 +115,9 @@ show_sni_help() {
 
 show_backup_help() {
     echo -e "$(localized_text "${CYAN}VPS-Optimize > 备份与回滚 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Backup and Rollback > Help${PLAIN}" "${CYAN}VPS-Optimize > Резервное копирование и откат > Справка${PLAIN}")"
-    echo "$(localized_text "1 创建备份：高风险操作前先用。" "1 Create a backup: Use it before high-risk operations." "1 Создайте резервную копию. Используйте ее перед операциями с высоким риском.")"
+    echo "$(localized_text "1 创建备份：选择配置、自定义目录或两者，并可指定存放目录。" "1 Create a backup: choose configuration, custom directories, or both, and select the storage directory." "1 Создать копию: выберите конфигурацию, пользовательские каталоги или оба варианта, а затем каталог хранения.")"
     echo "$(localized_text "2 查看备份：确认可用备份和时间。" "2 View backups: Confirm available backups and times." "2 Просмотр резервных копий: подтвердите доступные резервные копии и время.")"
-    echo "$(localized_text "3 回滚：覆盖当前配置，输入 yes 确认（不区分大小写）。" "3 Rollback: overwrites current configuration. Confirm with yes (case-insensitive)." "3 Откат: перезаписывает текущую конфигурацию. Подтвердите вводом yes в любом регистре.")"
+    echo "$(localized_text "3 恢复：从默认列表或指定 .tar.gz 备份包恢复；先查看环境预检。" "3 Restore: use the default list or a specified .tar.gz archive; review the environment preflight first." "3 Восстановление: используйте список по умолчанию или указанный архив .tar.gz; сначала проверьте предварительную проверку среды.")"
     echo "$(localized_text "4 隔离旧备份：移入隔离目录，不直接删除。" "4 Quarantine old backups: move them to quarantine; do not delete them." "4 Изолировать старые копии: переместить в карантин, не удалять.")"
     echo "$(localized_text "5 查看/编辑已应用配置：先备份，校验后可 reload/restart。" "5 View or edit applied configuration: back up first, validate, then reload or restart if needed." "5 Просмотр или правка применённой конфигурации: сначала копия, затем проверка и reload/restart при необходимости.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"

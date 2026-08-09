@@ -2773,6 +2773,14 @@ head -n 1 <<<"$traffic_guard_dist_checker_template" | grep -Fq '#!/usr/bin/env b
 bash -n <<<"$traffic_guard_dist_checker_template"
 grep -q 'func_health_dashboard' dist/vps.sh
 grep -q 'func_backup_center' dist/vps.sh
+grep -q 'backup_collect_custom_directories' dist/vps.sh
+grep -q 'backup_restore_preflight' dist/vps.sh
+(
+    source src/backup.sh
+    [[ "$(backup_resolve_custom_directory "$repo_root")" == "$repo_root" ]]
+    ! backup_resolve_custom_directory /etc
+    ! backup_resolve_custom_directory /tmp
+)
 grep -q 'func_edit_applied_config_center' dist/vps.sh
 grep -q 'edit_applied_config_file' dist/vps.sh
 grep -q 'collect_applied_config_files' dist/vps.sh

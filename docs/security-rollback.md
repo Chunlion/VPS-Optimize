@@ -4,9 +4,13 @@
 
 ## 备份范围
 
-菜单中的“全量配置备份”指脚本管理配置备份，会尽量覆盖 SSH、主机名、Nginx/Caddy、443端口复用、DNS、证书、Cloudflare Token、Docker daemon 配置、Fail2ban、sysctl 和 3x-ui 关键配置。
+菜单支持三种范围：脚本与服务配置、自定义系统目录、两者一起备份。配置备份会尽量覆盖 SSH、主机名、Nginx/Caddy、443端口复用、DNS、证书、Cloudflare Token、Docker daemon 配置、Fail2ban、sysctl 和 3x-ui 关键配置。
 
-它不包含 Docker volume、容器业务数据、镜像和完整防火墙运行状态，也不能替代 VPS 快照。Compose 项目还需要单独备份数据目录和 volume。
+自定义目录每行填写一个绝对路径，留空结束。例如：`/opt/app-data`、`/var/lib/myapp`。不支持 `/`、一级目录、`/proc`、`/sys`、`/dev`、`/run` 和 `/tmp`。数据库或 Docker 数据目录请先停止相关服务，文件复制不保证运行中数据一致。
+
+备份包可保存到指定绝对目录，默认是 `/etc/vps-optimize/backups/manual/`。它不包含 Docker volume、容器业务数据、镜像和完整防火墙运行状态，也不能替代 VPS 快照。
+
+新系统恢复时，在主菜单 `[16] -> [3]` 选择“指定备份包路径”，例如 `/root/backup_20260101_120000.tar.gz`。脚本会先检查 Nginx、Caddy、Docker、3x-ui 等组件；缺少的服务不会自动安装，恢复配置后需自行安装并启动。
 
 备份里可能包含私钥、面板数据库和 API Token，不要公开分享。
 
@@ -18,7 +22,7 @@
 
 常用操作：
 
-- 创建全量配置备份（脚本管理配置，不含完整业务数据）。
+- 创建配置备份、自定义目录备份或两者一起备份。
 - 查看现有备份列表。
 - 从备份一键回滚。
 - 查看或编辑脚本已应用配置。

@@ -1908,6 +1908,175 @@ backup_copy_xui_databases() {
     return "$copied"
 }
 
+backup_copy_managed_configuration() {
+    local manifest_file="$1"
+    local work_dir="$2"
+    local copied=1
+
+    backup_copy_path /etc/ssh/sshd_config etc/ssh/sshd_config "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/hostname etc/hostname "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/hosts etc/hosts "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/nginx/nginx.conf etc/nginx/nginx.conf "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/nginx/stream.d etc/nginx/stream.d "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/nginx/conf.d etc/nginx/conf.d "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/nginx/sites-available etc/nginx/sites-available "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/nginx/sites-enabled etc/nginx/sites-enabled "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/caddy/Caddyfile etc/caddy/Caddyfile "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/caddy/conf.d etc/caddy/conf.d "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/caddy/certs etc/caddy/certs "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /root/cert root/cert "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /root/.acme.sh root/.acme.sh "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /root/.config/vps-panel/cloudflare.env root/.config/vps-panel/cloudflare.env "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/vps-optimize/sni-stack.env etc/vps-optimize/sni-stack.env "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/vps-optimize/sni-stack.last-backup etc/vps-optimize/sni-stack.last-backup "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/vps-optimize/443-engine.conf etc/vps-optimize/443-engine.conf "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/vps-optimize/vpso-mux.yaml etc/vps-optimize/vpso-mux.yaml "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/systemd/system/vpso-mux.service etc/systemd/system/vpso-mux.service "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /usr/local/bin/vpso-mux usr/local/bin/vpso-mux "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/vps-optimize/traffic-guard.conf etc/vps-optimize/traffic-guard.conf "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /var/lib/vps-optimize/traffic-guard var/lib/vps-optimize/traffic-guard "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /usr/local/bin/vps-traffic-guard-check usr/local/bin/vps-traffic-guard-check "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/systemd/system/vps-traffic-guard.service etc/systemd/system/vps-traffic-guard.service "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/systemd/system/vps-traffic-guard.timer etc/systemd/system/vps-traffic-guard.timer "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/resolv.conf etc/resolv.conf "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/docker/daemon.json etc/docker/daemon.json "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/fail2ban/jail.local etc/fail2ban/jail.local "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/sysctl.d etc/sysctl.d "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/x-ui etc/x-ui "$manifest_file" "$work_dir" && copied=0
+    backup_copy_xui_databases "$manifest_file" "$work_dir" && copied=0
+    return "$copied"
+}
+
+backup_resolve_custom_directory() {
+    local input_path="$1"
+    local resolved_path
+
+    [[ "$input_path" == /* && "$input_path" != "/" ]] || return 1
+    resolved_path=$(cd -- "$input_path" 2>/dev/null && pwd -P) || return 1
+    case "$resolved_path" in
+        /proc|/proc/*|/sys|/sys/*|/dev|/dev/*|/run|/run/*|/tmp|/tmp/*) return 1 ;;
+    esac
+    [[ "${resolved_path#/}" == */* ]] || return 1
+    printf '%s' "$resolved_path"
+}
+
+backup_collect_custom_directories() {
+    local array_name="$1"
+    local -n directory_list="$array_name"
+    local input_path resolved_path existing duplicate
+
+    directory_list=()
+    echo -e "$(localized_text "${CYAN}每行填写一个要备份的绝对目录，留空结束。${PLAIN}" "${CYAN}Enter one absolute directory per line; leave blank to finish.${PLAIN}" "${CYAN}Введите один абсолютный каталог в строке; пустая строка завершает ввод.${PLAIN}")"
+    echo -e "$(localized_text "示例：/opt/app-data 或 /var/lib/myapp；不支持 /、一级目录、/proc、/sys、/dev、/run、/tmp。" "Example: /opt/app-data or /var/lib/myapp. /, top-level directories, /proc, /sys, /dev, /run, and /tmp are not supported." "Пример: /opt/app-data или /var/lib/myapp. /, каталоги верхнего уровня, /proc, /sys, /dev, /run и /tmp не поддерживаются.")"
+    while true; do
+        IFS= read -r -p "$(localized_text "目录: " "Directory: " "Каталог: ")" input_path || return 1
+        input_path=$(trim_input "$input_path")
+        [[ -n "$input_path" ]] || break
+        if ! resolved_path=$(backup_resolve_custom_directory "$input_path"); then
+            echo -e "$(localized_text "${RED}❌ 目录无效或不允许备份。${PLAIN}" "${RED}❌ Directory is invalid or cannot be backed up.${PLAIN}" "${RED}❌ Каталог недопустим или его нельзя резервировать.${PLAIN}")"
+            continue
+        fi
+        duplicate=0
+        for existing in "${directory_list[@]}"; do
+            if [[ "$existing" == "$resolved_path" ]]; then
+                duplicate=1
+                break
+            fi
+        done
+        [[ "$duplicate" -eq 1 ]] && continue
+        directory_list+=("$resolved_path")
+        echo -e "$(localized_text "${GREEN}已加入：${resolved_path}${PLAIN}" "${GREEN}Added: ${resolved_path}${PLAIN}" "${GREEN}Добавлено: ${resolved_path}${PLAIN}")"
+    done
+    [[ ${#directory_list[@]} -gt 0 ]]
+}
+
+backup_select_archive_directory() {
+    local default_dir="$1"
+    local input_path
+
+    while true; do
+        IFS= read -r -p "$(localized_text "备份存放目录 [${default_dir}]: " "Backup storage directory [${default_dir}]: " "Каталог хранения резервной копии [${default_dir}]: ")" input_path || return 1
+        input_path=$(trim_input "$input_path")
+        input_path=${input_path:-$default_dir}
+        if [[ "$input_path" != /* || "$input_path" == "/" ]]; then
+            echo -e "$(localized_text "${RED}❌ 请填写非根目录的绝对路径。${PLAIN}" "${RED}❌ Enter an absolute path other than /.${PLAIN}" "${RED}❌ Укажите абсолютный путь, отличный от /.${PLAIN}")"
+            continue
+        fi
+        if mkdir -p -- "$input_path" 2>/dev/null; then
+            BACKUP_ARCHIVE_ROOT="$input_path"
+            return 0
+        fi
+        echo -e "$(localized_text "${RED}❌ 无法创建或写入该目录。${PLAIN}" "${RED}❌ Cannot create or write to this directory.${PLAIN}" "${RED}❌ Не удалось создать каталог или записать в него.${PLAIN}")"
+    done
+}
+
+backup_copy_custom_directories() {
+    local manifest_file="$1"
+    local work_dir="$2"
+    local array_name="$3"
+    local -n directory_list="$array_name"
+    local mapping_file="${work_dir}/custom-paths.txt"
+    local directory dest_rel
+    local copied=1
+
+    for directory in "${directory_list[@]}"; do
+        dest_rel="custom${directory}"
+        if backup_copy_path "$directory" "$dest_rel" "$manifest_file" "$work_dir"; then
+            printf '%s|%s\n' "$dest_rel" "$directory" >> "$mapping_file"
+            copied=0
+        fi
+    done
+    [[ "$copied" -eq 0 ]] || rm -f "$mapping_file"
+    return "$copied"
+}
+
+backup_restore_preflight() {
+    local restore_dir="$1"
+    local missing=0
+
+    echo -e "$(localized_text "${CYAN}恢复环境预检：${PLAIN}" "${CYAN}Restore environment preflight:${PLAIN}" "${CYAN}Предварительная проверка среды восстановления:${PLAIN}")"
+    if [[ -e "$restore_dir/etc/nginx/nginx.conf" || -d "$restore_dir/etc/nginx" ]] && ! command -v nginx >/dev/null 2>&1; then
+        echo -e "$(localized_text "${YELLOW}- Nginx 配置在备份中，但新系统未安装 Nginx。${PLAIN}" "${YELLOW}- Nginx configuration is in the backup, but Nginx is not installed on this system.${PLAIN}" "${YELLOW}- Конфигурация Nginx есть в резервной копии, но Nginx не установлен в системе.${PLAIN}")"
+        missing=1
+    fi
+    if [[ -e "$restore_dir/etc/caddy/Caddyfile" || -d "$restore_dir/etc/caddy" ]] && ! command -v caddy >/dev/null 2>&1; then
+        echo -e "$(localized_text "${YELLOW}- Caddy 配置在备份中，但新系统未安装 Caddy。${PLAIN}" "${YELLOW}- Caddy configuration is in the backup, but Caddy is not installed on this system.${PLAIN}" "${YELLOW}- Конфигурация Caddy есть в резервной копии, но Caddy не установлен в системе.${PLAIN}")"
+        missing=1
+    fi
+    if [[ -e "$restore_dir/etc/docker/daemon.json" ]] && ! command -v docker >/dev/null 2>&1; then
+        echo -e "$(localized_text "${YELLOW}- Docker 配置在备份中，但新系统未安装 Docker。${PLAIN}" "${YELLOW}- Docker configuration is in the backup, but Docker is not installed on this system.${PLAIN}" "${YELLOW}- Конфигурация Docker есть в резервной копии, но Docker не установлен в системе.${PLAIN}")"
+        missing=1
+    fi
+    if [[ -d "$restore_dir/etc/x-ui" ]] && [[ ! -d /etc/x-ui && ! -d /usr/local/x-ui ]]; then
+        echo -e "$(localized_text "${YELLOW}- 3x-ui 配置在备份中，但新系统未检测到 3x-ui。${PLAIN}" "${YELLOW}- 3x-ui configuration is in the backup, but 3x-ui was not detected on this system.${PLAIN}" "${YELLOW}- Конфигурация 3x-ui есть в резервной копии, но 3x-ui не обнаружен в системе.${PLAIN}")"
+        missing=1
+    fi
+    if [[ -f "$restore_dir/custom-paths.txt" ]]; then
+        echo -e "$(localized_text "${YELLOW}- 备份包含自定义系统目录，恢复会覆盖这些目录。${PLAIN}" "${YELLOW}- The backup contains custom system directories; restoring will overwrite them.${PLAIN}" "${YELLOW}- Резервная копия содержит пользовательские системные каталоги; восстановление перезапишет их.${PLAIN}")"
+    fi
+    [[ "$missing" -eq 0 ]] || echo -e "$(localized_text "${YELLOW}缺少的服务不会自动安装；恢复文件后请安装并启动对应服务。${PLAIN}" "${YELLOW}Missing services are not installed automatically. Install and start them after restoring the files.${PLAIN}" "${YELLOW}Отсутствующие службы не устанавливаются автоматически. После восстановления файлов установите и запустите их.${PLAIN}")"
+}
+
+backup_restore_custom_directories() {
+    local restore_dir="$1"
+    local quarantine_root="$2"
+    local mapping_file="${restore_dir}/custom-paths.txt"
+    local dest_rel target_path
+    local failed=0
+
+    [[ -f "$mapping_file" ]] || return 0
+    while IFS='|' read -r dest_rel target_path; do
+        [[ "$dest_rel" == "custom${target_path}" && "$target_path" == /* && "$target_path" != "/" && "${target_path#/}" == */* ]] || return 1
+        case "$target_path" in
+            /proc|/proc/*|/sys|/sys/*|/dev|/dev/*|/run|/run/*|/tmp|/tmp/*) return 1 ;;
+        esac
+        [[ -d "$restore_dir/$dest_rel" ]] || return 1
+        restore_backup_dir "$restore_dir/$dest_rel" "$target_path" "$quarantine_root" || failed=1
+    done < "$mapping_file"
+    return "$failed"
+}
+
 redact_sensitive_output() {
     sed -E \
         -e 's/(authorization:[[:space:]]*(bearer|basic)[[:space:]]+)[^[:space:]]+/\1***REDACTED***/gI' \
@@ -2425,9 +2594,9 @@ func_backup_center() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "当前备份目录: ${YELLOW}${backup_root}${PLAIN}" "Current backup directory: ${YELLOW}${backup_root}${PLAIN}" "Текущий каталог резервной копии: ${YELLOW}${backup_root}${PLAIN}.")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 创建全量配置备份${PLAIN}       ${YELLOW}(系统/面板/Caddy/脚本配置)${PLAIN}" "${GREEN}1. Create a full configuration backup (System/Panel/Caddy/Script Configuration)${PLAIN}" "${GREEN}1. Создайте полную резервную копию конфигурации (Система/Панель/Caddy/Конфигурация сценария)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 查看现有备份列表${PLAIN}" "${GREEN}2. View the existing backup list${PLAIN}" "${GREEN}2. Просмотрите существующий список резервных копий.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 从备份一键回滚${PLAIN}" "${GREEN}3. One-click rollback of from backup${PLAIN}" "${GREEN}3. Откат из резервной копии в один клик.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 创建备份${PLAIN}               ${YELLOW}(配置 / 自定义目录 / 两者)${PLAIN}" "${GREEN}1. Create backup${PLAIN} (configuration / custom directories / both)" "${GREEN}1. Создать резервную копию${PLAIN} (конфигурация / пользовательские каталоги / оба)")"
+        echo -e "$(localized_text "${GREEN}  2. 查看默认目录备份${PLAIN}" "${GREEN}2. View backups in the default directory${PLAIN}" "${GREEN}2. Просмотреть копии в каталоге по умолчанию${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 从备份恢复${PLAIN}             ${YELLOW}(默认列表或指定备份包)${PLAIN}" "${GREEN}3. Restore from backup${PLAIN} (default list or selected archive)" "${GREEN}3. Восстановить из копии${PLAIN} (список по умолчанию или выбранный архив)")"
         echo -e "$(localized_text "${GREEN}  4. 隔离旧备份${PLAIN}             ${YELLOW}(仅保留最近 5 份，旧文件移入隔离区)${PLAIN}" "${GREEN}4. Isolate old backups (only the latest 5 copies are kept, and old files are moved to the quarantine area)${PLAIN}" "${GREEN}4. Изолировать старые резервные копии (сохраняются только последние 5 копий, а старые файлы перемещаются в зону карантина)${PLAIN}")"
         echo -e "$(localized_text "${CYAN}  5. 查看/编辑脚本已应用配置${PLAIN} ${YELLOW}(备份、校验，可选择 reload/restart)${PLAIN}" "${CYAN}5. View/edit script applied configuration (backup, verification, optional reload/restart)${PLAIN}" "${CYAN}5. Просмотр/редактирование примененной конфигурации сценария (резервное копирование, проверка, дополнительная перезагрузка/перезапуск)${PLAIN}")"
         echo -e "------------------------------------------------"
@@ -2440,12 +2609,39 @@ func_backup_center() {
 
         case $b_choice in
             1)
-                local ts
+                local backup_scope scope_choice ts
                 ts=$(date +%Y%m%d_%H%M%S)
                 local work_dir
-                local tar_file="${backup_root}/backup_${ts}.tar.gz"
+                local tar_file
                 local manifest_file
                 local copied=0
+                local -a custom_directories=()
+
+                echo -e "$(localized_text "${BOLD}备份范围${PLAIN}" "${BOLD}Backup scope${PLAIN}" "${BOLD}Область резервного копирования${PLAIN}")"
+                echo -e "  1. $(localized_text "脚本与服务配置（默认）" "Script and service configuration (default)" "Конфигурация скрипта и служб (по умолчанию)")"
+                echo -e "  2. $(localized_text "自定义系统目录" "Custom system directories" "Пользовательские системные каталоги")"
+                echo -e "  3. $(localized_text "配置 + 自定义系统目录" "Configuration + custom system directories" "Конфигурация + пользовательские системные каталоги")"
+                echo -e "  0. $(localized_text "取消" "Cancel" "Отмена")"
+                read_trimmed scope_choice "$(localized_text "选择备份范围: " "Select backup scope: " "Выберите область резервного копирования: ")"
+                case "$scope_choice" in
+                    1) backup_scope="managed" ;;
+                    2) backup_scope="custom" ;;
+                    3) backup_scope="both" ;;
+                    0|q|Q) continue ;;
+                    *)
+                        echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"
+                        continue
+                        ;;
+                esac
+                if [[ "$backup_scope" == "custom" || "$backup_scope" == "both" ]]; then
+                    echo -e "$(localized_text "${YELLOW}数据库或 Docker 数据目录请先停止相关服务，文件复制不保证运行中数据一致。${PLAIN}" "${YELLOW}Stop related services before backing up database or Docker data directories; file copying does not guarantee consistency for active data.${PLAIN}" "${YELLOW}Перед резервным копированием каталогов баз данных или Docker остановите связанные службы: копирование файлов не гарантирует согласованность активных данных.${PLAIN}")"
+                    if ! backup_collect_custom_directories custom_directories; then
+                        echo -e "$(localized_text "${YELLOW}未填写可备份目录，已取消。${PLAIN}" "${YELLOW}No backupable directory entered; canceled.${PLAIN}" "${YELLOW}Не указан каталог для резервного копирования; операция отменена.${PLAIN}")"
+                        continue
+                    fi
+                fi
+                backup_select_archive_directory "$backup_root" || continue
+                tar_file="${BACKUP_ARCHIVE_ROOT}/backup_${ts}.tar.gz"
 
                 work_dir=$(make_secure_temp_dir "vps_backup_${ts}") || {
                     echo -e "$(localized_text "${RED}❌ 无法创建安全临时目录，备份已取消。${PLAIN}" "${RED}❌ Unable to create secure temporary directory, backup canceled.${PLAIN}" "${RED}❌ Невозможно создать безопасный временный каталог, резервное копирование отменено.${PLAIN}")"
@@ -2457,41 +2653,16 @@ func_backup_center() {
                     echo "VPS-Optimize backup manifest"
                     echo "Created: $(date -Is 2>/dev/null || date)"
                     echo "Backup file: ${tar_file}"
+                    echo "Scope: ${backup_scope}"
                     echo "Included paths:"
                 } > "$manifest_file"
 
-                backup_copy_path /etc/ssh/sshd_config etc/ssh/sshd_config "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/hostname etc/hostname "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/hosts etc/hosts "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/nginx/nginx.conf etc/nginx/nginx.conf "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/nginx/stream.d etc/nginx/stream.d "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/nginx/conf.d etc/nginx/conf.d "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/nginx/sites-available etc/nginx/sites-available "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/nginx/sites-enabled etc/nginx/sites-enabled "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/caddy/Caddyfile etc/caddy/Caddyfile "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/caddy/conf.d etc/caddy/conf.d "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/caddy/certs etc/caddy/certs "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /root/cert root/cert "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /root/.acme.sh root/.acme.sh "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /root/.config/vps-panel/cloudflare.env root/.config/vps-panel/cloudflare.env "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/vps-optimize/sni-stack.env etc/vps-optimize/sni-stack.env "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/vps-optimize/sni-stack.last-backup etc/vps-optimize/sni-stack.last-backup "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/vps-optimize/443-engine.conf etc/vps-optimize/443-engine.conf "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/vps-optimize/vpso-mux.yaml etc/vps-optimize/vpso-mux.yaml "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/systemd/system/vpso-mux.service etc/systemd/system/vpso-mux.service "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /usr/local/bin/vpso-mux usr/local/bin/vpso-mux "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/vps-optimize/traffic-guard.conf etc/vps-optimize/traffic-guard.conf "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /var/lib/vps-optimize/traffic-guard var/lib/vps-optimize/traffic-guard "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /usr/local/bin/vps-traffic-guard-check usr/local/bin/vps-traffic-guard-check "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/systemd/system/vps-traffic-guard.service etc/systemd/system/vps-traffic-guard.service "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/systemd/system/vps-traffic-guard.timer etc/systemd/system/vps-traffic-guard.timer "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/resolv.conf etc/resolv.conf "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf etc/systemd/resolved.conf.d/99-vps-optimize-dns.conf "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/docker/daemon.json etc/docker/daemon.json "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/fail2ban/jail.local etc/fail2ban/jail.local "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/sysctl.d etc/sysctl.d "$manifest_file" "$work_dir" && copied=1
-                backup_copy_path /etc/x-ui etc/x-ui "$manifest_file" "$work_dir" && copied=1
-                backup_copy_xui_databases "$manifest_file" "$work_dir" && copied=1
+                if [[ "$backup_scope" == "managed" || "$backup_scope" == "both" ]]; then
+                    backup_copy_managed_configuration "$manifest_file" "$work_dir" && copied=1
+                fi
+                if [[ "$backup_scope" == "custom" || "$backup_scope" == "both" ]]; then
+                    backup_copy_custom_directories "$manifest_file" "$work_dir" custom_directories && copied=1
+                fi
 
                 if [[ "$copied" -eq 0 ]]; then
                     quarantine_path "$work_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
@@ -2524,32 +2695,45 @@ func_backup_center() {
                 ;;
 
             3)
-                mapfile -t backups < <(ls -1t "$backup_root"/backup_*.tar.gz 2>/dev/null)
-                if [[ ${#backups[@]} -eq 0 ]]; then
-                    echo -e "$(localized_text "${YELLOW}⚠️ 没有可用备份，无法回滚。${PLAIN}" "${YELLOW}⚠️ No backup available, cannot roll back.${PLAIN}" "${YELLOW}⚠️ Резервная копия недоступна, невозможно выполнить откат.${PLAIN}")"
-                    read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-                    continue
-                fi
-
-                echo -e "$(localized_text "${CYAN}👇 可回滚备份如下：${PLAIN}" "${CYAN}👇 The rollback backup is as follows:${PLAIN}" "${CYAN}👇 Резервная копия для отката выглядит следующим образом:${PLAIN}")"
-                for i in "${!backups[@]}"; do
-                    echo -e "  ${GREEN}$((i+1)).${PLAIN} $(basename "${backups[$i]}")"
-                done
-
-                local r_choice
-                read_trimmed r_choice "$(localized_text "👉 请输入要回滚的序号: " "👉 Please enter the serial number to be rolled back:" "👉 Пожалуйста, введите серийный номер для отката:")"
-                if ! [[ "$r_choice" =~ ^[0-9]+$ ]] || [[ "$r_choice" -lt 1 ]] || [[ "$r_choice" -gt ${#backups[@]} ]]; then
-                    echo -e "$(localized_text "${RED}❌ 无效序号，已取消回滚。${PLAIN}" "${RED}❌ Invalid sequence number, rollback canceled.${PLAIN}" "${RED}❌ Неверный порядковый номер, откат отменен.${PLAIN}")"
-                    read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-                    continue
-                fi
-
-                local target_file="${backups[$((r_choice-1))]}"
-                confirm_danger "$(localized_text "从备份回滚系统配置" "Rolling back system configuration from backup" "Откат конфигурации системы из резервной копии")" "$(localized_text "会覆盖 SSH、Caddy、Docker、Fail2ban、sysctl 等已纳入备份的当前配置。" "It will overwrite the current configurations of SSH, Caddy, Docker, Fail2ban, sysctl, etc. that have been included in the backup." "Он перезапишет текущие конфигурации SSH, Caddy, Docker, Fail2ban, sysctl и т. д., которые были включены в резервную копию.")" "$(localized_text "回滚后脚本会尝试重启相关服务；请保持当前 SSH 会话并准备好云厂商救援控制台。" "After the rollback, the script will try to restart related services; please keep the current SSH session and prepare the cloud vendor rescue console." "После отката скрипт попытается перезапустить связанные службы; сохраните текущий сеанс SSH и подготовьте консоль восстановления облачного поставщика.")" || {
-                    echo -e "$(localized_text "${BLUE}已取消回滚操作。${PLAIN}" "${BLUE}The rollback operation has been canceled.${PLAIN}" "${BLUE}Операция отката отменена.${PLAIN}")"
-                    read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-                    continue
-                }
+                local restore_source r_choice target_file
+                echo -e "  1. $(localized_text "默认目录备份列表" "Backup list in the default directory" "Список копий в каталоге по умолчанию")"
+                echo -e "  2. $(localized_text "指定备份包路径" "Specify backup archive path" "Указать путь к архиву резервной копии")"
+                echo -e "  0. $(localized_text "取消" "Cancel" "Отмена")"
+                read_trimmed restore_source "$(localized_text "选择恢复来源: " "Select restore source: " "Выберите источник восстановления: ")"
+                case "$restore_source" in
+                    1)
+                        mapfile -t backups < <(ls -1t "$backup_root"/backup_*.tar.gz 2>/dev/null)
+                        if [[ ${#backups[@]} -eq 0 ]]; then
+                            echo -e "$(localized_text "${YELLOW}⚠️ 默认目录没有可用备份。${PLAIN}" "${YELLOW}⚠️ No backup is available in the default directory.${PLAIN}" "${YELLOW}⚠️ В каталоге по умолчанию нет доступной резервной копии.${PLAIN}")"
+                            read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
+                            continue
+                        fi
+                        echo -e "$(localized_text "${CYAN}可恢复备份：${PLAIN}" "${CYAN}Restorable backups:${PLAIN}" "${CYAN}Доступные резервные копии:${PLAIN}")"
+                        for i in "${!backups[@]}"; do
+                            echo -e "  ${GREEN}$((i+1)).${PLAIN} $(basename "${backups[$i]}")"
+                        done
+                        read_trimmed r_choice "$(localized_text "输入备份序号: " "Enter backup number: " "Введите номер резервной копии: ")"
+                        if ! [[ "$r_choice" =~ ^[0-9]+$ ]] || [[ "$r_choice" -lt 1 ]] || [[ "$r_choice" -gt ${#backups[@]} ]]; then
+                            echo -e "$(localized_text "${RED}❌ 无效序号，已取消恢复。${PLAIN}" "${RED}❌ Invalid number; restore canceled.${PLAIN}" "${RED}❌ Неверный номер; восстановление отменено.${PLAIN}")"
+                            read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
+                            continue
+                        fi
+                        target_file="${backups[$((r_choice-1))]}"
+                        ;;
+                    2)
+                        IFS= read -r -p "$(localized_text "备份包绝对路径（例：/root/backup_20260101_120000.tar.gz）: " "Absolute backup archive path (example: /root/backup_20260101_120000.tar.gz): " "Абсолютный путь к архиву (пример: /root/backup_20260101_120000.tar.gz): ")" target_file || continue
+                        target_file=$(trim_input "$target_file")
+                        if [[ ! -f "$target_file" || "$target_file" != *.tar.gz ]]; then
+                            echo -e "$(localized_text "${RED}❌ 未找到可读取的 .tar.gz 备份包。${PLAIN}" "${RED}❌ A readable .tar.gz backup archive was not found.${PLAIN}" "${RED}❌ Не найден доступный для чтения архив резервной копии .tar.gz.${PLAIN}")"
+                            continue
+                        fi
+                        ;;
+                    0|q|Q) continue ;;
+                    *)
+                        echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"
+                        continue
+                        ;;
+                esac
 
                 local restore_dir
                 local restore_failed=0
@@ -2579,6 +2763,14 @@ func_backup_center() {
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
                 fi
+
+                backup_restore_preflight "$restore_dir"
+                confirm_danger "$(localized_text "确认从备份恢复" "Confirm backup restore" "Подтвердите восстановление из резервной копии")" "$(localized_text "会覆盖 SSH、Caddy、Docker、Fail2ban、sysctl 及备份中的自定义系统目录。" "It will overwrite SSH, Caddy, Docker, Fail2ban, sysctl, and custom system directories in the backup." "Будут перезаписаны SSH, Caddy, Docker, Fail2ban, sysctl и пользовательские системные каталоги из резервной копии.")" "$(localized_text "恢复后脚本会尝试重启已安装服务；请保持当前 SSH 会话并准备好云厂商救援控制台。" "After restoring, the script will try to restart installed services. Keep the current SSH session and prepare the cloud rescue console." "После восстановления скрипт попытается перезапустить установленные службы. Сохраните текущий сеанс SSH и подготовьте облачную консоль восстановления.")" || {
+                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                    echo -e "$(localized_text "${BLUE}已取消恢复操作。${PLAIN}" "${BLUE}Restore operation canceled.${PLAIN}" "${BLUE}Операция восстановления отменена.${PLAIN}")"
+                    read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
+                    continue
+                }
 
                 if [[ -f "$restore_dir/etc/vps-optimize/traffic-guard.conf" || -f "$restore_dir/usr/local/bin/vps-traffic-guard-check" ]]; then
                     if declare -F traffic_guard_restore_ssh_only_firewall >/dev/null 2>&1 && ! traffic_guard_restore_ssh_only_firewall; then
@@ -2626,6 +2818,7 @@ func_backup_center() {
                 restore_backup_file "$restore_dir/usr/local/x-ui/bin/x-ui.db" /usr/local/x-ui/bin/x-ui.db || restore_failed=1
                 restore_backup_file "$restore_dir/usr/local/x-ui/bin/x-ui.db-wal" /usr/local/x-ui/bin/x-ui.db-wal || restore_failed=1
                 restore_backup_file "$restore_dir/usr/local/x-ui/bin/x-ui.db-shm" /usr/local/x-ui/bin/x-ui.db-shm || restore_failed=1
+                backup_restore_custom_directories "$restore_dir" "$restore_quarantine" || restore_failed=1
 
                 if [[ -d "$restore_dir/etc/sysctl.d" ]]; then
                     sysctl --system >/dev/null 2>&1
@@ -21849,9 +22042,9 @@ show_sni_help() {
 
 show_backup_help() {
     echo -e "$(localized_text "${CYAN}VPS-Optimize > 备份与回滚 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Backup and Rollback > Help${PLAIN}" "${CYAN}VPS-Optimize > Резервное копирование и откат > Справка${PLAIN}")"
-    echo "$(localized_text "1 创建备份：高风险操作前先用。" "1 Create a backup: Use it before high-risk operations." "1 Создайте резервную копию. Используйте ее перед операциями с высоким риском.")"
+    echo "$(localized_text "1 创建备份：选择配置、自定义目录或两者，并可指定存放目录。" "1 Create a backup: choose configuration, custom directories, or both, and select the storage directory." "1 Создать копию: выберите конфигурацию, пользовательские каталоги или оба варианта, а затем каталог хранения.")"
     echo "$(localized_text "2 查看备份：确认可用备份和时间。" "2 View backups: Confirm available backups and times." "2 Просмотр резервных копий: подтвердите доступные резервные копии и время.")"
-    echo "$(localized_text "3 回滚：覆盖当前配置，输入 yes 确认（不区分大小写）。" "3 Rollback: overwrites current configuration. Confirm with yes (case-insensitive)." "3 Откат: перезаписывает текущую конфигурацию. Подтвердите вводом yes в любом регистре.")"
+    echo "$(localized_text "3 恢复：从默认列表或指定 .tar.gz 备份包恢复；先查看环境预检。" "3 Restore: use the default list or a specified .tar.gz archive; review the environment preflight first." "3 Восстановление: используйте список по умолчанию или указанный архив .tar.gz; сначала проверьте предварительную проверку среды.")"
     echo "$(localized_text "4 隔离旧备份：移入隔离目录，不直接删除。" "4 Quarantine old backups: move them to quarantine; do not delete them." "4 Изолировать старые копии: переместить в карантин, не удалять.")"
     echo "$(localized_text "5 查看/编辑已应用配置：先备份，校验后可 reload/restart。" "5 View or edit applied configuration: back up first, validate, then reload or restart if needed." "5 Просмотр или правка применённой конфигурации: сначала копия, затем проверка и reload/restart при необходимости.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
