@@ -1957,7 +1957,6 @@ backup_resolve_custom_directory() {
     case "$resolved_path" in
         /proc|/proc/*|/sys|/sys/*|/dev|/dev/*|/run|/run/*|/tmp|/tmp/*) return 1 ;;
     esac
-    [[ "${resolved_path#/}" == */* ]] || return 1
     printf '%s' "$resolved_path"
 }
 
@@ -1968,7 +1967,7 @@ backup_collect_custom_directories() {
 
     directory_list=()
     echo -e "$(localized_text "${CYAN}每行填写一个要备份的绝对目录，留空结束。${PLAIN}" "${CYAN}Enter one absolute directory per line; leave blank to finish.${PLAIN}" "${CYAN}Введите один абсолютный каталог в строке; пустая строка завершает ввод.${PLAIN}")"
-    echo -e "$(localized_text "示例：/opt/app-data 或 /var/lib/myapp；不支持 /、一级目录、/proc、/sys、/dev、/run、/tmp。" "Example: /opt/app-data or /var/lib/myapp. /, top-level directories, /proc, /sys, /dev, /run, and /tmp are not supported." "Пример: /opt/app-data или /var/lib/myapp. /, каталоги верхнего уровня, /proc, /sys, /dev, /run и /tmp не поддерживаются.")"
+    echo -e "$(localized_text "示例：/etc、/usr、/home 或 /var/lib/myapp；不支持 /、/proc、/sys、/dev、/run、/tmp。" "Example: /etc, /usr, /home, or /var/lib/myapp. /, /proc, /sys, /dev, /run, and /tmp are not supported." "Пример: /etc, /usr, /home или /var/lib/myapp. /, /proc, /sys, /dev, /run и /tmp не поддерживаются.")"
     while true; do
         IFS= read -r -p "$(localized_text "目录: " "Directory: " "Каталог: ")" input_path || return 1
         input_path=$(trim_input "$input_path")
@@ -2009,6 +2008,86 @@ backup_select_archive_directory() {
         fi
         echo -e "$(localized_text "${RED}❌ 无法创建或写入该目录。${PLAIN}" "${RED}❌ Cannot create or write to this directory.${PLAIN}" "${RED}❌ Не удалось создать каталог или записать в него.${PLAIN}")"
     done
+}
+
+backup_archive_is_readable() {
+    local archive_file="$1"
+    [[ -f "$archive_file" && -r "$archive_file" && "$archive_file" == *.tar.gz ]]
+}
+
+backup_register_archive_root() {
+    local archive_root="$1"
+    local roots_file="/etc/vps-optimize/backup-archive-roots.conf"
+
+    [[ "$archive_root" == /* && "$archive_root" != "/" ]] || return 1
+    mkdir -p /etc/vps-optimize || return 1
+    touch "$roots_file" || return 1
+    chmod 600 "$roots_file" 2>/dev/null || true
+    grep -Fqx -- "$archive_root" "$roots_file" 2>/dev/null || printf '%s\n' "$archive_root" >> "$roots_file"
+}
+
+backup_collect_archive_roots() {
+    local array_name="$1"
+    local -n root_list="$array_name"
+    local roots_file="/etc/vps-optimize/backup-archive-roots.conf"
+    local root existing duplicate
+
+    root_list=()
+    while IFS= read -r root; do
+        [[ "$root" == /* && "$root" != "/" && -d "$root" ]] || continue
+        duplicate=0
+        for existing in "${root_list[@]}"; do
+            [[ "$existing" == "$root" ]] && duplicate=1 && break
+        done
+        [[ "$duplicate" -eq 1 ]] || root_list+=("$root")
+    done < <(
+        printf '%s\n' "/etc/vps-optimize/backups/manual" "/backups" "/root/backups"
+        [[ -f "$roots_file" ]] && sed -n '/^\//p' "$roots_file"
+    )
+}
+
+backup_collect_available_archives() {
+    local array_name="$1"
+    local -n archive_list="$array_name"
+    local -a roots=()
+    local root archive existing duplicate
+
+    archive_list=()
+    backup_collect_archive_roots roots
+    for root in "${roots[@]}"; do
+        while IFS= read -r archive; do
+            backup_archive_is_readable "$archive" || continue
+            duplicate=0
+            for existing in "${archive_list[@]}"; do
+                [[ "$existing" == "$archive" ]] && duplicate=1 && break
+            done
+            [[ "$duplicate" -eq 1 ]] || archive_list+=("$archive")
+        done < <(ls -1t "$root"/*.tar.gz 2>/dev/null)
+    done
+}
+
+backup_select_available_archive() {
+    local output_name="$1"
+    local -n selected_archive="$output_name"
+    local -a archives=()
+    local choice i
+
+    backup_collect_available_archives archives
+    if [[ ${#archives[@]} -eq 0 ]]; then
+        echo -e "$(localized_text "${YELLOW}⚠️ 未自动读取到可用的 .tar.gz 备份包。${PLAIN}" "${YELLOW}⚠️ No usable .tar.gz backup archive was found automatically.${PLAIN}" "${YELLOW}⚠️ Автоматически не найден доступный архив резервной копии .tar.gz.${PLAIN}")"
+        return 1
+    fi
+
+    echo -e "$(localized_text "${CYAN}可加载备份：${PLAIN}" "${CYAN}Loadable backups:${PLAIN}" "${CYAN}Доступные для загрузки копии:${PLAIN}")"
+    for i in "${!archives[@]}"; do
+        echo -e "  ${GREEN}$((i + 1)).${PLAIN} $(basename "${archives[$i]}") ${YELLOW}($(dirname "${archives[$i]}"))${PLAIN}"
+    done
+    read_trimmed choice "$(localized_text "输入备份序号: " "Enter backup number: " "Введите номер резервной копии: ")"
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#archives[@]} )); then
+        echo -e "$(localized_text "${RED}❌ 无效序号。${PLAIN}" "${RED}❌ Invalid number.${PLAIN}" "${RED}❌ Неверный номер.${PLAIN}")"
+        return 1
+    fi
+    selected_archive="${archives[$((choice - 1))]}"
 }
 
 backup_copy_custom_directories() {
@@ -2067,12 +2146,16 @@ backup_restore_custom_directories() {
 
     [[ -f "$mapping_file" ]] || return 0
     while IFS='|' read -r dest_rel target_path; do
-        [[ "$dest_rel" == "custom${target_path}" && "$target_path" == /* && "$target_path" != "/" && "${target_path#/}" == */* ]] || return 1
+        [[ "$dest_rel" == "custom${target_path}" && "$target_path" == /* && "$target_path" != "/" ]] || return 1
         case "$target_path" in
             /proc|/proc/*|/sys|/sys/*|/dev|/dev/*|/run|/run/*|/tmp|/tmp/*) return 1 ;;
         esac
         [[ -d "$restore_dir/$dest_rel" ]] || return 1
-        restore_backup_dir "$restore_dir/$dest_rel" "$target_path" "$quarantine_root" || failed=1
+        if [[ "${target_path#/}" == */* ]]; then
+            restore_backup_dir "$restore_dir/$dest_rel" "$target_path" "$quarantine_root" || failed=1
+        else
+            mkdir -p "$target_path" && cp -a -- "$restore_dir/$dest_rel/." "$target_path/" || failed=1
+        fi
     done < "$mapping_file"
     return "$failed"
 }
@@ -2583,6 +2666,7 @@ func_edit_applied_config_center() {
 
 func_backup_center() {
     local backup_root="/etc/vps-optimize/backups/manual"
+    local loaded_archive=""
     mkdir -p "$backup_root"
     chmod 700 "$backup_root" 2>/dev/null || true
 
@@ -2593,10 +2677,12 @@ func_backup_center() {
         echo -e "$(localized_text "${BOLD}🗂️ 配置备份与回滚中心${PLAIN}" "${BOLD}🗂️ Configure backup and rollback center${PLAIN}" "${BOLD}🗂️ Настройка центра резервного копирования и отката${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "当前备份目录: ${YELLOW}${backup_root}${PLAIN}" "Current backup directory: ${YELLOW}${backup_root}${PLAIN}" "Текущий каталог резервной копии: ${YELLOW}${backup_root}${PLAIN}.")"
+        [[ -n "$loaded_archive" && ! -r "$loaded_archive" ]] && loaded_archive=""
+        [[ -n "$loaded_archive" ]] && echo -e "$(localized_text "已加载备份包: ${YELLOW}$(basename "$loaded_archive")${PLAIN}" "Loaded backup archive: ${YELLOW}$(basename "$loaded_archive")${PLAIN}" "Загруженный архив резервной копии: ${YELLOW}$(basename "$loaded_archive")${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 创建备份${PLAIN}               ${YELLOW}(配置 / 自定义目录 / 两者)${PLAIN}" "${GREEN}1. Create backup${PLAIN} (configuration / custom directories / both)" "${GREEN}1. Создать резервную копию${PLAIN} (конфигурация / пользовательские каталоги / оба)")"
-        echo -e "$(localized_text "${GREEN}  2. 查看默认目录备份${PLAIN}" "${GREEN}2. View backups in the default directory${PLAIN}" "${GREEN}2. Просмотреть копии в каталоге по умолчанию${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 从备份恢复${PLAIN}             ${YELLOW}(默认列表或指定备份包)${PLAIN}" "${GREEN}3. Restore from backup${PLAIN} (default list or selected archive)" "${GREEN}3. Восстановить из копии${PLAIN} (список по умолчанию или выбранный архив)")"
+        echo -e "$(localized_text "${GREEN}  2. 加载备份包${PLAIN}               ${YELLOW}(自动读取已有 .tar.gz)${PLAIN}" "${GREEN}2. Load backup archive${PLAIN} (automatically read existing .tar.gz files)" "${GREEN}2. Загрузить архив резервной копии${PLAIN} (автоматически найти существующие .tar.gz)")"
+        echo -e "$(localized_text "${GREEN}  3. 从备份恢复${PLAIN}             ${YELLOW}(已加载 / 自动列表 / 指定路径)${PLAIN}" "${GREEN}3. Restore from backup${PLAIN} (loaded / automatic list / specified path)" "${GREEN}3. Восстановить из копии${PLAIN} (загруженный / автоматический список / указанный путь)")"
         echo -e "$(localized_text "${GREEN}  4. 隔离旧备份${PLAIN}             ${YELLOW}(仅保留最近 5 份，旧文件移入隔离区)${PLAIN}" "${GREEN}4. Isolate old backups (only the latest 5 copies are kept, and old files are moved to the quarantine area)${PLAIN}" "${GREEN}4. Изолировать старые резервные копии (сохраняются только последние 5 копий, а старые файлы перемещаются в зону карантина)${PLAIN}")"
         echo -e "$(localized_text "${CYAN}  5. 查看/编辑脚本已应用配置${PLAIN} ${YELLOW}(备份、校验，可选择 reload/restart)${PLAIN}" "${CYAN}5. View/edit script applied configuration (backup, verification, optional reload/restart)${PLAIN}" "${CYAN}5. Просмотр/редактирование примененной конфигурации сценария (резервное копирование, проверка, дополнительная перезагрузка/перезапуск)${PLAIN}")"
         echo -e "------------------------------------------------"
@@ -2670,7 +2756,10 @@ func_backup_center() {
                 else
                     if ( umask 077 && tar -czf "$tar_file" -C "$work_dir" . ) >/dev/null 2>&1; then
                         chmod 600 "$tar_file" 2>/dev/null || true
+                        backup_register_archive_root "$BACKUP_ARCHIVE_ROOT" || true
+                        loaded_archive="$tar_file"
                         echo -e "$(localized_text "${GREEN}✅ 备份创建成功: ${tar_file}${PLAIN}" "${GREEN}✅ Backup created successfully: ${tar_file}${PLAIN}" "${GREEN}. Резервная копия успешно создана: ${tar_file}.${PLAIN}")"
+                        echo -e "$(localized_text "已加载备份包: $(basename "$tar_file")，可在 [3] -> [1] 恢复。" "Loaded backup archive: $(basename "$tar_file"). Restore it with [3] -> [1]." "Загружен архив: $(basename "$tar_file"). Восстановление: [3] -> [1].")"
                         echo -e "$(localized_text "${YELLOW}⚠️ 备份包含证书私钥、面板数据库和 API Token 等敏感配置，请妥善保管。${PLAIN}" "${YELLOW}⚠️ The backup contains sensitive configurations such as certificate private key, panel database and API Token, please keep it properly.${PLAIN}" "${YELLOW}⚠️ Резервная копия содержит конфиденциальные конфигурации, такие как закрытый ключ сертификата, база данных панели и токен API, сохраняйте ее правильно.${PLAIN}")"
                     else
                         echo -e "$(localized_text "${RED}❌ 备份打包失败，请检查磁盘空间与权限。${PLAIN}" "${RED}❌ Backup packaging failed, please check the disk space and permissions.${PLAIN}" "${RED}❌ Не удалось создать резервную копию, проверьте место на диске и разрешения.${PLAIN}")"
@@ -2680,53 +2769,38 @@ func_backup_center() {
                 ;;
 
             2)
-                local backups
-                backups=$(ls -1t "$backup_root"/backup_*.tar.gz 2>/dev/null)
-                if [[ -z "$backups" ]]; then
-                    echo -e "$(localized_text "${YELLOW}⚠️ 当前没有任何备份文件。${PLAIN}" "${YELLOW}⚠️ There are currently no backup files.${PLAIN}" "${YELLOW}⚠️ На данный момент файлов резервных копий нет.${PLAIN}")"
-                else
-                    echo -e "$(localized_text "${CYAN}👇 当前备份列表 (新 -> 旧)：${PLAIN}" "${CYAN}👇 Current backup list (new -> old):${PLAIN}" "${CYAN}👇 Текущий список резервных копий (новый -> старый):${PLAIN}")"
-                    local idx=1
-                    while IFS= read -r f; do
-                        echo -e "  ${GREEN}${idx}.${PLAIN} $(basename "$f")"
-                        idx=$((idx+1))
-                    done <<< "$backups"
-                fi
+                backup_select_available_archive loaded_archive || true
+                [[ -n "$loaded_archive" ]] && echo -e "$(localized_text "${GREEN}✅ 已加载: ${loaded_archive}${PLAIN}" "${GREEN}✅ Loaded: ${loaded_archive}${PLAIN}" "${GREEN}✅ Загружено: ${loaded_archive}${PLAIN}")"
                 ;;
 
             3)
-                local restore_source r_choice target_file
-                echo -e "  1. $(localized_text "默认目录备份列表" "Backup list in the default directory" "Список копий в каталоге по умолчанию")"
-                echo -e "  2. $(localized_text "指定备份包路径" "Specify backup archive path" "Указать путь к архиву резервной копии")"
+                local restore_source target_file
+                echo -e "  1. $(localized_text "已加载备份包" "Loaded backup archive" "Загруженный архив резервной копии")"
+                echo -e "  2. $(localized_text "自动读取的备份列表" "Automatically detected backup list" "Автоматически найденный список копий")"
+                echo -e "  3. $(localized_text "指定备份包路径" "Specify backup archive path" "Указать путь к архиву резервной копии")"
                 echo -e "  0. $(localized_text "取消" "Cancel" "Отмена")"
                 read_trimmed restore_source "$(localized_text "选择恢复来源: " "Select restore source: " "Выберите источник восстановления: ")"
                 case "$restore_source" in
                     1)
-                        mapfile -t backups < <(ls -1t "$backup_root"/backup_*.tar.gz 2>/dev/null)
-                        if [[ ${#backups[@]} -eq 0 ]]; then
-                            echo -e "$(localized_text "${YELLOW}⚠️ 默认目录没有可用备份。${PLAIN}" "${YELLOW}⚠️ No backup is available in the default directory.${PLAIN}" "${YELLOW}⚠️ В каталоге по умолчанию нет доступной резервной копии.${PLAIN}")"
+                        if ! backup_archive_is_readable "$loaded_archive"; then
+                            echo -e "$(localized_text "${YELLOW}⚠️ 尚未加载可用备份包。${PLAIN}" "${YELLOW}⚠️ No usable backup archive is loaded.${PLAIN}" "${YELLOW}⚠️ Доступный архив резервной копии не загружен.${PLAIN}")"
                             read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                             continue
                         fi
-                        echo -e "$(localized_text "${CYAN}可恢复备份：${PLAIN}" "${CYAN}Restorable backups:${PLAIN}" "${CYAN}Доступные резервные копии:${PLAIN}")"
-                        for i in "${!backups[@]}"; do
-                            echo -e "  ${GREEN}$((i+1)).${PLAIN} $(basename "${backups[$i]}")"
-                        done
-                        read_trimmed r_choice "$(localized_text "输入备份序号: " "Enter backup number: " "Введите номер резервной копии: ")"
-                        if ! [[ "$r_choice" =~ ^[0-9]+$ ]] || [[ "$r_choice" -lt 1 ]] || [[ "$r_choice" -gt ${#backups[@]} ]]; then
-                            echo -e "$(localized_text "${RED}❌ 无效序号，已取消恢复。${PLAIN}" "${RED}❌ Invalid number; restore canceled.${PLAIN}" "${RED}❌ Неверный номер; восстановление отменено.${PLAIN}")"
-                            read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-                            continue
-                        fi
-                        target_file="${backups[$((r_choice-1))]}"
+                        target_file="$loaded_archive"
                         ;;
                     2)
-                        IFS= read -r -p "$(localized_text "备份包绝对路径（例：/root/backup_20260101_120000.tar.gz）: " "Absolute backup archive path (example: /root/backup_20260101_120000.tar.gz): " "Абсолютный путь к архиву (пример: /root/backup_20260101_120000.tar.gz): ")" target_file || continue
+                        backup_select_available_archive target_file || continue
+                        loaded_archive="$target_file"
+                        ;;
+                    3)
+                        IFS= read -r -p "$(localized_text "备份包绝对路径（例：/backups/etc_usr_home_20260809165222.tar.gz）: " "Absolute backup archive path (example: /backups/etc_usr_home_20260809165222.tar.gz): " "Абсолютный путь к архиву (пример: /backups/etc_usr_home_20260809165222.tar.gz): ")" target_file || continue
                         target_file=$(trim_input "$target_file")
-                        if [[ ! -f "$target_file" || "$target_file" != *.tar.gz ]]; then
+                        if ! backup_archive_is_readable "$target_file"; then
                             echo -e "$(localized_text "${RED}❌ 未找到可读取的 .tar.gz 备份包。${PLAIN}" "${RED}❌ A readable .tar.gz backup archive was not found.${PLAIN}" "${RED}❌ Не найден доступный для чтения архив резервной копии .tar.gz.${PLAIN}")"
                             continue
                         fi
+                        loaded_archive="$target_file"
                         ;;
                     0|q|Q) continue ;;
                     *)
@@ -22042,9 +22116,9 @@ show_sni_help() {
 
 show_backup_help() {
     echo -e "$(localized_text "${CYAN}VPS-Optimize > 备份与回滚 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Backup and Rollback > Help${PLAIN}" "${CYAN}VPS-Optimize > Резервное копирование и откат > Справка${PLAIN}")"
-    echo "$(localized_text "1 创建备份：选择配置、自定义目录或两者，并可指定存放目录。" "1 Create a backup: choose configuration, custom directories, or both, and select the storage directory." "1 Создать копию: выберите конфигурацию, пользовательские каталоги или оба варианта, а затем каталог хранения.")"
-    echo "$(localized_text "2 查看备份：确认可用备份和时间。" "2 View backups: Confirm available backups and times." "2 Просмотр резервных копий: подтвердите доступные резервные копии и время.")"
-    echo "$(localized_text "3 恢复：从默认列表或指定 .tar.gz 备份包恢复；先查看环境预检。" "3 Restore: use the default list or a specified .tar.gz archive; review the environment preflight first." "3 Восстановление: используйте список по умолчанию или указанный архив .tar.gz; сначала проверьте предварительную проверку среды.")"
+    echo "$(localized_text "1 创建备份：选择配置、自定义目录或两者，并可指定存放目录；自定义目录支持 /etc、/usr、/home。" "1 Create a backup: choose configuration, custom directories, or both, and select the storage directory; custom directories support /etc, /usr, and /home." "1 Создать копию: выберите конфигурацию, пользовательские каталоги или оба варианта, а затем каталог хранения; пользовательские каталоги поддерживают /etc, /usr и /home.")"
+    echo "$(localized_text "2 加载备份包：自动读取默认目录、/backups、/root/backups 和已记录目录中的 .tar.gz。" "2 Load backup archive: automatically read .tar.gz files in the default directory, /backups, /root/backups, and recorded directories." "2 Загрузка архива: автоматически найти .tar.gz в каталоге по умолчанию, /backups, /root/backups и сохраненных каталогах.")"
+    echo "$(localized_text "3 恢复：使用已加载备份、自动列表或指定 .tar.gz 路径；先查看环境预检。" "3 Restore: use a loaded backup, the automatic list, or a specified .tar.gz path; review the environment preflight first." "3 Восстановление: используйте загруженную копию, автоматический список или указанный путь .tar.gz; сначала проверьте предварительную проверку среды.")"
     echo "$(localized_text "4 隔离旧备份：移入隔离目录，不直接删除。" "4 Quarantine old backups: move them to quarantine; do not delete them." "4 Изолировать старые копии: переместить в карантин, не удалять.")"
     echo "$(localized_text "5 查看/编辑已应用配置：先备份，校验后可 reload/restart。" "5 View or edit applied configuration: back up first, validate, then reload or restart if needed." "5 Просмотр или правка применённой конфигурации: сначала копия, затем проверка и reload/restart при необходимости.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"

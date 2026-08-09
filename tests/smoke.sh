@@ -2775,10 +2775,12 @@ grep -q 'func_health_dashboard' dist/vps.sh
 grep -q 'func_backup_center' dist/vps.sh
 grep -q 'backup_collect_custom_directories' dist/vps.sh
 grep -q 'backup_restore_preflight' dist/vps.sh
+grep -q 'backup_collect_available_archives' dist/vps.sh
+grep -q 'backup_register_archive_root' dist/vps.sh
 (
     source src/backup.sh
     [[ "$(backup_resolve_custom_directory "$repo_root")" == "$repo_root" ]]
-    ! backup_resolve_custom_directory /etc
+    [[ "$(backup_resolve_custom_directory /etc)" == "/etc" ]]
     ! backup_resolve_custom_directory /tmp
 )
 grep -q 'func_edit_applied_config_center' dist/vps.sh
