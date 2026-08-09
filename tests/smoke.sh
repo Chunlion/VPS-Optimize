@@ -396,6 +396,7 @@ for function_name in \
     manage_compose_project \
     func_sublinkpro_menu \
     func_dockge_menu \
+    func_dockge_compose_menu \
     func_komari_menu \
     func_update_subscription_tools \
     func_migrate_compose_to_dockge
@@ -2058,6 +2059,8 @@ grep -q 'print_project_runtime_overview' dist/vps.sh
 grep -q 'xui_panel_status_compact' dist/vps.sh
 grep -q '3x-ui 面板（托管 Xray）' dist/vps.sh
 grep -q '独立 Xray 服务' dist/vps.sh
+grep -q 'Dockge / Compose 管理' dist/vps.sh
+grep -q '端口流量监控（dog）' dist/vps.sh
 grep -Fq '安装 3x-ui / x-ui 面板（最新版）' dist/vps.sh
 grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh' dist/vps.sh
 grep -Fq '最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。' dist/vps.sh

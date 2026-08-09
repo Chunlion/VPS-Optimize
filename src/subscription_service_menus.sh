@@ -106,6 +106,30 @@ func_dockge_menu() {
     func_service_action_menu "$(localized_text "Dockge 管理" "Dockge Management" "Dockge Управление")" "$(localized_text "安装或管理 Docker Compose 部署的 Dockge。" "Install or manage Dockge deployed by Dockge." "Установите или управляйте Dockge, развернутым Dockge.")" "$(localized_text "安装 Dockge" "Install Dockge" "Установить Dockge")" func_dockge "$(localized_text "管理 / 卸载 Dockge" "Manage/Uninstall Dockge" "Управление/удаление Dockge")" func_manage_dockge
 }
 
+func_dockge_compose_menu() {
+    local choice
+
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "$(localized_text "面板、节点与订阅工具 > Dockge / Compose 管理" "Panels, Nodes and Subscription Tools > Dockge / Compose Management" "Панели, узлы и инструменты подписки > Управление Dockge / Compose")"
+        echo -e "${BOLD}🧭 $(localized_text "Dockge / Compose 管理" "Dockge / Compose Management" "Управление Dockge / Compose")${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "$(localized_text "${GREEN}  1. 安装 / 管理 Dockge${PLAIN}" "${GREEN}1. Install / manage Dockge${PLAIN}" "${GREEN}1. Установить / управлять Dockge${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 迁移已有 Compose 项目${PLAIN}" "${GREEN}2. Migrate existing Compose projects${PLAIN}" "${GREEN}2. Перенести существующие проекты Compose${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Return to the previous menu / q Return${PLAIN}" "${RED}0. Возврат в предыдущее меню / q Возврат${PLAIN}")"
+        echo -e "${CYAN}================================================${PLAIN}"
+        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+
+        case "$choice" in
+            1) func_dockge_menu ;;
+            2) func_migrate_compose_to_dockge ;;
+            0|q|Q) return ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
+        esac
+    done
+}
+
 func_komari_menu() {
     func_service_action_menu "$(localized_text "Komari 探针监控" "Komari monitoring" "Мониторинг Komari")" "$(localized_text "安装或管理 Docker Compose 部署的 Komari 探针监控面板。" "Install or manage the Komari monitoring panel deployed with Docker Compose." "Установить или настроить панель мониторинга Komari, развёрнутую через Docker Compose.")" "$(localized_text "安装 Komari" "Install Komari" "Установить Komari")" func_komari "$(localized_text "管理 / 卸载 Komari" "Manage / Uninstall Komari" "Управление / удаление Komari")" func_manage_komari
 }
