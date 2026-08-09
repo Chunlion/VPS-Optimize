@@ -1640,8 +1640,6 @@ read_trimmed dog_confirm "确认操作？[Y/n]: " <<< ""
 [[ "$(normalize_main_choice "q")" == "0" ]]
 [[ "$(format_bytes "")" == "0B" ]]
 [[ "$(format_bytes 1023)" == "1023B" ]]
-dog_notification_template=$(render_notification_template '<b>{server_name}</b>|{report}|{time}' 'node-a' 'port 443: 1GB' '2026-08-09 12:00:00')
-[[ "$dog_notification_template" == '<b>node-a</b>|port 443: 1GB|2026-08-09 12:00:00' ]]
 telegram_notification_due 1h 9 13
 telegram_notification_due 6h 9 12
 telegram_notification_due 12h 9 0
@@ -1650,8 +1648,14 @@ if telegram_notification_due 6h 9 13 || telegram_notification_due daily 9 8 || t
     echo "Unexpected dog Telegram notification schedule match." >&2
     exit 1
 fi
-dog_nft_snapshot=$(printf '%s' '{"nftables":[{"counter":{"name":"port_443_in","bytes":123}},{"counter":{"name":"port_443_out","bytes":456}}]}' | parse_nft_counter_snapshot)
-[[ "$(jq -r '.port_443_in + .port_443_out' <<< "$dog_nft_snapshot")" == "579" ]]
+if command -v jq >/dev/null 2>&1; then
+    dog_notification_template=$(render_notification_template '<b>{server_name}</b>|{report}|{time}' 'node-a' 'port 443: 1GB' '2026-08-09 12:00:00')
+    [[ "$dog_notification_template" == '<b>node-a</b>|port 443: 1GB|2026-08-09 12:00:00' ]]
+    dog_nft_snapshot=$(printf '%s' '{"nftables":[{"counter":{"name":"port_443_in","bytes":123}},{"counter":{"name":"port_443_out","bytes":456}}]}' | parse_nft_counter_snapshot)
+    [[ "$(jq -r '.port_443_in + .port_443_out' <<< "$dog_nft_snapshot")" == "579" ]]
+else
+    echo "jq not found; skipped dog notification rendering and nft JSON snapshot tests."
+fi
 declare -f sanitize_nftables_config >/dev/null
 declare -f update_telegram_config >/dev/null
 grep -q '^refresh_nftables_counter_snapshot()' dog.sh
