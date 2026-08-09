@@ -396,16 +396,34 @@ docker_backup_migration_menu() {
     local choice
     while true; do
         clear
-        print_breadcrumb "$(localized_text "Docker 管理 > 备份与迁移" "Docker Management > Backup and Migration" "Docker > Резервное копирование и перенос")"
+        print_breadcrumb "$(localized_text "Docker 管理 > 备份 / Compose" "Docker Management > Backup / Compose" "Docker > Резервное копирование / Compose")"
         echo -e "$(localized_text "${YELLOW}配置备份可还原 daemon.json；不包含镜像和数据卷。${PLAIN}" "${YELLOW}Configuration backups include daemon.json, not images or volumes.${PLAIN}" "${YELLOW}Резервная копия включает daemon.json, но не образы и тома.${PLAIN}")"
         echo -e "${GREEN}  1. $(localized_text "配置备份 / 还原" "Configuration backup / restore" "Резервная копия / восстановление")${PLAIN}"
-        echo -e "${GREEN}  2. $(localized_text "迁移 Compose 项目到 Dockge" "Migrate Compose project to Dockge" "Перенести Compose в Dockge")${PLAIN}"
+        echo -e "${GREEN}  2. $(localized_text "Dockge / Compose 管理" "Dockge / Compose management" "Управление Dockge / Compose")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
         read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
         case "$choice" in
             1) func_backup_center ;;
-            2) func_migrate_compose_to_dockge ;;
+            2) docker_compose_management_menu ;;
             0) return ;;
+            *) echo -e "${RED}$(localized_text "无效选择。" "Invalid choice." "Неверный выбор.")${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
+docker_compose_management_menu() {
+    local choice
+    while true; do
+        clear
+        print_breadcrumb "$(localized_text "Docker 管理 > Dockge / Compose" "Docker Management > Dockge / Compose" "Docker > Dockge / Compose")"
+        echo -e "${GREEN}  1. $(localized_text "安装 / 管理 Dockge" "Install / manage Dockge" "Установить / управлять Dockge")${PLAIN}"
+        echo -e "${GREEN}  2. $(localized_text "迁移已有 Compose 项目" "Migrate existing Compose projects" "Перенести существующие проекты Compose")${PLAIN}"
+        echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
+        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        case "$choice" in
+            1) func_dockge_menu ;;
+            2) func_migrate_compose_to_dockge ;;
+            0|q|Q) return ;;
             *) echo -e "${RED}$(localized_text "无效选择。" "Invalid choice." "Неверный выбор.")${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -470,7 +488,7 @@ func_docker_manage() {
         echo -e "${GREEN} 11. $(localized_text "开启 Docker IPv6" "Enable Docker IPv6" "Включить Docker IPv6")${PLAIN}"
         echo -e "${GREEN} 12. $(localized_text "关闭 Docker IPv6" "Disable Docker IPv6" "Отключить Docker IPv6")${PLAIN}"
         echo "------------------------------------------------"
-        echo -e "${GREEN} 19. $(localized_text "备份 / 迁移 / 还原 Docker 配置" "Backup / migrate / restore Docker configuration" "Резервное копирование / перенос / восстановление")${PLAIN}"
+        echo -e "${GREEN} 19. $(localized_text "备份 / Compose 管理" "Backup / Compose management" "Резервное копирование / управление Compose")${PLAIN}"
         echo -e "${RED} 20. $(localized_text "卸载 Docker 环境" "Uninstall Docker" "Удалить Docker")${PLAIN}"
         echo "------------------------------------------------"
         echo -e "${RED}  0. $(localized_text "返回主菜单" "Main menu" "Главное меню") / q $(localized_text "返回" "Back" "Назад")${PLAIN}"

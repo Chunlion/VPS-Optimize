@@ -349,7 +349,7 @@ assert_file_not_contains src/docker_manage.sh 'UPD 更新订阅工具容器' "Do
 assert_file_contains src/docker_manage.sh '3. $(localized_text "容器管理"' "Docker management must include container management."
 assert_file_contains src/docker_manage.sh '7. $(localized_text "清理未使用资源"' "Docker management must include unused resource cleanup."
 assert_file_contains src/docker_manage.sh '11. $(localized_text "开启 Docker IPv6"' "Docker management must include Docker IPv6 controls."
-assert_file_contains src/docker_manage.sh '19. $(localized_text "备份 / 迁移 / 还原 Docker 配置"' "Docker management must include configuration backup and migration."
+assert_file_contains src/docker_manage.sh '19. $(localized_text "备份 / Compose 管理"' "Docker management must include backup and Compose management."
 assert_file_contains docs/existing-server-migration.md '主菜单 [11 Docker 管理] -> [10 Docker 本地防穿透]' "Migration docs must point users to the current Docker protection option."
 assert_file_contains docs/config-paths.md '主菜单 [11 Docker 管理] -> [10 Docker 本地防穿透]' "Config paths doc must list the current Docker protection option."
 assert_file_contains docs/config-paths.md '主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]' "Config paths doc must list the current connlimit option."
@@ -396,7 +396,7 @@ for function_name in \
     manage_compose_project \
     func_sublinkpro_menu \
     func_dockge_menu \
-    func_dockge_compose_menu \
+    docker_compose_management_menu \
     func_komari_menu \
     func_update_subscription_tools \
     func_migrate_compose_to_dockge
@@ -2060,6 +2060,7 @@ grep -q 'xui_panel_status_compact' dist/vps.sh
 grep -q '3x-ui 面板（托管 Xray）' dist/vps.sh
 grep -q '独立 Xray 服务' dist/vps.sh
 grep -q 'Dockge / Compose 管理' dist/vps.sh
+grep -q 'docker_compose_management_menu' dist/vps.sh
 grep -q '端口流量监控（dog）' dist/vps.sh
 grep -Fq '安装 3x-ui / x-ui 面板（最新版）' dist/vps.sh
 grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh' dist/vps.sh
@@ -2068,7 +2069,7 @@ grep -Fq '安装 3x-ui / x-ui 面板（v2.9.4）' dist/vps.sh
 grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh' dist/vps.sh
 grep -Fq 'install_args=("v2.9.4")' dist/vps.sh
 grep -Fq 'v2.9.4 属于 2.x 老流程' dist/vps.sh
-grep -Fq 'S-UI 面板脚本' dist/vps.sh
+grep -Fq 'S-UI 管理' dist/vps.sh
 grep -Fq '安装 S-UI 面板' dist/vps.sh
 grep -Fq 'https://raw.githubusercontent.com/alireza0/s-ui/master/install.sh' dist/vps.sh
 if grep -q 'x-ui\[$(service_status_compact x-ui)\]' dist/vps.sh; then

@@ -15695,16 +15695,34 @@ docker_backup_migration_menu() {
     local choice
     while true; do
         clear
-        print_breadcrumb "$(localized_text "Docker 管理 > 备份与迁移" "Docker Management > Backup and Migration" "Docker > Резервное копирование и перенос")"
+        print_breadcrumb "$(localized_text "Docker 管理 > 备份 / Compose" "Docker Management > Backup / Compose" "Docker > Резервное копирование / Compose")"
         echo -e "$(localized_text "${YELLOW}配置备份可还原 daemon.json；不包含镜像和数据卷。${PLAIN}" "${YELLOW}Configuration backups include daemon.json, not images or volumes.${PLAIN}" "${YELLOW}Резервная копия включает daemon.json, но не образы и тома.${PLAIN}")"
         echo -e "${GREEN}  1. $(localized_text "配置备份 / 还原" "Configuration backup / restore" "Резервная копия / восстановление")${PLAIN}"
-        echo -e "${GREEN}  2. $(localized_text "迁移 Compose 项目到 Dockge" "Migrate Compose project to Dockge" "Перенести Compose в Dockge")${PLAIN}"
+        echo -e "${GREEN}  2. $(localized_text "Dockge / Compose 管理" "Dockge / Compose management" "Управление Dockge / Compose")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
         read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
         case "$choice" in
             1) func_backup_center ;;
-            2) func_migrate_compose_to_dockge ;;
+            2) docker_compose_management_menu ;;
             0) return ;;
+            *) echo -e "${RED}$(localized_text "无效选择。" "Invalid choice." "Неверный выбор.")${PLAIN}"; sleep 1 ;;
+        esac
+    done
+}
+
+docker_compose_management_menu() {
+    local choice
+    while true; do
+        clear
+        print_breadcrumb "$(localized_text "Docker 管理 > Dockge / Compose" "Docker Management > Dockge / Compose" "Docker > Dockge / Compose")"
+        echo -e "${GREEN}  1. $(localized_text "安装 / 管理 Dockge" "Install / manage Dockge" "Установить / управлять Dockge")${PLAIN}"
+        echo -e "${GREEN}  2. $(localized_text "迁移已有 Compose 项目" "Migrate existing Compose projects" "Перенести существующие проекты Compose")${PLAIN}"
+        echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
+        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        case "$choice" in
+            1) func_dockge_menu ;;
+            2) func_migrate_compose_to_dockge ;;
+            0|q|Q) return ;;
             *) echo -e "${RED}$(localized_text "无效选择。" "Invalid choice." "Неверный выбор.")${PLAIN}"; sleep 1 ;;
         esac
     done
@@ -15769,7 +15787,7 @@ func_docker_manage() {
         echo -e "${GREEN} 11. $(localized_text "开启 Docker IPv6" "Enable Docker IPv6" "Включить Docker IPv6")${PLAIN}"
         echo -e "${GREEN} 12. $(localized_text "关闭 Docker IPv6" "Disable Docker IPv6" "Отключить Docker IPv6")${PLAIN}"
         echo "------------------------------------------------"
-        echo -e "${GREEN} 19. $(localized_text "备份 / 迁移 / 还原 Docker 配置" "Backup / migrate / restore Docker configuration" "Резервное копирование / перенос / восстановление")${PLAIN}"
+        echo -e "${GREEN} 19. $(localized_text "备份 / Compose 管理" "Backup / Compose management" "Резервное копирование / управление Compose")${PLAIN}"
         echo -e "${RED} 20. $(localized_text "卸载 Docker 环境" "Uninstall Docker" "Удалить Docker")${PLAIN}"
         echo "------------------------------------------------"
         echo -e "${RED}  0. $(localized_text "返回主菜单" "Main menu" "Главное меню") / q $(localized_text "返回" "Back" "Назад")${PLAIN}"
@@ -18352,30 +18370,6 @@ func_substore_menu() {
 
 func_dockge_menu() {
     func_service_action_menu "$(localized_text "Dockge 管理" "Dockge Management" "Dockge Управление")" "$(localized_text "安装或管理 Docker Compose 部署的 Dockge。" "Install or manage Dockge deployed by Dockge." "Установите или управляйте Dockge, развернутым Dockge.")" "$(localized_text "安装 Dockge" "Install Dockge" "Установить Dockge")" func_dockge "$(localized_text "管理 / 卸载 Dockge" "Manage/Uninstall Dockge" "Управление/удаление Dockge")" func_manage_dockge
-}
-
-func_dockge_compose_menu() {
-    local choice
-
-    while true; do
-        clear
-        echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "面板、节点与订阅工具 > Dockge / Compose 管理" "Panels, Nodes and Subscription Tools > Dockge / Compose Management" "Панели, узлы и инструменты подписки > Управление Dockge / Compose")"
-        echo -e "${BOLD}🧭 $(localized_text "Dockge / Compose 管理" "Dockge / Compose Management" "Управление Dockge / Compose")${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${GREEN}  1. 安装 / 管理 Dockge${PLAIN}" "${GREEN}1. Install / manage Dockge${PLAIN}" "${GREEN}1. Установить / управлять Dockge${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 迁移已有 Compose 项目${PLAIN}" "${GREEN}2. Migrate existing Compose projects${PLAIN}" "${GREEN}2. Перенести существующие проекты Compose${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Return to the previous menu / q Return${PLAIN}" "${RED}0. Возврат в предыдущее меню / q Возврат${PLAIN}")"
-        echo -e "${CYAN}================================================${PLAIN}"
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
-
-        case "$choice" in
-            1) func_dockge_menu ;;
-            2) func_migrate_compose_to_dockge ;;
-            0|q|Q) return ;;
-            *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
-        esac
-    done
 }
 
 func_komari_menu() {
@@ -22113,7 +22107,7 @@ show_panel_help() {
     echo "$(localized_text "3 面板 SSL 修复：443 接入前清空面板证书路径。" "3 Panel SSL repair: clear panel certificate paths before using Port 443 Reuse." "3 Исправление SSL панели: очистить пути сертификатов панели перед настройкой повторного использования порта 443.")"
     echo "$(localized_text "4 S-UI：安装、官方菜单、卸载。" "4 S-UI: install, open the official menu, or uninstall." "4 S-UI: установка, официальное меню и удаление.")"
     echo "$(localized_text "5/6 Sing-box 与 Xray 脚本。" "5/6 Sing-box and Xray scripts." "5/6 Скрипты Sing-box и Xray.")"
-    echo "$(localized_text "7/8/9 订阅工具，10 更新订阅工具，11/12 Dockge / Compose 管理；公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription tools; 10: update subscription tools; 11/12: Dockge / Compose management. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [8 Manage Web domains/reverse proxy]." "7/8/9: инструменты подписки; 10: обновление инструментов подписки; 11/12: управление Dockge / Compose. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [8 Управление Web-доменами и обратным прокси].")"
+    echo "$(localized_text "7/8/9 订阅工具，10 更新订阅工具，13 Komari；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription tools; 10: update subscription tools; 13: Komari. Dockge / Compose management is in main menu [11 Docker Management] -> [19]. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [8 Manage Web domains/reverse proxy]." "7/8/9: инструменты подписки; 10: обновление инструментов подписки; 13: Komari. Управление Dockge / Compose находится в главном меню [11 Управление Docker] -> [19]. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [8 Управление Web-доменами и обратным прокси].")"
     echo "$(localized_text "16 端口流量监控（dog）：仅统计已监控端口的实际流量。" "16 Per-port traffic monitor (dog): shows traffic only for monitored ports." "16 Монитор трафика по портам (dog): показывает трафик только отслеживаемых портов.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
@@ -22302,9 +22296,9 @@ func_panel_deploy_menu() {
         echo -e "$(localized_text "  ${BOLD}${GREEN}1.${PLAIN} ${BOLD}3x-ui 管理${PLAIN}          ${BOLD}${GREEN}2.${PLAIN} ${BOLD}x-ui 增强工具${PLAIN}      ${BOLD}${GREEN}3.${PLAIN} ${BOLD}面板 SSL 修复${PLAIN}" "${BOLD}${GREEN}1.${PLAIN} ${BOLD}3x-ui Management${PLAIN} ${BOLD}${GREEN}2.${PLAIN} ${BOLD}x-ui Tools${PLAIN} ${BOLD}${GREEN}3.${PLAIN} ${BOLD}Panel SSL Repair${PLAIN}" "${BOLD}${GREEN}1.${PLAIN} ${BOLD}Управление 3x-ui${PLAIN} ${BOLD}${GREEN}2.${PLAIN} ${BOLD}Инструменты x-ui${PLAIN} ${BOLD}${GREEN}3.${PLAIN} ${BOLD}Исправление SSL панели${PLAIN}")"
         echo -e "$(localized_text "  ${BOLD}${GREEN}4.${PLAIN} ${BOLD}S-UI 管理${PLAIN}           ${BOLD}${GREEN}5.${PLAIN} ${BOLD}Sing-box 管理${PLAIN}       ${BOLD}${GREEN}6.${PLAIN} ${BOLD}Xray 管理${PLAIN}" "${BOLD}${GREEN}4.${PLAIN} ${BOLD}S-UI Management${PLAIN} ${BOLD}${GREEN}5.${PLAIN} ${BOLD}Sing-box Management${PLAIN} ${BOLD}${GREEN}6.${PLAIN} ${BOLD}Xray Management${PLAIN}" "${BOLD}${GREEN}4.${PLAIN} ${BOLD}Управление S-UI${PLAIN} ${BOLD}${GREEN}5.${PLAIN} ${BOLD}Управление Sing-box${PLAIN} ${BOLD}${GREEN}6.${PLAIN} ${BOLD}Управление Xray${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 订阅 / Compose${PLAIN}" "${BOLD}▶ Subscription / Compose${PLAIN}" "${BOLD}▶ Подписки / Compose${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 订阅 / 监控${PLAIN}" "${BOLD}▶ Subscription / Monitoring${PLAIN}" "${BOLD}▶ Подписки / Мониторинг${PLAIN}")"
         echo -e "$(localized_text "  ${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN}            ${BOLD}${GREEN}8.${PLAIN} ${BOLD}妙妙屋订阅${PLAIN}          ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Miaomiaowu${PLAIN} ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Miaomiaowu${PLAIN} ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}")"
-        echo -e "$(localized_text " ${BOLD}${YELLOW}10.${PLAIN} ${BOLD}更新订阅工具${PLAIN}        ${BOLD}${GREEN}11/12.${PLAIN} ${BOLD}Dockge / Compose 管理${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Komari 监控${PLAIN}" "${BOLD}${YELLOW}10.${PLAIN} ${BOLD}Update subscription tools${PLAIN} ${BOLD}${GREEN}11/12.${PLAIN} ${BOLD}Dockge / Compose management${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Komari monitoring${PLAIN}" "${BOLD}${YELLOW}10.${PLAIN} ${BOLD}Обновить инструменты подписки${PLAIN} ${BOLD}${GREEN}11/12.${PLAIN} ${BOLD}Управление Dockge / Compose${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN}")"
+        echo -e "$(localized_text " ${BOLD}${YELLOW}10.${PLAIN} ${BOLD}更新订阅工具${PLAIN}        ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Komari 监控${PLAIN}" "${BOLD}${YELLOW}10.${PLAIN} ${BOLD}Update subscription tools${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Komari monitoring${PLAIN}" "${BOLD}${YELLOW}10.${PLAIN} ${BOLD}Обновить инструменты подписки${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 网络 / 监控${PLAIN}" "${BOLD}▶ Network / Monitoring${PLAIN}" "${BOLD}▶ Сеть / Мониторинг${PLAIN}")"
         echo -e "$(localized_text " ${BOLD}${GREEN}14.${PLAIN} ${BOLD}DNS 解锁${PLAIN}            ${BOLD}${GREEN}15.${PLAIN} ${BOLD}IP-Sentinel${PLAIN}         ${BOLD}${GREEN}16.${PLAIN} ${BOLD}端口流量监控（dog）${PLAIN}" "${BOLD}${GREEN}14.${PLAIN} ${BOLD}DNS Unlock${PLAIN} ${BOLD}${GREEN}15.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}Per-port traffic (dog)${PLAIN}" "${BOLD}${GREEN}14.${PLAIN} ${BOLD}Разблокировка DNS${PLAIN} ${BOLD}${GREEN}15.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}Трафик по портам (dog)${PLAIN}")"
@@ -22326,7 +22320,7 @@ func_panel_deploy_menu() {
             8) func_miaomiaowu_menu ;;
             9) func_substore_menu ;;
             10) func_update_subscription_tools ;;
-            11|12) func_dockge_compose_menu ;;
+            11|12) docker_backup_migration_menu ;;
             13) func_komari_menu ;;
             14) func_dns_unlock ;;
             15) func_ip_sentinel ;;
@@ -22574,7 +22568,7 @@ main_menu() {
             echo -e "  ${GREEN}2.${PLAIN} Базовая настройка системы   ${YELLOW}(инструменты, часовой пояс, обновления и базовый BBR)${PLAIN}"
             echo -e "  ${GREEN}3.${PLAIN} Компоненты и службы          ${YELLOW}(Docker, Python, WARP и распространённые инструменты)${PLAIN}"
             echo -e "  ${GREEN}4.${PLAIN} Обратный прокси             ${YELLOW}(Caddy/Nginx вне повторного использования порта 443)${PLAIN}"
-            echo -e "  ${GREEN}5.${PLAIN} Панели, узлы и подписки     ${YELLOW}(3x-ui, Sing-box, подписки и Dockge)${PLAIN}"
+            echo -e "  ${GREEN}5.${PLAIN} Панели, узлы и подписки     ${YELLOW}(3x-ui, Sing-box, подписки и Komari)${PLAIN}"
 
             echo -e " ${BOLD}${BLUE}▶ ② Безопасность и контроль доступа${PLAIN}"
             echo -e "  ${GREEN}6.${PLAIN} Центр безопасности SSH      ${YELLOW}(порт, открытые ключи и вход только по ключу)${PLAIN}"
@@ -22614,7 +22608,7 @@ main_menu() {
             echo -e "  ${GREEN}2.${PLAIN} Base system initialization  ${YELLOW}(tools, timezone, updates, and basic BBR)${PLAIN}"
             echo -e "  ${GREEN}3.${PLAIN} Components and services      ${YELLOW}(Docker, Python, WARP, and common tools)${PLAIN}"
             echo -e "  ${GREEN}4.${PLAIN} Reverse proxy               ${YELLOW}(Caddy/Nginx sites outside the Port 443 Reuse)${PLAIN}"
-            echo -e "  ${GREEN}5.${PLAIN} Panels, nodes, subscriptions ${YELLOW}(3x-ui, Sing-box, subscriptions, and Dockge)${PLAIN}"
+            echo -e "  ${GREEN}5.${PLAIN} Panels, nodes, subscriptions ${YELLOW}(3x-ui, Sing-box, subscriptions, and Komari)${PLAIN}"
 
             echo -e " ${BOLD}${BLUE}▶ ② Security and access control${PLAIN}"
             echo -e "  ${GREEN}6.${PLAIN} SSH security center         ${YELLOW}(port, public keys, and key-only login modes)${PLAIN}"
@@ -22654,7 +22648,7 @@ main_menu() {
         echo -e "  ${GREEN}2.${PLAIN} 基础环境初始化        ${YELLOW}(工具/时区/系统更新/基础 BBR)${PLAIN}"
         echo -e "  ${GREEN}3.${PLAIN} 基础组件与常用服务    ${YELLOW}(Docker/Python/WARP/常用工具)${PLAIN}"
         echo -e "  ${GREEN}4.${PLAIN} 反代（Caddy/Nginx）   ${YELLOW}(未接入 443端口复用的网站/面板反代)${PLAIN}"
-        echo -e "  ${GREEN}5.${PLAIN} 面板、节点与订阅工具  ${YELLOW}(3x-ui/Sing-box/订阅管理/Dockge)${PLAIN}"
+        echo -e "  ${GREEN}5.${PLAIN} 面板、节点与订阅工具  ${YELLOW}(3x-ui/Sing-box/订阅管理/Komari)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ② 安全与访问控制${PLAIN}"
         echo -e "  ${GREEN}6.${PLAIN} SSH 安全中心          ${YELLOW}(端口/公钥/密钥登录模式)${PLAIN}"
