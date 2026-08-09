@@ -2062,6 +2062,11 @@ grep -q '独立 Xray 服务' dist/vps.sh
 grep -q 'Dockge / Compose 管理' dist/vps.sh
 grep -q 'docker_compose_management_menu' dist/vps.sh
 grep -q '端口流量监控（dog）' dist/vps.sh
+assert_function_body_contains src/menus.sh func_panel_deploy_menu '11) func_komari_menu ;;' "Panel/tools option 11 must open Komari management."
+assert_function_body_contains src/menus.sh func_panel_deploy_menu '12) func_dns_unlock ;;' "Panel/tools option 12 must open DNS Unlock."
+assert_function_body_contains src/menus.sh func_panel_deploy_menu '13) func_ip_sentinel ;;' "Panel/tools option 13 must open IP-Sentinel."
+assert_function_body_contains src/menus.sh func_panel_deploy_menu '14) func_port_dog ;;' "Panel/tools option 14 must open the per-port traffic monitor."
+assert_file_not_contains src/menus.sh '11|12) docker_backup_migration_menu ;;' "Panel/tools menu must not retain hidden Docker/Compose routes."
 grep -Fq '安装 3x-ui / x-ui 面板（最新版）' dist/vps.sh
 grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh' dist/vps.sh
 grep -Fq '最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。' dist/vps.sh
@@ -2874,7 +2879,7 @@ assert_dist_contains "$subscription_public_hint" "Release script must include th
 panel_menu_compact_label='Sing-box 管理'
 assert_file_contains "src/menus.sh" "$panel_menu_compact_label" "Panel/tools menu must use the compact script-style label."
 assert_dist_contains "$panel_menu_compact_label" "Release script must include the compact panel/tools menu label."
-panel_help_public_hint='7/8/9 订阅工具，10 更新订阅工具，13 Komari；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
+panel_help_public_hint='7/8/9 订阅工具，10 更新订阅工具，11 Komari；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both without Port 443 Reuse and Port 443 Reuse reverse proxy paths."
 assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
 panel_domain_menu_path='主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]'
