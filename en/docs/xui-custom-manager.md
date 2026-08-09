@@ -100,7 +100,7 @@ Flow calibration is used to manually modify the used flow rate in the database:
 - Inbound calibration modifies `inbounds.up` / `inbounds.down`.
 - Client calibration will modify `client_traffics.up` / `client_traffics.down`.
 
-Calibration does not modify the `total` upper limit. The values ​​before and after modification will be displayed before writing. You must enter `YES` to write to the library. The database will be automatically backed up before writing, and `x-ui` will be tried to start after writing.
+Calibration does not modify the `total` limit. Before writing, the script shows the values before and after the change and asks for confirmation; press Enter to continue or enter `n` to cancel. The database is backed up automatically before writing, and the script attempts to start `x-ui` afterward.
 
 When the version is outside the supported range or the schema check fails, the use of real write library calibration is prohibited.
 

@@ -20,7 +20,6 @@ GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 CYAN='\033[1;36m'
-MAGENTA='\033[1;35m'
 WHITE='\033[1;37m'
 DIM='\033[2m'
 BOLD='\033[1m'
@@ -87,7 +86,7 @@ clear_screen() {
 pause() {
     echo
     # EOF（Ctrl+D）时不因 set -e 直接退出整个脚本
-    read -rp "按回车返回菜单..." || true
+    read -rp "按回车返回..." || true
 }
 
 confirm_yes() {
@@ -95,7 +94,7 @@ confirm_yes() {
     local answer
     echo
     echo -e "${YELLOW}${message}${PLAIN}"
-    read -rp "确认继续？[Y/n]: " answer
+    read -rp "继续？[Y/n]: " answer
     answer="${answer:-yes}"
     [[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
@@ -123,7 +122,7 @@ require_interactive_menu() {
 
 read_menu_choice() {
     local __var_name="$1"
-    local __prompt="${2:-👉 请选择操作: }"
+    local __prompt="${2:-请选择：}"
     local __value
     # EOF（Ctrl+D）按“返回上级”处理，避免 set -e 直接退出整个脚本
     read -rp "$__prompt" __value || { echo; __value="q"; }
@@ -597,19 +596,16 @@ restore_backup() {
 
     while true; do
         clear_screen
-        echo "================================================"
-        echo "恢复$label"
-        echo "================================================"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "${BOLD}x-ui 增强套件 - 恢复$label${PLAIN}"
+        echo -e "${CYAN}================================================${PLAIN}"
 
         local files=()
         mapfile -t files < <(find "$BACKUP_DIR" -maxdepth 1 -type f -name "$pattern" | sort -r)
 
         if [ "${#files[@]}" -eq 0 ]; then
             echo "未找到 $label 备份。"
-            echo "------------------------------------------------"
-            echo -e "${RED}  0. 返回上级 / q 返回${PLAIN}"
-            echo "================================================"
-            read_menu_choice _ "👉 请选择操作: "
+            pause
             return 0
         fi
 
@@ -618,16 +614,16 @@ restore_backup() {
             echo " $((i + 1)). ${files[$i]}"
         done
         echo "------------------------------------------------"
-        echo -e "${RED}  0. 返回上级 / q 返回${PLAIN}"
+        echo -e "${RED}  0/q. 返回备份与恢复${PLAIN}"
         echo "================================================"
 
         local choice
-        read_menu_choice choice "👉 请选择备份文件: "
+        read_menu_choice choice "请选择备份文件 [0-${#files[@]}]："
         if [[ "$choice" =~ ^(0|q|Q)$ ]]; then
             return 0
         fi
         if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#files[@]}" ]; then
-            echo -e "${RED}❌ 无效选择！${PLAIN}"
+            echo -e "${RED}输入无效，请输入 0-${#files[@]}。${PLAIN}"
             sleep 1
             continue
         fi
@@ -694,9 +690,9 @@ restore_backup() {
 
 cleanup_backups() {
     clear_screen
-    echo "================================================"
-    echo "清理旧备份"
-    echo "================================================"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}x-ui 增强套件 - 清理旧备份${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
     ensure_dirs
 
     local patterns=("x-ui.db.*.bak" "x-ui-etc.*.tar.gz" "x-ui-program.*.tar.gz")
@@ -720,10 +716,10 @@ cleanup_backups() {
                 echo " $((idx + 1)). ${files[$idx]}"
             fi
         done
-        echo -e "${RED}  0. 跳过 / q 跳过${PLAIN}"
+        echo -e "${RED}  0/q. 跳过此类备份${PLAIN}"
 
         local choice
-        read_menu_choice choice "👉 请选择要删除的备份: "
+        read_menu_choice choice "请选择要删除的备份编号："
         if [[ "$choice" =~ ^(0|q|Q)$ ]]; then
             continue
         fi
@@ -804,7 +800,7 @@ def clear_screen():
     print("\033c", end="")
 
 def pause():
-    input("\n按回车返回菜单...")
+    input("\n按回车返回...")
 
 def print_write_blocked():
     print(paint(f"错误：当前 3x-ui v{detected_version} 不在支持范围内，或数据库表/字段关键字未通过检查。", "red"))
@@ -977,7 +973,7 @@ for client in clients:
 
 def show_config():
     clear_screen()
-    title("🧭 x-ui 增强套件 - 当前自定义重置配置")
+    title("x-ui 增强套件 - 自定义重置配置")
     print(json.dumps(config, ensure_ascii=False, indent=2))
     pause()
 
@@ -985,9 +981,9 @@ def manage_clients(inbound_id, inbound_cfg):
     clients_for_inbound = clients_by_inbound.get(str(inbound_id), [])
     while True:
         clear_screen()
-        title("🧭 x-ui 增强套件 - 客户端单独日期")
+        title("x-ui 增强套件 - 设置客户端重置日")
         print(f"{paint('入站 ID：', 'cyan')}{paint(inbound_id, 'white')}")
-        print(paint("说明：不单独设置时，客户端按入站规则处理。", "yellow"))
+        print(paint("未单独设置的客户端使用入站规则。", "yellow"))
         separator()
 
         if not clients_for_inbound:
@@ -998,27 +994,27 @@ def manage_clients(inbound_id, inbound_cfg):
             if ccfg.get("enabled") and ccfg.get("day"):
                 status = paint(f"每月 {ccfg['day']} 号", "green")
             else:
-                status = paint("不单独设置", "yellow")
+                status = paint("使用入站规则", "yellow")
             print(f" {paint(str(idx) + '.', 'cyan')} {paint(email, 'white')}")
             print(f"    {status}")
 
         separator()
-        print(f" {paint('0.', 'red')} 返回上级 / q 返回")
+        print(f" {paint('0/q.', 'red')} 返回入站设置")
         print(paint("================================================", "cyan"))
 
         valid = {"0", "q", "Q"} | {str(i) for i in range(1, len(clients_for_inbound) + 1)}
-        choice = input_choice("👉 请选择客户端: ", valid)
+        choice = input_choice(f"请选择客户端 [0-{len(clients_for_inbound)}]：", valid)
         if choice in {"0", "q", "Q"}:
             return
 
         email = clients_for_inbound[int(choice) - 1]["email"] or ""
         if not require_config_write():
             continue
-        day = ask_day("输入 1-31 设置该客户端日期，输入 0 删除单独日期：", allow_zero=True)
+        day = ask_day("设置重置日 [1-31]，输入 0 使用入站规则：", allow_zero=True)
         inbound_cfg.setdefault("clients", {})
         if day == 0:
             inbound_cfg["clients"].pop(email, None)
-            print("已删除该客户端单独日期。")
+            print("已改为使用入站规则。")
         else:
             inbound_cfg["clients"][email] = {"enabled": True, "day": day}
             print(f"已设置为每月 {day} 号。")
@@ -1039,29 +1035,29 @@ def manage_inbound(inbound):
 
     while True:
         clear_screen()
-        title("🧭 x-ui 增强套件 - 入站设置")
+        title("x-ui 增强套件 - 入站重置设置")
         print(f"{paint('ID：', 'cyan')}{paint(iid, 'white')}")
         print(f"{paint('端口：', 'cyan')}{paint(str(inbound['port']), 'white')}")
         print(f"{paint('备注：', 'cyan')}{paint(inbound['remark'] or '无备注', 'white')}")
         print()
-        print(f"{paint('外置重置：', 'cyan')}{status_value(cfg.get('enabled'))}")
-        print(f"{paint('入站日期：', 'cyan')}{paint('每月 ' + str(cfg.get('day', config.get('default_day', 1))) + ' 号', 'white')}")
-        print(f"{paint('入站自身 up/down：', 'cyan')}{paint('重置', 'green') if cfg.get('reset_inbound', True) else paint('不重置', 'yellow')}")
-        print(f"{paint('未单独设置日期的客户端：', 'cyan')}{paint('跟随入站', 'green') if cfg.get('reset_clients_without_custom_day', False) else paint('忽略', 'yellow')}")
+        print(f"{paint('自定义重置：', 'cyan')}{status_value(cfg.get('enabled'), '启用', '停用')}")
+        print(f"{paint('重置日：', 'cyan')}{paint('每月 ' + str(cfg.get('day', config.get('default_day', 1))) + ' 号', 'white')}")
+        print(f"{paint('入站自身流量：', 'cyan')}{paint('重置 up/down', 'green') if cfg.get('reset_inbound', True) else paint('不重置', 'yellow')}")
+        print(f"{paint('未单独设置日的客户端：', 'cyan')}{paint('跟随入站重置', 'green') if cfg.get('reset_clients_without_custom_day', False) else paint('不跟随入站', 'yellow')}")
         if inbound["traffic_reset"] == "monthly":
             print()
             print(paint("提醒：面板原生 monthly 仍启用，请在 3x-ui 面板中改为 never/不重置。", "yellow"))
         separator()
-        menu_line(1, "开启/关闭该入站外置重置")
-        menu_line(2, "设置该入站日期")
-        menu_line(3, "开启/关闭重置入站自身 up/down")
-        menu_line(4, "开启/关闭客户端跟随入站")
-        menu_line(5, "管理客户端单独日期")
+        menu_line(1, "停用该入站自定义重置" if cfg.get("enabled") else "启用该入站自定义重置")
+        menu_line(2, "修改入站重置日")
+        menu_line(3, "不重置入站自身 up/down" if cfg.get("reset_inbound", True) else "重置入站自身 up/down")
+        menu_line(4, "未单独设置日的客户端不跟随入站" if cfg.get("reset_clients_without_custom_day", False) else "未单独设置日的客户端跟随入站")
+        menu_line(5, "设置客户端单独重置日")
         separator()
-        print(f" {paint('0.', 'red')} 返回上级 / q 返回")
+        print(f" {paint('0/q.', 'red')} 返回入站列表")
         print(paint("================================================", "cyan"))
 
-        choice = input_choice("👉 请选择操作: ", {"0", "q", "Q", "1", "2", "3", "4", "5"})
+        choice = input_choice("请选择 [0-5]：", {"0", "q", "Q", "1", "2", "3", "4", "5"})
         if choice in {"0", "q", "Q"}:
             return
         if choice in {"1", "2", "3", "4"} and not require_config_write():
@@ -1069,7 +1065,7 @@ def manage_inbound(inbound):
         if choice == "1":
             cfg["enabled"] = not cfg.get("enabled", False)
         elif choice == "2":
-            cfg["day"] = ask_day("请输入该入站每月重置日期 (1-31)：")
+            cfg["day"] = ask_day("设置入站重置日 [1-31]：")
         elif choice == "3":
             cfg["reset_inbound"] = not cfg.get("reset_inbound", True)
         elif choice == "4":
@@ -1084,7 +1080,7 @@ def manage_inbound(inbound):
 def choose_inbound():
     while True:
         clear_screen()
-        title("🧭 x-ui 增强套件 - 选择入站")
+        title("x-ui 增强套件 - 配置入站重置规则")
 
         if not inbounds:
             print(paint("未读取到入站。", "yellow"))
@@ -1094,7 +1090,7 @@ def choose_inbound():
             enabled = status_value(cfg.get("enabled"))
             day = cfg.get("day", config.get("default_day", 1))
             print(f" {paint(str(idx) + '.', 'cyan')} ID={paint(iid, 'white')}  端口={paint(str(inbound['port']), 'white')}  备注={paint(trunc(inbound['remark']), 'white')}")
-            print(f"    外置重置：{enabled}  日期：{paint('每月 ' + str(day) + ' 号', 'green')}")
+            print(f"    自定义重置：{enabled}  重置日：{paint('每月 ' + str(day) + ' 号', 'green')}")
             if inbound["traffic_reset"] == "monthly":
                 print(f"    面板原生：{paint('monthly', 'red')}  {paint('警告：请在面板中改为 never/不重置', 'yellow')}")
             else:
@@ -1102,39 +1098,39 @@ def choose_inbound():
             print()
 
         separator()
-        print(f" {paint('0.', 'red')} 返回上级 / q 返回")
+        print(f" {paint('0/q.', 'red')} 返回自定义重置")
         print(paint("================================================", "cyan"))
 
         valid = {"0", "q", "Q"} | {str(i) for i in range(1, len(inbounds) + 1)}
-        choice = input_choice("👉 请选择入站: ", valid)
+        choice = input_choice(f"请选择入站 [0-{len(inbounds)}]：", valid)
         if choice in {"0", "q", "Q"}:
             return
         manage_inbound(inbounds[int(choice) - 1])
 
 while True:
     clear_screen()
-    title("🧭 x-ui 增强套件 - 自定义流量重置日期")
-    print(f"{paint('全局状态：', 'cyan')}{status_value(config.get('enabled'), '启用', '禁用')}")
-    print(f"{paint('默认日期：', 'cyan')}{paint('每月 ' + str(config.get('default_day', 1)) + ' 号', 'white')}")
+    title("x-ui 增强套件 - 自定义流量重置")
+    print(f"{paint('自动重置：', 'cyan')}{status_value(config.get('enabled'), '启用', '停用')}")
+    print(f"{paint('默认重置日：', 'cyan')}{paint('每月 ' + str(config.get('default_day', 1)) + ' 号', 'white')}")
     print(f"{paint('自动检查：', 'cyan')}{status_value(timer_status(), '已启用', '未启用')}")
     print()
     if not write_allowed:
         print(paint(f"兼容性：当前 3x-ui v{detected_version} 不在支持范围内，或数据库表/字段关键字未通过检查。", "yellow"))
         print(paint("当前只允许查看配置和预览，不允许修改配置或启用自动重置。", "yellow"))
         print()
-    print(paint("提示：请在 3x-ui 面板里关闭对应入站的原生 monthly 重置。", "yellow"))
-    print(paint("如果只是想看本次会影响谁，选 [4]，会先预览；确认步骤直接回车执行，输入 n 取消。", "yellow"))
+    print(paint("使用前请在 3x-ui 面板中将对应入站的原生 monthly 改为 never/不重置。", "yellow"))
+    print(paint("首次使用先选 [4] 预览；预览后输入 n 可取消执行。", "yellow"))
     separator()
-    menu_line(1, "开启/关闭自定义重置")
-    menu_line(2, "设置默认重置日", f"当前：每月 {config.get('default_day', 1)} 号")
-    menu_line(3, "管理入站/客户端重置日")
-    menu_line(4, "预览并手动执行一次重置检查")
-    menu_line(5, "查看当前 JSON 配置")
+    menu_line(1, "停用自动重置" if config.get("enabled") else "启用自动重置")
+    menu_line(2, "修改默认重置日", f"当前：每月 {config.get('default_day', 1)} 号")
+    menu_line(3, "配置入站和客户端")
+    menu_line(4, "预览本次重置", "预览后可确认执行")
+    menu_line(5, "查看配置 JSON")
     separator()
-    print(f" {paint('0.', 'red')} 返回主菜单 / q 返回")
+    print(f" {paint('0/q.', 'red')} 返回主菜单")
     print(paint("================================================", "cyan"))
 
-    choice = input_choice("👉 请选择操作: ", {"0", "q", "Q", "1", "2", "3", "4", "5"})
+    choice = input_choice("请选择 [0-5]：", {"0", "q", "Q", "1", "2", "3", "4", "5"})
     if choice in {"0", "q", "Q"}:
         sys.exit(0)
     if choice == "1":
@@ -1142,7 +1138,7 @@ while True:
             continue
         action = "关闭" if config.get("enabled", False) else "开启"
         try:
-            answer = input(f"确认{action}自定义重置（将同步{'停用' if action == '关闭' else '安装并启动'}自动检查 timer）？[Y/n]: ").strip().lower() or "y"
+            answer = input(f"确认{action}自动重置？将同步{'停用' if action == '关闭' else '安装并启动'}检查 timer。[Y/n]: ").strip().lower() or "y"
         except (EOFError, KeyboardInterrupt):
             print("\n已取消。")
             continue
@@ -1154,7 +1150,7 @@ while True:
     if choice == "2":
         if not require_config_write():
             continue
-        config["default_day"] = ask_day("请输入默认日期 (1-31)：")
+        config["default_day"] = ask_day("设置默认重置日 [1-31]：")
         save_config(config)
     elif choice == "3":
         choose_inbound()
@@ -1359,18 +1355,18 @@ def build_write(target, up, down):
 
 def calibrate_target(target):
     clear_screen()
-    title("🧭 x-ui 增强套件 - 输入校准流量")
+    title("x-ui 增强套件 - 设置已用流量")
     print(f"{paint('对象：', 'cyan')}{paint(target['label'], 'white')}")
     print(f"{paint('当前已用：', 'cyan')}{paint(format_gib((target['up'] or 0) + (target['down'] or 0)), 'green')}")
     print()
-    print(paint("请选择写入方式：", "yellow"))
-    menu_line(1, "输入总已用流量，全部写入 down")
-    menu_line(2, "输入总已用流量，按当前 up/down 比例分配")
-    menu_line(3, "分别输入 up 和 down")
+    print(paint("选择流量分配方式：", "yellow"))
+    menu_line(1, "设置总已用流量", "全部计入 down")
+    menu_line(2, "设置总已用流量", "沿用当前比例；当前为 0 时计入 down")
+    menu_line(3, "分别设置 up 和 down")
     separator()
-    print(f" {paint('0.', 'red')} 返回上级 / q 返回")
+    print(f" {paint('0/q.', 'red')} 返回校准对象")
     print(paint("================================================", "cyan"))
-    mode = input_choice("👉 请选择操作: ", {"0", "q", "Q", "1", "2", "3"})
+    mode = input_choice("请选择 [0-3]：", {"0", "q", "Q", "1", "2", "3"})
     if mode in {"0", "q", "Q"}:
         return None
 
@@ -1379,23 +1375,22 @@ def calibrate_target(target):
     cur_total = cur_up + cur_down
 
     if mode in ("1", "2"):
-        total = ask_gib("请输入总已用流量 (GiB)：")
+        total = ask_gib("总已用流量 [GiB]：")
         if mode == "1" or cur_total <= 0:
             new_up, new_down = 0, total
         else:
             new_up = int(Decimal(total) * Decimal(cur_up) / Decimal(cur_total))
             new_down = total - new_up
     else:
-        new_up = ask_gib("请输入上传 up 流量 (GiB)：")
-        new_down = ask_gib("请输入下载 down 流量 (GiB)：")
+        new_up = ask_gib("上传流量 up [GiB]：")
+        new_down = ask_gib("下载流量 down [GiB]：")
 
     return build_write(target, new_up, new_down)
 
 while True:
     clear_screen()
-    title("🧭 x-ui 增强套件 - 校准已用流量")
-    print(paint("说明：这里只校准已用流量 up/down，不修改流量上限 total。", "yellow"))
-    print(paint("单位：GiB，1 GiB = 1024^3 bytes", "yellow"))
+    title("x-ui 增强套件 - 校准已用流量")
+    print(paint("只修改已用流量 up/down，不修改流量上限 total。单位：GiB。", "yellow"))
     separator()
 
     if not inbounds:
@@ -1409,11 +1404,11 @@ while True:
         print()
 
     separator()
-    print(f" {paint('0.', 'red')} 返回主菜单 / q 返回")
+    print(f" {paint('0/q.', 'red')} 返回主菜单")
     print(paint("================================================", "cyan"))
 
     valid_inbounds = {"0", "q", "Q"} | {str(i) for i in range(1, len(inbounds) + 1)}
-    choice = input_choice("👉 请选择入站: ", valid_inbounds)
+    choice = input_choice(f"请选择入站 [0-{len(inbounds)}]：", valid_inbounds)
     if choice in {"0", "q", "Q"}:
         sys.exit(100)
 
@@ -1424,7 +1419,7 @@ while True:
 
     while True:
         clear_screen()
-        title("🧭 x-ui 增强套件 - 选择校准对象")
+        title("x-ui 增强套件 - 选择校准对象")
         print(f"{paint('入站 ID：', 'cyan')}{paint(str(inbound_id), 'white')}")
         print(f"{paint('端口：', 'cyan')}{paint(str(inbound['port']), 'white')}")
         print(f"{paint('备注：', 'cyan')}{paint(inbound['remark'] or '无备注', 'white')}")
@@ -1447,14 +1442,14 @@ while True:
         if clients:
             menu_line(all_clients_choice, "逐个校准全部客户端")
         separator()
-        print(f" {paint('0.', 'red')} 返回上级 / q 返回")
+        print(f" {paint('0/q.', 'red')} 返回入站列表")
         print(paint("================================================", "cyan"))
 
         valid_objects = {"0", "q", "Q", "1"} | {str(i) for i in range(2, len(clients) + 2)}
         if clients:
             valid_objects.add(all_clients_choice)
 
-        obj_choice = input_choice("👉 请选择对象: ", valid_objects)
+        obj_choice = input_choice(f"请选择对象 [0-{all_clients_choice if clients else len(clients) + 1}]：", valid_objects)
         if obj_choice in {"0", "q", "Q"}:
             break
 
@@ -1498,7 +1493,7 @@ while True:
             continue
 
         clear_screen()
-        title("🧭 x-ui 增强套件 - 确认写入")
+        title("x-ui 增强套件 - 确认流量校准")
         print(paint("以下操作只会修改 up/down，不会修改 total。", "yellow"))
         print(paint("写库前会自动备份数据库，并重启 x-ui。", "yellow"))
         separator()
@@ -1510,7 +1505,7 @@ while True:
             print(f"  修改后：up {paint(format_gib(write['after_up']), 'green')} / down {paint(format_gib(write['after_down']), 'green')} / 合计 {paint(format_gib(after_total), 'green')}")
             print()
         try:
-            answer = input("确认写入？[Y/n]: ").strip().lower() or "y"
+            answer = input("确认写入数据库？[Y/n]: ").strip().lower() or "y"
         except (EOFError, KeyboardInterrupt):
             print("\n已取消。")
             sys.exit(100)
@@ -2202,7 +2197,7 @@ run_reset_check_interactive() {
 
     echo
     local answer
-    read -rp "是否立即执行以上重置？[Y/n]: " answer || answer=""
+    read -rp "确认按以上计划执行重置？[Y/n]: " answer || answer=""
     answer="${answer:-yes}"
     if [[ ! "$answer" =~ ^[Yy]([Ee][Ss])?$ ]]; then
         echo "已取消，没有写入数据库。"
@@ -2404,8 +2399,8 @@ print_health_report() {
         echo -e "  ${GREEN}未发现明显错误关键词。${PLAIN}"
     fi
 
-    echo "预览模式："
-    echo "  可在“自定义流量重置日期 -> 预览并手动执行一次重置检查”预览本次计划。"
+    echo "预览入口："
+    echo "  [1] 自定义流量重置 -> [4] 预览本次重置"
 }
 
 run_self_test() {
@@ -2545,7 +2540,7 @@ PY
 health_check() {
     clear_screen
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧪 x-ui 增强套件 - 健康检查${PLAIN}"
+    echo -e "${BOLD}x-ui 增强套件 - 健康检查${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     print_health_report
 }
@@ -2554,19 +2549,18 @@ menu_logs() {
     while true; do
         clear_screen
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}🧾 x-ui 增强套件 - 查看日志与报错${PLAIN}"
+        echo -e "${BOLD}x-ui 增强套件 - 日志${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：查看外置脚本、自动检查 timer 和 x-ui 服务日志。${PLAIN}"
-        echo -e "${YELLOW}提示：脚本日志包含历史记录，旧菜单或 read error 可能是旧版本留下的。${PLAIN}"
+        echo -e "${YELLOW}查看脚本、自动重置检查和 x-ui 服务日志。${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 查看脚本日志${PLAIN}              ${YELLOW}(/var/log/xui-custom-manager.log)${PLAIN}"
-        echo -e "${GREEN}  2. 只看 reset-check 日志${PLAIN}      ${YELLOW}(过滤自动重置检查记录)${PLAIN}"
-        echo -e "${GREEN}  3. 查看自动检查 timer 日志${PLAIN}    ${YELLOW}(xui-custom-reset.service)${PLAIN}"
-        echo -e "${GREEN}  4. 查看 x-ui 服务日志${PLAIN}         ${YELLOW}(x-ui.service)${PLAIN}"
+        echo -e "${GREEN}  1. 脚本日志${PLAIN}                  ${YELLOW}($LOG_FILE)${PLAIN}"
+        echo -e "${GREEN}  2. 自动重置检查日志${PLAIN}          ${YELLOW}(仅 reset-check 记录)${PLAIN}"
+        echo -e "${GREEN}  3. timer 服务日志${PLAIN}            ${YELLOW}(xui-custom-reset.service)${PLAIN}"
+        echo -e "${GREEN}  4. x-ui 服务日志${PLAIN}             ${YELLOW}(x-ui.service)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
+        echo -e "${RED}  0/q. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        read_menu_choice choice
+        read_menu_choice choice "请选择 [0-4]："
 
         case "$choice" in
             1)
@@ -2616,7 +2610,7 @@ menu_logs() {
                 return 0
                 ;;
             *)
-                echo -e "${RED}❌ 无效选择！${PLAIN}"
+                echo -e "${RED}输入无效，请输入 0-4。${PLAIN}"
                 sleep 1
                 ;;
         esac
@@ -2627,19 +2621,18 @@ menu_backup_restore() {
     while true; do
         clear_screen
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}💾 x-ui 增强套件 - 备份 / 恢复 x-ui${PLAIN}"
+        echo -e "${BOLD}x-ui 增强套件 - 备份与恢复${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：备份或恢复 x-ui 数据库、配置目录和程序目录。${PLAIN}"
         echo -e "${YELLOW}备份目录：$BACKUP_DIR${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 立即备份${PLAIN}                  ${YELLOW}(数据库 / 配置 / 程序)${PLAIN}"
-        echo -e "${GREEN}  2. 恢复数据库${PLAIN}                ${YELLOW}(x-ui.db)${PLAIN}"
+        echo -e "${GREEN}  1. 立即备份全部${PLAIN}              ${YELLOW}(数据库 / 配置 / 程序)${PLAIN}"
+        echo -e "${GREEN}  2. 恢复数据库${PLAIN}                ${YELLOW}(覆盖当前 x-ui.db)${PLAIN}"
         echo -e "${GREEN}  3. 恢复程序目录${PLAIN}              ${YELLOW}(/usr/local/x-ui)${PLAIN}"
         echo -e "${GREEN}  4. 恢复配置目录${PLAIN}              ${YELLOW}(/etc/x-ui)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}"
+        echo -e "${RED}  0/q. 返回主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        read_menu_choice choice
+        read_menu_choice choice "请选择 [0-4]："
 
         case "$choice" in
             1)
@@ -2664,7 +2657,7 @@ menu_backup_restore() {
                 return 0
                 ;;
             *)
-                echo -e "${RED}❌ 无效选择！${PLAIN}"
+                echo -e "${RED}输入无效，请输入 0-4。${PLAIN}"
                 sleep 1
                 ;;
         esac
@@ -2674,23 +2667,22 @@ menu_backup_restore() {
 show_quick_guide() {
     clear_screen
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}🧭 x-ui 增强套件 - 功能索引${PLAIN}"
+    echo -e "${BOLD}x-ui 增强套件 - 按目标选择${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${YELLOW}按你想做的事选入口：${PLAIN}"
-    echo "  想让不同入站/客户端按不同日期重置流量 -> [1] 自定义流量重置日期"
-    echo "  想先看看今天会重置谁，不想直接写库       -> [1] -> [4] 预览并手动执行一次重置检查"
-    echo "  想把面板里的已用流量改成实际值           -> [2] 校准已用流量"
-    echo "  想先留后路，或从旧状态恢复               -> [3] 备份 / 恢复 x-ui"
-    echo "  想检查 timer、数据库、monthly 冲突        -> [4] 健康检查 / monthly 冲突"
-    echo "  想看报错、自动检查记录或 x-ui 日志        -> [5] 查看日志与报错"
-    echo "  想删旧备份文件                            -> [6] 清理旧备份"
+    echo "  设置入站或客户端重置日       -> [1] 自定义流量重置"
+    echo "  只预览今天的重置计划         -> [1] -> [4]，预览后输入 n"
+    echo "  修正面板显示的已用流量       -> [2] 校准已用流量"
+    echo "  备份数据或恢复旧状态         -> [3] 备份与恢复"
+    echo "  检查服务、数据库和重置冲突   -> [4] 健康检查"
+    echo "  排查自动重置或 x-ui 报错     -> [5] 日志"
+    echo "  删除一个旧备份文件           -> [6] 清理旧备份"
     echo "------------------------------------------------"
     echo "命令行入口："
     echo "  xcm                                  打开本菜单"
     echo "  xui-custom-manager.sh --dry-run      只预览本次重置计划"
     echo "  xui-custom-manager.sh --reset-check  执行一次自动重置检查"
     echo "------------------------------------------------"
-    echo -e "${YELLOW}注意：涉及写数据库或恢复备份的操作都会先备份，并要求输入大写 YES。${PLAIN}"
+    echo -e "${YELLOW}写库和恢复前会显示影响范围并要求确认；确认提示默认 Yes，输入 n 取消。${PLAIN}"
 }
 
 main_menu() {
@@ -2699,32 +2691,23 @@ main_menu() {
     while true; do
         clear_screen
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}${WHITE}🧭 x-ui 增强套件${PLAIN}"
+        echo -e "${BOLD}${WHITE}x-ui 增强套件 - 主菜单${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}用途：补充 3x-ui 面板缺失能力，例如自定义重置、校准已用流量、备份恢复和健康检查。${PLAIN}"
+        echo -e "${YELLOW}管理 3x-ui 自定义重置、已用流量、备份和诊断。${PLAIN}"
         print_xui_version_warning
-        echo -e "${YELLOW}提示：不知道选哪个时输入 ? 查看“我要做什么”索引；写库前会自动备份。${PLAIN}"
+        echo -e "${CYAN}自动重置：${GREEN}$(timer_active_status)${PLAIN} ${DIM}|${PLAIN} ${CYAN}本地执行器：${GREEN}$(runner_status)${PLAIN} ${DIM}|${PLAIN} ${CYAN}快捷命令：${WHITE}xcm${PLAIN}"
         echo -e "${BLUE}------------------------------------------------${PLAIN}"
-        echo -e "${CYAN}配置：${WHITE}$CONFIG_FILE${PLAIN}"
-        echo -e "${CYAN}备份：${WHITE}$BACKUP_DIR${PLAIN}"
-        echo -e "${CYAN}日志：${WHITE}$LOG_FILE${PLAIN}"
-        echo -e "${CYAN}自动检查：${GREEN}$(timer_active_status)${PLAIN} ${DIM}|${PLAIN} ${CYAN}本地执行器：${GREEN}$(runner_status)${PLAIN} ${DIM}|${PLAIN} ${CYAN}快捷命令：${WHITE}xcm${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}${MAGENTA} ▶ 重置${PLAIN}"
-        echo -e "  ${CYAN}1.${PLAIN} ${GREEN}自定义流量重置日期${PLAIN}        ${YELLOW}(入站 / 客户端分开设置)${PLAIN}"
-        echo -e "${BOLD}${MAGENTA} ▶ 流量${PLAIN}"
+        echo -e "  ${CYAN}1.${PLAIN} ${GREEN}自定义流量重置${PLAIN}            ${YELLOW}(设置入站 / 客户端重置日)${PLAIN}"
         echo -e "  ${CYAN}2.${PLAIN} ${GREEN}校准已用流量${PLAIN}              ${YELLOW}(只改 up/down，不改 total)${PLAIN}"
-        echo -e "${BOLD}${MAGENTA} ▶ 备份${PLAIN}"
-        echo -e "  ${CYAN}3.${PLAIN} ${GREEN}备份 / 恢复 x-ui${PLAIN}          ${YELLOW}(数据库 / 配置 / 程序)${PLAIN}"
-        echo -e "${BOLD}${MAGENTA} ▶ 诊断${PLAIN}"
-        echo -e "  ${CYAN}4.${PLAIN} ${GREEN}健康检查 / monthly 冲突${PLAIN}   ${YELLOW}(服务 / 数据库 / timer)${PLAIN}"
-        echo -e "  ${CYAN}5.${PLAIN} ${GREEN}查看日志与报错${PLAIN}            ${YELLOW}(脚本 / reset-check / systemd)${PLAIN}"
+        echo -e "  ${CYAN}3.${PLAIN} ${GREEN}备份与恢复${PLAIN}                ${YELLOW}(数据库 / 配置 / 程序)${PLAIN}"
+        echo -e "  ${CYAN}4.${PLAIN} ${GREEN}健康检查${PLAIN}                  ${YELLOW}(服务 / 数据库 / timer / 冲突)${PLAIN}"
+        echo -e "  ${CYAN}5.${PLAIN} ${GREEN}日志${PLAIN}                      ${YELLOW}(脚本 / reset-check / systemd)${PLAIN}"
         echo -e "  ${CYAN}6.${PLAIN} ${GREEN}清理旧备份${PLAIN}                ${YELLOW}(每次只删一个明确备份文件)${PLAIN}"
         echo -e "${BLUE}------------------------------------------------${PLAIN}"
-        echo -e "  ${BLUE}?.${PLAIN} ${WHITE}功能索引 / 我想做什么${PLAIN}"
-        echo -e "${RED}  0. 退出 / q 退出${PLAIN}"
+        echo -e "  ${BLUE}?.${PLAIN} ${WHITE}按目标选择${PLAIN}"
+        echo -e "${RED}  0/q. 退出${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        read_menu_choice choice "👉 请输入数字 / ? 查看索引 / q 退出: "
+        read_menu_choice choice "请选择 [0-6/?]："
 
         case "$choice" in
             "?"|help|HELP|帮助)
@@ -2757,7 +2740,7 @@ main_menu() {
                 exit 0
                 ;;
             *)
-                echo -e "${RED}❌ 无效选择！${PLAIN}"
+                echo -e "${RED}输入无效，请输入 0-6 或 ?。${PLAIN}"
                 sleep 1
                 ;;
         esac

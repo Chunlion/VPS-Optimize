@@ -100,7 +100,7 @@ bash /usr/local/bin/xui-custom-manager.sh --self-test
 - 入站校准会修改 `inbounds.up` / `inbounds.down`。
 - 客户端校准会修改 `client_traffics.up` / `client_traffics.down`。
 
-校准不会修改 `total` 上限。写入前会显示修改前后数值，必须输入 `YES` 才会写库。写库前会自动备份数据库，并在写入后尝试启动 `x-ui`。
+校准不会修改 `total` 上限。写入前会显示修改前后数值并要求确认；直接回车表示继续，输入 `n` 取消。写库前会自动备份数据库，并在写入后尝试启动 `x-ui`。
 
 版本不在支持范围或 schema 检查失败时，禁止使用真实写库校准。
 
