@@ -1041,7 +1041,7 @@ print_sni_stack_result() {
     echo -e "$(localized_text "${YELLOW}  不建议使用 webBasePath=/，随机面板路径能降低被批量扫描命中的概率。${PLAIN}" "${YELLOW}It is not recommended to use webBasePath=/. Random panel paths can reduce the probability of being hit by batch scanning.${PLAIN}" "${YELLOW}Не рекомендуется использовать webBasePath=/. Случайное расположение панелей может снизить вероятность попадания в пакетное сканирование.${PLAIN}")"
     echo -e "$(localized_text "  2.x/旧配置订阅证书路径/私钥路径：清空" "2.x/old configuration subscription certificate path/private key path: clear" "2.x/путь сертификата подписки старой конфигурации/путь закрытого ключа: очистить")"
     echo -e ""
-    echo -e "$(localized_text "${BOLD}三、Xray / 3x-ui REALITY 入站这样填${PLAIN}" "${BOLD}3. Xray / 3x-ui REALITY Enter like this${PLAIN}" "${BOLD}3. Xray / 3x-ui REALITY Введите вот так${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}三、Xray / 3x-ui+Reality 入站这样填${PLAIN}" "${BOLD}3. Configure the Xray / 3x-ui+Reality inbound as follows${PLAIN}" "${BOLD}3. Заполните входящее подключение Xray / 3x-ui+Reality так${PLAIN}")"
     echo -e "$(localized_text "  入站监听地址 listen：${XRAY_LISTEN_ADDR}" "Inbound listening address listen: ${XRAY_LISTEN_ADDR}" "Адрес прослушивания входящего подключения: ${XRAY_LISTEN_ADDR}")"
     echo -e "$(localized_text "  入站监听端口 port：  ${XRAY_LISTEN_PORT}" "Inbound listening port port: ${XRAY_LISTEN_PORT}" "Порт входящего прослушивания: ${XRAY_LISTEN_PORT}")"
     echo -e "$(localized_text "  协议 protocol：      VLESS" "Protocol protocol: VLESS" "Протокол протокола: VLESS")"

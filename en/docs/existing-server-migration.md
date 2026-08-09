@@ -11,7 +11,7 @@ The menu path in this article is written in the format of "main menu [number men
 | current situation | Is it suitable |
 |---|---|
 | Already have 3x-ui, and want to use the public internet for panel and subscription `443` | suitable for |
-| Already have a Caddy website and want to share `443` with 3x-ui / REALITY | suitable for |
+| Already have a Caddy website and want to share `443` with 3x-ui+Reality | suitable for |
 | Already occupied by Nginx/Apache `443` | Suitable, but old site must be documented before migration |
 | Already have Docker subscription tool and want to add HTTPS domain | suitable for |
 | I don’t know what services are running on the machine. | Take inventory first, don’t migrate directly |
@@ -104,7 +104,7 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 | There is already a subscription tool Docker container, but the Port 443 Reuse is not enabled yet. | Keep the container, use `Main menu [4 reverse proxy]` to select Caddy or Nginx HTTPS to reverse proxy |
 | Already have subscription tool Docker container, ready to enable Port 443 Reuse | Keep the container and change external access to Port 443 Reuse point Web domain/reverse proxy |
 
-For complete 3x-ui + REALITY + 443 steps, see [../tutorials/01-3x-ui-reality-443.md](../tutorials/01-3x-ui-reality-443.md).
+For complete steps, see [3x-ui+Reality: Port 443 Reuse Deployment Guide](../tutorials/01-3x-ui-reality-443.md).
 
 For subscription tool migration, see [Subscription Tools on Port 443](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md).
 

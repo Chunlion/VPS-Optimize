@@ -137,12 +137,12 @@ assert_file_not_contains en/index.md '## Common Documentation' "English docs hom
 assert_file_not_contains ru/index.md '## Основные документы' "Russian docs homepage must not render the removed document list."
 
 assert_file_contains quick-start.md '](docs/443-single-entry.md)' "Quick start must link to the Port 443 Reuse doc."
-assert_file_contains quick-start.md '](tutorials/01-3x-ui-reality-443.md)' "Quick start must link to the 3x-ui REALITY 443 tutorial."
+assert_file_contains quick-start.md '](tutorials/01-3x-ui-reality-443.md)' "Quick start must link to the 3x-ui+Reality port 443 reuse tutorial."
 assert_file_contains quick-start.md '](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)' "Quick start must link to the subscription tools 443 tutorial."
 
 assert_file_contains .vitepress/config.mts "link: '/quick-start'" "VitePress nav/sidebar must expose quick start."
 assert_file_contains .vitepress/config.mts "link: '/docs/443-single-entry'" "VitePress nav/sidebar must expose the Port 443 Reuse doc."
-assert_file_contains .vitepress/config.mts "link: '/tutorials/01-3x-ui-reality-443'" "VitePress nav/sidebar must expose the 3x-ui REALITY 443 tutorial."
+assert_file_contains .vitepress/config.mts "link: '/tutorials/01-3x-ui-reality-443'" "VitePress nav/sidebar must expose the 3x-ui+Reality port 443 reuse tutorial."
 assert_file_contains .vitepress/config.mts "link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry'" "VitePress nav/sidebar must expose the subscription tools 443 tutorial."
 
 assert_function_once dist/vps.sh main_menu

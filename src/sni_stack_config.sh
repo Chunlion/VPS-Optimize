@@ -1430,7 +1430,7 @@ sni_stack_health_check() {
 
     check_listen "$(localized_text "Nginx 公网入口" "Nginx public entry" "Nginx вход в публичную сеть")" "$NGINX_LISTEN_PORT" ""
     check_listen "$(localized_text "$(web_proxy_engine_label) 本地 TLS" "$(web_proxy_engine_label) local TLS" "$(web_proxy_engine_label) локальный TLS")" "$CADDY_LISTEN_PORT" "$CADDY_LISTEN_ADDR"
-    check_listen "Xray/3x-ui REALITY" "$XRAY_LISTEN_PORT" "$XRAY_LISTEN_ADDR"
+    check_listen "Xray / 3x-ui+Reality" "$XRAY_LISTEN_PORT" "$XRAY_LISTEN_ADDR"
     check_listen "$(localized_text "3x-ui 面板" "3x-ui panel" "Панель 3x-ui")" "$PANEL_LISTEN_PORT" "$PANEL_LISTEN_ADDR"
     check_listen "$(localized_text "3x-ui 订阅" "3x-ui Subscribe" "3x-ui Подписаться")" "$SUB_LISTEN_PORT" "$SUB_LISTEN_ADDR"
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then

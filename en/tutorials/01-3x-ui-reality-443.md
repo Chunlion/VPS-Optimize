@@ -1,4 +1,4 @@
-# 3x-ui + REALITY: Port 443 Reuse Deployment Guide
+# 3x-ui+Reality: Port 443 Reuse Deployment Guide
 
 This guide shows how to run the 3x-ui panel, subscription, websites, and REALITY through one public port, `443`.
 
@@ -23,7 +23,7 @@ Please replace it with your own domain, path and port during actual deployment; 
 
 | situation | Is it suitable |
 |---|---|
-| New machine ready for deployment 3x-ui + REALITY | suitable for |
+| New machine ready for deployment 3x-ui+Reality | suitable for |
 | I already have 3x-ui and want to connect the panel and subscription to the public port `443` | suitable for |
 | The Caddy/Nginx website already occupies 443 | Suitable, but the old site must be backed up and migrated first |
 | It is hoped that Caddy, 3x-ui, and Xray will each listens on the public port `443` | Not suitable, should be unified entrance |

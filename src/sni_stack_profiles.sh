@@ -153,15 +153,15 @@ edit_sni_stack_reality_profile() {
     echo -e "$(localized_text "${BOLD}修改 REALITY 本地监听与伪装 SNI${PLAIN}" "${BOLD}Modified REALITY local listeners and disguise SNI${PLAIN}" "${BOLD}модифицированный REALITY локальный прослушивание и маскировка SNI${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "$(localized_text "${YELLOW}适用于：你在 3x-ui REALITY 入站里修改了监听端口、监听地址，或更换了伪装 SNI。${PLAIN}" "${YELLOW}Applies to: You have modified the listening port and listening address in 3x-ui REALITY inbound, or changed the camouflage SNI.${PLAIN}" "${YELLOW}применяется к: Вы изменили порт прослушивания и адрес прослушивания во входящем 3x-ui REALITY или изменили камуфляж SNI.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}适用于：你在 3x-ui+Reality 入站中修改了监听端口、监听地址，或更换了伪装 SNI。${PLAIN}" "${YELLOW}Applies when you changed the listen port, listen address, or camouflage SNI of a 3x-ui+Reality inbound.${PLAIN}" "${YELLOW}Применяется, если вы изменили порт или адрес прослушивания либо маскировочный SNI входящего 3x-ui+Reality.${PLAIN}")"
     echo -e "------------------------------------------------"
     echo -e "$(localized_text "当前 REALITY：${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "Current REALITY: ${XRAY_LISTEN_ADDR}: ${XRAY_LISTEN_PORT}" "Текущий REALITY: ${XRAY_LISTEN_ADDR}: ${XRAY_LISTEN_PORT}")"
     echo -e "$(localized_text "当前 REALITY SNI：${REALITY_SNI}" "Current REALITY SNI: ${REALITY_SNI}" "Текущий REALITY SNI: ${REALITY_SNI}")"
     echo -e "------------------------------------------------"
 
     local reality_sni_input
-    XRAY_LISTEN_ADDR=$(ask_with_default "$(localized_text "Xray/3x-ui REALITY 本地监听地址" "Xray/3x-ui REALITY local listening address" "Xray/3x-ui REALITY локальный адрес прослушивания")" "$XRAY_LISTEN_ADDR")
-    XRAY_LISTEN_PORT=$(ask_with_default "$(localized_text "Xray/3x-ui REALITY 本地监听端口" "Xray/3x-ui REALITY local listening port" "Xray/3x-ui REALITY локальный порт прослушивания")" "$XRAY_LISTEN_PORT")
+    XRAY_LISTEN_ADDR=$(ask_with_default "$(localized_text "Xray / 3x-ui+Reality 入站本地监听地址" "Xray / 3x-ui+Reality inbound local listening address" "Локальный адрес прослушивания входящего Xray / 3x-ui+Reality")" "$XRAY_LISTEN_ADDR")
+    XRAY_LISTEN_PORT=$(ask_with_default "$(localized_text "Xray / 3x-ui+Reality 入站本地监听端口" "Xray / 3x-ui+Reality inbound local listening port" "Локальный порт прослушивания входящего Xray / 3x-ui+Reality")" "$XRAY_LISTEN_PORT")
     reality_sni_input=$(ask_with_default "$(localized_text "REALITY 伪装 SNI" "REALITY disguise SNI" "Маскировка REALITY SNI")" "$REALITY_SNI")
     REALITY_SNI=$(normalize_domain_input "$reality_sni_input")
 

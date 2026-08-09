@@ -7,10 +7,10 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
     echo -e "$(localized_text "${BOLD}🧩 Reality 443 复用 + Cloudflare DNS 自动化向导${PLAIN}" "${BOLD}🧩 Reality 443 Multiplex + Cloudflare DNS Automation Wizard${PLAIN}" "${BOLD}🧩 Reality 443 Multiplex + Cloudflare DNS Мастер автоматизации${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}本向导会让 Caddy 仅监听本地端口，不占用公网 80/443。${PLAIN}" "${YELLOW}This wizard will make Caddy only listen to the local port and not occupy the public 80/443.${PLAIN}" "${YELLOW}Этот мастер заставит Caddy только прослушивать локальный порт и не занимать публичную сеть 80/443.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}推荐用于：3x-ui Reality 已占用 443，同时 Web 服务需要同域名 HTTPS。${PLAIN}" "${YELLOW}Is recommended for: 3x-ui Reality has occupied 443, and the Web service needs the same domain HTTPS.${PLAIN}" "${YELLOW}рекомендуется для: 3x-ui Reality занимает 443, и веб-службе требуется то же доменное имя HTTPS.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}推荐用于：3x-ui+Reality 已占用 443，同时 Web 服务需要同域名 HTTPS。${PLAIN}" "${YELLOW}Recommended when 3x-ui+Reality occupies 443 and the Web service needs HTTPS on the same domain.${PLAIN}" "${YELLOW}Рекомендуется, когда 3x-ui+Reality занимает 443, а веб-службе нужен HTTPS на том же домене.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    read_trimmed reality_occupied "$(localized_text "❓ 当前 443 端口是否已被 3x-ui VLESS-Reality 占用？(Y/n): " "❓ Is the current port 443 occupied by 3x-ui VLESS-Reality? (Y/n):" "❓ Занят ли текущий порт 443 3x-ui VLESS-Reality? (Да/Нет):")"
+    read_trimmed reality_occupied "$(localized_text "❓ 当前 443 端口是否已被 3x-ui+Reality 入站占用？(Y/n): " "❓ Is port 443 currently occupied by a 3x-ui+Reality inbound? (Y/n):" "❓ Занят ли порт 443 входящим 3x-ui+Reality? (Да/Нет):")"
     if is_no "$reality_occupied"; then
         echo -e "$(localized_text "${BLUE}ℹ️ 您选择了未占用 443，本向导仍将使用本地端口模式，避免与未来业务冲突。${PLAIN}" "${BLUE}ℹ️ If you select Unoccupied 443, this wizard will still use the local port mode to avoid conflicts with future services.${PLAIN}" "${BLUE}ℹ️ Если вы выберете Незанятый 443, этот мастер по-прежнему будет использовать режим локального порта, чтобы избежать конфликтов с будущими службами.${PLAIN}")"
     fi

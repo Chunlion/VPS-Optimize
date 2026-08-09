@@ -6590,10 +6590,10 @@ func_caddy_cf_reality_wizard_legacy_disabled() {
     echo -e "$(localized_text "${BOLD}🧩 Reality 443 复用 + Cloudflare DNS 自动化向导${PLAIN}" "${BOLD}🧩 Reality 443 Multiplex + Cloudflare DNS Automation Wizard${PLAIN}" "${BOLD}🧩 Reality 443 Multiplex + Cloudflare DNS Мастер автоматизации${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}本向导会让 Caddy 仅监听本地端口，不占用公网 80/443。${PLAIN}" "${YELLOW}This wizard will make Caddy only listen to the local port and not occupy the public 80/443.${PLAIN}" "${YELLOW}Этот мастер заставит Caddy только прослушивать локальный порт и не занимать публичную сеть 80/443.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}推荐用于：3x-ui Reality 已占用 443，同时 Web 服务需要同域名 HTTPS。${PLAIN}" "${YELLOW}Is recommended for: 3x-ui Reality has occupied 443, and the Web service needs the same domain HTTPS.${PLAIN}" "${YELLOW}рекомендуется для: 3x-ui Reality занимает 443, и веб-службе требуется то же доменное имя HTTPS.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}推荐用于：3x-ui+Reality 已占用 443，同时 Web 服务需要同域名 HTTPS。${PLAIN}" "${YELLOW}Recommended when 3x-ui+Reality occupies 443 and the Web service needs HTTPS on the same domain.${PLAIN}" "${YELLOW}Рекомендуется, когда 3x-ui+Reality занимает 443, а веб-службе нужен HTTPS на том же домене.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    read_trimmed reality_occupied "$(localized_text "❓ 当前 443 端口是否已被 3x-ui VLESS-Reality 占用？(Y/n): " "❓ Is the current port 443 occupied by 3x-ui VLESS-Reality? (Y/n):" "❓ Занят ли текущий порт 443 3x-ui VLESS-Reality? (Да/Нет):")"
+    read_trimmed reality_occupied "$(localized_text "❓ 当前 443 端口是否已被 3x-ui+Reality 入站占用？(Y/n): " "❓ Is port 443 currently occupied by a 3x-ui+Reality inbound? (Y/n):" "❓ Занят ли порт 443 входящим 3x-ui+Reality? (Да/Нет):")"
     if is_no "$reality_occupied"; then
         echo -e "$(localized_text "${BLUE}ℹ️ 您选择了未占用 443，本向导仍将使用本地端口模式，避免与未来业务冲突。${PLAIN}" "${BLUE}ℹ️ If you select Unoccupied 443, this wizard will still use the local port mode to avoid conflicts with future services.${PLAIN}" "${BLUE}ℹ️ Если вы выберете Незанятый 443, этот мастер по-прежнему будет использовать режим локального порта, чтобы избежать конфликтов с будущими службами.${PLAIN}")"
     fi
@@ -8222,7 +8222,7 @@ sni_stack_health_check() {
 
     check_listen "$(localized_text "Nginx 公网入口" "Nginx public entry" "Nginx вход в публичную сеть")" "$NGINX_LISTEN_PORT" ""
     check_listen "$(localized_text "$(web_proxy_engine_label) 本地 TLS" "$(web_proxy_engine_label) local TLS" "$(web_proxy_engine_label) локальный TLS")" "$CADDY_LISTEN_PORT" "$CADDY_LISTEN_ADDR"
-    check_listen "Xray/3x-ui REALITY" "$XRAY_LISTEN_PORT" "$XRAY_LISTEN_ADDR"
+    check_listen "Xray / 3x-ui+Reality" "$XRAY_LISTEN_PORT" "$XRAY_LISTEN_ADDR"
     check_listen "$(localized_text "3x-ui 面板" "3x-ui panel" "Панель 3x-ui")" "$PANEL_LISTEN_PORT" "$PANEL_LISTEN_ADDR"
     check_listen "$(localized_text "3x-ui 订阅" "3x-ui Subscribe" "3x-ui Подписаться")" "$SUB_LISTEN_PORT" "$SUB_LISTEN_ADDR"
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
@@ -10425,15 +10425,15 @@ edit_sni_stack_reality_profile() {
     echo -e "$(localized_text "${BOLD}修改 REALITY 本地监听与伪装 SNI${PLAIN}" "${BOLD}Modified REALITY local listeners and disguise SNI${PLAIN}" "${BOLD}модифицированный REALITY локальный прослушивание и маскировка SNI${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "$(localized_text "${YELLOW}适用于：你在 3x-ui REALITY 入站里修改了监听端口、监听地址，或更换了伪装 SNI。${PLAIN}" "${YELLOW}Applies to: You have modified the listening port and listening address in 3x-ui REALITY inbound, or changed the camouflage SNI.${PLAIN}" "${YELLOW}применяется к: Вы изменили порт прослушивания и адрес прослушивания во входящем 3x-ui REALITY или изменили камуфляж SNI.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}适用于：你在 3x-ui+Reality 入站中修改了监听端口、监听地址，或更换了伪装 SNI。${PLAIN}" "${YELLOW}Applies when you changed the listen port, listen address, or camouflage SNI of a 3x-ui+Reality inbound.${PLAIN}" "${YELLOW}Применяется, если вы изменили порт или адрес прослушивания либо маскировочный SNI входящего 3x-ui+Reality.${PLAIN}")"
     echo -e "------------------------------------------------"
     echo -e "$(localized_text "当前 REALITY：${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "Current REALITY: ${XRAY_LISTEN_ADDR}: ${XRAY_LISTEN_PORT}" "Текущий REALITY: ${XRAY_LISTEN_ADDR}: ${XRAY_LISTEN_PORT}")"
     echo -e "$(localized_text "当前 REALITY SNI：${REALITY_SNI}" "Current REALITY SNI: ${REALITY_SNI}" "Текущий REALITY SNI: ${REALITY_SNI}")"
     echo -e "------------------------------------------------"
 
     local reality_sni_input
-    XRAY_LISTEN_ADDR=$(ask_with_default "$(localized_text "Xray/3x-ui REALITY 本地监听地址" "Xray/3x-ui REALITY local listening address" "Xray/3x-ui REALITY локальный адрес прослушивания")" "$XRAY_LISTEN_ADDR")
-    XRAY_LISTEN_PORT=$(ask_with_default "$(localized_text "Xray/3x-ui REALITY 本地监听端口" "Xray/3x-ui REALITY local listening port" "Xray/3x-ui REALITY локальный порт прослушивания")" "$XRAY_LISTEN_PORT")
+    XRAY_LISTEN_ADDR=$(ask_with_default "$(localized_text "Xray / 3x-ui+Reality 入站本地监听地址" "Xray / 3x-ui+Reality inbound local listening address" "Локальный адрес прослушивания входящего Xray / 3x-ui+Reality")" "$XRAY_LISTEN_ADDR")
+    XRAY_LISTEN_PORT=$(ask_with_default "$(localized_text "Xray / 3x-ui+Reality 入站本地监听端口" "Xray / 3x-ui+Reality inbound local listening port" "Локальный порт прослушивания входящего Xray / 3x-ui+Reality")" "$XRAY_LISTEN_PORT")
     reality_sni_input=$(ask_with_default "$(localized_text "REALITY 伪装 SNI" "REALITY disguise SNI" "Маскировка REALITY SNI")" "$REALITY_SNI")
     REALITY_SNI=$(normalize_domain_input "$reality_sni_input")
 
@@ -11632,7 +11632,7 @@ print_sni_stack_result() {
     echo -e "$(localized_text "${YELLOW}  不建议使用 webBasePath=/，随机面板路径能降低被批量扫描命中的概率。${PLAIN}" "${YELLOW}It is not recommended to use webBasePath=/. Random panel paths can reduce the probability of being hit by batch scanning.${PLAIN}" "${YELLOW}Не рекомендуется использовать webBasePath=/. Случайное расположение панелей может снизить вероятность попадания в пакетное сканирование.${PLAIN}")"
     echo -e "$(localized_text "  2.x/旧配置订阅证书路径/私钥路径：清空" "2.x/old configuration subscription certificate path/private key path: clear" "2.x/путь сертификата подписки старой конфигурации/путь закрытого ключа: очистить")"
     echo -e ""
-    echo -e "$(localized_text "${BOLD}三、Xray / 3x-ui REALITY 入站这样填${PLAIN}" "${BOLD}3. Xray / 3x-ui REALITY Enter like this${PLAIN}" "${BOLD}3. Xray / 3x-ui REALITY Введите вот так${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}三、Xray / 3x-ui+Reality 入站这样填${PLAIN}" "${BOLD}3. Configure the Xray / 3x-ui+Reality inbound as follows${PLAIN}" "${BOLD}3. Заполните входящее подключение Xray / 3x-ui+Reality так${PLAIN}")"
     echo -e "$(localized_text "  入站监听地址 listen：${XRAY_LISTEN_ADDR}" "Inbound listening address listen: ${XRAY_LISTEN_ADDR}" "Адрес прослушивания входящего подключения: ${XRAY_LISTEN_ADDR}")"
     echo -e "$(localized_text "  入站监听端口 port：  ${XRAY_LISTEN_PORT}" "Inbound listening port port: ${XRAY_LISTEN_PORT}" "Порт входящего прослушивания: ${XRAY_LISTEN_PORT}")"
     echo -e "$(localized_text "  协议 protocol：      VLESS" "Protocol protocol: VLESS" "Протокол протокола: VLESS")"

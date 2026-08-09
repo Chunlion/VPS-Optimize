@@ -11,7 +11,7 @@
 | 当前情况 | 是否适合 |
 |---|---|
 | 已有 3x-ui，想让面板和订阅走公网 `443` | 适合 |
-| 已有 Caddy 网站，想和 3x-ui / REALITY 共用 `443` | 适合 |
+| 已有 Caddy 网站，想和 3x-ui+Reality 共用 `443` | 适合 |
 | 已有 Nginx/Apache 占用 `443` | 适合，但迁移前必须记录旧站点 |
 | 已有 Docker 订阅工具，想加 HTTPS 域名 | 适合 |
 | 不知道机器上跑了什么服务 | 先盘点，不要直接迁移 |
@@ -104,7 +104,7 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 | 已有订阅工具 Docker 容器，暂不启用 443端口复用 | 保留容器，用 `主菜单 [4 反代]` 选择 Caddy 或 Nginx HTTPS 反代 |
 | 已有订阅工具 Docker 容器，准备启用 443端口复用 | 保留容器，把外部访问改成 443端口复用的 Web 域名/反代 |
 
-完整 3x-ui + REALITY + 443 步骤见 [../tutorials/01-3x-ui-reality-443.md](../tutorials/01-3x-ui-reality-443.md)。
+完整步骤见 [3x-ui+Reality：443端口复用部署指南](../tutorials/01-3x-ui-reality-443.md)。
 
 订阅工具迁移见 [订阅工具接入 Caddy/Nginx 反代与 443端口复用](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。
 
