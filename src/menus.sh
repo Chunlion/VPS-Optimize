@@ -656,7 +656,7 @@ main_menu() {
 
         echo -e " ${BOLD}${BLUE}▶ ③ 网络性能与容器${PLAIN}"
         echo -e " ${GREEN}10.${PLAIN} 网络与内核优化        ${YELLOW}(BBR/TCP/ZRAM/DNS/轻量内核)${PLAIN}"
-        echo -e " ${GREEN}11.${PLAIN} Docker 安全管理       ${YELLOW}(本地防穿透/恢复访问)${PLAIN}"
+        echo -e " ${GREEN}11.${PLAIN} Docker 管理           ${YELLOW}(容器/镜像/网络/安全)${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ④ 诊断、备份与维护${PLAIN}"
         echo -e " ${GREEN}12.${PLAIN} 测速与质量检测        ${YELLOW}(YABS/流媒体/回程/IP质量)${PLAIN}"
