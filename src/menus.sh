@@ -96,8 +96,7 @@ show_panel_help() {
 show_sni_help() {
     echo -e "$(localized_text "${CYAN}VPS-Optimize > 443 单入口管理中心 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > 443 shared entry Management Center > Help${PLAIN}" "${CYAN}VPS-Optimize > 443 Центр управления общим входом > Справка${PLAIN}")"
     echo "$(localized_text "1 查看入口与监听：公网 443、Web 反代、Xray 和服务状态。" "1 View entry and listener status: public 443, Web proxy, Xray, and services." "1 Состояние входа и прослушивания: публичный 443, Web-прокси, Xray и службы.")"
-    echo "$(localized_text "2 首次配置：Web 域名、反代引擎、证书和默认 Nginx Stream。" "2 Initial setup: Web domains, proxy engine, certificates, and default Nginx Stream." "2 Первоначальная настройка: Web-домены, обратный прокси, сертификаты и Nginx Stream по умолчанию.")"
-    echo "$(localized_text "3/4/5 切换入口模式：Nginx Stream、Xray Fallback、TCP Peek + Splice。" "3/4/5 Switch entry mode: Nginx Stream, Xray Fallback, or TCP Peek + Splice." "3/4/5 Сменить режим входа: Nginx Stream, Xray Fallback или TCP Peek + Splice.")"
+    echo "$(localized_text "2 安装 / 切换入口模式：选择 Nginx Stream、Xray Fallback 或 TCP Peek + Splice。" "2 Install / switch entry mode: select Nginx Stream, Xray Fallback, or TCP Peek + Splice." "2 Установка / смена режима: Nginx Stream, Xray Fallback или TCP Peek + Splice.")"
     echo "$(localized_text "6 重新应用：按当前 ENTRY_MODE 重新生成并启动入口配置。" "6 Reapply: regenerate and start the entry configuration for the current ENTRY_MODE." "6 Повторно применить: заново сформировать и запустить конфигурацию для текущего ENTRY_MODE.")"
     echo "$(localized_text "7 回滚：恢复上一次入口模式切换前的备份。" "7 Rollback: Restore the backup before the last entry mode switch." "7 Откат: восстановление резервной копии перед последним переключением режима входа.")"
     echo "$(localized_text "8 管理 Web 域名/反代：后续新增或删除网站，不需要重跑首次配置。" "8 Manage Web domains/reverse proxy: add or remove sites without rerunning the initial setup." "8 Управление Web-доменами и обратным прокси: добавляйте и удаляйте сайты без повторной первоначальной настройки.")"
@@ -108,9 +107,7 @@ show_sni_help() {
     echo "$(localized_text "13 链路体检：检查 ENTRY_MODE、监听、证书、Web 和 Xray 路由。" "13 Connection diagnostics: check ENTRY_MODE, listeners, certificates, Web, and Xray routing." "13 Диагностика соединения: ENTRY_MODE, прослушивание, сертификаты, Web и маршрутизация Xray.")"
     echo "$(localized_text "14 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅响应。" "14 Network access test: check DNS, TCP, TLS SNI, panel, and subscription responses." "14 Проверка доступа: DNS, TCP, TLS SNI, ответы панели и подписки.")"
     echo "$(localized_text "15 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。" "15 Manage Xray routes: record SNI -> local address:port without editing 3x-ui/Xray inbounds." "15 Маршруты Xray: запись SNI -> локальный адрес:порт без изменения входящих подключений 3x-ui/Xray.")"
-    echo "$(localized_text "16 TCP Peek + Splice 状态 / 8444 预检：查看 status.json；预检只监听 8444，不改公网 443。" "16 TCP Peek + Splice status / 8444 preflight: show status.json; listens only on 8444 and leaves public 443 unchanged." "16 Статус TCP Peek + Splice / проверка 8444: status.json; слушает только 8444 и не меняет публичный 443.")"
-    echo "$(localized_text "17 TCP Peek 分流规则校验：只检查配置，不重启入口。" "17 TCP Peek routing-rule validation: check configuration only; do not restart the entry service." "17 Проверка правил маршрутизации TCP Peek: проверяет только конфигурацию и не перезапускает входной сервис.")"
-    echo "$(localized_text "18 查看 TCP Peek + Splice 日志：查看 vpso-mux 分流器日志。" "18 TCP Peek + Splice logs: view the vpso-mux routing log." "18 Журналы TCP Peek + Splice: просмотр журнала маршрутизации vpso-mux.")"
+    echo "$(localized_text "16 当前入口日志：按 ENTRY_MODE 查看 Nginx、Xray/3x-ui 或 vpso-mux。" "16 Current entry logs: show Nginx, Xray/3x-ui, or vpso-mux based on ENTRY_MODE." "16 Журналы текущего входа: Nginx, Xray/3x-ui или vpso-mux согласно ENTRY_MODE.")"
     echo "$(localized_text "修改面板域名请走主菜单 [19 443 单入口管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。" "To modify the panel domain, please go to the main menu [19 443 shared entry Management Center] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain]." "Чтобы изменить имя домена панели, перейдите в главное меню [19 443 центр управления общей точкой входа] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].")"
     echo "$(localized_text "未接入 443 单入口时，用主菜单 [4 反代] -> [5] 管理 Caddy/Nginx 域名 IP 白名单。" "When the 443 shared entry is not connected, use the main menu [4 reverse proxy] -> [5] to manage the Caddy/Nginx domain IP whitelist." "Если общий вход 443 не подключен, используйте главное меню [4 обратный прокси] -> [5] для управления белым списком IP-адресов доменного имени Caddy/Nginx.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
@@ -328,32 +325,25 @@ func_sni_stack_quick_menu() {
         print_breadcrumb "$(localized_text "443 单入口管理中心" "Shared 443 Entry Manager" "Управление общей точкой входа 443")"
         echo -e "$(localized_text "${BOLD}🧩 443 单入口管理中心${PLAIN}" "${BOLD}🧩 Shared 443 Entry Manager${PLAIN}" "${BOLD}🧩 Управление общей точкой входа 443${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：统一管理公网 443 的入口模式、Web 域名、Xray 入站分流和链路体检。${PLAIN}" "${YELLOW}Manage the public port 443 entry mode, Web domains, Xray inbound routes, and connection health checks.${PLAIN}" "${YELLOW}Управление режимом публичного порта 443, веб-доменами, маршрутами входящих подключений Xray и проверкой соединений.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}首次部署先选 [2]；已有配置后用 [3]/[4]/[5] 在三种入口模式间切换。${PLAIN}" "${YELLOW}When deploying for the first time, select [2] first; after configuration, use [3]/[4]/[5] to switch between the three entry modes.${PLAIN}" "${YELLOW}При первом развертывании сначала выберите [2]; после настройки используйте [3]/[4]/[5] для переключения между тремя режимами входа.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 当前状态与入口模式${PLAIN}" "${BOLD}▶ Current status and entry mode${PLAIN}" "${BOLD}▶ Текущее состояние и режим входа${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  1. 查看当前入口状态 / 监听详情${PLAIN} ${YELLOW}(公网 443、Web 反代、Xray、服务状态)${PLAIN}" "${GREEN}1. View entry status and listeners (public port 443, Web proxy, Xray, and services)${PLAIN}" "${GREEN}1. Состояние входа и прослушивания (публичный порт 443, веб-прокси, Xray и службы)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 首次配置 / 安装 443 单入口${PLAIN} ${YELLOW}(默认 Nginx Stream 模式，第一次部署用)${PLAIN}" "${GREEN}2. Set up the shared 443 entry (Nginx Stream by default; use for initial deployment)${PLAIN}" "${GREEN}2. Настроить общую точку входа 443 (по умолчанию Nginx Stream; для первого развёртывания)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 切换到 Nginx Stream 模式${PLAIN}  ${YELLOW}(默认稳定模式)${PLAIN}" "${GREEN}3. Switch to Nginx Stream mode (default stable mode)${PLAIN}" "${GREEN}3. Переключиться в режим Nginx Stream (стабильный режим по умолчанию)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 切换到 Xray Fallback 模式${PLAIN} ${YELLOW}(需已有 Xray/3x-ui 主入站)${PLAIN}" "${GREEN}4. Switch to Xray Fallback mode (requires an existing Xray/3x-ui main inbound)${PLAIN}" "${GREEN}4. Переключиться в режим Xray Fallback (требуется основное входящее подключение Xray/3x-ui)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 切换到 TCP Peek + Splice 模式${PLAIN} ${YELLOW}(需先完成 8444 预检，切换时不自动编译)${PLAIN}" "${GREEN}5. Switch to TCP Peek + Splice (complete the 8444 preflight first; switching does not build automatically)${PLAIN}" "${GREEN}5. Переключиться в TCP Peek + Splice (сначала выполните проверку на 8444; сборка при переключении не запускается)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 安装 / 切换 443 入口模式${PLAIN} ${YELLOW}(Nginx Stream / Xray Fallback / TCP Peek)${PLAIN}" "${GREEN}2. Install / switch the 443 entry mode (Nginx Stream / Xray Fallback / TCP Peek)${PLAIN}" "${GREEN}2. Установить / сменить режим входа 443 (Nginx Stream / Xray Fallback / TCP Peek)${PLAIN}")"
         echo -e "$(localized_text "${CYAN}  6. 重新应用当前入口模式${PLAIN}" "${CYAN}6. Reapply the current entry mode${PLAIN}" "${CYAN}6. Повторно применить текущий режим входа${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}  7. 回滚上一次入口模式切换${PLAIN}" "${YELLOW}7. Roll back the last entry mode switch${PLAIN}" "${YELLOW}7. Откатить последнее переключение режима входа${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 共享配置与体检${PLAIN}" "${BOLD}▶ Shared configuration and health check${PLAIN}" "${BOLD}▶ Общая конфигурация и проверка состояния${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 网站与证书${PLAIN}" "${BOLD}▶ Websites and certificates${PLAIN}" "${BOLD}▶ Сайты и сертификаты${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  8. 管理 Web 域名/反代${PLAIN}        ${YELLOW}(新增/删除/查看网站，最常用)${PLAIN}" "${GREEN}8. Manage Web domains and reverse proxies (add, delete, or view sites)${PLAIN}" "${GREEN}8. Управление веб-доменами и обратным прокси (добавить, удалить или просмотреть сайт)${PLAIN}")"
         echo -e "$(localized_text "${CYAN}  9. 管理 Web 域名 IP 白名单${PLAIN}   ${YELLOW}(只限制 Web 域名)${PLAIN}" "${CYAN}9. Manage the Web-domain IP whitelist (applies only to Web domains)${PLAIN}" "${CYAN}9. Белый список IP-адресов веб-доменов (только для веб-доменов)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 10. 修改 443 共享参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}" "${CYAN}10. Change shared 443 settings (panel, subscription, REALITY, entry port, and paths)${PLAIN}" "${CYAN}10. Изменить общие параметры 443 (панель, подписка, REALITY, входной порт и пути)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 11. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}" "${CYAN}11. Subscription link / External Proxy guidance (check whether node links use public port 443)${PLAIN}" "${CYAN}11. Подсказки для ссылок подписки / External Proxy (проверка публичного порта 443 в ссылках узлов)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 12. CF DNS / Caddy 证书维护${PLAIN}   ${YELLOW}(重签/软链/清理/修复/回滚)${PLAIN}" "${CYAN}12. CF DNS / Caddy certificate maintenance (renew, symlink, clean, repair, or roll back)${PLAIN}" "${CYAN}12. Обслуживание сертификатов CF DNS / Caddy (перевыпуск, ссылки, очистка, восстановление, откат)${PLAIN}")"
+        echo -e "------------------------------------------------"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 诊断与维护${PLAIN}" "${BOLD}▶ Diagnostics and maintenance${PLAIN}" "${BOLD}▶ Диагностика и обслуживание${PLAIN}")"
         echo -e "$(localized_text "${GREEN} 13. 443 链路体检${PLAIN}              ${YELLOW}(ENTRY_MODE/监听/证书/Web/Xray 分流)${PLAIN}" "${GREEN}13. Port 443 connection health check (ENTRY_MODE, listeners, certificates, Web, and Xray routes)${PLAIN}" "${GREEN}13. Проверка соединений порта 443 (ENTRY_MODE, прослушивание, сертификаты, Web и маршруты Xray)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 14. 443 网络访问测试${PLAIN}          ${YELLOW}(DNS/TCP/TLS/面板/订阅路径)${PLAIN}" "${CYAN}14. 443 Network access test (DNS/TCP/TLS/panel/subscription path)${PLAIN}" "${CYAN}14. 443 Проверка доступа к сети (DNS/TCP/TLS/панель/путь подписки)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 15. Xray 入站管理${PLAIN}             ${YELLOW}(SNI -> 本地地址:端口 分流记录)${PLAIN}" "${CYAN}15. Manage Xray inbounds (SNI -> local address:port routes)${PLAIN}" "${CYAN}15. Управление входящими подключениями Xray (SNI -> локальный адрес:порт)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN} 16. 查看 TCP Peek + Splice 状态 / 8444 预检${PLAIN} ${YELLOW}(不改公网 443)${PLAIN}" "${CYAN}16. View TCP Peek + Splice status / run the 8444 preflight (does not change public port 443)${PLAIN}" "${CYAN}16. Состояние TCP Peek + Splice / проверка на 8444 (публичный порт 443 не изменяется)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN} 17. TCP Peek 分流规则校验${PLAIN} ${YELLOW}(只检查配置，不重启入口)${PLAIN}" "${CYAN}17. Validate TCP Peek routing rules (checks configuration without restarting the entry)${PLAIN}" "${CYAN}17. Проверить маршруты TCP Peek (только конфигурация, без перезапуска входа)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN} 18. 查看 TCP Peek + Splice 日志${PLAIN} ${YELLOW}(vpso-mux 分流器日志)${PLAIN}" "${CYAN}18. View TCP Peek + Splice logs (vpso-mux routing logs)${PLAIN}" "${CYAN}18. Журналы TCP Peek + Splice (маршрутизация vpso-mux)${PLAIN}")"
-        echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${YELLOW}说明：三种 443 入口不是三套独立安装器；[2] 建立共享配置，[3]/[4]/[5] 负责检查依赖、生成目标配置并切换入口。${PLAIN}" "${YELLOW}Description: The three 443 entries are not three sets of independent installers; [2] creates a shared configuration, [3]/[4]/[5] are responsible for checking dependencies, generating target configurations and switching entries.${PLAIN}" "${YELLOW}Описание: Три входа 443 — это не три группы независимых установщиков; [2] создает общую конфигурацию, [3]/[4]/[5] отвечают за проверку зависимостей, генерацию целевых конфигураций и переключение входов.${PLAIN}")"
+        echo -e "$(localized_text "${CYAN} 16. 查看当前入口日志${PLAIN}          ${YELLOW}(自动识别 Nginx / Xray / vpso-mux)${PLAIN}" "${CYAN}16. View current entry logs (detects Nginx / Xray / vpso-mux automatically)${PLAIN}" "${CYAN}16. Журналы текущего входа (автовыбор Nginx / Xray / vpso-mux)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q/back/返回${PLAIN}" "${RED}0. Main menu / q/back${PLAIN}" "${RED}0. Главное меню / q/back${PLAIN}")"
@@ -363,10 +353,7 @@ func_sni_stack_quick_menu() {
         read_trimmed sni_choice "$(localized_text "👉 请输入菜单编号或 ?: " "👉 Please enter menu number or ?:" "👉 Пожалуйста, введите номер меню или ?:")"
         case "$sni_choice" in
             1) show_current_entry_status ;;
-            2) func_caddy_cf_reality_wizard ;;
-            3) switch_entry_mode "nginx-stream" ;;
-            4) switch_entry_mode "xray-fallback" ;;
-            5) switch_entry_mode "tcp-peek" ;;
+            2) manage_entry_mode_install_or_switch ;;
             6) reapply_current_entry_mode ;;
             7) rollback_last_entry_mode ;;
             8) manage_sni_stack_sites; continue ;;
@@ -377,9 +364,7 @@ func_sni_stack_quick_menu() {
             13) sni_stack_health_check_enhanced ;;
             14) func_443_network_test; continue ;;
             15) manage_xray_inbound_routes; continue ;;
-            16) start_tcp_peek_test_port ;;
-            17) tcp_peek_dry_run_config ;;
-            18) view_vpso_mux_logs ;;
+            16) view_current_entry_logs ;;
             "?"|help) show_sni_help; pause_return; continue ;;
             0) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;

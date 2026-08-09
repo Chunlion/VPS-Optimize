@@ -68,9 +68,8 @@ require_vpso_mux_binary_for_cutover() {
     if [[ -x /usr/local/bin/vpso-mux ]]; then
         return 0
     fi
-    echo -e "$(localized_text "${RED}❌ 缺少 /usr/local/bin/vpso-mux，拒绝切换到 TCP Peek + Splice 模式。${PLAIN}" "${RED}❌ Missing /usr/local/bin/vpso-mux, refusing to switch to TCP Peek + Splice mode.${PLAIN}" "${RED}❌ Отсутствует /usr/local/bin/vpso-mux, отказывается переключаться в режим TCP Peek + Splice.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}为避免生产机在 443 切换过程中下载 Go 工具链或远端编译，公网 443 切换流程不会自动构建 vpso-mux。${PLAIN}" "${YELLOW}In order to prevent the production machine from downloading the Go tool chain or remote compilation during the 443 switching process, the public port 443 switching process will not automatically build vpso-mux.${PLAIN}" "${YELLOW}Чтобы предотвратить загрузку цепочки инструментов Go или удаленную компиляцию производственной машиной во время процесса переключения 443, процесс переключения 443 публичной сети не будет автоматически создавать vpso-mux.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}请先在 443 管理中心运行 TCP Peek 8444 预检/测试，确认 vpso-mux 安装和测试端口都正常后，再切换公网 443。${PLAIN}" "${YELLOW}Please run TCP Peek 8444 preflight check/test in the 443 management center first, and then switch to the public port 443 after confirming that the vpso-mux installation and test ports are normal.${PLAIN}" "${YELLOW}Сначала запустите предварительную проверку/тестирование TCP Peek 8444 в центре управления 443, а затем переключитесь на публичный порт 443 после подтверждения того, что порты установки и тестирования vpso-mux работают нормально.${PLAIN}")"
+    echo -e "$(localized_text "${RED}❌ /usr/local/bin/vpso-mux 不可用，无法继续 TCP Peek 预检或切换。${PLAIN}" "${RED}❌ /usr/local/bin/vpso-mux is unavailable; TCP Peek preflight or switching cannot continue.${PLAIN}" "${RED}❌ /usr/local/bin/vpso-mux недоступен; проверка и переключение TCP Peek невозможны.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}请根据前面的安装或构建错误处理后重试。${PLAIN}" "${YELLOW}Fix the installation or build error above, then retry.${PLAIN}" "${YELLOW}Исправьте указанную выше ошибку установки или сборки и повторите попытку.${PLAIN}")"
     return 1
 }
 

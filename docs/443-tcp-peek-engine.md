@@ -21,14 +21,9 @@
 
 ```text
 主菜单 [19 443 单入口管理中心]
-  -> [2] 首次配置 / 安装 443 单入口
-  -> [3] 切换到 Nginx Stream 模式
-  -> [4] 切换到 Xray Fallback 模式
-  -> [5] 切换到 TCP Peek + Splice 模式
+  -> [2] 安装 / 切换 443 入口模式
   -> [7] 回滚上一次入口模式切换
-  -> [16] 查看 TCP Peek + Splice 状态 / 8444 预检
-  -> [17] TCP Peek 分流规则校验
-  -> [18] 查看 TCP Peek + Splice 日志
+  -> [16] 查看当前入口日志
 ```
 
 3x-ui 面板、订阅和 Xray 入站的具体填写方式见 [443 单入口分流教程](443-single-entry.md) 的“3x-ui 三种入口模式配置速查”。这里先给结论：
@@ -55,7 +50,7 @@ Nginx Stream 是默认稳定模式。公网 `443` 由 Nginx stream 监听，使�
 
 ## TCP Peek + Splice / vpso-mux 实现
 
-TCP Peek + Splice / vpso-mux 和 Nginx Stream 使用同一套 443 单入口配置。Web 域名、证书、Web 反代引擎后端、Web 白名单和 Xray SNI 分流记录都不需要另起一套；3x-ui 面板、订阅和 Xray 入站仍按本地监听填写。第一次使用时先运行 `主菜单 [19 443 单入口管理中心] -> [16] 查看 TCP Peek + Splice 状态 / 8444 预检`，确认 `vpso-mux` 能在 `8444` 启动并转发；再运行 `[17] TCP Peek 分流规则校验`。只有用户随后执行 `[5] 切换到 TCP Peek + Splice 模式`，公网 `443` 才会从 Nginx Stream 切到 `vpso-mux`。
+TCP Peek + Splice / vpso-mux 和 Nginx Stream 使用同一套 443 单入口配置。Web 域名、证书、Web 反代引擎后端、Web 白名单和 Xray SNI 分流记录都不需要另起一套；3x-ui 面板、订阅和 Xray 入站仍按本地监听填写。进入 `[2 安装 / 切换 443 入口模式]` 并选择 TCP Peek 后，脚本会安装缺少的构建依赖，生成并校验配置，再通过独立的 `8444` 服务验证 SNI 路由和本地后端。预检通过后才切换公网 `443`。
 
 `vpso-mux` 使用 `MSG_PEEK` 查看 TLS ClientHello 中的 SNI，不消费首包；后端收到的 ClientHello 仍与客户端原始数据一致。转发优先使用 splice，失败或不可用时回退普通 copy。
 
@@ -190,7 +185,7 @@ TCP Peek 生成的 `vpso-mux.yaml` 会按脚本保存的公网监听地址只写
 
 ```text
 主菜单 [19 443 单入口管理中心]
-  -> [18] 查看 TCP Peek + Splice 日志
+  -> [16] 查看当前入口日志
 ```
 
 常用诊断命令：
@@ -228,12 +223,11 @@ Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监�
 
 ```text
 主菜单 [19 443 单入口管理中心]
-  -> [16] 查看 TCP Peek + Splice 状态 / 8444 预检
-  -> [17] TCP Peek 分流规则校验
-  -> [5] 切换到 TCP Peek + Splice 模式
+  -> [2] 安装 / 切换 443 入口模式
+  -> [3] TCP Peek + Splice
 ```
 
-切换流程不会在公网 `443` 切换路径里自动下载 Go 工具链或远端编译 `vpso-mux`。如果 `/usr/local/bin/vpso-mux` 不存在，脚本会拒绝切换，要求先走 `[16]` 的 `8444` 预检。正式切换前脚本会再次启动独立 `vpso-mux-preflight.service` 监听 `8444`，确认 Web 反代引擎和 Xray 本地后端可达；预检失败时公网 `443` 不会被替换。
+如果缺少 `/usr/local/bin/vpso-mux` 或 Go，脚本会先尝试通过系统包管理器补齐工具链并构建程序。随后启动独立的 `vpso-mux-preflight.service` 监听 `8444`，确认 Web 反代引擎、SNI 路由和 Xray 本地后端可达；预检失败时公网 `443` 不会被替换，并会显示预检服务状态和最近日志。
 
 正式切换会生成并校验 `vpso-mux.yaml`、创建备份、隔离当前 VPS-Optimize 管理的 Nginx stream 443 配置、启动 `vpso-mux` 接管公网 `443`，并检查 Web 反代引擎和 Xray 本地后端可达。失败时会尝试自动回滚。
 
@@ -248,7 +242,7 @@ Xray Fallback 是特殊模式：公网 `443` 由已有 Xray/3x-ui 主入站监�
   -> [7] 回滚上一次入口模式切换
 ```
 
-通用回滚会恢复上一次入口模式切换前的备份，适合撤销最近一次 `[3]`、`[4]` 或 `[5]` 触发的入口切换。TCP Peek 切换后需要回退时，也使用这个范围更广的回滚入口。
+通用回滚会恢复上一次入口模式切换前的备份。TCP Peek 切换后需要回退时，也使用这个入口。
 
 ## 常见故障
 

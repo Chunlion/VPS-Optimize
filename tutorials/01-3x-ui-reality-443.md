@@ -274,7 +274,7 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 进入：
 
 ```text
-主菜单 [19 443 单入口管理中心] -> [2 首次配置 / 安装 443 单入口]
+主菜单 [19 443 单入口管理中心] -> [2 安装 / 切换 443 入口模式]
 ```
 
 示例填写：

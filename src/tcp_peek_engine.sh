@@ -94,12 +94,14 @@ run_tcppeek_preflight_service() {
     systemctl stop vpso-mux-preflight >/dev/null 2>&1 || true
     if ! systemctl start vpso-mux-preflight; then
         echo -e "$(localized_text "${RED}❌ TCP Peek 8444 预检服务启动失败，公网 443 未改动。${PLAIN}" "${RED}❌ TCP Peek 8444 The preflight service failed to start, and the public port 443 has not been changed.${PLAIN}" "${RED}❌ TCP Peek 8444 Не удалось запустить предполетную службу, а публичный порт 443 не был изменён.${PLAIN}")"
+        print_tcppeek_preflight_failure_context "$test_port"
         return 1
     fi
     sleep 1
     if ! port_listener_has_process "$test_port" 'vpso-mux'; then
         systemctl stop vpso-mux-preflight >/dev/null 2>&1 || true
         echo -e "$(localized_text "${RED}❌ TCP Peek 8444 预检未监听到 vpso-mux，拒绝切换公网 443。${PLAIN}" "${RED}❌ TCP Peek 8444 The precheck did not detect vpso-mux and refused to switch to the public port 443.${PLAIN}" "${RED}❌ TCP Peek 8444 Предварительная проверка не обнаружила vpso-mux и отказалась переключаться в публичную сеть 443.${PLAIN}")"
+        print_tcppeek_preflight_failure_context "$test_port"
         return 1
     fi
     tcppeek_preflight_probe_route_matrix "$test_port" || {
@@ -110,6 +112,15 @@ run_tcppeek_preflight_service() {
         systemctl stop vpso-mux-preflight >/dev/null 2>&1 || true
     fi
     return 0
+}
+
+print_tcppeek_preflight_failure_context() {
+    local port="${1:-8444}"
+    echo -e "$(localized_text "${YELLOW}vpso-mux 预检状态与最近日志：${PLAIN}" "${YELLOW}vpso-mux preflight status and recent logs:${PLAIN}" "${YELLOW}Состояние проверки vpso-mux и последние журналы:${PLAIN}")"
+    systemctl status vpso-mux-preflight --no-pager -l 2>/dev/null || true
+    journalctl -u vpso-mux-preflight -n 40 --no-pager 2>/dev/null || true
+    echo -e "$(localized_text "${YELLOW}${port} 端口监听：${PLAIN}" "${YELLOW}Port ${port} listener:${PLAIN}" "${YELLOW}Прослушивание порта ${port}:${PLAIN}")"
+    ss -lntp 2>/dev/null | awk -v p=":${port}" '$4 ~ p"$" {print}' || true
 }
 
 tcp_peek_dry_run_config() {
@@ -779,37 +790,53 @@ apply_entry_mode_by_name() {
 }
 
 select_initial_entry_mode() {
-    local choice tcppeek_bootstrap
+    local choice
     ENTRY_MODE="nginx-stream"
 
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}选择本次首次配置使用的 443 入口模式${PLAIN}" "${BOLD}Select the 443 entry mode used for this first configuration${PLAIN}" "${BOLD}Выберите режим входа 443, используемый для этой первой конфигурации.${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}选择 443 入口模式${PLAIN}" "${BOLD}Select the 443 entry mode${PLAIN}" "${BOLD}Выберите режим входа 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${GREEN}  1. Nginx Stream 模式${PLAIN}       ${YELLOW}(默认稳定模式，适合大多数用户)${PLAIN}" "${GREEN}1. Nginx Stream mode (default stable mode, suitable for most users)${PLAIN}" "${GREEN}1. Режим Nginx Stream (стабильный режим по умолчанию, подходит для большинства пользователей)${PLAIN}")"
     echo -e "$(localized_text "${GREEN}  2. Xray Fallback 模式${PLAIN}      ${YELLOW}(需你已在 Xray/3x-ui 准备好公网 443 主入站)${PLAIN}" "${GREEN}2. Xray Fallback mode (you need to prepare the public port 443 main inbound in Xray/3x-ui)${PLAIN}" "${GREEN}2. Xray Резервный режим (необходимо подготовить основное входящее подключение публичного порта 443 в Xray/3x-ui)${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}  3. TCP Peek + Splice 模式${PLAIN}  ${YELLOW}(首次安装会先提示安装/使用 Nginx Stream，再跑 8444 预检后切换)${PLAIN}" "${GREEN}3. TCP Peek + Splice mode (the first installation will prompt you to install/use Nginx Stream, and then run 8444 to preflight check and switch)${PLAIN}" "${GREEN}3. Режим TCP Peek + Splice (при первой установке вам будет предложено установить/использовать Nginx Stream, а затем запустить 8444 для предварительной проверки и переключения)${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  3. TCP Peek + Splice 模式${PLAIN}  ${YELLOW}(自动安装依赖、8444 预检并切换)${PLAIN}" "${GREEN}3. TCP Peek + Splice mode (installs dependencies, runs the 8444 preflight, then switches)${PLAIN}" "${GREEN}3. TCP Peek + Splice (установка зависимостей, проверка 8444 и переключение)${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     read_trimmed choice "$(localized_text "请选择入口模式（默认 1）: " "Please select entry mode (default 1):" "Пожалуйста, выберите режим входа (по умолчанию 1):")"
     case "${choice:-1}" in
         1) ENTRY_MODE="nginx-stream" ;;
         2) ENTRY_MODE="xray-fallback" ;;
-        3)
-            echo -e "$(localized_text "${YELLOW}TCP Peek 首次接管 443 前必须先安装/使用 Nginx Stream，建立可用的共享配置和 Nginx/Caddy 基线。${PLAIN}" "${YELLOW}TCP Peek Before taking over 443 for the first time, Nginx Stream must be installed/used to establish the available shared configuration and Nginx/Caddy baseline.${PLAIN}" "${YELLOW}TCP Peek Прежде чем впервые взять под контроль 443, необходимо установить/использовать Nginx Stream для установки доступной общей конфигурации и базовой линии Nginx/Caddy.${PLAIN}")"
-            echo -e "$(localized_text "${YELLOW}推荐流程：先安装/使用 Nginx Stream 完成首次安装，再进入 [19] -> [16] 做 8444 预检，最后用 [5] 切换到 TCP Peek。${PLAIN}" "${YELLOW}Recommended process for : First install/use Nginx Stream to complete the first installation, then enter [19] -> [16] to do 8444 preflight check, and finally use [5] to switch to TCP Peek.${PLAIN}" "${YELLOW}Рекомендуемый процесс для : сначала установите/используйте Nginx Stream для завершения первой установки, затем введите [19] -> [16] для выполнения предварительной проверки 8444 и, наконец, используйте [5] для переключения на TCP Peek.${PLAIN}")"
-            read_trimmed tcppeek_bootstrap "$(localized_text "是否先安装/使用 Nginx Stream 完成本次首次安装？(Y/n，默认 yes): " "Do you want to install/use Nginx Stream first to complete this first installation? (Y/n, default yes):" "Хотите ли вы сначала установить/использовать Nginx Stream, чтобы завершить первую установку? (Да/нет, по умолчанию да):")"
-            tcppeek_bootstrap="${tcppeek_bootstrap:-yes}"
-            if is_yes "$tcppeek_bootstrap"; then
-                ENTRY_MODE="nginx-stream"
-            else
-                echo -e "$(localized_text "${BLUE}已取消首次配置。${PLAIN}" "${BLUE}Has been canceled for the first time.${PLAIN}" "${BLUE}отменен впервые.${PLAIN}")"
-                return 1
-            fi
-            ;;
+        3) ENTRY_MODE="tcp-peek" ;;
         0|q|Q) echo -e "$(localized_text "${BLUE}已取消首次配置。${PLAIN}" "${BLUE}Has been canceled for the first time.${PLAIN}" "${BLUE}отменен впервые.${PLAIN}")"; return 1 ;;
         *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"; return 1 ;;
     esac
     echo -e "$(localized_text "${GREEN}✅ 已选择 443 入口模式：${ENTRY_MODE}${PLAIN}" "${GREEN}✅ 443 entry mode selected: ${ENTRY_MODE}${PLAIN}" "${GREEN}Выбран 443 режима входа: ${ENTRY_MODE}${PLAIN}")"
+}
+
+manage_entry_mode_install_or_switch() {
+    local choice current_mode
+    if [[ ! -f /etc/vps-optimize/sni-stack.env ]]; then
+        func_caddy_cf_reality_wizard
+        return
+    fi
+
+    load_sni_stack_env || return 1
+    current_mode=$(get_entry_mode)
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}安装 / 切换 443 入口模式${PLAIN}" "${BOLD}Install / switch the 443 entry mode${PLAIN}" "${BOLD}Установка / смена режима входа 443${PLAIN}")"
+    echo -e "$(localized_text "当前：${GREEN}${current_mode}${PLAIN}" "Current: ${GREEN}${current_mode}${PLAIN}" "Текущий: ${GREEN}${current_mode}${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${GREEN}  1. Nginx Stream${PLAIN}"
+    echo -e "${GREEN}  2. Xray Fallback${PLAIN}"
+    echo -e "${GREEN}  3. TCP Peek + Splice${PLAIN}"
+    echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
+    read_trimmed choice "$(localized_text "选择模式: " "Select a mode: " "Выберите режим: ")"
+    case "$choice" in
+        1) switch_entry_mode "nginx-stream" ;;
+        2) switch_entry_mode "xray-fallback" ;;
+        3) switch_entry_mode "tcp-peek" ;;
+        0|q|Q) return ;;
+        *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"; return 1 ;;
+    esac
 }
 
 prepare_initial_entry_mode_dependencies() {
@@ -817,8 +844,8 @@ prepare_initial_entry_mode_dependencies() {
     target_mode=$(normalize_entry_mode_name "$target_mode") || return 1
     case "$target_mode" in
         "tcp-peek")
-            require_vpso_mux_binary_for_cutover || {
-                echo -e "$(localized_text "${YELLOW}首次配置阶段尚未有共享配置可用于 8444 预检；请先选择 Nginx Stream 完成首次配置，再运行 [19] -> [16] 预检，最后用 [5] 切换到 TCP Peek。${PLAIN}" "${YELLOW}During the first configuration phase of , there is no shared configuration available for 8444 preflight; please select Nginx Stream to complete the first configuration, then run [19] -> [16] preflight, and finally use [5] to switch to TCP Peek.${PLAIN}" "${YELLOW}На первом этапе настройки общая конфигурация для предполетной подготовки 8444 недоступна; пожалуйста, выберите Nginx Stream, чтобы завершить первую настройку, затем запустите [19] -> [16] предварительная проверка и, наконец, используйте [5] для переключения на TCP Peek.${PLAIN}")"
+            install_vpso_mux_binary || {
+                echo -e "$(localized_text "${RED}❌ vpso-mux 安装失败，首次配置已停止。请根据上方错误处理后重试。${PLAIN}" "${RED}❌ Failed to install vpso-mux. Initial setup stopped. Fix the error above and retry.${PLAIN}" "${RED}❌ Не удалось установить vpso-mux. Первоначальная настройка остановлена. Исправьте ошибку выше и повторите попытку.${PLAIN}")"
                 return 1
             }
             ;;
@@ -851,6 +878,13 @@ switch_entry_mode() {
     fi
 
     echo -e "$(localized_text "${CYAN}准备切换 443 入口模式：${current_mode} -> ${target_mode}${PLAIN}" "${CYAN}Is ready to switch 443 Entry mode: ${current_mode} -> ${target_mode}${PLAIN}" "${CYAN}готов переключить режим ввода 443: ${current_mode} -> ${target_mode}${PLAIN}")"
+    if [[ "$target_mode" == "tcp-peek" && ! -x /usr/local/bin/vpso-mux ]]; then
+        echo -e "$(localized_text "${CYAN}▶ 未检测到 vpso-mux，正在安装构建依赖并生成程序...${PLAIN}" "${CYAN}▶ vpso-mux was not found; installing build dependencies and building it...${PLAIN}" "${CYAN}▶ vpso-mux не найден; устанавливаются зависимости и выполняется сборка...${PLAIN}")"
+        install_vpso_mux_binary || {
+            echo -e "$(localized_text "${RED}❌ vpso-mux 安装失败，公网 443 未切换。请根据上方错误处理后重试。${PLAIN}" "${RED}❌ Failed to install vpso-mux. Public port 443 was not switched. Fix the error above and retry.${PLAIN}" "${RED}❌ Не удалось установить vpso-mux. Публичный порт 443 не переключён. Исправьте ошибку выше и повторите попытку.${PLAIN}")"
+            return 1
+        }
+    fi
     check_entry_mode_dependencies "$target_mode" || return 1
     if [[ "$target_mode" == "xray-fallback" ]]; then
         select_xray_fallback_main_route_for_switch || return 1
@@ -922,12 +956,31 @@ reapply_current_entry_mode() {
     show_current_entry_status
 }
 
-view_vpso_mux_logs() {
+view_current_entry_logs() {
+    local mode service label
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}📜 vpso-mux 日志${PLAIN}" "${BOLD}📜 vpso-mux Log${PLAIN}" "${BOLD}📜 vpso-mux Журнал${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}📜 当前 443 入口日志${PLAIN}" "${BOLD}📜 Current 443 entry logs${PLAIN}" "${BOLD}📜 Журналы текущего входа 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    journalctl -u vpso-mux -n 120 --no-pager 2>/dev/null || echo "$(localized_text "未读取到 vpso-mux 日志。" "The vpso-mux log was not read." "Журнал vpso-mux не был прочитан.")"
+    load_sni_stack_env || return 1
+    mode=$(get_entry_mode)
+    case "$mode" in
+        nginx-stream) service="nginx"; label="Nginx Stream" ;;
+        xray-fallback)
+            service=$(xray_entry_service_name 2>/dev/null) || {
+                echo -e "$(localized_text "${RED}❌ 未检测到 Xray/3x-ui 入口服务。${PLAIN}" "${RED}❌ No Xray/3x-ui entry service was detected.${PLAIN}" "${RED}❌ Служба входа Xray/3x-ui не обнаружена.${PLAIN}")"
+                return 1
+            }
+            label="Xray Fallback"
+            ;;
+        tcp-peek) service="vpso-mux"; label="TCP Peek + Splice" ;;
+        *) echo -e "$(localized_text "${RED}❌ ENTRY_MODE 无效：${mode}${PLAIN}" "${RED}❌ Invalid ENTRY_MODE: ${mode}${PLAIN}" "${RED}❌ Недопустимый ENTRY_MODE: ${mode}${PLAIN}")"; return 1 ;;
+    esac
+    echo -e "$(localized_text "入口模式：${GREEN}${label}${PLAIN}  服务：${CYAN}${service}${PLAIN}" "Entry mode: ${GREEN}${label}${PLAIN}  Service: ${CYAN}${service}${PLAIN}" "Режим: ${GREEN}${label}${PLAIN}  Служба: ${CYAN}${service}${PLAIN}")"
+    echo -e "------------------------------------------------"
+    systemctl status "$service" --no-pager -l 2>/dev/null || true
+    echo -e "------------------------------------------------"
+    journalctl -u "$service" -n 120 --no-pager 2>/dev/null || echo "$(localized_text "未读取到 ${service} 日志。" "No logs were read for ${service}." "Не удалось прочитать журнал ${service}.")"
 }
 
 entry_mode_supports_xray_sni_routes() {

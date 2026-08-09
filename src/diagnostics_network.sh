@@ -154,7 +154,7 @@ func_443_network_test() {
     echo -e "${CYAN}================================================${PLAIN}"
 
     if [[ ! -f /etc/vps-optimize/sni-stack.env ]]; then
-        echo -e "$(localized_text "${YELLOW}未检测到 443 单入口配置。请先进入 [19] -> [2] 完成首次配置。${PLAIN}" "${YELLOW}443 shared entry configuration not detected. Please enter [19] -> [2] to complete the first configuration.${PLAIN}" "${YELLOW}Не обнаружено 443 конфигурации с общей точкой входа. Пожалуйста, введите [19] -> [2] для завершения первой настройки.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 443 单入口配置。请先进入 [19] -> [2] 安装入口。${PLAIN}" "${YELLOW}No shared 443 entry configuration was found. Use [19] -> [2] to install it first.${PLAIN}" "${YELLOW}Конфигурация общего входа 443 не найдена. Сначала установите её через [19] -> [2].${PLAIN}")"
         read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
         return
     fi

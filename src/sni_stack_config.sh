@@ -890,7 +890,7 @@ load_sni_stack_env() {
     local env_file
     env_file=$(sni_stack_env_path)
     if [[ ! -f "$env_file" ]]; then
-        echo -e "$(localized_text "${RED}❌ 未找到 ${env_file}，请先运行主菜单 [19] -> [2] 首次配置 443 单入口。${PLAIN}" "${RED}❌ ${env_file} not found, please run the main menu [19] -> [2] for the first time to configure 443 shared entry.${PLAIN}" "${RED}❌ ${env_file} не найден, запустите главное меню [19] -> [2] в первый раз, чтобы настроить общий вход 443.${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ 未找到 ${env_file}，请运行主菜单 [19] -> [2] 安装 443 入口。${PLAIN}" "${RED}❌ ${env_file} was not found. Run main menu [19] -> [2] to install the 443 entry.${PLAIN}" "${RED}❌ Файл ${env_file} не найден. Запустите главное меню [19] -> [2], чтобы установить вход 443.${PLAIN}")"
         return 1
     fi
     # shellcheck disable=SC1090

@@ -490,7 +490,7 @@ func_caddy_cf_maintenance_menu() {
                 fi
 
                 if [[ ! -x "$acme_bin" ]]; then
-                    echo -e "$(localized_text "${RED}❌ 未检测到 acme.sh，请先运行主菜单 [19] -> [2] 首次配置 443 单入口。${PLAIN}" "${RED}❌ acme.sh is not detected, please run the main menu [19] -> [2] first to configure 443 shared entry.${PLAIN}" "${RED}❌ acme.sh не обнаружен, запустите главное меню [19] -> [2], чтобы настроить общую запись 443 в первый раз.${PLAIN}")"
+                    echo -e "$(localized_text "${RED}❌ 未检测到 acme.sh，请先运行主菜单 [19] -> [2] 安装 443 入口。${PLAIN}" "${RED}❌ acme.sh was not found. Run main menu [19] -> [2] to install the 443 entry first.${PLAIN}" "${RED}❌ acme.sh не найден. Сначала установите вход 443 через главное меню [19] -> [2].${PLAIN}")"
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
                 fi
