@@ -308,9 +308,9 @@ print_443_issue_connlimit_summary() {
     fi
 
     marker=$(port_connlimit_comment 443)
-    runtime_rules=$(port_connlimit_runtime_rule_fingerprints | grep -F "$marker" || true)
-    saved_rules=$(port_connlimit_known_saved_rule_fingerprints | grep -F "$marker" || true)
-    rules=$(printf '%s\n%s\n' "$runtime_rules" "$saved_rules" | grep -F "$marker" || true)
+    runtime_rules=$(port_connlimit_runtime_rule_fingerprints | grep -E "${marker}([^0-9]|$)" || true)
+    saved_rules=$(port_connlimit_known_saved_rule_fingerprints | grep -E "${marker}([^0-9]|$)" || true)
+    rules=$(printf '%s\n%s\n' "$runtime_rules" "$saved_rules" | grep -E "${marker}([^0-9]|$)" || true)
 
     if [[ -z "$rules" ]]; then
         echo "$(localized_text "- 443 connlimit: 未检测到本脚本添加的公网 443 规则" "- 443 connlimit: The public port 443 rule added by this script was not detected" "- 443 connlimit: правило 443 публичной сети, добавленное этим скриптом, не обнаружено.")"

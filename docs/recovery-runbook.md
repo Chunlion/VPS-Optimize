@@ -155,7 +155,7 @@ ss -lntp
 
 ### 端口并发连接限制误封
 
-`主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]` 写入的是额外 `iptables` / `ip6tables` connlimit 限制规则，不等同于 UFW/firewalld 的端口放行规则。它会按公网端口限制每来源 IP 的 TCP 并发连接数；如果限制公网 `443` 且启用了 443 单入口，只能限制整个公网 `443`，不能精准到某个 Xray/3x-ui 入站、SNI、UUID 或用户。不要误选 `[6 关闭防火墙]`。
+`主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]` 优先使用原生 nftables `ct count`，不支持时回退到 `iptables` / `ip6tables` connlimit。该限制不等同于 UFW/firewalld 端口放行。它按公网端口限制每来源 IP 的 TCP 并发连接数；如果限制公网 `443` 且启用了 443 单入口，只能限制整个公网 `443`，不能精准到某个 Xray/3x-ui 入站、SNI、UUID 或用户。不要误选 `[6 关闭防火墙]`。
 
 还能进菜单时，优先走：
 
@@ -165,16 +165,17 @@ ss -lntp
 主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制] -> [5 保存/检查重启持久化]
 ```
 
-脚本删除规则后会自动尝试刷新持久化快照；`[5]` 用来确认保存文件是否已经同步。如果系统没有 `netfilter-persistent`、`iptables-persistent` 或 RHEL 系列已有的 `iptables-services` 持久化路径，菜单会提示当前 connlimit 规则只在本次运行期生效。
+原生 nftables 规则保存在 `/etc/vps-optimize/port-connlimit.nft`，由 `vps-optimize-connlimit.service` 开机恢复。回退模式继续使用系统的 `netfilter-persistent` 或 `iptables-services` 持久化路径。`[5]` 用于检查或重新保存。
 
 菜单进不去时，用 VNC / 救援控制台查看脚本规则标记：
 
 ```bash
+nft -nn list table inet vps_optimize_connlimit
 iptables -S INPUT | grep 'VPSO_CONN_LIMIT_PORT_'
 ip6tables -S INPUT | grep 'VPSO_CONN_LIMIT_PORT_'
 ```
 
-只删除确认属于本脚本、且端口和连接数匹配的单条规则。做法是复制输出里的那一整条 `-A INPUT ... VPSO_CONN_LIMIT_PORT_端口 ...`，把开头的 `-A INPUT` 改成 `-D INPUT` 后执行；IPv6 规则同理用 `ip6tables`。不要批量清空 INPUT 链，也不要把 UFW/firewalld 放行规则和 connlimit 限制规则混在一起处理。
+优先通过菜单按端口和连接数删除。紧急情况下，`nft delete table inet vps_optimize_connlimit` 会删除全部 VPS-Optimize 原生并发限制；随后执行 `systemctl disable vps-optimize-connlimit.service`，防止重启恢复。回退规则只删除确认属于本脚本且端口、连接数匹配的条目：复制完整的 `-A INPUT ... VPSO_CONN_LIMIT_PORT_端口 ...`，将开头改为 `-D INPUT` 后执行；IPv6 使用 `ip6tables`。不要批量清空 INPUT 链。
 
 ## 443 单入口改坏
 

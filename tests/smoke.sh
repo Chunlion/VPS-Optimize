@@ -1028,6 +1028,110 @@ SS_OUTPUT
 
 (
     source src/common.sh
+    source src/language.sh
+    source src/validate.sh
+    source src/firewall.sh
+
+    PORT_CONNLIMIT_KERNEL_RELEASE=4.19.9
+    ! port_connlimit_kernel_supports_ct_count
+    PORT_CONNLIMIT_KERNEL_RELEASE=4.19.10
+    port_connlimit_kernel_supports_ct_count
+    PORT_CONNLIMIT_KERNEL_RELEASE=6.8.0-custom
+    port_connlimit_kernel_supports_ct_count
+
+    merged=$(printf '%s\n' '4|443|50' '4|443|10' '4|443|10' '6|8443|7' | port_connlimit_merge_rule_entries)
+    [[ "$(grep -xc '4|443|10' <<<"$merged")" -eq 1 ]]
+    [[ "$(grep -xc '6|8443|7' <<<"$merged")" -eq 1 ]]
+
+    updated=$(port_connlimit_update_rule_entries "$merged" add 443 50 4 6 | port_connlimit_merge_rule_entries)
+    [[ "$(grep -xc '4|443|50' <<<"$updated")" -eq 1 ]]
+    [[ "$(grep -xc '6|443|50' <<<"$updated")" -eq 1 ]]
+    [[ "$(grep -c '|443|10' <<<"$updated" || true)" -eq 0 ]]
+    [[ "$(grep -xc '6|8443|7' <<<"$updated")" -eq 1 ]]
+
+    rendered=$(render_port_connlimit_nft_config "$updated")
+    grep -Fq 'flush table inet vps_optimize_connlimit' <<<"$rendered"
+    grep -Fq 'set v4_p443 { type ipv4_addr; size 65535; flags dynamic; }' <<<"$rendered"
+    grep -Fq 'set v6_p443 { type ipv6_addr; size 65535; flags dynamic; }' <<<"$rendered"
+    grep -Fq 'add @v4_p443 { ip saddr ct count over 50 } reject with tcp reset comment "VPSO_CONN_LIMIT_PORT_443"' <<<"$rendered"
+    grep -Fq 'add @v6_p443 { ip6 saddr ct count over 50 } reject with tcp reset comment "VPSO_CONN_LIMIT_PORT_443"' <<<"$rendered"
+
+    nft() {
+        if [[ "$1" == "-nn" && "$2" == "list" ]]; then
+            cat <<'NFT_RULES'
+table inet vps_optimize_connlimit {
+    chain input {
+        tcp dport 443 ct state new add @v4_p443 { ip saddr ct count over 50 } reject with tcp reset comment "VPSO_CONN_LIMIT_PORT_443"
+        tcp dport 8443 ct state new add @v6_p8443 { ip6 saddr ct count over 7 } reject with tcp reset comment "VPSO_CONN_LIMIT_PORT_8443"
+    }
+}
+NFT_RULES
+            return 0
+        fi
+        if [[ "$1" == "-c" && "$2" == "-f" && "$3" == "-" ]]; then
+            probe=$(cat)
+            grep -Fq 'ct count over 1' <<<"$probe"
+            return $?
+        fi
+        return 1
+    }
+    parsed=$(port_connlimit_nft_rule_entries)
+    grep -Fxq '4|443|50' <<<"$parsed"
+    grep -Fxq '6|8443|7' <<<"$parsed"
+    port_connlimit_nft_supported
+    port_connlimit_nft_supported() { return 1; }
+    ! ensure_nft_connlimit_support >/dev/null
+
+    port_connlimit_nft_rule_entries() {
+        printf '%s\n' '4|443|10' '6|8443|7'
+    }
+    port_connlimit_legacy_rule_entries() {
+        printf '%s\n' '4|443|5' '4|9443|9' '4|9443|9'
+    }
+    nft_write_calls=0
+    nft_written_entries=""
+    write_port_connlimit_nft_config() {
+        nft_write_calls=$((nft_write_calls + 1))
+        nft_written_entries="$1"
+        [[ "$2" -eq 1 ]]
+    }
+    cleanup_calls=0
+    cleaned_legacy=""
+    cleanup_port_connlimit_legacy_rules() {
+        cleanup_calls=$((cleanup_calls + 1))
+        cleaned_legacy="$1"
+    }
+
+    run_nft_port_connlimit_action add 443 50 1 >/dev/null
+    [[ "$nft_write_calls" -eq 1 ]]
+    [[ "$cleanup_calls" -eq 1 ]]
+    [[ "$(grep -xc '4|443|50' <<<"$nft_written_entries")" -eq 1 ]]
+    [[ "$(grep -xc '6|443|50' <<<"$nft_written_entries")" -eq 1 ]]
+    [[ "$(grep -xc '4|9443|9' <<<"$nft_written_entries")" -eq 1 ]]
+    [[ "$(grep -xc '4|443|5' <<<"$nft_written_entries" || true)" -eq 0 ]]
+    [[ "$(grep -xc '4|9443|9' <<<"$cleaned_legacy")" -eq 2 ]]
+
+    port_connlimit_nft_rule_entries() {
+        printf '%s\n' '4|443|50' '6|443|50'
+    }
+    port_connlimit_legacy_rule_entries() { :; }
+    nft_write_calls=0
+    nft_apply_mode=-1
+    write_port_connlimit_nft_config() {
+        nft_write_calls=$((nft_write_calls + 1))
+        nft_apply_mode="$2"
+    }
+    run_nft_port_connlimit_action add 443 50 1 >/dev/null
+    [[ "$nft_write_calls" -eq 1 ]]
+    [[ "$nft_apply_mode" -eq 0 ]]
+
+    service=$(render_nft_port_connlimit_service /usr/sbin/nft)
+    grep -Fq 'ExecStartPre=-/usr/sbin/nft add table inet vps_optimize_connlimit' <<<"$service"
+    grep -Fq 'ExecStart=/usr/sbin/nft -f /etc/vps-optimize/port-connlimit.nft' <<<"$service"
+)
+
+(
+    source src/common.sh
     source src/ui.sh
     source src/input.sh
     source src/validate.sh

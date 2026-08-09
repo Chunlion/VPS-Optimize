@@ -44,7 +44,7 @@ Rules for new code:
 
 - Put reusable shell primitives in `common.sh`, `ui.sh`, `input.sh`, `validate.sh`, `rollback.sh`, or `backup.sh`.
 - Put feature-specific flows in the nearest focused feature module.
-- Put firewall allow/delete/view/connlimit workflows in `firewall.sh`; keep UFW/firewalld port allow rules separate from raw iptables/ip6tables connlimit rules and their netfilter-persistent save/check path.
+- Put firewall allow/delete/view/connlimit workflows in `firewall.sh`; keep UFW/firewalld port allow rules separate from native nftables connlimit rules and the iptables/ip6tables compatibility fallback.
 - Keep `main.sh` as a tiny bootstrap so runtime privileges are checked before starting the same menu.
 - Do not make the release script source `src/*.sh` at runtime; regenerate `dist/vps.sh` with `scripts/build.sh`.
 - Keep menu numbers stable for backward compatibility; prefer adding aliases or moving display groups over renumbering existing entries.

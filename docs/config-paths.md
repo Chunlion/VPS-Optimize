@@ -317,6 +317,9 @@ nft list ruleset 2>/dev/null | grep -i port_traffic_monitor || true
 | `ssh` / `sshd` systemd 服务 | 不同系统服务名不同 |
 | `ufw` | Ubuntu/Debian 常见防火墙前端 |
 | `firewalld` | RHEL 系常见防火墙 |
+| `inet vps_optimize_connlimit` | VPS-Optimize 原生 nftables 端口并发限制专用表 |
+| `/etc/vps-optimize/port-connlimit.nft` | 原生 nftables 端口并发限制持久化配置 |
+| `vps-optimize-connlimit.service` | 开机恢复原生 nftables 端口并发限制 |
 | `/etc/fail2ban/jail.local` | Fail2ban 本地规则 |
 | `fail2ban` systemd 服务 | Fail2ban 服务 |
 

@@ -118,9 +118,9 @@ print_443_health_connlimit_scope_notice() {
     fi
 
     marker=$(port_connlimit_comment 443)
-    runtime_rules=$(port_connlimit_runtime_rule_fingerprints | grep -F "$marker" || true)
-    saved_rules=$(port_connlimit_known_saved_rule_fingerprints | grep -F "$marker" || true)
-    rules=$(printf '%s\n%s\n' "$runtime_rules" "$saved_rules" | grep -F "$marker" || true)
+    runtime_rules=$(port_connlimit_runtime_rule_fingerprints | grep -E "${marker}([^0-9]|$)" || true)
+    saved_rules=$(port_connlimit_known_saved_rule_fingerprints | grep -E "${marker}([^0-9]|$)" || true)
+    rules=$(printf '%s\n%s\n' "$runtime_rules" "$saved_rules" | grep -E "${marker}([^0-9]|$)" || true)
 
     if [[ -z "$rules" ]]; then
         echo -e "$(localized_text "${BLUE}未检测到本脚本添加的公网 443 connlimit 规则。${PLAIN}" "${BLUE}Did not detect the public port 443 connlimit rule added by this script.${PLAIN}" "${BLUE}не обнаружил правило connlimit публичного порта 443, добавленное этим сценарием.${PLAIN}")"

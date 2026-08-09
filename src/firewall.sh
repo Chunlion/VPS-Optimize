@@ -1,6 +1,11 @@
 # shellcheck shell=bash
 # Firewall rule management workflows.
 
+PORT_CONNLIMIT_NFT_TABLE="${PORT_CONNLIMIT_NFT_TABLE:-vps_optimize_connlimit}"
+PORT_CONNLIMIT_NFT_CONFIG="${PORT_CONNLIMIT_NFT_CONFIG:-/etc/vps-optimize/port-connlimit.nft}"
+PORT_CONNLIMIT_NFT_SERVICE="${PORT_CONNLIMIT_NFT_SERVICE:-vps-optimize-connlimit.service}"
+PORT_CONNLIMIT_NFT_UNIT="${PORT_CONNLIMIT_NFT_UNIT:-/etc/systemd/system/${PORT_CONNLIMIT_NFT_SERVICE}}"
+
 port_connlimit_comment() {
     local port="$1"
     printf 'VPSO_CONN_LIMIT_PORT_%s' "$port"
@@ -37,6 +42,401 @@ ensure_connlimit_tool() {
 try_load_connlimit_module() {
     if command -v modprobe >/dev/null 2>&1; then
         modprobe xt_connlimit >/dev/null 2>&1 || true
+    fi
+}
+
+port_connlimit_kernel_release() {
+    if [[ -n "${PORT_CONNLIMIT_KERNEL_RELEASE:-}" ]]; then
+        printf '%s\n' "$PORT_CONNLIMIT_KERNEL_RELEASE"
+    else
+        uname -r 2>/dev/null
+    fi
+}
+
+port_connlimit_kernel_supports_ct_count() {
+    local release major minor patch
+    release=$(port_connlimit_kernel_release)
+    if [[ ! "$release" =~ ^([0-9]+)\.([0-9]+)(\.([0-9]+))? ]]; then
+        return 1
+    fi
+    major=$((10#${BASH_REMATCH[1]}))
+    minor=$((10#${BASH_REMATCH[2]}))
+    patch=$((10#${BASH_REMATCH[4]:-0}))
+
+    (( major > 4 )) && return 0
+    (( major == 4 && minor > 19 )) && return 0
+    (( major == 4 && minor == 19 && patch >= 10 ))
+}
+
+port_connlimit_nft_is_managed() {
+    command -v nft >/dev/null 2>&1 || return 1
+    [[ -f "$PORT_CONNLIMIT_NFT_CONFIG" ]] && return 0
+    nft list table inet "$PORT_CONNLIMIT_NFT_TABLE" >/dev/null 2>&1
+}
+
+port_connlimit_nft_supported() {
+    local probe_table="vpso_connlimit_probe_$$"
+
+    command -v nft >/dev/null 2>&1 || return 1
+    port_connlimit_kernel_supports_ct_count || return 1
+    if command -v modprobe >/dev/null 2>&1; then
+        modprobe nf_tables >/dev/null 2>&1 || true
+        modprobe nf_conntrack >/dev/null 2>&1 || true
+    fi
+
+    nft -c -f - >/dev/null 2>&1 <<EOF
+add table inet ${probe_table}
+add set inet ${probe_table} v4_sources { type ipv4_addr; flags dynamic; }
+add set inet ${probe_table} v6_sources { type ipv6_addr; flags dynamic; }
+add chain inet ${probe_table} input { type filter hook input priority -1; policy accept; }
+add rule inet ${probe_table} input tcp dport 1 ct state new add @v4_sources { ip saddr ct count over 1 } reject with tcp reset
+add rule inet ${probe_table} input tcp dport 1 ct state new add @v6_sources { ip6 saddr ct count over 1 } reject with tcp reset
+delete table inet ${probe_table}
+EOF
+}
+
+ensure_nft_connlimit_support() {
+    local release
+    release=$(port_connlimit_kernel_release)
+
+    if ! command -v nft >/dev/null 2>&1; then
+        echo -e "$(localized_text "${YELLOW}未检测到 nft，正在尝试安装 nftables...${PLAIN}" "${YELLOW}nft not found; attempting to install nftables...${PLAIN}" "${YELLOW}nft не найден; выполняется попытка установить nftables...${PLAIN}")"
+        install_pkg nftables || true
+    fi
+    if port_connlimit_nft_supported; then
+        echo -e "$(localized_text "${GREEN}已检测到 nftables ct count 支持（内核 ${release}），优先使用原生 nftables。${PLAIN}" "${GREEN}nftables ct count is supported (kernel ${release}); using native nftables.${PLAIN}" "${GREEN}Обнаружена поддержка nftables ct count (ядро ${release}); используется нативный nftables.${PLAIN}")"
+        return 0
+    fi
+
+    echo -e "$(localized_text "${YELLOW}当前 nftables/内核不支持可用的 ct count，回退到 iptables/ip6tables connlimit。内核：${release:-unknown}。${PLAIN}" "${YELLOW}Usable nftables ct count support is unavailable; falling back to iptables/ip6tables connlimit. Kernel: ${release:-unknown}.${PLAIN}" "${YELLOW}Поддержка nftables ct count недоступна; выполняется переход на iptables/ip6tables connlimit. Ядро: ${release:-unknown}.${PLAIN}")"
+    return 1
+}
+
+port_connlimit_nft_rule_entries() {
+    command -v nft >/dev/null 2>&1 || return 0
+    nft -nn list table inet "$PORT_CONNLIMIT_NFT_TABLE" 2>/dev/null | awk '
+        /comment "VPSO_CONN_LIMIT_PORT_[0-9]+"/ {
+            family = ""
+            port = ""
+            limit = ""
+            for (i = 1; i <= NF; i++) {
+                if ($i == "dport" && i < NF) port = $(i + 1)
+                if ($i == "over" && i < NF) limit = $(i + 1)
+                if ($i == "ip" && $(i + 1) == "saddr") family = "4"
+                if ($i == "ip6" && $(i + 1) == "saddr") family = "6"
+            }
+            if (family != "" && port ~ /^[0-9]+$/ && limit ~ /^[0-9]+$/) {
+                print family "|" port "|" limit
+            }
+        }
+    ' | sort -t '|' -k1,1n -k2,2n -k3,3n -u
+}
+
+port_connlimit_legacy_rule_entries_for_family() {
+    local cmd="$1"
+    local family="$2"
+
+    command -v "$cmd" >/dev/null 2>&1 || return 0
+    "$cmd" -S INPUT 2>/dev/null | awk -v family="$family" '
+        $1 == "-A" && $2 == "INPUT" {
+            port = ""
+            limit = ""
+            comment = ""
+            for (i = 3; i <= NF; i++) {
+                if ($i == "--dport" && i < NF) port = $(i + 1)
+                if ($i == "--connlimit-above" && i < NF) limit = $(i + 1)
+                if ($i == "--comment" && i < NF) {
+                    comment = $(i + 1)
+                    gsub(/^["\047]|["\047]$/, "", comment)
+                }
+            }
+            if (port ~ /^[0-9]+$/ && limit ~ /^[0-9]+$/ && comment == "VPSO_CONN_LIMIT_PORT_" port) {
+                print family "|" port "|" limit
+            }
+        }
+    '
+}
+
+port_connlimit_legacy_rule_entries() {
+    {
+        port_connlimit_legacy_rule_entries_for_family iptables 4
+        port_connlimit_legacy_rule_entries_for_family ip6tables 6
+    }
+}
+
+port_connlimit_merge_rule_entries() {
+    awk -F '|' '
+        $1 ~ /^[46]$/ && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ {
+            key = $1 FS $2
+            if (!(key in minimum) || $3 + 0 < minimum[key] + 0) minimum[key] = $3
+        }
+        END {
+            for (key in minimum) print key FS minimum[key]
+        }
+    ' | sort -t '|' -k1,1n -k2,2n
+}
+
+port_connlimit_update_rule_entries() {
+    local entries="$1"
+    local action="$2"
+    local port="$3"
+    local limit="$4"
+    shift 4
+    local families=("$@")
+    local family line_family line_port line_limit selected
+
+    while IFS='|' read -r line_family line_port line_limit; do
+        [[ -n "$line_family" && -n "$line_port" && -n "$line_limit" ]] || continue
+        selected=0
+        for family in "${families[@]}"; do
+            [[ "$line_family" == "$family" ]] && selected=1
+        done
+        if [[ "$action" == "add" && "$selected" -eq 1 && "$line_port" == "$port" ]]; then
+            continue
+        fi
+        if [[ "$action" == "delete" && "$selected" -eq 1 && "$line_port" == "$port" && "$line_limit" == "$limit" ]]; then
+            continue
+        fi
+        printf '%s|%s|%s\n' "$line_family" "$line_port" "$line_limit"
+    done <<<"$entries"
+
+    if [[ "$action" == "add" ]]; then
+        for family in "${families[@]}"; do
+            printf '%s|%s|%s\n' "$family" "$port" "$limit"
+        done
+    fi
+}
+
+render_port_connlimit_nft_config() {
+    local entries="$1"
+    local family port limit set_name
+
+    printf 'flush table inet %s\n' "$PORT_CONNLIMIT_NFT_TABLE"
+    printf 'table inet %s {\n' "$PORT_CONNLIMIT_NFT_TABLE"
+    while IFS='|' read -r family port limit; do
+        [[ -n "$family" && -n "$port" && -n "$limit" ]] || continue
+        set_name="v${family}_p${port}"
+        if [[ "$family" == "4" ]]; then
+            printf '    set %s { type ipv4_addr; size 65535; flags dynamic; }\n' "$set_name"
+        else
+            printf '    set %s { type ipv6_addr; size 65535; flags dynamic; }\n' "$set_name"
+        fi
+    done <<<"$entries"
+
+    if [[ -n "$entries" ]]; then
+        printf '    chain input {\n'
+        printf '        type filter hook input priority -1; policy accept;\n'
+        while IFS='|' read -r family port limit; do
+            [[ -n "$family" && -n "$port" && -n "$limit" ]] || continue
+            set_name="v${family}_p${port}"
+            if [[ "$family" == "4" ]]; then
+                printf '        tcp dport %s ct state new add @%s { ip saddr ct count over %s } reject with tcp reset comment "%s"\n' "$port" "$set_name" "$limit" "$(port_connlimit_comment "$port")"
+            else
+                printf '        tcp dport %s ct state new add @%s { ip6 saddr ct count over %s } reject with tcp reset comment "%s"\n' "$port" "$set_name" "$limit" "$(port_connlimit_comment "$port")"
+            fi
+        done <<<"$entries"
+        printf '    }\n'
+    fi
+    printf '}\n'
+}
+
+port_connlimit_nft_ensure_table() {
+    nft list table inet "$PORT_CONNLIMIT_NFT_TABLE" >/dev/null 2>&1 && return 0
+    nft add table inet "$PORT_CONNLIMIT_NFT_TABLE" >/dev/null 2>&1 || \
+        nft list table inet "$PORT_CONNLIMIT_NFT_TABLE" >/dev/null 2>&1
+}
+
+enable_nft_port_connlimit_persistence() {
+    local nft_path unit_dir unit_tmp
+    nft_path=$(port_connlimit_command_path nft 2>/dev/null) || return 1
+    command -v systemctl >/dev/null 2>&1 || return 1
+
+    unit_dir=$(dirname "$PORT_CONNLIMIT_NFT_UNIT")
+    mkdir -p "$unit_dir" || return 1
+    unit_tmp=$(mktemp "${unit_dir}/.${PORT_CONNLIMIT_NFT_SERVICE}.XXXXXX") || return 1
+    if ! render_nft_port_connlimit_service "$nft_path" >"$unit_tmp"; then
+        rm -f "$unit_tmp"
+        return 1
+    fi
+    chmod 0644 "$unit_tmp" 2>/dev/null || true
+    if ! mv -f "$unit_tmp" "$PORT_CONNLIMIT_NFT_UNIT"; then
+        rm -f "$unit_tmp"
+        return 1
+    fi
+    systemctl daemon-reload >/dev/null 2>&1 || return 1
+    systemctl enable "$PORT_CONNLIMIT_NFT_SERVICE" >/dev/null 2>&1
+}
+
+render_nft_port_connlimit_service() {
+    local nft_path="$1"
+    cat <<EOF
+[Unit]
+Description=VPS-Optimize port connection limits
+After=nftables.service firewalld.service ufw.service
+
+[Service]
+Type=oneshot
+ExecStartPre=-${nft_path} add table inet ${PORT_CONNLIMIT_NFT_TABLE}
+ExecStart=${nft_path} -f ${PORT_CONNLIMIT_NFT_CONFIG}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+write_port_connlimit_nft_config() {
+    local entries="$1"
+    local apply_runtime="${2:-0}"
+    local config_dir tmp_file output
+
+    config_dir=$(dirname "$PORT_CONNLIMIT_NFT_CONFIG")
+    mkdir -p "$config_dir" || return 1
+    port_connlimit_nft_ensure_table || return 1
+    tmp_file=$(mktemp "${config_dir}/.port-connlimit.nft.XXXXXX") || return 1
+    render_port_connlimit_nft_config "$entries" >"$tmp_file"
+
+    if ! output=$(nft -c -f "$tmp_file" 2>&1); then
+        rm -f "$tmp_file"
+        echo -e "$(localized_text "${RED}nftables 配置校验失败：${output}${PLAIN}" "${RED}nftables configuration validation failed: ${output}${PLAIN}" "${RED}Ошибка проверки конфигурации nftables: ${output}${PLAIN}")"
+        return 1
+    fi
+    if [[ "$apply_runtime" -eq 1 ]] && ! output=$(nft -f "$tmp_file" 2>&1); then
+        rm -f "$tmp_file"
+        echo -e "$(localized_text "${RED}nftables 原子更新失败：${output}${PLAIN}" "${RED}Atomic nftables update failed: ${output}${PLAIN}" "${RED}Не удалось атомарно обновить nftables: ${output}${PLAIN}")"
+        return 1
+    fi
+    chmod 0600 "$tmp_file" 2>/dev/null || true
+    if ! mv -f "$tmp_file" "$PORT_CONNLIMIT_NFT_CONFIG"; then
+        rm -f "$tmp_file"
+        return 1
+    fi
+    if ! enable_nft_port_connlimit_persistence; then
+        echo -e "$(localized_text "${YELLOW}nftables 运行时规则已更新，但未能启用 ${PORT_CONNLIMIT_NFT_SERVICE}，重启恢复状态需手动确认。${PLAIN}" "${YELLOW}The nftables runtime rules were updated, but ${PORT_CONNLIMIT_NFT_SERVICE} could not be enabled; boot restoration must be checked manually.${PLAIN}" "${YELLOW}Правила nftables обновлены, но не удалось включить ${PORT_CONNLIMIT_NFT_SERVICE}; восстановление после загрузки необходимо проверить вручную.${PLAIN}")"
+        return 1
+    fi
+    return 0
+}
+
+remove_saved_port_connlimit_legacy_rules() {
+    local file dir tmp_file rc=0
+    local files=(
+        /etc/iptables/rules.v4
+        /etc/iptables/rules.v6
+        /etc/sysconfig/iptables
+        /etc/sysconfig/ip6tables
+    )
+
+    for file in "${files[@]}"; do
+        [[ -f "$file" ]] || continue
+        grep -Fq 'VPSO_CONN_LIMIT_PORT_' "$file" 2>/dev/null || continue
+        dir=$(dirname "$file")
+        tmp_file=$(mktemp "${dir}/.vpso-connlimit-clean.XXXXXX") || {
+            rc=1
+            continue
+        }
+        if awk 'index($0, "VPSO_CONN_LIMIT_PORT_") == 0 { print }' "$file" >"$tmp_file" && \
+            chmod --reference="$file" "$tmp_file" 2>/dev/null && \
+            chown --reference="$file" "$tmp_file" 2>/dev/null && \
+            mv -f "$tmp_file" "$file"; then
+            :
+        else
+            rm -f "$tmp_file"
+            rc=1
+        fi
+    done
+    return "$rc"
+}
+
+delete_port_connlimit_legacy_entry() {
+    local family="$1"
+    local port="$2"
+    local limit="$3"
+    local cmd mask comment
+
+    if [[ "$family" == "4" ]]; then
+        cmd=iptables
+        mask=32
+    else
+        cmd=ip6tables
+        mask=128
+    fi
+    command -v "$cmd" >/dev/null 2>&1 || return 1
+    comment=$(port_connlimit_comment "$port")
+    "$cmd" -D INPUT \
+        -p tcp --dport "$port" --syn \
+        -m connlimit --connlimit-above "$limit" --connlimit-mask "$mask" --connlimit-saddr \
+        -m comment --comment "$comment" \
+        -j REJECT --reject-with tcp-reset >/dev/null 2>&1
+}
+
+cleanup_port_connlimit_legacy_rules() {
+    local legacy_entries="$1"
+    local family port limit remaining removed=0 rc=0
+
+    while IFS='|' read -r family port limit; do
+        [[ -n "$family" && -n "$port" && -n "$limit" ]] || continue
+        if delete_port_connlimit_legacy_entry "$family" "$port" "$limit"; then
+            removed=$((removed + 1))
+        else
+            rc=1
+        fi
+    done <<<"$legacy_entries"
+    remove_saved_port_connlimit_legacy_rules || rc=1
+    remaining=$(( $(port_connlimit_runtime_rule_count iptables) + $(port_connlimit_runtime_rule_count ip6tables) ))
+    (( remaining == 0 )) || rc=1
+
+    if (( removed > 0 )); then
+        echo -e "$(localized_text "${GREEN}已迁移并清理 ${removed} 条旧 iptables/ip6tables connlimit 规则。${PLAIN}" "${GREEN}Migrated and removed ${removed} legacy iptables/ip6tables connlimit rule(s).${PLAIN}" "${GREEN}Перенесено и удалено старых правил iptables/ip6tables connlimit: ${removed}.${PLAIN}")"
+    fi
+    if (( rc != 0 )); then
+        echo -e "$(localized_text "${YELLOW}部分旧 connlimit 规则或保存快照清理失败；剩余运行时规则 ${remaining} 条，可能与 nftables 限制叠加。${PLAIN}" "${YELLOW}Some legacy connlimit rules or saved snapshots could not be removed; ${remaining} runtime rule(s) remain and may overlap the nftables limits.${PLAIN}" "${YELLOW}Не удалось удалить часть старых правил connlimit или сохранённых снимков; осталось правил во время выполнения: ${remaining}. Они могут применяться вместе с ограничениями nftables.${PLAIN}")"
+    fi
+    return "$rc"
+}
+
+run_nft_port_connlimit_action() {
+    local action="$1"
+    local port="$2"
+    local limit="$3"
+    local apply_ipv6="$4"
+    local nft_entries legacy_entries merged_entries current_entries updated_entries match_count
+    local families=(4)
+
+    [[ "$apply_ipv6" -eq 1 ]] && families+=(6)
+    nft_entries=$(port_connlimit_nft_rule_entries)
+    legacy_entries=$(port_connlimit_legacy_rule_entries)
+    merged_entries=$(printf '%s\n%s\n' "$nft_entries" "$legacy_entries" | port_connlimit_merge_rule_entries)
+    current_entries=$(printf '%s\n' "$nft_entries" | port_connlimit_merge_rule_entries)
+
+    if [[ "$action" == "delete" ]]; then
+        match_count=$(printf '%s\n' "$merged_entries" | awk -F '|' -v port="$port" -v limit="$limit" -v ipv6="$apply_ipv6" '
+            $2 == port && $3 == limit && ($1 == 4 || (ipv6 == 1 && $1 == 6)) { count++ }
+            END { print count + 0 }
+        ')
+        if (( match_count == 0 )); then
+            echo -e "$(localized_text "${YELLOW}未找到 nftables 或旧 iptables 匹配规则：端口 ${port}，连接数 ${limit}。${PLAIN}" "${YELLOW}No matching nftables or legacy iptables rule found for port ${port}, connection limit ${limit}.${PLAIN}" "${YELLOW}Не найдено подходящее правило nftables или старое правило iptables для порта ${port} с лимитом ${limit}.${PLAIN}")"
+            return 1
+        fi
+    fi
+
+    updated_entries=$(port_connlimit_update_rule_entries "$merged_entries" "$action" "$port" "$limit" "${families[@]}" | port_connlimit_merge_rule_entries)
+    if [[ "$action" == "add" && -z "$legacy_entries" && "$updated_entries" == "$current_entries" ]]; then
+        if write_port_connlimit_nft_config "$current_entries" 0; then
+            echo -e "$(localized_text "${BLUE}nftables 已存在相同限制：端口 ${port}，每来源 IP 最大并发 ${limit}。${PLAIN}" "${BLUE}The same nftables limit already exists for port ${port}: ${limit} concurrent connections per source IP.${PLAIN}" "${BLUE}Такое ограничение nftables уже существует для порта ${port}: ${limit} подключений на исходный IP-адрес.${PLAIN}")"
+            return 0
+        fi
+        return 1
+    fi
+    if ! write_port_connlimit_nft_config "$updated_entries" 1; then
+        return 1
+    fi
+
+    cleanup_port_connlimit_legacy_rules "$legacy_entries" || return 1
+    if [[ "$action" == "add" ]]; then
+        echo -e "$(localized_text "${GREEN}nftables 规则已应用：端口 ${port}，每来源 IP 最大并发 ${limit}。${PLAIN}" "${GREEN}nftables rule applied: port ${port}, maximum ${limit} concurrent connections per source IP.${PLAIN}" "${GREEN}Правило nftables применено: порт ${port}, не более ${limit} одновременных подключений на исходный IP-адрес.${PLAIN}")"
+    else
+        echo -e "$(localized_text "${GREEN}nftables 规则已删除：端口 ${port}，连接数 ${limit}。${PLAIN}" "${GREEN}nftables rule removed: port ${port}, connection limit ${limit}.${PLAIN}" "${GREEN}Правило nftables удалено: порт ${port}, лимит подключений ${limit}.${PLAIN}")"
     fi
 }
 
@@ -170,9 +570,33 @@ port_connlimit_saved_rule_fingerprints_for_file() {
 
 port_connlimit_runtime_rule_fingerprints() {
     {
+        while IFS='|' read -r family port limit; do
+            [[ -n "$family" && -n "$port" && -n "$limit" ]] || continue
+            printf 'nftables:%s|%s|%s|%s\n' "$family" "$port" "$limit" "$(port_connlimit_comment "$port")"
+        done < <(port_connlimit_nft_rule_entries)
         port_connlimit_runtime_rule_fingerprints_for_family "IPv4" iptables
         port_connlimit_runtime_rule_fingerprints_for_family "IPv6" ip6tables
     } | sort -u
+}
+
+port_connlimit_nft_saved_rule_fingerprints() {
+    [[ -f "$PORT_CONNLIMIT_NFT_CONFIG" ]] || return 0
+    awk '
+        /comment "VPSO_CONN_LIMIT_PORT_[0-9]+"/ {
+            family = ""
+            port = ""
+            limit = ""
+            for (i = 1; i <= NF; i++) {
+                if ($i == "dport" && i < NF) port = $(i + 1)
+                if ($i == "over" && i < NF) limit = $(i + 1)
+                if ($i == "ip" && $(i + 1) == "saddr") family = "4"
+                if ($i == "ip6" && $(i + 1) == "saddr") family = "6"
+            }
+            if (family != "" && port ~ /^[0-9]+$/ && limit ~ /^[0-9]+$/) {
+                print "nftables:" family "|" port "|" limit "|VPSO_CONN_LIMIT_PORT_" port
+            }
+        }
+    ' "$PORT_CONNLIMIT_NFT_CONFIG" | sort -u
 }
 
 port_connlimit_saved_rule_fingerprints_for_backend() {
@@ -189,6 +613,7 @@ port_connlimit_saved_rule_fingerprints_for_backend() {
 
 port_connlimit_known_saved_rule_fingerprints() {
     {
+        port_connlimit_nft_saved_rule_fingerprints
         port_connlimit_saved_rule_fingerprints_for_file "IPv4" /etc/iptables/rules.v4
         port_connlimit_saved_rule_fingerprints_for_file "IPv6" /etc/iptables/rules.v6
         port_connlimit_saved_rule_fingerprints_for_file "IPv4" /etc/sysconfig/iptables
@@ -210,15 +635,24 @@ print_port_connlimit_health_summary() {
     local backend runtime_rules saved_rules known_saved_rules
     local runtime_count saved_count known_saved_count backend_label consistency risk
 
-    backend=$(port_connlimit_persistence_backend)
+    if port_connlimit_nft_is_managed; then
+        backend="nftables"
+    else
+        backend=$(port_connlimit_persistence_backend)
+    fi
     runtime_rules=$(port_connlimit_runtime_rule_fingerprints)
-    saved_rules=$(port_connlimit_saved_rule_fingerprints_for_backend "$backend")
+    if [[ "$backend" == "nftables" ]]; then
+        saved_rules=$(port_connlimit_nft_saved_rule_fingerprints)
+    else
+        saved_rules=$(port_connlimit_saved_rule_fingerprints_for_backend "$backend")
+    fi
     known_saved_rules=$(port_connlimit_known_saved_rule_fingerprints)
     runtime_count=$(port_connlimit_fingerprint_count "$runtime_rules")
     saved_count=$(port_connlimit_fingerprint_count "$saved_rules")
     known_saved_count=$(port_connlimit_fingerprint_count "$known_saved_rules")
 
     case "$backend" in
+        nftables) backend_label="${GREEN}nftables (${PORT_CONNLIMIT_NFT_SERVICE})${PLAIN}" ;;
         netfilter-persistent) backend_label="${GREEN}netfilter-persistent${PLAIN}" ;;
         rhel-iptables-services) backend_label="${GREEN}rhel-iptables-services${PLAIN}" ;;
         *) backend_label="$(localized_text "${YELLOW}未检测到可用后端${PLAIN}" "${YELLOW}No available backend detected${PLAIN}" "${YELLOW}Доступная бэкенд не обнаружена${PLAIN}")" ;;
@@ -269,7 +703,7 @@ print_port_connlimit_persistence_unavailable() {
     echo -e "$(localized_text "${YELLOW}当前 connlimit 规则只在本次运行期生效，重启后可能丢失或恢复旧快照。${PLAIN}" "${YELLOW}The current connlimit rule only takes effect during this running period. Old snapshots may be lost or restored after restarting.${PLAIN}" "${YELLOW}Текущее правило connlimit вступает в силу только в течение этого периода работы. Старые снимки могут быть потеряны или восстановлены после перезапуска.${PLAIN}")"
 }
 
-print_port_connlimit_persistence_status() {
+print_legacy_port_connlimit_persistence_status() {
     local v4_runtime v6_runtime v4_saved v6_saved backend
     local v4_file deb_v4_saved deb_v6_saved rhel_v4_saved rhel_v6_saved
 
@@ -329,6 +763,39 @@ print_port_connlimit_persistence_status() {
         echo -e "$(localized_text "${GREEN}  已在当前可用的保存文件中检测到脚本规则标记，重启恢复还取决于对应恢复服务是否启用。${PLAIN}" "${GREEN}A script rule tag has been detected in a currently available save file. Restarting recovery also depends on whether the corresponding recovery service is enabled.${PLAIN}" "${GREEN}В доступном в данный момент файле сохранения обнаружен тег правила сценария. Перезапуск восстановления также зависит от того, включена ли соответствующая служба восстановления.${PLAIN}")"
     else
         echo -e "$(localized_text "${BLUE}  当前没有检测到脚本添加的运行时 connlimit 规则。${PLAIN}" "${BLUE}Runtime connlimit rules added by the script are not currently detected.${PLAIN}" "${BLUE}Правила connlimit во время выполнения, добавленные сценарием, в настоящее время не обнаружены.${PLAIN}")"
+    fi
+}
+
+print_nft_port_connlimit_persistence_status() {
+    local runtime_count saved_count legacy_runtime service_enabled service_active
+    runtime_count=$(port_connlimit_nft_rule_entries | grep -c . || true)
+    saved_count=$(port_connlimit_persisted_rule_count "$PORT_CONNLIMIT_NFT_CONFIG")
+    legacy_runtime=$(( $(port_connlimit_runtime_rule_count iptables) + $(port_connlimit_runtime_rule_count ip6tables) ))
+    service_enabled="unknown"
+    service_active="unknown"
+    if command -v systemctl >/dev/null 2>&1; then
+        service_enabled=$(systemctl is-enabled "$PORT_CONNLIMIT_NFT_SERVICE" 2>/dev/null || true)
+        service_active=$(systemctl is-active "$PORT_CONNLIMIT_NFT_SERVICE" 2>/dev/null || true)
+    fi
+
+    echo -e "$(localized_text "${CYAN}持久化检查：${PLAIN}" "${CYAN}Persistence check:${PLAIN}" "${CYAN}Проверка сохранения:${PLAIN}")"
+    echo "$(localized_text "  后端：原生 nftables；专用表：inet ${PORT_CONNLIMIT_NFT_TABLE}" "  Backend: native nftables; table: inet ${PORT_CONNLIMIT_NFT_TABLE}" "  Бэкенд: нативный nftables; таблица: inet ${PORT_CONNLIMIT_NFT_TABLE}")"
+    echo "$(localized_text "  运行时规则：${runtime_count} 条；配置文件：${PORT_CONNLIMIT_NFT_CONFIG} 中 ${saved_count} 条。" "  Runtime rules: ${runtime_count}; configuration file: ${saved_count} in ${PORT_CONNLIMIT_NFT_CONFIG}." "  Правила во время выполнения: ${runtime_count}; в файле ${PORT_CONNLIMIT_NFT_CONFIG}: ${saved_count}.")"
+    echo "$(localized_text "  开机恢复：${PORT_CONNLIMIT_NFT_SERVICE} enabled=${service_enabled:-unknown}, active=${service_active:-unknown}。" "  Boot restore: ${PORT_CONNLIMIT_NFT_SERVICE} enabled=${service_enabled:-unknown}, active=${service_active:-unknown}." "  Восстановление при загрузке: ${PORT_CONNLIMIT_NFT_SERVICE} enabled=${service_enabled:-unknown}, active=${service_active:-unknown}.")"
+    if (( legacy_runtime > 0 )); then
+        echo -e "$(localized_text "${YELLOW}  检测到 ${legacy_runtime} 条遗留 iptables/ip6tables 规则，可能与 nftables 限制叠加。${PLAIN}" "${YELLOW}  Found ${legacy_runtime} legacy iptables/ip6tables rule(s), which may overlap the nftables limits.${PLAIN}" "${YELLOW}  Обнаружено старых правил iptables/ip6tables: ${legacy_runtime}; они могут применяться вместе с ограничениями nftables.${PLAIN}")"
+    elif [[ "$runtime_count" -eq "$saved_count" && "$service_enabled" == "enabled" ]]; then
+        echo -e "$(localized_text "${GREEN}  运行时规则、配置文件和开机恢复状态一致。${PLAIN}" "${GREEN}  Runtime rules, configuration file, and boot restoration are consistent.${PLAIN}" "${GREEN}  Правила, файл конфигурации и восстановление при загрузке согласованы.${PLAIN}")"
+    else
+        echo -e "$(localized_text "${YELLOW}  运行时、配置文件或开机恢复状态不一致。${PLAIN}" "${YELLOW}  Runtime, configuration file, or boot restoration state is inconsistent.${PLAIN}" "${YELLOW}  Состояние правил, файла конфигурации или восстановления при загрузке не согласовано.${PLAIN}")"
+    fi
+}
+
+print_port_connlimit_persistence_status() {
+    if port_connlimit_nft_is_managed; then
+        print_nft_port_connlimit_persistence_status
+    else
+        print_legacy_port_connlimit_persistence_status
     fi
 }
 
@@ -425,7 +892,7 @@ save_rhel_port_connlimit_persistence() {
     return "$rc"
 }
 
-save_port_connlimit_persistence() {
+save_legacy_port_connlimit_persistence() {
     local output backend
     local v4_runtime v6_runtime v4_saved v6_saved
 
@@ -466,6 +933,24 @@ save_port_connlimit_persistence() {
     return 0
 }
 
+save_nft_port_connlimit_persistence() {
+    local entries
+    entries=$(port_connlimit_nft_rule_entries)
+    if write_port_connlimit_nft_config "$entries" 0; then
+        echo -e "$(localized_text "${GREEN}nftables 配置已保存到 ${PORT_CONNLIMIT_NFT_CONFIG}，并启用 ${PORT_CONNLIMIT_NFT_SERVICE}。${PLAIN}" "${GREEN}nftables configuration saved to ${PORT_CONNLIMIT_NFT_CONFIG}; ${PORT_CONNLIMIT_NFT_SERVICE} is enabled.${PLAIN}" "${GREEN}Конфигурация nftables сохранена в ${PORT_CONNLIMIT_NFT_CONFIG}; служба ${PORT_CONNLIMIT_NFT_SERVICE} включена.${PLAIN}")"
+        return 0
+    fi
+    return 1
+}
+
+save_port_connlimit_persistence() {
+    if port_connlimit_nft_is_managed; then
+        save_nft_port_connlimit_persistence
+    else
+        save_legacy_port_connlimit_persistence
+    fi
+}
+
 auto_save_port_connlimit_persistence_after_change() {
     local action_label="$1"
 
@@ -481,12 +966,20 @@ auto_save_port_connlimit_persistence_after_change() {
 }
 
 func_save_port_connlimit_persistence() {
+    local effect scope
     print_port_connlimit_persistence_status
     echo ""
+    if port_connlimit_nft_is_managed; then
+        effect="$(localized_text "保存 nftables 专用表配置并启用 ${PORT_CONNLIMIT_NFT_SERVICE}" "save the dedicated nftables table configuration and enable ${PORT_CONNLIMIT_NFT_SERVICE}" "сохранить конфигурацию выделенной таблицы nftables и включить ${PORT_CONNLIMIT_NFT_SERVICE}")"
+        scope="$(localized_text "不修改 UFW/firewalld，也不保存其他 nftables 表" "do not modify UFW/firewalld or save other nftables tables" "не изменять UFW/firewalld и не сохранять другие таблицы nftables")"
+    else
+        effect="$(localized_text "按系统可用机制保存 iptables/ip6tables 快照" "save the iptables/ip6tables snapshot using the available system mechanism" "сохранить снимок iptables/ip6tables через доступный системный механизм")"
+        scope="$(localized_text "不清空运行时规则，也不修改 UFW/firewalld" "do not clear runtime rules or modify UFW/firewalld" "не очищать текущие правила и не изменять UFW/firewalld")"
+    fi
     confirm_risk_action "$(localized_text "保存端口并发连接限制持久化快照" "Save port concurrent connection limit persistent snapshot" "Сохранить постоянный снимок ограничения количества одновременных подключений к порту")" \
-        "$(localized_text "按当前系统已检测到的持久化机制保存 iptables/ip6tables 快照；Debian/Ubuntu 优先 netfilter-persistent，RHEL 系列优先已有 iptables-services" "Save the iptables/ip6tables snapshot according to the persistence mechanism detected by the current system; Debian/Ubuntu gives priority to netfilter-persistent, and RHEL series gives priority to existing iptables-services" "Сохраните снимок iptables/ip6tables в соответствии с механизмом сохранения, обнаруженным текущей системой; Debian/Ubuntu отдает приоритет постоянным службам netfilter, а серия RHEL отдает приоритет существующим службам iptables.")" \
-        "$(localized_text "添加或删除 connlimit 规则后脚本会自动尝试保存；本入口用于手动检查或失败后重试" "After adding or deleting the connlimit rule, the script will automatically try to save; this entry is used for manual checking or retrying after failure." "После добавления или удаления правила connlimit скрипт автоматически попытается сохранить его; эта запись используется для ручной проверки или повторной попытки после неудачи.")" \
-        "$(localized_text "本操作不清空运行时规则，不改写 UFW/firewalld 放行配置；它只刷新额外 connlimit 规则所在的 iptables 快照。" "This operation does not clear the runtime rules and does not rewrite the UFW/firewalld release configuration; it only refreshes the iptables snapshot where the additional connlimit rules are located." "Эта операция не очищает правила времени выполнения и не перезаписывает конфигурацию выпуска UFW/firewalld; он обновляет только снимок iptables, в котором расположены дополнительные правила connlimit.")" || {
+        "$effect" \
+        "$(localized_text "用于手动检查或失败后重试" "use this for a manual check or retry after failure" "использовать для ручной проверки или повторной попытки после ошибки")" \
+        "$scope" || {
         echo -e "$(localized_text "${BLUE}已取消保存端口并发连接限制持久化快照。${PLAIN}" "${BLUE}The port concurrent connection limit persistent snapshot has been canceled.${PLAIN}" "${BLUE}Постоянный снимок ограничения количества одновременных подключений к порту был отменен.${PLAIN}")"
         return 0
     }
@@ -518,7 +1011,7 @@ port_connlimit_loopback_only_listener() {
 print_port_connlimit_scope_notice() {
     local port="$1"
 
-    echo -e "$(localized_text "${YELLOW}说明：本功能写入的是额外 iptables/ip6tables connlimit 规则，不等同于 UFW/firewalld 的端口放行规则。${PLAIN}" "${YELLOW}Description: This function writes additional iptables/ip6tables connlimit rules, which are not equivalent to the port allow rules of UFW/firewalld.${PLAIN}" "${YELLOW}Описание: Эта функция записывает дополнительные правила connlimit iptables/ip6tables, которые не эквивалентны правилам освобождения портов UFW/firewalld.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}说明：本功能优先使用原生 nftables；不支持 ct count 时回退到 iptables/ip6tables connlimit。该限制不等同于 UFW/firewalld 端口放行。${PLAIN}" "${YELLOW}This feature prefers native nftables and falls back to iptables/ip6tables connlimit when ct count is unavailable. It does not allow ports through UFW/firewalld.${PLAIN}" "${YELLOW}Функция предпочитает нативный nftables и переходит на iptables/ip6tables connlimit, если ct count недоступен. Она не открывает порты в UFW/firewalld.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}默认按“每个来源 IP”限制 TCP 并发连接数，不做全局总连接数限制。${PLAIN}" "${YELLOW}By default, the limit applies per source IP, not to the global connection total.${PLAIN}" "${YELLOW}По умолчанию ограничение применяется отдельно к каждому исходному IP-адресу, а не к общему числу соединений.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}添加/删除后会自动尝试刷新持久化快照；系统不支持时会明确提示只在本次运行期生效。${PLAIN}" "${YELLOW}After is added/deleted, it will automatically try to refresh the persistent snapshot; if the system does not support it, it will clearly prompt that it will only take effect during this running period.${PLAIN}" "${YELLOW}После добавления/удаления он автоматически попытается обновить постоянный снимок; если система его не поддерживает, она четко сообщит, что оно вступит в силу только в течение этого периода работы.${PLAIN}")"
 
@@ -687,35 +1180,51 @@ read_connlimit_limit() {
 }
 
 func_add_port_connlimit_rule() {
-    local port limit apply_ipv6 rc=0 touched=0
+    local port limit apply_ipv6 backend effect rollback marker rc=0 touched=0 include_ipv6=1
 
     read_connlimit_port port || return 0
     read_connlimit_limit limit || return 0
-    read_trimmed apply_ipv6 "$(localized_text "是否同时应用 IPv6？(Y/n，默认 y): " "Do you want to apply IPv6 at the same time? (Y/n, default y):" "Хотите ли вы одновременно применить IPv6? (Да/нет, по умолчанию y):")"
+    read_trimmed apply_ipv6 "$(localized_text "是否同时应用 IPv6？(Y/n，默认 y): " "Apply to IPv6 too? (Y/n, default y):" "Применить также к IPv6? (Y/n, по умолчанию y):")"
+    is_no "$apply_ipv6" && include_ipv6=0
 
     print_port_connlimit_scope_notice "$port"
-    echo -e "$(localized_text "${CYAN}即将添加规则标记：$(port_connlimit_comment "$port")${PLAIN}" "${CYAN}Will soon add rule tags: $(port_connlimit_comment \"$port\")${PLAIN}" "${CYAN}В скоро будут добавлены теги правил: $(port_connlimit_comment \"$port\").${PLAIN}")"
+    marker=$(port_connlimit_comment "$port")
+    echo -e "$(localized_text "${CYAN}规则标记：${marker}${PLAIN}" "${CYAN}Rule marker: ${marker}${PLAIN}" "${CYAN}Метка правила: ${marker}${PLAIN}")"
 
-    ensure_connlimit_tool iptables "IPv4" || return 1
-    if is_yes "$apply_ipv6"; then
-        ensure_connlimit_tool ip6tables "IPv6" || return 1
+    if port_connlimit_nft_is_managed || ensure_nft_connlimit_support; then
+        backend="nftables"
+        effect="$(localized_text "在 nftables 专用表中使用 ct count 按来源 IP 限制并发，并原子更新整张表" "use ct count in a dedicated nftables table to limit concurrency per source IP and update the table atomically" "использовать ct count в выделенной таблице nftables для ограничения по исходному IP-адресу и атомарного обновления таблицы")"
+        rollback="$(localized_text "回到本菜单删除同端口和连接数；必要时删除 nftables 表 ${PORT_CONNLIMIT_NFT_TABLE}" "Return here to remove the same port and limit; if necessary, delete nftables table ${PORT_CONNLIMIT_NFT_TABLE}" "Вернитесь в это меню и удалите тот же порт и лимит; при необходимости удалите таблицу nftables ${PORT_CONNLIMIT_NFT_TABLE}")"
+    else
+        backend="iptables"
+        effect="$(localized_text "写入 iptables/ip6tables INPUT connlimit 规则，拒绝超过 ${limit} 条并发的新 TCP 连接" "add iptables/ip6tables INPUT connlimit rules and reject new TCP connections above ${limit}" "добавить правила connlimit в INPUT iptables/ip6tables и отклонять новые TCP-подключения сверх ${limit}")"
+        rollback="$(localized_text "回到本菜单删除同端口和连接数；必要时通过云控制台/VNC 清理 iptables 规则" "Return here to remove the same port and limit; if necessary, clear iptables rules through the cloud console/VNC" "Вернитесь в это меню и удалите тот же порт и лимит; при необходимости очистите правила iptables через облачную консоль/VNC")"
+        ensure_connlimit_tool iptables "IPv4" || return 1
+        if (( include_ipv6 == 1 )); then
+            ensure_connlimit_tool ip6tables "IPv6" || return 1
+        fi
+        try_load_connlimit_module
     fi
-    try_load_connlimit_module
 
-    confirm_risk_action "$(localized_text "添加端口 ${port} 并发连接限制" "Add port ${port} concurrent connection limit" "Добавить лимит одновременных подключений порта ${port}")" \
-        "$(localized_text "iptables/ip6tables INPUT 链 connlimit 规则，超过 ${limit} 条并发的新 TCP 连接将被拒绝" "iptables/ip6tables INPUT chain connlimit rule, new TCP connections exceeding ${limit} concurrent connections will be rejected" "Правило iptables/ip6tables INPUT для цепочки connlimit, новые подключения TCP, превышающие количество одновременных подключений ${limit}, будут отклонены.")" \
-        "$(localized_text "回到本菜单按同一端口和连接数删除规则；必要时通过云控制台/VNC 清理 iptables 规则" "Return to this menu to delete rules by the same port and connection number; if necessary, clear the iptables rule through the cloud console/VNC" "Вернитесь в это меню, чтобы удалить правила по тому же порту и номеру подключения; при необходимости очистите правило iptables через облачную консоль/VNC.")" \
-        "$(localized_text "该规则是额外连接数限制，不代表端口已被 UFW/firewalld 放行。" "This is an additional connection limit; it does not mean UFW/firewalld allows the port." "Это дополнительное ограничение соединений; оно не означает, что UFW/firewalld разрешает порт.")" || {
-        echo -e "$(localized_text "${BLUE}已取消添加端口并发连接限制。${PLAIN}" "${BLUE}The added port concurrent connection limit has been cancelled.${PLAIN}" "${BLUE}Ограничение количества одновременных подключений к добавленному порту было отменено.${PLAIN}")"
+    confirm_risk_action "$(localized_text "添加端口 ${port} 并发连接限制" "Add a concurrency limit to port ${port}" "Добавить ограничение подключений для порта ${port}")" \
+        "$effect" \
+        "$rollback" \
+        "$(localized_text "该规则不代表端口已被 UFW/firewalld 放行。" "This rule does not allow the port through UFW/firewalld." "Это правило не открывает порт в UFW/firewalld.")" || {
+        echo -e "$(localized_text "${BLUE}已取消添加端口并发连接限制。${PLAIN}" "${BLUE}Port concurrency limit was not added.${PLAIN}" "${BLUE}Добавление ограничения подключений отменено.${PLAIN}")"
         return 0
     }
+
+    if [[ "$backend" == "nftables" ]]; then
+        run_nft_port_connlimit_action add "$port" "$limit" "$include_ipv6"
+        return $?
+    fi
 
     if run_port_connlimit_rule_action iptables add "$port" "$limit" 32 "IPv4"; then
         touched=1
     else
         rc=1
     fi
-    if is_yes "$apply_ipv6"; then
+    if (( include_ipv6 == 1 )); then
         if run_port_connlimit_rule_action ip6tables add "$port" "$limit" 128 "IPv6"; then
             touched=1
         else
@@ -723,38 +1232,54 @@ func_add_port_connlimit_rule() {
         fi
     fi
     if [[ "$touched" -eq 1 ]]; then
-        auto_save_port_connlimit_persistence_after_change "$(localized_text "添加规则" "Add rule" "Добавить правило")" || true
+        auto_save_port_connlimit_persistence_after_change "$(localized_text "添加规则" "add" "добавления")" || true
     else
-        echo -e "$(localized_text "${YELLOW}提示：添加未完全成功，未自动刷新持久化快照；请先处理上方失败项。${PLAIN}" "${YELLOW}Tip: The addition was not completely successful and the persistent snapshot was not automatically refreshed; please handle the above failure items first.${PLAIN}" "${YELLOW}Совет: добавление не было полностью успешным, и постоянный снимок не обновлялся автоматически; пожалуйста, сначала обработайте вышеуказанные неисправности.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}规则添加不完整，未刷新持久化快照。${PLAIN}" "${YELLOW}Rules were not added completely; the persistent snapshot was not refreshed.${PLAIN}" "${YELLOW}Правила добавлены не полностью; постоянный снимок не обновлён.${PLAIN}")"
     fi
     return "$rc"
 }
 
 func_delete_port_connlimit_rule() {
-    local port limit delete_ipv6 rc=0
+    local port limit delete_ipv6 backend effect rollback marker rc=0 include_ipv6=1
 
     read_connlimit_port port || return 0
     read_connlimit_limit limit || return 0
-    read_trimmed delete_ipv6 "$(localized_text "是否同时删除 IPv6 对应规则？(Y/n，默认 yes): " "Do you want to delete the rules corresponding to IPv6 at the same time? (Y/n, default yes):" "Вы хотите одновременно удалить правила, соответствующие IPv6? (Да/нет, по умолчанию да):")"
+    read_trimmed delete_ipv6 "$(localized_text "是否同时删除 IPv6 规则？(Y/n，默认 y): " "Remove the IPv6 rule too? (Y/n, default y):" "Удалить также правило IPv6? (Y/n, по умолчанию y):")"
+    is_no "$delete_ipv6" && include_ipv6=0
 
     print_port_connlimit_scope_notice "$port"
-    echo -e "$(localized_text "${CYAN}将按端口和连接数精确删除规则标记：$(port_connlimit_comment "$port")${PLAIN}" "${CYAN}Will remove rule tags by port and connection number exactly: $(port_connlimit_comment \"$port\")${PLAIN}" "${CYAN}удалит теги правил точно по порту и номеру соединения: $(port_connlimit_comment \"$port\")${PLAIN}")"
+    marker=$(port_connlimit_comment "$port")
+    echo -e "$(localized_text "${CYAN}规则标记：${marker}${PLAIN}" "${CYAN}Rule marker: ${marker}${PLAIN}" "${CYAN}Метка правила: ${marker}${PLAIN}")"
 
-    ensure_connlimit_tool iptables "IPv4" || return 1
-    if ! is_no "$delete_ipv6"; then
-        ensure_connlimit_tool ip6tables "IPv6" || return 1
+    if port_connlimit_nft_is_managed || ensure_nft_connlimit_support; then
+        backend="nftables"
+        effect="$(localized_text "从 nftables 专用表原子移除匹配限制，并迁移遗留 iptables 规则" "atomically remove the matching limit from the dedicated nftables table and migrate legacy iptables rules" "атомарно удалить лимит из выделенной таблицы nftables и перенести старые правила iptables")"
+        rollback="$(localized_text "如误删，可重新添加同端口和连接数限制" "Re-add the same port and connection limit if needed" "При необходимости снова добавьте тот же порт и лимит подключений")"
+    else
+        backend="iptables"
+        effect="$(localized_text "仅删除端口 ${port}、连接数 ${limit} 和对应脚本标记的 connlimit 规则" "remove only connlimit rules for port ${port}, limit ${limit}, and the matching script marker" "удалить только правила connlimit для порта ${port}, лимита ${limit} и соответствующей метки сценария")"
+        rollback="$(localized_text "如误删，可重新添加同端口和连接数限制" "Re-add the same port and connection limit if needed" "При необходимости снова добавьте тот же порт и лимит подключений")"
+        ensure_connlimit_tool iptables "IPv4" || return 1
+        if (( include_ipv6 == 1 )); then
+            ensure_connlimit_tool ip6tables "IPv6" || return 1
+        fi
     fi
 
     confirm_risk_action "$(localized_text "删除端口 ${port} 并发连接限制" "Delete port ${port} concurrent connection limit" "Удалить лимит одновременных подключений порта ${port}")" \
-        "$(localized_text "仅删除端口 ${port}、连接数 ${limit}、脚本标记为 $(port_connlimit_comment "$port") 的 connlimit 规则" "Delete only the connlimit rules with port ${port}, connection number ${limit}, and script tag $(port_connlimit_comment \"$port\")" "Удалите только правила connlimit с портом ${port}, номером соединения ${limit} и тегом сценария $(port_connlimit_comment \"$port\").")" \
-        "$(localized_text "如误删，可回到本菜单重新添加同端口同连接数限制" "If you delete it by mistake, you can return to this menu and re-add the limit on the number of the same port and the same connection." "Если вы удалили его по ошибке, то можете вернуться в это меню и заново добавить ограничение на количество того же порта и того же соединения.")" \
-        "$(localized_text "本操作不会清空 UFW/firewalld，也不会批量清空 iptables。" "This operation will not clear UFW/firewalld, nor will it clear iptables in batches." "Эта операция не очистит UFW/firewalld и не очистит iptables в пакетном режиме.")" || {
+        "$effect" \
+        "$rollback" \
+        "$(localized_text "本操作不清空 UFW/firewalld，也不删除非 VPS-Optimize 规则。" "This does not clear UFW/firewalld or remove rules not owned by VPS-Optimize." "Операция не очищает UFW/firewalld и не удаляет правила, не принадлежащие VPS-Optimize.")" || {
         echo -e "$(localized_text "${BLUE}已取消删除端口并发连接限制。${PLAIN}" "${BLUE}The port concurrent connection limit has been canceled.${PLAIN}" "${BLUE}Ограничение на количество одновременных подключений к порту отменено.${PLAIN}")"
         return 0
     }
 
+    if [[ "$backend" == "nftables" ]]; then
+        run_nft_port_connlimit_action delete "$port" "$limit" "$include_ipv6"
+        return $?
+    fi
+
     run_port_connlimit_rule_action iptables delete "$port" "$limit" 32 "IPv4" || rc=1
-    if ! is_no "$delete_ipv6"; then
+    if (( include_ipv6 == 1 )); then
         run_port_connlimit_rule_action ip6tables delete "$port" "$limit" 128 "IPv6" || rc=1
     fi
     auto_save_port_connlimit_persistence_after_change "$(localized_text "删除规则" "delete rule" "удалить правило")" || true
@@ -768,8 +1293,18 @@ func_show_port_connlimit_rules() {
     echo -e "$(localized_text "${YELLOW}标记格式：VPSO_CONN_LIMIT_PORT_<端口>${PLAIN}" "${YELLOW}Tag format: VPSO_CONN_LIMIT_PORT_<port>${PLAIN}" "${YELLOW}Формат тега : VPSO_CONN_LIMIT_PORT_<порт>${PLAIN}")"
     echo ""
 
+    if command -v nft >/dev/null 2>&1 && nft list table inet "$PORT_CONNLIMIT_NFT_TABLE" >/dev/null 2>&1; then
+        echo -e "${BOLD}nftables (inet ${PORT_CONNLIMIT_NFT_TABLE}):${PLAIN}"
+        if nft -nn list table inet "$PORT_CONNLIMIT_NFT_TABLE" 2>/dev/null | grep -F 'VPSO_CONN_LIMIT_PORT_'; then
+            found=1
+        else
+            echo "$(localized_text "  未发现 nftables 脚本规则。" "  No managed nftables rules found." "  Управляемые правила nftables не найдены.")"
+        fi
+        echo ""
+    fi
+
     if command -v iptables >/dev/null 2>&1; then
-        echo -e "${BOLD}IPv4:${PLAIN}"
+        echo -e "${BOLD}$(localized_text "旧规则 IPv4" "Legacy IPv4" "Старые правила IPv4"):${PLAIN}"
         if iptables -S INPUT 2>/dev/null | grep -F 'VPSO_CONN_LIMIT_PORT_'; then
             found=1
         else
@@ -781,7 +1316,7 @@ func_show_port_connlimit_rules() {
 
     echo ""
     if command -v ip6tables >/dev/null 2>&1; then
-        echo -e "${BOLD}IPv6:${PLAIN}"
+        echo -e "${BOLD}$(localized_text "旧规则 IPv6" "Legacy IPv6" "Старые правила IPv6"):${PLAIN}"
         if ip6tables -S INPUT 2>/dev/null | grep -F 'VPSO_CONN_LIMIT_PORT_'; then
             found=1
         else
@@ -847,7 +1382,7 @@ show_firewall_menu_help() {
     echo "$(localized_text "计划只代表当前公网监听和 Docker 发布端口，不能判断业务是否仍需对外开放；可按编号排除非必要规则，确认后才应用。" "The plan only represents the current public listening and Docker publishing ports, and cannot determine whether the business still needs to be open to the outside world; unnecessary rules can be excluded by number and applied after confirmation." "План представляет только текущий прослушивание публичной сети и порты публикации Docker и не может определить, нужно ли по-прежнему бизнесу быть открытым для внешнего мира; ненужные правила можно исключить по количеству и применить после подтверждения.")"
     echo "$(localized_text "Docker 映射可能绕过普通 UFW/firewalld 端口规则；排除计划项不会关闭容器映射，需要同时修改 Docker 发布地址或使用 Docker 安全管理。" "Docker mapping may bypass ordinary UFW/firewalld port rules; excluding plan items will not turn off container mapping, and you need to modify the Docker publishing address at the same time or use Docker security management." "Сопоставление Docker может обходить обычные правила порта UFW/firewalld; исключение элементов плана не приведет к отключению сопоставления контейнеров, и вам необходимо одновременно изменить адрес публикации Docker или использовать управление безопасностью Docker.")"
     echo "$(localized_text "手动添加默认只放行 TCP，可明确选择 udp 或 both。删除旧规则默认同时检查 TCP/UDP。" "Manually adding only TCP is allowed by default, you can explicitly select udp or both. Deleting old rules also checks TCP/UDP by default." "По умолчанию разрешено добавление только TCP вручную, вы можете явно выбрать udp или оба. При удалении старых правил также по умолчанию проверяется TCP/UDP.")"
-    echo "$(localized_text "端口并发连接限制用于按公网端口限制每来源 IP 的 TCP 并发连接数，IPv4 使用 iptables connlimit，IPv6 使用 ip6tables connlimit。" "The port concurrent connection limit is used to limit the number of TCP concurrent connections per source IP by public port. IPv4 uses iptables connlimit, and IPv6 uses ip6tables connlimit." "Ограничение одновременных подключений к порту используется для ограничения количества одновременных подключений TCP на IP-адрес источника по порту публичной сети. IPv4 использует connlimit iptables, а IPv6 использует connlimit ip6tables.")"
+    echo "$(localized_text "端口并发连接限制优先使用 nftables ct count；不支持时回退到 iptables/ip6tables connlimit。" "Port concurrency limits prefer nftables ct count and fall back to iptables/ip6tables connlimit when unavailable." "Ограничение подключений предпочитает nftables ct count и при недоступности переходит на iptables/ip6tables connlimit.")"
     echo "$(localized_text "该限制是额外连接数限制规则，不等同于 UFW/firewalld 的端口放行规则；两者可能并存。" "This restriction is an additional connection limit rule and is not equivalent to the UFW/firewalld port access rule; the two may coexist." "Это ограничение является дополнительным правилом ограничения подключений и не эквивалентно правилу освобождения порта UFW/firewalld; они могут сосуществовать.")"
     echo "$(localized_text "添加/删除 connlimit 后会自动尝试刷新持久化快照；[5] 可手动检查或再次保存。系统不支持时会提示当前规则只在本次运行期生效。" "After adding/removing connlimit, it will automatically try to refresh the persistent snapshot; [5] it can be checked manually or saved again. If the system does not support it, it will prompt that the current rule will only take effect during this running period." "После добавления/удаления connlimit он автоматически попытается обновить постоянный снимок; [5] его можно проверить вручную или сохранить снова. Если система его не поддерживает, она предложит, что текущее правило вступит в силу только в течение этого периода работы.")"
     echo "$(localized_text "如果限制公网 443 且当前启用了 443 单入口/端口复用，限制粒度只能是整个公网 443，不能精准到某个入站、SNI、UUID 或用户。" "If public port 443 is restricted and 443 shared entry/port reuse is currently enabled, the restriction granularity can only be the entire public port 443, and cannot be precise to a specific inbound connection, SNI, UUID, or user." "Если публичный порт 443 ограничена и в настоящее время включено повторное использование одной записи/порта 443, степень детализации ограничения может охватывать только всю публичный порт 443 и не может быть точной для конкретного входящего подключения, SNI, UUID или пользователя.")"
