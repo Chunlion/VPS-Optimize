@@ -2871,10 +2871,10 @@ assert_file_contains "docs/443-tcp-peek-engine.md" 'Web 反代引擎可选择 Ca
 subscription_public_hint='公网 HTTPS 访问建议：未启用 443端口复用时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443端口复用时，请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/subscription_apps.sh" "$subscription_public_hint" "Subscription/Komari installers must explain both without Port 443 Reuse and Port 443 Reuse reverse proxy paths."
 assert_dist_contains "$subscription_public_hint" "Release script must include the current Subscription/Komari public HTTPS guidance."
-panel_menu_compact_label='Sing-box 脚本'
+panel_menu_compact_label='Sing-box 管理'
 assert_file_contains "src/menus.sh" "$panel_menu_compact_label" "Panel/tools menu must use the compact script-style label."
 assert_dist_contains "$panel_menu_compact_label" "Release script must include the compact panel/tools menu label."
-panel_help_public_hint='7/8/9 订阅栈，11 Dockge Compose，12 Compose 迁移；公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
+panel_help_public_hint='7/8/9 订阅工具，10 更新订阅工具，13 Komari；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both without Port 443 Reuse and Port 443 Reuse reverse proxy paths."
 assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
 panel_domain_menu_path='主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]'
