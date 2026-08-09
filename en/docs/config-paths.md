@@ -277,12 +277,12 @@ FLVX is deployed using Docker Compose. Install Docker first. The EasyTier and Ta
 
 | path | Description |
 |---|---|
-| `/etc/port-traffic-dog/config.json` | main configuration |
+| `/etc/port-traffic-dog/config.json` | Main configuration, including scheduled Telegram notifications and the custom template |
 | `/etc/port-traffic-dog/traffic_data.json` | traffic statistics |
 | `/etc/port-traffic-dog/daily_usage.json` | Daily data |
 | `/etc/port-traffic-dog/daily_snapshot_state.json` | Daily snapshot status |
 | `/etc/port-traffic-dog/logs/traffic.log` | Log |
-| `/usr/local/bin/port-traffic-dog.sh` | Local script path, used for scheduled tasks if it exists |
+| `/usr/local/bin/port-traffic-dog.sh` | Local script used by the bot service and scheduled tasks |
 
 It also uses:
 
@@ -290,7 +290,7 @@ It also uses:
 |---|---|
 | `nftables` | Port traffic count |
 | `tc` | speed limit |
-| `cron` | Power-on recovery, scheduled save, daily snapshot, monthly reset |
+| `cron` | Boot recovery, scheduled save, daily snapshot, monthly reset, and scheduled Telegram notifications |
 | `conntrack` | Clear connection status |
 
 Check:

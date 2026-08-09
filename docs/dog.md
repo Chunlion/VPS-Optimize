@@ -4,7 +4,7 @@
 
 ## 功能定位
 
-它适合按端口观察用量、给端口设置用量上限、限制带宽，以及通过 Telegram 查询端口流量。
+它适合按端口观察用量、给端口设置用量上限、限制带宽，以及通过 Telegram 手动查询或定时接收流量报告。
 
 它依赖系统组件工作，主要包括：
 
@@ -46,6 +46,7 @@ dog
 ## 准确性边界
 
 - 实时端口累计适合参考，前提是对应 `nftables` counter 和链规则存在，并且没有被清空、重建或被其它工具覆盖。
+- 实时汇总从一次 nftables JSON 快照读取全部端口，并校验 counter 和规则数量；发现缺失或重复规则时不会把异常结果当成 `0` 发送。
 - 日报趋势基于定时快照增量，可能存在小时级跨日误差。
 - 重启、异常断电、内核计数丢失或脚本退出前未及时持久化时，可能出现漏算或回退。
 - 端口段统计是范围聚合，不区分范围内每个端口的单独用量。
@@ -79,7 +80,9 @@ dog
 - 设置配额：进入 `2. 配额/限速管理`，为端口设置月流量配额。
 - 设置限速：进入 `2. 配额/限速管理`，为端口设置带宽限制。
 - 查看日报：进入 `8. 日报与趋势报表`。
-- Telegram 查询：进入 `7. 通知管理 (Telegram 查询)`，部署交互式查询机器人后使用 `/t`、`/all`、`/yday`、`/trend`、`/day YYYY-MM-DD`。
+- Telegram 查询：进入 `7. 通知管理 (Telegram 查询/通知)`，部署交互式查询机器人后使用 `/t`、`/all`、`/yday`、`/trend`、`/day YYYY-MM-DD`。
+- Telegram 通知：通知管理支持立即发送实时汇总，以及每小时、每 6 小时、每 12 小时或每天指定北京时间发送。
+- 通知模板：默认使用内置模板；自定义模板支持 `{server_name}`、`{report}`、`{time}`，并且必须包含 `{report}`。
 - 更新脚本：进入 `5. 检查并热更新脚本`。
 - 卸载脚本：进入 `6. 卸载脚本`。卸载前建议先导出配置。
 
@@ -93,12 +96,12 @@ dog
 | `/etc/port-traffic-dog/daily_usage.json` | 日报累计数据 |
 | `/etc/port-traffic-dog/daily_snapshot_state.json` | 日报快照状态 |
 | `/usr/local/bin/port-traffic-dog.sh` | 本地脚本路径，存在时用于定时任务 |
-| `crontab` 中 dog 相关任务 | 开机恢复、`--save-data`、`--daily-snapshot`、`--daily-reset-check` 等任务 |
+| `crontab` 中 dog 相关任务 | 开机恢复、`--save-data`、`--daily-snapshot`、`--daily-reset-check`、`--scheduled-notify` 等任务 |
 
 查看当前定时任务：
 
 ```bash
-crontab -l | grep -E 'port-traffic-dog|dog.sh|--save-data|--daily-snapshot|--daily-reset-check'
+crontab -l | grep -E 'port-traffic-dog|dog.sh|--save-data|--daily-snapshot|--daily-reset-check|--scheduled-notify'
 ```
 
 ## 排错
@@ -157,6 +160,10 @@ sudo -i
 - `crontab` 中是否存在 `--daily-snapshot` 任务。
 - `/etc/port-traffic-dog/daily_usage.json` 是否存在且 JSON 有效。
 - 监控端口是否有实际流量。
+
+### Telegram 定时通知没有收到
+
+检查 Telegram Bot Token、Chat ID、`cron` 服务和 `--scheduled-notify` 任务。日志位于 `/etc/port-traffic-dog/logs/traffic.log`。如果统计健康检查发现 counter 缺失或规则重复，脚本会取消通知，避免发送错误数字。
 
 ### 配额没有生效
 

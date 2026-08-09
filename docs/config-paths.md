@@ -277,12 +277,12 @@ FLVX 使用 Docker Compose 部署，先安装 Docker。EasyTier 和 Tailscale �
 
 | 路径 | 说明 |
 |---|---|
-| `/etc/port-traffic-dog/config.json` | 主配置 |
+| `/etc/port-traffic-dog/config.json` | 主配置，包含 Telegram 定时通知和自定义模板 |
 | `/etc/port-traffic-dog/traffic_data.json` | 流量统计数据 |
 | `/etc/port-traffic-dog/daily_usage.json` | 日报数据 |
 | `/etc/port-traffic-dog/daily_snapshot_state.json` | 日快照状态 |
 | `/etc/port-traffic-dog/logs/traffic.log` | 日志 |
-| `/usr/local/bin/port-traffic-dog.sh` | 本地脚本路径，存在时用于定时任务 |
+| `/usr/local/bin/port-traffic-dog.sh` | 本地脚本路径，用于机器人服务和定时任务 |
 
 它还会使用：
 
@@ -290,7 +290,7 @@ FLVX 使用 Docker Compose 部署，先安装 Docker。EasyTier 和 Tailscale �
 |---|---|
 | `nftables` | 端口流量计数 |
 | `tc` | 限速 |
-| `cron` | 开机恢复、定时保存、日报快照、月度重置 |
+| `cron` | 开机恢复、定时保存、日报快照、月度重置和 Telegram 定时通知 |
 | `conntrack` | 清理连接状态 |
 
 检查：

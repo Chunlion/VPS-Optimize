@@ -4,7 +4,7 @@
 
 ## Functional positioning
 
-It is suitable for observing usage by port, setting usage limits for ports, limiting bandwidth, and querying port traffic through Telegram.
+It is suitable for observing usage by port, setting usage limits, limiting bandwidth, and querying or receiving scheduled port-traffic reports through Telegram.
 
 It relies on system components to work, mainly including:
 
@@ -46,6 +46,7 @@ Therefore, it is not recommended to use the results of `dog.sh` for accurate rec
 ## accuracy bounds
 
 - Real-time port accumulation is suitable for reference, provided that the corresponding `nftables` counter and chain rules exist and have not been cleared, rebuilt, or overwritten by other tools.
+- A real-time summary reads every port from one nftables JSON snapshot and validates the counters and rule counts. Missing or duplicate rules are reported instead of being sent as zero usage.
 - Daily trends are based on scheduled snapshot increments and may have hour-level cross-day errors.
 - Missing calculations or rollbacks may occur due to restart, abnormal power outage, loss of kernel count, or failure to persist in time before script exit.
 - Port segment statistics are range aggregations and do not distinguish the individual usage of each port within the range.
@@ -79,7 +80,9 @@ These reports are suitable for viewing trends, not strict splitting of bills fro
 - Set quota: Enter `2. Quota/speed limit management` and set the monthly traffic quota for the port.
 - Set speed limit: Enter `2. Quota/speed limit management` and set bandwidth limit for the port.
 - View daily reports: Enter `8. Daily and trend reports`.
-- Telegram query: Enter `7. Notification management (Telegram Query)`, deploy the interactive query robot and use `/t`, `/all`, `/yday`, `/trend`, `/day YYYY-MM-DD`.
+- Telegram query: Enter `7. Notification management (Telegram Query/Notification)`, deploy the interactive query bot, and use `/t`, `/all`, `/yday`, `/trend`, or `/day YYYY-MM-DD`.
+- Telegram notifications: Send a real-time summary immediately or schedule it hourly, every 6 or 12 hours, or once a day at a selected Beijing-time hour.
+- Notification template: The built-in template is used by default. Custom templates support `{server_name}`, `{report}`, and `{time}`, and must contain `{report}`.
 - Update script: Enter `5. Check and hot update scripts`.
 - Uninstall script: Enter `6. uninstall script`. It is recommended to export the configuration before uninstalling.
 
@@ -93,12 +96,12 @@ These reports are suitable for viewing trends, not strict splitting of bills fro
 | `/etc/port-traffic-dog/daily_usage.json` | Daily cumulative data |
 | `/etc/port-traffic-dog/daily_snapshot_state.json` | Daily snapshot status |
 | `/usr/local/bin/port-traffic-dog.sh` | Local script path, used for scheduled tasks if it exists |
-| Dog related tasks in `crontab` | Boot recovery, `--save-data`, `--daily-snapshot`, `--daily-reset-check` and other tasks |
+| Dog related tasks in `crontab` | Boot recovery, `--save-data`, `--daily-snapshot`, `--daily-reset-check`, `--scheduled-notify`, and other tasks |
 
 View current scheduled tasks:
 
 ```bash
-crontab -l | grep -E 'port-traffic-dog|dog.sh|--save-data|--daily-snapshot|--daily-reset-check'
+crontab -l | grep -E 'port-traffic-dog|dog.sh|--save-data|--daily-snapshot|--daily-reset-check|--scheduled-notify'
 ```
 
 ## Troubleshooting
@@ -157,6 +160,10 @@ Check:
 - Whether the `--daily-snapshot` task exists in `crontab`.
 - Whether `/etc/port-traffic-dog/daily_usage.json` exists and JSON is valid.
 - Monitor the port for actual traffic.
+
+### Scheduled Telegram notification is not received
+
+Check the Telegram Bot Token, Chat ID, `cron` service, and `--scheduled-notify` task. Logs are written to `/etc/port-traffic-dog/logs/traffic.log`. A notification is cancelled when the statistics health check finds a missing counter or duplicate rules, so invalid numbers are not sent.
 
 ### Quota is not in effect
 

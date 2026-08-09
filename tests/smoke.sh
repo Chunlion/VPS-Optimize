@@ -1640,8 +1640,24 @@ read_trimmed dog_confirm "确认操作？[Y/n]: " <<< ""
 [[ "$(normalize_main_choice "q")" == "0" ]]
 [[ "$(format_bytes "")" == "0B" ]]
 [[ "$(format_bytes 1023)" == "1023B" ]]
+dog_notification_template=$(render_notification_template '<b>{server_name}</b>|{report}|{time}' 'node-a' 'port 443: 1GB' '2026-08-09 12:00:00')
+[[ "$dog_notification_template" == '<b>node-a</b>|port 443: 1GB|2026-08-09 12:00:00' ]]
+telegram_notification_due 1h 9 13
+telegram_notification_due 6h 9 12
+telegram_notification_due 12h 9 0
+telegram_notification_due daily 9 9
+if telegram_notification_due 6h 9 13 || telegram_notification_due daily 9 8 || telegram_notification_due invalid 9 9; then
+    echo "Unexpected dog Telegram notification schedule match." >&2
+    exit 1
+fi
+dog_nft_snapshot=$(printf '%s' '{"nftables":[{"counter":{"name":"port_443_in","bytes":123}},{"counter":{"name":"port_443_out","bytes":456}}]}' | parse_nft_counter_snapshot)
+[[ "$(jq -r '.port_443_in + .port_443_out' <<< "$dog_nft_snapshot")" == "579" ]]
 declare -f sanitize_nftables_config >/dev/null
 declare -f update_telegram_config >/dev/null
+grep -q '^refresh_nftables_counter_snapshot()' dog.sh
+grep -q '^send_telegram_status_notification()' dog.sh
+grep -q '^run_scheduled_telegram_notification()' dog.sh
+grep -q '^manage_telegram_template()' dog.sh
 
 assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read scripts/modules.list."
 assert_file_contains vps.sh 'src/${module}.sh' "Source checkout entrypoint must source modules from src."
@@ -1896,6 +1912,10 @@ assert_file_contains "docs/dog.md" '商家后台仍应作为账单参考' "dog.s
 assert_file_not_contains "docs/dog.md" '账单级准确' "dog.sh docs must not claim bill-grade accuracy."
 assert_file_not_contains "docs/dog.md" '可作为账单依据' "dog.sh docs must not present dog.sh data as billing evidence."
 assert_file_not_contains "docs/dog.md" '可替代商家账单' "dog.sh docs must not present dog.sh data as a provider-bill replacement."
+assert_file_contains "docs/dog.md" '`--scheduled-notify`' "dog.sh docs must document scheduled Telegram notifications."
+assert_file_contains "docs/dog.md" '`{server_name}`、`{report}`、`{time}`' "dog.sh docs must document Telegram template variables."
+assert_file_contains "en/docs/dog.md" '`{server_name}`, `{report}`, and `{time}`' "English dog.sh docs must document Telegram template variables."
+assert_file_contains "ru/docs/dog.md" '`{server_name}`, `{report}` и `{time}`' "Russian dog.sh docs must document Telegram template variables."
 
 assert_file_contains "docs/xui-custom-manager.md" '支持使用 SQLite 的 3x-ui 2.9.x 和 3.x。' "xui-custom-manager docs must state the supported version ranges."
 assert_file_contains "docs/xui-custom-manager.md" '写库前必须通过只读数据库 schema 检查' "xui-custom-manager docs must require schema checks before writes."

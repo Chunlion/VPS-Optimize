@@ -2,7 +2,7 @@
 #原项目https://github.com/zywe03/realm-xwPF/blob/main/port-traffic-dog.sh
 set -euo pipefail
 
-readonly SCRIPT_VERSION="1.2.6-TG优化版"
+readonly SCRIPT_VERSION="1.2.7-TG通知版"
 readonly SCRIPT_NAME="端口流量狗"
 readonly SCRIPT_PATH="$(realpath "$0")"
 readonly CONFIG_DIR="/etc/port-traffic-dog"
@@ -11,6 +11,8 @@ readonly LOG_FILE="$CONFIG_DIR/logs/traffic.log"
 readonly TRAFFIC_DATA_FILE="$CONFIG_DIR/traffic_data.json"
 readonly DAILY_USAGE_FILE="$CONFIG_DIR/daily_usage.json"
 readonly DAILY_SNAPSHOT_STATE_FILE="$CONFIG_DIR/daily_snapshot_state.json"
+
+NFT_COUNTER_SNAPSHOT=""
 
 readonly RED='\033[0;31m'
 readonly YELLOW='\033[0;33m'
@@ -237,6 +239,16 @@ setup_script_permissions() {
     if [ -f "/usr/local/bin/port-traffic-dog.sh" ]; then chmod +x "/usr/local/bin/port-traffic-dog.sh" 2>/dev/null || true; fi
 }
 
+ensure_local_script_copy() {
+    local local_script="/usr/local/bin/port-traffic-dog.sh"
+    if [ "$SCRIPT_PATH" != "$local_script" ]; then
+        install -m 700 "$SCRIPT_PATH" "$local_script" || return 1
+    else
+        chmod 700 "$local_script" 2>/dev/null || true
+    fi
+    printf '%s' "$local_script"
+}
+
 confirm_danger() {
     local title="$1"
     local impact="$2"
@@ -250,6 +262,8 @@ confirm_danger() {
 }
 
 setup_cron_environment() {
+    local runtime_script
+    runtime_script=$(ensure_local_script_copy) || runtime_script="$SCRIPT_PATH"
     local current_cron=$(crontab -l 2>/dev/null || true)
     if ! echo "$current_cron" | grep -q "^PATH=.*sbin"; then
         local temp_cron=$(mktemp /tmp/port-traffic-dog-cron.XXXXXX)
@@ -261,31 +275,33 @@ setup_cron_environment() {
     
     # 修复：强行注册开机自启任务，确保重启后恢复逻辑被执行
     # 兼容旧版未加引号的条目：只要 @reboot 行里含本脚本路径就视为已注册
-    if ! crontab -l 2>/dev/null | grep -F "$SCRIPT_PATH" | grep -Fq "@reboot"; then
+    if ! crontab -l 2>/dev/null | grep -F "$runtime_script" | grep -Fq "@reboot"; then
         local temp_cron2=$(mktemp)
         crontab -l 2>/dev/null > "$temp_cron2" || true
-        echo "@reboot /bin/bash \"$SCRIPT_PATH\" >/dev/null 2>&1" >> "$temp_cron2"
+        echo "@reboot /bin/bash \"$runtime_script\" >/dev/null 2>&1" >> "$temp_cron2"
         crontab "$temp_cron2" 2>/dev/null || true
         rm -f "$temp_cron2"
     fi
     # 修复：注入高频持久化任务，防止意外死机导致的流量数据蒸发
-    if ! crontab -l 2>/dev/null | grep -Fq -- "--save-data"; then
+    if ! crontab -l 2>/dev/null | grep -F "$runtime_script" | grep -Fq -- "--save-data"; then
         local temp_cron3=$(mktemp)
-        crontab -l 2>/dev/null > "$temp_cron3" || true
+        crontab -l 2>/dev/null | grep -vF -- "--save-data" > "$temp_cron3" || true
         # 每小时第 15 分钟触发一次后台数据存档
-        echo "15 * * * * /bin/bash \"$SCRIPT_PATH\" --save-data >/dev/null 2>&1" >> "$temp_cron3"
+        echo "15 * * * * /bin/bash \"$runtime_script\" --save-data >/dev/null 2>&1" >> "$temp_cron3"
         crontab "$temp_cron3" 2>/dev/null || true
         rm -f "$temp_cron3"
     fi
 
     # 每小时增量采集一次日报快照数据（用于昨日/近7日趋势）
-    if ! crontab -l 2>/dev/null | grep -Fq -- "--daily-snapshot"; then
+    if ! crontab -l 2>/dev/null | grep -F "$runtime_script" | grep -Fq -- "--daily-snapshot"; then
         local temp_cron4=$(mktemp)
-        crontab -l 2>/dev/null > "$temp_cron4" || true
-        echo "10 * * * * /bin/bash \"$SCRIPT_PATH\" --daily-snapshot >/dev/null 2>&1" >> "$temp_cron4"
+        crontab -l 2>/dev/null | grep -vF -- "--daily-snapshot" > "$temp_cron4" || true
+        echo "10 * * * * /bin/bash \"$runtime_script\" --daily-snapshot >/dev/null 2>&1" >> "$temp_cron4"
         crontab "$temp_cron4" 2>/dev/null || true
         rm -f "$temp_cron4"
     fi
+
+    sync_telegram_notification_cron
 }
 
 check_root() {
@@ -316,9 +332,11 @@ init_config() {
       "bot_token": "",
       "chat_id": "",
       "server_name": "",
+      "template": "<b>🐶 {server_name} 端口流量通知</b>\n{report}",
       "status_notifications": {
         "enabled": false,
-        "interval": "1h"
+        "interval": "1h",
+        "daily_hour": 9
       }
     },
     "email": {
@@ -340,6 +358,7 @@ EOF
     fi
     chmod 600 "$CONFIG_FILE" 2>/dev/null || true
     ensure_global_defaults
+    ensure_notification_defaults
     sanitize_nftables_config
     ensure_daily_usage_files
     init_nftables
@@ -467,6 +486,79 @@ update_telegram_config() {
     ) 9> "${CONFIG_DIR}/.config.lock"
 }
 
+ensure_notification_defaults() {
+    if jq -e '
+        . as $root |
+        ($root.notifications.telegram.template | type == "string" and contains("{report}")) and
+        (["1h", "6h", "12h", "daily"] | index($root.notifications.telegram.status_notifications.interval) != null) and
+        ($root.notifications.telegram.status_notifications.daily_hour | type == "number" and . >= 0 and . <= 23)
+    ' "$CONFIG_FILE" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    update_config '
+        .notifications //= {} |
+        .notifications.telegram //= {} |
+        .notifications.telegram.enabled //= false |
+        .notifications.telegram.bot_token //= "" |
+        .notifications.telegram.chat_id //= "" |
+        .notifications.telegram.server_name //= "" |
+        .notifications.telegram.template //= "<b>🐶 {server_name} 端口流量通知</b>\n{report}" |
+        .notifications.telegram.status_notifications //= {} |
+        .notifications.telegram.status_notifications.enabled //= false |
+        .notifications.telegram.status_notifications.interval //= "1h" |
+        .notifications.telegram.status_notifications.daily_hour //= 9 |
+        .notifications.telegram.template |= if type == "string" and contains("{report}") then . else "<b>🐶 {server_name} 端口流量通知</b>\n{report}" end |
+        .notifications.telegram.status_notifications.interval |= if . == "1h" or . == "6h" or . == "12h" or . == "daily" then . else "1h" end |
+        .notifications.telegram.status_notifications.daily_hour |= if type == "number" and . >= 0 and . <= 23 then . else 9 end
+    ' >/dev/null
+}
+
+render_notification_template() {
+    local template="$1"
+    local server_name="$2"
+    local report="$3"
+    local generated_at="$4"
+
+    jq -nr \
+        --arg template "$template" \
+        --arg server_name "$server_name" \
+        --arg report "$report" \
+        --arg generated_at "$generated_at" \
+        '$template
+         | split("{server_name}") | join($server_name)
+         | split("{report}") | join($report)
+         | split("{time}") | join($generated_at)'
+}
+
+telegram_notification_due() {
+    local interval="$1"
+    local daily_hour="$2"
+    local current_hour="$3"
+
+    [[ "$current_hour" =~ ^([0-9]|1[0-9]|2[0-3])$ ]] || return 1
+    case "$interval" in
+        1h) return 0 ;;
+        6h) ((10#$current_hour % 6 == 0)) ;;
+        12h) ((10#$current_hour % 12 == 0)) ;;
+        daily)
+            [[ "$daily_hour" =~ ^([0-9]|1[0-9]|2[0-3])$ ]] || return 1
+            ((10#$current_hour == 10#$daily_hour))
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+parse_nft_counter_snapshot() {
+    jq -ce '
+        reduce (
+            .nftables[]?
+            | select(.counter.name? != null)
+            | .counter
+        ) as $counter ({}; .[$counter.name] = ($counter.bytes // 0))
+    '
+}
+
 show_port_list() {
     local active_ports=($(get_active_ports))
     if [ ${#active_ports[@]} -eq 0 ]; then
@@ -578,9 +670,17 @@ get_nftables_counter_data() {
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
     local input_bytes=0
     local output_bytes=0
+    local port_safe=$(echo "$port" | tr '-' '_')
+
+    if [ -n "$NFT_COUNTER_SNAPSHOT" ]; then
+        if get_nftables_counter_data_from_snapshot "$port"; then
+            return 0
+        fi
+        echo "0 0"
+        return 0
+    fi
 
     if is_port_range "$port"; then
-        local port_safe=$(echo "$port" | tr '-' '_')
         input_bytes=$(nft list counter "$family" "$table_name" "port_${port_safe}_in" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || true)
         output_bytes=$(nft list counter "$family" "$table_name" "port_${port_safe}_out" 2>/dev/null | grep -o 'bytes [0-9]*' | awk '{print $2}' || true)
     else
@@ -592,6 +692,65 @@ get_nftables_counter_data() {
     echo "$input_bytes $output_bytes"
 }
 
+refresh_nftables_counter_snapshot() {
+    local table_name
+    local family
+    local nft_json
+    local parsed
+
+    table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
+    family=$(jq -r '.nftables.family' "$CONFIG_FILE")
+    NFT_COUNTER_SNAPSHOT=""
+
+    nft_json=$(nft -j list table "$family" "$table_name" 2>/dev/null) || return 1
+    parsed=$(printf '%s' "$nft_json" | parse_nft_counter_snapshot) || return 1
+    NFT_COUNTER_SNAPSHOT="$parsed"
+}
+
+get_nftables_counter_data_from_snapshot() {
+    local port="$1"
+    local port_safe
+    local counter_in
+    local counter_out
+
+    [ -n "$NFT_COUNTER_SNAPSHOT" ] || return 1
+    port_safe=$(echo "$port" | tr '-' '_')
+    counter_in="port_${port_safe}_in"
+    counter_out="port_${port_safe}_out"
+
+    jq -er --arg counter_in "$counter_in" --arg counter_out "$counter_out" '
+        if has($counter_in)
+           and has($counter_out)
+           and (.[$counter_in] | type) == "number"
+           and (.[$counter_out] | type) == "number"
+        then "\(.[$counter_in]) \(.[$counter_out])"
+        else empty
+        end
+    ' <<< "$NFT_COUNTER_SNAPSHOT"
+}
+
+validate_traffic_counter_snapshot() {
+    local active_ports=()
+    local port
+    local table_name
+    local family
+    local input_chain
+    local output_chain
+    local forward_chain
+
+    mapfile -t active_ports < <(get_active_ports 2>/dev/null || true)
+    refresh_nftables_counter_snapshot || return 1
+    table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
+    family=$(jq -r '.nftables.family' "$CONFIG_FILE")
+    input_chain=$(nft list chain "$family" "$table_name" input 2>/dev/null) || return 1
+    output_chain=$(nft list chain "$family" "$table_name" output 2>/dev/null) || return 1
+    forward_chain=$(nft list chain "$family" "$table_name" forward 2>/dev/null) || return 1
+    for port in "${active_ports[@]}"; do
+        get_nftables_counter_data_from_snapshot "$port" >/dev/null || return 1
+        port_nftables_rules_are_exact "$port" "$input_chain" "$output_chain" "$forward_chain" || return 1
+    done
+}
+
 save_traffic_data() {
     local temp_file=$(mktemp /tmp/port-traffic-dog-data.XXXXXX)
     local active_ports=($(get_active_ports 2>/dev/null || true))
@@ -599,10 +758,15 @@ save_traffic_data() {
         rm -f "$temp_file"
         return 0
     fi
+    if ! validate_traffic_counter_snapshot; then
+        rm -f "$temp_file"
+        echo "$(get_beijing_time -Iseconds) 实时计数保存失败：nftables counter 快照不完整" >> "$LOG_FILE"
+        return 1
+    fi
     echo '{}' > "$temp_file"
 
     for port in "${active_ports[@]}"; do
-        local traffic_data=($(get_nftables_counter_data "$port"))
+        local traffic_data=($(get_nftables_counter_data_from_snapshot "$port"))
         local current_input=${traffic_data[0]}
         local current_output=${traffic_data[1]}
         if [ $current_input -gt 0 ] || [ $current_output -gt 0 ]; then
@@ -622,7 +786,7 @@ setup_exit_hooks() {
     trap 'save_traffic_data_on_exit; exit 1' INT TERM
 }
 
-save_traffic_data_on_exit() { save_traffic_data >/dev/null 2>&1; }
+save_traffic_data_on_exit() { save_traffic_data >/dev/null 2>&1 || true; }
 
 restore_monitoring_if_needed() {
     local active_ports=($(get_active_ports 2>/dev/null || true))
@@ -798,6 +962,12 @@ show_statistics_health_check() {
                 echo -e "  ${GREEN}forward 链 $counter_in/$counter_out 规则: 存在${NC}"
             else
                 echo -e "  ${RED}forward 链 $counter_in/$counter_out 规则: 缺失${NC}"
+                problems=$((problems + 1))
+            fi
+            if port_nftables_rules_are_exact "$port" "$input_chain" "$output_chain" "$forward_chain"; then
+                echo -e "  ${GREEN}计数规则数量: 正常${NC}"
+            else
+                echo -e "  ${RED}计数规则数量: 缺失或重复${NC}"
                 problems=$((problems + 1))
             fi
         done
@@ -1032,7 +1202,24 @@ get_daily_total_traffic() {
 
 collect_daily_usage_snapshot() {
     local silent_mode=${1:-"false"}
+    (
+        if ! flock -w 30 9; then
+            [ "$silent_mode" = "true" ] || echo -e "${RED}日报快照任务正忙，请稍后重试。${NC}"
+            return 1
+        fi
+        collect_daily_usage_snapshot_locked "$silent_mode"
+    ) 9> "${CONFIG_DIR}/.daily-snapshot.lock"
+}
+
+collect_daily_usage_snapshot_locked() {
+    local silent_mode=${1:-"false"}
     ensure_daily_usage_files
+
+    if ! validate_traffic_counter_snapshot; then
+        echo "$(get_beijing_time -Iseconds) 日报快照失败：nftables counter 快照不完整" >> "$LOG_FILE"
+        [ "$silent_mode" = "true" ] || echo -e "${RED}nftables counter 不完整，未写入日报。请运行 health 检查。${NC}"
+        return 1
+    fi
 
     local day_key=$(get_beijing_time +%F)
     local snapshot_time=$(get_beijing_time -Iseconds)
@@ -1043,7 +1230,7 @@ collect_daily_usage_snapshot() {
 
     local active_ports=($(get_active_ports 2>/dev/null || true))
     for port in "${active_ports[@]}"; do
-        local traffic_data=($(get_nftables_counter_data "$port"))
+        local traffic_data=($(get_nftables_counter_data_from_snapshot "$port"))
         local input_bytes=${traffic_data[0]:-0}
         local output_bytes=${traffic_data[1]:-0}
         local actual_total=$((input_bytes + output_bytes))
@@ -1246,11 +1433,18 @@ format_port_list() {
 show_detailed_port_usage() {
     clear
     local active_ports=($(get_active_ports))
+    local counter_snapshot_ok=true
+    if ! validate_traffic_counter_snapshot; then
+        counter_snapshot_ok=false
+        NFT_COUNTER_SNAPSHOT=""
+    fi
 
     echo -e "${BLUE}=== 端口流量详细视图 ===${NC}"
     print_traffic_scope_notice
     echo "────────────────────────────────────────────────────────"
-    if [ ${#active_ports[@]} -gt 0 ]; then
+    if [ "$counter_snapshot_ok" != "true" ]; then
+        echo -e "${RED}nftables counter 不完整，未显示流量数字。请运行 health 检查。${NC}"
+    elif [ ${#active_ports[@]} -gt 0 ]; then
         format_port_list "display_detail"
     else
         echo -e "${YELLOW}暂无监控端口${NC}"
@@ -1264,7 +1458,14 @@ show_main_menu() {
     clear
     local active_ports=($(get_active_ports))
     local port_count=${#active_ports[@]}
-    local port_actual_total=$(get_daily_total_traffic)
+    local counter_snapshot_ok=true
+    local port_actual_total="统计不可用"
+    if validate_traffic_counter_snapshot; then
+        port_actual_total=$(get_daily_total_traffic)
+    else
+        counter_snapshot_ok=false
+        NFT_COUNTER_SNAPSHOT=""
+    fi
 
     echo -e "${BLUE}=== 端口流量狗 v$SCRIPT_VERSION ===${NC}"
     echo -e "${GREEN}介绍主页:${NC}https://zywe.de | ${GREEN}原项目:${NC}https://github.com/zywe03/realm-xwPF"
@@ -1277,7 +1478,9 @@ show_main_menu() {
     echo -e "${YELLOW}实际端口总流量: $port_actual_total${NC}"
     echo "────────────────────────────────────────────────────────"
 
-    if [ $port_count -gt 0 ]; then
+    if [ "$counter_snapshot_ok" != "true" ]; then
+        echo -e "${RED}nftables counter 不完整，未显示流量数字。请使用 health 检查。${NC}"
+    elif [ $port_count -gt 0 ]; then
         format_port_list "display"
     else
         echo -e "${YELLOW}暂无监控端口${NC}"
@@ -1287,7 +1490,7 @@ show_main_menu() {
     echo -e "${BLUE}1.${NC} 添加/删除端口监控       ${BLUE}2.${NC} 配额/限速管理"
     echo -e "${BLUE}3.${NC} 每月/立即重置流量       ${BLUE}4.${NC} 导出/导入配置"
     echo -e "${BLUE}5.${NC} 检查并热更新脚本        ${BLUE}6.${NC} 卸载脚本"
-    echo -e "${BLUE}7.${NC} 通知管理 (Telegram 查询) ${BLUE}8.${NC} 日报与趋势报表"
+    echo -e "${BLUE}7.${NC} 通知管理 (Telegram 查询/通知) ${BLUE}8.${NC} 日报与趋势报表"
     echo -e "${BLUE}0.${NC} 退出"
     echo
     read_trimmed choice "请选择操作 [0-8 或快捷词]: "
@@ -1548,17 +1751,67 @@ remove_port_monitoring() {
     manage_port_monitoring
 }
 
-# 优化4：批量应用 nftables 规则，提升并发性能
+port_nftables_rules_are_exact() {
+    local port="$1"
+    local input_chain="${2:-}"
+    local output_chain="${3:-}"
+    local forward_chain="${4:-}"
+    local port_safe
+    local counter_in
+    local counter_out
+    local input_count
+    local output_count
+    local forward_in_count
+    local forward_out_count
+
+    port_safe=$(echo "$port" | tr '-' '_')
+    counter_in="port_${port_safe}_in"
+    counter_out="port_${port_safe}_out"
+    input_count=$(grep -Fc "counter name \"$counter_in\"" <<< "$input_chain" || true)
+    output_count=$(grep -Fc "counter name \"$counter_out\"" <<< "$output_chain" || true)
+    forward_in_count=$(grep -Fc "counter name \"$counter_in\"" <<< "$forward_chain" || true)
+    forward_out_count=$(grep -Fc "counter name \"$counter_out\"" <<< "$forward_chain" || true)
+
+    [ "$input_count" -eq 2 ] && [ "$output_count" -eq 2 ] && \
+        [ "$forward_in_count" -eq 2 ] && [ "$forward_out_count" -eq 2 ]
+}
+
+# 原子修复并应用 nftables 计数规则，避免缺失或重复规则造成漏算、重复计数。
 add_nftables_rules() {
     local port=$1
     local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
     local batch_cmds=""
-
     local port_safe=$(echo "$port" | tr '-' '_')
-    if nft list chain "$family" "$table_name" output 2>/dev/null | grep -q "port_${port_safe}_out"; then
+    local counter_in="port_${port_safe}_in"
+    local counter_out="port_${port_safe}_out"
+    local input_chain
+    local output_chain
+    local forward_chain
+    local chain
+    local chain_rules
+    local handle
+
+    input_chain=$(nft -a list chain "$family" "$table_name" input 2>/dev/null || true)
+    output_chain=$(nft -a list chain "$family" "$table_name" output 2>/dev/null || true)
+    forward_chain=$(nft -a list chain "$family" "$table_name" forward 2>/dev/null || true)
+    if port_nftables_rules_are_exact "$port" "$input_chain" "$output_chain" "$forward_chain"; then
         return 0
     fi
+
+    for chain in input output forward; do
+        case "$chain" in
+            input) chain_rules="$input_chain" ;;
+            output) chain_rules="$output_chain" ;;
+            forward) chain_rules="$forward_chain" ;;
+        esac
+        while IFS= read -r handle; do
+            [ -n "$handle" ] && batch_cmds+="delete rule $family $table_name $chain handle $handle\n"
+        done < <(
+            grep -F -e "counter name \"$counter_in\"" -e "counter name \"$counter_out\"" <<< "$chain_rules" \
+                | sed -n 's/.*# handle \([0-9]\+\)$/\1/p'
+        )
+    done
 
     # 智能处理匹配表达式（兼容单端口和端口段）
     local match_expr="dport $port"
@@ -1570,21 +1823,24 @@ add_nftables_rules() {
     fi
 
     # 1. 注入响应方向计数规则
-    nft list counter "$family" "$table_name" "port_${port_safe}_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_out\n"
+    nft list counter "$family" "$table_name" "$counter_out" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name $counter_out\n"
     for proto in tcp udp; do
-        batch_cmds+="add rule $family $table_name output $proto $sport_expr counter name \"port_${port_safe}_out\"\n"
-        batch_cmds+="add rule $family $table_name forward $proto $sport_expr counter name \"port_${port_safe}_out\"\n"
+        batch_cmds+="add rule $family $table_name output $proto $sport_expr counter name \"$counter_out\"\n"
+        batch_cmds+="add rule $family $table_name forward $proto $sport_expr counter name \"$counter_out\"\n"
     done
 
     # 2. 注入请求方向计数规则
-    nft list counter "$family" "$table_name" "port_${port_safe}_in" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name port_${port_safe}_in\n"
+    nft list counter "$family" "$table_name" "$counter_in" >/dev/null 2>&1 || batch_cmds+="add counter $family $table_name $counter_in\n"
     for proto in tcp udp; do
-        batch_cmds+="add rule $family $table_name input $proto $match_expr counter name \"port_${port_safe}_in\"\n"
-        batch_cmds+="add rule $family $table_name forward $proto $match_expr counter name \"port_${port_safe}_in\"\n"
+        batch_cmds+="add rule $family $table_name input $proto $match_expr counter name \"$counter_in\"\n"
+        batch_cmds+="add rule $family $table_name forward $proto $match_expr counter name \"$counter_in\"\n"
     done
 
     if [ -n "$batch_cmds" ]; then
-        echo -e "$batch_cmds" | nft -f - 2>/dev/null || true
+        if ! printf '%b' "$batch_cmds" | nft -f - 2>/dev/null; then
+            echo -e "${RED}端口 $port 的 nftables 计数规则应用失败。${NC}" >&2
+            return 1
+        fi
     fi
 }
 
@@ -2218,9 +2474,9 @@ uninstall_script() {
         quarantine_path /etc/systemd/system/port-tg-bot.service "/root/port-traffic-dog-quarantine/systemd" >/dev/null 2>&1 || true
         systemctl daemon-reload >/dev/null 2>&1 || true
 
-        # 清理本脚本注册的全部定时任务（@reboot / --save-data / --daily-snapshot / --daily-reset-check）
+        # 清理本脚本注册的全部定时任务。
         local cleaned_cron
-        cleaned_cron=$(crontab -l 2>/dev/null | grep -vF "$SCRIPT_PATH" || true)
+        cleaned_cron=$(crontab -l 2>/dev/null | grep -vF "$SCRIPT_PATH" | grep -vF "/usr/local/bin/port-traffic-dog.sh" || true)
         if [ -n "$cleaned_cron" ]; then
             printf '%s\n' "$cleaned_cron" | crontab - 2>/dev/null || true
         else
@@ -2230,7 +2486,10 @@ uninstall_script() {
         quarantine_path "$CONFIG_DIR" "/root/port-traffic-dog-quarantine" >/dev/null 2>&1 || true
         quarantine_path "/usr/local/bin/$SHORTCUT_COMMAND" "/root/port-traffic-dog-quarantine/bin" >/dev/null 2>&1 || true
         
-        quarantine_path "$SCRIPT_PATH" "/root/port-traffic-dog-quarantine/bin" >/dev/null 2>&1 || true
+        quarantine_path "/usr/local/bin/port-traffic-dog.sh" "/root/port-traffic-dog-quarantine/bin" >/dev/null 2>&1 || true
+        if [ "$SCRIPT_PATH" != "/usr/local/bin/port-traffic-dog.sh" ]; then
+            quarantine_path "$SCRIPT_PATH" "/root/port-traffic-dog-quarantine/bin" >/dev/null 2>&1 || true
+        fi
 
         echo -e "${GREEN}✅ 卸载完成，旧配置目录和脚本文件已隔离到 /root/port-traffic-dog-quarantine。${NC}"
         echo -e "${YELLOW}感谢使用，江湖路远，有缘再见！👋${NC}"
@@ -2271,6 +2530,13 @@ setup_interactive_tg() {
         manage_notifications
         return
     fi
+    local runtime_script
+    if ! runtime_script=$(ensure_local_script_copy); then
+        echo -e "${RED}无法安装本地脚本到 /usr/local/bin/port-traffic-dog.sh。${NC}"
+        sleep 2
+        manage_notifications
+        return
+    fi
     
     cat > /etc/systemd/system/port-tg-bot.service << EOF
 [Unit]
@@ -2280,7 +2546,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/bin/bash $SCRIPT_PATH --run-listener
+ExecStart=/bin/bash $runtime_script --run-listener
 Restart=always
 RestartSec=5
 
@@ -2351,7 +2617,7 @@ manage_display_mode() {
     show_main_menu
 }
 
-tg_send_message() {
+tg_send_message_checked() {
     local token="$1"
     local chat_id="$2"
     local text="$3"
@@ -2361,12 +2627,279 @@ tg_send_message() {
         curl -fsS --connect-timeout 10 --max-time 20 --retry 1 --retry-delay 1 -X POST "https://api.telegram.org/bot${token}/sendMessage" \
             --data-urlencode "chat_id=${chat_id}" \
             --data-urlencode "text=${text}" \
-            --data-urlencode "parse_mode=${parse_mode}" >/dev/null 2>&1 || true
+            --data-urlencode "parse_mode=${parse_mode}" >/dev/null 2>&1
     else
         curl -fsS --connect-timeout 10 --max-time 20 --retry 1 --retry-delay 1 -X POST "https://api.telegram.org/bot${token}/sendMessage" \
             --data-urlencode "chat_id=${chat_id}" \
-            --data-urlencode "text=${text}" >/dev/null 2>&1 || true
+            --data-urlencode "text=${text}" >/dev/null 2>&1
     fi
+}
+
+tg_send_message() {
+    tg_send_message_checked "$@" || true
+}
+
+html_escape_text() {
+    jq -nr --arg value "$1" '$value
+        | split("&") | join("&amp;")
+        | split("<") | join("&lt;")
+        | split(">") | join("&gt;")'
+}
+
+get_telegram_server_name() {
+    local server_name
+    server_name=$(jq -r '.notifications.telegram.server_name // ""' "$CONFIG_FILE" 2>/dev/null || true)
+    if [ -z "$server_name" ] || [ "$server_name" = "null" ]; then
+        server_name=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "VPS")
+    fi
+    html_escape_text "$server_name"
+}
+
+build_telegram_status_notification() {
+    local template
+    local report
+    local server_name
+    local generated_at
+
+    template=$(jq -r '.notifications.telegram.template // "<b>🐶 {server_name} 端口流量通知</b>\n{report}"' "$CONFIG_FILE")
+    [[ "$template" == *"{report}"* ]] || return 1
+    report=$(build_tg_all_ports_report)
+    [[ "$report" != "❌"* ]] || return 1
+    server_name=$(get_telegram_server_name)
+    generated_at=$(get_beijing_time '+%Y-%m-%d %H:%M:%S')
+    render_notification_template "$template" "$server_name" "$report" "$generated_at"
+}
+
+send_telegram_status_notification() {
+    local source="${1:-manual}"
+    local token
+    local chat_id
+    local message
+
+    token=$(jq -r '.notifications.telegram.bot_token // ""' "$CONFIG_FILE" 2>/dev/null || true)
+    chat_id=$(jq -r '.notifications.telegram.chat_id // ""' "$CONFIG_FILE" 2>/dev/null || true)
+    if [ -z "$token" ] || [ "$token" = "null" ] || [ -z "$chat_id" ] || [ "$chat_id" = "null" ]; then
+        echo "Telegram Bot Token 或 Chat ID 未配置。" >&2
+        return 1
+    fi
+    if ! validate_traffic_counter_snapshot; then
+        echo "nftables counter 不完整，已取消通知。" >&2
+        return 1
+    fi
+
+    if ! message=$(build_telegram_status_notification); then
+        echo "无法生成通知，请检查模板和统计健康状态。" >&2
+        return 1
+    fi
+    if [ ${#message} -gt 4000 ]; then
+        echo "通知内容超过 4000 字符，请缩短模板或减少监控端口。" >&2
+        return 1
+    fi
+    if tg_send_message_checked "$token" "$chat_id" "$message"; then
+        echo "$(get_beijing_time -Iseconds) Telegram ${source}通知发送成功" >> "$LOG_FILE"
+        return 0
+    fi
+    echo "$(get_beijing_time -Iseconds) Telegram ${source}通知发送失败" >> "$LOG_FILE"
+    return 1
+}
+
+send_manual_telegram_notification() {
+    echo -e "${BLUE}=== 立即查询并发送 ===${NC}"
+    if send_telegram_status_notification "手动"; then
+        echo -e "${GREEN}实时流量报告已发送。${NC}"
+    else
+        echo -e "${RED}发送失败，请检查 Telegram 配置、网络和统计健康状态。${NC}"
+    fi
+    read -r -p "按回车返回通知管理..."
+    manage_notifications
+}
+
+sync_telegram_notification_cron() {
+    command -v crontab >/dev/null 2>&1 || return 0
+    [ -f "$CONFIG_FILE" ] || return 0
+
+    local enabled
+    local temp_cron
+    local runtime_script
+    runtime_script=$(ensure_local_script_copy) || return 1
+    enabled=$(jq -r '.notifications.telegram.status_notifications.enabled // false' "$CONFIG_FILE" 2>/dev/null || echo "false")
+    temp_cron=$(mktemp /tmp/port-traffic-dog-notify-cron.XXXXXX) || return 1
+    crontab -l 2>/dev/null | grep -vF -- "--scheduled-notify" > "$temp_cron" || true
+    if [ "$enabled" = "true" ]; then
+        echo "20 * * * * /bin/bash \"$runtime_script\" --scheduled-notify >/dev/null 2>&1  # 端口流量狗 Telegram 定时通知" >> "$temp_cron"
+    fi
+    crontab "$temp_cron"
+    rm -f "$temp_cron"
+}
+
+run_scheduled_telegram_notification() {
+    local enabled
+    local interval
+    local daily_hour
+    local current_hour
+
+    enabled=$(jq -r '.notifications.telegram.status_notifications.enabled // false' "$CONFIG_FILE" 2>/dev/null || echo "false")
+    [ "$enabled" = "true" ] || return 0
+    interval=$(jq -r '.notifications.telegram.status_notifications.interval // "1h"' "$CONFIG_FILE")
+    daily_hour=$(jq -r '.notifications.telegram.status_notifications.daily_hour // 9' "$CONFIG_FILE")
+    current_hour=$(get_beijing_time +%-H)
+    telegram_notification_due "$interval" "$daily_hour" "$current_hour" || return 0
+
+    (
+        flock -n 9 || exit 0
+        send_telegram_status_notification "定时"
+    ) 9> "${CONFIG_DIR}/.telegram-notification.lock"
+}
+
+update_telegram_schedule_config() {
+    local interval="$1"
+    local daily_hour="$2"
+    local enabled="$3"
+    local temp_file
+    (
+        flock -w 5 9 || return 1
+        temp_file=$(mktemp "${CONFIG_DIR}/config.XXXXXX.tmp") || return 1
+        if jq --arg interval "$interval" --argjson daily_hour "$daily_hour" --argjson enabled "$enabled" '
+            .notifications.telegram.status_notifications.enabled = $enabled |
+            .notifications.telegram.status_notifications.interval = $interval |
+            .notifications.telegram.status_notifications.daily_hour = $daily_hour
+        ' "$CONFIG_FILE" > "$temp_file"; then
+            mv "$temp_file" "$CONFIG_FILE"
+            chmod 600 "$CONFIG_FILE" 2>/dev/null || true
+        else
+            rm -f "$temp_file"
+            return 1
+        fi
+    ) 9> "${CONFIG_DIR}/.config.lock"
+}
+
+manage_telegram_schedule() {
+    local current_enabled
+    local current_interval
+    local current_daily_hour
+    local choice
+    local interval="1h"
+    local daily_hour=9
+    local token
+    local chat_id
+
+    current_enabled=$(jq -r '.notifications.telegram.status_notifications.enabled // false' "$CONFIG_FILE")
+    current_interval=$(jq -r '.notifications.telegram.status_notifications.interval // "1h"' "$CONFIG_FILE")
+    current_daily_hour=$(jq -r '.notifications.telegram.status_notifications.daily_hour // 9' "$CONFIG_FILE")
+    echo -e "${BLUE}=== Telegram 定时通知 ===${NC}"
+    echo "当前状态: enabled=$current_enabled interval=$current_interval daily_hour=$current_daily_hour"
+    echo "1. 每小时"
+    echo "2. 每 6 小时"
+    echo "3. 每 12 小时"
+    echo "4. 每天指定小时（北京时间）"
+    echo "5. 停用定时通知"
+    echo "0. 返回"
+    read_trimmed choice "请选择 [0-5]: "
+
+    case "$choice" in
+        1) interval="1h" ;;
+        2) interval="6h" ;;
+        3) interval="12h" ;;
+        4)
+            interval="daily"
+            read_trimmed daily_hour "请输入通知小时 [0-23，默认9]: "
+            daily_hour=${daily_hour:-9}
+            if ! [[ "$daily_hour" =~ ^([0-9]|1[0-9]|2[0-3])$ ]]; then
+                echo -e "${RED}小时必须是 0-23。${NC}"
+                sleep 1
+                manage_telegram_schedule
+                return
+            fi
+            ;;
+        5)
+            if update_telegram_schedule_config "$current_interval" "$current_daily_hour" false && sync_telegram_notification_cron; then
+                echo -e "${GREEN}定时通知已停用。${NC}"
+            else
+                echo -e "${RED}定时通知停用失败。${NC}"
+            fi
+            sleep 1
+            manage_notifications
+            return
+            ;;
+        0) manage_notifications; return ;;
+        *) echo -e "${RED}无效选择${NC}"; sleep 1; manage_telegram_schedule; return ;;
+    esac
+
+    token=$(jq -r '.notifications.telegram.bot_token // ""' "$CONFIG_FILE" 2>/dev/null || true)
+    chat_id=$(jq -r '.notifications.telegram.chat_id // ""' "$CONFIG_FILE" 2>/dev/null || true)
+    if [ -z "$token" ] || [ "$token" = "null" ] || [ -z "$chat_id" ] || [ "$chat_id" = "null" ]; then
+        echo -e "${RED}请先部署 Telegram 机器人并配置 Bot Token、Chat ID。${NC}"
+        sleep 1
+        manage_notifications
+        return
+    fi
+
+    if update_telegram_schedule_config "$interval" "$daily_hour" true && sync_telegram_notification_cron; then
+        echo -e "${GREEN}定时通知已启用：$interval。${NC}"
+    else
+        echo -e "${RED}定时通知配置失败。${NC}"
+    fi
+    sleep 1
+    manage_notifications
+}
+
+update_telegram_template() {
+    local template="$1"
+    local temp_file
+    (
+        flock -w 5 9 || return 1
+        temp_file=$(mktemp "${CONFIG_DIR}/config.XXXXXX.tmp") || return 1
+        if jq --arg template "$template" '.notifications.telegram.template = $template' "$CONFIG_FILE" > "$temp_file"; then
+            mv "$temp_file" "$CONFIG_FILE"
+            chmod 600 "$CONFIG_FILE" 2>/dev/null || true
+        else
+            rm -f "$temp_file"
+            return 1
+        fi
+    ) 9> "${CONFIG_DIR}/.config.lock"
+}
+
+manage_telegram_template() {
+    local choice
+    local line
+    local template=""
+    local default_template=$'<b>🐶 {server_name} 端口流量通知</b>\n{report}'
+
+    echo -e "${BLUE}=== Telegram 通知模板 ===${NC}"
+    echo "可用变量: {server_name} {report} {time}"
+    echo "1. 自定义模板"
+    echo "2. 恢复默认模板"
+    echo "0. 返回"
+    read_trimmed choice "请选择 [0-2]: "
+    case "$choice" in
+        1)
+            echo "逐行输入模板，单独输入 . 保存；模板必须包含 {report}。"
+            while IFS= read -r line; do
+                [ "$line" = "." ] && break
+                template+="${template:+$'\n'}${line}"
+            done
+            if [[ "$template" != *"{report}"* ]]; then
+                echo -e "${RED}模板缺少 {report}，未保存。${NC}"
+            elif [ ${#template} -gt 2000 ]; then
+                echo -e "${RED}模板不能超过 2000 字符。${NC}"
+            elif update_telegram_template "$template"; then
+                echo -e "${GREEN}通知模板已保存。${NC}"
+            else
+                echo -e "${RED}通知模板保存失败。${NC}"
+            fi
+            ;;
+        2)
+            if update_telegram_template "$default_template"; then
+                echo -e "${GREEN}已恢复默认通知模板。${NC}"
+            else
+                echo -e "${RED}默认模板恢复失败。${NC}"
+            fi
+            ;;
+        0) manage_notifications; return ;;
+        *) echo -e "${RED}无效选择${NC}" ;;
+    esac
+    sleep 1
+    manage_notifications
 }
 
 build_tg_help_message() {
@@ -2389,7 +2922,16 @@ build_tg_port_report() {
         return 0
     fi
 
-    local traffic_data=($(get_nftables_counter_data "$port"))
+    if ! refresh_nftables_counter_snapshot; then
+        echo "❌ 无法读取 nftables counter，请运行 dog 后使用 health 检查"
+        return 0
+    fi
+    local counter_data
+    if ! counter_data=$(get_nftables_counter_data_from_snapshot "$port"); then
+        echo "❌ 端口 ${port} 的 counter 不完整，请运行 dog 后使用 health 检查"
+        return 0
+    fi
+    local traffic_data=($counter_data)
     local in_b=${traffic_data[0]:-0}
     local out_b=${traffic_data[1]:-0}
     local actual_total=$((in_b + out_b))
@@ -2412,11 +2954,16 @@ build_tg_all_ports_report() {
         return 0
     fi
 
+    if ! validate_traffic_counter_snapshot; then
+        echo "❌ nftables counter 不完整，未生成流量汇总。请运行 dog 后使用 health 检查"
+        return 0
+    fi
+
     local total_actual=0
     local report="<b>全部端口实时流量汇总</b>"
 
     for port in "${active_ports[@]}"; do
-        local traffic_data=($(get_nftables_counter_data "$port"))
+        local traffic_data=($(get_nftables_counter_data_from_snapshot "$port"))
         local in_b=${traffic_data[0]:-0}
         local out_b=${traffic_data[1]:-0}
         local actual_total=$((in_b + out_b))
@@ -2569,14 +3116,20 @@ manage_notifications() {
     echo "1. 部署 Telegram 交互式查询机器人 (支持 /t /all /yday /trend /day)"
     echo "2. 停止并卸载 Telegram 交互式机器人"
     echo "3. 原版企业 wx 机器人通知配置 (保留接口)"
+    echo "4. 立即查询并发送实时报告"
+    echo "5. Telegram 定时通知"
+    echo "6. 自定义 Telegram 通知模板"
     echo "0. 返回主菜单"
     echo
-    read_trimmed choice "请选择操作 [0-3]: "
+    read_trimmed choice "请选择操作 [0-6]: "
 
     case $choice in
         1) setup_interactive_tg ;;
         2) stop_interactive_tg ;;
         3) echo -e "${YELLOW}请使用旧版逻辑维护${NC}"; sleep 2; manage_notifications ;;
+        4) send_manual_telegram_notification ;;
+        5) manage_telegram_schedule ;;
+        6) manage_telegram_template ;;
         0) show_main_menu ;;
         *) echo -e "${RED}无效选择${NC}"; sleep 1; manage_notifications ;;
     esac
@@ -2584,11 +3137,13 @@ manage_notifications() {
 
 setup_port_auto_reset_cron() {
     local temp_cron=$(mktemp /tmp/port-traffic-dog-cron.XXXXXX)
+    local runtime_script
+    runtime_script=$(ensure_local_script_copy) || runtime_script="$SCRIPT_PATH"
     # 顺手把之前可能生成的冗余独立端口规则清理掉
     crontab -l 2>/dev/null | grep -v -- "端口流量狗自动重置端口" | grep -v -- "--reset-port" | grep -v -- "--daily-reset-check" > "$temp_cron" || true
     
     # 注入唯一的“全局每日智能心跳检测”
-    echo "5 0 * * * /bin/bash \"$SCRIPT_PATH\" --daily-reset-check >/dev/null 2>&1  # 端口流量狗全局智能流量重置" >> "$temp_cron"
+    echo "5 0 * * * /bin/bash \"$runtime_script\" --daily-reset-check >/dev/null 2>&1  # 端口流量狗全局智能流量重置" >> "$temp_cron"
     
     crontab "$temp_cron"
     rm -f "$temp_cron"
@@ -2599,10 +3154,12 @@ remove_port_auto_reset_cron() {
     : 
 }
 create_shortcut_command() {
+    local runtime_script
+    runtime_script=$(ensure_local_script_copy) || runtime_script="$SCRIPT_PATH"
     if [ ! -f "/usr/local/bin/$SHORTCUT_COMMAND" ]; then
         cat > "/usr/local/bin/$SHORTCUT_COMMAND" << EOF
 #!/bin/bash
-exec bash "$SCRIPT_PATH" "\$@"
+exec bash "$runtime_script" "\$@"
 EOF
         chmod +x "/usr/local/bin/$SHORTCUT_COMMAND" 2>/dev/null || true
     fi
@@ -2644,6 +3201,10 @@ main() {
     # 拦截日报快照采集参数
     if [ "${1:-}" == "--daily-snapshot" ]; then
         collect_daily_usage_snapshot "true"
+        exit 0
+    fi
+    if [ "${1:-}" == "--scheduled-notify" ]; then
+        run_scheduled_telegram_notification
         exit 0
     fi
     # 5. 常规的前台菜单逻辑
