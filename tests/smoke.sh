@@ -650,6 +650,15 @@ is_valid_port "https://panel.example.com:４４３/path"
     system_reinstall_set_target 41
     [[ "$SYSTEM_REINSTALL_LABEL" == "Windows 11 Pro" ]]
     [[ "${SYSTEM_REINSTALL_TARGET[*]}" == "windows --image-name Windows 11 Pro --lang zh-cn" ]]
+    system_reinstall_set_password "Passw0rd!"
+    [[ "$SYSTEM_REINSTALL_AUTH_MODE" == "password" ]]
+    [[ "${SYSTEM_REINSTALL_ACCESS_ARGS[*]}" == "--password Passw0rd!" ]]
+    system_reinstall_set_ssh_port "２２２２"
+    [[ "$SYSTEM_REINSTALL_SSH_PORT" == "2222" ]]
+    system_reinstall_set_ssh_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE2sjkXzvKPCdYfwtG2nOuQ4Vd8f0SmA0fMGVCpMtrLS test@example.com"
+    [[ "$SYSTEM_REINSTALL_AUTH_MODE" == "ssh_key" ]]
+    ! system_reinstall_is_valid_ssh_public_key "ssh-ed25519 not-base64 test@example.com"
+    ! system_reinstall_set_ssh_port "65536"
     for reinstall_target in 2 3 4 11 12 13 14 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 42 44 45 46 47; do
         system_reinstall_set_target "$reinstall_target"
         [[ -n "$SYSTEM_REINSTALL_LABEL" && "${#SYSTEM_REINSTALL_TARGET[@]}" -gt 0 ]]

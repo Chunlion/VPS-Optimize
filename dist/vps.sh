@@ -3351,6 +3351,142 @@ system_reinstall_set_windows7_target() {
     SYSTEM_REINSTALL_LABEL="Windows 7 Ultimate"
 }
 
+system_reinstall_is_windows_target() {
+    [[ "${SYSTEM_REINSTALL_TARGET[0]:-}" == "windows" ]]
+}
+
+system_reinstall_is_valid_ssh_public_key() {
+    local ssh_key="$1"
+    local key_type key_data
+
+    [[ "$ssh_key" != *$'\n'* && "$ssh_key" != *$'\r'* ]] || return 1
+    read -r key_type key_data _ <<<"$ssh_key"
+    case "$key_type" in
+        ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) ;;
+        *) return 1 ;;
+    esac
+    [[ "$key_data" =~ ^[A-Za-z0-9+/]+={0,2}$ ]]
+}
+
+system_reinstall_set_password() {
+    local password="$1"
+
+    [[ -n "$password" ]] || return 1
+    SYSTEM_REINSTALL_AUTH_MODE="password"
+    SYSTEM_REINSTALL_ACCESS_ARGS=(--password "$password")
+}
+
+system_reinstall_set_ssh_key() {
+    local ssh_key="$1"
+
+    system_reinstall_is_valid_ssh_public_key "$ssh_key" || return 1
+    SYSTEM_REINSTALL_AUTH_MODE="ssh_key"
+    SYSTEM_REINSTALL_ACCESS_ARGS=(--ssh-key "$ssh_key")
+}
+
+system_reinstall_set_ssh_port() {
+    local ssh_port
+
+    ssh_port=$(normalize_port_input "$1")
+    is_valid_port "$ssh_port" || return 1
+    SYSTEM_REINSTALL_SSH_PORT="$ssh_port"
+}
+
+system_reinstall_read_password() {
+    local password password_confirm
+
+    while true; do
+        IFS= read -r -p "$(localized_text "设置登录密码（输入会明文显示）: " "Set login password (input is visible): " "Введите пароль для входа (ввод отображается): ")" password || return 1
+        if ! system_reinstall_set_password "$password"; then
+            echo -e "$(localized_text "${RED}❌ 密码不能为空。${PLAIN}" "${RED}❌ Password cannot be empty.${PLAIN}" "${RED}❌ Пароль не может быть пустым.${PLAIN}")"
+            continue
+        fi
+
+        printf '%b%s%b%s\n' "$YELLOW" "$(localized_text "将写入的密码：" "Password to be set: " "Устанавливаемый пароль: ")" "$PLAIN" "$password"
+        IFS= read -r -p "$(localized_text "再次输入密码确认（输入会明文显示）: " "Retype password to confirm (input is visible): " "Повторите пароль для подтверждения (ввод отображается): ")" password_confirm || return 1
+        if [[ "$password" == "$password_confirm" ]]; then
+            printf '%b%s%b%s\n' "$GREEN" "$(localized_text "密码已确认：" "Password confirmed: " "Пароль подтверждён: ")" "$PLAIN" "$password"
+            return 0
+        fi
+
+        echo -e "$(localized_text "${RED}❌ 两次密码不一致，请重新输入。${PLAIN}" "${RED}❌ Passwords do not match. Try again.${PLAIN}" "${RED}❌ Пароли не совпадают. Повторите ввод.${PLAIN}")"
+    done
+}
+
+system_reinstall_read_ssh_key() {
+    local ssh_key
+
+    while true; do
+        IFS= read -r -p "$(localized_text "SSH 公钥（单行）: " "SSH public key (one line): " "Открытый ключ SSH (одна строка): ")" ssh_key || return 1
+        if system_reinstall_set_ssh_key "$ssh_key"; then
+            echo -e "$(localized_text "${GREEN}✅ SSH 公钥格式检查通过。${PLAIN}" "${GREEN}✅ SSH public-key format accepted.${PLAIN}" "${GREEN}✅ Формат открытого ключа SSH принят.${PLAIN}")"
+            return 0
+        fi
+
+        echo -e "$(localized_text "${RED}❌ SSH 公钥格式无效，仅支持单行 ssh-rsa、ssh-ed25519 或 ecdsa-sha2-nistp* 公钥。${PLAIN}" "${RED}❌ Invalid SSH public-key format. Use a one-line ssh-rsa, ssh-ed25519, or ecdsa-sha2-nistp* public key.${PLAIN}" "${RED}❌ Недопустимый формат открытого ключа SSH. Используйте однострочный ключ ssh-rsa, ssh-ed25519 или ecdsa-sha2-nistp*.${PLAIN}")"
+    done
+}
+
+system_reinstall_read_ssh_port() {
+    local ssh_port
+
+    while true; do
+        IFS= read -r -p "$(localized_text "SSH 登录端口 [22]: " "SSH login port [22]: " "Порт входа SSH [22]: ")" ssh_port || return 1
+        ssh_port=${ssh_port:-22}
+        if system_reinstall_set_ssh_port "$ssh_port"; then
+            echo -e "$(localized_text "${YELLOW}请确认云厂商安全组和防火墙允许 TCP ${SYSTEM_REINSTALL_SSH_PORT}。${PLAIN}" "${YELLOW}Ensure the cloud security group and firewall allow TCP ${SYSTEM_REINSTALL_SSH_PORT}.${PLAIN}" "${YELLOW}Убедитесь, что облачная группа безопасности и межсетевой экран разрешают TCP ${SYSTEM_REINSTALL_SSH_PORT}.${PLAIN}")"
+            return 0
+        fi
+
+        echo -e "$(localized_text "${RED}❌ SSH 端口必须在 1-65535。${PLAIN}" "${RED}❌ SSH port must be between 1 and 65535.${PLAIN}" "${RED}❌ Порт SSH должен быть от 1 до 65535.${PLAIN}")"
+    done
+}
+
+system_reinstall_collect_access_options() {
+    local access_choice
+
+    SYSTEM_REINSTALL_AUTH_MODE=""
+    SYSTEM_REINSTALL_ACCESS_ARGS=()
+    SYSTEM_REINSTALL_SSH_PORT=""
+    while true; do
+        echo -e "$(localized_text "${BOLD}登录方式${PLAIN}" "${BOLD}Login method${PLAIN}" "${BOLD}Способ входа${PLAIN}")"
+        echo -e "  1. $(localized_text "密码登录" "Password" "Пароль")"
+        echo -e "  2. $(localized_text "SSH 公钥登录" "SSH public key" "Открытый ключ SSH")"
+        echo -e "  0. $(localized_text "返回系统选择" "Back to system selection" "Назад к выбору системы")"
+        if system_reinstall_is_windows_target; then
+            echo -e "$(localized_text "${YELLOW}Windows 重装不支持 SSH 公钥，选择 [1] 设置密码。${PLAIN}" "${YELLOW}Windows reinstallation does not support SSH public keys; select [1] to set a password.${PLAIN}" "${YELLOW}Переустановка Windows не поддерживает открытые ключи SSH; выберите [1], чтобы задать пароль.${PLAIN}")"
+        fi
+
+        read_trimmed access_choice "$(localized_text "选择登录方式: " "Select login method: " "Выберите способ входа: ")"
+        case "$access_choice" in
+            0|q|Q) return 1 ;;
+            1)
+                system_reinstall_read_password || return 1
+                break
+                ;;
+            2)
+                if system_reinstall_is_windows_target; then
+                    echo -e "$(localized_text "${RED}❌ Windows 不支持 SSH 公钥登录。${PLAIN}" "${RED}❌ Windows does not support SSH public-key login.${PLAIN}" "${RED}❌ Windows не поддерживает вход по открытому ключу SSH.${PLAIN}")"
+                    continue
+                fi
+                system_reinstall_read_ssh_key || return 1
+                break
+                ;;
+            *)
+                echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"
+                ;;
+        esac
+    done
+
+    system_reinstall_read_ssh_port || return 1
+    if [[ "$SYSTEM_REINSTALL_AUTH_MODE" == "password" ]]; then
+        printf '%b%s%b%s\n' "$YELLOW" "$(localized_text "确认使用密码登录，密码：" "Password login confirmed, password: " "Подтверждён вход по паролю, пароль: ")" "$PLAIN" "${SYSTEM_REINSTALL_ACCESS_ARGS[1]}"
+    else
+        echo -e "$(localized_text "${GREEN}确认使用 SSH 公钥登录。${PLAIN}" "${GREEN}SSH public-key login confirmed.${PLAIN}" "${GREEN}Подтверждён вход по открытому ключу SSH.${PLAIN}")"
+    fi
+    echo -e "$(localized_text "${GREEN}SSH 登录端口：${SYSTEM_REINSTALL_SSH_PORT}${PLAIN}" "${GREEN}SSH login port: ${SYSTEM_REINSTALL_SSH_PORT}${PLAIN}" "${GREEN}Порт входа SSH: ${SYSTEM_REINSTALL_SSH_PORT}${PLAIN}")"
+}
+
 system_reinstall_fetch_upstream() {
     local script_dir temp_script
 
@@ -3412,7 +3548,7 @@ func_system_reinstall() {
         echo -e "$(localized_text "${BOLD}⚠️ 系统重装${PLAIN}" "${BOLD}⚠️ System reinstallation${PLAIN}" "${BOLD}⚠️ Переустановка системы${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${RED}重装会在重启后清空主硬盘数据，可能导致 SSH 失联。请先备份并确认云厂商控制台或救援模式可用。${PLAIN}" "${RED}Reinstallation erases the main disk after reboot and may disconnect SSH. Back up data and confirm cloud-console or rescue access first.${PLAIN}" "${RED}После перезагрузки переустановка очистит основной диск и может отключить SSH. Сначала создайте резервную копию и проверьте доступ к облачной консоли или режиму восстановления.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}后端：bin456789/reinstall；参考：leitbogioro/Tools。下载后由上游脚本继续询问账号、密码等参数。${PLAIN}" "${YELLOW}Backend: bin456789/reinstall; reference: leitbogioro/Tools. The upstream script will then request account, password, and other settings.${PLAIN}" "${YELLOW}Основа: bin456789/reinstall; справочный проект: leitbogioro/Tools. Затем исходный сценарий запросит учётные данные и другие параметры.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}后端：bin456789/reinstall；参考：leitbogioro/Tools。选择系统后设置登录方式和 SSH 端口。${PLAIN}" "${YELLOW}Backend: bin456789/reinstall; reference: leitbogioro/Tools. After selecting a system, set the login method and SSH port.${PLAIN}" "${YELLOW}Основа: bin456789/reinstall; справочный проект: leitbogioro/Tools. После выбора системы задайте способ входа и порт SSH.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "  1. Debian 13                 2. Debian 12"
         echo -e "  3. Debian 11                 4. Debian 10"
@@ -3476,6 +3612,10 @@ func_system_reinstall() {
                 ;;
         esac
 
+        if ! system_reinstall_collect_access_options; then
+            continue
+        fi
+
         confirm_risk_action \
             "$(localized_text "重装为 ${SYSTEM_REINSTALL_LABEL}" "Reinstall as ${SYSTEM_REINSTALL_LABEL}" "Переустановить как ${SYSTEM_REINSTALL_LABEL}")" \
             "$(localized_text "下载并执行第三方上游脚本，写入一次性安装引导项；重启后会清空主硬盘及全部分区数据" "Download and run a third-party upstream script that writes a one-time installer boot entry; rebooting will erase the main disk and all its partitions" "Загрузить и запустить сторонний исходный сценарий, который создаст одноразовую загрузочную запись; после перезагрузки основной диск и все его разделы будут очищены")" \
@@ -3488,7 +3628,7 @@ func_system_reinstall() {
             continue
         fi
 
-        bash "$SYSTEM_REINSTALL_SCRIPT" "${SYSTEM_REINSTALL_TARGET[@]}"
+        bash "$SYSTEM_REINSTALL_SCRIPT" "${SYSTEM_REINSTALL_TARGET[@]}" "${SYSTEM_REINSTALL_ACCESS_ARGS[@]}" --ssh-port "$SYSTEM_REINSTALL_SSH_PORT"
         result=$?
         if [[ "$result" -eq 0 ]]; then
             echo -e "$(localized_text "${YELLOW}重装已安排，重启后开始执行；如需取消，请在重启前选择 [50]。${PLAIN}" "${YELLOW}Reinstallation is scheduled and starts after reboot. To cancel, select [50] before rebooting.${PLAIN}" "${YELLOW}Переустановка запланирована и начнётся после перезагрузки. Для отмены выберите [50] до перезагрузки.${PLAIN}")"
