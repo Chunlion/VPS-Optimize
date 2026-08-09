@@ -1,4 +1,4 @@
-# TCP Peek Implementation for Shared Port 443
+# Shared Port 443 Entry Implementations
 
 This article explains three shared port 443 point implementations of VPS-Optimize: Nginx Stream default stable implementation, TCP Peek + Splice / vpso-mux same configuration implementation, Xray Fallback special implementation.
 

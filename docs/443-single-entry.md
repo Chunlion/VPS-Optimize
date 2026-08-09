@@ -1,6 +1,6 @@
-# 443 单入口分流教程
+# 共享 443 配置指南
 
-遇到面板打不开、订阅 404、证书失败或 REALITY 连接失败时，先看：[443 单入口排错手册](443-single-entry-troubleshooting.md)。
+遇到面板打不开、订阅 404、证书失败或 REALITY 连接失败时，先看：[共享 443 排错指南](443-single-entry-troubleshooting.md)。
 
 这篇文档教你把 VPS 的公网 `443` 统一接入 VPS-Optimize 的 443 单入口。默认推荐 Nginx Stream，也可以在配置完成后切换到 TCP Peek + Splice 或 Xray Fallback。无论选择哪种入口模式，公网 `443` 同一时间只由当前 `ENTRY_MODE` 对应的单个服务监听。
 
@@ -644,7 +644,7 @@ https://dockge.example.com/
 
 ## 排错入口
 
-遇到面板打不开、订阅 404、证书失败、端口被占用或 REALITY 连接失败，统一看：[443 单入口排错手册](443-single-entry-troubleshooting.md)。
+遇到面板打不开、订阅 404、证书失败、端口被占用或 REALITY 连接失败，统一看：[共享 443 排错指南](443-single-entry-troubleshooting.md)。
 
 ## 一组完整示例，仅供参考
 

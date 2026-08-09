@@ -32,7 +32,7 @@ Priority checks:
 - Whether the cloud security group allows `443/tcp`.
 - Whether the domain DNS is resolved to the current server.
 
-For detailed troubleshooting, see [shared port 443 Troubleshooting Manual](443-single-entry-troubleshooting.md).
+For detailed troubleshooting, see [Shared Port 443 Troubleshooting](443-single-entry-troubleshooting.md).
 
 ## Browser reports error when accessing internal port
 

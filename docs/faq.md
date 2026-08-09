@@ -32,7 +32,7 @@ systemctl status ssh --no-pager || systemctl status sshd --no-pager
 - 云安全组是否放行 `443/tcp`。
 - 域名 DNS 是否解析到当前服务器。
 
-详细排查见 [443 单入口排错手册](443-single-entry-troubleshooting.md)。
+详细排查见 [共享 443 排错指南](443-single-entry-troubleshooting.md)。
 
 ## 浏览器访问内部端口报错
 

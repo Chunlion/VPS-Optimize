@@ -1,6 +1,6 @@
-# Shared Port 443 Guide
+# Shared Port 443 Configuration Guide
 
-When encountering panel failure to open, subscription 404, certificate failure or REALITY connection failure, first read: [shared port 443 Troubleshooting Manual](443-single-entry-troubleshooting.md).
+When encountering panel failure to open, subscription 404, certificate failure, or REALITY connection failure, first read: [Shared Port 443 Troubleshooting](443-single-entry-troubleshooting.md).
 
 This document teaches you how to connect the VPS Internet `443` to the 443 shared entry of VPS-Optimize. Nginx Stream is recommended by default, and you can also switch to TCP Peek + Splice or Xray Fallback after the configuration is completed. No matter which entry mode is selected, Internet `443` is only bound by a single service corresponding to the current `ENTRY_MODE` at the same time.
 
@@ -649,7 +649,7 @@ Services suitable for integration include SublinkPro, Sub-Store, Dockge, Komari,
 
 ## Debug entry
 
-If you encounter panel failure to open, subscription 404, certificate failure, port occupied, or REALITY connection failure, please refer to: [shared port 443 Troubleshooting Manual](443-single-entry-troubleshooting.md).
+If you encounter panel failure to open, subscription 404, certificate failure, a port conflict, or REALITY connection failure, see [Shared Port 443 Troubleshooting](443-single-entry-troubleshooting.md).
 
 ## A complete set of examples for reference only
 

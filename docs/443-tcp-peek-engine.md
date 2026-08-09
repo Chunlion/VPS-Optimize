@@ -1,4 +1,4 @@
-# 443 单入口技术实现
+# 共享 443 入口实现
 
 本文说明 VPS-Optimize 的三种 443 单入口实现方式：Nginx Stream 默认稳定实现、TCP Peek + Splice / vpso-mux 同配置实现、Xray Fallback 特殊实现。
 
@@ -26,7 +26,7 @@
   -> [16] 查看当前入口日志
 ```
 
-3x-ui 面板、订阅和 Xray 入站的具体填写方式见 [443 单入口分流教程](443-single-entry.md) 的“3x-ui 三种入口模式配置速查”。这里先给结论：
+3x-ui 面板、订阅和 Xray 入站的具体填写方式见 [共享 443 配置指南](443-single-entry.md) 的“3x-ui 三种入口模式配置速查”。这里先给结论：
 
 | ENTRY_MODE | 3x-ui/Xray 应怎么监听 | 切换时最重要的注意事项 |
 | --- | --- | --- |

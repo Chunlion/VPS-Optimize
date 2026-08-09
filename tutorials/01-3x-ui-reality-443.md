@@ -1,18 +1,17 @@
-# 3x-ui + REALITY + 443 单入口部署
+# 3x-ui + REALITY：共享 443 部署指南
 
-这篇教程讲的是：用 3x-ui 管理节点，让面板、订阅、网站和 REALITY 都通过公网 `443` 工作。核心思路是公网 `443` 只给当前入口模式对应的单个服务：`nginx-stream` 用 Nginx stream 按 SNI 分流，`tcp-peek` 用 `vpso-mux` 按 SNI 分流，`xray-fallback` 用 Xray 主入站接管 443 并 fallback 到本地 Web 反代引擎；本地后端全部尽量监听 `127.0.0.1`。
+本教程说明如何让 3x-ui 面板、订阅、网站和 REALITY 共用公网 `443`。
 
-推荐先读完整 443 教程：
+公网 `443` 同一时间只由一个入口服务监听：
 
-```text
-docs/443-single-entry.md
-```
+- `nginx-stream`：Nginx Stream 按 SNI 分流。
+- `tcp-peek`：`vpso-mux` 按 SNI 分流。
+- `xray-fallback`：Xray 主入站监听 `443`，并回退到本地 Web 反代引擎。
 
-排错时看：
+本地后端尽量只监听 `127.0.0.1`。
 
-```text
-docs/443-single-entry-troubleshooting.md
-```
+- [共享 443 配置指南](../docs/443-single-entry.md)
+- [共享 443 排错指南](../docs/443-single-entry-troubleshooting.md)
 
 ## 示例说明
 

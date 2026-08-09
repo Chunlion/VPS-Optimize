@@ -1,18 +1,17 @@
-# 3x-ui + REALITY + shared port 443 deployment
+# 3x-ui + REALITY: Shared Port 443 Deployment Guide
 
-This tutorial is about: using 3x-ui to manage nodes so that panels, subscriptions, websites and REALITY all work through the Internet `443`. The core idea is that the Internet `443` only provides a single service corresponding to the current entry mode: `nginx-stream` uses Nginx stream and is routed according to SNI, `tcp-peek` uses `vpso-mux` and is routed according to SNI, and `xray-fallback` is used The main inbound connection of Xray takes over 443 and fallsback to the local web reverse proxy engine; all local backends are bound to `127.0.0.1` as much as possible.
+This guide shows how to run the 3x-ui panel, subscription, websites, and REALITY through one public port, `443`.
 
-It is recommended to read the complete 443 tutorial first:
+Only one service listens on public port `443` at a time:
 
-```text
-docs/443-single-entry.md
-```
+- `nginx-stream`: Nginx Stream routes by SNI.
+- `tcp-peek`: `vpso-mux` routes by SNI.
+- `xray-fallback`: the Xray main inbound listens on `443` and falls back to the local web reverse proxy.
 
-When troubleshooting, look at:
+Local backends should listen on `127.0.0.1` whenever possible.
 
-```text
-docs/443-single-entry-troubleshooting.md
-```
+- [Shared Port 443 Configuration Guide](../docs/443-single-entry.md)
+- [Shared Port 443 Troubleshooting](../docs/443-single-entry-troubleshooting.md)
 
 ## Example description
 
