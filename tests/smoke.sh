@@ -962,6 +962,72 @@ SS_OUTPUT
 
 (
     source src/common.sh
+    source src/language.sh
+    source src/firewall.sh
+
+    is_valid_connlimit_value 4294967295
+    ! is_valid_connlimit_value 4294967296
+    ! is_valid_connlimit_value 999999999999999999999999
+
+    MOCK_CONNLIMIT_STATE=$(mktemp /tmp/vps-connlimit-reconcile-smoke.XXXXXX)
+    trap 'rm -f "$MOCK_CONNLIMIT_STATE" "$MOCK_CONNLIMIT_STATE.tmp"' EXIT
+    printf '%s\n' "443|10" "443|10" "443|50" "8443|7" >"$MOCK_CONNLIMIT_STATE"
+    mock_connlimit_iptables() {
+        local action="$1"
+        shift
+        local port="" limit="" comment="" i rule rule_port rule_limit
+        local -a args=("$@")
+
+        if [[ "$action" == "-S" ]]; then
+            while IFS= read -r rule; do
+                IFS='|' read -r rule_port rule_limit <<<"$rule"
+                printf '%s\n' "-A INPUT -p tcp --dport ${rule_port} --syn -m connlimit --connlimit-above ${rule_limit} --connlimit-mask 32 --connlimit-saddr -m comment --comment VPSO_CONN_LIMIT_PORT_${rule_port} -j REJECT --reject-with tcp-reset"
+            done <"$MOCK_CONNLIMIT_STATE"
+            return 0
+        fi
+
+        for ((i = 0; i < ${#args[@]}; i++)); do
+            case "${args[$i]}" in
+                --dport) port="${args[$((i + 1))]}" ;;
+                --connlimit-above) limit="${args[$((i + 1))]}" ;;
+                --comment) comment="${args[$((i + 1))]}" ;;
+            esac
+        done
+        [[ "$comment" == "VPSO_CONN_LIMIT_PORT_${port}" ]] || return 1
+
+        case "$action" in
+            -C)
+                grep -Fxq "${port}|${limit}" "$MOCK_CONNLIMIT_STATE"
+                ;;
+            -I)
+                printf '%s\n' "${port}|${limit}" >>"$MOCK_CONNLIMIT_STATE"
+                ;;
+            -D)
+                awk -v target="${port}|${limit}" '
+                    !removed && $0 == target { removed = 1; next }
+                    { print }
+                    END { exit (removed ? 0 : 1) }
+                ' "$MOCK_CONNLIMIT_STATE" >"$MOCK_CONNLIMIT_STATE.tmp" || return 1
+                mv "$MOCK_CONNLIMIT_STATE.tmp" "$MOCK_CONNLIMIT_STATE"
+                ;;
+            *) return 1 ;;
+        esac
+    }
+
+    [[ -z "$(port_connlimit_rule_limits_for_port mock_connlimit_iptables 44)" ]]
+    run_port_connlimit_rule_action mock_connlimit_iptables add 443 50 32 IPv4 >/dev/null
+    [[ "$(grep -xc '443|50' "$MOCK_CONNLIMIT_STATE")" -eq 1 ]]
+    [[ "$(grep -c '^443|' "$MOCK_CONNLIMIT_STATE")" -eq 1 ]]
+    [[ "$(grep -xc '8443|7' "$MOCK_CONNLIMIT_STATE")" -eq 1 ]]
+
+    printf '%s\n' "443|50" "443|50" "8443|7" >"$MOCK_CONNLIMIT_STATE"
+    run_port_connlimit_rule_action mock_connlimit_iptables delete 443 50 32 IPv4 >/dev/null
+    [[ "$(grep -c '^443|' "$MOCK_CONNLIMIT_STATE" || true)" -eq 0 ]]
+    [[ "$(grep -xc '8443|7' "$MOCK_CONNLIMIT_STATE")" -eq 1 ]]
+)
+
+(
+    source src/common.sh
     source src/ui.sh
     source src/input.sh
     source src/validate.sh

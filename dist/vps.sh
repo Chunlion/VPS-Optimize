@@ -3289,7 +3289,10 @@ port_connlimit_comment() {
 
 is_valid_connlimit_value() {
     local value="$1"
-    [[ "$value" =~ ^[0-9]+$ ]] && (( 10#$value > 0 ))
+    [[ "$value" =~ ^[0-9]+$ ]] || return 1
+    value="${value#"${value%%[!0]*}"}"
+    [[ -n "$value" && ${#value} -le 10 ]] || return 1
+    (( 10#$value <= 4294967295 ))
 }
 
 ensure_connlimit_tool() {
@@ -3811,13 +3814,33 @@ print_port_connlimit_scope_notice() {
     fi
 }
 
-port_connlimit_has_rule_for_port() {
+port_connlimit_rule_limits_for_port() {
     local cmd="$1"
     local port="$2"
     local comment
     comment=$(port_connlimit_comment "$port")
 
-    "$cmd" -S INPUT 2>/dev/null | grep -Fq "$comment"
+    "$cmd" -S INPUT 2>/dev/null | awk -v expected_comment="$comment" '
+        $1 == "-A" && $2 == "INPUT" {
+            matched = 0
+            limit = ""
+            for (i = 3; i <= NF; i++) {
+                if ($i == "--comment" && i < NF) {
+                    value = $(i + 1)
+                    gsub(/^["\047]|["\047]$/, "", value)
+                    if (value == expected_comment) {
+                        matched = 1
+                    }
+                }
+                if ($i == "--connlimit-above" && i < NF) {
+                    limit = $(i + 1)
+                }
+            }
+            if (matched && limit ~ /^[0-9]+$/) {
+                print limit
+            }
+        }
+    '
 }
 
 run_port_connlimit_rule_action() {
@@ -3827,7 +3850,8 @@ run_port_connlimit_rule_action() {
     local limit="$4"
     local mask="$5"
     local family_label="$6"
-    local comment output
+    local comment output existing_limits existing_count existing_limit keep_count remove_count i
+    local changed=0 removed=0 cleanup_failed=0
     comment=$(port_connlimit_comment "$port")
 
     local args=(
@@ -3839,31 +3863,68 @@ run_port_connlimit_rule_action() {
 
     case "$action" in
         add)
-            if "$cmd" -C INPUT "${args[@]}" >/dev/null 2>&1; then
-                echo -e "$(localized_text "${BLUE}ℹ️ ${family_label} 已存在相同规则：端口 ${port}，每来源 IP 超过 ${limit} 条新连接将被拒绝。${PLAIN}" "${BLUE}ℹ️ ${family_label} The same rule already exists: port ${port}, new connections exceeding ${limit} per source IP will be rejected.${PLAIN}" "${BLUE}ℹ️ ${family_label} Такое же правило уже существует: порт ${port}, новые соединения, превышающие ${limit} для каждого IP-адреса источника, будут отклонены.${PLAIN}")"
-                return 0
+            existing_limits=$(port_connlimit_rule_limits_for_port "$cmd" "$port")
+            keep_count=$(printf '%s\n' "$existing_limits" | grep -xc "$limit" || true)
+            if (( keep_count == 0 )); then
+                if output=$("$cmd" -I INPUT "${args[@]}" 2>&1); then
+                    changed=1
+                else
+                    echo -e "$(localized_text "${RED}❌ ${family_label} 添加失败：${output}${PLAIN}" "${RED}❌ ${family_label} Failed to add: ${output}${PLAIN}" "${RED}❌ ${family_label} Не удалось добавить: ${output}${PLAIN}")"
+                    return 1
+                fi
             fi
-            if port_connlimit_has_rule_for_port "$cmd" "$port"; then
-                echo -e "$(localized_text "${YELLOW}⚠️ ${family_label} 已存在同端口脚本规则。继续添加会叠加限制；如需替换，建议先按端口和连接数删除旧规则。${PLAIN}" "${YELLOW}⚠️ ${family_label} The same port script rule already exists. Continuing to add will add restrictions; if you need to replace them, it is recommended to delete the old rules by port and number of connections first.${PLAIN}" "${YELLOW}⚠️ ${family_label} Такое же правило сценария порта уже существует. Продолжение добавления приведет к добавлению ограничений; при необходимости их замены рекомендуется сначала удалить старые правила по порту и количеству подключений.${PLAIN}")"
+
+            while read -r existing_count existing_limit; do
+                [[ -n "$existing_count" && -n "$existing_limit" ]] || continue
+                keep_count=0
+                [[ "$existing_limit" == "$limit" ]] && keep_count=1
+                remove_count=$((existing_count - keep_count))
+                local cleanup_args=(
+                    -p tcp --dport "$port" --syn
+                    -m connlimit --connlimit-above "$existing_limit" --connlimit-mask "$mask" --connlimit-saddr
+                    -m comment --comment "$comment"
+                    -j REJECT --reject-with tcp-reset
+                )
+                for ((i = 0; i < remove_count; i++)); do
+                    if output=$("$cmd" -D INPUT "${cleanup_args[@]}" 2>&1); then
+                        removed=$((removed + 1))
+                        changed=1
+                    else
+                        cleanup_failed=1
+                        echo -e "$(localized_text "${RED}❌ ${family_label} 清理端口 ${port} 的旧限制 ${existing_limit} 失败：${output}${PLAIN}" "${RED}❌ ${family_label} Failed to clean up old limit ${existing_limit} on port ${port}: ${output}${PLAIN}" "${RED}❌ ${family_label} Не удалось очистить старое ограничение ${existing_limit} на порту ${port}: ${output}${PLAIN}")"
+                        break
+                    fi
+                done
+            done < <(printf '%s\n' "$existing_limits" | sed '/^$/d' | sort -n | uniq -c)
+
+            if (( cleanup_failed != 0 )); then
+                echo -e "$(localized_text "${YELLOW}⚠️ ${family_label} 目标规则已保留，但同端口旧规则可能仍会叠加生效。${PLAIN}" "${YELLOW}⚠️ ${family_label} The target rule is retained, but old rules on the same port may still apply cumulatively.${PLAIN}" "${YELLOW}⚠️ ${family_label} Целевое правило сохранено, но старые правила на том же порту могут продолжать действовать совместно.${PLAIN}")"
+                return 1
             fi
-            if output=$("$cmd" -I INPUT "${args[@]}" 2>&1); then
-                echo -e "$(localized_text "${GREEN}✅ ${family_label} 已添加：端口 ${port}，每来源 IP 最大并发 ${limit}。${PLAIN}" "${GREEN}✅ ${family_label} Added: Port ${port}, maximum concurrency per source IP ${limit}.${PLAIN}" "${GREEN}✅ ${family_label} Добавлено: порт ${port}, максимальный параллелизм на IP-адрес источника ${limit}.${PLAIN}")"
-                return 0
+            if (( changed == 0 )); then
+                echo -e "$(localized_text "${BLUE}ℹ️ ${family_label} 已存在唯一目标规则：端口 ${port}，每来源 IP 最大并发 ${limit}。${PLAIN}" "${BLUE}ℹ️ ${family_label} The single target rule already exists: port ${port}, maximum concurrency per source IP ${limit}.${PLAIN}" "${BLUE}ℹ️ ${family_label} Единственное целевое правило уже существует: порт ${port}, максимальное количество одновременных подключений на IP-адрес источника — ${limit}.${PLAIN}")"
+            else
+                echo -e "$(localized_text "${GREEN}✅ ${family_label} 已应用：端口 ${port}，每来源 IP 最大并发 ${limit}；清理旧/重复规则 ${removed} 条。${PLAIN}" "${GREEN}✅ ${family_label} Applied: port ${port}, maximum concurrency per source IP ${limit}; removed ${removed} old/duplicate rules.${PLAIN}" "${GREEN}✅ ${family_label} Применено: порт ${port}, максимальное количество одновременных подключений на IP-адрес источника — ${limit}; удалено старых/повторяющихся правил: ${removed}.${PLAIN}")"
             fi
-            echo -e "$(localized_text "${RED}❌ ${family_label} 添加失败：${output}${PLAIN}" "${RED}❌ ${family_label} Failed to add: ${output}${PLAIN}" "${RED}❌ ${family_label} Не удалось добавить: ${output}${PLAIN}")"
-            return 1
+            return 0
             ;;
         delete)
-            if ! "$cmd" -C INPUT "${args[@]}" >/dev/null 2>&1; then
+            existing_limits=$(port_connlimit_rule_limits_for_port "$cmd" "$port")
+            remove_count=$(printf '%s\n' "$existing_limits" | grep -xc "$limit" || true)
+            if (( remove_count == 0 )); then
                 echo -e "$(localized_text "${YELLOW}⚠️ ${family_label} 未找到匹配规则：端口 ${port}，连接数 ${limit}。${PLAIN}" "${YELLOW}⚠️ ${family_label} No matching rule found: port ${port}, connection number ${limit}.${PLAIN}" "${YELLOW}⚠️ ${family_label} Не найдено соответствующее правило: порт ${port}, номер подключения ${limit}.${PLAIN}")"
                 return 1
             fi
-            if output=$("$cmd" -D INPUT "${args[@]}" 2>&1); then
-                echo -e "$(localized_text "${GREEN}✅ ${family_label} 已删除：端口 ${port}，连接数 ${limit}。${PLAIN}" "${GREEN}✅ ${family_label} Deleted: Port ${port}, connection number ${limit}.${PLAIN}" "${GREEN}✅ ${family_label} Удален: Порт ${port}, номер подключения ${limit}.${PLAIN}")"
-                return 0
-            fi
-            echo -e "$(localized_text "${RED}❌ ${family_label} 删除失败：${output}${PLAIN}" "${RED}❌ ${family_label} Deletion failed: ${output}${PLAIN}" "${RED}❌ ${family_label} Не удалось удалить: ${output}${PLAIN}")"
-            return 1
+            for ((i = 0; i < remove_count; i++)); do
+                if output=$("$cmd" -D INPUT "${args[@]}" 2>&1); then
+                    removed=$((removed + 1))
+                else
+                    echo -e "$(localized_text "${RED}❌ ${family_label} 删除失败：${output}${PLAIN}" "${RED}❌ ${family_label} Deletion failed: ${output}${PLAIN}" "${RED}❌ ${family_label} Не удалось удалить: ${output}${PLAIN}")"
+                    return 1
+                fi
+            done
+            echo -e "$(localized_text "${GREEN}✅ ${family_label} 已删除：端口 ${port}，连接数 ${limit}，共 ${removed} 条。${PLAIN}" "${GREEN}✅ ${family_label} Deleted: port ${port}, connection limit ${limit}, ${removed} rule(s) in total.${PLAIN}" "${GREEN}✅ ${family_label} Удалено: порт ${port}, ограничение подключений ${limit}, всего правил: ${removed}.${PLAIN}")"
+            return 0
             ;;
         *)
             echo -e "$(localized_text "${RED}❌ 未知 connlimit 操作：${action}${PLAIN}" "${RED}❌ unknown connlimit operation: ${action}${PLAIN}" "${RED}❌ неизвестная операция connlimit: ${action}${PLAIN}")"
