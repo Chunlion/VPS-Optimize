@@ -2,28 +2,73 @@
 layout: home
 
 hero:
+  eyebrow: Built for ongoing maintenance
   name: VPS-Optimize
-  text: VPS Setup and Server Maintenance
-  tagline: A scripting toolkit for VPS initialization, system optimization, network tuning, and server maintenance.
+  text: From first setup to ongoing VPS maintenance
+  tagline: Detect, back up, optimize, verify, and roll back through one clear workflow.
+  image:
+    light: /assets/entry-routing-en.webp
+    dark: /assets/entry-routing-en-dark.webp
+    alt: Port 443 routed through VPS-Optimize to Web, Xray, and TCP Peek
+    caption: One public ingress · Shared configuration · Visible status
   actions:
     - theme: brand
-      text: Get Started
+      text: View the Workflow
       link: /en/quick-start
     - theme: alt
-      text: GitHub
+      text: Source Code
       link: https://github.com/Chunlion/VPS-Optimize
 
-features:
-  - title: VPS Setup
-    details: Prepare the base environment, install common tools, and configure the timezone and package sources before bringing a new server online.
-  - title: System Environment Detection
-    details: Detect the OS version, CPU architecture, virtualization platform, network connectivity, and key service status before making changes.
-  - title: Network Parameter Tuning
-    details: Adjust common kernel network parameters for connection queues, forwarding, buffers, and general server networking.
-  - title: TCP Optimization
-    details: Configure congestion control, queue disciplines, and BBR-related options with snapshots and rollback preparation.
-  - title: Shared 443 Entry
-    details: Share public port 443 among panels, subscriptions, websites, and REALITY nodes while reducing exposed ports and conflicts.
-  - title: Maintenance and Rollback
-    details: Update, clean, inspect, back up, restore, and troubleshoot the server during routine maintenance.
+workflow:
+  label: VPS-Optimize maintenance workflow
+  steps:
+    - icon: fa-solid fa-magnifying-glass
+      title: Detect
+      details: Check the system, network, and services for potential issues.
+    - icon: fa-solid fa-database
+      title: Back up
+      details: Save critical configuration and keep a recovery path.
+    - icon: fa-solid fa-bolt
+      title: Optimize
+      details: Adjust the system and network only where needed.
+    - icon: fa-solid fa-shield-halved
+      title: Verify
+      details: Confirm service availability and the result of each change.
+    - icon: fa-solid fa-rotate-left
+      title: Roll back
+      details: Restore saved configuration when a change fails.
+
+story:
+  kicker: Project approach
+  title: Maintenance is not a one-time task
+  description: VPS-Optimize combines detection, backup, changes, verification, and rollback in one workflow while keeping key status and logs visible for ongoing maintenance.
+  principles:
+    - icon: fa-solid fa-list-check
+      title: Standard workflow
+      text: Consistent steps and output
+    - icon: fa-solid fa-shield-halved
+      title: Controlled changes
+      text: Backups before critical updates
+    - icon: fa-solid fa-chart-column
+      title: Visible state
+      text: Key status and logs together
+  terminalLabel: VPS-Optimize status example
+  terminalHeader: Item / Status
+  terminalRows:
+    - label: System environment
+      value: Healthy
+    - label: Configuration backup
+      value: Available
+    - label: Shared port 443
+      value: Running
+    - label: Key services
+      value: Running
+    - label: Firewall
+      value: Enabled
+  primaryIcon: fa-solid fa-shield-halved
+  primaryTitle: Safer changes
+  primaryText: Keep a recovery path before changing critical configuration.
+  secondaryIcon: fa-regular fa-clock
+  secondaryTitle: Clearer diagnosis
+  secondaryText: Review checks and service state in one place when problems occur.
 ---
