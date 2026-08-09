@@ -65,6 +65,16 @@ bash /usr/local/bin/xui-custom-manager.sh --reset-check --dry-run
 bash /usr/local/bin/xui-custom-manager.sh --self-test
 ```
 
+## 界面语言
+
+默认使用中文。启动时可指定 `--lang zh|en|ru`，例如：
+
+```bash
+xcm --lang en
+```
+
+也可在主菜单输入 `l` 或 `lang` 切换语言。选择会保存到 `/etc/xui-custom-manager.conf` 的 `XCM_LANGUAGE`。
+
 ## 自定义重置逻辑
 
 自定义重置由 `/etc/xui-custom-reset.json` 控制，核心概念如下：

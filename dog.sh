@@ -13,12 +13,66 @@ readonly DAILY_USAGE_FILE="$CONFIG_DIR/daily_usage.json"
 readonly DAILY_SNAPSHOT_STATE_FILE="$CONFIG_DIR/daily_snapshot_state.json"
 
 NFT_COUNTER_SNAPSHOT=""
+UI_LANGUAGE="${VPSO_LANG:-${DOG_LANGUAGE:-zh}}"
+REQUESTED_UI_LANGUAGE=""
 
 readonly RED='\033[0;31m'
 readonly YELLOW='\033[0;33m'
 readonly BLUE='\033[0;34m'
 readonly GREEN='\033[0;32m'
 readonly NC='\033[0m'
+
+normalize_ui_language() {
+    case "${1,,}" in
+        zh|zh_cn|zh-cn|chinese|中文) printf 'zh' ;;
+        en|en_us|en-us|english) printf 'en' ;;
+        ru|ru_ru|ru-ru|russian|русский) printf 'ru' ;;
+        *) return 1 ;;
+    esac
+}
+
+ui_text() {
+    local zh="$1" en="$2" ru="$3"
+    case "$UI_LANGUAGE" in
+        en) printf '%s' "$en" ;;
+        ru) printf '%s' "$ru" ;;
+        *) printf '%s' "$zh" ;;
+    esac
+}
+
+load_ui_language() {
+    local saved=""
+    if [[ -z "${VPSO_LANG:-}" && -z "${DOG_LANGUAGE:-}" && -f "$CONFIG_FILE" ]] && command -v jq >/dev/null 2>&1; then
+        saved=$(jq -r '.global.ui_language // empty' "$CONFIG_FILE" 2>/dev/null || true)
+    fi
+    UI_LANGUAGE=$(normalize_ui_language "${VPSO_LANG:-${DOG_LANGUAGE:-${REQUESTED_UI_LANGUAGE:-$saved}}}" 2>/dev/null || printf 'zh')
+}
+
+save_ui_language() {
+    local language="$1"
+    language=$(normalize_ui_language "$language") || return 1
+    update_config ".global.ui_language = \"${language}\"" || return 1
+    UI_LANGUAGE="$language"
+}
+
+select_ui_language() {
+    local choice target
+    echo -e "${BLUE}$(ui_text '=== 界面语言 ===' '=== Interface language ===' '=== Язык интерфейса ===')${NC}"
+    echo "  1. English"
+    echo "  2. 简体中文"
+    echo "  3. Русский"
+    echo "  0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
+    read_trimmed choice "$(ui_text '请选择 [0-3]: ' 'Select [0-3]: ' 'Выберите [0-3]: ')"
+    case "${choice,,}" in
+        1|en|english) target="en" ;;
+        2|zh|chinese|中文) target="zh" ;;
+        3|ru|russian|русский) target="ru" ;;
+        0|q|quit|back) return 0 ;;
+        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; return 1 ;;
+    esac
+    save_ui_language "$target" || { echo -e "${RED}$(ui_text '语言设置保存失败。' 'Failed to save language setting.' 'Не удалось сохранить язык интерфейса.')${NC}"; return 1; }
+    echo -e "${GREEN}$(ui_text '界面语言已更新。' 'Interface language updated.' 'Язык интерфейса обновлён.')${NC}"
+}
 
 trim_input() {
     local value="$*"
@@ -105,6 +159,7 @@ normalize_main_choice() {
         report|trend|日报|趋势) echo "8" ;;
         detail|details|d|明细|详细) echo "detail" ;;
         health|check|diag|diagnose|h|诊断|健康检查) echo "health" ;;
+        lang|language|l|语言|язык) echo "language" ;;
         *) echo "$choice" ;;
     esac
 }
@@ -306,7 +361,7 @@ setup_cron_environment() {
 
 check_root() {
     if [ "$EUID" -ne 0 ]; then
-        echo -e "${RED}错误：此脚本需要root权限运行${NC}"
+        echo -e "${RED}$(ui_text '错误：此脚本需要 root 权限运行。' 'Error: run this script as root.' 'Ошибка: запустите сценарий от root.')${NC}"
         exit 1
     fi
 }
@@ -439,9 +494,9 @@ format_bytes() {
 get_beijing_time() { TZ='Asia/Shanghai' date "$@"; }
 
 print_traffic_scope_notice() {
-    echo -e "${YELLOW}统计口径：当前统计来自 nftables counter。${NC}"
-    echo -e "${YELLOW}范围：被监控端口匹配到的 TCP/UDP input/output/forward 流量，不等同于 VPS 商家账单流量。${NC}"
-    echo -e "${YELLOW}日报：按定时快照增量统计，可能存在小时级跨日误差。${NC}"
+    echo -e "${YELLOW}$(ui_text '统计口径：当前统计来自 nftables counter。' 'Source: nftables counters.' 'Источник: счётчики nftables.')${NC}"
+    echo -e "${YELLOW}$(ui_text '范围：受监控端口的 TCP/UDP input/output/forward 流量，不等同于 VPS 商家账单。' 'Scope: TCP/UDP input/output/forward traffic for monitored ports; not a VPS provider bill.' 'Охват: TCP/UDP input/output/forward для отслеживаемых портов; это не счёт провайдера VPS.')${NC}"
+    echo -e "${YELLOW}$(ui_text '日报按定时快照增量统计，跨日可能有小时级误差。' 'Daily reports use scheduled snapshot deltas and may have hour-level cross-day variance.' 'Дневные отчёты используют приращения снимков; на границе суток возможна погрешность до часа.')${NC}"
 }
 
 print_daily_snapshot_notice() {
@@ -1459,7 +1514,8 @@ show_main_menu() {
     local active_ports=($(get_active_ports))
     local port_count=${#active_ports[@]}
     local counter_snapshot_ok=true
-    local port_actual_total="统计不可用"
+    local port_actual_total
+    port_actual_total="$(ui_text '统计不可用' 'Unavailable' 'Недоступно')"
     if validate_traffic_counter_snapshot; then
         port_actual_total=$(get_daily_total_traffic)
     else
@@ -1467,33 +1523,32 @@ show_main_menu() {
         NFT_COUNTER_SNAPSHOT=""
     fi
 
-    echo -e "${BLUE}=== 端口流量狗 v$SCRIPT_VERSION ===${NC}"
-    echo -e "${GREEN}介绍主页:${NC}https://zywe.de | ${GREEN}原项目:${NC}https://github.com/zywe03/realm-xwPF"
-    echo -e "${GREEN}项目地址：https://github.com/Chunlion/VPS-Optimize 作者修改了部分代码 | 快捷命令: dog${NC}"
-    echo -e "${YELLOW}用途：按端口统计流量、设置配额/限速、日报趋势和 Telegram 查询。${NC}"
-    echo -e "${YELLOW}快捷输入：add 添加端口，limit 配额/限速，tg 通知，report 报表，u 更新，q 退出。${NC}"
-    echo -e "${YELLOW}快捷诊断：detail 查看 input/output 明细，health 执行统计健康检查。${NC}"
+    echo -e "${BLUE}=== $(ui_text '端口流量狗' 'Port Traffic Dog' 'Монитор трафика портов') v$SCRIPT_VERSION ===${NC}"
+    echo -e "${GREEN}$(ui_text '原项目' 'Original project' 'Исходный проект'):${NC}https://github.com/zywe03/realm-xwPF"
+    echo -e "${GREEN}VPS-Optimize: https://github.com/Chunlion/VPS-Optimize | $(ui_text '快捷命令' 'Command' 'Команда'): dog${NC}"
+    echo -e "${YELLOW}$(ui_text '按端口统计流量、设置配额/限速、查看日报趋势和 Telegram 报告。' 'Monitor traffic by port, manage quotas/rate limits, and view daily trends or Telegram reports.' 'Контролируйте трафик по портам, квоты/лимиты скорости, дневные отчёты и Telegram-уведомления.')${NC}"
+    echo -e "${YELLOW}$(ui_text '快捷输入：add、limit、tg、report、detail、health、lang、u、q。' 'Shortcuts: add, limit, tg, report, detail, health, lang, u, q.' 'Быстрые команды: add, limit, tg, report, detail, health, lang, u, q.')${NC}"
     echo
-    echo -e "${GREEN}状态: 监控中${NC} | ${BLUE}守护端口: ${port_count}个${NC}"
-    echo -e "${YELLOW}实际端口总流量: $port_actual_total${NC}"
+    echo -e "${GREEN}$(ui_text '状态：监控中' 'Status: monitoring' 'Статус: мониторинг')${NC} | ${BLUE}$(ui_text '监控端口' 'Monitored ports' 'Отслеживаемые порты'): ${port_count}${NC}"
+    echo -e "${YELLOW}$(ui_text '实际端口总流量' 'Actual monitored-port traffic' 'Фактический трафик отслеживаемых портов'): $port_actual_total${NC}"
     echo "────────────────────────────────────────────────────────"
 
     if [ "$counter_snapshot_ok" != "true" ]; then
-        echo -e "${RED}nftables counter 不完整，未显示流量数字。请使用 health 检查。${NC}"
+        echo -e "${RED}$(ui_text 'nftables counter 不完整，未显示流量数字。请使用 health 检查。' 'nftables counters are incomplete; traffic values are hidden. Run health.' 'Счётчики nftables неполные; значения трафика скрыты. Запустите health.')${NC}"
     elif [ $port_count -gt 0 ]; then
         format_port_list "display"
     else
-        echo -e "${YELLOW}暂无监控端口${NC}"
+        echo -e "${YELLOW}$(ui_text '暂无监控端口' 'No monitored ports.' 'Нет отслеживаемых портов.')${NC}"
     fi
 
     echo "────────────────────────────────────────────────────────"
-    echo -e "${BLUE}1.${NC} 添加/删除端口监控       ${BLUE}2.${NC} 配额/限速管理"
-    echo -e "${BLUE}3.${NC} 每月/立即重置流量       ${BLUE}4.${NC} 导出/导入配置"
-    echo -e "${BLUE}5.${NC} 检查并热更新脚本        ${BLUE}6.${NC} 卸载脚本"
-    echo -e "${BLUE}7.${NC} 通知管理 (Telegram 查询/通知) ${BLUE}8.${NC} 日报与趋势报表"
-    echo -e "${BLUE}0.${NC} 退出"
+    echo -e "${BLUE}1.${NC} $(ui_text '端口监控' 'Port monitoring' 'Мониторинг портов')       ${BLUE}2.${NC} $(ui_text '配额与限速' 'Quotas and rate limits' 'Квоты и лимиты скорости')"
+    echo -e "${BLUE}3.${NC} $(ui_text '流量重置' 'Traffic reset' 'Сброс трафика')         ${BLUE}4.${NC} $(ui_text '导出/导入配置' 'Export/import config' 'Экспорт/импорт конфигурации')"
+    echo -e "${BLUE}5.${NC} $(ui_text '更新脚本' 'Update script' 'Обновить сценарий')        ${BLUE}6.${NC} $(ui_text '卸载' 'Uninstall' 'Удалить')"
+    echo -e "${BLUE}7.${NC} $(ui_text 'Telegram 通知' 'Telegram notifications' 'Уведомления Telegram')  ${BLUE}8.${NC} $(ui_text '日报与趋势' 'Daily reports and trends' 'Дневные отчёты и тренды')"
+    echo -e "${BLUE}l.${NC} $(ui_text '界面语言' 'Interface language' 'Язык интерфейса')        ${BLUE}0.${NC} $(ui_text '退出' 'Exit' 'Выход')"
     echo
-    read_trimmed choice "请选择操作 [0-8 或快捷词]: "
+    read_trimmed choice "$(ui_text '请选择 [0-8 或快捷词]: ' 'Select [0-8 or shortcut]: ' 'Выберите [0-8 или команду]: ')"
     choice=$(normalize_main_choice "$choice")
 
     case $choice in
@@ -1509,25 +1564,26 @@ show_main_menu() {
         health)
             show_statistics_health_check
             echo
-            read -r -p "按回车返回主菜单..."
+            read -r -p "$(ui_text '按回车返回主菜单...' 'Press Enter to return to the main menu...' 'Нажмите Enter для возврата в главное меню...')"
             show_main_menu
             ;;
+        language) select_ui_language; sleep 1; show_main_menu ;;
         0) exit 0 ;;
-        *) echo -e "${RED}无效选择，请输入0-8或快捷词${NC}"; sleep 1; show_main_menu ;;
+        *) echo -e "${RED}$(ui_text '无效选择，请输入 0-8 或快捷词。' 'Invalid selection. Enter 0-8 or a shortcut.' 'Неверный выбор. Введите 0-8 или команду.')${NC}"; sleep 1; show_main_menu ;;
     esac
 }
 
 manage_port_monitoring() {
-    echo -e "${BLUE}=== 端口监控管理 ===${NC}"
-    echo "1. 添加端口监控"
-    echo "2. 删除端口监控"
-    echo "0. 返回主菜单"
-    read_trimmed choice "请选择操作 [0-2]: "
+    echo -e "${BLUE}=== $(ui_text '端口监控' 'Port monitoring' 'Мониторинг портов') ===${NC}"
+    echo "1. $(ui_text '添加端口监控' 'Add port monitoring' 'Добавить мониторинг порта')"
+    echo "2. $(ui_text '删除端口监控' 'Remove port monitoring' 'Удалить мониторинг порта')"
+    echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
+    read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
     case $choice in
         1) add_port_monitoring ;;
         2) remove_port_monitoring ;;
         0) show_main_menu ;;
-        *) echo -e "${RED}无效选择${NC}"; sleep 1; manage_port_monitoring ;;
+        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; sleep 1; manage_port_monitoring ;;
     esac
 }
 
@@ -2033,16 +2089,16 @@ set_port_quota_limit() {
 }
 
 manage_traffic_limits() {
-    echo -e "${BLUE}=== 端口限制设置管理 ===${NC}"
-    echo "1. 设置端口带宽限制（速率控制）"
-    echo "2. 设置端口流量配额（总量控制）"
-    echo "0. 返回主菜单"
-    read_trimmed choice "请选择操作 [0-2]: "
+    echo -e "${BLUE}=== $(ui_text '配额与限速' 'Quotas and rate limits' 'Квоты и лимиты скорости') ===${NC}"
+    echo "1. $(ui_text '设置端口带宽限制（速率控制）' 'Set port bandwidth limit (rate control)' 'Ограничить скорость порта')"
+    echo "2. $(ui_text '设置端口流量配额（总量控制）' 'Set port traffic quota (volume control)' 'Задать квоту трафика порта')"
+    echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
+    read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
     case $choice in
         1) set_port_bandwidth_limit ;;
         2) set_port_quota_limit ;;
         0) show_main_menu ;;
-        *) echo -e "${RED}无效选择${NC}"; sleep 1; manage_traffic_limits ;;
+        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; sleep 1; manage_traffic_limits ;;
     esac
 }
 
@@ -2167,16 +2223,16 @@ remove_tc_limit() {
 }
 
 manage_traffic_reset() {
-    echo -e "${BLUE}流量重置管理${NC}"
-    echo "1. 每月流量重置日设置"
-    echo "2. 立即重置"
-    echo "0. 返回主菜单"
-    read_trimmed choice "请选择操作 [0-2]: "
+    echo -e "${BLUE}$(ui_text '流量重置' 'Traffic reset' 'Сброс трафика')${NC}"
+    echo "1. $(ui_text '每月流量重置日设置' 'Monthly reset day' 'День ежемесячного сброса')"
+    echo "2. $(ui_text '立即重置' 'Reset now' 'Сбросить сейчас')"
+    echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
+    read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
     case $choice in
         1) set_reset_day ;;
         2) immediate_reset ;;
         0) show_main_menu ;;
-        *) echo -e "${RED}无效选择${NC}"; sleep 1; manage_traffic_reset ;;
+        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; sleep 1; manage_traffic_reset ;;
     esac
 }
 
@@ -2314,16 +2370,16 @@ reset_port_nftables_counters() {
 }
 
 manage_configuration() {
-    echo -e "${BLUE}=== 配置文件管理 ===${NC}"
-    echo "1. 导出配置包"
-    echo "2. 导入配置包"
-    echo "0. 返回上级菜单"
-    read_trimmed choice "请输入选择 [0-2]: "
+    echo -e "${BLUE}=== $(ui_text '配置导入与导出' 'Configuration import/export' 'Импорт/экспорт конфигурации') ===${NC}"
+    echo "1. $(ui_text '导出配置包' 'Export configuration' 'Экспорт конфигурации')"
+    echo "2. $(ui_text '导入配置包' 'Import configuration' 'Импорт конфигурации')"
+    echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
+    read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
     case $choice in
         1) export_config ;;
         2) import_config ;;
         0) show_main_menu ;;
-        *) echo -e "${RED}无效选择${NC}"; sleep 1; manage_configuration ;;
+        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; sleep 1; manage_configuration ;;
     esac
 }
 
@@ -3112,26 +3168,26 @@ run_tg_listener() {
 }
 
 manage_notifications() {
-    echo -e "${BLUE}=== 通知管理 ===${NC}"
-    echo "1. 部署 Telegram 交互式查询机器人 (支持 /t /all /yday /trend /day)"
-    echo "2. 停止并卸载 Telegram 交互式机器人"
-    echo "3. 原版企业 wx 机器人通知配置 (保留接口)"
-    echo "4. 立即查询并发送实时报告"
-    echo "5. Telegram 定时通知"
-    echo "6. 自定义 Telegram 通知模板"
-    echo "0. 返回主菜单"
+    echo -e "${BLUE}=== $(ui_text '通知管理' 'Notifications' 'Уведомления') ===${NC}"
+    echo "1. $(ui_text '部署 Telegram 查询机器人（/t /all /yday /trend /day）' 'Deploy Telegram query bot (/t /all /yday /trend /day)' 'Развернуть Telegram-бота запросов (/t /all /yday /trend /day)')"
+    echo "2. $(ui_text '停止并卸载 Telegram 查询机器人' 'Stop and uninstall Telegram query bot' 'Остановить и удалить Telegram-бота запросов')"
+    echo "3. $(ui_text '企业微信机器人（保留接口）' 'WeCom bot (legacy interface)' 'Бот WeCom (устаревший интерфейс)')"
+    echo "4. $(ui_text '立即发送实时报告' 'Send a real-time report now' 'Отправить отчёт сейчас')"
+    echo "5. $(ui_text 'Telegram 定时通知' 'Scheduled Telegram notifications' 'Расписание уведомлений Telegram')"
+    echo "6. $(ui_text 'Telegram 通知模板' 'Telegram notification template' 'Шаблон уведомлений Telegram')"
+    echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
     echo
-    read_trimmed choice "请选择操作 [0-6]: "
+    read_trimmed choice "$(ui_text '请选择 [0-6]: ' 'Select [0-6]: ' 'Выберите [0-6]: ')"
 
     case $choice in
         1) setup_interactive_tg ;;
         2) stop_interactive_tg ;;
-        3) echo -e "${YELLOW}请使用旧版逻辑维护${NC}"; sleep 2; manage_notifications ;;
+        3) echo -e "${YELLOW}$(ui_text '请使用旧版逻辑维护。' 'Use the legacy workflow for this item.' 'Используйте прежний сценарий для этого пункта.')${NC}"; sleep 2; manage_notifications ;;
         4) send_manual_telegram_notification ;;
         5) manage_telegram_schedule ;;
         6) manage_telegram_template ;;
         0) show_main_menu ;;
-        *) echo -e "${RED}无效选择${NC}"; sleep 1; manage_notifications ;;
+        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; sleep 1; manage_notifications ;;
     esac
 }
 
@@ -3166,12 +3222,25 @@ EOF
 }
 
 main() {
+    if [[ "${1:-}" == "--lang" ]]; then
+        REQUESTED_UI_LANGUAGE="${2:-}"
+        if ! normalize_ui_language "$REQUESTED_UI_LANGUAGE" >/dev/null; then
+            echo -e "${RED}--lang $(ui_text '仅支持 zh、en 或 ru。' 'accepts only zh, en, or ru.' 'поддерживает только zh, en или ru.')${NC}" >&2
+            exit 1
+        fi
+        UI_LANGUAGE=$(normalize_ui_language "$REQUESTED_UI_LANGUAGE")
+        shift 2
+    fi
     # 1. 基础环境校验
     check_root
     
     # 2. 👉 【核心大招】：把配置初始化和恢复规则提到了最前面！
     # 这样无论是开机自启还是手动运行，它都会先默默检查并补齐丢失的监控规则
     init_config  
+    load_ui_language
+    if [[ -n "$REQUESTED_UI_LANGUAGE" ]]; then
+        save_ui_language "$REQUESTED_UI_LANGUAGE" || exit 1
+    fi
 
     # 3. 拦截后台机器人的启动参数
     if [ "${1:-}" == "--run-listener" ]; then

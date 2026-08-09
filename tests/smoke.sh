@@ -1643,6 +1643,12 @@ read_trimmed dog_confirm "确认操作？[Y/n]: " <<< ""
 [[ "$(normalize_main_choice " add ")" == "1" ]]
 [[ "$(normalize_main_choice "tg")" == "7" ]]
 [[ "$(normalize_main_choice "q")" == "0" ]]
+[[ "$(normalize_main_choice "lang")" == "language" ]]
+UI_LANGUAGE=en
+[[ "$(ui_text "中文" "English" "Русский")" == "English" ]]
+UI_LANGUAGE=ru
+[[ "$(ui_text "中文" "English" "Русский")" == "Русский" ]]
+UI_LANGUAGE=zh
 [[ "$(format_bytes "")" == "0B" ]]
 [[ "$(format_bytes 1023)" == "1023B" ]]
 telegram_notification_due 1h 9 13
@@ -1925,6 +1931,11 @@ assert_file_contains "docs/dog.md" '`--scheduled-notify`' "dog.sh docs must docu
 assert_file_contains "docs/dog.md" '`{server_name}`、`{report}`、`{time}`' "dog.sh docs must document Telegram template variables."
 assert_file_contains "en/docs/dog.md" '`{server_name}`, `{report}`, and `{time}`' "English dog.sh docs must document Telegram template variables."
 assert_file_contains "ru/docs/dog.md" '`{server_name}`, `{report}` и `{time}`' "Russian dog.sh docs must document Telegram template variables."
+assert_file_contains "dog.sh" '--lang' "dog.sh must expose a command-line language selector."
+assert_file_contains "dog.sh" 'select_ui_language' "dog.sh must keep an interactive language selector."
+assert_file_contains "docs/dog.md" '`--lang zh|en|ru`' "dog.sh Chinese docs must explain runtime language selection."
+assert_file_contains "en/docs/dog.md" '`--lang zh|en|ru`' "dog.sh English docs must explain runtime language selection."
+assert_file_contains "ru/docs/dog.md" '`--lang zh|en|ru`' "dog.sh Russian docs must explain runtime language selection."
 
 assert_file_contains "docs/xui-custom-manager.md" '支持使用 SQLite 的 3x-ui 2.9.x 和 3.x。' "xui-custom-manager docs must state the supported version ranges."
 assert_file_contains "docs/xui-custom-manager.md" '写库前必须通过只读数据库 schema 检查' "xui-custom-manager docs must require schema checks before writes."
@@ -1933,6 +1944,11 @@ assert_file_not_contains "docs/xui-custom-manager.md" '只有 3x-ui v2.9.4 验�
 assert_file_not_contains "docs/xui-custom-manager.md" '未验证版本可能可用' "xui-custom-manager docs must not imply unsupported 3x-ui versions may work."
 assert_file_not_contains "docs/xui-custom-manager.md" '其它版本也可能兼容' "xui-custom-manager docs must not imply unsupported 3x-ui versions may work."
 assert_file_not_contains "docs/xui-custom-manager.md" '其它版本可尝试写库' "xui-custom-manager docs must not permit write trials on other 3x-ui versions."
+assert_file_contains "xui-custom-manager.sh" '--lang' "xui-custom-manager must expose a command-line language selector."
+assert_file_contains "xui-custom-manager.sh" 'select_ui_language' "xui-custom-manager must keep an interactive language selector."
+assert_file_contains "docs/xui-custom-manager.md" '`--lang zh|en|ru`' "xui-custom-manager Chinese docs must explain runtime language selection."
+assert_file_contains "en/docs/xui-custom-manager.md" '`--lang zh|en|ru`' "xui-custom-manager English docs must explain runtime language selection."
+assert_file_contains "ru/docs/xui-custom-manager.md" '`--lang zh|en|ru`' "xui-custom-manager Russian docs must explain runtime language selection."
 
 grep -q 'print_vpso_mux_failure_context' dist/vps.sh
 grep -q 'print_nginx_stream_failure_context' dist/vps.sh

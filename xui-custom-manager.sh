@@ -28,6 +28,69 @@ PLAIN='\033[0m'
 RUN_CHECK=0
 DRY_RUN=0
 SELF_TEST=0
+UI_LANGUAGE="${VPSO_LANG:-${XCM_LANGUAGE:-zh}}"
+REQUESTED_UI_LANGUAGE=""
+
+normalize_ui_language() {
+    case "${1,,}" in
+        zh|zh_cn|zh-cn|chinese|中文) printf 'zh' ;;
+        en|en_us|en-us|english) printf 'en' ;;
+        ru|ru_ru|ru-ru|russian|русский) printf 'ru' ;;
+        *) return 1 ;;
+    esac
+}
+
+ui_text() {
+    local zh="$1" en="$2" ru="$3"
+    case "$UI_LANGUAGE" in
+        en) printf '%s' "$en" ;;
+        ru) printf '%s' "$ru" ;;
+        *) printf '%s' "$zh" ;;
+    esac
+}
+
+load_ui_language() {
+    UI_LANGUAGE=$(normalize_ui_language "${VPSO_LANG:-${REQUESTED_UI_LANGUAGE:-${XCM_LANGUAGE:-zh}}}" 2>/dev/null || printf 'zh')
+}
+
+save_ui_language() {
+    local language="$1" tmp_file profile_dir
+    language=$(normalize_ui_language "$language") || return 1
+    profile_dir=$(dirname "$CONFIG_PROFILE")
+    mkdir -p "$profile_dir" || return 1
+    tmp_file=$(mktemp "${profile_dir}/.xui-custom-manager.conf.XXXXXX") || return 1
+    if [[ -f "$CONFIG_PROFILE" ]]; then
+        grep -v '^[[:space:]]*XCM_LANGUAGE=' "$CONFIG_PROFILE" > "$tmp_file" || true
+    fi
+    printf 'XCM_LANGUAGE=%q\n' "$language" >> "$tmp_file" || { rm -f "$tmp_file"; return 1; }
+    chmod 600 "$tmp_file" 2>/dev/null || true
+    mv -f "$tmp_file" "$CONFIG_PROFILE" || { rm -f "$tmp_file"; return 1; }
+    XCM_LANGUAGE="$language"
+    UI_LANGUAGE="$language"
+}
+
+select_ui_language() {
+    local choice target
+    clear_screen
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "${BOLD}$(ui_text '界面语言' 'Interface language' 'Язык интерфейса')${PLAIN}"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo "  1. English"
+    echo "  2. 简体中文"
+    echo "  3. Русский"
+    echo "  0/q. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
+    read_menu_choice choice "$(ui_text '请选择 [0-3]: ' 'Select [0-3]: ' 'Выберите [0-3]: ')"
+    case "${choice,,}" in
+        1|en|english) target="en" ;;
+        2|zh|chinese|中文) target="zh" ;;
+        3|ru|russian|русский) target="ru" ;;
+        0|q|quit|back) return 0 ;;
+        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${PLAIN}"; sleep 1; return 1 ;;
+    esac
+    save_ui_language "$target" || { echo -e "${RED}$(ui_text '语言设置保存失败。' 'Failed to save language setting.' 'Не удалось сохранить язык интерфейса.')${PLAIN}"; sleep 1; return 1; }
+    echo -e "${GREEN}$(ui_text '界面语言已更新。' 'Interface language updated.' 'Язык интерфейса обновлён.')${PLAIN}"
+    sleep 1
+}
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -40,8 +103,16 @@ while [ "$#" -gt 0 ]; do
         --self-test)
             SELF_TEST=1
             ;;
+        --lang)
+            REQUESTED_UI_LANGUAGE="${2:-}"
+            if ! UI_LANGUAGE=$(normalize_ui_language "$REQUESTED_UI_LANGUAGE"); then
+                echo "--lang $(ui_text '仅支持 zh、en 或 ru。' 'accepts only zh, en, or ru.' 'поддерживает только zh, en или ru.')" >&2
+                exit 1
+            fi
+            shift
+            ;;
         -h|--help)
-            echo "用法：$0 [--reset-check] [--dry-run] [--self-test]"
+            echo "$(ui_text '用法' 'Usage' 'Использование'): $0 [--reset-check] [--dry-run] [--self-test] [--lang zh|en|ru]"
             exit 0
             ;;
         *)
@@ -53,13 +124,17 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$(id -u)" -ne 0 ] && [ "$SELF_TEST" -ne 1 ]; then
-    echo "请用 root 用户运行。"
+    echo "$(ui_text '请用 root 用户运行。' 'Run as root.' 'Запустите от root.')"
     exit 1
 fi
 
 if [ -f "$CONFIG_PROFILE" ]; then
     # shellcheck source=/dev/null
     source "$CONFIG_PROFILE"
+fi
+load_ui_language
+if [[ -n "$REQUESTED_UI_LANGUAGE" ]]; then
+    save_ui_language "$REQUESTED_UI_LANGUAGE" || exit 1
 fi
 
 LOCAL_RUNNER="/usr/local/bin/xui-custom-manager.sh"
@@ -86,7 +161,7 @@ clear_screen() {
 pause() {
     echo
     # EOF（Ctrl+D）时不因 set -e 直接退出整个脚本
-    read -rp "按回车返回..." || true
+    read -rp "$(ui_text '按回车返回...' 'Press Enter to return...' 'Нажмите Enter для возврата...')" || true
 }
 
 confirm_yes() {
@@ -94,14 +169,14 @@ confirm_yes() {
     local answer
     echo
     echo -e "${YELLOW}${message}${PLAIN}"
-    read -rp "继续？[Y/n]: " answer
+    read -rp "$(ui_text '继续？[Y/n]: ' 'Continue? [Y/n]: ' 'Продолжить? [Y/n]: ')" answer
     answer="${answer:-yes}"
     [[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
 need_tty() {
     if [ ! -t 0 ] && [ ! -r /dev/tty ]; then
-        echo "错误：该功能需要交互式终端。"
+        echo "$(ui_text '错误：该功能需要交互式终端。' 'Error: this action requires an interactive terminal.' 'Ошибка: для этого действия нужен интерактивный терминал.')"
         return 1
     fi
 }
@@ -114,15 +189,15 @@ require_interactive_menu() {
         exec </dev/tty
         return 0
     fi
-    echo "错误：管理菜单需要交互式终端，当前没有可读取的 stdin。"
-    echo "请在 SSH 终端中直接运行：bash $LOCAL_RUNNER"
-    echo "非交互环境请使用：bash $LOCAL_RUNNER --reset-check --dry-run"
+    echo "$(ui_text '错误：管理菜单需要交互式终端，当前没有可读取的 stdin。' 'Error: the management menu requires an interactive terminal.' 'Ошибка: меню управления требует интерактивный терминал.')"
+    echo "$(ui_text '请在 SSH 终端中直接运行：' 'Run this directly in an SSH terminal:' 'Запустите в терминале SSH:') bash $LOCAL_RUNNER"
+    echo "$(ui_text '非交互环境请使用：' 'For non-interactive use:' 'Для неинтерактивного запуска:') bash $LOCAL_RUNNER --reset-check --dry-run"
     return 1
 }
 
 read_menu_choice() {
     local __var_name="$1"
-    local __prompt="${2:-请选择：}"
+    local __prompt="${2:-$(ui_text '请选择：' 'Select: ' 'Выберите: ')}"
     local __value
     # EOF（Ctrl+D）按“返回上级”处理，避免 set -e 直接退出整个脚本
     read -rp "$__prompt" __value || { echo; __value="q"; }
@@ -191,10 +266,10 @@ print_xui_version_warning() {
     detected_version="${detected_version:-$(detect_xui_version)}"
     supported_ranges="$(format_supported_version_ranges)"
     if xui_version_is_supported "$detected_version"; then
-        echo -e "${GREEN}兼容性：当前 3x-ui v${detected_version} 在支持范围内，写库前仍会校验数据库表/字段关键字。${PLAIN}"
+        echo -e "${GREEN}$(ui_text "兼容性：3x-ui v${detected_version} 在支持范围内；写库前仍会校验数据库表和字段。" "Compatibility: 3x-ui v${detected_version} is supported; tables and fields are still checked before writes." "Совместимость: 3x-ui v${detected_version} поддерживается; перед записью проверяются таблицы и поля.")${PLAIN}"
     else
-        echo -e "${YELLOW}兼容性提示：当前 3x-ui v${detected_version} 不在支持范围内。${PLAIN}"
-        echo -e "${YELLOW}支持范围：${supported_ranges}。其它版本只允许备份、查看、预览和自检，不允许写库或启用自动重置。${PLAIN}"
+        echo -e "${YELLOW}$(ui_text "兼容性提示：3x-ui v${detected_version} 不在支持范围内。" "Compatibility notice: 3x-ui v${detected_version} is not supported." "Предупреждение совместимости: 3x-ui v${detected_version} не поддерживается.")${PLAIN}"
+        echo -e "${YELLOW}$(ui_text "支持范围：${supported_ranges}。其它版本只允许备份、查看、预览和自检，不允许写库或启用自动重置。" "Supported ranges: ${supported_ranges}. Other versions allow backup, viewing, preview, and self-test only; database writes and automatic reset are blocked." "Поддерживаемые версии: ${supported_ranges}. Для других версий доступны только резервное копирование, просмотр, предварительный просмотр и самопроверка; запись в БД и автосброс заблокированы.")${PLAIN}"
     fi
 }
 
@@ -328,9 +403,9 @@ install_runtime_deps() {
 
 timer_active_status() {
     if systemctl is-active --quiet xui-custom-reset.timer 2>/dev/null; then
-        echo "已启用"
+        ui_text '已启用' 'active' 'активен'
     else
-        echo "未启用"
+        ui_text '未启用' 'inactive' 'неактивен'
     fi
 }
 
@@ -344,9 +419,9 @@ timer_enabled_status() {
 
 runner_status() {
     if [ -x "$LOCAL_RUNNER" ]; then
-        echo "已安装"
+        ui_text '已安装' 'installed' 'установлен'
     else
-        echo "未安装"
+        ui_text '未安装' 'not installed' 'не установлен'
     fi
 }
 
@@ -2540,7 +2615,7 @@ PY
 health_check() {
     clear_screen
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}x-ui 增强套件 - 健康检查${PLAIN}"
+    echo -e "${BOLD}$(ui_text 'x-ui 增强套件 - 健康检查' 'x-ui Extension - Health check' 'Расширение x-ui — проверка состояния')${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
     print_health_report
 }
@@ -2549,18 +2624,18 @@ menu_logs() {
     while true; do
         clear_screen
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}x-ui 增强套件 - 日志${PLAIN}"
+        echo -e "${BOLD}$(ui_text 'x-ui 增强套件 - 日志' 'x-ui Extension - Logs' 'Расширение x-ui — журналы')${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}查看脚本、自动重置检查和 x-ui 服务日志。${PLAIN}"
+        echo -e "${YELLOW}$(ui_text '查看脚本、自动重置检查和 x-ui 服务日志。' 'View script, automatic reset, and x-ui service logs.' 'Просмотр журнала сценария, автосброса и службы x-ui.')${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${GREEN}  1. 脚本日志${PLAIN}                  ${YELLOW}($LOG_FILE)${PLAIN}"
-        echo -e "${GREEN}  2. 自动重置检查日志${PLAIN}          ${YELLOW}(仅 reset-check 记录)${PLAIN}"
-        echo -e "${GREEN}  3. timer 服务日志${PLAIN}            ${YELLOW}(xui-custom-reset.service)${PLAIN}"
-        echo -e "${GREEN}  4. x-ui 服务日志${PLAIN}             ${YELLOW}(x-ui.service)${PLAIN}"
+        echo -e "${GREEN}  1. $(ui_text '脚本日志' 'Script log' 'Журнал сценария')${PLAIN}                  ${YELLOW}($LOG_FILE)${PLAIN}"
+        echo -e "${GREEN}  2. $(ui_text '自动重置检查日志' 'Automatic reset-check log' 'Журнал проверки автосброса')${PLAIN}"
+        echo -e "${GREEN}  3. $(ui_text 'timer 服务日志' 'Timer service log' 'Журнал службы timer')${PLAIN}            ${YELLOW}(xui-custom-reset.service)${PLAIN}"
+        echo -e "${GREEN}  4. $(ui_text 'x-ui 服务日志' 'x-ui service log' 'Журнал службы x-ui')${PLAIN}             ${YELLOW}(x-ui.service)${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "${RED}  0/q. 返回主菜单${PLAIN}"
+        echo -e "${RED}  0/q. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        read_menu_choice choice "请选择 [0-4]："
+        read_menu_choice choice "$(ui_text '请选择 [0-4]：' 'Select [0-4]: ' 'Выберите [0-4]: ')"
 
         case "$choice" in
             1)
@@ -2667,22 +2742,22 @@ menu_backup_restore() {
 show_quick_guide() {
     clear_screen
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "${BOLD}x-ui 增强套件 - 按目标选择${PLAIN}"
+    echo -e "${BOLD}$(ui_text 'x-ui 增强套件 - 按目标选择' 'x-ui Extension - Choose by goal' 'Расширение x-ui — выбор по задаче')${PLAIN}"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo "  设置入站或客户端重置日       -> [1] 自定义流量重置"
-    echo "  只预览今天的重置计划         -> [1] -> [4]，预览后输入 n"
-    echo "  修正面板显示的已用流量       -> [2] 校准已用流量"
-    echo "  备份数据或恢复旧状态         -> [3] 备份与恢复"
-    echo "  检查服务、数据库和重置冲突   -> [4] 健康检查"
-    echo "  排查自动重置或 x-ui 报错     -> [5] 日志"
-    echo "  删除一个旧备份文件           -> [6] 清理旧备份"
+    echo "  $(ui_text '设置入站或客户端重置日' 'Set inbound or client reset days' 'Настроить дни сброса inbound или клиента')       -> [1]"
+    echo "  $(ui_text '只预览今天的重置计划' 'Preview the reset plan for today only' 'Только просмотреть план сброса на сегодня')         -> [1] -> [4]"
+    echo "  $(ui_text '修正面板显示的已用流量' 'Correct displayed used traffic' 'Исправить отображаемый использованный трафик')       -> [2]"
+    echo "  $(ui_text '备份或恢复数据' 'Back up or restore data' 'Создать резервную копию или восстановить данные')                 -> [3]"
+    echo "  $(ui_text '检查服务、数据库和重置冲突' 'Check services, database, and reset conflicts' 'Проверить службы, БД и конфликты сброса')   -> [4]"
+    echo "  $(ui_text '排查自动重置或 x-ui 报错' 'Troubleshoot automatic resets or x-ui errors' 'Диагностировать ошибки сброса или x-ui')     -> [5]"
+    echo "  $(ui_text '删除一个旧备份文件' 'Delete one old backup file' 'Удалить один старый файл резервной копии')           -> [6]"
     echo "------------------------------------------------"
-    echo "命令行入口："
-    echo "  xcm                                  打开本菜单"
-    echo "  xui-custom-manager.sh --dry-run      只预览本次重置计划"
-    echo "  xui-custom-manager.sh --reset-check  执行一次自动重置检查"
+    echo "$(ui_text '命令行入口：' 'Command-line entry points:' 'Команды:')"
+    echo "  xcm                                  $(ui_text '打开本菜单' 'Open this menu' 'Открыть это меню')"
+    echo "  xui-custom-manager.sh --dry-run      $(ui_text '只预览本次重置计划' 'Preview this reset plan only' 'Только просмотреть план сброса')"
+    echo "  xui-custom-manager.sh --reset-check  $(ui_text '执行一次自动重置检查' 'Run one automatic reset check' 'Запустить одну проверку сброса')"
     echo "------------------------------------------------"
-    echo -e "${YELLOW}写库和恢复前会显示影响范围并要求确认；确认提示默认 Yes，输入 n 取消。${PLAIN}"
+    echo -e "${YELLOW}$(ui_text '写库和恢复前会显示影响范围并要求确认；直接回车继续，输入 n 取消。' 'Before database writes or restore, the affected scope is shown and confirmation is required; press Enter to continue or n to cancel.' 'Перед записью в БД или восстановлением будет показан объём изменений; Enter — продолжить, n — отмена.')${PLAIN}"
 }
 
 main_menu() {
@@ -2691,28 +2766,32 @@ main_menu() {
     while true; do
         clear_screen
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${BOLD}${WHITE}x-ui 增强套件 - 主菜单${PLAIN}"
+        echo -e "${BOLD}${WHITE}$(ui_text 'x-ui 增强套件 - 主菜单' 'x-ui Extension - Main menu' 'Расширение x-ui — главное меню')${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "${YELLOW}管理 3x-ui 自定义重置、已用流量、备份和诊断。${PLAIN}"
+        echo -e "${YELLOW}$(ui_text '管理 3x-ui 自定义重置、已用流量、备份和诊断。' 'Manage 3x-ui custom resets, used traffic, backups, and diagnostics.' 'Управление пользовательским сбросом 3x-ui, трафиком, резервными копиями и диагностикой.')${PLAIN}"
         print_xui_version_warning
-        echo -e "${CYAN}自动重置：${GREEN}$(timer_active_status)${PLAIN} ${DIM}|${PLAIN} ${CYAN}本地执行器：${GREEN}$(runner_status)${PLAIN} ${DIM}|${PLAIN} ${CYAN}快捷命令：${WHITE}xcm${PLAIN}"
+        echo -e "${CYAN}$(ui_text '自动重置' 'Automatic reset' 'Автосброс')：${GREEN}$(timer_active_status)${PLAIN} ${DIM}|${PLAIN} ${CYAN}$(ui_text '本地执行器' 'Local runner' 'Локальный запуск')：${GREEN}$(runner_status)${PLAIN} ${DIM}|${PLAIN} ${CYAN}$(ui_text '快捷命令' 'Command' 'Команда')：${WHITE}xcm${PLAIN}"
         echo -e "${BLUE}------------------------------------------------${PLAIN}"
-        echo -e "  ${CYAN}1.${PLAIN} ${GREEN}自定义流量重置${PLAIN}            ${YELLOW}(设置入站 / 客户端重置日)${PLAIN}"
-        echo -e "  ${CYAN}2.${PLAIN} ${GREEN}校准已用流量${PLAIN}              ${YELLOW}(只改 up/down，不改 total)${PLAIN}"
-        echo -e "  ${CYAN}3.${PLAIN} ${GREEN}备份与恢复${PLAIN}                ${YELLOW}(数据库 / 配置 / 程序)${PLAIN}"
-        echo -e "  ${CYAN}4.${PLAIN} ${GREEN}健康检查${PLAIN}                  ${YELLOW}(服务 / 数据库 / timer / 冲突)${PLAIN}"
-        echo -e "  ${CYAN}5.${PLAIN} ${GREEN}日志${PLAIN}                      ${YELLOW}(脚本 / reset-check / systemd)${PLAIN}"
-        echo -e "  ${CYAN}6.${PLAIN} ${GREEN}清理旧备份${PLAIN}                ${YELLOW}(每次只删一个明确备份文件)${PLAIN}"
+        echo -e "  ${CYAN}1.${PLAIN} ${GREEN}$(ui_text '自定义流量重置' 'Custom traffic reset' 'Пользовательский сброс трафика')${PLAIN}"
+        echo -e "  ${CYAN}2.${PLAIN} ${GREEN}$(ui_text '校准已用流量' 'Calibrate used traffic' 'Калибровать использованный трафик')${PLAIN}"
+        echo -e "  ${CYAN}3.${PLAIN} ${GREEN}$(ui_text '备份与恢复' 'Backup and restore' 'Резервное копирование и восстановление')${PLAIN}"
+        echo -e "  ${CYAN}4.${PLAIN} ${GREEN}$(ui_text '健康检查' 'Health check' 'Проверка состояния')${PLAIN}"
+        echo -e "  ${CYAN}5.${PLAIN} ${GREEN}$(ui_text '日志' 'Logs' 'Журналы')${PLAIN}"
+        echo -e "  ${CYAN}6.${PLAIN} ${GREEN}$(ui_text '清理旧备份' 'Clean old backups' 'Очистить старые резервные копии')${PLAIN}"
         echo -e "${BLUE}------------------------------------------------${PLAIN}"
-        echo -e "  ${BLUE}?.${PLAIN} ${WHITE}按目标选择${PLAIN}"
-        echo -e "${RED}  0/q. 退出${PLAIN}"
+        echo -e "  ${BLUE}?.${PLAIN} ${WHITE}$(ui_text '按目标选择' 'Choose by goal' 'Выбор по задаче')${PLAIN}"
+        echo -e "  ${BLUE}l.${PLAIN} ${WHITE}$(ui_text '界面语言' 'Interface language' 'Язык интерфейса')${PLAIN}"
+        echo -e "${RED}  0/q. $(ui_text '退出' 'Exit' 'Выход')${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        read_menu_choice choice "请选择 [0-6/?]："
+        read_menu_choice choice "$(ui_text '请选择 [0-6/?/l]：' 'Select [0-6/?/l]: ' 'Выберите [0-6/?/l]: ')"
 
         case "$choice" in
             "?"|help|HELP|帮助)
                 show_quick_guide
                 pause
+                ;;
+            l|L|lang|language|语言|язык)
+                select_ui_language || true
                 ;;
             1)
                 # 各入口失败时内部已提示；|| true 防止 set -e 结束整个交互会话
@@ -2740,7 +2819,7 @@ main_menu() {
                 exit 0
                 ;;
             *)
-                echo -e "${RED}输入无效，请输入 0-6 或 ?。${PLAIN}"
+                echo -e "${RED}$(ui_text '输入无效，请输入 0-6、? 或 l。' 'Invalid selection. Enter 0-6, ?, or l.' 'Неверный выбор. Введите 0-6, ? или l.')${PLAIN}"
                 sleep 1
                 ;;
         esac

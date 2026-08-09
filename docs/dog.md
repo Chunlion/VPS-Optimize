@@ -30,6 +30,16 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/d
 dog
 ```
 
+## 界面语言
+
+默认使用中文。启动时可指定 `--lang zh|en|ru`，例如：
+
+```bash
+dog --lang en
+```
+
+也可在主菜单输入 `l` 或 `lang` 切换语言。选择会保存到 `/etc/port-traffic-dog/config.json`，下次启动继续使用。
+
 运行前建议保留当前 SSH 会话；在生产机器上修改配额、限速、重置或卸载前，先导出配置或创建 VPS 快照。
 
 ## 统计口径说明

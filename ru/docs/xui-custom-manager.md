@@ -65,6 +65,16 @@ bash /usr/local/bin/xui-custom-manager.sh --reset-check --dry-run
 bash /usr/local/bin/xui-custom-manager.sh --self-test
 ```
 
+## Язык интерфейса
+
+По умолчанию используется китайский. Укажите язык при запуске через `--lang zh|en|ru`, например:
+
+```bash
+xcm --lang ru
+```
+
+Также можно ввести `l` или `lang` в главном меню. Выбор сохраняется как `XCM_LANGUAGE` в `/etc/xui-custom-manager.conf`.
+
 ## Пользовательская логика сброса
 
 Пользовательский сброс контролируется `/etc/xui-custom-reset.json`, основная концепция заключается в следующем:

@@ -65,6 +65,16 @@ bash /usr/local/bin/xui-custom-manager.sh --reset-check --dry-run
 bash /usr/local/bin/xui-custom-manager.sh --self-test
 ```
 
+## Interface language
+
+Chinese is the default. Select a language at startup with `--lang zh|en|ru`, for example:
+
+```bash
+xcm --lang en
+```
+
+You can also enter `l` or `lang` in the main menu. The choice is saved as `XCM_LANGUAGE` in `/etc/xui-custom-manager.conf`.
+
 ## Custom reset logic
 
 Custom reset is controlled by `/etc/xui-custom-reset.json`, the core concept is as follows:

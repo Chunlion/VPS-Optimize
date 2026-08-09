@@ -30,6 +30,16 @@ The script requires `root` permissions because it writes `nftables`, `tc`, and `
 dog
 ```
 
+## Interface language
+
+Chinese is the default. Select a language at startup with `--lang zh|en|ru`, for example:
+
+```bash
+dog --lang en
+```
+
+You can also enter `l` or `lang` in the main menu. The choice is saved in `/etc/port-traffic-dog/config.json` and reused on the next run.
+
 It is recommended to retain the current SSH session before running; export the configuration or create a VPS snapshot before modifying quotas, speed limits, resetting or uninstalling on the production machine.
 
 ## Description of statistical caliber
