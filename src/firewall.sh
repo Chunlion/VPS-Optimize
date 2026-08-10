@@ -1184,8 +1184,8 @@ func_add_port_connlimit_rule() {
 
     read_connlimit_port port || return 0
     read_connlimit_limit limit || return 0
-    read_trimmed apply_ipv6 "$(localized_text "是否同时应用 IPv6？(Y/n，默认 y): " "Apply to IPv6 too? (Y/n, default y):" "Применить также к IPv6? (Y/n, по умолчанию y):")"
-    is_no "$apply_ipv6" && include_ipv6=0
+    read_trimmed apply_ipv6 "$(localized_text "是否同时应用 IPv6？(y/N，默认 N): " "Apply the rule to IPv6 too? (y/N, default N): " "Также применить правило к IPv6? (y/N, по умолчанию N): ")"
+    is_yes "$apply_ipv6" || include_ipv6=0
 
     print_port_connlimit_scope_notice "$port"
     marker=$(port_connlimit_comment "$port")
@@ -1244,8 +1244,8 @@ func_delete_port_connlimit_rule() {
 
     read_connlimit_port port || return 0
     read_connlimit_limit limit || return 0
-    read_trimmed delete_ipv6 "$(localized_text "是否同时删除 IPv6 规则？(Y/n，默认 y): " "Remove the IPv6 rule too? (Y/n, default y):" "Удалить также правило IPv6? (Y/n, по умолчанию y):")"
-    is_no "$delete_ipv6" && include_ipv6=0
+    read_trimmed delete_ipv6 "$(localized_text "是否同时删除 IPv6 规则？(y/N，默认 N): " "Remove the IPv6 rule too? (y/N, default N): " "Также удалить правило IPv6? (y/N, по умолчанию N): ")"
+    is_yes "$delete_ipv6" || include_ipv6=0
 
     print_port_connlimit_scope_notice "$port"
     marker=$(port_connlimit_comment "$port")
@@ -1995,7 +1995,7 @@ func_firewall_manage() {
                 fi
                 sleep 2
                 ;;
-            "?"|help) show_firewall_menu_help; pause_return ;;
+            "?") show_firewall_menu_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效的选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac

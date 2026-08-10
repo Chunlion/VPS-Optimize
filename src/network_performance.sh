@@ -33,7 +33,7 @@ func_tcp_tune() {
     
     > "$temp_f"
     echo -e "$(localized_text "\n${YELLOW}👇 请在下方直接【右键粘贴】代码。${PLAIN}" "\n${YELLOW}👇 Please directly [right-click and paste] the code below.${PLAIN}" "\n${YELLOW}👇 Пожалуйста, [щелкните правой кнопкой мыши и вставьте] код ниже.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}💡 粘贴完成后，请按下【回车键】，然后输入 ${RED}EOF${YELLOW} 并再次回车保存：${PLAIN}" "${YELLOW}💡 After pasting is completed, please press the [Enter key], then enter EOFand press Enter again to save:${PLAIN}" "${YELLOW}💡 После завершения вставки нажмите [Enter], затем введите EOFи снова нажмите Enter, чтобы сохранить:${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}💡 粘贴完成后先按回车，再输入 ${RED}EOF${YELLOW} 并按回车保存：${PLAIN}" "${YELLOW}💡 After pasting, press Enter, type EOF, and press Enter again to save:${PLAIN}" "${YELLOW}💡 После вставки нажмите Enter, введите EOF и снова нажмите Enter для сохранения:${PLAIN}")"
     
     local has_content=false
     while IFS= read -r line; do

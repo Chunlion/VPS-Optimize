@@ -286,7 +286,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "$(localized_text "${GREEN}  5. 重新应用当前保存的配置${PLAIN}" "${GREEN}5. Reapply the currently saved configuration${PLAIN}" "${GREEN}5. Повторно примените текущую сохраненную конфигурацию.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回上一级 / q/back/返回${PLAIN}" "${RED}0. Return to the previous level / q/back/return to${PLAIN}" "${RED}0. Возврат на предыдущий уровень /q/назад/возврат в${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
@@ -297,7 +297,7 @@ edit_sni_stack_runtime_profile() {
             3) edit_sni_stack_entry_profile ;;
             4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
             5) reapply_sni_stack_from_env ;;
-            "?"|help) show_sni_help; pause_return; continue ;;
+            "?") show_sni_help; pause_return; continue ;;
             0) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;
         esac

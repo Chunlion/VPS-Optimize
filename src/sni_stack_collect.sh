@@ -52,7 +52,7 @@ collect_sni_stack_config() {
     CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "3x-ui Clash/Mihomo subscription path prefix (without client identifier; recommended: /clash/)" "Префикс подписки Clash/Mihomo в 3x-ui (без идентификатора клиента; рекомендуется /clash/)")" "/clash/")")
     local panel_whitelist_enabled panel_whitelist_input panel_whitelist_ranges current_client_ip
     local -a panel_whitelist_array=()
-    read_trimmed panel_whitelist_enabled "$(localized_text "是否为面板域名启用 IP 白名单？(Y/n，默认 y): " "Enable IP whitelisting for panel domains? (Y/n, default y):" "Включить белый список IP-адресов для доменных имен панели? (Да/нет, по умолчанию y):")"
+    read_trimmed panel_whitelist_enabled "$(localized_text "是否为面板域名启用 IP 白名单？(y/N，默认 N): " "Enable an IP allowlist for the panel domain? (y/N, default N): " "Включить список разрешённых IP-адресов для домена панели? (y/N, по умолчанию N): ")"
     if [[ "$panel_whitelist_enabled" =~ ^[Yy]$ ]]; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "$(localized_text "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}" "${YELLOW}The current source IP of SSH may be: ${current_client_ip}. Please confirm that it has been added to the whitelist.${PLAIN}" "${YELLOW}Текущий исходный IP-адрес SSH может быть: ${current_client_ip}. Пожалуйста, подтвердите, что он был добавлен в белый список.${PLAIN}")"
@@ -80,9 +80,7 @@ collect_sni_stack_config() {
 
     echo -e "$(localized_text "${YELLOW}请确认 3x-ui 面板设置 -> 常规 -> 证书、订阅设置 -> 证书 路径已经清空。${PLAIN}" "${YELLOW}Please confirm that the 3x-ui Panel Settings -> General -> Certificate, Subscription Settings -> Certificate path has been cleared.${PLAIN}" "${YELLOW}Подтвердите, что настройки панели 3x-ui -> Общие -> Сертификат, Настройки подписки -> Путь к сертификату удалены.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}本向导会让 Caddy 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}" "${YELLOW}This wizard will allow Caddy to connect ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} and ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} through HTTP.${PLAIN}" "${YELLOW}Этот мастер позволит Caddy соединить ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} и ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} через HTTP.${PLAIN}")"
-    local cert_clear_confirm
-    read_trimmed cert_clear_confirm "$(localized_text "确认已经清空面板证书和订阅证书路径？(Y/n): " "Are you sure you have cleared the panel certificate and subscription certificate paths? (Y/n):" "Вы уверены, что очистили пути сертификата панели и сертификата подписки? (Да/Нет):")"
-    is_yes "$cert_clear_confirm" || { echo -e "$(localized_text "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}" "${YELLOW}Please return to 3x-ui to clear the certificate path, save and restart, and then run this wizard.${PLAIN}" "${YELLOW}Вернитесь в 3x-ui, чтобы очистить путь к сертификату, сохраните его и перезапустите, а затем запустите этот мастер.${PLAIN}")"; return 1; }
+    confirm_default_no "$(localized_text "确认已经清空面板和订阅证书路径？(y/N): " "Confirm that the panel and subscription certificate paths are already clear. (y/N): " "Подтвердите, что пути сертификатов панели и подписки уже очищены. (y/N): ")" || { echo -e "$(localized_text "${YELLOW}请先在 3x-ui 中清空证书路径，保存并重启面板。${PLAIN}" "${YELLOW}Clear the certificate paths in 3x-ui, save, and restart the panel first.${PLAIN}" "${YELLOW}Сначала очистите пути сертификатов в 3x-ui, сохраните изменения и перезапустите панель.${PLAIN}")"; return 1; }
 
     echo -e "$(localized_text "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}" "${CYAN}Please enter Cloudflare API Token (requires Zone.DNS.Edit + Zone.Zone.Read)${PLAIN}" "${CYAN}Введите токен API Cloudflare (требуется Zone.DNS.Edit + Zone.Zone.Read)${PLAIN}")"
     read_secret_trimmed CF_TOKEN "CF Token: "

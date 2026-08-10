@@ -21,6 +21,16 @@ CYAN='\033[1;36m'
 PLAIN='\033[0m'
 BOLD='\033[1m'
 
+if [[ -n "${NO_COLOR+x}" ]]; then
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    CYAN=''
+    PLAIN=''
+    BOLD=''
+fi
+
 SCRIPT_VERSION="v2.6"
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
 UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
@@ -738,42 +748,141 @@ pause_return() {
     echo ""
 }
 
+print_action_summary() {
+    local level="$1"
+    local title="$2"
+    local impact="$3"
+    local rollback="$4"
+    local advice="${5:-}"
+    local snapshot_advice="${6:-}"
+
+    if [[ -z "$snapshot_advice" ]]; then
+        if [[ "$level" == "danger" ]]; then
+            snapshot_advice="$(localized_text \
+                "建议先创建 VPS 快照，或确认云厂商快照/救援控制台可用。" \
+                "Create a VPS snapshot first, or confirm that snapshot or rescue-console access is available." \
+                "Сначала создайте снимок VPS или убедитесь, что доступны снимок либо аварийная консоль.")"
+        else
+            snapshot_advice="$(localized_text \
+                "确认上方参数无误。" \
+                "Verify the values above." \
+                "Проверьте указанные выше значения.")"
+        fi
+    fi
+
+    if [[ "$level" == "danger" ]]; then
+        echo -e "$(localized_text "${RED}⚠️ 高风险操作：${title}${PLAIN}" "${RED}⚠️ High-risk operation: ${title}${PLAIN}" "${RED}⚠️ Операция высокого риска: ${title}${PLAIN}")"
+    else
+        echo -e "$(localized_text "${YELLOW}⚠️ 操作确认：${title}${PLAIN}" "${YELLOW}⚠️ Confirm operation: ${title}${PLAIN}" "${YELLOW}⚠️ Подтвердите операцию: ${title}${PLAIN}")"
+    fi
+    echo -e "$(localized_text "${YELLOW}将修改：${PLAIN}${impact}" "${YELLOW}Changes:${PLAIN} ${impact}" "${YELLOW}Изменения:${PLAIN} ${impact}")"
+    echo -e "$(localized_text "${BLUE}恢复方式：${PLAIN}${rollback}" "${BLUE}Recovery:${PLAIN} ${rollback}" "${BLUE}Восстановление:${PLAIN} ${rollback}")"
+    echo -e "$(localized_text "${CYAN}操作前：${PLAIN}${snapshot_advice}" "${CYAN}Before continuing:${PLAIN} ${snapshot_advice}" "${CYAN}Перед продолжением:${PLAIN} ${snapshot_advice}")"
+    [[ -n "$advice" ]] && echo -e "$(localized_text "${CYAN}注意：${PLAIN}${advice}" "${CYAN}Note:${PLAIN} ${advice}" "${CYAN}Важно:${PLAIN} ${advice}")"
+}
+
+confirm_default_yes() {
+    local confirm
+    while true; do
+        read_trimmed confirm "$(localized_text "确认执行？(Y/n，默认 Y): " "Proceed? (Y/n, default Y): " "Продолжить? (Y/n, по умолчанию Y): ")" || return 1
+        case "$(trim_input "$confirm" | tr '[:upper:]' '[:lower:]')" in
+            y|yes) return 0 ;;
+            n|no) return 1 ;;
+            *)
+                echo -e "$(localized_text "${YELLOW}请输入 Y 或 n。${PLAIN}" "${YELLOW}Enter Y or n.${PLAIN}" "${YELLOW}Введите Y или n.${PLAIN}")"
+                ;;
+        esac
+    done
+}
+
+confirm_default_no() {
+    local prompt="${1:-$(localized_text "确认继续？(y/N): " "Continue? (y/N): " "Продолжить? (y/N): ")}"
+    local confirm
+    while true; do
+        read_trimmed confirm "$prompt" || return 1
+        case "$(trim_input "$confirm" | tr '[:upper:]' '[:lower:]')" in
+            y|yes) return 0 ;;
+            n|no) return 1 ;;
+            "")
+                echo -e "$(localized_text "${GREEN}尚未执行；已填写参数仍保留。输入 y 继续，输入 n 取消。${PLAIN}" "${GREEN}Not executed; entered values are preserved. Enter y to continue or n to cancel.${PLAIN}" "${GREEN}Операция не запущена; введённые значения сохранены. Введите y для продолжения или n для отмены.${PLAIN}")"
+                ;;
+            *)
+                echo -e "$(localized_text "${YELLOW}请输入 y 或 N。${PLAIN}" "${YELLOW}Enter y or N.${PLAIN}" "${YELLOW}Введите y или N.${PLAIN}")"
+                ;;
+        esac
+    done
+}
+
 confirm_danger() {
     local title="$1"
     local impact="$2"
     local rollback="$3"
     local advice="${4:-}"
-    local snapshot_advice="$(localized_text "${5:-建议先创建 VPS 快照，或确认云厂商快照/救援控制台可用。}" "${5:-建议先创建 VPS 快照，或确认云厂商快照/救援控制台可用。}" "${5:-建议先创建 VPS 快照，或确认云厂商快照/救援控制台可用。}")"
-    local confirm
-    echo -e "$(localized_text "${RED}⚠️ 高风险操作：${title}${PLAIN}" "${RED}⚠️ High-risk operation: ${title}${PLAIN}" "${RED}⚠️ Операция высокого риска: ${title}${PLAIN}")"
-    echo ""
-    echo -e "$(localized_text "${YELLOW}操作名称：${PLAIN}${title}" "${YELLOW}Operation name:${PLAIN}${title}" "${YELLOW}Имя операции:${PLAIN}${title}")"
-    echo -e "$(localized_text "${YELLOW}将修改的内容：${PLAIN}" "${YELLOW}Will modify the content:${PLAIN}" "${YELLOW}изменит содержимое:${PLAIN}")"
-    echo -e "- ${impact}"
-    echo ""
-    echo -e "$(localized_text "${YELLOW}可能风险：${PLAIN}" "${YELLOW}Possible risks:${PLAIN}" "${YELLOW}Возможные риски:${PLAIN}")"
-    echo "$(localized_text "- 操作失败可能导致 SSH、面板、反代、证书、容器或网络服务短暂不可用。" "- Operation failure may cause SSH, panel, reverse proxy, certificate, container or network service to be temporarily unavailable." "- Сбой в работе может привести к временной недоступности SSH, панели, обратный прокси, сертификата, контейнера или сетевой службы.")"
-    echo "$(localized_text "- 如果云厂商安全组、防火墙、监听地址或证书配置不匹配，可能导致远程访问中断。" "- If the cloud vendor's security group, firewall, listening address, or certificate configurations do not match, remote access may be interrupted." "- Если конфигурация группы безопасности, брандмауэра, адреса прослушивания или сертификата поставщика облака не совпадает, удаленный доступ может быть прерван.")"
-    echo ""
-    echo -e "$(localized_text "${BLUE}出错恢复方式：${PLAIN}" "${BLUE}Error recovery method:${PLAIN}" "${BLUE}Метод восстановления ошибки :${PLAIN}")"
-    echo -e "- ${rollback}"
-    echo "$(localized_text "- 使用当前未断开的 SSH 会话恢复配置。" "- Restore the configuration using a currently undisconnected SSH session." "- Восстановите конфигурацию, используя в данный момент неотключенный сеанс SSH.")"
-    echo "$(localized_text "- 使用云厂商控制台、VNC 或救援模式恢复。" "- Restore using cloud vendor console, VNC or rescue mode." "- Восстановление с помощью консоли облачного поставщика, VNC или режима восстановления.")"
-    echo "$(localized_text "- 使用备份与回滚入口恢复已纳入备份的配置。" "- Use the backup and rollback menu to restore configurations that have been included in the backup." "- Используйте точка входа резервного копирования и отката для восстановления конфигураций, включенных в резервную копию.")"
-    echo ""
-    echo -e "$(localized_text "${CYAN}是否建议先做快照：${PLAIN}${snapshot_advice}" "${CYAN}Is it recommended to take a snapshot first:${PLAIN}${snapshot_advice}" "${CYAN}Рекомендуется ли сначала сделать снимок:${PLAIN}${snapshot_advice}")"
-    echo -e "$(localized_text "${CYAN}建议：${PLAIN}" "${CYAN}Recommendation:${PLAIN}" "${CYAN}Рекомендация:${PLAIN}")"
-    echo "$(localized_text "- 已创建 VPS 快照。" "- VPS snapshot created." "- Создан снимок VPS.")"
-    echo "$(localized_text "- 已确认云厂商安全组和系统防火墙规则。" "- The cloud vendor security group and system firewall rules have been confirmed." "— Группа безопасности поставщика облака и правила системного брандмауэра подтверждены.")"
-    echo "$(localized_text "- 当前 SSH 会话不要断开。" "- Do not disconnect the current SSH session." "- Не отключайте текущий сеанс SSH.")"
-    [[ -n "$advice" ]] && echo -e "- ${advice}"
-    echo ""
-    read_trimmed confirm "$(localized_text "直接回车继续，输入 n 取消（大小写均可）: " "Just press Enter to continue, enter n to cancel (both uppercase and lowercase are acceptable):" "Просто нажмите Enter, чтобы продолжить, введите n для отмены (допускаются как прописные, так и строчные буквы):")"
-    is_yes "$confirm"
+    local snapshot_advice="${5:-}"
+    local confirm confirm_word
+
+    print_action_summary "danger" "$title" "$impact" "$rollback" "$advice" "$snapshot_advice"
+    echo -e "$(localized_text \
+        "${BOLD}${GREEN}默认 N：${PLAIN}直接回车仅停留在本页，已填写参数不会丢失。" \
+        "${BOLD}${GREEN}Default N:${PLAIN} Enter keeps this page open and preserves the values you entered." \
+        "${BOLD}${GREEN}По умолчанию N:${PLAIN} Enter оставляет эту страницу открытой и сохраняет введённые значения.")"
+
+    while true; do
+        read_trimmed confirm "$(localized_text "继续执行？(y/N): " "Continue? (y/N): " "Продолжить? (y/N): ")" || return 1
+        case "$(trim_input "$confirm" | tr '[:upper:]' '[:lower:]')" in
+            "")
+                echo -e "$(localized_text "${GREEN}尚未执行；参数已保留。输入 y 继续，输入 n 取消。${PLAIN}" "${GREEN}Not executed; values are preserved. Enter y to continue or n to cancel.${PLAIN}" "${GREEN}Операция не запущена; значения сохранены. Введите y для продолжения или n для отмены.${PLAIN}")"
+                ;;
+            n|no) return 1 ;;
+            y|yes)
+                while true; do
+                    read_trimmed confirm_word "$(localized_text "再次确认：输入 YES 执行，直接回车返回上一步: " "Final confirmation: enter YES to proceed, or press Enter to go back: " "Повторное подтверждение: введите YES для запуска или нажмите Enter, чтобы вернуться: ")" || return 1
+                    case "$(trim_input "$confirm_word" | tr '[:lower:]' '[:upper:]')" in
+                        YES) return 0 ;;
+                        "")
+                            echo -e "$(localized_text "${GREEN}已返回上一步；参数仍保留。${PLAIN}" "${GREEN}Back to the previous confirmation; values are still preserved.${PLAIN}" "${GREEN}Возврат к предыдущему подтверждению; значения сохранены.${PLAIN}")"
+                            break
+                            ;;
+                        *)
+                            echo -e "$(localized_text "${YELLOW}确认词不匹配，操作尚未执行。请输入 YES，或直接回车返回上一步。${PLAIN}" "${YELLOW}Confirmation did not match; nothing was executed. Enter YES, or press Enter to go back.${PLAIN}" "${YELLOW}Подтверждение не совпало; операция не запущена. Введите YES или нажмите Enter, чтобы вернуться.${PLAIN}")"
+                            ;;
+                    esac
+                done
+                ;;
+            *)
+                echo -e "$(localized_text "${YELLOW}请输入 y 或 N。${PLAIN}" "${YELLOW}Enter y or N.${PLAIN}" "${YELLOW}Введите y или N.${PLAIN}")"
+                ;;
+        esac
+    done
+
+}
+
+action_needs_safe_default() {
+    local title
+    local impact
+    title=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')
+    impact=$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')
+
+    case "$title" in
+        *删除*|*清理*|*清空*|*隔离*|*卸载*|*重装*|*重启*|*关机*|*停机*|*恢复*|*回滚*|*停止*|*停用*|*关闭*|*覆盖*|*白名单*|*防火墙*|*监听公网*|*重置*|*切换*|*迁移*|*应用*|*重签*|*公网\ 443*|*delete*|*remove*|*prune*|*clean*|*clear*|*quarantine*|*isolate*|*uninstall*|*reinstall*|*restart*|*reboot*|*shutdown*|*poweroff*|*restore*|*rollback*|*stop*|*disable*|*overwrite*|*whitelist*|*allowlist*|*firewall*|*publicly*|*public\ port\ 443*|*reset*|*switch*|*migrate*|*apply*|*re-sign*|*удал*|*Удал*|*очист*|*Очист*|*карантин*|*Карантин*|*изолир*|*Изолир*|*переустанов*|*Переустанов*|*перезап*|*Перезап*|*перезагруз*|*Перезагруз*|*выключ*|*Выключ*|*восстанов*|*Восстанов*|*откат*|*Откат*|*останов*|*Останов*|*отключ*|*Отключ*|*сброс*|*Сброс*|*переключ*|*Переключ*|*мигр*|*Мигр*|*примен*|*Примен*|*переподп*|*Переподп*|*белый\ список*|*Белый\ список*|*список\ разреш*|*Список\ разреш*|*брандмауэр*|*Брандмауэр*|*публичн*443*|*Публичн*443*)
+            return 0
+            ;;
+    esac
+    case "$impact" in
+        *删除*|*清空*|*关机*|*重启*|*覆盖*|*公网\ 443*|*erase*|*delete*|*shutdown*|*poweroff*|*restart*|*overwrite*|*public\ port\ 443*|*удал*|*Удал*|*очист*|*Очист*|*перезагруз*|*Перезагруз*|*выключ*|*Выключ*|*перезапис*|*Перезапис*|*публичн*443*|*Публичн*443*)
+            return 0
+            ;;
+    esac
+    return 1
 }
 
 confirm_risk_action() {
-    confirm_danger "$@"
+    if action_needs_safe_default "$1" "$2"; then
+        confirm_danger "$@"
+        return $?
+    fi
+    print_action_summary "risk" "$1" "$2" "$3" "${4:-}" "${5:-}"
+    confirm_default_yes
 }
 
 render_menu() {
@@ -849,19 +958,35 @@ normalize_menu_choice_input() {
     esac
     lower=$(echo "$value" | tr '[:upper:]' '[:lower:]')
     case "$lower" in
-        q|quit|exit|back|return|返回|退出) printf '0' ;;
+        q) printf '0' ;;
         *) printf '%s' "$value" ;;
     esac
+}
+
+colorize_confirmation_prompt() {
+    local prompt="$1"
+    local bold="${BOLD:-}"
+    local green="${GREEN:-}"
+    local red="${RED:-}"
+    local plain="${PLAIN:-}"
+    prompt="${prompt//Y\/n/${bold}${green}Y${plain}\/${red}n${plain}}"
+    prompt="${prompt//y\/N/${red}y${plain}\/${bold}${green}N${plain}}"
+    prompt="${prompt//Да\/Нет/${bold}${green}Y${plain}\/${red}n${plain}}"
+    prompt="${prompt//Да\/нет/${bold}${green}Y${plain}\/${red}n${plain}}"
+    printf '%b' "$prompt"
 }
 
 read_trimmed() {
     local __target="$1"
     local prompt="${2:-}"
-    local __raw_input
-    read -r -p "$prompt" __raw_input
-    if [[ -z "$(trim_input "$__raw_input")" ]]; then
+    local display_prompt
+    local __raw_input=""
+    local read_rc=0
+    display_prompt=$(colorize_confirmation_prompt "$prompt")
+    read -r -p "$display_prompt" __raw_input || read_rc=$?
+    if (( read_rc == 0 )) && [[ -z "$(trim_input "$__raw_input")" ]]; then
         case "$prompt" in
-            *"(Y/n"*|*"[Y/n]"*|*"直接回车继续"*) __raw_input="y" ;;
+            *"(Y/n"*|*"[Y/n]"*|*"(Да/Нет"*|*"(Да/нет"*|*"直接回车继续"*) __raw_input="y" ;;
         esac
     fi
     case "$__target" in
@@ -889,6 +1014,7 @@ read_trimmed() {
             printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
             ;;
     esac
+    return "$read_rc"
 }
 
 read_secret_trimmed() {
@@ -1130,7 +1256,7 @@ check_domain_dns_sanity() {
     local domain="$1"
     local label="$(localized_text "${2:-域名}" "${2:-域名}" "${2:-域名}")"
     local mode="${3:-warn}"
-    local ips ip suspect=0 confirm
+    local ips ip suspect=0
 
     ips=$(resolve_domain_a_records "$domain")
     if [[ -z "$ips" ]]; then
@@ -1151,8 +1277,7 @@ check_domain_dns_sanity() {
         echo -e "$(localized_text "${YELLOW}请在 VPS 上复查 DNS。若只在本地电脑开启了 fake-ip，198.18.x.x 可能只是本地代理映射；若 VPS/公共 DNS 也看到此地址，请把 A 记录改成真实 VPS 公网 IP。${PLAIN}" "${YELLOW}Please review DNS on VPS. If fake-ip is only enabled on the local computer, 198.18.x.x may only be local proxy mapping; if VPS/public DNS also sees this address, please change the A record to the real VPS public IP.${PLAIN}" "${YELLOW}Пожалуйста, просмотрите DNS на VPS. Если поддельный IP-адрес включен только на локальном компьютере, 198.18.x.x может быть сопоставлением только локального прокси-сервера; если VPS/public DNS также видит этот адрес, измените запись A на реальный IP-адрес VPS в Интернете.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}如果使用 Cloudflare 小云朵，公共 DNS 应看到 Cloudflare 边缘 IP，而不是 198.18/10/127/192.168 等地址。${PLAIN}" "${YELLOW}If using the Cloudflare cloudlet, the public DNS should see the Cloudflare edge IP instead of 198.18/10/127/192.168 etc. addresses.${PLAIN}" "${YELLOW}При использовании облака Cloudflare общедоступный DNS должен видеть граничный IP-адрес Cloudflare вместо адресов 198.18/10/127/192.168 и т. д.${PLAIN}")"
         if [[ "$mode" == "prompt" ]]; then
-            read_trimmed confirm "$(localized_text "仍要继续？(Y/n，不推荐): " "Still want to continue? (Y/n, not recommended):" "Все еще хотите продолжить? (Да/нет, не рекомендуется):")"
-            is_yes "$confirm" || return 1
+            confirm_default_no "$(localized_text "仍要继续？(y/N，不推荐): " "Continue anyway? (y/N, not recommended): " "Всё равно продолжить? (y/N, не рекомендуется): ")" || return 1
         else
             return 1
         fi
@@ -1464,7 +1589,7 @@ confirm_backend_target_or_continue() {
     local label="$1"
     local addr="$2"
     local port="$3"
-    local probe_rc continue_confirm
+    local probe_rc
 
     if probe_backend_target "$label" "$addr" "$port"; then
         return 0
@@ -1472,12 +1597,11 @@ confirm_backend_target_or_continue() {
     probe_rc=$?
     [[ "$probe_rc" -eq 2 ]] && return 0
 
-    read_trimmed continue_confirm "$(localized_text "后端当前不可连接，仍要继续保存吗？(Y/n，默认 y): " "The backend is currently unavailable. Do you still want to save? (Y/n, default y):" "бэкенд в настоящее время недоступна. Вы все еще хотите сэкономить? (Да/нет, по умолчанию y):")"
-    if is_yes "$continue_confirm"; then
+    if confirm_default_no "$(localized_text "后端当前不可连接，仍要继续保存吗？(y/N，默认 N): " "The backend is unreachable. Save anyway? (y/N, default N): " "Бэкенд недоступен. Всё равно сохранить? (y/N, по умолчанию N): ")"; then
         echo -e "$(localized_text "${YELLOW}⚠️ 已选择继续；保存后请检查后端服务、地址和端口。${PLAIN}" "${YELLOW}⚠️ Selected to continue; please check the backend service, address and port after saving.${PLAIN}" "${YELLOW}⚠️ Выбрано для продолжения; пожалуйста, проверьте серверную службу, адрес и порт после сохранения.${PLAIN}")"
         return 0
     fi
-    echo -e "$(localized_text "${BLUE}已取消保存。${PLAIN}" "${BLUE}Has been canceled.${PLAIN}" "${BLUE}отменен.${PLAIN}")"
+    echo -e "$(localized_text "${BLUE}已取消保存。${PLAIN}" "${BLUE}Save canceled.${PLAIN}" "${BLUE}Сохранение отменено.${PLAIN}")"
     return 1
 }
 
@@ -1868,6 +1992,23 @@ make_secure_temp_dir() {
     printf '%s' "$tmp_dir"
 }
 
+backup_cleanup_temp_dir() {
+    local target="$1"
+    local temp_root resolved_target target_parent target_name
+
+    [[ -n "$target" && -d "$target" && ! -L "$target" ]] || return 0
+    temp_root=$(readlink -f -- "${TMPDIR:-/tmp}") || return 1
+    resolved_target=$(readlink -f -- "$target") || return 1
+    target_parent=$(dirname -- "$resolved_target")
+    target_name=$(basename -- "$resolved_target")
+    [[ "$target_parent" == "$temp_root" ]] || return 1
+    case "$target_name" in
+        vps_backup_*.??????|vps_restore.??????) ;;
+        *) return 1 ;;
+    esac
+    find "$resolved_target" -xdev -depth -delete
+}
+
 backup_copy_path() {
     local src="$1"
     local dest_rel="$2"
@@ -1883,7 +2024,62 @@ backup_copy_path() {
         echo " - $src" >> "$manifest_file"
         return 0
     fi
+    BACKUP_COPY_FAILURES+=("$src")
     return 1
+}
+
+backup_path_size_bytes() {
+    local target="$1"
+    local size_kib
+    size_kib=$(du -sk -- "$target" 2>/dev/null | awk 'NR == 1 {print $1}')
+    [[ "$size_kib" =~ ^[0-9]+$ ]] || return 1
+    printf '%s' "$((size_kib * 1024))"
+}
+
+backup_archive_unpacked_size_bytes() {
+    local archive_file="$1"
+    local size
+    size=$(LC_ALL=C tar -tvzf "$archive_file" 2>/dev/null | awk '$3 ~ /^[0-9]+$/ {total += $3} END {printf "%.0f", total + 0}')
+    [[ "$size" =~ ^[0-9]+$ ]] || return 1
+    printf '%s' "$size"
+}
+
+backup_available_bytes() {
+    local target="$1"
+    local available_kib
+    available_kib=$(df -Pk -- "$target" 2>/dev/null | awk 'NR == 2 {print $4}')
+    [[ "$available_kib" =~ ^[0-9]+$ ]] || return 1
+    printf '%s' "$((available_kib * 1024))"
+}
+
+backup_human_size() {
+    local bytes="$1"
+    awk -v bytes="$bytes" 'BEGIN {
+        split("B KiB MiB GiB TiB", units, " ")
+        unit_index = 1
+        while (bytes >= 1024 && unit_index < 5) { bytes /= 1024; unit_index++ }
+        if (unit_index == 1) printf "%d %s", bytes, units[unit_index]
+        else printf "%.1f %s", bytes, units[unit_index]
+    }'
+}
+
+backup_require_free_space() {
+    local target="$1"
+    local payload_bytes="$2"
+    local operation="$3"
+    local reserve_bytes=$((64 * 1024 * 1024))
+    local required_bytes available_bytes
+
+    required_bytes=$((payload_bytes + payload_bytes / 10 + reserve_bytes))
+    if ! available_bytes=$(backup_available_bytes "$target"); then
+        echo -e "$(localized_text "${YELLOW}⚠️ 无法读取 ${target} 的可用空间，继续前请自行确认磁盘容量。${PLAIN}" "${YELLOW}⚠️ Available space for ${target} could not be read. Verify disk capacity before continuing.${PLAIN}" "${YELLOW}⚠️ Не удалось определить свободное место для ${target}. Перед продолжением проверьте объём диска.${PLAIN}")"
+        return 0
+    fi
+    if (( available_bytes < required_bytes )); then
+        echo -e "$(localized_text "${RED}❌ ${operation}需要约 $(backup_human_size "$required_bytes")，${target} 仅剩 $(backup_human_size "$available_bytes")。操作已停止。${PLAIN}" "${RED}❌ ${operation} needs about $(backup_human_size "$required_bytes"), but ${target} has only $(backup_human_size "$available_bytes") free. Operation stopped.${PLAIN}" "${RED}❌ Для операции «${operation}» требуется около $(backup_human_size "$required_bytes"), а в ${target} свободно только $(backup_human_size "$available_bytes"). Операция остановлена.${PLAIN}")"
+        return 1
+    fi
+    echo -e "$(localized_text "${GREEN}空间预检通过：需要约 $(backup_human_size "$required_bytes")，可用 $(backup_human_size "$available_bytes")。${PLAIN}" "${GREEN}Space check passed: about $(backup_human_size "$required_bytes") required, $(backup_human_size "$available_bytes") available.${PLAIN}" "${GREEN}Проверка места пройдена: требуется около $(backup_human_size "$required_bytes"), доступно $(backup_human_size "$available_bytes").${PLAIN}")"
 }
 
 backup_copy_xui_databases() {
@@ -2012,7 +2208,71 @@ backup_select_archive_directory() {
 
 backup_archive_is_readable() {
     local archive_file="$1"
-    [[ -f "$archive_file" && -r "$archive_file" && "$archive_file" == *.tar.gz ]]
+    [[ -f "$archive_file" && -r "$archive_file" ]] || return 1
+    [[ "$archive_file" == *.tar.gz || "$archive_file" == *.tar.gz.enc ]]
+}
+
+backup_archive_is_encrypted() {
+    [[ "${1:-}" == *.tar.gz.enc ]]
+}
+
+backup_read_new_password() {
+    local output_name="$1"
+    local -n output_password="$output_name"
+    local first second
+
+    while true; do
+        read_secret_trimmed first "$(localized_text "备份加密密码: " "Backup encryption password: " "Пароль шифрования резервной копии: ")"
+        if [[ ${#first} -lt 10 ]]; then
+            echo -e "$(localized_text "${YELLOW}密码至少需要 10 个字符。${PLAIN}" "${YELLOW}The password must contain at least 10 characters.${PLAIN}" "${YELLOW}Пароль должен содержать не менее 10 символов.${PLAIN}")"
+            continue
+        fi
+        read_secret_trimmed second "$(localized_text "再次输入密码: " "Enter the password again: " "Введите пароль ещё раз: ")"
+        if [[ "$first" == "$second" ]]; then
+            output_password="$first"
+            first=""
+            second=""
+            return 0
+        fi
+        first=""
+        second=""
+        echo -e "$(localized_text "${YELLOW}两次密码不一致，请重新输入。${PLAIN}" "${YELLOW}The passwords do not match. Try again.${PLAIN}" "${YELLOW}Пароли не совпадают. Повторите ввод.${PLAIN}")"
+    done
+}
+
+backup_create_archive() {
+    local work_dir="$1"
+    local archive_file="$2"
+    local password="${3:-}"
+
+    if backup_archive_is_encrypted "$archive_file"; then
+        (
+            set -o pipefail
+            umask 077
+            exec 3<<<"$password"
+            tar -czf - -C "$work_dir" . | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -pass fd:3 -out "$archive_file"
+        ) >/dev/null 2>&1 || return 1
+        (
+            set -o pipefail
+            exec 3<<<"$password"
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass fd:3 -in "$archive_file" | tar -tzf - >/dev/null
+        ) 2>/dev/null
+    else
+        ( umask 077 && tar -czf "$archive_file" -C "$work_dir" . ) >/dev/null 2>&1 || return 1
+        tar -tzf "$archive_file" >/dev/null 2>&1
+    fi
+}
+
+backup_decrypt_archive() {
+    local archive_file="$1"
+    local output_file="$2"
+    local password="$3"
+
+    (
+        umask 077
+        exec 3<<<"$password"
+        openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass fd:3 -in "$archive_file" -out "$output_file"
+    ) >/dev/null 2>&1
 }
 
 backup_register_archive_root() {
@@ -2062,7 +2322,7 @@ backup_collect_available_archives() {
                 [[ "$existing" == "$archive" ]] && duplicate=1 && break
             done
             [[ "$duplicate" -eq 1 ]] || archive_list+=("$archive")
-        done < <(ls -1t "$root"/*.tar.gz 2>/dev/null)
+        done < <(ls -1t "$root"/*.tar.gz "$root"/*.tar.gz.enc 2>/dev/null)
     done
 }
 
@@ -2074,7 +2334,7 @@ backup_select_available_archive() {
 
     backup_collect_available_archives archives
     if [[ ${#archives[@]} -eq 0 ]]; then
-        echo -e "$(localized_text "${YELLOW}⚠️ 未自动读取到可用的 .tar.gz 备份包。${PLAIN}" "${YELLOW}⚠️ No usable .tar.gz backup archive was found automatically.${PLAIN}" "${YELLOW}⚠️ Автоматически не найден доступный архив резервной копии .tar.gz.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ 未自动读取到可用的 .tar.gz 或 .tar.gz.enc 备份包。${PLAIN}" "${YELLOW}⚠️ No usable .tar.gz or .tar.gz.enc backup archive was found automatically.${PLAIN}" "${YELLOW}⚠️ Не найден доступный архив .tar.gz или .tar.gz.enc.${PLAIN}")"
         return 1
     fi
 
@@ -2419,8 +2679,8 @@ restart_named_service_if_available() {
 reload_applied_config_kind() {
     local kind="$1"
     local target_file="$2"
-    local previous_file="${3:-}"
-    local confirm unit_name
+    local previous_file="${3:-${target_file}.bak}"
+    local unit_name
 
     case "$kind" in
         caddy)
@@ -2432,27 +2692,33 @@ reload_applied_config_kind() {
         systemd)
             systemctl daemon-reload >/dev/null 2>&1 || return 1
             unit_name=$(basename "$target_file")
-            read_trimmed confirm "$(localized_text "systemd 已 daemon-reload，是否现在重启/重新加载 ${unit_name}？(Y/n，默认 y): " "systemd has been daemon-reloaded. Do you want to restart/reload ${unit_name} now? (Y/n, default y):" "systemd был перезагружен демоном. Вы хотите перезапустить/перезагрузить ${unit_name} сейчас? (Да/нет, по умолчанию y):")"
-            if is_yes "$confirm"; then
+            if confirm_danger \
+                "$(localized_text "重启或重新加载 ${unit_name}" "Restart or reload ${unit_name}" "Перезапустить или перезагрузить ${unit_name}")" \
+                "$(localized_text "立即让已编辑的 systemd 单元配置生效。" "Apply the edited systemd unit configuration immediately." "Немедленно применить изменённую конфигурацию systemd.")" \
+                "$(localized_text "恢复 ${previous_file} 后执行 systemctl daemon-reload，并重新启动该单元。" "Restore ${previous_file}, run systemctl daemon-reload, and start the unit again." "Восстановите ${previous_file}, выполните systemctl daemon-reload и снова запустите службу.")"; then
                 systemctl try-reload-or-restart "$unit_name" >/dev/null 2>&1 || systemctl restart "$unit_name" >/dev/null 2>&1
             else
-                echo -e "$(localized_text "${BLUE}已保存 unit 修改，未重启 ${unit_name}。${PLAIN}" "${BLUE}Has saved the unit modification and has not restarted ${unit_name}.${PLAIN}" "${BLUE}сохранил модификацию устройства и не перезапустил ${unit_name}.${PLAIN}")"
+                echo -e "$(localized_text "${BLUE}unit 修改已保存，${unit_name} 尚未重启。${PLAIN}" "${BLUE}The unit change is saved; ${unit_name} has not been restarted.${PLAIN}" "${BLUE}Изменения unit сохранены; ${unit_name} не перезапущен.${PLAIN}")"
             fi
             ;;
         docker-json)
-            read_trimmed confirm "$(localized_text "Docker daemon.json 已校验，是否现在重启 Docker 使其生效？(Y/n，默认 y): " "Docker daemon.json has been verified. Do you want to restart Docker now to make it take effect? (Y/n, default y):" "Демон Docker.json проверен. Хотите перезапустить Docker сейчас, чтобы изменения вступили в силу? (Да/нет, по умолчанию y):")"
-            if is_yes "$confirm"; then
+            if confirm_danger \
+                "$(localized_text "重启 Docker" "Restart Docker" "Перезапустить Docker")" \
+                "$(localized_text "应用已校验的 daemon.json；运行中容器的网络可能短暂中断。" "Apply the validated daemon.json; networking for running containers may be interrupted briefly." "Применить проверенный daemon.json; сеть запущенных контейнеров может кратковременно прерваться.")" \
+                "$(localized_text "恢复 ${previous_file} 后再次重启 Docker。" "Restore ${previous_file} and restart Docker again." "Восстановите ${previous_file} и снова перезапустите Docker.")"; then
                 restart_named_service_if_available docker
             else
                 echo -e "$(localized_text "${YELLOW}⚠️ Docker 未重启，daemon.json 修改尚未生效。${PLAIN}" "${YELLOW}⚠️ Docker has not restarted, and the modification of daemon.json has not yet taken effect.${PLAIN}" "${YELLOW}⚠️ Docker не перезапустился, а модификация daemon.json еще не вступила в силу.${PLAIN}")"
             fi
             ;;
         compose)
-            read_trimmed confirm "$(localized_text "Compose 配置已校验，是否现在执行 up -d 应用修改？(Y/n，默认 y): " "Compose The configuration has been verified. Do you want to execute up -d to apply the changes now? (Y/n, default y):" "Compose Конфигурация проверена. Вы хотите выполнить команду up -d, чтобы применить изменения сейчас? (Да/нет, по умолчанию y):")"
-            if is_yes "$confirm"; then
+            if confirm_danger \
+                "$(localized_text "应用 Compose 配置" "Apply the Compose configuration" "Применить конфигурацию Compose")" \
+                "$(localized_text "执行 up -d；相关容器可能被创建、重建或重启。" "Run up -d; related containers may be created, recreated, or restarted." "Выполнить up -d; связанные контейнеры могут быть созданы, пересозданы или перезапущены.")" \
+                "$(localized_text "恢复 ${previous_file} 后再次执行 Compose up -d。" "Restore ${previous_file} and run Compose up -d again." "Восстановите ${previous_file} и снова выполните Compose up -d.")"; then
                 run_applied_config_compose "$target_file" up -d
             else
-                echo -e "$(localized_text "${YELLOW}⚠️ Compose 修改已保存，但容器尚未重建。${PLAIN}" "${YELLOW}⚠️ Compose The modifications have been saved, but the container has not been rebuilt.${PLAIN}" "${YELLOW}⚠️ Compose Модификации сохранены, но контейнер не пересобран.${PLAIN}")"
+                echo -e "$(localized_text "${YELLOW}⚠️ Compose 修改已保存，但尚未应用到容器。${PLAIN}" "${YELLOW}⚠️ The Compose change is saved but has not been applied to the containers.${PLAIN}" "${YELLOW}⚠️ Изменения Compose сохранены, но ещё не применены к контейнерам.${PLAIN}")"
             fi
             ;;
         ssh)
@@ -2681,7 +2947,7 @@ func_backup_center() {
         [[ -n "$loaded_archive" ]] && echo -e "$(localized_text "已加载备份包: ${YELLOW}$(basename "$loaded_archive")${PLAIN}" "Loaded backup archive: ${YELLOW}$(basename "$loaded_archive")${PLAIN}" "Загруженный архив резервной копии: ${YELLOW}$(basename "$loaded_archive")${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 创建备份${PLAIN}               ${YELLOW}(配置 / 自定义目录 / 两者)${PLAIN}" "${GREEN}1. Create backup${PLAIN} (configuration / custom directories / both)" "${GREEN}1. Создать резервную копию${PLAIN} (конфигурация / пользовательские каталоги / оба)")"
-        echo -e "$(localized_text "${GREEN}  2. 加载备份包${PLAIN}               ${YELLOW}(自动读取已有 .tar.gz)${PLAIN}" "${GREEN}2. Load backup archive${PLAIN} (automatically read existing .tar.gz files)" "${GREEN}2. Загрузить архив резервной копии${PLAIN} (автоматически найти существующие .tar.gz)")"
+        echo -e "$(localized_text "${GREEN}  2. 加载备份包${PLAIN}               ${YELLOW}(.tar.gz / 加密 .tar.gz.enc)${PLAIN}" "${GREEN}2. Load backup archive${PLAIN} (.tar.gz / encrypted .tar.gz.enc)" "${GREEN}2. Загрузить архив${PLAIN} (.tar.gz / зашифрованный .tar.gz.enc)")"
         echo -e "$(localized_text "${GREEN}  3. 从备份恢复${PLAIN}             ${YELLOW}(已加载 / 自动列表 / 指定路径)${PLAIN}" "${GREEN}3. Restore from backup${PLAIN} (loaded / automatic list / specified path)" "${GREEN}3. Восстановить из копии${PLAIN} (загруженный / автоматический список / указанный путь)")"
         echo -e "$(localized_text "${GREEN}  4. 隔离旧备份${PLAIN}             ${YELLOW}(仅保留最近 5 份，旧文件移入隔离区)${PLAIN}" "${GREEN}4. Isolate old backups (only the latest 5 copies are kept, and old files are moved to the quarantine area)${PLAIN}" "${GREEN}4. Изолировать старые резервные копии (сохраняются только последние 5 копий, а старые файлы перемещаются в зону карантина)${PLAIN}")"
         echo -e "$(localized_text "${CYAN}  5. 查看/编辑脚本已应用配置${PLAIN} ${YELLOW}(备份、校验，可选择 reload/restart)${PLAIN}" "${CYAN}5. View/edit script applied configuration (backup, verification, optional reload/restart)${PLAIN}" "${CYAN}5. Просмотр/редактирование примененной конфигурации сценария (резервное копирование, проверка, дополнительная перезагрузка/перезапуск)${PLAIN}")"
@@ -2701,7 +2967,10 @@ func_backup_center() {
                 local tar_file
                 local manifest_file
                 local copied=0
+                local encrypt_choice=""
+                local backup_password=""
                 local -a custom_directories=()
+                local -a BACKUP_COPY_FAILURES=()
 
                 echo -e "$(localized_text "${BOLD}备份范围${PLAIN}" "${BOLD}Backup scope${PLAIN}" "${BOLD}Область резервного копирования${PLAIN}")"
                 echo -e "  1. $(localized_text "脚本与服务配置（默认）" "Script and service configuration (default)" "Конфигурация скрипта и служб (по умолчанию)")"
@@ -2725,9 +2994,23 @@ func_backup_center() {
                         echo -e "$(localized_text "${YELLOW}未填写可备份目录，已取消。${PLAIN}" "${YELLOW}No backupable directory entered; canceled.${PLAIN}" "${YELLOW}Не указан каталог для резервного копирования; операция отменена.${PLAIN}")"
                         continue
                     fi
+                    confirm_risk_action \
+                        "$(localized_text "备份自定义系统目录" "Back up custom system directories" "Создать резервную копию пользовательских системных каталогов")" \
+                        "$(localized_text "复制所选目录到权限为 600 的压缩包；运行中的数据库或 Docker 数据可能处于不一致状态。" "Copy the selected directories into a mode-600 archive. Active databases or Docker data may be inconsistent." "Скопировать выбранные каталоги в архив с правами 600. Активные базы данных и данные Docker могут оказаться несогласованными.")" \
+                        "$(localized_text "备份不会修改源目录；若需一致快照，请先停止相关服务后重新创建备份。" "The source directories are not modified. Stop related services and recreate the backup if a consistent snapshot is required." "Исходные каталоги не изменяются. Для согласованной копии остановите связанные службы и создайте архив заново.")" || continue
                 fi
                 backup_select_archive_directory "$backup_root" || continue
-                tar_file="${BACKUP_ARCHIVE_ROOT}/backup_${ts}.tar.gz"
+                read_trimmed encrypt_choice "$(localized_text "是否使用 AES-256 加密备份？(y/N，默认 N): " "Encrypt the backup with AES-256? (y/N, default N): " "Зашифровать резервную копию с помощью AES-256? (y/N, по умолчанию N): ")"
+                if is_yes "$encrypt_choice"; then
+                    if ! command -v openssl >/dev/null 2>&1; then
+                        echo -e "$(localized_text "${RED}❌ 缺少 openssl，无法创建加密备份。${PLAIN}" "${RED}❌ openssl is required to create an encrypted backup.${PLAIN}" "${RED}❌ Для создания зашифрованной копии требуется openssl.${PLAIN}")"
+                        continue
+                    fi
+                    backup_read_new_password backup_password
+                    tar_file="${BACKUP_ARCHIVE_ROOT}/backup_${ts}.tar.gz.enc"
+                else
+                    tar_file="${BACKUP_ARCHIVE_ROOT}/backup_${ts}.tar.gz"
+                fi
 
                 work_dir=$(make_secure_temp_dir "vps_backup_${ts}") || {
                     echo -e "$(localized_text "${RED}❌ 无法创建安全临时目录，备份已取消。${PLAIN}" "${RED}❌ Unable to create secure temporary directory, backup canceled.${PLAIN}" "${RED}❌ Невозможно создать безопасный временный каталог, резервное копирование отменено.${PLAIN}")"
@@ -2750,21 +3033,37 @@ func_backup_center() {
                     backup_copy_custom_directories "$manifest_file" "$work_dir" custom_directories && copied=1
                 fi
 
-                if [[ "$copied" -eq 0 ]]; then
-                    quarantine_path "$work_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                if (( ${#BACKUP_COPY_FAILURES[@]} > 0 )); then
+                    backup_cleanup_temp_dir "$work_dir" || true
+                    echo -e "$(localized_text "${RED}❌ 以下路径复制失败，未创建不完整备份：${BACKUP_COPY_FAILURES[*]}${PLAIN}" "${RED}❌ These paths could not be copied; an incomplete backup was not created: ${BACKUP_COPY_FAILURES[*]}${PLAIN}" "${RED}❌ Не удалось скопировать следующие пути; неполная резервная копия не создана: ${BACKUP_COPY_FAILURES[*]}${PLAIN}")"
+                elif [[ "$copied" -eq 0 ]]; then
+                    backup_cleanup_temp_dir "$work_dir" || true
                     echo -e "$(localized_text "${YELLOW}⚠️ 未检测到可备份配置文件，已取消创建。${PLAIN}" "${YELLOW}⚠️ The backupable configuration file was not detected and the creation has been cancelled.${PLAIN}" "${YELLOW}⚠️ Резервный файл конфигурации не обнаружен, и его создание отменено.${PLAIN}")"
                 else
-                    if ( umask 077 && tar -czf "$tar_file" -C "$work_dir" . ) >/dev/null 2>&1; then
+                    local backup_payload_bytes
+                    backup_payload_bytes=$(backup_path_size_bytes "$work_dir") || backup_payload_bytes=0
+                    if ! backup_require_free_space "$BACKUP_ARCHIVE_ROOT" "$backup_payload_bytes" "$(localized_text "创建备份" "Backup creation" "Создание резервной копии")"; then
+                        backup_cleanup_temp_dir "$work_dir" || true
+                        continue
+                    fi
+                    if backup_create_archive "$work_dir" "$tar_file" "$backup_password"; then
+                        backup_password=""
                         chmod 600 "$tar_file" 2>/dev/null || true
                         backup_register_archive_root "$BACKUP_ARCHIVE_ROOT" || true
                         loaded_archive="$tar_file"
                         echo -e "$(localized_text "${GREEN}✅ 备份创建成功: ${tar_file}${PLAIN}" "${GREEN}✅ Backup created successfully: ${tar_file}${PLAIN}" "${GREEN}. Резервная копия успешно создана: ${tar_file}.${PLAIN}")"
                         echo -e "$(localized_text "已加载备份包: $(basename "$tar_file")，可在 [3] -> [1] 恢复。" "Loaded backup archive: $(basename "$tar_file"). Restore it with [3] -> [1]." "Загружен архив: $(basename "$tar_file"). Восстановление: [3] -> [1].")"
-                        echo -e "$(localized_text "${YELLOW}⚠️ 备份包含证书私钥、面板数据库和 API Token 等敏感配置，请妥善保管。${PLAIN}" "${YELLOW}⚠️ The backup contains sensitive configurations such as certificate private key, panel database and API Token, please keep it properly.${PLAIN}" "${YELLOW}⚠️ Резервная копия содержит конфиденциальные конфигурации, такие как закрытый ключ сертификата, база данных панели и токен API, сохраняйте ее правильно.${PLAIN}")"
+                        if backup_archive_is_encrypted "$tar_file"; then
+                            echo -e "$(localized_text "${YELLOW}⚠️ 加密密码不会保存；丢失后无法恢复该备份。${PLAIN}" "${YELLOW}⚠️ The encryption password is not stored. The backup cannot be restored if the password is lost.${PLAIN}" "${YELLOW}⚠️ Пароль шифрования не сохраняется. Без него восстановить копию невозможно.${PLAIN}")"
+                        else
+                            echo -e "$(localized_text "${YELLOW}⚠️ 备份包含证书私钥、面板数据库和 API Token；文件权限已设为 600，请勿公开传输。${PLAIN}" "${YELLOW}⚠️ This archive contains certificate keys, panel databases, and API tokens. Its mode is 600; do not transfer it publicly.${PLAIN}" "${YELLOW}⚠️ Архив содержит закрытые ключи, базы данных панели и API-токены. Права установлены в 600; не передавайте его публично.${PLAIN}")"
+                        fi
                     else
+                        backup_password=""
+                        rm -f -- "$tar_file"
                         echo -e "$(localized_text "${RED}❌ 备份打包失败，请检查磁盘空间与权限。${PLAIN}" "${RED}❌ Backup packaging failed, please check the disk space and permissions.${PLAIN}" "${RED}❌ Не удалось создать резервную копию, проверьте место на диске и разрешения.${PLAIN}")"
                     fi
-                    quarantine_path "$work_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                    backup_cleanup_temp_dir "$work_dir" || true
                 fi
                 ;;
 
@@ -2794,10 +3093,10 @@ func_backup_center() {
                         loaded_archive="$target_file"
                         ;;
                     3)
-                        IFS= read -r -p "$(localized_text "备份包绝对路径（例：/backups/etc_usr_home_20260809165222.tar.gz）: " "Absolute backup archive path (example: /backups/etc_usr_home_20260809165222.tar.gz): " "Абсолютный путь к архиву (пример: /backups/etc_usr_home_20260809165222.tar.gz): ")" target_file || continue
+                        IFS= read -r -p "$(localized_text "备份包绝对路径（.tar.gz 或 .tar.gz.enc）: " "Absolute backup archive path (.tar.gz or .tar.gz.enc): " "Абсолютный путь к архиву (.tar.gz или .tar.gz.enc): ")" target_file || continue
                         target_file=$(trim_input "$target_file")
                         if ! backup_archive_is_readable "$target_file"; then
-                            echo -e "$(localized_text "${RED}❌ 未找到可读取的 .tar.gz 备份包。${PLAIN}" "${RED}❌ A readable .tar.gz backup archive was not found.${PLAIN}" "${RED}❌ Не найден доступный для чтения архив резервной копии .tar.gz.${PLAIN}")"
+                            echo -e "$(localized_text "${RED}❌ 未找到可读取的 .tar.gz 或 .tar.gz.enc 备份包。${PLAIN}" "${RED}❌ A readable .tar.gz or .tar.gz.enc backup archive was not found.${PLAIN}" "${RED}❌ Не найден доступный для чтения архив .tar.gz или .tar.gz.enc.${PLAIN}")"
                             continue
                         fi
                         loaded_archive="$target_file"
@@ -2809,7 +3108,7 @@ func_backup_center() {
                         ;;
                 esac
 
-                local restore_dir
+                local restore_dir restore_archive restore_password
                 local restore_failed=0
                 local restore_quarantine="/etc/vps-optimize/quarantine/manual-restore"
                 restore_dir=$(make_secure_temp_dir "vps_restore") || {
@@ -2817,30 +3116,73 @@ func_backup_center() {
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
                 }
+                restore_archive="$target_file"
+                restore_password=""
+                if backup_archive_is_encrypted "$target_file"; then
+                    if ! command -v openssl >/dev/null 2>&1; then
+                        backup_cleanup_temp_dir "$restore_dir" || true
+                        echo -e "$(localized_text "${RED}❌ 缺少 openssl，无法解密该备份。${PLAIN}" "${RED}❌ openssl is required to decrypt this backup.${PLAIN}" "${RED}❌ Для расшифровки этой копии требуется openssl.${PLAIN}")"
+                        continue
+                    fi
+                    read_secret_trimmed restore_password "$(localized_text "备份解密密码: " "Backup decryption password: " "Пароль для расшифровки: ")"
+                    if [[ -z "$restore_password" ]]; then
+                        backup_cleanup_temp_dir "$restore_dir" || true
+                        echo -e "$(localized_text "${YELLOW}未输入密码，恢复已取消。${PLAIN}" "${YELLOW}No password was entered; restore canceled.${PLAIN}" "${YELLOW}Пароль не введён; восстановление отменено.${PLAIN}")"
+                        continue
+                    fi
+                    local encrypted_archive_bytes
+                    encrypted_archive_bytes=$(backup_path_size_bytes "$target_file") || encrypted_archive_bytes=0
+                    if ! backup_require_free_space "$restore_dir" "$encrypted_archive_bytes" "$(localized_text "解密备份" "Backup decryption" "Расшифровка резервной копии")"; then
+                        restore_password=""
+                        backup_cleanup_temp_dir "$restore_dir" || true
+                        continue
+                    fi
+                    restore_archive="${restore_dir}/.decrypted-backup.tar.gz"
+                    if ! backup_decrypt_archive "$target_file" "$restore_archive" "$restore_password"; then
+                        restore_password=""
+                        rm -f -- "$restore_archive"
+                        backup_cleanup_temp_dir "$restore_dir" || true
+                        echo -e "$(localized_text "${RED}❌ 解密失败：密码错误或文件已损坏。${PLAIN}" "${RED}❌ Decryption failed: the password is incorrect or the file is damaged.${PLAIN}" "${RED}❌ Ошибка расшифровки: неверный пароль или повреждённый файл.${PLAIN}")"
+                        continue
+                    fi
+                    restore_password=""
+                fi
 
-                if ! tar -tzf "$target_file" >/dev/null 2>&1; then
-                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                if ! tar -tzf "$restore_archive" >/dev/null 2>&1; then
+                    [[ "$restore_archive" == "$target_file" ]] || rm -f -- "$restore_archive"
+                    backup_cleanup_temp_dir "$restore_dir" || true
                     echo -e "$(localized_text "${RED}❌ 备份文件无法读取，回滚中止。${PLAIN}" "${RED}❌ The backup file cannot be read and the rollback is aborted.${PLAIN}" "${RED}❌ Файл резервной копии не может быть прочитан, и откат прерывается.${PLAIN}")"
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
                 fi
-                if tar -tzf "$target_file" 2>/dev/null | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
-                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                if tar -tzf "$restore_archive" 2>/dev/null | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+                    [[ "$restore_archive" == "$target_file" ]] || rm -f -- "$restore_archive"
+                    backup_cleanup_temp_dir "$restore_dir" || true
                     echo -e "$(localized_text "${RED}❌ 备份文件包含不安全路径，回滚中止。${PLAIN}" "${RED}❌ The backup file contains an unsafe path and the rollback is aborted.${PLAIN}" "${RED}❌ Файл резервной копии содержит небезопасный путь, и откат прерывается.${PLAIN}")"
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
                 fi
 
-                if ! tar -xzf "$target_file" -C "$restore_dir" >/dev/null 2>&1; then
-                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                local unpacked_bytes
+                unpacked_bytes=$(backup_archive_unpacked_size_bytes "$restore_archive") || unpacked_bytes=0
+                if ! backup_require_free_space "$restore_dir" "$unpacked_bytes" "$(localized_text "解压备份" "Backup extraction" "Распаковка резервной копии")"; then
+                    [[ "$restore_archive" == "$target_file" ]] || rm -f -- "$restore_archive"
+                    backup_cleanup_temp_dir "$restore_dir" || true
+                    continue
+                fi
+
+                if ! tar -xzf "$restore_archive" -C "$restore_dir" >/dev/null 2>&1; then
+                    [[ "$restore_archive" == "$target_file" ]] || rm -f -- "$restore_archive"
+                    backup_cleanup_temp_dir "$restore_dir" || true
                     echo -e "$(localized_text "${RED}❌ 备份解压失败，回滚中止。${PLAIN}" "${RED}❌ Backup decompression failed and rollback aborted.${PLAIN}" "${RED}❌ Не удалось распаковать резервную копию, и откат прерван.${PLAIN}")"
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
                 fi
+                [[ "$restore_archive" == "$target_file" ]] || rm -f -- "$restore_archive"
 
                 backup_restore_preflight "$restore_dir"
                 confirm_danger "$(localized_text "确认从备份恢复" "Confirm backup restore" "Подтвердите восстановление из резервной копии")" "$(localized_text "会覆盖 SSH、Caddy、Docker、Fail2ban、sysctl 及备份中的自定义系统目录。" "It will overwrite SSH, Caddy, Docker, Fail2ban, sysctl, and custom system directories in the backup." "Будут перезаписаны SSH, Caddy, Docker, Fail2ban, sysctl и пользовательские системные каталоги из резервной копии.")" "$(localized_text "恢复后脚本会尝试重启已安装服务；请保持当前 SSH 会话并准备好云厂商救援控制台。" "After restoring, the script will try to restart installed services. Keep the current SSH session and prepare the cloud rescue console." "После восстановления скрипт попытается перезапустить установленные службы. Сохраните текущий сеанс SSH и подготовьте облачную консоль восстановления.")" || {
-                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                    backup_cleanup_temp_dir "$restore_dir" || true
                     echo -e "$(localized_text "${BLUE}已取消恢复操作。${PLAIN}" "${BLUE}Restore operation canceled.${PLAIN}" "${BLUE}Операция восстановления отменена.${PLAIN}")"
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
@@ -2848,7 +3190,7 @@ func_backup_center() {
 
                 if [[ -f "$restore_dir/etc/vps-optimize/traffic-guard.conf" || -f "$restore_dir/usr/local/bin/vps-traffic-guard-check" ]]; then
                     if declare -F traffic_guard_restore_ssh_only_firewall >/dev/null 2>&1 && ! traffic_guard_restore_ssh_only_firewall; then
-                        quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                        backup_cleanup_temp_dir "$restore_dir" || true
                         echo -e "$(localized_text "${RED}❌ 无法解除当前仅保留 SSH 封锁规则，回滚中止。${PLAIN}" "${RED}❌ Unable to unblock the current blocking rule of SSH, the rollback is aborted.${PLAIN}" "${RED}❌ Невозможно разблокировать текущее правило блокировки SSH, откат прерывается.${PLAIN}")"
                         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                         continue
@@ -2925,7 +3267,7 @@ func_backup_center() {
                     [[ "$restart_rc" -eq 1 ]] && restart_failed=1
                 done
 
-                quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                backup_cleanup_temp_dir "$restore_dir" || true
                 if [[ "$restore_failed" -eq 0 && "$restart_failed" -eq 0 ]]; then
                     echo -e "$(localized_text "${GREEN}✅ 回滚完成！建议立即验证 SSH、反代和容器服务状态。${PLAIN}" "${GREEN}✅ Rollback completed! It is recommended to verify SSH, reverse proxy and container service status immediately.${PLAIN}" "${GREEN}✅ Откат завершен! Рекомендуется немедленно проверить статус SSH, обратный прокси и контейнерной службы.${PLAIN}")"
                 elif [[ "$restore_failed" -ne 0 ]]; then
@@ -2936,9 +3278,9 @@ func_backup_center() {
                 ;;
 
             4)
-                mapfile -t backups < <(ls -1t "$backup_root"/backup_*.tar.gz 2>/dev/null)
+                mapfile -t backups < <(ls -1t "$backup_root"/backup_*.tar.gz "$backup_root"/backup_*.tar.gz.enc 2>/dev/null)
                 if [[ ${#backups[@]} -le 5 ]]; then
-                    echo -e "$(localized_text "${BLUE}当前备份数量不超过 5 份，无需清理。${PLAIN}" "${BLUE}The current number of backups does not exceed 5 and no cleaning is required.${PLAIN}" "${BLUE}Текущее количество резервных копий не превышает 5 и очистка не требуется.${PLAIN}")"
+                    echo -e "$(localized_text "${BLUE}当前备份不超过 5 份，无需清理。${PLAIN}" "${BLUE}There are no more than five backups; no cleanup is needed.${PLAIN}" "${BLUE}Резервных копий не больше пяти; очистка не требуется.${PLAIN}")"
                 else
                     confirm_danger "$(localized_text "隔离旧备份" "Quarantine old backups" "Поместить старые резервные копии в карантин")" "$(localized_text "会把第 6 份及更早的备份移入隔离目录，不会直接删除。" "The 6th and earlier backups will be moved to the quarantine directory and will not be deleted directly." "Шестая и более ранние резервные копии будут перемещены в каталог карантина и не будут удалены напрямую.")" "$(localized_text "如需恢复，可到 /etc/vps-optimize/quarantine/manual-backups 手动查看。保留最近 5 份不动。" "If you need to restore, you can go to /etc/vps-optimize/quarantine/manual-backups to check manually. Leave the last 5 copies unchanged." "Если вам нужно восстановить, вы можете перейти к /etc/vps-optimize/quarantine/manual-backups и проверить вручную. Последние 5 копий оставьте без изменений.")" || {
                         echo -e "$(localized_text "${BLUE}已取消旧备份隔离。${PLAIN}" "${BLUE}The old backup has been dequarantined.${PLAIN}" "${BLUE}Старая резервная копия выведена из карантина.${PLAIN}")"
@@ -2958,7 +3300,7 @@ func_backup_center() {
                 func_edit_applied_config_center
                 ;;
 
-            "?"|help) show_backup_help ;;
+            "?") show_backup_help ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")" ;;
         esac
@@ -2982,6 +3324,41 @@ ensure_runtime_root() {
             "${RED}❌ Error: run this script as root.${PLAIN}" \
             "${RED}❌ Ошибка: запустите этот скрипт от имени пользователя root.${PLAIN}"
         exit 1
+    fi
+}
+
+acquire_vpso_session_lock() {
+    local lock_dir="/run/lock"
+    local lock_file="${lock_dir}/vps-optimize.lock"
+    local owner=""
+
+    command -v flock >/dev/null 2>&1 || {
+        localized_echo \
+            "${RED}❌ 缺少 flock，无法防止多个会话同时修改配置。${PLAIN}" \
+            "${RED}❌ flock is required to prevent concurrent configuration changes.${PLAIN}" \
+            "${RED}❌ Для защиты от одновременного изменения конфигурации требуется flock.${PLAIN}"
+        exit 1
+    }
+    mkdir -p "$lock_dir" || exit 1
+    exec {VPSO_SESSION_LOCK_FD}>>"$lock_file" || exit 1
+    if ! flock -n "$VPSO_SESSION_LOCK_FD"; then
+        owner=$(head -n 1 "$lock_file" 2>/dev/null || true)
+        localized_echo \
+            "${YELLOW}⚠️ 另一个 VPS-Optimize 会话正在运行：${owner:-状态未知}${PLAIN}" \
+            "${YELLOW}⚠️ Another VPS-Optimize session is running: ${owner:-unknown}${PLAIN}" \
+            "${YELLOW}⚠️ Уже запущен другой сеанс VPS-Optimize: ${owner:-неизвестно}${PLAIN}"
+        exit 1
+    fi
+    : > "$lock_file"
+    printf 'pid=%s started=%s\n' "$$" "$(date -Is 2>/dev/null || date)" >&"$VPSO_SESSION_LOCK_FD"
+    trap release_vpso_session_lock EXIT
+}
+
+release_vpso_session_lock() {
+    if [[ -n "${VPSO_SESSION_LOCK_FD:-}" ]]; then
+        flock -u "$VPSO_SESSION_LOCK_FD" 2>/dev/null || true
+        exec {VPSO_SESSION_LOCK_FD}>&-
+        VPSO_SESSION_LOCK_FD=""
     fi
 }
 
@@ -5095,8 +5472,8 @@ func_add_port_connlimit_rule() {
 
     read_connlimit_port port || return 0
     read_connlimit_limit limit || return 0
-    read_trimmed apply_ipv6 "$(localized_text "是否同时应用 IPv6？(Y/n，默认 y): " "Apply to IPv6 too? (Y/n, default y):" "Применить также к IPv6? (Y/n, по умолчанию y):")"
-    is_no "$apply_ipv6" && include_ipv6=0
+    read_trimmed apply_ipv6 "$(localized_text "是否同时应用 IPv6？(y/N，默认 N): " "Apply the rule to IPv6 too? (y/N, default N): " "Также применить правило к IPv6? (y/N, по умолчанию N): ")"
+    is_yes "$apply_ipv6" || include_ipv6=0
 
     print_port_connlimit_scope_notice "$port"
     marker=$(port_connlimit_comment "$port")
@@ -5155,8 +5532,8 @@ func_delete_port_connlimit_rule() {
 
     read_connlimit_port port || return 0
     read_connlimit_limit limit || return 0
-    read_trimmed delete_ipv6 "$(localized_text "是否同时删除 IPv6 规则？(Y/n，默认 y): " "Remove the IPv6 rule too? (Y/n, default y):" "Удалить также правило IPv6? (Y/n, по умолчанию y):")"
-    is_no "$delete_ipv6" && include_ipv6=0
+    read_trimmed delete_ipv6 "$(localized_text "是否同时删除 IPv6 规则？(y/N，默认 N): " "Remove the IPv6 rule too? (y/N, default N): " "Также удалить правило IPv6? (y/N, по умолчанию N): ")"
+    is_yes "$delete_ipv6" || include_ipv6=0
 
     print_port_connlimit_scope_notice "$port"
     marker=$(port_connlimit_comment "$port")
@@ -5906,7 +6283,7 @@ func_firewall_manage() {
                 fi
                 sleep 2
                 ;;
-            "?"|help) show_firewall_menu_help; pause_return ;;
+            "?") show_firewall_menu_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效的选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac
@@ -6358,7 +6735,7 @@ func_caddy_add_reverse_proxy() {
 
     local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
-    read_trimmed enable_ip_whitelist "$(localized_text "❓ 是否只允许指定 IP/CIDR 访问该域名？(Y/n，默认 y): " "❓ Are only the specified IP/CIDR allowed to access the domain? (Y/n, default y):" "❓ Разрешен ли только указанный IP/CIDR доступ к доменному имени? (Да/нет, по умолчанию y):")"
+    read_trimmed enable_ip_whitelist "$(localized_text "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/N，默认 N): " "❓ Restrict this domain to specified IP/CIDR ranges? (y/N, default N): " "❓ Ограничить доступ к домену указанными IP/CIDR? (y/N, по умолчанию N): ")"
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "$(localized_text "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}" "${YELLOW}The current source IP of SSH may be: ${current_client_ip}. Please confirm that you have joined the whitelist to avoid blocking yourself out.${PLAIN}" "${YELLOW}Текущий IP-адрес источника SSH может быть: ${current_client_ip}. Пожалуйста, подтвердите, что вы присоединились к белому списку, чтобы не заблокировать себя.${PLAIN}")"
@@ -6655,7 +7032,7 @@ func_nginx_add_reverse_proxy() {
     fi
 
     read_trimmed is_https "$(localized_text "后端是否是自带证书的 HTTPS 服务？(Y/n，默认 y): " "Is the backend a HTTPS service with its own certificate? (Y/n, default y):" "Является ли бэкенд службой HTTPS с собственным сертификатом? (Да/нет, по умолчанию y):")"
-    read_trimmed enable_ip_whitelist "$(localized_text "是否只允许指定 IP/CIDR 访问该 Nginx 域名？(Y/n，默认 y): " "Are only the specified IP/CIDR allowed to access the Nginx domain? (Y/n, default y):" "Разрешен ли только указанный IP/CIDR доступ к доменному имени Nginx? (Да/нет, по умолчанию y):")"
+    read_trimmed enable_ip_whitelist "$(localized_text "是否只允许指定 IP/CIDR 访问该 Nginx 域名？(y/N，默认 N): " "Restrict this Nginx domain to specified IP/CIDR ranges? (y/N, default N): " "Ограничить доступ к домену Nginx указанными IP/CIDR? (y/N, по умолчанию N): ")"
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "$(localized_text "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}" "${YELLOW}The current source IP of SSH may be: ${current_client_ip}. Please confirm that you have joined the whitelist to avoid blocking yourself out.${PLAIN}" "${YELLOW}Текущий IP-адрес источника SSH может быть: ${current_client_ip}. Пожалуйста, подтвердите, что вы присоединились к белому списку, чтобы не заблокировать себя.${PLAIN}")"
@@ -7195,7 +7572,7 @@ func_env_install() {
                     echo -e "$(localized_text "${GREEN}✅ 安装完成后运行 tailscale up，按提示登录并加入网络。${PLAIN}" "${GREEN}✅ After the installation is complete, run tailscale up, follow the prompts to log in and join the network.${PLAIN}" "${GREEN}. После завершения установки запустите Tailscale Up, следуйте инструкциям, чтобы войти в систему и присоединиться к сети.${PLAIN}")"
                 fi
                 ;;
-            "?"|help) echo "$(localized_text "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443端口复用走主菜单 [19]。" "The basic component menu only installs Docker, Python, WARP, forwarding tunnel and common services. Caddy/Nginx reverse proxy goes to the main menu [4]; Port 443 Reuse goes to the main menu [19]." "Меню базового компонента устанавливает только Docker, Python, WARP, туннель пересылки и общие службы. Caddy/Nginx осуществляет обратный доступ к главному меню [4]; 443 повторного использования порта 443 обеспечивает доступ к главному меню [19].")"; pause_return ;;
+            "?") echo "$(localized_text "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443端口复用走主菜单 [19]。" "The basic components menu installs only Docker, Python, WARP, forwarding tunnels, and common services. Use main menu [4] for Caddy/Nginx reverse proxy and [19] for Port 443 Reuse." "Меню базовых компонентов устанавливает только Docker, Python, WARP, туннели перенаправления и распространённые службы. Для обратного прокси Caddy/Nginx используйте пункт [4] главного меню, для повторного использования порта 443 — пункт [19].")"; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效的输入！${PLAIN}" "${RED}❌ Invalid input!${PLAIN}" "${RED}❌ Неверный ввод!${PLAIN}")" ;;
         esac
@@ -10384,7 +10761,7 @@ select_initial_entry_mode() {
         1) ENTRY_MODE="nginx-stream" ;;
         2) ENTRY_MODE="xray-fallback" ;;
         3) ENTRY_MODE="tcp-peek" ;;
-        0|q|Q) echo -e "$(localized_text "${BLUE}已取消首次配置。${PLAIN}" "${BLUE}Has been canceled for the first time.${PLAIN}" "${BLUE}отменен впервые.${PLAIN}")"; return 1 ;;
+        0|q|Q) echo -e "$(localized_text "${BLUE}已取消首次配置。${PLAIN}" "${BLUE}Initial setup canceled.${PLAIN}" "${BLUE}Первоначальная настройка отменена.${PLAIN}")"; return 1 ;;
         *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"; return 1 ;;
     esac
     echo -e "$(localized_text "${GREEN}✅ 已选择 443 入口模式：${ENTRY_MODE}${PLAIN}" "${GREEN}✅ 443 entry mode selected: ${ENTRY_MODE}${PLAIN}" "${GREEN}Выбран 443 режима входа: ${ENTRY_MODE}${PLAIN}")"
@@ -10444,14 +10821,17 @@ prepare_initial_entry_mode_dependencies() {
 
 switch_entry_mode() {
     local target_mode="$1"
-    local current_mode backup_dir planned_backup_dir yn
+    local current_mode backup_dir planned_backup_dir
     load_sni_stack_env || return 1
     target_mode=$(normalize_entry_mode_name "$target_mode") || { echo -e "$(localized_text "${RED}❌ 目标入口模式无效：${target_mode}${PLAIN}" "${RED}❌ Invalid target entry mode: ${target_mode}${PLAIN}" "${RED}❌ Неверный режим ввода цели: ${target_mode}${PLAIN}")"; return 1; }
     current_mode=$(get_entry_mode)
 
     if [[ "$target_mode" == "$current_mode" ]]; then
-        read_trimmed yn "$(localized_text "当前已经是 ${target_mode}，是否重新应用当前模式？(Y/n，默认 y): " "The current value is ${target_mode}. Do you want to reapply the current mode? (Y/n, default y):" "Текущее значение — ${target_mode}. Вы хотите повторно применить текущий режим? (Да/нет, по умолчанию y):")"
-        is_yes "$yn" && reapply_current_entry_mode
+        confirm_danger \
+            "$(localized_text "重新应用 ${target_mode} 入口模式" "Reapply the ${target_mode} entry mode" "Повторно применить режим входа ${target_mode}")" \
+            "$(localized_text "重新生成公网 443 入口配置并重启相关入口服务。" "Regenerate the public Port 443 entry configuration and restart the related entry services." "Заново создать конфигурацию публичного входа 443 и перезапустить связанные службы.")" \
+            "$(localized_text "使用入口模式备份回滚，或重新应用原入口模式。" "Roll back with the entry-mode backup or reapply the previous entry mode." "Выполните откат из резервной копии режима входа или повторно примените прежний режим.")" || return 1
+        reapply_current_entry_mode
         return $?
     fi
 
@@ -11188,7 +11568,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "$(localized_text "${GREEN}  5. 重新应用当前保存的配置${PLAIN}" "${GREEN}5. Reapply the currently saved configuration${PLAIN}" "${GREEN}5. Повторно примените текущую сохраненную конфигурацию.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回上一级 / q/back/返回${PLAIN}" "${RED}0. Return to the previous level / q/back/return to${PLAIN}" "${RED}0. Возврат на предыдущий уровень /q/назад/возврат в${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
@@ -11199,7 +11579,7 @@ edit_sni_stack_runtime_profile() {
             3) edit_sni_stack_entry_profile ;;
             4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси-сервером] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
             5) reapply_sni_stack_from_env ;;
-            "?"|help) show_sni_help; pause_return; continue ;;
+            "?") show_sni_help; pause_return; continue ;;
             0) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;
         esac
@@ -11309,7 +11689,7 @@ collect_sni_stack_config() {
     CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "3x-ui Clash/Mihomo subscription path prefix (without client identifier; recommended: /clash/)" "Префикс подписки Clash/Mihomo в 3x-ui (без идентификатора клиента; рекомендуется /clash/)")" "$default_clash_path")")
     local panel_whitelist_enabled panel_whitelist_input panel_whitelist_ranges current_client_ip
     local -a panel_whitelist_array=()
-    read_trimmed panel_whitelist_enabled "$(localized_text "是否为面板域名启用 IP 白名单？(Y/n，默认 y): " "Enable IP whitelisting for panel domains? (Y/n, default y):" "Включить белый список IP-адресов для доменных имен панели? (Да/нет, по умолчанию y):")"
+    read_trimmed panel_whitelist_enabled "$(localized_text "是否为面板域名启用 IP 白名单？(y/N，默认 N): " "Enable an IP allowlist for the panel domain? (y/N, default N): " "Включить список разрешённых IP-адресов для домена панели? (y/N, по умолчанию N): ")"
     if is_yes "$panel_whitelist_enabled"; then
         if ! web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-nginx-stream}" "$WEB_PROXY_ENGINE"; then
             echo -e "$(localized_text "${RED}❌ xray-fallback 模式不支持 Web 白名单。${PLAIN}" "${RED}❌ xray-fallback mode does not support web whitelisting.${PLAIN}" "${RED}❌ Резервный режим xray не поддерживает белый список веб-сайтов.${PLAIN}")"
@@ -11345,17 +11725,15 @@ collect_sni_stack_config() {
     echo -e "$(localized_text "${CYAN}证书处理分两种情况：${PLAIN}" "${CYAN}Certificate processing is divided into two situations:${PLAIN}" "${CYAN}Обработка сертификата делится на две ситуации:.${PLAIN}")"
     echo -e "$(localized_text "  3x-ui 3.x 新安装：在官方安装器选第 4 项 Skip SSL，再选 y 仅绑定 127.0.0.1；本步骤只做兜底检查。" "  New 3x-ui 3.x installation: choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. This step is only a fallback check." "  Новая установка 3x-ui 3.x: выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Этот шаг выполняет только проверку.")"
     echo -e "$(localized_text "  3x-ui 2.x、升级旧配置、或曾经启用过 3x-ui SSL：继续按旧流程清空面板/订阅证书路径。" "3x-ui 2.x, upgrading old configuration, or 3x-ui SSL has been enabled: Continue to clear the panel/subscription certificate path according to the old process." "3x-ui 2.x, обновление старой конфигурации или 3x-ui SSL включен: продолжайте очищать путь сертификата панели/подписки в соответствии со старым процессом.")"
-    local cert_clear_confirm
-    read_trimmed cert_clear_confirm "$(localized_text "是否现在兜底清空 2.x/旧配置中的 3x-ui 面板/订阅证书路径？(Y/n，默认 yes): " "Do you want to clean up the 3x-ui panel/subscription certificate path in the 2.x/old configuration now? (Y/n, default yes):" "Хотите ли вы сейчас очистить путь к сертификату панели/подписки 3x-ui в конфигурации 2.x/old? (Да/нет, по умолчанию да):")"
-    cert_clear_confirm="${cert_clear_confirm:-yes}"
-    if is_yes "$cert_clear_confirm"; then
+    if confirm_danger \
+        "$(localized_text "清空 3x-ui 旧证书路径" "Clear legacy 3x-ui certificate paths" "Очистить старые пути сертификатов 3x-ui")" \
+        "$(localized_text "清空 3x-ui 2.x 或旧配置中的面板和订阅证书路径，使本地反代改用 HTTP。" "Clear panel and subscription certificate paths in 3x-ui 2.x or legacy configuration so the local proxy can use HTTP." "Очистить пути сертификатов панели и подписки в 3x-ui 2.x или старой конфигурации, чтобы локальный прокси использовал HTTP.")" \
+        "$(localized_text "可在 3x-ui 官方菜单中重新填写原证书路径，或恢复操作前备份。" "Restore the original certificate paths from the official 3x-ui menu or a pre-operation backup." "Верните исходные пути через официальное меню 3x-ui или восстановите резервную копию.")"; then
         if ! clear_xui_cert_settings_for_single_443; then
-            read_trimmed cert_clear_confirm "$(localized_text "未能自动确认清空，是否已经手动清空面板证书和订阅证书路径？(Y/n，默认 y): " "Failed to automatically confirm the clearing. Have you manually cleared the panel certificate and subscription certificate paths? (Y/n, default y):" "Не удалось автоматически подтвердить очистку. Очистили ли вы вручную пути к сертификату панели и сертификату подписки? (Да/нет, по умолчанию y):")"
-            is_yes "$cert_clear_confirm" || { echo -e "$(localized_text "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}" "${YELLOW}Please return to 3x-ui to clear the certificate path, save and restart, and then run this wizard.${PLAIN}" "${YELLOW}Вернитесь в 3x-ui, чтобы очистить путь к сертификату, сохраните его и перезапустите, а затем запустите этот мастер.${PLAIN}")"; return 1; }
+            confirm_default_no "$(localized_text "是否已经手动清空面板和订阅证书路径？(y/N): " "Have you already cleared the panel and subscription certificate paths manually? (y/N): " "Вы уже вручную очистили пути сертификатов панели и подписки? (y/N): ")" || { echo -e "$(localized_text "${YELLOW}请先在 3x-ui 中清空证书路径，保存并重启面板。${PLAIN}" "${YELLOW}Clear the certificate paths in 3x-ui, save, and restart the panel first.${PLAIN}" "${YELLOW}Сначала очистите пути сертификатов в 3x-ui, сохраните изменения и перезапустите панель.${PLAIN}")"; return 1; }
         fi
     else
-        read_trimmed cert_clear_confirm "$(localized_text "确认已经手动清空面板证书和订阅证书路径？(Y/n，默认 y): " "Are you sure you have manually cleared the panel certificate and subscription certificate paths? (Y/n, default y):" "Вы уверены, что вручную очистили пути к сертификатам панели и сертификатам подписки? (Да/нет, по умолчанию y):")"
-        is_yes "$cert_clear_confirm" || { echo -e "$(localized_text "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}" "${YELLOW}Please return to 3x-ui to clear the certificate path, save and restart, and then run this wizard.${PLAIN}" "${YELLOW}Вернитесь в 3x-ui, чтобы очистить путь к сертификату, сохраните его и перезапустите, а затем запустите этот мастер.${PLAIN}")"; return 1; }
+        confirm_default_no "$(localized_text "是否已经手动清空面板和订阅证书路径？(y/N): " "Have you already cleared the panel and subscription certificate paths manually? (y/N): " "Вы уже вручную очистили пути сертификатов панели и подписки? (y/N): ")" || { echo -e "$(localized_text "${YELLOW}请先在 3x-ui 中清空证书路径，保存并重启面板。${PLAIN}" "${YELLOW}Clear the certificate paths in 3x-ui, save, and restart the panel first.${PLAIN}" "${YELLOW}Сначала очистите пути сертификатов в 3x-ui, сохраните изменения и перезапустите панель.${PLAIN}")"; return 1; }
     fi
 
     echo -e "$(localized_text "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}" "${CYAN}Please enter Cloudflare API Token (requires Zone.DNS.Edit + Zone.Zone.Read)${PLAIN}" "${CYAN}Введите токен API Cloudflare (требуется Zone.DNS.Edit + Zone.Zone.Read)${PLAIN}")"
@@ -12160,35 +12538,43 @@ EOF
 }
 
 harden_single_443_firewall() {
-    local yn ssh_port remove_ports port
-    echo -e "$(localized_text "${YELLOW}可选：防火墙只保留 SSH 与 Nginx 公网入口端口。${PLAIN}" "${YELLOW}Is optional: the firewall only reserves SSH and Nginx public entry ports.${PLAIN}" "${YELLOW}является необязательным: межсетевой экран резервирует только порты входа в публичную сеть SSH и Nginx.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}提醒：若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，脚本的“自动追加当前活动端口”功能可能再次放行它。${PLAIN}" "${YELLOW}Reminder: if 3x-ui still listens on 0.0.0.0:${PANEL_LISTEN_PORT}, automatic active-port detection may allow that port again.${PLAIN}" "${YELLOW}Напоминание: если 3x-ui по-прежнему слушает 0.0.0.0:${PANEL_LISTEN_PORT}, автоматическое обнаружение активных портов может снова разрешить этот порт.${PLAIN}")"
-    read_trimmed yn "$(localized_text "是否现在收紧防火墙？(Y/n，默认 y): " "Tighten the firewall now? (Y/n, default y):" "Ужесточить брандмауэр сейчас? (Да/нет, по умолчанию y):")"
-    is_yes "$yn" || return 0
+    local ssh_port remove_ports port
+    local failures=()
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}
+    confirm_danger \
+        "$(localized_text "收紧 443 入口防火墙" "Tighten the Port 443 firewall" "Ужесточить правила брандмауэра для порта 443")" \
+        "$(localized_text "只保留 SSH ${ssh_port:-22}/tcp 与公网入口 ${NGINX_LISTEN_PORT}/tcp，并撤销已知后端端口的公网放行规则。" "Keep only SSH ${ssh_port:-22}/tcp and public entry ${NGINX_LISTEN_PORT}/tcp, and revoke public allow rules for known backend ports." "Оставить только SSH ${ssh_port:-22}/tcp и публичный вход ${NGINX_LISTEN_PORT}/tcp, удалив разрешающие правила для известных внутренних портов.")" \
+        "$(localized_text "保持当前 SSH 会话；可通过云厂商控制台重新放行端口或恢复防火墙规则。" "Keep the current SSH session open; use the provider console to restore firewall rules or allow ports again." "Не закрывайте текущий сеанс SSH; правила можно восстановить через консоль провайдера.")" \
+        "$(localized_text "若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，自动活动端口检测以后可能再次放行该端口。" "If 3x-ui still listens on 0.0.0.0:${PANEL_LISTEN_PORT}, automatic active-port detection may allow it again later." "Если 3x-ui продолжает слушать 0.0.0.0:${PANEL_LISTEN_PORT}, автоматическое обнаружение активных портов позднее может снова разрешить этот порт.")" || return 0
     remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}" "${XRAY_SNI_ROUTE_PORTS[@]}" "40000" "8443" "1443" "2096" "3000")
     if command -v ufw >/dev/null 2>&1; then
-        ufw allow "${ssh_port}/tcp" >/dev/null 2>&1 || true
-        ufw allow "${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || true
+        ufw allow "${ssh_port}/tcp" >/dev/null 2>&1 || failures+=("SSH ${ssh_port}/tcp")
+        ufw allow "${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || failures+=("entry ${NGINX_LISTEN_PORT}/tcp")
         for port in "${remove_ports[@]}"; do
             [[ "$port" == "$ssh_port" || "$port" == "$NGINX_LISTEN_PORT" ]] && continue
-            ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
-            ufw delete allow "${port}/udp" >/dev/null 2>&1 || true
+            ufw delete allow "${port}/tcp" >/dev/null 2>&1 || :
+            ufw delete allow "${port}/udp" >/dev/null 2>&1 || :
         done
     elif command -v firewall-cmd >/dev/null 2>&1; then
-        systemctl enable --now firewalld >/dev/null 2>&1 || true
-        firewall-cmd --permanent --add-port="${ssh_port}/tcp" >/dev/null 2>&1 || true
-        firewall-cmd --permanent --add-port="${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || true
+        systemctl enable --now firewalld >/dev/null 2>&1 || failures+=("firewalld")
+        firewall-cmd --permanent --add-port="${ssh_port}/tcp" >/dev/null 2>&1 || failures+=("SSH ${ssh_port}/tcp")
+        firewall-cmd --permanent --add-port="${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || failures+=("entry ${NGINX_LISTEN_PORT}/tcp")
         for port in "${remove_ports[@]}"; do
             [[ "$port" == "$ssh_port" || "$port" == "$NGINX_LISTEN_PORT" ]] && continue
-            firewall-cmd --permanent --remove-port="${port}/tcp" >/dev/null 2>&1 || true
-            firewall-cmd --permanent --remove-port="${port}/udp" >/dev/null 2>&1 || true
+            firewall-cmd --permanent --remove-port="${port}/tcp" >/dev/null 2>&1 || :
+            firewall-cmd --permanent --remove-port="${port}/udp" >/dev/null 2>&1 || :
         done
-        firewall-cmd --reload >/dev/null 2>&1 || true
+        firewall-cmd --reload >/dev/null 2>&1 || failures+=("firewalld reload")
     else
         echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 ufw/firewalld，跳过防火墙收紧。${PLAIN}" "${YELLOW}⚠️ ufw/firewalld not detected, skipping firewall tightening.${PLAIN}" "${YELLOW}⚠️ ufw/firewalld не обнаружен, пропускается ужесточение брандмауэра.${PLAIN}")"
+        return 0
     fi
+    if (( ${#failures[@]} > 0 )); then
+        echo -e "$(localized_text "${RED}❌ 防火墙收紧未完整应用：${failures[*]}。请保持当前 SSH 会话并检查防火墙状态。${PLAIN}" "${RED}❌ Firewall tightening was only partially applied: ${failures[*]}. Keep the current SSH session open and inspect the firewall state.${PLAIN}" "${RED}❌ Правила брандмауэра применены не полностью: ${failures[*]}. Не закрывайте текущий сеанс SSH и проверьте состояние брандмауэра.${PLAIN}")"
+        return 1
+    fi
+    echo -e "$(localized_text "${GREEN}✅ 防火墙规则已应用：保留 SSH ${ssh_port}/tcp 与入口 ${NGINX_LISTEN_PORT}/tcp。${PLAIN}" "${GREEN}✅ Firewall rules applied: SSH ${ssh_port}/tcp and entry ${NGINX_LISTEN_PORT}/tcp are allowed.${PLAIN}" "${GREEN}✅ Правила применены: разрешены SSH ${ssh_port}/tcp и вход ${NGINX_LISTEN_PORT}/tcp.${PLAIN}")"
 }
 
 print_sni_stack_result() {
@@ -12469,7 +12855,7 @@ add_sni_stack_site() {
     confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${site_domain}" "Website/reverse proxy backend ${site_domain}" "Сайт/бэкенд обратного прокси ${site_domain}")" "$site_addr" "$site_port" || return 1
 
     if web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "$web_engine"; then
-        read_trimmed enable_ip_whitelist "$(localized_text "是否为 ${site_domain} 启用 IP 白名单？(Y/n，默认 y): " "Enable IP whitelisting for ${site_domain}? (Y/n, default y):" "Включить белый список IP-адресов для ${site_domain}? (Да/нет, по умолчанию y):")"
+        read_trimmed enable_ip_whitelist "$(localized_text "是否为 ${site_domain} 启用 IP 白名单？(y/N，默认 N): " "Enable an IP allowlist for ${site_domain}? (y/N, default N): " "Включить список разрешённых IP-адресов для ${site_domain}? (y/N, по умолчанию N): ")"
     else
         echo -e "$(localized_text "${YELLOW}xray-fallback 无法让本地 Web 反代引擎可靠获取真实客户端源 IP，本次禁止为新域名启用 Web 白名单。${PLAIN}" "${YELLOW}Xray-fallback cannot allow the local web reverse proxy engine to reliably obtain the real client source IP. This time, it is prohibited to enable the web whitelist for new domains.${PLAIN}" "${YELLOW}xray-резервный вариант не может позволить локальному механизму веб-прокси надежно получить реальный исходный IP-адрес клиента. На этот раз запрещено включать белый список веб-сайтов для новых доменных имен.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}如需 Web 白名单，请改用 Nginx Stream/TCP Peek 入口模式。${PLAIN}" "${YELLOW}If you need Web whitelist, please use Nginx Stream/TCP Peek entry mode instead.${PLAIN}" "${YELLOW}Если вам нужен белый список веб-страниц, используйте вместо этого режим входа Nginx Stream/TCP Peek.${PLAIN}")"
@@ -12525,7 +12911,7 @@ edit_sni_stack_site_backend() {
     echo -e "------------------------------------------------"
     read_trimmed choice "$(localized_text "请输入要修改的序号: " "Please enter the serial number to be modified:" "Пожалуйста, введите серийный номер, который необходимо изменить:")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消修改。${PLAIN}" "${BLUE}Has been modified.${PLAIN}" "${BLUE}был изменен.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消修改。${PLAIN}" "${BLUE}Edit canceled.${PLAIN}" "${BLUE}Изменение отменено.${PLAIN}")"
         return 0
     fi
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#SITE_DOMAINS[@]} )); then
@@ -12578,7 +12964,7 @@ remove_sni_stack_site() {
     echo -e "------------------------------------------------"
     read_trimmed choice "$(localized_text "请输入要删除的序号: " "Please enter the serial number to be deleted:" "Пожалуйста, введите серийный номер, который необходимо удалить:")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Has been canceled.${PLAIN}" "${BLUE}отменен.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Removal canceled.${PLAIN}" "${BLUE}Удаление отменено.${PLAIN}")"
         return 0
     fi
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#SITE_DOMAINS[@]} )); then
@@ -12610,7 +12996,7 @@ remove_sni_stack_site() {
 
     apply_sni_stack_runtime_config || return 1
 
-    read_trimmed delete_cert "$(localized_text "是否同时隔离 ${domain} 的 Caddy 证书文件？(Y/n，默认 y): " "Are the Caddy certificate files of ${domain} also quarantined? (Y/n, default y):" "Файлы сертификатов Caddy ${domain} также помещены в карантин? (Да/нет, по умолчанию y):")"
+    read_trimmed delete_cert "$(localized_text "是否同时隔离 ${domain} 的 Caddy 证书文件？(y/N，默认 N): " "Also quarantine the Caddy certificate files for ${domain}? (y/N, default N): " "Также поместить файлы сертификата Caddy для ${domain} в карантин? (y/N, по умолчанию N): ")"
     if is_yes "$delete_cert"; then
         quarantine_path "/etc/caddy/certs/${domain}.crt" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
         quarantine_path "/etc/caddy/certs/${domain}.key" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
@@ -12783,7 +13169,7 @@ edit_sni_stack_tcp_route() {
     echo -e "------------------------------------------------"
     read_trimmed choice "$(localized_text "请输入要修改的序号: " "Please enter the serial number to be modified:" "Пожалуйста, введите серийный номер, который необходимо изменить:")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消修改。${PLAIN}" "${BLUE}Has been modified.${PLAIN}" "${BLUE}был изменен.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消修改。${PLAIN}" "${BLUE}Edit canceled.${PLAIN}" "${BLUE}Изменение отменено.${PLAIN}")"
         return 0
     fi
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#TCP_ROUTE_SNIS[@]} )); then
@@ -12859,7 +13245,7 @@ remove_sni_stack_tcp_route() {
     echo -e "------------------------------------------------"
     read_trimmed choice "$(localized_text "请输入要删除的序号: " "Please enter the serial number to be deleted:" "Пожалуйста, введите серийный номер, который необходимо удалить:")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Has been canceled.${PLAIN}" "${BLUE}отменен.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Removal canceled.${PLAIN}" "${BLUE}Удаление отменено.${PLAIN}")"
         return 0
     fi
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#TCP_ROUTE_SNIS[@]} )); then
@@ -13342,7 +13728,7 @@ manage_sni_stack_sites() {
         echo -e "$(localized_text "${GREEN}  9. 修改面板域名${PLAIN}" "${GREEN}9. Change the panel domain${PLAIN}" "${GREEN}9. Изменить домен панели${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回上一级 / q/back/返回${PLAIN}" "${RED}0. Back / q/back/return${PLAIN}" "${RED}0. Назад / q/back/вернуться${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
@@ -13357,7 +13743,7 @@ manage_sni_stack_sites() {
             7) sni_stack_health_check ;;
             8) switch_sni_stack_web_proxy_engine ;;
             9) edit_sni_stack_panel_domain_profile ;;
-            "?"|help) show_sni_help; pause_return; continue ;;
+            "?") show_sni_help; pause_return; continue ;;
             0) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")" ;;
         esac
@@ -13978,7 +14364,7 @@ func_caddy_cf_maintenance_menu() {
                 quarantine_path "/root/cert/${domain}.crt" "$domain_quarantine_dir" >/dev/null 2>&1 || true
                 quarantine_path "/root/cert/${domain}.key" "$domain_quarantine_dir" >/dev/null 2>&1 || true
 
-                read_trimmed purge_acme "$(localized_text "❓ 是否同时删除 acme.sh 历史记录？(Y/n，默认 y，建议保留): " "❓ Do you want to delete the acme.sh history at the same time? (Y/n, default y, recommended to keep):" "❓ Хотите одновременно удалить историю acme.sh? (Да/нет, по умолчанию y, рекомендуется сохранить):")"
+                read_trimmed purge_acme "$(localized_text "❓ 是否同时删除 acme.sh 历史记录？(y/N，默认 N，建议保留): " "❓ Also remove the acme.sh history? (y/N, default N; keeping it is recommended): " "❓ Также удалить историю acme.sh? (y/N, по умолчанию N; рекомендуется сохранить): ")"
                 if is_yes "$purge_acme"; then
                     /root/.acme.sh/acme.sh --remove -d "$domain" --ecc >/dev/null 2>&1 || true
                     quarantine_path "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
@@ -14477,7 +14863,7 @@ func_caddy_add_insecure() {
         return
     fi
 
-    read_trimmed enable_ip_whitelist "$(localized_text "❓ 是否只允许指定 IP/CIDR 访问该域名？(Y/n，默认 y): " "❓ Are only the specified IP/CIDR allowed to access the domain? (Y/n, default y):" "❓ Разрешен ли только указанный IP/CIDR доступ к доменному имени? (Да/нет, по умолчанию y):")"
+    read_trimmed enable_ip_whitelist "$(localized_text "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/N，默认 N): " "❓ Restrict this domain to specified IP/CIDR ranges? (y/N, default N): " "❓ Ограничить доступ к домену указанными IP/CIDR? (y/N, по умолчанию N): ")"
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "$(localized_text "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}" "${YELLOW}The current source IP of SSH may be: ${current_client_ip}. Please confirm that it has been added to the whitelist.${PLAIN}" "${YELLOW}Текущий исходный IP-адрес SSH может быть: ${current_client_ip}. Пожалуйста, подтвердите, что он был добавлен в белый список.${PLAIN}")"
@@ -15282,7 +15668,7 @@ func_add_ssh_key() {
     user=$(ssh_choose_user) || { read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"; return; }
     if ssh_add_public_key_for_user "$user"; then
         echo -e "$(localized_text "${GREEN}✅ 公钥添加完成。请立刻新开一个 SSH 窗口测试私钥登录。${PLAIN}" "${GREEN}✅ The public key has been added. Please open a new SSH window immediately to test private key login.${PLAIN}" "${GREEN}✅ Открытый ключ добавлен. Немедленно откройте новое окно SSH, чтобы проверить вход в систему с закрытым ключом.${PLAIN}")"
-        read_trimmed enable_mode "$(localized_text "是否同时写入“密钥 + 密码登录（保留/恢复密码）”模式？(Y/n): " "Also write \"Key + Password Login (Keep/Recover Password)\" mode? (Y/n):" "Также пишется режим «Ключ + Пароль (Сохранить/Восстановить пароль)»? (Да/Нет):")"
+        read_trimmed enable_mode "$(localized_text "是否同时启用“密钥 + 密码登录（保留/恢复密码）”模式？(y/N，默认 N): " "Also enable key + password login? (y/N, default N): " "Также включить вход по ключу и паролю? (y/N, по умолчанию N): ")"
         if is_yes "$enable_mode"; then
             ssh_apply_auth_mode key_preferred || true
         fi
@@ -16207,7 +16593,7 @@ func_tcp_tune() {
     
     > "$temp_f"
     echo -e "$(localized_text "\n${YELLOW}👇 请在下方直接【右键粘贴】代码。${PLAIN}" "\n${YELLOW}👇 Please directly [right-click and paste] the code below.${PLAIN}" "\n${YELLOW}👇 Пожалуйста, [щелкните правой кнопкой мыши и вставьте] код ниже.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}💡 粘贴完成后，请按下【回车键】，然后输入 ${RED}EOF${YELLOW} 并再次回车保存：${PLAIN}" "${YELLOW}💡 After pasting is completed, please press the [Enter key], then enter EOFand press Enter again to save:${PLAIN}" "${YELLOW}💡 После завершения вставки нажмите [Enter], затем введите EOFи снова нажмите Enter, чтобы сохранить:${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}💡 粘贴完成后先按回车，再输入 ${RED}EOF${YELLOW} 并按回车保存：${PLAIN}" "${YELLOW}💡 After pasting, press Enter, type EOF, and press Enter again to save:${PLAIN}" "${YELLOW}💡 После вставки нажмите Enter, введите EOF и снова нажмите Enter для сохранения:${PLAIN}")"
     
     local has_content=false
     local parse_failed=false
@@ -17362,7 +17748,7 @@ func_xui_custom_manager() {
     echo -e "$(localized_text "${BOLD}🧭 x-ui 增强套件${PLAIN}" "${BOLD}🧭 x-ui Enhancement Kit${PLAIN}" "${BOLD}🧭 x-ui Комплект расширения${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}用途：补充 3x-ui 面板内没有的维护能力，例如自定义流量重置、校准已用流量、备份恢复和健康检查。${PLAIN}" "${YELLOW}Purpose: to supplement the maintenance capabilities not available in the 3x-ui panel, such as custom flow reset, calibration of used flow, backup recovery and health check.${PLAIN}" "${YELLOW}Назначение: дополнить возможности обслуживания, недоступные на панели 3x-ui, такие как сброс пользовательского потока, калибровка используемого потока, восстановление резервной копии и проверка работоспособности.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}提示：也可以在主菜单直接输入 xcm 进入；脚本内输入 ? 可看功能索引。${PLAIN}" "${YELLOW}Tip: You can also enter xcm directly in the main menu; enter ? in the script to see the function index.${PLAIN}" "${YELLOW}Совет: Вы также можете ввести xcm непосредственно в главном меню; входить ? в скрипте, чтобы увидеть индекс функции.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}在当前菜单输入 ? 可查看功能索引。${PLAIN}" "${YELLOW}Enter ? in the current menu to view the feature index.${PLAIN}" "${YELLOW}Введите ? в текущем меню, чтобы посмотреть список функций.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}建议：修改数据库或恢复备份前，先做快照或通过脚本备份 x-ui 数据。${PLAIN}" "${YELLOW}Recommendation: Before modifying the database or restoring the backup, take a snapshot or back up the x-ui data through a script.${PLAIN}" "${YELLOW}Рекомендация : перед изменением базы данных или восстановлением резервной копии сделайте снимок или создайте резервную копию данных x-ui с помощью сценария.${PLAIN}")"
     echo -e "------------------------------------------------"
     run_remote_script "$(localized_text "运行 x-ui 增强套件脚本" "Run the x-ui enhancement kit script" "Запустите сценарий комплекта расширения x-ui.")" "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh"
@@ -17771,7 +18157,7 @@ func_sublinkpro() {
     print_public_https_reverse_proxy_hint
     echo -e "$(localized_text "${YELLOW}账号密码说明：当前安装流程不提供自定义后台账号密码。${PLAIN}" "${YELLOW}Account and Password Description: The current installation process does not provide custom background account passwords.${PLAIN}" "${YELLOW}Описание учетной записи и пароля: Текущий процесс установки не предоставляет пользовательские пароли фоновой учетной записи.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}默认后台账号：${CYAN}admin${PLAIN} / 默认后台密码：${CYAN}123456${PLAIN}" "${YELLOW}Default background account: admin / Default background password: 123456${PLAIN}" "${YELLOW}Фоновая учетная запись по умолчанию: admin / Фоновый пароль по умолчанию: 123456${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}部署完成后请尽快登录后台修改默认密码。${PLAIN}" "${YELLOW}After the deployment is completed, please log in to the background as soon as possible to change the default password.${PLAIN}" "${YELLOW}После завершения развертывания как можно скорее войдите в фоновый режим, чтобы изменить пароль по умолчанию.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}部署完成后请尽快登录管理后台修改默认密码。${PLAIN}" "${YELLOW}After deployment, sign in to the admin panel and change the default password promptly.${PLAIN}" "${YELLOW}После развёртывания войдите в панель администратора и сразу измените пароль по умолчанию.${PLAIN}")"
     echo -e "------------------------------------------------"
     
     read_trimmed yn "$(localized_text "❓ 确认现在开始一键安装吗？(Y/n): " "❓ Are you sure you want to start the one-click installation now? (Y/n):" "❓ Вы уверены, что хотите начать установку в один клик сейчас? (Да/Нет):")"
@@ -17815,7 +18201,7 @@ EOF
         echo -e "$(localized_text "如果您日后需要升级容器或重装 VPS，请务必提前打包备份该目录下的 ${GREEN}./db${PLAIN} 和 ${GREEN}./template${PLAIN} 文件夹！" "If you need to upgrade the container or reinstall the VPS in the future, be sure to pack and back up the ${GREEN}./db${PLAIN} and ${GREEN}./template${PLAIN} folders in this directory in advance!" "Если в будущем вам потребуется обновить контейнер или переустановить VPS, обязательно заранее запакуйте и сделайте резервную копию папок ${GREEN}./db${PLAIN} и ${GREEN}./template${PLAIN} в этом каталоге!")"
         echo -e "------------------------------------------------"
     else
-        echo -e "$(localized_text "${BLUE}已安全取消部署。${PLAIN}" "${BLUE}Has been safely undeployed.${PLAIN}" "${BLUE}благополучно деразвернут.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
     fi
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
 }
@@ -17907,7 +18293,7 @@ EOF
         print_public_https_reverse_proxy_hint
         echo -e "$(localized_text "${YELLOW}请定期备份 ${install_dir}/data、subscribes、rule_templates。${PLAIN}" "${YELLOW}Please back up ${install_dir}/data, subscribers, rule_templates regularly.${PLAIN}" "${YELLOW}Регулярно создавайте резервные копии ${install_dir}/data, подписчиков, rule_templates.${PLAIN}")"
     else
-        echo -e "$(localized_text "${BLUE}已安全取消部署。${PLAIN}" "${BLUE}Has been safely undeployed.${PLAIN}" "${BLUE}благополучно деразвернут.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
     fi
 
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
@@ -17991,7 +18377,7 @@ EOF
         print_public_https_reverse_proxy_hint
         echo -e "$(localized_text "${YELLOW}请定期备份 ${install_dir}/data。${PLAIN}" "${YELLOW}Please back up ${install_dir}/data regularly.${PLAIN}" "${YELLOW}Регулярно создавайте резервные копии ${install_dir}/data.${PLAIN}")"
     else
-        echo -e "$(localized_text "${BLUE}已安全取消部署。${PLAIN}" "${BLUE}Has been safely undeployed.${PLAIN}" "${BLUE}благополучно деразвернут.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
     fi
 
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
@@ -18063,7 +18449,7 @@ EOF
         echo -e "$(localized_text "账号密码：${YELLOW}无默认账号密码，首次打开页面创建管理员账号。${PLAIN}" "Account password: ${YELLOW}Has no default account password. Create an administrator account when you open the page for the first time.${PLAIN}" "Пароль учетной записи: ${YELLOW}не имеет пароля учетной записи по умолчанию. Создайте учетную запись администратора при первом открытии страницы.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}已有 compose 项目可返回部署菜单选择 [10] 迁移到 Dockge 后，在 Dockge 里扫描 stacks 目录。${PLAIN}" "${YELLOW}Already has the compose project. You can return to the deployment menu and select [10]. After migrating to Dockge, scan the stacks directory in Dockge.${PLAIN}" "${YELLOW}У уже есть проект compose. Вы можете вернуться в меню развертывания и выбрать [10]. После перехода на Dockge просканируйте каталог stacks в Dockge.${PLAIN}")"
     else
-        echo -e "$(localized_text "${BLUE}已安全取消部署。${PLAIN}" "${BLUE}Has been safely undeployed.${PLAIN}" "${BLUE}благополучно деразвернут.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
     fi
 
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
@@ -18114,7 +18500,7 @@ func_komari() {
             read_secret_trimmed admin_password "$(localized_text "管理员密码（至少 8 位，留空自动生成）: " "Administrator password (at least 8 characters, leave blank to automatically generate):" "Пароль администратора (не менее 8 символов, оставьте пустым для автоматической генерации):")"
             if [[ -z "$admin_password" ]]; then
                 admin_password=$(generate_random_secret | cut -c1-24)
-                echo -e "$(localized_text "${YELLOW}已自动生成管理员密码，部署完成后会显示一次，请及时保存。${PLAIN}" "${YELLOW}Has automatically generated the administrator password. It will be displayed once after the deployment is completed. Please save it in time.${PLAIN}" "${YELLOW}автоматически сгенерировал пароль администратора. Он будет отображен один раз после завершения развертывания. Пожалуйста, сохраните его вовремя.${PLAIN}")"
+                echo -e "$(localized_text "${YELLOW}已生成管理员密码；部署完成后仅显示一次，请及时保存。${PLAIN}" "${YELLOW}An administrator password was generated. It is shown once after deployment; save it immediately.${PLAIN}" "${YELLOW}Пароль администратора создан. После развёртывания он будет показан один раз; сразу сохраните его.${PLAIN}")"
                 break
             fi
             if [[ ${#admin_password} -ge 8 ]]; then
@@ -18185,7 +18571,7 @@ EOF
         fi
         print_public_https_reverse_proxy_hint
     else
-        echo -e "$(localized_text "${BLUE}已安全取消部署。${PLAIN}" "${BLUE}Has been safely undeployed.${PLAIN}" "${BLUE}благополучно деразвернут.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
     fi
 
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
@@ -18254,7 +18640,7 @@ func_update_subscription_tools() {
     echo -e "------------------------------------------------"
     echo -e "$(localized_text "${GREEN}✅ 更新流程已执行完成。${PLAIN}" "${GREEN}✅ The update process has been completed.${PLAIN}" "${GREEN}✅ Процесс обновления завершен.${PLAIN}")"
     local prune_confirm
-    read_trimmed prune_confirm "$(localized_text "是否清理无标签旧镜像以释放磁盘空间？(Y/n，默认 y): " "Clean old unlabeled images to free up disk space? (Y/n, default y):" "Очистить старые немаркированные изображения, чтобы освободить место на диске? (Да/нет, по умолчанию y):")"
+    read_trimmed prune_confirm "$(localized_text "是否清理无标签旧镜像以释放磁盘空间？(y/N，默认 N): " "Remove dangling images to free disk space? (y/N, default N): " "Удалить неиспользуемые образы, чтобы освободить место? (y/N, по умолчанию N): ")"
     if is_yes "$prune_confirm"; then
         docker image prune -f
     fi
@@ -18464,8 +18850,8 @@ migrate_compose_project_to_dockge() {
         "$(localized_text "把 ${target_dir} 手动移回 ${source_dir}，并用原 compose 文件重新启动" "Manually move ${target_dir} back to ${source_dir} and restart with the original compose file" "Вручную переместите ${target_dir} обратно в ${source_dir} и перезапустите исходный файл compose.")" \
         "$(localized_text "确认项目没有绝对路径依赖，且已备份重要数据。" "Confirm that the project has no absolute path dependencies and that important data has been backed up." "Убедитесь, что проект не имеет абсолютных зависимостей пути и что важные данные были зарезервированы.")" || { echo -e "$(localized_text "${BLUE}已取消迁移 ${source_dir}。${PLAIN}" "${BLUE}Canceled the migration of ${source_dir}.${PLAIN}" "${BLUE}отменил миграцию ${source_dir}.${PLAIN}")"; return 0; }
 
-    read_trimmed restart_confirm "$(localized_text "是否先停止旧容器并在新目录重新启动？(Y/n): " "Should I stop the old container first and restart it in the new directory? (Y/n):" "Должен ли я сначала остановить старый контейнер и перезапустить его в новом каталоге? (Да/Нет):")"
-    if is_no "$restart_confirm"; then
+    read_trimmed restart_confirm "$(localized_text "是否停止旧容器并在新目录重新启动？(y/N，默认 N): " "Stop the old containers and restart them from the new directory? (y/N, default N): " "Остановить старые контейнеры и перезапустить их из нового каталога? (y/N, по умолчанию N): ")"
+    if ! is_yes "$restart_confirm"; then
         restart_stack="false"
     fi
 
@@ -18577,14 +18963,15 @@ func_rescue_panel() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}🚑 面板 SSL 修复${PLAIN}" "${BOLD}🚑 Panel SSL Repair${PLAIN}" "${BOLD}🚑 Панель SSL Ремонт${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}用途：清空 3x-ui 面板证书路径，让 Caddy 可以按 HTTP 反代本机面板。${PLAIN}" "${YELLOW}Purpose of : Clear the 3x-ui panel certificate path so that Caddy can reverse the local panel by HTTP.${PLAIN}" "${YELLOW}Назначение : Очистите путь сертификата панели 3x-ui, чтобы Caddy мог отменить локальную панель с помощью HTTP.${PLAIN}")"
-    echo -e "$(localized_text "更推荐在 3x-ui 面板里手动进入：面板设置 -> 常规 -> 证书，把证书路径和私钥路径清空后保存重启。" "It is more recommended to enter manually in the 3x-ui panel: Panel Settings -> General -> Certificate, clear the certificate path and private key path, save and restart." "Рекомендуется ввести вручную в панели 3x-ui: Настройки панели -> Общие -> Сертификат, очистить путь к сертификату и путь к закрытому ключу, сохранить и перезапустить.")"
-    echo -e "$(localized_text "本功能只作为打不开面板时的救急方案，会尝试清空常见证书字段：webCertFile/webKeyFile/CertFile/KeyFile 等。" "This function is only used as a rescue solution when the panel cannot be opened. It will try to clear common certificate fields: webCertFile/webKeyFile/CertFile/KeyFile, etc." "Эта функция используется только в качестве спасательного решения, когда панель невозможно открыть. Он попытается очистить общие поля сертификата: webCertFile/webKeyFile/CertFile/KeyFile и т. д.")"
+    echo -e "$(localized_text "${YELLOW}用途：清空 3x-ui 面板证书路径，使 Caddy 可通过 HTTP 反代本机面板。${PLAIN}" "${YELLOW}Purpose: clear the 3x-ui panel certificate paths so Caddy can proxy the local panel over HTTP.${PLAIN}" "${YELLOW}Назначение: очистить пути сертификатов панели 3x-ui, чтобы Caddy мог проксировать локальную панель по HTTP.${PLAIN}")"
+    echo -e "$(localized_text "优先在 3x-ui 中手动打开“面板设置 -> 常规 -> 证书”，清空证书和私钥路径，保存后重启面板。" "Preferred method: in 3x-ui, open Panel Settings -> General -> Certificate, clear the certificate and private-key paths, save, and restart the panel." "Предпочтительный способ: в 3x-ui откройте «Настройки панели -> Общие -> Сертификат», очистите пути сертификата и закрытого ключа, сохраните изменения и перезапустите панель.")"
+    echo -e "$(localized_text "本功能仅用于面板无法打开时，会尝试清空 webCertFile、webKeyFile、CertFile、KeyFile 等常见字段。" "Use this only when the panel cannot be opened. It attempts to clear common fields such as webCertFile, webKeyFile, CertFile, and KeyFile." "Используйте эту функцию только тогда, когда панель не открывается. Она очищает распространённые поля: webCertFile, webKeyFile, CertFile и KeyFile.")"
     echo -e "------------------------------------------------"
     
-    local yn
-    read_trimmed yn "$(localized_text "❓ 确定要清空面板证书路径并尝试退回 HTTP 吗？(Y/n): " "❓ Are you sure you want to clear the panel certificate path and try to fall back to HTTP? (Y/n):" "❓ Вы уверены, что хотите очистить путь сертификата панели и попытаться вернуться к HTTP? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger \
+        "$(localized_text "清空 3x-ui 面板证书路径" "Clear the 3x-ui panel certificate paths" "Очистить пути сертификатов панели 3x-ui")" \
+        "$(localized_text "清空 3x-ui 中常见的面板和订阅证书字段，并尝试改回 HTTP。" "Clear common panel and subscription certificate fields in 3x-ui and try to switch back to HTTP." "Очистить распространённые поля сертификатов панели и подписки в 3x-ui и попробовать вернуться к HTTP.")" \
+        "$(localized_text "从 3x-ui 官方菜单重新填写原证书路径，或恢复操作前备份。" "Restore the original certificate paths from the official 3x-ui menu or from a pre-operation backup." "Верните исходные пути сертификатов через официальное меню 3x-ui или восстановите резервную копию.")"; then
         local xui_bin
         xui_bin=$(detect_xui_command 2>/dev/null || true)
         if [[ -n "$xui_bin" ]]; then
@@ -18592,7 +18979,11 @@ func_rescue_panel() {
             "$xui_bin" setting -getCert true 2>/dev/null || true
             echo -e "------------------------------------------------"
         fi
-        clear_xui_cert_settings_for_single_443 || true
+        if ! clear_xui_cert_settings_for_single_443; then
+            echo -e "$(localized_text "${RED}❌ 未能清空证书路径，请改用 3x-ui 官方菜单手动处理。${PLAIN}" "${RED}❌ Certificate paths could not be cleared. Use the official 3x-ui menu instead.${PLAIN}" "${RED}❌ Не удалось очистить пути сертификатов. Используйте официальное меню 3x-ui.${PLAIN}")"
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
+            return 1
+        fi
         echo -e "------------------------------------------------"
         if [[ -n "$xui_bin" ]]; then
             echo -e "$(localized_text "${CYAN}清理后的 3x-ui 证书状态：${PLAIN}" "${CYAN}Cleaned 3x-ui Certificate status:${PLAIN}" "${CYAN}Очищен 3x-ui Статус сертификата:${PLAIN}")"
@@ -18883,8 +19274,9 @@ func_update_script() {
         && ! grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' "$tmp_file" 2>/dev/null \
         && copy_shortcut_candidate "$tmp_file" /usr/local/bin/cy "$(localized_text "已验证更新脚本" "Verified update script" "Проверенный скрипт обновления")"; then
         rm -f "$tmp_file" "$SCRIPT_UPDATE_CACHE"
-        echo -e "$(localized_text "${GREEN}✅ 更新下载并覆盖完成！正在重启面板...${PLAIN}" "${GREEN}✅ Update download and coverage completed! Restarting panel...${PLAIN}" "${GREEN}✅ Загрузка обновления и покрытие завершены! Перезапуск панели...${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}✅ 更新已安装，正在重新打开面板...${PLAIN}" "${GREEN}✅ Update installed. Reopening the panel...${PLAIN}" "${GREEN}✅ Обновление установлено. Панель запускается заново...${PLAIN}")"
         sleep 1
+        release_vpso_session_lock
         exec bash /usr/local/bin/cy
     else
         rm -f "$tmp_file"
@@ -21615,25 +22007,37 @@ configure_traffic_guard() {
     echo -e "$(localized_text "触发动作：" "Trigger action:" "Триггерное действие:")"
     echo -e "$(localized_text "  1. 立即关机 ${YELLOW}(防止继续产生流量费用)${PLAIN}" "1. Shut down immediately ${YELLOW}(to prevent continued traffic charges)${PLAIN}" "1. Немедленно выключите ${YELLOW}(во избежание продолжения оплаты трафика)${PLAIN}")"
     echo -e "$(localized_text "  2. 仅保留 SSH 端口 ${YELLOW}(封锁其他公网业务流量，到重置日自动恢复)${PLAIN}" "2. Only reserve SSH port ${YELLOW}(block other public business traffic and automatically restore on the reset date)${PLAIN}" "2. Зарезервируйте только порт SSH ${YELLOW}(блокируйте другой бизнес-трафик публичной сети и автоматически восстанавливайте его в дату сброса)${PLAIN}")"
-    echo -e "$(localized_text "  3. 只写日志 ${YELLOW}(测试配置，不关机)${PLAIN}" "3. Only write log ${YELLOW}(test configuration, do not shut down)${PLAIN}" "3. Записывать только журнал ${YELLOW}(тестовая конфигурация, не выключать)${PLAIN}")"
-    read_trimmed action_choice "$(localized_text "请选择触发动作 (默认 1): " "Please select a trigger action (default 1):" "Пожалуйста, выберите действие триггера (по умолчанию 1):")"
-    case "${action_choice:-1}" in
-        2)
-            traffic_guard_ssh_only_firewall_supported || {
-                echo -e "$(localized_text "${RED}❌ 缺少 iptables，或启用 IPv6 时缺少 ip6tables，无法安全启用仅保留 SSH 模式。${PLAIN}" "${RED}❌ Missing iptables, or missing ip6tables when enabling IPv6, cannot safely enable SSH-only mode.${PLAIN}" "${RED}❌ Отсутствие iptables или отсутствие ip6tables при включении IPv6 не позволяет безопасно включить режим только SSH.${PLAIN}")"
-                pause_return
-                return 1
-            }
-            ssh_port=$(traffic_guard_detect_ssh_port) || {
-                echo -e "$(localized_text "${RED}❌ 未检测到唯一可用的 SSH 监听端口，无法安全启用仅保留 SSH 模式。${PLAIN}" "${RED}❌ The only available listening port for SSH is not detected, and SSH-only mode cannot be safely enabled.${PLAIN}" "${RED}❌ Единственный доступный порт прослушивания для SSH не обнаружен, и режим только SSH не может быть безопасно включен.${PLAIN}")"
-                pause_return
-                return 1
-            }
-            action="ssh-only"
-            ;;
-        3) action="log" ;;
-        *) action="poweroff" ;;
-    esac
+    echo -e "$(localized_text "  3. 只写日志 ${YELLOW}(安全默认值；不关机、不封锁端口)${PLAIN}" "3. Log only ${YELLOW}(safe default; no shutdown or port blocking)${PLAIN}" "3. Только журнал ${YELLOW}(безопасный вариант по умолчанию; без выключения и блокировки портов)${PLAIN}")"
+    while true; do
+        read_trimmed action_choice "$(localized_text "请选择触发动作 (默认 3): " "Select a trigger action (default 3): " "Выберите действие (по умолчанию 3): ")"
+        case "${action_choice:-3}" in
+            1)
+                action="poweroff"
+                break
+                ;;
+            2)
+                traffic_guard_ssh_only_firewall_supported || {
+                    echo -e "$(localized_text "${RED}❌ 缺少 iptables，或启用 IPv6 时缺少 ip6tables，无法安全启用仅保留 SSH 模式。${PLAIN}" "${RED}❌ SSH-only mode requires iptables and, when IPv6 is enabled, ip6tables.${PLAIN}" "${RED}❌ Для режима «только SSH» требуется iptables, а при включённом IPv6 — также ip6tables.${PLAIN}")"
+                    pause_return
+                    return 1
+                }
+                ssh_port=$(traffic_guard_detect_ssh_port) || {
+                    echo -e "$(localized_text "${RED}❌ 未检测到唯一可用的 SSH 监听端口，无法安全启用仅保留 SSH 模式。${PLAIN}" "${RED}❌ A single usable SSH listening port was not detected; SSH-only mode cannot be enabled safely.${PLAIN}" "${RED}❌ Не удалось определить единственный доступный порт SSH; безопасно включить режим «только SSH» невозможно.${PLAIN}")"
+                    pause_return
+                    return 1
+                }
+                action="ssh-only"
+                break
+                ;;
+            3)
+                action="log"
+                break
+                ;;
+            *)
+                echo -e "$(localized_text "${YELLOW}请输入 1、2 或 3；直接回车使用安全默认值 3。${PLAIN}" "${YELLOW}Enter 1, 2, or 3. Press Enter for the safe default, 3.${PLAIN}" "${YELLOW}Введите 1, 2 или 3. Нажмите Enter для безопасного варианта 3.${PLAIN}")"
+                ;;
+        esac
+    done
 
     echo -e "------------------------------------------------"
     echo -e "$(localized_text "网卡：${CYAN}${iface}${PLAIN}" "Network card: ${CYAN}${iface}${PLAIN}" "Сетевая карта: ${CYAN}${iface}${PLAIN}")"
@@ -21681,9 +22085,14 @@ configure_traffic_guard() {
         return 1
     }
 
-    /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || true
-    reset_traffic_guard_failed_state
-    echo -e "$(localized_text "${GREEN}✅ 流量达量保护已启用。${PLAIN}" "${GREEN}✅ Traffic volume protection is enabled.${PLAIN}" "${GREEN}✅ Включена защита объема трафика.${PLAIN}")"
+    local checker_rc=0
+    /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || checker_rc=$?
+    if (( checker_rc == 0 )); then
+        reset_traffic_guard_failed_state
+        echo -e "$(localized_text "${GREEN}✅ 流量达量保护已启用，首次检查通过。${PLAIN}" "${GREEN}✅ Traffic Guard is enabled and the first check passed.${PLAIN}" "${GREEN}✅ Traffic Guard включён; первая проверка выполнена успешно.${PLAIN}")"
+    else
+        echo -e "$(localized_text "${YELLOW}⚠️ 流量达量保护已启用，但首次检查失败（rc=${checker_rc}）。请先查看日志和菜单 [2] 状态。${PLAIN}" "${YELLOW}⚠️ Traffic Guard is enabled, but the first check failed (rc=${checker_rc}). Review the log and menu [2] status.${PLAIN}" "${YELLOW}⚠️ Traffic Guard включён, но первая проверка завершилась ошибкой (rc=${checker_rc}). Проверьте журнал и состояние в пункте [2].${PLAIN}")"
+    fi
     echo -e "$(localized_text "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}The status can be viewed in this menu [2]; log: ${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}Статус можно просмотреть в этом меню [2]; журнал: ${TRAFFIC_GUARD_LOG}${PLAIN}")"
     pause_return
 }
@@ -22035,7 +22444,6 @@ show_main_help() {
         echo "19  Управление единым публичным входом 443 для панелей, подписок и REALITY."
         echo "20  Выбор языка интерфейса."
         echo "10 -> 5  Защита от превышения лимита трафика с учётом расчётного периода."
-        echo "xcm открывает расширенный набор x-ui; он также доступен через 5 -> 2."
         echo "? показывает справку; 0/q завершает работу."
     elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
         echo -e "${CYAN}VPS-Optimize > Main menu > Help${PLAIN}"
@@ -22051,7 +22459,6 @@ show_main_help() {
         echo "19  Manage Port 443 Reuse for panels, subscriptions, and REALITY."
         echo "20  Select the interface language."
         echo "10 -> 5  Protect against traffic overages based on the billing cycle."
-        echo "xcm opens the x-ui extension directly; it is also available through 5 -> 2."
         echo "? shows help; 0/q exits."
     else
         echo -e "${CYAN}VPS-Optimize > 主菜单 > 帮助${PLAIN}"
@@ -22067,36 +22474,7 @@ show_main_help() {
         echo "19  443端口复用管理中心，面板/订阅/REALITY 共用公网 443。"
         echo "20  选择界面语言。"
         echo "10 -> 5  流量达量保护，按账单周期防刷流量和超额账单。"
-        echo "xcm 直达 x-ui 增强套件；也可走 5 -> 2。"
         echo "? 查看帮助，0/q 退出。"
-    fi
-}
-
-show_beginner_help() {
-    if [[ "$VPSO_LANGUAGE" == "ru" ]]; then
-        echo -e "${CYAN}VPS-Optimize > Руководство для начинающих > Справка${PLAIN}"
-        echo "1 Первичная настройка сервера в безопасном порядке: проверка, базовая настройка, SSH, ключи, Fail2ban, брандмауэр и резервная копия."
-        echo "2 Открыть меню панелей, узлов и инструментов подписок."
-        echo "3 Открыть управление повторным использованием порта 443 для панелей, подписок и REALITY."
-        echo "4 Проверить службы, порты и сертификаты или создать диагностические данные."
-        echo "5 Создать резервную копию или восстановить существующую."
-        echo "? показывает справку; 0/q возвращает в главное меню."
-    elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
-        echo -e "${CYAN}VPS-Optimize > Beginner guide > Help${PLAIN}"
-        echo "1 Initialize a new server in a safe order: preflight, base setup, SSH, keys, Fail2ban, firewall, and backup."
-        echo "2 Open the panel, node, and subscription tools menu."
-        echo "3 Open the Port 443 Reuse manager for panels, subscriptions, and REALITY."
-        echo "4 Check services, ports, and certificates, or generate diagnostic details."
-        echo "5 Create a backup or restore an existing backup."
-        echo "? shows help; 0/q returns to the main menu."
-    else
-        echo -e "${CYAN}VPS-Optimize > 新手向导 > 帮助${PLAIN}"
-        echo "1 新机器初始化：按安全顺序引导预检、初始化、SSH、公钥、Fail2ban、防火墙、备份。"
-        echo "2 安装面板/节点：进入面板、节点与订阅工具菜单。"
-        echo "3 配置 443端口复用：进入 443 管理中心，适合面板、订阅和 REALITY 共用 443。"
-        echo "4 健康检查：查看服务、端口、证书，并可生成反馈诊断信息。"
-        echo "5 备份/回滚：创建备份或从已有备份恢复。"
-        echo "? 查看帮助，0/q 返回主菜单。"
     fi
 }
 
@@ -22134,9 +22512,9 @@ show_sni_help() {
 
 show_backup_help() {
     echo -e "$(localized_text "${CYAN}VPS-Optimize > 备份与回滚 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Backup and Rollback > Help${PLAIN}" "${CYAN}VPS-Optimize > Резервное копирование и откат > Справка${PLAIN}")"
-    echo "$(localized_text "1 创建备份：选择配置、自定义目录或两者，并可指定存放目录；自定义目录支持 /etc、/usr、/home。" "1 Create a backup: choose configuration, custom directories, or both, and select the storage directory; custom directories support /etc, /usr, and /home." "1 Создать копию: выберите конфигурацию, пользовательские каталоги или оба варианта, а затем каталог хранения; пользовательские каталоги поддерживают /etc, /usr и /home.")"
-    echo "$(localized_text "2 加载备份包：自动读取默认目录、/backups、/root/backups 和已记录目录中的 .tar.gz。" "2 Load backup archive: automatically read .tar.gz files in the default directory, /backups, /root/backups, and recorded directories." "2 Загрузка архива: автоматически найти .tar.gz в каталоге по умолчанию, /backups, /root/backups и сохраненных каталогах.")"
-    echo "$(localized_text "3 恢复：使用已加载备份、自动列表或指定 .tar.gz 路径；先查看环境预检。" "3 Restore: use a loaded backup, the automatic list, or a specified .tar.gz path; review the environment preflight first." "3 Восстановление: используйте загруженную копию, автоматический список или указанный путь .tar.gz; сначала проверьте предварительную проверку среды.")"
+    echo "$(localized_text "1 创建备份：选择配置、自定义目录或两者；打包前检查空间，可选 AES-256 加密。" "1 Create a backup: choose configuration, custom directories, or both. Space is checked before packaging; AES-256 encryption is optional." "1 Создать копию: выберите конфигурацию, пользовательские каталоги или оба варианта. Перед упаковкой проверяется место; доступно шифрование AES-256.")"
+    echo "$(localized_text "2 加载备份包：自动读取默认目录、/backups、/root/backups 和已记录目录中的 .tar.gz / .tar.gz.enc。" "2 Load a backup: scan the default directory, /backups, /root/backups, and recorded directories for .tar.gz and .tar.gz.enc files." "2 Загрузить копию: найти файлы .tar.gz и .tar.gz.enc в каталоге по умолчанию, /backups, /root/backups и сохранённых каталогах.")"
+    echo "$(localized_text "3 恢复：支持已加载备份、自动列表或指定路径；先校验归档、路径安全和解压空间。" "3 Restore: use the loaded backup, automatic list, or a specified path. Archive integrity, path safety, and extraction space are checked first." "3 Восстановление: используйте загруженную копию, автоматический список или указанный путь. Сначала проверяются архив, безопасность путей и место для распаковки.")"
     echo "$(localized_text "4 隔离旧备份：移入隔离目录，不直接删除。" "4 Quarantine old backups: move them to quarantine; do not delete them." "4 Изолировать старые копии: переместить в карантин, не удалять.")"
     echo "$(localized_text "5 查看/编辑已应用配置：先备份，校验后可 reload/restart。" "5 View or edit applied configuration: back up first, validate, then reload or restart if needed." "5 Просмотр или правка применённой конфигурации: сначала копия, затем проверка и reload/restart при необходимости.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
@@ -22274,7 +22652,7 @@ func_net_kernel_menu() {
         local nk_choice
         read_trimmed nk_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
         case $nk_choice in
-            "?"|help) show_net_kernel_help; pause_return ;;
+            "?") show_net_kernel_help; pause_return ;;
             0|q|Q) break ;;
             *) dispatch_menu_choice "$nk_choice" NET_KERNEL_MENU_ITEMS || { echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1; } ;;
         esac
@@ -22324,8 +22702,7 @@ func_panel_deploy_menu() {
             12) func_dns_unlock ;;
             13) func_ip_sentinel ;;
             14) func_port_dog ;;
-            xcm|XCM|xui-custom|外置|外置增强|外置管理) func_xui_custom_manager ;;
-            "?"|help) show_panel_help; pause_return ;;
+            "?") show_panel_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac
@@ -22362,7 +22739,7 @@ func_sni_stack_quick_menu() {
         echo -e "$(localized_text "${CYAN} 16. 查看当前入口日志${PLAIN}          ${YELLOW}(自动识别 Nginx / Xray / vpso-mux)${PLAIN}" "${CYAN}16. View current entry logs (detects Nginx / Xray / vpso-mux automatically)${PLAIN}" "${CYAN}16. Журналы текущего входа (автовыбор Nginx / Xray / vpso-mux)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q/back/返回${PLAIN}" "${RED}0. Main menu / q/back${PLAIN}" "${RED}0. Главное меню / q/back${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local sni_choice
@@ -22381,169 +22758,12 @@ func_sni_stack_quick_menu() {
             14) func_443_network_test; continue ;;
             15) manage_xray_inbound_routes; continue ;;
             16) view_current_entry_logs ;;
-            "?"|help) show_sni_help; pause_return; continue ;;
+            "?") show_sni_help; pause_return; continue ;;
             0) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;
         esac
         echo ""
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-    done
-}
-
-normalize_main_choice() {
-    local choice
-    choice="$(trim_input "$1")"
-    choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
-
-    case "$choice" in
-        q|quit|exit|0|退出) echo "0" ;;
-        pre|preflight|check|预检) echo "1" ;;
-        init|base|初始化) echo "2" ;;
-        env|docker|组件) echo "3" ;;
-        caddy|nginx|ngx|proxy|reverse|反代) echo "4" ;;
-        xcm|xui-custom|外置|外置增强|外置管理) echo "xui-custom" ;;
-        panel|node|nodes|面板|节点) echo "5" ;;
-        ssh) echo "6" ;;
-        fail2ban|f2b) echo "7" ;;
-        fw|firewall|防火墙) echo "8" ;;
-        tweak|system|系统) echo "9" ;;
-        net|kernel|bbr|网络|内核) echo "10" ;;
-        docker-safe|docker安全) echo "11" ;;
-        test|speed|测速) echo "12" ;;
-        port|端口) echo "13" ;;
-        info|hardware|探针) echo "14" ;;
-        h|health|健康|体检) echo "15" ;;
-        b|backup|bak|备份) echo "16" ;;
-        u|upd|update|更新) echo "17" ;;
-        reboot|重启) echo "18" ;;
-        sni|443|端口复用) echo "19" ;;
-        l|lang|language|язык|语言) echo "20" ;;
-        traffic|quota|bill|流量|达量|账单) echo "10" ;;
-        *) echo "$choice" ;;
-    esac
-}
-
-beginner_run_optional_step() {
-    local step="$1"
-    local total="$2"
-    local label="$3"
-    local function_name="$4"
-    local choice
-
-    echo -e "${CYAN}[${step}/${total}] ${label}${PLAIN}"
-    read_trimmed choice "$(localized_text "是否进入此步骤？(Y/n): " "Do you want to proceed to this step? (Y/n):" "Хотите перейти к этому шагу? (Да/Нет):")"
-    if [[ "${choice:-yes}" =~ ^[Nn]([Oo])?$ ]]; then
-        echo -e "$(localized_text "${BLUE}已跳过：${label}${PLAIN}" "${BLUE}Skipped: ${label}${PLAIN}" "${BLUE}пропущен: ${label}${PLAIN}")"
-        return 2
-    fi
-    "$function_name"
-}
-
-func_beginner_machine_init() {
-    local total=7
-    local step_rc step_entry step label function_name
-    local VPSO_BEGINNER_FLOW=1
-    local completed=("$(localized_text "部署前预检" "Preflight check" "Предварительная проверка")")
-    local skipped=()
-    local optional_steps=(
-        "3|$(localized_text "SSH 安全配置" "SSH security" "Безопасность SSH")|func_security"
-        "4|$(localized_text "SSH 公钥配置" "SSH public key" "Открытый ключ SSH")|func_add_ssh_key"
-        "5|$(localized_text "Fail2ban 配置" "Fail2ban" "Fail2ban")|func_fail2ban"
-        "6|$(localized_text "防火墙配置" "Firewall" "Брандмауэр")|func_firewall_manage"
-        "7|$(localized_text "配置备份" "Configuration backup" "Резервная копия конфигурации")|func_backup_center"
-    )
-
-    echo -e "$(localized_text "${CYAN}[1/${total}] 部署前预检${PLAIN}" "${CYAN}[1/${total}] preflight check before deployment${PLAIN}" "${CYAN}[1/${total}] Предварительная проверка перед развертыванием.${PLAIN}")"
-    if ! func_preflight_check; then
-        echo -e "$(localized_text "${RED}❌ 预检存在异常，新机器初始化已停止，未继续修改系统。${PLAIN}" "${RED}❌ Preflight checks failed. New-server initialization stopped without further system changes.${PLAIN}" "${RED}❌ Предварительная проверка завершилась ошибкой. Инициализация нового сервера остановлена без дальнейших изменений системы.${PLAIN}")"
-        pause_return
-        return 1
-    fi
-
-    echo -e "$(localized_text "${CYAN}[2/${total}] 基础初始化${PLAIN}" "${CYAN}[2/${total}] Basic initialization${PLAIN}" "${CYAN}[2/${total}] Базовая инициализация${PLAIN}")"
-    if ! func_base_init; then
-        echo -e "$(localized_text "${RED}❌ 基础初始化未完整完成，后续安全配置已停止。${PLAIN}" "${RED}❌ Basic initialization is not completely completed, and subsequent security configuration has been stopped.${PLAIN}" "${RED}❌ Базовая инициализация не полностью завершена, и последующая настройка безопасности остановлена.${PLAIN}")"
-        pause_return
-        return 1
-    fi
-    completed+=("$(localized_text "基础初始化" "Base initialization" "Базовая инициализация")")
-
-    for step_entry in "${optional_steps[@]}"; do
-        IFS='|' read -r step label function_name <<< "$step_entry"
-        beginner_run_optional_step "$step" "$total" "$label" "$function_name"
-        step_rc=$?
-        if [[ "$step_rc" -eq 0 ]]; then
-            completed+=("$label")
-        elif [[ "$step_rc" -eq 2 ]]; then
-            skipped+=("$label")
-        else
-            echo -e "$(localized_text "${RED}❌ ${label} 执行失败，新机器初始化已停止。${PLAIN}" "${RED}❌ ${label} execution failed, new machine initialization has stopped.${PLAIN}" "${RED}❌ ${label} не удалось выполнить, инициализация новой машины остановлена.${PLAIN}")"
-            echo -e "$(localized_text "${CYAN}已完成：${completed[*]}${PLAIN}" "${CYAN}Completed: ${completed[*]}${PLAIN}" "${CYAN}Завершено: ${completed[*]}${PLAIN}")"
-            pause_return
-            return 1
-        fi
-    done
-
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${GREEN}✅ 新机器初始化流程结束。${PLAIN}" "${GREEN}✅ The new machine initialization process is completed.${PLAIN}" "${GREEN}✅ Процесс инициализации нового устройства завершен.${PLAIN}")"
-    echo -e "$(localized_text "已完成：${completed[*]}" "Completed: ${completed[*]}" "Завершено: ${completed[*]}")"
-    if [[ ${#skipped[@]} -gt 0 ]]; then
-        echo -e "$(localized_text "${YELLOW}已跳过：${skipped[*]}${PLAIN}" "${YELLOW}Skipped: ${skipped[*]}${PLAIN}" "${YELLOW}пропущен: ${skipped[*]}${PLAIN}")"
-    fi
-    pause_return
-}
-
-func_beginner_menu() {
-    while true; do
-        clear
-        echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "新手向导" "Beginner guide" "Руководство для начинающих")"
-        echo -e "${BOLD}VPS-Optimize ${SCRIPT_VERSION}${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-        localized_echo \
-            "${YELLOW}这是简化入口，只保留第一次部署最常用的路径；老用户可返回完整菜单。${PLAIN}" \
-            "${YELLOW}This simplified guide contains the most common first-deployment paths. Return to the full menu for all features.${PLAIN}" \
-            "${YELLOW}Это упрощённый раздел с основными действиями для первого запуска. Все функции доступны в полном меню.${PLAIN}"
-        echo -e "------------------------------------------------"
-        localized_echo \
-            "${GREEN}  1. 新机器初始化${PLAIN}       ${YELLOW}(预检 -> 初始化 -> SSH/公钥/Fail2ban/防火墙 -> 备份)${PLAIN}" \
-            "${GREEN}  1. Initialize a new server${PLAIN}  ${YELLOW}(preflight -> base setup -> SSH/keys/Fail2ban/firewall -> backup)${PLAIN}" \
-            "${GREEN}  1. Первичная настройка сервера${PLAIN}  ${YELLOW}(проверка -> базовая настройка -> SSH/ключи/Fail2ban/брандмауэр -> резервная копия)${PLAIN}"
-        localized_echo \
-            "${GREEN}  2. 安装面板/节点${PLAIN}     ${YELLOW}(进入面板、节点与订阅工具菜单)${PLAIN}" \
-            "${GREEN}  2. Install a panel/node${PLAIN}    ${YELLOW}(open panel, node, and subscription tools)${PLAIN}" \
-            "${GREEN}  2. Установить панель/узел${PLAIN}     ${YELLOW}(открыть меню панелей, узлов и подписок)${PLAIN}"
-        localized_echo \
-            "${GREEN}  3. 配置 443端口复用${PLAIN}   ${YELLOW}(面板/订阅/REALITY 共用公网 443)${PLAIN}" \
-            "${GREEN}  3. Configure Port 443 Reuse${PLAIN} ${YELLOW}(panels, subscriptions, and REALITY share public port 443)${PLAIN}" \
-            "${GREEN}  3. Настроить повторное использование порта 443${PLAIN}   ${YELLOW}(общий публичный порт 443 для панелей, подписок и REALITY)${PLAIN}"
-        localized_echo \
-            "${GREEN}  4. 健康检查${PLAIN}          ${YELLOW}(服务状态、端口、证书、反馈诊断)${PLAIN}" \
-            "${GREEN}  4. Health check${PLAIN}              ${YELLOW}(services, ports, certificates, and diagnostics)${PLAIN}" \
-            "${GREEN}  4. Проверка состояния${PLAIN}          ${YELLOW}(службы, порты, сертификаты и диагностика)${PLAIN}"
-        localized_echo \
-            "${GREEN}  5. 备份/回滚${PLAIN}         ${YELLOW}(创建备份或恢复配置)${PLAIN}" \
-            "${GREEN}  5. Backup/rollback${PLAIN}           ${YELLOW}(create a backup or restore configuration)${PLAIN}" \
-            "${GREEN}  5. Резервная копия/откат${PLAIN}       ${YELLOW}(создать копию или восстановить конфигурацию)${PLAIN}"
-        echo -e "------------------------------------------------"
-        localized_echo "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}  ?. Help${PLAIN}" "${BLUE}  ?. Справка${PLAIN}"
-        localized_echo "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}  0. Main menu / q Back${PLAIN}" "${RED}  0. Главное меню / q Назад${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-
-        local beginner_choice
-        read_trimmed beginner_choice "$(localized_text "👉 请选择操作: " "👉 Choose an action: " "👉 Выберите действие: ")"
-        case "$beginner_choice" in
-            1)
-                func_beginner_machine_init
-                ;;
-            2) func_panel_deploy_menu ;;
-            3) func_sni_stack_quick_menu ;;
-            4) func_health_dashboard ;;
-            5) func_backup_center ;;
-            "?"|help|h) show_beginner_help; echo ""; pause_return ;;
-            0|q|Q) break ;;
-            *) localized_echo "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid choice.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}"; sleep 1 ;;
-        esac
     done
 }
 
@@ -22592,7 +22812,7 @@ main_menu() {
             echo -e " ${GREEN}19.${PLAIN} повторное использование порта 443            ${YELLOW}(настройка, сайты, диагностика и сертификаты)${PLAIN}"
             echo -e " ${GREEN}20.${PLAIN} Язык интерфейса           ${YELLOW}(中文 / English / Русский)${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
-            echo -e " ${RED} 0.${PLAIN} Выход"
+            echo -e " ${RED} 0.${PLAIN} Выход / ${RED}q${PLAIN} Выход"
             echo -e "${CYAN}================================================${PLAIN}"
         elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
             echo -e "${CYAN}================================================${PLAIN}"
@@ -22632,7 +22852,7 @@ main_menu() {
             echo -e " ${GREEN}19.${PLAIN} Port 443 Reuse manager    ${YELLOW}(initialize, add sites, check health, and repair certificates)${PLAIN}"
             echo -e " ${GREEN}20.${PLAIN} Interface language          ${YELLOW}(中文 / English / Русский)${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
-            echo -e " ${RED} 0.${PLAIN} Exit"
+            echo -e " ${RED} 0.${PLAIN} Exit / ${RED}q${PLAIN} Exit"
             echo -e "${CYAN}================================================${PLAIN}"
         else
         echo -e "${CYAN}================================================${PLAIN}"
@@ -22672,19 +22892,16 @@ main_menu() {
         echo -e " ${GREEN}19.${PLAIN} 443端口复用管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
         echo -e " ${GREEN}20.${PLAIN} 界面语言              ${YELLOW}(中文 / English / Русский)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e " ${RED} 0.${PLAIN} 退出面板"
+        echo -e " ${RED} 0.${PLAIN} 退出面板 / ${RED}q${PLAIN} 退出"
         echo -e "${CYAN}================================================${PLAIN}"
         fi
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请输入数字或快捷词选择功能: " "👉 Enter a number or shortcut: " "👉 Введите номер или команду: ")"
-        choice=$(normalize_main_choice "$choice")
+        read_trimmed choice "$(localized_text "👉 请输入菜单编号、? 或已标出的快捷词: " "👉 Enter a menu number, ?, or a shortcut shown above: " "👉 Введите номер меню, ? или указанную выше команду: ")"
 
         case $choice in
-            n|N|newbie|guide|新手|向导) func_beginner_menu ;;
-            "?"|help|帮助) show_main_help; echo ""; pause_return ;;
-            20|l|L|lang|language|язык|语言) select_ui_language; sleep 1 ;;
-            xui-custom) func_xui_custom_manager ;;
+            "?") show_main_help; echo ""; pause_return ;;
+            20) select_ui_language; sleep 1 ;;
             1) func_preflight_check ;;
             2) func_base_init ;;
             3) func_env_install ;;
@@ -22701,15 +22918,15 @@ main_menu() {
             14) func_system_info ;;
             15) func_health_dashboard ;;
             16) func_backup_center ;;
-            17) func_update_script ;;
+            17|u|U|update|UPDATE|upd|UPD) func_update_script ;;
             18) func_reboot_server ;;
             19) func_sni_stack_quick_menu ;;
             0) exit 0 ;;
             *)
                 localized_echo \
                     "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}" \
-                    "${RED}❌ Invalid input. Enter a number or shortcut shown in the menu.${PLAIN}" \
-                    "${RED}❌ Неверный ввод. Введите номер или команду из меню.${PLAIN}"
+                    "${RED}❌ Invalid input. Enter a menu number, ?, or a shortcut shown above.${PLAIN}" \
+                    "${RED}❌ Неверный ввод. Введите номер меню, ? или указанную выше команду.${PLAIN}"
                 sleep 1
                 ;;
         esac
@@ -22726,6 +22943,7 @@ main_menu() {
 main() {
     load_ui_language
     ensure_runtime_root
+    acquire_vpso_session_lock
     prompt_initial_ui_language
     main_menu "$@"
 }

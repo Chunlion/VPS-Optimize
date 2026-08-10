@@ -455,15 +455,15 @@ assert_file_contains src/README.md 'Do not reintroduce split shadow modules' "So
 assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '请输入菜单编号或 ?: ' "443 Web/SNI submenu must prompt for a menu number or help."
 assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '请输入菜单编号或 ?: ' "443 Port 443 Reuse parameter submenu must prompt for a menu number or help."
 assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '请输入菜单编号或 ?: ' "Port 443 Reuse menu must prompt for a menu number or help."
-assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '"?"|help) show_sni_help; pause_return; continue ;;' "443 Web/SNI submenu must accept ? help."
-assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '"?"|help) show_sni_help; pause_return; continue ;;' "443 Port 443 Reuse parameter submenu must accept ? help."
-assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '"?"|help) show_sni_help; pause_return; continue ;;' "Port 443 Reuse menu must accept ? help."
-assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '0) break ;;' "443 Web/SNI submenu must rely on normalized back words."
-assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '0) break ;;' "443 Port 443 Reuse parameter submenu must rely on normalized back words."
-assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '0) break ;;' "Port 443 Reuse menu must rely on normalized back words."
-assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites 'q/back/返回' "443 Web/SNI submenu must advertise common back words."
-assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile 'q/back/返回' "443 Port 443 Reuse parameter submenu must advertise common back words."
-assert_function_body_contains src/menus.sh func_sni_stack_quick_menu 'q/back/返回' "Port 443 Reuse menu must advertise common back words."
+assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '"?") show_sni_help; pause_return; continue ;;' "443 Web/SNI submenu must accept the displayed ? help entry."
+assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '"?") show_sni_help; pause_return; continue ;;' "443 Port 443 Reuse parameter submenu must accept the displayed ? help entry."
+assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '"?") show_sni_help; pause_return; continue ;;' "Port 443 Reuse menu must accept the displayed ? help entry."
+assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '0) break ;;' "443 Web/SNI submenu must accept the displayed 0/q back entry."
+assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '0) break ;;' "443 Port 443 Reuse parameter submenu must accept the displayed 0/q back entry."
+assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '0) break ;;' "Port 443 Reuse menu must accept the displayed 0/q back entry."
+assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites 'q 返回' "443 Web/SNI submenu must advertise only the supported q shortcut."
+assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile 'q 返回' "443 Port 443 Reuse parameter submenu must advertise only the supported q shortcut."
+assert_function_body_contains src/menus.sh func_sni_stack_quick_menu 'q 返回' "Port 443 Reuse menu must advertise only the supported q shortcut."
 assert_dist_contains '请输入菜单编号或 ?' "Release script must include hardened 443 menu prompts."
 assert_dist_contains '❌ 无效选择，请输入菜单编号或 ?。' "Release script must include hardened 443 invalid-choice guidance."
 if command -v go >/dev/null 2>&1; then
@@ -568,7 +568,7 @@ split_csv_to_array $'Site1.Example.com site2.example.com，site3.example.com、s
 
 [[ "$(trim_input "  q  ")" == "q" ]]
 [[ "$(normalize_menu_choice_input "  q  ")" == "0" ]]
-[[ "$(normalize_menu_choice_input " 返回 ")" == "0" ]]
+[[ "$(normalize_menu_choice_input " 返回 ")" == "返回" ]]
 [[ "$(normalize_menu_choice_input " １ ")" == "1" ]]
 [[ "$(normalize_menu_choice_input "１０、")" == "10" ]]
 [[ "$(normalize_menu_choice_input "2)")" == "2" ]]
@@ -576,19 +576,19 @@ split_csv_to_array $'Site1.Example.com site2.example.com，site3.example.com、s
 [[ "$(LC_ALL=C normalize_menu_choice_input "３．")" == "3" ]]
 choice=""
 read_trimmed choice "" <<< " 返回 "
-[[ "$choice" == "0" ]]
+[[ "$choice" == "返回" ]]
 choice=""
 read_trimmed choice "" <<< " Q "
 [[ "$choice" == "0" ]]
 action=""
 read_trimmed action "" <<< "back"
-[[ "$action" == "0" ]]
+[[ "$action" == "back" ]]
 c=""
 read_trimmed c "" <<< "３．"
 [[ "$c" == "3" ]]
 t=""
 read_trimmed t "" <<< "退出"
-[[ "$t" == "0" ]]
+[[ "$t" == "退出" ]]
 mode_choice=""
 read_trimmed mode_choice "" <<< "back"
 [[ "$mode_choice" == "back" ]]
@@ -613,6 +613,37 @@ read_trimmed ip_whitelist_input "" <<< "1.1.1.1 2.2.2.2/32"
 confirm=""
 read_trimmed confirm "确认操作？(Y/n): " <<< ""
 [[ "$confirm" == "y" ]]
+eof_confirm="sentinel"
+if read_trimmed eof_confirm "确认操作？(Y/n): " </dev/null; then
+    echo "Closed input must not accept a default confirmation." >&2
+    exit 1
+fi
+[[ -z "$eof_confirm" ]]
+confirm=""
+read_trimmed confirm "Продолжить? (Да/Нет): " <<< ""
+[[ "$confirm" == "y" ]]
+colored_confirmation=$(colorize_confirmation_prompt "Proceed? (Y/n) Continue? (y/N)")
+[[ "$colored_confirmation" == *$'\033[1;32mY'* ]]
+[[ "$colored_confirmation" == *$'\033[1;31mn'* ]]
+[[ "$colored_confirmation" == *$'\033[1;31my'* ]]
+[[ "$colored_confirmation" == *$'\033[1;32mN'* ]]
+[[ "$(NO_COLOR= bash -c 'source src/common.sh; printf "%s%s" "$GREEN" "$RED"')" == "" ]]
+confirm_default_yes <<< ""
+action_needs_safe_default "重启 SSH 服务" ""
+action_needs_safe_default "Isolate certificate files" ""
+action_needs_safe_default "Apply sysctl configuration" ""
+action_needs_safe_default "Перезапустить Docker" ""
+action_needs_safe_default "Переключить режим входа" ""
+if action_needs_safe_default "查看服务状态" "仅读取状态"; then
+    echo "Read-only actions must keep the low-risk default." >&2
+    exit 1
+fi
+danger_output=$(confirm_danger "重启服务" "重启测试服务" "再次启动服务" <<< $'\ny\nYES\n')
+[[ "$danger_output" == *"参数已保留"* ]]
+if confirm_danger "删除配置" "删除测试配置" "从备份恢复" <<< $'y\n\nn\n' >/dev/null; then
+    echo "Blank final confirmation must return to the first confirmation instead of executing." >&2
+    exit 1
+fi
 [[ "$(ask_with_default "后端端口" "3000" <<< "https://site.example.com:８４４３/path")" == "8443" ]]
 [[ "$(ask_with_default "本地监听地址" "127.0.0.1" <<< "https://[::1]:443/path")" == "::1" ]]
 [[ "$(ask_with_default "普通订阅路径前缀（不带端口）" "/sub/" <<< "/sub/")" == "/sub/" ]]
@@ -748,7 +779,7 @@ SMOKE_COMPOSE_RUNTIME
     SCRIPT_DIR="$compose_apply_tmp" \
         COMPOSE_HELPER_MARKER="$compose_apply_tmp/helper.marker" \
         COMPOSE_CMD_ARGS="$compose_apply_tmp/compose.args" \
-        reload_applied_config_kind compose "$compose_apply_tmp/project/docker-compose.yml" <<< "y"
+        reload_applied_config_kind compose "$compose_apply_tmp/project/docker-compose.yml" <<< $'y\nYES\n'
     grep -Fq loaded "$compose_apply_tmp/helper.marker"
     grep -Fq -- "-f $compose_apply_tmp/project/docker-compose.yml up -d" "$compose_apply_tmp/compose.args"
     rm -f "$compose_apply_tmp/src/compose_runtime.sh"
@@ -797,8 +828,8 @@ assert_file_not_contains src/preflight.sh '[1/8]' "Preflight progress must not k
 assert_function_body_contains src/preflight.sh func_preflight_check 'return 1' "Preflight must return failure when blocking errors remain."
 assert_function_body_contains src/system_core.sh func_base_init 'failed_steps+=("$(localized_text "系统软件包更新"' "Base init must preserve package update failures."
 assert_function_body_contains src/system_core.sh func_base_init 'BBR 状态验证' "Base init must verify BBR runtime state before reporting success."
-assert_function_body_contains src/menus.sh func_beginner_machine_init '预检存在异常，新机器初始化已停止' "Beginner initialization must stop when preflight fails."
-assert_function_body_contains src/menus.sh func_beginner_machine_init '已跳过：${skipped[*]}' "Beginner initialization must summarize skipped steps."
+assert_file_not_contains src/menus.sh 'func_beginner_menu' "The removed hidden beginner entry must not remain in source."
+assert_file_not_contains src/menus.sh 'normalize_main_choice' "The removed hidden main-menu aliases must not remain in source."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'VPSO_FIREWALLD_OFFLINE_MODE=1' "Inactive firewalld must receive allow rules before the service starts."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'systemctl enable --now firewalld' "Firewalld must start only after offline rules succeed."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'firewall_build_minimum_plan' "Firewall enable flow must build a least-privilege plan."
@@ -1672,10 +1703,10 @@ source <(sed -n '1,/^show_port_list()/p' dog.sh | sed '$d')
 dog_confirm=""
 read_trimmed dog_confirm "确认操作？[Y/n]: " <<< ""
 [[ "$dog_confirm" == "y" ]]
-[[ "$(normalize_main_choice " add ")" == "1" ]]
-[[ "$(normalize_main_choice "tg")" == "7" ]]
-[[ "$(normalize_main_choice "q")" == "0" ]]
-[[ "$(normalize_main_choice "lang")" == "language" ]]
+[[ "$(normalize_menu_choice_input " add ")" == "add" ]]
+[[ "$(normalize_menu_choice_input "tg")" == "tg" ]]
+[[ "$(normalize_menu_choice_input "q")" == "0" ]]
+[[ "$(normalize_menu_choice_input "lang")" == "lang" ]]
 UI_LANGUAGE=en
 [[ "$(ui_text "中文" "English" "Русский")" == "English" ]]
 UI_LANGUAGE=ru
@@ -2179,7 +2210,7 @@ if grep -q '重置日只支持 1-28' dist/vps.sh; then
     exit 1
 fi
 grep -q 'counter reset detected on ${IFACE}, baseline reset and preserved current counters' dist/vps.sh
-grep -q 'traffic|quota|bill|流量|达量|账单) echo "10"' dist/vps.sh
+assert_file_not_contains dist/vps.sh 'traffic|quota|bill|流量|达量|账单) echo "10"' "Release script must not keep the hidden Traffic Guard main-menu alias."
 traffic_guard_menu_path='主菜单 [10 网络与内核优化] -> [5 流量达量关机保护]'
 assert_file_contains CHANGELOG.md "$traffic_guard_menu_path" "CHANGELOG must document the current traffic guard menu path."
 assert_file_contains src/menus.sh '10 -> 5  流量达量保护' "Menu help must keep traffic guard under network/kernel option 10 -> 5."
@@ -2792,6 +2823,23 @@ grep -q 'backup_register_archive_root' dist/vps.sh
     [[ "$(backup_resolve_custom_directory "$repo_root")" == "$repo_root" ]]
     [[ "$(backup_resolve_custom_directory /etc)" == "/etc" ]]
     ! backup_resolve_custom_directory /tmp
+    backup_test_dir=$(mktemp -d /tmp/vpso-backup-smoke.XXXXXX)
+    mkdir "$backup_test_dir/source"
+    printf '%s\n' 'encrypted-backup-ok' > "$backup_test_dir/source/value.txt"
+    [[ "$(backup_path_size_bytes "$backup_test_dir/source")" =~ ^[0-9]+$ ]]
+    cleanup_test_dir=$(mktemp -d /tmp/vps_backup_smoke.XXXXXX)
+    printf '%s\n' 'temporary-plaintext' > "$cleanup_test_dir/value.txt"
+    backup_cleanup_temp_dir "$cleanup_test_dir"
+    [[ ! -e "$cleanup_test_dir" ]]
+    if command -v openssl >/dev/null 2>&1; then
+        backup_create_archive "$backup_test_dir/source" "$backup_test_dir/test.tar.gz.enc" 'smoke-password-123'
+        backup_archive_is_encrypted "$backup_test_dir/test.tar.gz.enc"
+        backup_decrypt_archive "$backup_test_dir/test.tar.gz.enc" "$backup_test_dir/test.tar.gz" 'smoke-password-123'
+        [[ "$(tar -xOzf "$backup_test_dir/test.tar.gz" ./value.txt)" == "encrypted-backup-ok" ]]
+        rm -f "$backup_test_dir/test.tar.gz.enc" "$backup_test_dir/test.tar.gz"
+    fi
+    rm -f "$backup_test_dir/source/value.txt"
+    rmdir "$backup_test_dir/source" "$backup_test_dir"
 )
 grep -q 'func_edit_applied_config_center' dist/vps.sh
 grep -q 'edit_applied_config_file' dist/vps.sh
@@ -2823,7 +2871,7 @@ grep -q 'for unit in ssh.socket sshd.socket' dist/vps.sh
 grep -q 'func_network_interface_manage' dist/vps.sh
 grep -q 'network_set_iface_mtu' dist/vps.sh
 grep -q '4) func_caddy_reverse_proxy_menu' dist/vps.sh
-grep -q 'nginx|ngx|proxy|reverse' dist/vps.sh
+assert_file_not_contains dist/vps.sh 'nginx|ngx|proxy|reverse' "Release script must not keep hidden reverse-proxy main-menu aliases."
 grep -q 'func_nginx_add_reverse_proxy' dist/vps.sh
 grep -q '2) func_nginx_add_reverse_proxy ;;' dist/vps.sh
 grep -q 'func_proxy_add_insecure' dist/vps.sh
@@ -2947,7 +2995,10 @@ grep -q 'wget -q --timeout=15 --tries=3' dist/vps.sh
 grep -q '"${sublink_bind_addr}:${sublink_port}:8000"' dist/vps.sh
 grep -q '"${mmw_bind_addr}:${mmw_port}:${mmw_port}"' dist/vps.sh
 grep -q 'confirm_risk_action' dist/vps.sh
-grep -q 'func_beginner_menu' dist/vps.sh
+if grep -q 'func_beginner_menu\|normalize_main_choice' dist/vps.sh; then
+    echo "Release script must not contain removed hidden menu entries." >&2
+    exit 1
+fi
 grep -q 'generate_issue_diagnostics' dist/vps.sh
 grep -q 'install_update_script' dog.sh
 

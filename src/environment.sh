@@ -47,7 +47,7 @@ func_env_install() {
                     echo -e "$(localized_text "${GREEN}✅ 安装完成后运行 tailscale up，按提示登录并加入网络。${PLAIN}" "${GREEN}✅ After the installation is complete, run tailscale up, follow the prompts to log in and join the network.${PLAIN}" "${GREEN}. После завершения установки запустите Tailscale Up, следуйте инструкциям, чтобы войти в систему и присоединиться к сети.${PLAIN}")"
                 fi
                 ;;
-            "?"|help) echo "$(localized_text "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443端口复用走主菜单 [19]。" "The basic component menu only installs Docker, Python, WARP, forwarding tunnel and common services. Caddy/Nginx reverse proxy goes to the main menu [4]; Port 443 Reuse goes to the main menu [19]." "Меню базового компонента устанавливает только Docker, Python, WARP, туннель пересылки и общие службы. Caddy/Nginx осуществляет обратный доступ к главному меню [4]; 443 повторного использования порта 443 обеспечивает доступ к главному меню [19].")"; pause_return ;;
+            "?") echo "$(localized_text "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443端口复用走主菜单 [19]。" "The basic components menu installs only Docker, Python, WARP, forwarding tunnels, and common services. Use main menu [4] for Caddy/Nginx reverse proxy and [19] for Port 443 Reuse." "Меню базовых компонентов устанавливает только Docker, Python, WARP, туннели перенаправления и распространённые службы. Для обратного прокси Caddy/Nginx используйте пункт [4] главного меню, для повторного использования порта 443 — пункт [19].")"; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效的输入！${PLAIN}" "${RED}❌ Invalid input!${PLAIN}" "${RED}❌ Неверный ввод!${PLAIN}")" ;;
         esac

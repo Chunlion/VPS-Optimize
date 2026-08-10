@@ -806,7 +806,7 @@ select_initial_entry_mode() {
         1) ENTRY_MODE="nginx-stream" ;;
         2) ENTRY_MODE="xray-fallback" ;;
         3) ENTRY_MODE="tcp-peek" ;;
-        0|q|Q) echo -e "$(localized_text "${BLUE}已取消首次配置。${PLAIN}" "${BLUE}Has been canceled for the first time.${PLAIN}" "${BLUE}отменен впервые.${PLAIN}")"; return 1 ;;
+        0|q|Q) echo -e "$(localized_text "${BLUE}已取消首次配置。${PLAIN}" "${BLUE}Initial setup canceled.${PLAIN}" "${BLUE}Первоначальная настройка отменена.${PLAIN}")"; return 1 ;;
         *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"; return 1 ;;
     esac
     echo -e "$(localized_text "${GREEN}✅ 已选择 443 入口模式：${ENTRY_MODE}${PLAIN}" "${GREEN}✅ 443 entry mode selected: ${ENTRY_MODE}${PLAIN}" "${GREEN}Выбран 443 режима входа: ${ENTRY_MODE}${PLAIN}")"
@@ -866,14 +866,17 @@ prepare_initial_entry_mode_dependencies() {
 
 switch_entry_mode() {
     local target_mode="$1"
-    local current_mode backup_dir planned_backup_dir yn
+    local current_mode backup_dir planned_backup_dir
     load_sni_stack_env || return 1
     target_mode=$(normalize_entry_mode_name "$target_mode") || { echo -e "$(localized_text "${RED}❌ 目标入口模式无效：${target_mode}${PLAIN}" "${RED}❌ Invalid target entry mode: ${target_mode}${PLAIN}" "${RED}❌ Неверный режим ввода цели: ${target_mode}${PLAIN}")"; return 1; }
     current_mode=$(get_entry_mode)
 
     if [[ "$target_mode" == "$current_mode" ]]; then
-        read_trimmed yn "$(localized_text "当前已经是 ${target_mode}，是否重新应用当前模式？(Y/n，默认 y): " "The current value is ${target_mode}. Do you want to reapply the current mode? (Y/n, default y):" "Текущее значение — ${target_mode}. Вы хотите повторно применить текущий режим? (Да/нет, по умолчанию y):")"
-        is_yes "$yn" && reapply_current_entry_mode
+        confirm_danger \
+            "$(localized_text "重新应用 ${target_mode} 入口模式" "Reapply the ${target_mode} entry mode" "Повторно применить режим входа ${target_mode}")" \
+            "$(localized_text "重新生成公网 443 入口配置并重启相关入口服务。" "Regenerate the public Port 443 entry configuration and restart the related entry services." "Заново создать конфигурацию публичного входа 443 и перезапустить связанные службы.")" \
+            "$(localized_text "使用入口模式备份回滚，或重新应用原入口模式。" "Roll back with the entry-mode backup or reapply the previous entry mode." "Выполните откат из резервной копии режима входа или повторно примените прежний режим.")" || return 1
+        reapply_current_entry_mode
         return $?
     fi
 

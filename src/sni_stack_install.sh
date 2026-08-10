@@ -88,7 +88,7 @@ collect_sni_stack_config() {
     CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "3x-ui Clash/Mihomo subscription path prefix (without client identifier; recommended: /clash/)" "Префикс подписки Clash/Mihomo в 3x-ui (без идентификатора клиента; рекомендуется /clash/)")" "$default_clash_path")")
     local panel_whitelist_enabled panel_whitelist_input panel_whitelist_ranges current_client_ip
     local -a panel_whitelist_array=()
-    read_trimmed panel_whitelist_enabled "$(localized_text "是否为面板域名启用 IP 白名单？(Y/n，默认 y): " "Enable IP whitelisting for panel domains? (Y/n, default y):" "Включить белый список IP-адресов для доменных имен панели? (Да/нет, по умолчанию y):")"
+    read_trimmed panel_whitelist_enabled "$(localized_text "是否为面板域名启用 IP 白名单？(y/N，默认 N): " "Enable an IP allowlist for the panel domain? (y/N, default N): " "Включить список разрешённых IP-адресов для домена панели? (y/N, по умолчанию N): ")"
     if is_yes "$panel_whitelist_enabled"; then
         if ! web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-nginx-stream}" "$WEB_PROXY_ENGINE"; then
             echo -e "$(localized_text "${RED}❌ xray-fallback 模式不支持 Web 白名单。${PLAIN}" "${RED}❌ xray-fallback mode does not support web whitelisting.${PLAIN}" "${RED}❌ Резервный режим xray не поддерживает белый список веб-сайтов.${PLAIN}")"
@@ -124,17 +124,15 @@ collect_sni_stack_config() {
     echo -e "$(localized_text "${CYAN}证书处理分两种情况：${PLAIN}" "${CYAN}Certificate processing is divided into two situations:${PLAIN}" "${CYAN}Обработка сертификата делится на две ситуации:.${PLAIN}")"
     echo -e "$(localized_text "  3x-ui 3.x 新安装：在官方安装器选第 4 项 Skip SSL，再选 y 仅绑定 127.0.0.1；本步骤只做兜底检查。" "  New 3x-ui 3.x installation: choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. This step is only a fallback check." "  Новая установка 3x-ui 3.x: выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Этот шаг выполняет только проверку.")"
     echo -e "$(localized_text "  3x-ui 2.x、升级旧配置、或曾经启用过 3x-ui SSL：继续按旧流程清空面板/订阅证书路径。" "3x-ui 2.x, upgrading old configuration, or 3x-ui SSL has been enabled: Continue to clear the panel/subscription certificate path according to the old process." "3x-ui 2.x, обновление старой конфигурации или 3x-ui SSL включен: продолжайте очищать путь сертификата панели/подписки в соответствии со старым процессом.")"
-    local cert_clear_confirm
-    read_trimmed cert_clear_confirm "$(localized_text "是否现在兜底清空 2.x/旧配置中的 3x-ui 面板/订阅证书路径？(Y/n，默认 yes): " "Do you want to clean up the 3x-ui panel/subscription certificate path in the 2.x/old configuration now? (Y/n, default yes):" "Хотите ли вы сейчас очистить путь к сертификату панели/подписки 3x-ui в конфигурации 2.x/old? (Да/нет, по умолчанию да):")"
-    cert_clear_confirm="${cert_clear_confirm:-yes}"
-    if is_yes "$cert_clear_confirm"; then
+    if confirm_danger \
+        "$(localized_text "清空 3x-ui 旧证书路径" "Clear legacy 3x-ui certificate paths" "Очистить старые пути сертификатов 3x-ui")" \
+        "$(localized_text "清空 3x-ui 2.x 或旧配置中的面板和订阅证书路径，使本地反代改用 HTTP。" "Clear panel and subscription certificate paths in 3x-ui 2.x or legacy configuration so the local proxy can use HTTP." "Очистить пути сертификатов панели и подписки в 3x-ui 2.x или старой конфигурации, чтобы локальный прокси использовал HTTP.")" \
+        "$(localized_text "可在 3x-ui 官方菜单中重新填写原证书路径，或恢复操作前备份。" "Restore the original certificate paths from the official 3x-ui menu or a pre-operation backup." "Верните исходные пути через официальное меню 3x-ui или восстановите резервную копию.")"; then
         if ! clear_xui_cert_settings_for_single_443; then
-            read_trimmed cert_clear_confirm "$(localized_text "未能自动确认清空，是否已经手动清空面板证书和订阅证书路径？(Y/n，默认 y): " "Failed to automatically confirm the clearing. Have you manually cleared the panel certificate and subscription certificate paths? (Y/n, default y):" "Не удалось автоматически подтвердить очистку. Очистили ли вы вручную пути к сертификату панели и сертификату подписки? (Да/нет, по умолчанию y):")"
-            is_yes "$cert_clear_confirm" || { echo -e "$(localized_text "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}" "${YELLOW}Please return to 3x-ui to clear the certificate path, save and restart, and then run this wizard.${PLAIN}" "${YELLOW}Вернитесь в 3x-ui, чтобы очистить путь к сертификату, сохраните его и перезапустите, а затем запустите этот мастер.${PLAIN}")"; return 1; }
+            confirm_default_no "$(localized_text "是否已经手动清空面板和订阅证书路径？(y/N): " "Have you already cleared the panel and subscription certificate paths manually? (y/N): " "Вы уже вручную очистили пути сертификатов панели и подписки? (y/N): ")" || { echo -e "$(localized_text "${YELLOW}请先在 3x-ui 中清空证书路径，保存并重启面板。${PLAIN}" "${YELLOW}Clear the certificate paths in 3x-ui, save, and restart the panel first.${PLAIN}" "${YELLOW}Сначала очистите пути сертификатов в 3x-ui, сохраните изменения и перезапустите панель.${PLAIN}")"; return 1; }
         fi
     else
-        read_trimmed cert_clear_confirm "$(localized_text "确认已经手动清空面板证书和订阅证书路径？(Y/n，默认 y): " "Are you sure you have manually cleared the panel certificate and subscription certificate paths? (Y/n, default y):" "Вы уверены, что вручную очистили пути к сертификатам панели и сертификатам подписки? (Да/нет, по умолчанию y):")"
-        is_yes "$cert_clear_confirm" || { echo -e "$(localized_text "${YELLOW}请先回 3x-ui 清空证书路径并保存重启，再运行本向导。${PLAIN}" "${YELLOW}Please return to 3x-ui to clear the certificate path, save and restart, and then run this wizard.${PLAIN}" "${YELLOW}Вернитесь в 3x-ui, чтобы очистить путь к сертификату, сохраните его и перезапустите, а затем запустите этот мастер.${PLAIN}")"; return 1; }
+        confirm_default_no "$(localized_text "是否已经手动清空面板和订阅证书路径？(y/N): " "Have you already cleared the panel and subscription certificate paths manually? (y/N): " "Вы уже вручную очистили пути сертификатов панели и подписки? (y/N): ")" || { echo -e "$(localized_text "${YELLOW}请先在 3x-ui 中清空证书路径，保存并重启面板。${PLAIN}" "${YELLOW}Clear the certificate paths in 3x-ui, save, and restart the panel first.${PLAIN}" "${YELLOW}Сначала очистите пути сертификатов в 3x-ui, сохраните изменения и перезапустите панель.${PLAIN}")"; return 1; }
     fi
 
     echo -e "$(localized_text "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}" "${CYAN}Please enter Cloudflare API Token (requires Zone.DNS.Edit + Zone.Zone.Read)${PLAIN}" "${CYAN}Введите токен API Cloudflare (требуется Zone.DNS.Edit + Zone.Zone.Read)${PLAIN}")"
@@ -939,35 +937,43 @@ EOF
 }
 
 harden_single_443_firewall() {
-    local yn ssh_port remove_ports port
-    echo -e "$(localized_text "${YELLOW}可选：防火墙只保留 SSH 与 Nginx 公网入口端口。${PLAIN}" "${YELLOW}Is optional: the firewall only reserves SSH and Nginx public entry ports.${PLAIN}" "${YELLOW}является необязательным: межсетевой экран резервирует только порты входа в публичную сеть SSH и Nginx.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}提醒：若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，脚本的“自动追加当前活动端口”功能可能再次放行它。${PLAIN}" "${YELLOW}Reminder: if 3x-ui still listens on 0.0.0.0:${PANEL_LISTEN_PORT}, automatic active-port detection may allow that port again.${PLAIN}" "${YELLOW}Напоминание: если 3x-ui по-прежнему слушает 0.0.0.0:${PANEL_LISTEN_PORT}, автоматическое обнаружение активных портов может снова разрешить этот порт.${PLAIN}")"
-    read_trimmed yn "$(localized_text "是否现在收紧防火墙？(Y/n，默认 y): " "Tighten the firewall now? (Y/n, default y):" "Ужесточить брандмауэр сейчас? (Да/нет, по умолчанию y):")"
-    is_yes "$yn" || return 0
+    local ssh_port remove_ports port
+    local failures=()
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}
+    confirm_danger \
+        "$(localized_text "收紧 443 入口防火墙" "Tighten the Port 443 firewall" "Ужесточить правила брандмауэра для порта 443")" \
+        "$(localized_text "只保留 SSH ${ssh_port:-22}/tcp 与公网入口 ${NGINX_LISTEN_PORT}/tcp，并撤销已知后端端口的公网放行规则。" "Keep only SSH ${ssh_port:-22}/tcp and public entry ${NGINX_LISTEN_PORT}/tcp, and revoke public allow rules for known backend ports." "Оставить только SSH ${ssh_port:-22}/tcp и публичный вход ${NGINX_LISTEN_PORT}/tcp, удалив разрешающие правила для известных внутренних портов.")" \
+        "$(localized_text "保持当前 SSH 会话；可通过云厂商控制台重新放行端口或恢复防火墙规则。" "Keep the current SSH session open; use the provider console to restore firewall rules or allow ports again." "Не закрывайте текущий сеанс SSH; правила можно восстановить через консоль провайдера.")" \
+        "$(localized_text "若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，自动活动端口检测以后可能再次放行该端口。" "If 3x-ui still listens on 0.0.0.0:${PANEL_LISTEN_PORT}, automatic active-port detection may allow it again later." "Если 3x-ui продолжает слушать 0.0.0.0:${PANEL_LISTEN_PORT}, автоматическое обнаружение активных портов позднее может снова разрешить этот порт.")" || return 0
     remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}" "${XRAY_SNI_ROUTE_PORTS[@]}" "40000" "8443" "1443" "2096" "3000")
     if command -v ufw >/dev/null 2>&1; then
-        ufw allow "${ssh_port}/tcp" >/dev/null 2>&1 || true
-        ufw allow "${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || true
+        ufw allow "${ssh_port}/tcp" >/dev/null 2>&1 || failures+=("SSH ${ssh_port}/tcp")
+        ufw allow "${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || failures+=("entry ${NGINX_LISTEN_PORT}/tcp")
         for port in "${remove_ports[@]}"; do
             [[ "$port" == "$ssh_port" || "$port" == "$NGINX_LISTEN_PORT" ]] && continue
-            ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
-            ufw delete allow "${port}/udp" >/dev/null 2>&1 || true
+            ufw delete allow "${port}/tcp" >/dev/null 2>&1 || :
+            ufw delete allow "${port}/udp" >/dev/null 2>&1 || :
         done
     elif command -v firewall-cmd >/dev/null 2>&1; then
-        systemctl enable --now firewalld >/dev/null 2>&1 || true
-        firewall-cmd --permanent --add-port="${ssh_port}/tcp" >/dev/null 2>&1 || true
-        firewall-cmd --permanent --add-port="${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || true
+        systemctl enable --now firewalld >/dev/null 2>&1 || failures+=("firewalld")
+        firewall-cmd --permanent --add-port="${ssh_port}/tcp" >/dev/null 2>&1 || failures+=("SSH ${ssh_port}/tcp")
+        firewall-cmd --permanent --add-port="${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || failures+=("entry ${NGINX_LISTEN_PORT}/tcp")
         for port in "${remove_ports[@]}"; do
             [[ "$port" == "$ssh_port" || "$port" == "$NGINX_LISTEN_PORT" ]] && continue
-            firewall-cmd --permanent --remove-port="${port}/tcp" >/dev/null 2>&1 || true
-            firewall-cmd --permanent --remove-port="${port}/udp" >/dev/null 2>&1 || true
+            firewall-cmd --permanent --remove-port="${port}/tcp" >/dev/null 2>&1 || :
+            firewall-cmd --permanent --remove-port="${port}/udp" >/dev/null 2>&1 || :
         done
-        firewall-cmd --reload >/dev/null 2>&1 || true
+        firewall-cmd --reload >/dev/null 2>&1 || failures+=("firewalld reload")
     else
         echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 ufw/firewalld，跳过防火墙收紧。${PLAIN}" "${YELLOW}⚠️ ufw/firewalld not detected, skipping firewall tightening.${PLAIN}" "${YELLOW}⚠️ ufw/firewalld не обнаружен, пропускается ужесточение брандмауэра.${PLAIN}")"
+        return 0
     fi
+    if (( ${#failures[@]} > 0 )); then
+        echo -e "$(localized_text "${RED}❌ 防火墙收紧未完整应用：${failures[*]}。请保持当前 SSH 会话并检查防火墙状态。${PLAIN}" "${RED}❌ Firewall tightening was only partially applied: ${failures[*]}. Keep the current SSH session open and inspect the firewall state.${PLAIN}" "${RED}❌ Правила брандмауэра применены не полностью: ${failures[*]}. Не закрывайте текущий сеанс SSH и проверьте состояние брандмауэра.${PLAIN}")"
+        return 1
+    fi
+    echo -e "$(localized_text "${GREEN}✅ 防火墙规则已应用：保留 SSH ${ssh_port}/tcp 与入口 ${NGINX_LISTEN_PORT}/tcp。${PLAIN}" "${GREEN}✅ Firewall rules applied: SSH ${ssh_port}/tcp and entry ${NGINX_LISTEN_PORT}/tcp are allowed.${PLAIN}" "${GREEN}✅ Правила применены: разрешены SSH ${ssh_port}/tcp и вход ${NGINX_LISTEN_PORT}/tcp.${PLAIN}")"
 }
 
 print_sni_stack_result() {

@@ -607,7 +607,7 @@ func_caddy_cf_maintenance_menu() {
                 quarantine_path "/root/cert/${domain}.crt" "$domain_quarantine_dir" >/dev/null 2>&1 || true
                 quarantine_path "/root/cert/${domain}.key" "$domain_quarantine_dir" >/dev/null 2>&1 || true
 
-                read_trimmed purge_acme "$(localized_text "❓ 是否同时删除 acme.sh 历史记录？(Y/n，默认 y，建议保留): " "❓ Do you want to delete the acme.sh history at the same time? (Y/n, default y, recommended to keep):" "❓ Хотите одновременно удалить историю acme.sh? (Да/нет, по умолчанию y, рекомендуется сохранить):")"
+                read_trimmed purge_acme "$(localized_text "❓ 是否同时删除 acme.sh 历史记录？(y/N，默认 N，建议保留): " "❓ Also remove the acme.sh history? (y/N, default N; keeping it is recommended): " "❓ Также удалить историю acme.sh? (y/N, по умолчанию N; рекомендуется сохранить): ")"
                 if is_yes "$purge_acme"; then
                     /root/.acme.sh/acme.sh --remove -d "$domain" --ecc >/dev/null 2>&1 || true
                     quarantine_path "/root/.acme.sh/${domain}_ecc" "/root/.acme.sh/_quarantine" >/dev/null 2>&1 || true
@@ -1106,7 +1106,7 @@ func_caddy_add_insecure() {
         return
     fi
 
-    read_trimmed enable_ip_whitelist "$(localized_text "❓ 是否只允许指定 IP/CIDR 访问该域名？(Y/n，默认 y): " "❓ Are only the specified IP/CIDR allowed to access the domain? (Y/n, default y):" "❓ Разрешен ли только указанный IP/CIDR доступ к доменному имени? (Да/нет, по умолчанию y):")"
+    read_trimmed enable_ip_whitelist "$(localized_text "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/N，默认 N): " "❓ Restrict this domain to specified IP/CIDR ranges? (y/N, default N): " "❓ Ограничить доступ к домену указанными IP/CIDR? (y/N, по умолчанию N): ")"
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "$(localized_text "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}" "${YELLOW}The current source IP of SSH may be: ${current_client_ip}. Please confirm that it has been added to the whitelist.${PLAIN}" "${YELLOW}Текущий исходный IP-адрес SSH может быть: ${current_client_ip}. Пожалуйста, подтвердите, что он был добавлен в белый список.${PLAIN}")"

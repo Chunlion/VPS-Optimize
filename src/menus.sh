@@ -16,7 +16,6 @@ show_main_help() {
         echo "19  Управление единым публичным входом 443 для панелей, подписок и REALITY."
         echo "20  Выбор языка интерфейса."
         echo "10 -> 5  Защита от превышения лимита трафика с учётом расчётного периода."
-        echo "xcm открывает расширенный набор x-ui; он также доступен через 5 -> 2."
         echo "? показывает справку; 0/q завершает работу."
     elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
         echo -e "${CYAN}VPS-Optimize > Main menu > Help${PLAIN}"
@@ -32,7 +31,6 @@ show_main_help() {
         echo "19  Manage Port 443 Reuse for panels, subscriptions, and REALITY."
         echo "20  Select the interface language."
         echo "10 -> 5  Protect against traffic overages based on the billing cycle."
-        echo "xcm opens the x-ui extension directly; it is also available through 5 -> 2."
         echo "? shows help; 0/q exits."
     else
         echo -e "${CYAN}VPS-Optimize > 主菜单 > 帮助${PLAIN}"
@@ -48,36 +46,7 @@ show_main_help() {
         echo "19  443端口复用管理中心，面板/订阅/REALITY 共用公网 443。"
         echo "20  选择界面语言。"
         echo "10 -> 5  流量达量保护，按账单周期防刷流量和超额账单。"
-        echo "xcm 直达 x-ui 增强套件；也可走 5 -> 2。"
         echo "? 查看帮助，0/q 退出。"
-    fi
-}
-
-show_beginner_help() {
-    if [[ "$VPSO_LANGUAGE" == "ru" ]]; then
-        echo -e "${CYAN}VPS-Optimize > Руководство для начинающих > Справка${PLAIN}"
-        echo "1 Первичная настройка сервера в безопасном порядке: проверка, базовая настройка, SSH, ключи, Fail2ban, брандмауэр и резервная копия."
-        echo "2 Открыть меню панелей, узлов и инструментов подписок."
-        echo "3 Открыть управление повторным использованием порта 443 для панелей, подписок и REALITY."
-        echo "4 Проверить службы, порты и сертификаты или создать диагностические данные."
-        echo "5 Создать резервную копию или восстановить существующую."
-        echo "? показывает справку; 0/q возвращает в главное меню."
-    elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
-        echo -e "${CYAN}VPS-Optimize > Beginner guide > Help${PLAIN}"
-        echo "1 Initialize a new server in a safe order: preflight, base setup, SSH, keys, Fail2ban, firewall, and backup."
-        echo "2 Open the panel, node, and subscription tools menu."
-        echo "3 Open the Port 443 Reuse manager for panels, subscriptions, and REALITY."
-        echo "4 Check services, ports, and certificates, or generate diagnostic details."
-        echo "5 Create a backup or restore an existing backup."
-        echo "? shows help; 0/q returns to the main menu."
-    else
-        echo -e "${CYAN}VPS-Optimize > 新手向导 > 帮助${PLAIN}"
-        echo "1 新机器初始化：按安全顺序引导预检、初始化、SSH、公钥、Fail2ban、防火墙、备份。"
-        echo "2 安装面板/节点：进入面板、节点与订阅工具菜单。"
-        echo "3 配置 443端口复用：进入 443 管理中心，适合面板、订阅和 REALITY 共用 443。"
-        echo "4 健康检查：查看服务、端口、证书，并可生成反馈诊断信息。"
-        echo "5 备份/回滚：创建备份或从已有备份恢复。"
-        echo "? 查看帮助，0/q 返回主菜单。"
     fi
 }
 
@@ -115,9 +84,9 @@ show_sni_help() {
 
 show_backup_help() {
     echo -e "$(localized_text "${CYAN}VPS-Optimize > 备份与回滚 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Backup and Rollback > Help${PLAIN}" "${CYAN}VPS-Optimize > Резервное копирование и откат > Справка${PLAIN}")"
-    echo "$(localized_text "1 创建备份：选择配置、自定义目录或两者，并可指定存放目录；自定义目录支持 /etc、/usr、/home。" "1 Create a backup: choose configuration, custom directories, or both, and select the storage directory; custom directories support /etc, /usr, and /home." "1 Создать копию: выберите конфигурацию, пользовательские каталоги или оба варианта, а затем каталог хранения; пользовательские каталоги поддерживают /etc, /usr и /home.")"
-    echo "$(localized_text "2 加载备份包：自动读取默认目录、/backups、/root/backups 和已记录目录中的 .tar.gz。" "2 Load backup archive: automatically read .tar.gz files in the default directory, /backups, /root/backups, and recorded directories." "2 Загрузка архива: автоматически найти .tar.gz в каталоге по умолчанию, /backups, /root/backups и сохраненных каталогах.")"
-    echo "$(localized_text "3 恢复：使用已加载备份、自动列表或指定 .tar.gz 路径；先查看环境预检。" "3 Restore: use a loaded backup, the automatic list, or a specified .tar.gz path; review the environment preflight first." "3 Восстановление: используйте загруженную копию, автоматический список или указанный путь .tar.gz; сначала проверьте предварительную проверку среды.")"
+    echo "$(localized_text "1 创建备份：选择配置、自定义目录或两者；打包前检查空间，可选 AES-256 加密。" "1 Create a backup: choose configuration, custom directories, or both. Space is checked before packaging; AES-256 encryption is optional." "1 Создать копию: выберите конфигурацию, пользовательские каталоги или оба варианта. Перед упаковкой проверяется место; доступно шифрование AES-256.")"
+    echo "$(localized_text "2 加载备份包：自动读取默认目录、/backups、/root/backups 和已记录目录中的 .tar.gz / .tar.gz.enc。" "2 Load a backup: scan the default directory, /backups, /root/backups, and recorded directories for .tar.gz and .tar.gz.enc files." "2 Загрузить копию: найти файлы .tar.gz и .tar.gz.enc в каталоге по умолчанию, /backups, /root/backups и сохранённых каталогах.")"
+    echo "$(localized_text "3 恢复：支持已加载备份、自动列表或指定路径；先校验归档、路径安全和解压空间。" "3 Restore: use the loaded backup, automatic list, or a specified path. Archive integrity, path safety, and extraction space are checked first." "3 Восстановление: используйте загруженную копию, автоматический список или указанный путь. Сначала проверяются архив, безопасность путей и место для распаковки.")"
     echo "$(localized_text "4 隔离旧备份：移入隔离目录，不直接删除。" "4 Quarantine old backups: move them to quarantine; do not delete them." "4 Изолировать старые копии: переместить в карантин, не удалять.")"
     echo "$(localized_text "5 查看/编辑已应用配置：先备份，校验后可 reload/restart。" "5 View or edit applied configuration: back up first, validate, then reload or restart if needed." "5 Просмотр или правка применённой конфигурации: сначала копия, затем проверка и reload/restart при необходимости.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
@@ -255,7 +224,7 @@ func_net_kernel_menu() {
         local nk_choice
         read_trimmed nk_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
         case $nk_choice in
-            "?"|help) show_net_kernel_help; pause_return ;;
+            "?") show_net_kernel_help; pause_return ;;
             0|q|Q) break ;;
             *) dispatch_menu_choice "$nk_choice" NET_KERNEL_MENU_ITEMS || { echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1; } ;;
         esac
@@ -305,8 +274,7 @@ func_panel_deploy_menu() {
             12) func_dns_unlock ;;
             13) func_ip_sentinel ;;
             14) func_port_dog ;;
-            xcm|XCM|xui-custom|外置|外置增强|外置管理) func_xui_custom_manager ;;
-            "?"|help) show_panel_help; pause_return ;;
+            "?") show_panel_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac
@@ -343,7 +311,7 @@ func_sni_stack_quick_menu() {
         echo -e "$(localized_text "${CYAN} 16. 查看当前入口日志${PLAIN}          ${YELLOW}(自动识别 Nginx / Xray / vpso-mux)${PLAIN}" "${CYAN}16. View current entry logs (detects Nginx / Xray / vpso-mux automatically)${PLAIN}" "${CYAN}16. Журналы текущего входа (автовыбор Nginx / Xray / vpso-mux)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q/back/返回${PLAIN}" "${RED}0. Main menu / q/back${PLAIN}" "${RED}0. Главное меню / q/back${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local sni_choice
@@ -362,169 +330,12 @@ func_sni_stack_quick_menu() {
             14) func_443_network_test; continue ;;
             15) manage_xray_inbound_routes; continue ;;
             16) view_current_entry_logs ;;
-            "?"|help) show_sni_help; pause_return; continue ;;
+            "?") show_sni_help; pause_return; continue ;;
             0) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;
         esac
         echo ""
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-    done
-}
-
-normalize_main_choice() {
-    local choice
-    choice="$(trim_input "$1")"
-    choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
-
-    case "$choice" in
-        q|quit|exit|0|退出) echo "0" ;;
-        pre|preflight|check|预检) echo "1" ;;
-        init|base|初始化) echo "2" ;;
-        env|docker|组件) echo "3" ;;
-        caddy|nginx|ngx|proxy|reverse|反代) echo "4" ;;
-        xcm|xui-custom|外置|外置增强|外置管理) echo "xui-custom" ;;
-        panel|node|nodes|面板|节点) echo "5" ;;
-        ssh) echo "6" ;;
-        fail2ban|f2b) echo "7" ;;
-        fw|firewall|防火墙) echo "8" ;;
-        tweak|system|系统) echo "9" ;;
-        net|kernel|bbr|网络|内核) echo "10" ;;
-        docker-safe|docker安全) echo "11" ;;
-        test|speed|测速) echo "12" ;;
-        port|端口) echo "13" ;;
-        info|hardware|探针) echo "14" ;;
-        h|health|健康|体检) echo "15" ;;
-        b|backup|bak|备份) echo "16" ;;
-        u|upd|update|更新) echo "17" ;;
-        reboot|重启) echo "18" ;;
-        sni|443|端口复用) echo "19" ;;
-        l|lang|language|язык|语言) echo "20" ;;
-        traffic|quota|bill|流量|达量|账单) echo "10" ;;
-        *) echo "$choice" ;;
-    esac
-}
-
-beginner_run_optional_step() {
-    local step="$1"
-    local total="$2"
-    local label="$3"
-    local function_name="$4"
-    local choice
-
-    echo -e "${CYAN}[${step}/${total}] ${label}${PLAIN}"
-    read_trimmed choice "$(localized_text "是否进入此步骤？(Y/n): " "Do you want to proceed to this step? (Y/n):" "Хотите перейти к этому шагу? (Да/Нет):")"
-    if [[ "${choice:-yes}" =~ ^[Nn]([Oo])?$ ]]; then
-        echo -e "$(localized_text "${BLUE}已跳过：${label}${PLAIN}" "${BLUE}Skipped: ${label}${PLAIN}" "${BLUE}пропущен: ${label}${PLAIN}")"
-        return 2
-    fi
-    "$function_name"
-}
-
-func_beginner_machine_init() {
-    local total=7
-    local step_rc step_entry step label function_name
-    local VPSO_BEGINNER_FLOW=1
-    local completed=("$(localized_text "部署前预检" "Preflight check" "Предварительная проверка")")
-    local skipped=()
-    local optional_steps=(
-        "3|$(localized_text "SSH 安全配置" "SSH security" "Безопасность SSH")|func_security"
-        "4|$(localized_text "SSH 公钥配置" "SSH public key" "Открытый ключ SSH")|func_add_ssh_key"
-        "5|$(localized_text "Fail2ban 配置" "Fail2ban" "Fail2ban")|func_fail2ban"
-        "6|$(localized_text "防火墙配置" "Firewall" "Брандмауэр")|func_firewall_manage"
-        "7|$(localized_text "配置备份" "Configuration backup" "Резервная копия конфигурации")|func_backup_center"
-    )
-
-    echo -e "$(localized_text "${CYAN}[1/${total}] 部署前预检${PLAIN}" "${CYAN}[1/${total}] preflight check before deployment${PLAIN}" "${CYAN}[1/${total}] Предварительная проверка перед развертыванием.${PLAIN}")"
-    if ! func_preflight_check; then
-        echo -e "$(localized_text "${RED}❌ 预检存在异常，新机器初始化已停止，未继续修改系统。${PLAIN}" "${RED}❌ Preflight checks failed. New-server initialization stopped without further system changes.${PLAIN}" "${RED}❌ Предварительная проверка завершилась ошибкой. Инициализация нового сервера остановлена без дальнейших изменений системы.${PLAIN}")"
-        pause_return
-        return 1
-    fi
-
-    echo -e "$(localized_text "${CYAN}[2/${total}] 基础初始化${PLAIN}" "${CYAN}[2/${total}] Basic initialization${PLAIN}" "${CYAN}[2/${total}] Базовая инициализация${PLAIN}")"
-    if ! func_base_init; then
-        echo -e "$(localized_text "${RED}❌ 基础初始化未完整完成，后续安全配置已停止。${PLAIN}" "${RED}❌ Basic initialization is not completely completed, and subsequent security configuration has been stopped.${PLAIN}" "${RED}❌ Базовая инициализация не полностью завершена, и последующая настройка безопасности остановлена.${PLAIN}")"
-        pause_return
-        return 1
-    fi
-    completed+=("$(localized_text "基础初始化" "Base initialization" "Базовая инициализация")")
-
-    for step_entry in "${optional_steps[@]}"; do
-        IFS='|' read -r step label function_name <<< "$step_entry"
-        beginner_run_optional_step "$step" "$total" "$label" "$function_name"
-        step_rc=$?
-        if [[ "$step_rc" -eq 0 ]]; then
-            completed+=("$label")
-        elif [[ "$step_rc" -eq 2 ]]; then
-            skipped+=("$label")
-        else
-            echo -e "$(localized_text "${RED}❌ ${label} 执行失败，新机器初始化已停止。${PLAIN}" "${RED}❌ ${label} execution failed, new machine initialization has stopped.${PLAIN}" "${RED}❌ ${label} не удалось выполнить, инициализация новой машины остановлена.${PLAIN}")"
-            echo -e "$(localized_text "${CYAN}已完成：${completed[*]}${PLAIN}" "${CYAN}Completed: ${completed[*]}${PLAIN}" "${CYAN}Завершено: ${completed[*]}${PLAIN}")"
-            pause_return
-            return 1
-        fi
-    done
-
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${GREEN}✅ 新机器初始化流程结束。${PLAIN}" "${GREEN}✅ The new machine initialization process is completed.${PLAIN}" "${GREEN}✅ Процесс инициализации нового устройства завершен.${PLAIN}")"
-    echo -e "$(localized_text "已完成：${completed[*]}" "Completed: ${completed[*]}" "Завершено: ${completed[*]}")"
-    if [[ ${#skipped[@]} -gt 0 ]]; then
-        echo -e "$(localized_text "${YELLOW}已跳过：${skipped[*]}${PLAIN}" "${YELLOW}Skipped: ${skipped[*]}${PLAIN}" "${YELLOW}пропущен: ${skipped[*]}${PLAIN}")"
-    fi
-    pause_return
-}
-
-func_beginner_menu() {
-    while true; do
-        clear
-        echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "新手向导" "Beginner guide" "Руководство для начинающих")"
-        echo -e "${BOLD}VPS-Optimize ${SCRIPT_VERSION}${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-        localized_echo \
-            "${YELLOW}这是简化入口，只保留第一次部署最常用的路径；老用户可返回完整菜单。${PLAIN}" \
-            "${YELLOW}This simplified guide contains the most common first-deployment paths. Return to the full menu for all features.${PLAIN}" \
-            "${YELLOW}Это упрощённый раздел с основными действиями для первого запуска. Все функции доступны в полном меню.${PLAIN}"
-        echo -e "------------------------------------------------"
-        localized_echo \
-            "${GREEN}  1. 新机器初始化${PLAIN}       ${YELLOW}(预检 -> 初始化 -> SSH/公钥/Fail2ban/防火墙 -> 备份)${PLAIN}" \
-            "${GREEN}  1. Initialize a new server${PLAIN}  ${YELLOW}(preflight -> base setup -> SSH/keys/Fail2ban/firewall -> backup)${PLAIN}" \
-            "${GREEN}  1. Первичная настройка сервера${PLAIN}  ${YELLOW}(проверка -> базовая настройка -> SSH/ключи/Fail2ban/брандмауэр -> резервная копия)${PLAIN}"
-        localized_echo \
-            "${GREEN}  2. 安装面板/节点${PLAIN}     ${YELLOW}(进入面板、节点与订阅工具菜单)${PLAIN}" \
-            "${GREEN}  2. Install a panel/node${PLAIN}    ${YELLOW}(open panel, node, and subscription tools)${PLAIN}" \
-            "${GREEN}  2. Установить панель/узел${PLAIN}     ${YELLOW}(открыть меню панелей, узлов и подписок)${PLAIN}"
-        localized_echo \
-            "${GREEN}  3. 配置 443端口复用${PLAIN}   ${YELLOW}(面板/订阅/REALITY 共用公网 443)${PLAIN}" \
-            "${GREEN}  3. Configure Port 443 Reuse${PLAIN} ${YELLOW}(panels, subscriptions, and REALITY share public port 443)${PLAIN}" \
-            "${GREEN}  3. Настроить повторное использование порта 443${PLAIN}   ${YELLOW}(общий публичный порт 443 для панелей, подписок и REALITY)${PLAIN}"
-        localized_echo \
-            "${GREEN}  4. 健康检查${PLAIN}          ${YELLOW}(服务状态、端口、证书、反馈诊断)${PLAIN}" \
-            "${GREEN}  4. Health check${PLAIN}              ${YELLOW}(services, ports, certificates, and diagnostics)${PLAIN}" \
-            "${GREEN}  4. Проверка состояния${PLAIN}          ${YELLOW}(службы, порты, сертификаты и диагностика)${PLAIN}"
-        localized_echo \
-            "${GREEN}  5. 备份/回滚${PLAIN}         ${YELLOW}(创建备份或恢复配置)${PLAIN}" \
-            "${GREEN}  5. Backup/rollback${PLAIN}           ${YELLOW}(create a backup or restore configuration)${PLAIN}" \
-            "${GREEN}  5. Резервная копия/откат${PLAIN}       ${YELLOW}(создать копию или восстановить конфигурацию)${PLAIN}"
-        echo -e "------------------------------------------------"
-        localized_echo "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}  ?. Help${PLAIN}" "${BLUE}  ?. Справка${PLAIN}"
-        localized_echo "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}  0. Main menu / q Back${PLAIN}" "${RED}  0. Главное меню / q Назад${PLAIN}"
-        echo -e "${CYAN}================================================${PLAIN}"
-
-        local beginner_choice
-        read_trimmed beginner_choice "$(localized_text "👉 请选择操作: " "👉 Choose an action: " "👉 Выберите действие: ")"
-        case "$beginner_choice" in
-            1)
-                func_beginner_machine_init
-                ;;
-            2) func_panel_deploy_menu ;;
-            3) func_sni_stack_quick_menu ;;
-            4) func_health_dashboard ;;
-            5) func_backup_center ;;
-            "?"|help|h) show_beginner_help; echo ""; pause_return ;;
-            0|q|Q) break ;;
-            *) localized_echo "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid choice.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}"; sleep 1 ;;
-        esac
     done
 }
 
@@ -573,7 +384,7 @@ main_menu() {
             echo -e " ${GREEN}19.${PLAIN} повторное использование порта 443            ${YELLOW}(настройка, сайты, диагностика и сертификаты)${PLAIN}"
             echo -e " ${GREEN}20.${PLAIN} Язык интерфейса           ${YELLOW}(中文 / English / Русский)${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
-            echo -e " ${RED} 0.${PLAIN} Выход"
+            echo -e " ${RED} 0.${PLAIN} Выход / ${RED}q${PLAIN} Выход"
             echo -e "${CYAN}================================================${PLAIN}"
         elif [[ "$VPSO_LANGUAGE" == "en" ]]; then
             echo -e "${CYAN}================================================${PLAIN}"
@@ -613,7 +424,7 @@ main_menu() {
             echo -e " ${GREEN}19.${PLAIN} Port 443 Reuse manager    ${YELLOW}(initialize, add sites, check health, and repair certificates)${PLAIN}"
             echo -e " ${GREEN}20.${PLAIN} Interface language          ${YELLOW}(中文 / English / Русский)${PLAIN}"
             echo -e "${CYAN}================================================${PLAIN}"
-            echo -e " ${RED} 0.${PLAIN} Exit"
+            echo -e " ${RED} 0.${PLAIN} Exit / ${RED}q${PLAIN} Exit"
             echo -e "${CYAN}================================================${PLAIN}"
         else
         echo -e "${CYAN}================================================${PLAIN}"
@@ -653,19 +464,16 @@ main_menu() {
         echo -e " ${GREEN}19.${PLAIN} 443端口复用管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
         echo -e " ${GREEN}20.${PLAIN} 界面语言              ${YELLOW}(中文 / English / Русский)${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e " ${RED} 0.${PLAIN} 退出面板"
+        echo -e " ${RED} 0.${PLAIN} 退出面板 / ${RED}q${PLAIN} 退出"
         echo -e "${CYAN}================================================${PLAIN}"
         fi
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请输入数字或快捷词选择功能: " "👉 Enter a number or shortcut: " "👉 Введите номер или команду: ")"
-        choice=$(normalize_main_choice "$choice")
+        read_trimmed choice "$(localized_text "👉 请输入菜单编号、? 或已标出的快捷词: " "👉 Enter a menu number, ?, or a shortcut shown above: " "👉 Введите номер меню, ? или указанную выше команду: ")"
 
         case $choice in
-            n|N|newbie|guide|新手|向导) func_beginner_menu ;;
-            "?"|help|帮助) show_main_help; echo ""; pause_return ;;
-            20|l|L|lang|language|язык|语言) select_ui_language; sleep 1 ;;
-            xui-custom) func_xui_custom_manager ;;
+            "?") show_main_help; echo ""; pause_return ;;
+            20) select_ui_language; sleep 1 ;;
             1) func_preflight_check ;;
             2) func_base_init ;;
             3) func_env_install ;;
@@ -682,15 +490,15 @@ main_menu() {
             14) func_system_info ;;
             15) func_health_dashboard ;;
             16) func_backup_center ;;
-            17) func_update_script ;;
+            17|u|U|update|UPDATE|upd|UPD) func_update_script ;;
             18) func_reboot_server ;;
             19) func_sni_stack_quick_menu ;;
             0) exit 0 ;;
             *)
                 localized_echo \
                     "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}" \
-                    "${RED}❌ Invalid input. Enter a number or shortcut shown in the menu.${PLAIN}" \
-                    "${RED}❌ Неверный ввод. Введите номер или команду из меню.${PLAIN}"
+                    "${RED}❌ Invalid input. Enter a menu number, ?, or a shortcut shown above.${PLAIN}" \
+                    "${RED}❌ Неверный ввод. Введите номер меню, ? или указанную выше команду.${PLAIN}"
                 sleep 1
                 ;;
         esac

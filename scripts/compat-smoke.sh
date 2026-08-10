@@ -189,7 +189,7 @@ assert_file_contains dist/vps.sh '10) func_net_kernel_menu ;;' "Main menu item 1
 assert_file_contains dist/vps.sh '15) func_health_dashboard ;;' "Main menu item 15 must still route to health dashboard."
 assert_file_contains dist/vps.sh '19) func_sni_stack_quick_menu ;;' "Main menu item 19 must still route to Port 443 Reuse center."
 assert_file_contains src/menus.sh '${GREEN}20.${PLAIN} 界面语言' "Main menu item 20 must expose language selection."
-assert_file_contains dist/vps.sh '20|l|L|lang|language|язык|语言) select_ui_language' "Main menu item 20 must open language selection."
+assert_file_contains dist/vps.sh '20) select_ui_language' "Main menu item 20 must open language selection without hidden aliases."
 assert_file_contains README.md '主菜单 `[20 界面语言]`' "README must document the language menu number."
 assert_file_contains quick-start.md '3. Русский (Russian)' "Quick start must document Russian language selection."
 assert_file_contains docs/config-paths.md '/etc/vps-optimize/language.conf' "Config paths must document the persisted language setting."

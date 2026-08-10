@@ -58,7 +58,7 @@ func_update_subscription_tools() {
     echo -e "------------------------------------------------"
     echo -e "$(localized_text "${GREEN}✅ 更新流程已执行完成。${PLAIN}" "${GREEN}✅ The update process has been completed.${PLAIN}" "${GREEN}✅ Процесс обновления завершен.${PLAIN}")"
     local prune_confirm
-    read_trimmed prune_confirm "$(localized_text "是否清理无标签旧镜像以释放磁盘空间？(Y/n，默认 y): " "Clean old unlabeled images to free up disk space? (Y/n, default y):" "Очистить старые немаркированные изображения, чтобы освободить место на диске? (Да/нет, по умолчанию y):")"
+    read_trimmed prune_confirm "$(localized_text "是否清理无标签旧镜像以释放磁盘空间？(y/N，默认 N): " "Remove dangling images to free disk space? (y/N, default N): " "Удалить неиспользуемые образы, чтобы освободить место? (y/N, по умолчанию N): ")"
     if is_yes "$prune_confirm"; then
         docker image prune -f
     fi

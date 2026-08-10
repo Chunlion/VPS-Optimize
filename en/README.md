@@ -53,7 +53,7 @@ On the first interactive run, the installer asks in English whether to use Simpl
 | Panels and subscriptions | 3x-ui, S-UI, Sing-box, Xray, SublinkPro, Sub-Store, Dockge, and Komari |
 | Forwarding and networking | Realm, Gost, FLVX, EasyTier, and Tailscale |
 | Port 443 Reuse | Route Web services, panels, subscriptions, and nodes through public port `443` by SNI |
-| Diagnostics and rollback | Service health, port 443 diagnostics, configuration backup, restore, and quarantine archives |
+| Diagnostics and rollback | Service health, port 443 diagnostics, space checks, optional encrypted backups, restore, and quarantine archives |
 
 ## 📚 Documentation and Support
 

@@ -42,7 +42,7 @@ func_sublinkpro() {
     print_public_https_reverse_proxy_hint
     echo -e "$(localized_text "${YELLOW}账号密码说明：当前安装流程不提供自定义后台账号密码。${PLAIN}" "${YELLOW}Account and Password Description: The current installation process does not provide custom background account passwords.${PLAIN}" "${YELLOW}Описание учетной записи и пароля: Текущий процесс установки не предоставляет пользовательские пароли фоновой учетной записи.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}默认后台账号：${CYAN}admin${PLAIN} / 默认后台密码：${CYAN}123456${PLAIN}" "${YELLOW}Default background account: admin / Default background password: 123456${PLAIN}" "${YELLOW}Фоновая учетная запись по умолчанию: admin / Фоновый пароль по умолчанию: 123456${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}部署完成后请尽快登录后台修改默认密码。${PLAIN}" "${YELLOW}After the deployment is completed, please log in to the background as soon as possible to change the default password.${PLAIN}" "${YELLOW}После завершения развертывания как можно скорее войдите в фоновый режим, чтобы изменить пароль по умолчанию.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}部署完成后请尽快登录管理后台修改默认密码。${PLAIN}" "${YELLOW}After deployment, sign in to the admin panel and change the default password promptly.${PLAIN}" "${YELLOW}После развёртывания войдите в панель администратора и сразу измените пароль по умолчанию.${PLAIN}")"
     echo -e "------------------------------------------------"
     
     read_trimmed yn "$(localized_text "❓ 确认现在开始一键安装吗？(Y/n): " "❓ Are you sure you want to start the one-click installation now? (Y/n):" "❓ Вы уверены, что хотите начать установку в один клик сейчас? (Да/Нет):")"
@@ -86,7 +86,7 @@ EOF
         echo -e "$(localized_text "如果您日后需要升级容器或重装 VPS，请务必提前打包备份该目录下的 ${GREEN}./db${PLAIN} 和 ${GREEN}./template${PLAIN} 文件夹！" "If you need to upgrade the container or reinstall the VPS in the future, be sure to pack and back up the ${GREEN}./db${PLAIN} and ${GREEN}./template${PLAIN} folders in this directory in advance!" "Если в будущем вам потребуется обновить контейнер или переустановить VPS, обязательно заранее запакуйте и сделайте резервную копию папок ${GREEN}./db${PLAIN} и ${GREEN}./template${PLAIN} в этом каталоге!")"
         echo -e "------------------------------------------------"
     else
-        echo -e "$(localized_text "${BLUE}已安全取消部署。${PLAIN}" "${BLUE}Has been safely undeployed.${PLAIN}" "${BLUE}благополучно деразвернут.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
     fi
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
 }
@@ -178,7 +178,7 @@ EOF
         print_public_https_reverse_proxy_hint
         echo -e "$(localized_text "${YELLOW}请定期备份 ${install_dir}/data、subscribes、rule_templates。${PLAIN}" "${YELLOW}Please back up ${install_dir}/data, subscribers, rule_templates regularly.${PLAIN}" "${YELLOW}Регулярно создавайте резервные копии ${install_dir}/data, подписчиков, rule_templates.${PLAIN}")"
     else
-        echo -e "$(localized_text "${BLUE}已安全取消部署。${PLAIN}" "${BLUE}Has been safely undeployed.${PLAIN}" "${BLUE}благополучно деразвернут.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
     fi
 
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
@@ -262,7 +262,7 @@ EOF
         print_public_https_reverse_proxy_hint
         echo -e "$(localized_text "${YELLOW}请定期备份 ${install_dir}/data。${PLAIN}" "${YELLOW}Please back up ${install_dir}/data regularly.${PLAIN}" "${YELLOW}Регулярно создавайте резервные копии ${install_dir}/data.${PLAIN}")"
     else
-        echo -e "$(localized_text "${BLUE}已安全取消部署。${PLAIN}" "${BLUE}Has been safely undeployed.${PLAIN}" "${BLUE}благополучно деразвернут.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
     fi
 
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
@@ -334,7 +334,7 @@ EOF
         echo -e "$(localized_text "账号密码：${YELLOW}无默认账号密码，首次打开页面创建管理员账号。${PLAIN}" "Account password: ${YELLOW}Has no default account password. Create an administrator account when you open the page for the first time.${PLAIN}" "Пароль учетной записи: ${YELLOW}не имеет пароля учетной записи по умолчанию. Создайте учетную запись администратора при первом открытии страницы.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}已有 compose 项目可返回部署菜单选择 [10] 迁移到 Dockge 后，在 Dockge 里扫描 stacks 目录。${PLAIN}" "${YELLOW}Already has the compose project. You can return to the deployment menu and select [10]. After migrating to Dockge, scan the stacks directory in Dockge.${PLAIN}" "${YELLOW}У уже есть проект compose. Вы можете вернуться в меню развертывания и выбрать [10]. После перехода на Dockge просканируйте каталог stacks в Dockge.${PLAIN}")"
     else
-        echo -e "$(localized_text "${BLUE}已安全取消部署。${PLAIN}" "${BLUE}Has been safely undeployed.${PLAIN}" "${BLUE}благополучно деразвернут.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
     fi
 
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
@@ -385,7 +385,7 @@ func_komari() {
             read_secret_trimmed admin_password "$(localized_text "管理员密码（至少 8 位，留空自动生成）: " "Administrator password (at least 8 characters, leave blank to automatically generate):" "Пароль администратора (не менее 8 символов, оставьте пустым для автоматической генерации):")"
             if [[ -z "$admin_password" ]]; then
                 admin_password=$(generate_random_secret | cut -c1-24)
-                echo -e "$(localized_text "${YELLOW}已自动生成管理员密码，部署完成后会显示一次，请及时保存。${PLAIN}" "${YELLOW}Has automatically generated the administrator password. It will be displayed once after the deployment is completed. Please save it in time.${PLAIN}" "${YELLOW}автоматически сгенерировал пароль администратора. Он будет отображен один раз после завершения развертывания. Пожалуйста, сохраните его вовремя.${PLAIN}")"
+                echo -e "$(localized_text "${YELLOW}已生成管理员密码；部署完成后仅显示一次，请及时保存。${PLAIN}" "${YELLOW}An administrator password was generated. It is shown once after deployment; save it immediately.${PLAIN}" "${YELLOW}Пароль администратора создан. После развёртывания он будет показан один раз; сразу сохраните его.${PLAIN}")"
                 break
             fi
             if [[ ${#admin_password} -ge 8 ]]; then
@@ -456,7 +456,7 @@ EOF
         fi
         print_public_https_reverse_proxy_hint
     else
-        echo -e "$(localized_text "${BLUE}已安全取消部署。${PLAIN}" "${BLUE}Has been safely undeployed.${PLAIN}" "${BLUE}благополучно деразвернут.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
     fi
 
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"

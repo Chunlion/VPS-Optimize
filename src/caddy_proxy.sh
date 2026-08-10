@@ -104,7 +104,7 @@ func_caddy_add_reverse_proxy() {
 
     local enable_ip_whitelist ip_whitelist_input ip_whitelist_ranges current_client_ip
     local -a ip_whitelist_array=()
-    read_trimmed enable_ip_whitelist "$(localized_text "❓ 是否只允许指定 IP/CIDR 访问该域名？(Y/n，默认 y): " "❓ Are only the specified IP/CIDR allowed to access the domain? (Y/n, default y):" "❓ Разрешен ли только указанный IP/CIDR доступ к доменному имени? (Да/нет, по умолчанию y):")"
+    read_trimmed enable_ip_whitelist "$(localized_text "❓ 是否只允许指定 IP/CIDR 访问该域名？(y/N，默认 N): " "❓ Restrict this domain to specified IP/CIDR ranges? (y/N, default N): " "❓ Ограничить доступ к домену указанными IP/CIDR? (y/N, по умолчанию N): ")"
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "$(localized_text "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}" "${YELLOW}The current source IP of SSH may be: ${current_client_ip}. Please confirm that you have joined the whitelist to avoid blocking yourself out.${PLAIN}" "${YELLOW}Текущий IP-адрес источника SSH может быть: ${current_client_ip}. Пожалуйста, подтвердите, что вы присоединились к белому списку, чтобы не заблокировать себя.${PLAIN}")"
@@ -401,7 +401,7 @@ func_nginx_add_reverse_proxy() {
     fi
 
     read_trimmed is_https "$(localized_text "后端是否是自带证书的 HTTPS 服务？(Y/n，默认 y): " "Is the backend a HTTPS service with its own certificate? (Y/n, default y):" "Является ли бэкенд службой HTTPS с собственным сертификатом? (Да/нет, по умолчанию y):")"
-    read_trimmed enable_ip_whitelist "$(localized_text "是否只允许指定 IP/CIDR 访问该 Nginx 域名？(Y/n，默认 y): " "Are only the specified IP/CIDR allowed to access the Nginx domain? (Y/n, default y):" "Разрешен ли только указанный IP/CIDR доступ к доменному имени Nginx? (Да/нет, по умолчанию y):")"
+    read_trimmed enable_ip_whitelist "$(localized_text "是否只允许指定 IP/CIDR 访问该 Nginx 域名？(y/N，默认 N): " "Restrict this Nginx domain to specified IP/CIDR ranges? (y/N, default N): " "Ограничить доступ к домену Nginx указанными IP/CIDR? (y/N, по умолчанию N): ")"
     if is_yes "$enable_ip_whitelist"; then
         current_client_ip=$(detect_ssh_client_ip)
         [[ -n "$current_client_ip" ]] && echo -e "$(localized_text "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单，避免把自己挡在外面。${PLAIN}" "${YELLOW}The current source IP of SSH may be: ${current_client_ip}. Please confirm that you have joined the whitelist to avoid blocking yourself out.${PLAIN}" "${YELLOW}Текущий IP-адрес источника SSH может быть: ${current_client_ip}. Пожалуйста, подтвердите, что вы присоединились к белому списку, чтобы не заблокировать себя.${PLAIN}")"

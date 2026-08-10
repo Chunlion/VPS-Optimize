@@ -5,6 +5,7 @@
 main() {
     load_ui_language
     ensure_runtime_root
+    acquire_vpso_session_lock
     prompt_initial_ui_language
     main_menu "$@"
 }

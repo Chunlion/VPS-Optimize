@@ -83,8 +83,8 @@ migrate_compose_project_to_dockge() {
         "$(localized_text "把 ${target_dir} 手动移回 ${source_dir}，并用原 compose 文件重新启动" "Manually move ${target_dir} back to ${source_dir} and restart with the original compose file" "Вручную переместите ${target_dir} обратно в ${source_dir} и перезапустите исходный файл compose.")" \
         "$(localized_text "确认项目没有绝对路径依赖，且已备份重要数据。" "Confirm that the project has no absolute path dependencies and that important data has been backed up." "Убедитесь, что проект не имеет абсолютных зависимостей пути и что важные данные были зарезервированы.")" || { echo -e "$(localized_text "${BLUE}已取消迁移 ${source_dir}。${PLAIN}" "${BLUE}Canceled the migration of ${source_dir}.${PLAIN}" "${BLUE}отменил миграцию ${source_dir}.${PLAIN}")"; return 0; }
 
-    read_trimmed restart_confirm "$(localized_text "是否先停止旧容器并在新目录重新启动？(Y/n): " "Should I stop the old container first and restart it in the new directory? (Y/n):" "Должен ли я сначала остановить старый контейнер и перезапустить его в новом каталоге? (Да/Нет):")"
-    if is_no "$restart_confirm"; then
+    read_trimmed restart_confirm "$(localized_text "是否停止旧容器并在新目录重新启动？(y/N，默认 N): " "Stop the old containers and restart them from the new directory? (y/N, default N): " "Остановить старые контейнеры и перезапустить их из нового каталога? (y/N, по умолчанию N): ")"
+    if ! is_yes "$restart_confirm"; then
         restart_stack="false"
     fi
 

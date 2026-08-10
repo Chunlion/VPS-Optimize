@@ -38,19 +38,35 @@ normalize_menu_choice_input() {
     esac
     lower=$(echo "$value" | tr '[:upper:]' '[:lower:]')
     case "$lower" in
-        q|quit|exit|back|return|返回|退出) printf '0' ;;
+        q) printf '0' ;;
         *) printf '%s' "$value" ;;
     esac
+}
+
+colorize_confirmation_prompt() {
+    local prompt="$1"
+    local bold="${BOLD:-}"
+    local green="${GREEN:-}"
+    local red="${RED:-}"
+    local plain="${PLAIN:-}"
+    prompt="${prompt//Y\/n/${bold}${green}Y${plain}\/${red}n${plain}}"
+    prompt="${prompt//y\/N/${red}y${plain}\/${bold}${green}N${plain}}"
+    prompt="${prompt//Да\/Нет/${bold}${green}Y${plain}\/${red}n${plain}}"
+    prompt="${prompt//Да\/нет/${bold}${green}Y${plain}\/${red}n${plain}}"
+    printf '%b' "$prompt"
 }
 
 read_trimmed() {
     local __target="$1"
     local prompt="${2:-}"
-    local __raw_input
-    read -r -p "$prompt" __raw_input
-    if [[ -z "$(trim_input "$__raw_input")" ]]; then
+    local display_prompt
+    local __raw_input=""
+    local read_rc=0
+    display_prompt=$(colorize_confirmation_prompt "$prompt")
+    read -r -p "$display_prompt" __raw_input || read_rc=$?
+    if (( read_rc == 0 )) && [[ -z "$(trim_input "$__raw_input")" ]]; then
         case "$prompt" in
-            *"(Y/n"*|*"[Y/n]"*|*"直接回车继续"*) __raw_input="y" ;;
+            *"(Y/n"*|*"[Y/n]"*|*"(Да/Нет"*|*"(Да/нет"*|*"直接回车继续"*) __raw_input="y" ;;
         esac
     fi
     case "$__target" in
@@ -78,6 +94,7 @@ read_trimmed() {
             printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
             ;;
     esac
+    return "$read_rc"
 }
 
 read_secret_trimmed() {

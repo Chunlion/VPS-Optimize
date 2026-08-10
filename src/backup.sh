@@ -36,6 +36,23 @@ make_secure_temp_dir() {
     printf '%s' "$tmp_dir"
 }
 
+backup_cleanup_temp_dir() {
+    local target="$1"
+    local temp_root resolved_target target_parent target_name
+
+    [[ -n "$target" && -d "$target" && ! -L "$target" ]] || return 0
+    temp_root=$(readlink -f -- "${TMPDIR:-/tmp}") || return 1
+    resolved_target=$(readlink -f -- "$target") || return 1
+    target_parent=$(dirname -- "$resolved_target")
+    target_name=$(basename -- "$resolved_target")
+    [[ "$target_parent" == "$temp_root" ]] || return 1
+    case "$target_name" in
+        vps_backup_*.??????|vps_restore.??????) ;;
+        *) return 1 ;;
+    esac
+    find "$resolved_target" -xdev -depth -delete
+}
+
 backup_copy_path() {
     local src="$1"
     local dest_rel="$2"
@@ -51,7 +68,62 @@ backup_copy_path() {
         echo " - $src" >> "$manifest_file"
         return 0
     fi
+    BACKUP_COPY_FAILURES+=("$src")
     return 1
+}
+
+backup_path_size_bytes() {
+    local target="$1"
+    local size_kib
+    size_kib=$(du -sk -- "$target" 2>/dev/null | awk 'NR == 1 {print $1}')
+    [[ "$size_kib" =~ ^[0-9]+$ ]] || return 1
+    printf '%s' "$((size_kib * 1024))"
+}
+
+backup_archive_unpacked_size_bytes() {
+    local archive_file="$1"
+    local size
+    size=$(LC_ALL=C tar -tvzf "$archive_file" 2>/dev/null | awk '$3 ~ /^[0-9]+$/ {total += $3} END {printf "%.0f", total + 0}')
+    [[ "$size" =~ ^[0-9]+$ ]] || return 1
+    printf '%s' "$size"
+}
+
+backup_available_bytes() {
+    local target="$1"
+    local available_kib
+    available_kib=$(df -Pk -- "$target" 2>/dev/null | awk 'NR == 2 {print $4}')
+    [[ "$available_kib" =~ ^[0-9]+$ ]] || return 1
+    printf '%s' "$((available_kib * 1024))"
+}
+
+backup_human_size() {
+    local bytes="$1"
+    awk -v bytes="$bytes" 'BEGIN {
+        split("B KiB MiB GiB TiB", units, " ")
+        unit_index = 1
+        while (bytes >= 1024 && unit_index < 5) { bytes /= 1024; unit_index++ }
+        if (unit_index == 1) printf "%d %s", bytes, units[unit_index]
+        else printf "%.1f %s", bytes, units[unit_index]
+    }'
+}
+
+backup_require_free_space() {
+    local target="$1"
+    local payload_bytes="$2"
+    local operation="$3"
+    local reserve_bytes=$((64 * 1024 * 1024))
+    local required_bytes available_bytes
+
+    required_bytes=$((payload_bytes + payload_bytes / 10 + reserve_bytes))
+    if ! available_bytes=$(backup_available_bytes "$target"); then
+        echo -e "$(localized_text "${YELLOW}⚠️ 无法读取 ${target} 的可用空间，继续前请自行确认磁盘容量。${PLAIN}" "${YELLOW}⚠️ Available space for ${target} could not be read. Verify disk capacity before continuing.${PLAIN}" "${YELLOW}⚠️ Не удалось определить свободное место для ${target}. Перед продолжением проверьте объём диска.${PLAIN}")"
+        return 0
+    fi
+    if (( available_bytes < required_bytes )); then
+        echo -e "$(localized_text "${RED}❌ ${operation}需要约 $(backup_human_size "$required_bytes")，${target} 仅剩 $(backup_human_size "$available_bytes")。操作已停止。${PLAIN}" "${RED}❌ ${operation} needs about $(backup_human_size "$required_bytes"), but ${target} has only $(backup_human_size "$available_bytes") free. Operation stopped.${PLAIN}" "${RED}❌ Для операции «${operation}» требуется около $(backup_human_size "$required_bytes"), а в ${target} свободно только $(backup_human_size "$available_bytes"). Операция остановлена.${PLAIN}")"
+        return 1
+    fi
+    echo -e "$(localized_text "${GREEN}空间预检通过：需要约 $(backup_human_size "$required_bytes")，可用 $(backup_human_size "$available_bytes")。${PLAIN}" "${GREEN}Space check passed: about $(backup_human_size "$required_bytes") required, $(backup_human_size "$available_bytes") available.${PLAIN}" "${GREEN}Проверка места пройдена: требуется около $(backup_human_size "$required_bytes"), доступно $(backup_human_size "$available_bytes").${PLAIN}")"
 }
 
 backup_copy_xui_databases() {
@@ -180,7 +252,71 @@ backup_select_archive_directory() {
 
 backup_archive_is_readable() {
     local archive_file="$1"
-    [[ -f "$archive_file" && -r "$archive_file" && "$archive_file" == *.tar.gz ]]
+    [[ -f "$archive_file" && -r "$archive_file" ]] || return 1
+    [[ "$archive_file" == *.tar.gz || "$archive_file" == *.tar.gz.enc ]]
+}
+
+backup_archive_is_encrypted() {
+    [[ "${1:-}" == *.tar.gz.enc ]]
+}
+
+backup_read_new_password() {
+    local output_name="$1"
+    local -n output_password="$output_name"
+    local first second
+
+    while true; do
+        read_secret_trimmed first "$(localized_text "备份加密密码: " "Backup encryption password: " "Пароль шифрования резервной копии: ")"
+        if [[ ${#first} -lt 10 ]]; then
+            echo -e "$(localized_text "${YELLOW}密码至少需要 10 个字符。${PLAIN}" "${YELLOW}The password must contain at least 10 characters.${PLAIN}" "${YELLOW}Пароль должен содержать не менее 10 символов.${PLAIN}")"
+            continue
+        fi
+        read_secret_trimmed second "$(localized_text "再次输入密码: " "Enter the password again: " "Введите пароль ещё раз: ")"
+        if [[ "$first" == "$second" ]]; then
+            output_password="$first"
+            first=""
+            second=""
+            return 0
+        fi
+        first=""
+        second=""
+        echo -e "$(localized_text "${YELLOW}两次密码不一致，请重新输入。${PLAIN}" "${YELLOW}The passwords do not match. Try again.${PLAIN}" "${YELLOW}Пароли не совпадают. Повторите ввод.${PLAIN}")"
+    done
+}
+
+backup_create_archive() {
+    local work_dir="$1"
+    local archive_file="$2"
+    local password="${3:-}"
+
+    if backup_archive_is_encrypted "$archive_file"; then
+        (
+            set -o pipefail
+            umask 077
+            exec 3<<<"$password"
+            tar -czf - -C "$work_dir" . | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -pass fd:3 -out "$archive_file"
+        ) >/dev/null 2>&1 || return 1
+        (
+            set -o pipefail
+            exec 3<<<"$password"
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass fd:3 -in "$archive_file" | tar -tzf - >/dev/null
+        ) 2>/dev/null
+    else
+        ( umask 077 && tar -czf "$archive_file" -C "$work_dir" . ) >/dev/null 2>&1 || return 1
+        tar -tzf "$archive_file" >/dev/null 2>&1
+    fi
+}
+
+backup_decrypt_archive() {
+    local archive_file="$1"
+    local output_file="$2"
+    local password="$3"
+
+    (
+        umask 077
+        exec 3<<<"$password"
+        openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass fd:3 -in "$archive_file" -out "$output_file"
+    ) >/dev/null 2>&1
 }
 
 backup_register_archive_root() {
@@ -230,7 +366,7 @@ backup_collect_available_archives() {
                 [[ "$existing" == "$archive" ]] && duplicate=1 && break
             done
             [[ "$duplicate" -eq 1 ]] || archive_list+=("$archive")
-        done < <(ls -1t "$root"/*.tar.gz 2>/dev/null)
+        done < <(ls -1t "$root"/*.tar.gz "$root"/*.tar.gz.enc 2>/dev/null)
     done
 }
 
@@ -242,7 +378,7 @@ backup_select_available_archive() {
 
     backup_collect_available_archives archives
     if [[ ${#archives[@]} -eq 0 ]]; then
-        echo -e "$(localized_text "${YELLOW}⚠️ 未自动读取到可用的 .tar.gz 备份包。${PLAIN}" "${YELLOW}⚠️ No usable .tar.gz backup archive was found automatically.${PLAIN}" "${YELLOW}⚠️ Автоматически не найден доступный архив резервной копии .tar.gz.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ 未自动读取到可用的 .tar.gz 或 .tar.gz.enc 备份包。${PLAIN}" "${YELLOW}⚠️ No usable .tar.gz or .tar.gz.enc backup archive was found automatically.${PLAIN}" "${YELLOW}⚠️ Не найден доступный архив .tar.gz или .tar.gz.enc.${PLAIN}")"
         return 1
     fi
 
@@ -587,8 +723,8 @@ restart_named_service_if_available() {
 reload_applied_config_kind() {
     local kind="$1"
     local target_file="$2"
-    local previous_file="${3:-}"
-    local confirm unit_name
+    local previous_file="${3:-${target_file}.bak}"
+    local unit_name
 
     case "$kind" in
         caddy)
@@ -600,27 +736,33 @@ reload_applied_config_kind() {
         systemd)
             systemctl daemon-reload >/dev/null 2>&1 || return 1
             unit_name=$(basename "$target_file")
-            read_trimmed confirm "$(localized_text "systemd 已 daemon-reload，是否现在重启/重新加载 ${unit_name}？(Y/n，默认 y): " "systemd has been daemon-reloaded. Do you want to restart/reload ${unit_name} now? (Y/n, default y):" "systemd был перезагружен демоном. Вы хотите перезапустить/перезагрузить ${unit_name} сейчас? (Да/нет, по умолчанию y):")"
-            if is_yes "$confirm"; then
+            if confirm_danger \
+                "$(localized_text "重启或重新加载 ${unit_name}" "Restart or reload ${unit_name}" "Перезапустить или перезагрузить ${unit_name}")" \
+                "$(localized_text "立即让已编辑的 systemd 单元配置生效。" "Apply the edited systemd unit configuration immediately." "Немедленно применить изменённую конфигурацию systemd.")" \
+                "$(localized_text "恢复 ${previous_file} 后执行 systemctl daemon-reload，并重新启动该单元。" "Restore ${previous_file}, run systemctl daemon-reload, and start the unit again." "Восстановите ${previous_file}, выполните systemctl daemon-reload и снова запустите службу.")"; then
                 systemctl try-reload-or-restart "$unit_name" >/dev/null 2>&1 || systemctl restart "$unit_name" >/dev/null 2>&1
             else
-                echo -e "$(localized_text "${BLUE}已保存 unit 修改，未重启 ${unit_name}。${PLAIN}" "${BLUE}Has saved the unit modification and has not restarted ${unit_name}.${PLAIN}" "${BLUE}сохранил модификацию устройства и не перезапустил ${unit_name}.${PLAIN}")"
+                echo -e "$(localized_text "${BLUE}unit 修改已保存，${unit_name} 尚未重启。${PLAIN}" "${BLUE}The unit change is saved; ${unit_name} has not been restarted.${PLAIN}" "${BLUE}Изменения unit сохранены; ${unit_name} не перезапущен.${PLAIN}")"
             fi
             ;;
         docker-json)
-            read_trimmed confirm "$(localized_text "Docker daemon.json 已校验，是否现在重启 Docker 使其生效？(Y/n，默认 y): " "Docker daemon.json has been verified. Do you want to restart Docker now to make it take effect? (Y/n, default y):" "Демон Docker.json проверен. Хотите перезапустить Docker сейчас, чтобы изменения вступили в силу? (Да/нет, по умолчанию y):")"
-            if is_yes "$confirm"; then
+            if confirm_danger \
+                "$(localized_text "重启 Docker" "Restart Docker" "Перезапустить Docker")" \
+                "$(localized_text "应用已校验的 daemon.json；运行中容器的网络可能短暂中断。" "Apply the validated daemon.json; networking for running containers may be interrupted briefly." "Применить проверенный daemon.json; сеть запущенных контейнеров может кратковременно прерваться.")" \
+                "$(localized_text "恢复 ${previous_file} 后再次重启 Docker。" "Restore ${previous_file} and restart Docker again." "Восстановите ${previous_file} и снова перезапустите Docker.")"; then
                 restart_named_service_if_available docker
             else
                 echo -e "$(localized_text "${YELLOW}⚠️ Docker 未重启，daemon.json 修改尚未生效。${PLAIN}" "${YELLOW}⚠️ Docker has not restarted, and the modification of daemon.json has not yet taken effect.${PLAIN}" "${YELLOW}⚠️ Docker не перезапустился, а модификация daemon.json еще не вступила в силу.${PLAIN}")"
             fi
             ;;
         compose)
-            read_trimmed confirm "$(localized_text "Compose 配置已校验，是否现在执行 up -d 应用修改？(Y/n，默认 y): " "Compose The configuration has been verified. Do you want to execute up -d to apply the changes now? (Y/n, default y):" "Compose Конфигурация проверена. Вы хотите выполнить команду up -d, чтобы применить изменения сейчас? (Да/нет, по умолчанию y):")"
-            if is_yes "$confirm"; then
+            if confirm_danger \
+                "$(localized_text "应用 Compose 配置" "Apply the Compose configuration" "Применить конфигурацию Compose")" \
+                "$(localized_text "执行 up -d；相关容器可能被创建、重建或重启。" "Run up -d; related containers may be created, recreated, or restarted." "Выполнить up -d; связанные контейнеры могут быть созданы, пересозданы или перезапущены.")" \
+                "$(localized_text "恢复 ${previous_file} 后再次执行 Compose up -d。" "Restore ${previous_file} and run Compose up -d again." "Восстановите ${previous_file} и снова выполните Compose up -d.")"; then
                 run_applied_config_compose "$target_file" up -d
             else
-                echo -e "$(localized_text "${YELLOW}⚠️ Compose 修改已保存，但容器尚未重建。${PLAIN}" "${YELLOW}⚠️ Compose The modifications have been saved, but the container has not been rebuilt.${PLAIN}" "${YELLOW}⚠️ Compose Модификации сохранены, но контейнер не пересобран.${PLAIN}")"
+                echo -e "$(localized_text "${YELLOW}⚠️ Compose 修改已保存，但尚未应用到容器。${PLAIN}" "${YELLOW}⚠️ The Compose change is saved but has not been applied to the containers.${PLAIN}" "${YELLOW}⚠️ Изменения Compose сохранены, но ещё не применены к контейнерам.${PLAIN}")"
             fi
             ;;
         ssh)
@@ -849,7 +991,7 @@ func_backup_center() {
         [[ -n "$loaded_archive" ]] && echo -e "$(localized_text "已加载备份包: ${YELLOW}$(basename "$loaded_archive")${PLAIN}" "Loaded backup archive: ${YELLOW}$(basename "$loaded_archive")${PLAIN}" "Загруженный архив резервной копии: ${YELLOW}$(basename "$loaded_archive")${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 创建备份${PLAIN}               ${YELLOW}(配置 / 自定义目录 / 两者)${PLAIN}" "${GREEN}1. Create backup${PLAIN} (configuration / custom directories / both)" "${GREEN}1. Создать резервную копию${PLAIN} (конфигурация / пользовательские каталоги / оба)")"
-        echo -e "$(localized_text "${GREEN}  2. 加载备份包${PLAIN}               ${YELLOW}(自动读取已有 .tar.gz)${PLAIN}" "${GREEN}2. Load backup archive${PLAIN} (automatically read existing .tar.gz files)" "${GREEN}2. Загрузить архив резервной копии${PLAIN} (автоматически найти существующие .tar.gz)")"
+        echo -e "$(localized_text "${GREEN}  2. 加载备份包${PLAIN}               ${YELLOW}(.tar.gz / 加密 .tar.gz.enc)${PLAIN}" "${GREEN}2. Load backup archive${PLAIN} (.tar.gz / encrypted .tar.gz.enc)" "${GREEN}2. Загрузить архив${PLAIN} (.tar.gz / зашифрованный .tar.gz.enc)")"
         echo -e "$(localized_text "${GREEN}  3. 从备份恢复${PLAIN}             ${YELLOW}(已加载 / 自动列表 / 指定路径)${PLAIN}" "${GREEN}3. Restore from backup${PLAIN} (loaded / automatic list / specified path)" "${GREEN}3. Восстановить из копии${PLAIN} (загруженный / автоматический список / указанный путь)")"
         echo -e "$(localized_text "${GREEN}  4. 隔离旧备份${PLAIN}             ${YELLOW}(仅保留最近 5 份，旧文件移入隔离区)${PLAIN}" "${GREEN}4. Isolate old backups (only the latest 5 copies are kept, and old files are moved to the quarantine area)${PLAIN}" "${GREEN}4. Изолировать старые резервные копии (сохраняются только последние 5 копий, а старые файлы перемещаются в зону карантина)${PLAIN}")"
         echo -e "$(localized_text "${CYAN}  5. 查看/编辑脚本已应用配置${PLAIN} ${YELLOW}(备份、校验，可选择 reload/restart)${PLAIN}" "${CYAN}5. View/edit script applied configuration (backup, verification, optional reload/restart)${PLAIN}" "${CYAN}5. Просмотр/редактирование примененной конфигурации сценария (резервное копирование, проверка, дополнительная перезагрузка/перезапуск)${PLAIN}")"
@@ -869,7 +1011,10 @@ func_backup_center() {
                 local tar_file
                 local manifest_file
                 local copied=0
+                local encrypt_choice=""
+                local backup_password=""
                 local -a custom_directories=()
+                local -a BACKUP_COPY_FAILURES=()
 
                 echo -e "$(localized_text "${BOLD}备份范围${PLAIN}" "${BOLD}Backup scope${PLAIN}" "${BOLD}Область резервного копирования${PLAIN}")"
                 echo -e "  1. $(localized_text "脚本与服务配置（默认）" "Script and service configuration (default)" "Конфигурация скрипта и служб (по умолчанию)")"
@@ -893,9 +1038,23 @@ func_backup_center() {
                         echo -e "$(localized_text "${YELLOW}未填写可备份目录，已取消。${PLAIN}" "${YELLOW}No backupable directory entered; canceled.${PLAIN}" "${YELLOW}Не указан каталог для резервного копирования; операция отменена.${PLAIN}")"
                         continue
                     fi
+                    confirm_risk_action \
+                        "$(localized_text "备份自定义系统目录" "Back up custom system directories" "Создать резервную копию пользовательских системных каталогов")" \
+                        "$(localized_text "复制所选目录到权限为 600 的压缩包；运行中的数据库或 Docker 数据可能处于不一致状态。" "Copy the selected directories into a mode-600 archive. Active databases or Docker data may be inconsistent." "Скопировать выбранные каталоги в архив с правами 600. Активные базы данных и данные Docker могут оказаться несогласованными.")" \
+                        "$(localized_text "备份不会修改源目录；若需一致快照，请先停止相关服务后重新创建备份。" "The source directories are not modified. Stop related services and recreate the backup if a consistent snapshot is required." "Исходные каталоги не изменяются. Для согласованной копии остановите связанные службы и создайте архив заново.")" || continue
                 fi
                 backup_select_archive_directory "$backup_root" || continue
-                tar_file="${BACKUP_ARCHIVE_ROOT}/backup_${ts}.tar.gz"
+                read_trimmed encrypt_choice "$(localized_text "是否使用 AES-256 加密备份？(y/N，默认 N): " "Encrypt the backup with AES-256? (y/N, default N): " "Зашифровать резервную копию с помощью AES-256? (y/N, по умолчанию N): ")"
+                if is_yes "$encrypt_choice"; then
+                    if ! command -v openssl >/dev/null 2>&1; then
+                        echo -e "$(localized_text "${RED}❌ 缺少 openssl，无法创建加密备份。${PLAIN}" "${RED}❌ openssl is required to create an encrypted backup.${PLAIN}" "${RED}❌ Для создания зашифрованной копии требуется openssl.${PLAIN}")"
+                        continue
+                    fi
+                    backup_read_new_password backup_password
+                    tar_file="${BACKUP_ARCHIVE_ROOT}/backup_${ts}.tar.gz.enc"
+                else
+                    tar_file="${BACKUP_ARCHIVE_ROOT}/backup_${ts}.tar.gz"
+                fi
 
                 work_dir=$(make_secure_temp_dir "vps_backup_${ts}") || {
                     echo -e "$(localized_text "${RED}❌ 无法创建安全临时目录，备份已取消。${PLAIN}" "${RED}❌ Unable to create secure temporary directory, backup canceled.${PLAIN}" "${RED}❌ Невозможно создать безопасный временный каталог, резервное копирование отменено.${PLAIN}")"
@@ -918,21 +1077,37 @@ func_backup_center() {
                     backup_copy_custom_directories "$manifest_file" "$work_dir" custom_directories && copied=1
                 fi
 
-                if [[ "$copied" -eq 0 ]]; then
-                    quarantine_path "$work_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                if (( ${#BACKUP_COPY_FAILURES[@]} > 0 )); then
+                    backup_cleanup_temp_dir "$work_dir" || true
+                    echo -e "$(localized_text "${RED}❌ 以下路径复制失败，未创建不完整备份：${BACKUP_COPY_FAILURES[*]}${PLAIN}" "${RED}❌ These paths could not be copied; an incomplete backup was not created: ${BACKUP_COPY_FAILURES[*]}${PLAIN}" "${RED}❌ Не удалось скопировать следующие пути; неполная резервная копия не создана: ${BACKUP_COPY_FAILURES[*]}${PLAIN}")"
+                elif [[ "$copied" -eq 0 ]]; then
+                    backup_cleanup_temp_dir "$work_dir" || true
                     echo -e "$(localized_text "${YELLOW}⚠️ 未检测到可备份配置文件，已取消创建。${PLAIN}" "${YELLOW}⚠️ The backupable configuration file was not detected and the creation has been cancelled.${PLAIN}" "${YELLOW}⚠️ Резервный файл конфигурации не обнаружен, и его создание отменено.${PLAIN}")"
                 else
-                    if ( umask 077 && tar -czf "$tar_file" -C "$work_dir" . ) >/dev/null 2>&1; then
+                    local backup_payload_bytes
+                    backup_payload_bytes=$(backup_path_size_bytes "$work_dir") || backup_payload_bytes=0
+                    if ! backup_require_free_space "$BACKUP_ARCHIVE_ROOT" "$backup_payload_bytes" "$(localized_text "创建备份" "Backup creation" "Создание резервной копии")"; then
+                        backup_cleanup_temp_dir "$work_dir" || true
+                        continue
+                    fi
+                    if backup_create_archive "$work_dir" "$tar_file" "$backup_password"; then
+                        backup_password=""
                         chmod 600 "$tar_file" 2>/dev/null || true
                         backup_register_archive_root "$BACKUP_ARCHIVE_ROOT" || true
                         loaded_archive="$tar_file"
                         echo -e "$(localized_text "${GREEN}✅ 备份创建成功: ${tar_file}${PLAIN}" "${GREEN}✅ Backup created successfully: ${tar_file}${PLAIN}" "${GREEN}. Резервная копия успешно создана: ${tar_file}.${PLAIN}")"
                         echo -e "$(localized_text "已加载备份包: $(basename "$tar_file")，可在 [3] -> [1] 恢复。" "Loaded backup archive: $(basename "$tar_file"). Restore it with [3] -> [1]." "Загружен архив: $(basename "$tar_file"). Восстановление: [3] -> [1].")"
-                        echo -e "$(localized_text "${YELLOW}⚠️ 备份包含证书私钥、面板数据库和 API Token 等敏感配置，请妥善保管。${PLAIN}" "${YELLOW}⚠️ The backup contains sensitive configurations such as certificate private key, panel database and API Token, please keep it properly.${PLAIN}" "${YELLOW}⚠️ Резервная копия содержит конфиденциальные конфигурации, такие как закрытый ключ сертификата, база данных панели и токен API, сохраняйте ее правильно.${PLAIN}")"
+                        if backup_archive_is_encrypted "$tar_file"; then
+                            echo -e "$(localized_text "${YELLOW}⚠️ 加密密码不会保存；丢失后无法恢复该备份。${PLAIN}" "${YELLOW}⚠️ The encryption password is not stored. The backup cannot be restored if the password is lost.${PLAIN}" "${YELLOW}⚠️ Пароль шифрования не сохраняется. Без него восстановить копию невозможно.${PLAIN}")"
+                        else
+                            echo -e "$(localized_text "${YELLOW}⚠️ 备份包含证书私钥、面板数据库和 API Token；文件权限已设为 600，请勿公开传输。${PLAIN}" "${YELLOW}⚠️ This archive contains certificate keys, panel databases, and API tokens. Its mode is 600; do not transfer it publicly.${PLAIN}" "${YELLOW}⚠️ Архив содержит закрытые ключи, базы данных панели и API-токены. Права установлены в 600; не передавайте его публично.${PLAIN}")"
+                        fi
                     else
+                        backup_password=""
+                        rm -f -- "$tar_file"
                         echo -e "$(localized_text "${RED}❌ 备份打包失败，请检查磁盘空间与权限。${PLAIN}" "${RED}❌ Backup packaging failed, please check the disk space and permissions.${PLAIN}" "${RED}❌ Не удалось создать резервную копию, проверьте место на диске и разрешения.${PLAIN}")"
                     fi
-                    quarantine_path "$work_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                    backup_cleanup_temp_dir "$work_dir" || true
                 fi
                 ;;
 
@@ -962,10 +1137,10 @@ func_backup_center() {
                         loaded_archive="$target_file"
                         ;;
                     3)
-                        IFS= read -r -p "$(localized_text "备份包绝对路径（例：/backups/etc_usr_home_20260809165222.tar.gz）: " "Absolute backup archive path (example: /backups/etc_usr_home_20260809165222.tar.gz): " "Абсолютный путь к архиву (пример: /backups/etc_usr_home_20260809165222.tar.gz): ")" target_file || continue
+                        IFS= read -r -p "$(localized_text "备份包绝对路径（.tar.gz 或 .tar.gz.enc）: " "Absolute backup archive path (.tar.gz or .tar.gz.enc): " "Абсолютный путь к архиву (.tar.gz или .tar.gz.enc): ")" target_file || continue
                         target_file=$(trim_input "$target_file")
                         if ! backup_archive_is_readable "$target_file"; then
-                            echo -e "$(localized_text "${RED}❌ 未找到可读取的 .tar.gz 备份包。${PLAIN}" "${RED}❌ A readable .tar.gz backup archive was not found.${PLAIN}" "${RED}❌ Не найден доступный для чтения архив резервной копии .tar.gz.${PLAIN}")"
+                            echo -e "$(localized_text "${RED}❌ 未找到可读取的 .tar.gz 或 .tar.gz.enc 备份包。${PLAIN}" "${RED}❌ A readable .tar.gz or .tar.gz.enc backup archive was not found.${PLAIN}" "${RED}❌ Не найден доступный для чтения архив .tar.gz или .tar.gz.enc.${PLAIN}")"
                             continue
                         fi
                         loaded_archive="$target_file"
@@ -977,7 +1152,7 @@ func_backup_center() {
                         ;;
                 esac
 
-                local restore_dir
+                local restore_dir restore_archive restore_password
                 local restore_failed=0
                 local restore_quarantine="/etc/vps-optimize/quarantine/manual-restore"
                 restore_dir=$(make_secure_temp_dir "vps_restore") || {
@@ -985,30 +1160,73 @@ func_backup_center() {
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
                 }
+                restore_archive="$target_file"
+                restore_password=""
+                if backup_archive_is_encrypted "$target_file"; then
+                    if ! command -v openssl >/dev/null 2>&1; then
+                        backup_cleanup_temp_dir "$restore_dir" || true
+                        echo -e "$(localized_text "${RED}❌ 缺少 openssl，无法解密该备份。${PLAIN}" "${RED}❌ openssl is required to decrypt this backup.${PLAIN}" "${RED}❌ Для расшифровки этой копии требуется openssl.${PLAIN}")"
+                        continue
+                    fi
+                    read_secret_trimmed restore_password "$(localized_text "备份解密密码: " "Backup decryption password: " "Пароль для расшифровки: ")"
+                    if [[ -z "$restore_password" ]]; then
+                        backup_cleanup_temp_dir "$restore_dir" || true
+                        echo -e "$(localized_text "${YELLOW}未输入密码，恢复已取消。${PLAIN}" "${YELLOW}No password was entered; restore canceled.${PLAIN}" "${YELLOW}Пароль не введён; восстановление отменено.${PLAIN}")"
+                        continue
+                    fi
+                    local encrypted_archive_bytes
+                    encrypted_archive_bytes=$(backup_path_size_bytes "$target_file") || encrypted_archive_bytes=0
+                    if ! backup_require_free_space "$restore_dir" "$encrypted_archive_bytes" "$(localized_text "解密备份" "Backup decryption" "Расшифровка резервной копии")"; then
+                        restore_password=""
+                        backup_cleanup_temp_dir "$restore_dir" || true
+                        continue
+                    fi
+                    restore_archive="${restore_dir}/.decrypted-backup.tar.gz"
+                    if ! backup_decrypt_archive "$target_file" "$restore_archive" "$restore_password"; then
+                        restore_password=""
+                        rm -f -- "$restore_archive"
+                        backup_cleanup_temp_dir "$restore_dir" || true
+                        echo -e "$(localized_text "${RED}❌ 解密失败：密码错误或文件已损坏。${PLAIN}" "${RED}❌ Decryption failed: the password is incorrect or the file is damaged.${PLAIN}" "${RED}❌ Ошибка расшифровки: неверный пароль или повреждённый файл.${PLAIN}")"
+                        continue
+                    fi
+                    restore_password=""
+                fi
 
-                if ! tar -tzf "$target_file" >/dev/null 2>&1; then
-                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                if ! tar -tzf "$restore_archive" >/dev/null 2>&1; then
+                    [[ "$restore_archive" == "$target_file" ]] || rm -f -- "$restore_archive"
+                    backup_cleanup_temp_dir "$restore_dir" || true
                     echo -e "$(localized_text "${RED}❌ 备份文件无法读取，回滚中止。${PLAIN}" "${RED}❌ The backup file cannot be read and the rollback is aborted.${PLAIN}" "${RED}❌ Файл резервной копии не может быть прочитан, и откат прерывается.${PLAIN}")"
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
                 fi
-                if tar -tzf "$target_file" 2>/dev/null | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
-                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                if tar -tzf "$restore_archive" 2>/dev/null | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+                    [[ "$restore_archive" == "$target_file" ]] || rm -f -- "$restore_archive"
+                    backup_cleanup_temp_dir "$restore_dir" || true
                     echo -e "$(localized_text "${RED}❌ 备份文件包含不安全路径，回滚中止。${PLAIN}" "${RED}❌ The backup file contains an unsafe path and the rollback is aborted.${PLAIN}" "${RED}❌ Файл резервной копии содержит небезопасный путь, и откат прерывается.${PLAIN}")"
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
                 fi
 
-                if ! tar -xzf "$target_file" -C "$restore_dir" >/dev/null 2>&1; then
-                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                local unpacked_bytes
+                unpacked_bytes=$(backup_archive_unpacked_size_bytes "$restore_archive") || unpacked_bytes=0
+                if ! backup_require_free_space "$restore_dir" "$unpacked_bytes" "$(localized_text "解压备份" "Backup extraction" "Распаковка резервной копии")"; then
+                    [[ "$restore_archive" == "$target_file" ]] || rm -f -- "$restore_archive"
+                    backup_cleanup_temp_dir "$restore_dir" || true
+                    continue
+                fi
+
+                if ! tar -xzf "$restore_archive" -C "$restore_dir" >/dev/null 2>&1; then
+                    [[ "$restore_archive" == "$target_file" ]] || rm -f -- "$restore_archive"
+                    backup_cleanup_temp_dir "$restore_dir" || true
                     echo -e "$(localized_text "${RED}❌ 备份解压失败，回滚中止。${PLAIN}" "${RED}❌ Backup decompression failed and rollback aborted.${PLAIN}" "${RED}❌ Не удалось распаковать резервную копию, и откат прерван.${PLAIN}")"
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
                 fi
+                [[ "$restore_archive" == "$target_file" ]] || rm -f -- "$restore_archive"
 
                 backup_restore_preflight "$restore_dir"
                 confirm_danger "$(localized_text "确认从备份恢复" "Confirm backup restore" "Подтвердите восстановление из резервной копии")" "$(localized_text "会覆盖 SSH、Caddy、Docker、Fail2ban、sysctl 及备份中的自定义系统目录。" "It will overwrite SSH, Caddy, Docker, Fail2ban, sysctl, and custom system directories in the backup." "Будут перезаписаны SSH, Caddy, Docker, Fail2ban, sysctl и пользовательские системные каталоги из резервной копии.")" "$(localized_text "恢复后脚本会尝试重启已安装服务；请保持当前 SSH 会话并准备好云厂商救援控制台。" "After restoring, the script will try to restart installed services. Keep the current SSH session and prepare the cloud rescue console." "После восстановления скрипт попытается перезапустить установленные службы. Сохраните текущий сеанс SSH и подготовьте облачную консоль восстановления.")" || {
-                    quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                    backup_cleanup_temp_dir "$restore_dir" || true
                     echo -e "$(localized_text "${BLUE}已取消恢复操作。${PLAIN}" "${BLUE}Restore operation canceled.${PLAIN}" "${BLUE}Операция восстановления отменена.${PLAIN}")"
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
@@ -1016,7 +1234,7 @@ func_backup_center() {
 
                 if [[ -f "$restore_dir/etc/vps-optimize/traffic-guard.conf" || -f "$restore_dir/usr/local/bin/vps-traffic-guard-check" ]]; then
                     if declare -F traffic_guard_restore_ssh_only_firewall >/dev/null 2>&1 && ! traffic_guard_restore_ssh_only_firewall; then
-                        quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                        backup_cleanup_temp_dir "$restore_dir" || true
                         echo -e "$(localized_text "${RED}❌ 无法解除当前仅保留 SSH 封锁规则，回滚中止。${PLAIN}" "${RED}❌ Unable to unblock the current blocking rule of SSH, the rollback is aborted.${PLAIN}" "${RED}❌ Невозможно разблокировать текущее правило блокировки SSH, откат прерывается.${PLAIN}")"
                         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                         continue
@@ -1093,7 +1311,7 @@ func_backup_center() {
                     [[ "$restart_rc" -eq 1 ]] && restart_failed=1
                 done
 
-                quarantine_path "$restore_dir" "/etc/vps-optimize/quarantine/manual-temp" >/dev/null 2>&1 || true
+                backup_cleanup_temp_dir "$restore_dir" || true
                 if [[ "$restore_failed" -eq 0 && "$restart_failed" -eq 0 ]]; then
                     echo -e "$(localized_text "${GREEN}✅ 回滚完成！建议立即验证 SSH、反代和容器服务状态。${PLAIN}" "${GREEN}✅ Rollback completed! It is recommended to verify SSH, reverse proxy and container service status immediately.${PLAIN}" "${GREEN}✅ Откат завершен! Рекомендуется немедленно проверить статус SSH, обратный прокси и контейнерной службы.${PLAIN}")"
                 elif [[ "$restore_failed" -ne 0 ]]; then
@@ -1104,9 +1322,9 @@ func_backup_center() {
                 ;;
 
             4)
-                mapfile -t backups < <(ls -1t "$backup_root"/backup_*.tar.gz 2>/dev/null)
+                mapfile -t backups < <(ls -1t "$backup_root"/backup_*.tar.gz "$backup_root"/backup_*.tar.gz.enc 2>/dev/null)
                 if [[ ${#backups[@]} -le 5 ]]; then
-                    echo -e "$(localized_text "${BLUE}当前备份数量不超过 5 份，无需清理。${PLAIN}" "${BLUE}The current number of backups does not exceed 5 and no cleaning is required.${PLAIN}" "${BLUE}Текущее количество резервных копий не превышает 5 и очистка не требуется.${PLAIN}")"
+                    echo -e "$(localized_text "${BLUE}当前备份不超过 5 份，无需清理。${PLAIN}" "${BLUE}There are no more than five backups; no cleanup is needed.${PLAIN}" "${BLUE}Резервных копий не больше пяти; очистка не требуется.${PLAIN}")"
                 else
                     confirm_danger "$(localized_text "隔离旧备份" "Quarantine old backups" "Поместить старые резервные копии в карантин")" "$(localized_text "会把第 6 份及更早的备份移入隔离目录，不会直接删除。" "The 6th and earlier backups will be moved to the quarantine directory and will not be deleted directly." "Шестая и более ранние резервные копии будут перемещены в каталог карантина и не будут удалены напрямую.")" "$(localized_text "如需恢复，可到 /etc/vps-optimize/quarantine/manual-backups 手动查看。保留最近 5 份不动。" "If you need to restore, you can go to /etc/vps-optimize/quarantine/manual-backups to check manually. Leave the last 5 copies unchanged." "Если вам нужно восстановить, вы можете перейти к /etc/vps-optimize/quarantine/manual-backups и проверить вручную. Последние 5 копий оставьте без изменений.")" || {
                         echo -e "$(localized_text "${BLUE}已取消旧备份隔离。${PLAIN}" "${BLUE}The old backup has been dequarantined.${PLAIN}" "${BLUE}Старая резервная копия выведена из карантина.${PLAIN}")"
@@ -1126,7 +1344,7 @@ func_backup_center() {
                 func_edit_applied_config_center
                 ;;
 
-            "?"|help) show_backup_help ;;
+            "?") show_backup_help ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")" ;;
         esac

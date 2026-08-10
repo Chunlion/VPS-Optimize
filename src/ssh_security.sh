@@ -752,7 +752,7 @@ func_add_ssh_key() {
     user=$(ssh_choose_user) || { read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"; return; }
     if ssh_add_public_key_for_user "$user"; then
         echo -e "$(localized_text "${GREEN}✅ 公钥添加完成。请立刻新开一个 SSH 窗口测试私钥登录。${PLAIN}" "${GREEN}✅ The public key has been added. Please open a new SSH window immediately to test private key login.${PLAIN}" "${GREEN}✅ Открытый ключ добавлен. Немедленно откройте новое окно SSH, чтобы проверить вход в систему с закрытым ключом.${PLAIN}")"
-        read_trimmed enable_mode "$(localized_text "是否同时写入“密钥 + 密码登录（保留/恢复密码）”模式？(Y/n): " "Also write \"Key + Password Login (Keep/Recover Password)\" mode? (Y/n):" "Также пишется режим «Ключ + Пароль (Сохранить/Восстановить пароль)»? (Да/Нет):")"
+        read_trimmed enable_mode "$(localized_text "是否同时启用“密钥 + 密码登录（保留/恢复密码）”模式？(y/N，默认 N): " "Also enable key + password login? (y/N, default N): " "Также включить вход по ключу и паролю? (y/N, по умолчанию N): ")"
         if is_yes "$enable_mode"; then
             ssh_apply_auth_mode key_preferred || true
         fi

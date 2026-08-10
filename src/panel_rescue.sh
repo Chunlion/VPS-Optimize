@@ -6,14 +6,15 @@ func_rescue_panel() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}🚑 面板 SSL 修复${PLAIN}" "${BOLD}🚑 Panel SSL Repair${PLAIN}" "${BOLD}🚑 Панель SSL Ремонт${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}用途：清空 3x-ui 面板证书路径，让 Caddy 可以按 HTTP 反代本机面板。${PLAIN}" "${YELLOW}Purpose of : Clear the 3x-ui panel certificate path so that Caddy can reverse the local panel by HTTP.${PLAIN}" "${YELLOW}Назначение : Очистите путь сертификата панели 3x-ui, чтобы Caddy мог отменить локальную панель с помощью HTTP.${PLAIN}")"
-    echo -e "$(localized_text "更推荐在 3x-ui 面板里手动进入：面板设置 -> 常规 -> 证书，把证书路径和私钥路径清空后保存重启。" "It is more recommended to enter manually in the 3x-ui panel: Panel Settings -> General -> Certificate, clear the certificate path and private key path, save and restart." "Рекомендуется ввести вручную в панели 3x-ui: Настройки панели -> Общие -> Сертификат, очистить путь к сертификату и путь к закрытому ключу, сохранить и перезапустить.")"
-    echo -e "$(localized_text "本功能只作为打不开面板时的救急方案，会尝试清空常见证书字段：webCertFile/webKeyFile/CertFile/KeyFile 等。" "This function is only used as a rescue solution when the panel cannot be opened. It will try to clear common certificate fields: webCertFile/webKeyFile/CertFile/KeyFile, etc." "Эта функция используется только в качестве спасательного решения, когда панель невозможно открыть. Он попытается очистить общие поля сертификата: webCertFile/webKeyFile/CertFile/KeyFile и т. д.")"
+    echo -e "$(localized_text "${YELLOW}用途：清空 3x-ui 面板证书路径，使 Caddy 可通过 HTTP 反代本机面板。${PLAIN}" "${YELLOW}Purpose: clear the 3x-ui panel certificate paths so Caddy can proxy the local panel over HTTP.${PLAIN}" "${YELLOW}Назначение: очистить пути сертификатов панели 3x-ui, чтобы Caddy мог проксировать локальную панель по HTTP.${PLAIN}")"
+    echo -e "$(localized_text "优先在 3x-ui 中手动打开“面板设置 -> 常规 -> 证书”，清空证书和私钥路径，保存后重启面板。" "Preferred method: in 3x-ui, open Panel Settings -> General -> Certificate, clear the certificate and private-key paths, save, and restart the panel." "Предпочтительный способ: в 3x-ui откройте «Настройки панели -> Общие -> Сертификат», очистите пути сертификата и закрытого ключа, сохраните изменения и перезапустите панель.")"
+    echo -e "$(localized_text "本功能仅用于面板无法打开时，会尝试清空 webCertFile、webKeyFile、CertFile、KeyFile 等常见字段。" "Use this only when the panel cannot be opened. It attempts to clear common fields such as webCertFile, webKeyFile, CertFile, and KeyFile." "Используйте эту функцию только тогда, когда панель не открывается. Она очищает распространённые поля: webCertFile, webKeyFile, CertFile и KeyFile.")"
     echo -e "------------------------------------------------"
     
-    local yn
-    read_trimmed yn "$(localized_text "❓ 确定要清空面板证书路径并尝试退回 HTTP 吗？(Y/n): " "❓ Are you sure you want to clear the panel certificate path and try to fall back to HTTP? (Y/n):" "❓ Вы уверены, что хотите очистить путь сертификата панели и попытаться вернуться к HTTP? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger \
+        "$(localized_text "清空 3x-ui 面板证书路径" "Clear the 3x-ui panel certificate paths" "Очистить пути сертификатов панели 3x-ui")" \
+        "$(localized_text "清空 3x-ui 中常见的面板和订阅证书字段，并尝试改回 HTTP。" "Clear common panel and subscription certificate fields in 3x-ui and try to switch back to HTTP." "Очистить распространённые поля сертификатов панели и подписки в 3x-ui и попробовать вернуться к HTTP.")" \
+        "$(localized_text "从 3x-ui 官方菜单重新填写原证书路径，或恢复操作前备份。" "Restore the original certificate paths from the official 3x-ui menu or from a pre-operation backup." "Верните исходные пути сертификатов через официальное меню 3x-ui или восстановите резервную копию.")"; then
         local xui_bin
         xui_bin=$(detect_xui_command 2>/dev/null || true)
         if [[ -n "$xui_bin" ]]; then
@@ -21,7 +22,11 @@ func_rescue_panel() {
             "$xui_bin" setting -getCert true 2>/dev/null || true
             echo -e "------------------------------------------------"
         fi
-        clear_xui_cert_settings_for_single_443 || true
+        if ! clear_xui_cert_settings_for_single_443; then
+            echo -e "$(localized_text "${RED}❌ 未能清空证书路径，请改用 3x-ui 官方菜单手动处理。${PLAIN}" "${RED}❌ Certificate paths could not be cleared. Use the official 3x-ui menu instead.${PLAIN}" "${RED}❌ Не удалось очистить пути сертификатов. Используйте официальное меню 3x-ui.${PLAIN}")"
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
+            return 1
+        fi
         echo -e "------------------------------------------------"
         if [[ -n "$xui_bin" ]]; then
             echo -e "$(localized_text "${CYAN}清理后的 3x-ui 证书状态：${PLAIN}" "${CYAN}Cleaned 3x-ui Certificate status:${PLAIN}" "${CYAN}Очищен 3x-ui Статус сертификата:${PLAIN}")"

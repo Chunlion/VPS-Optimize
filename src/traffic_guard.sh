@@ -1585,25 +1585,37 @@ configure_traffic_guard() {
     echo -e "$(localized_text "触发动作：" "Trigger action:" "Триггерное действие:")"
     echo -e "$(localized_text "  1. 立即关机 ${YELLOW}(防止继续产生流量费用)${PLAIN}" "1. Shut down immediately ${YELLOW}(to prevent continued traffic charges)${PLAIN}" "1. Немедленно выключите ${YELLOW}(во избежание продолжения оплаты трафика)${PLAIN}")"
     echo -e "$(localized_text "  2. 仅保留 SSH 端口 ${YELLOW}(封锁其他公网业务流量，到重置日自动恢复)${PLAIN}" "2. Only reserve SSH port ${YELLOW}(block other public business traffic and automatically restore on the reset date)${PLAIN}" "2. Зарезервируйте только порт SSH ${YELLOW}(блокируйте другой бизнес-трафик публичной сети и автоматически восстанавливайте его в дату сброса)${PLAIN}")"
-    echo -e "$(localized_text "  3. 只写日志 ${YELLOW}(测试配置，不关机)${PLAIN}" "3. Only write log ${YELLOW}(test configuration, do not shut down)${PLAIN}" "3. Записывать только журнал ${YELLOW}(тестовая конфигурация, не выключать)${PLAIN}")"
-    read_trimmed action_choice "$(localized_text "请选择触发动作 (默认 1): " "Please select a trigger action (default 1):" "Пожалуйста, выберите действие триггера (по умолчанию 1):")"
-    case "${action_choice:-1}" in
-        2)
-            traffic_guard_ssh_only_firewall_supported || {
-                echo -e "$(localized_text "${RED}❌ 缺少 iptables，或启用 IPv6 时缺少 ip6tables，无法安全启用仅保留 SSH 模式。${PLAIN}" "${RED}❌ Missing iptables, or missing ip6tables when enabling IPv6, cannot safely enable SSH-only mode.${PLAIN}" "${RED}❌ Отсутствие iptables или отсутствие ip6tables при включении IPv6 не позволяет безопасно включить режим только SSH.${PLAIN}")"
-                pause_return
-                return 1
-            }
-            ssh_port=$(traffic_guard_detect_ssh_port) || {
-                echo -e "$(localized_text "${RED}❌ 未检测到唯一可用的 SSH 监听端口，无法安全启用仅保留 SSH 模式。${PLAIN}" "${RED}❌ The only available listening port for SSH is not detected, and SSH-only mode cannot be safely enabled.${PLAIN}" "${RED}❌ Единственный доступный порт прослушивания для SSH не обнаружен, и режим только SSH не может быть безопасно включен.${PLAIN}")"
-                pause_return
-                return 1
-            }
-            action="ssh-only"
-            ;;
-        3) action="log" ;;
-        *) action="poweroff" ;;
-    esac
+    echo -e "$(localized_text "  3. 只写日志 ${YELLOW}(安全默认值；不关机、不封锁端口)${PLAIN}" "3. Log only ${YELLOW}(safe default; no shutdown or port blocking)${PLAIN}" "3. Только журнал ${YELLOW}(безопасный вариант по умолчанию; без выключения и блокировки портов)${PLAIN}")"
+    while true; do
+        read_trimmed action_choice "$(localized_text "请选择触发动作 (默认 3): " "Select a trigger action (default 3): " "Выберите действие (по умолчанию 3): ")"
+        case "${action_choice:-3}" in
+            1)
+                action="poweroff"
+                break
+                ;;
+            2)
+                traffic_guard_ssh_only_firewall_supported || {
+                    echo -e "$(localized_text "${RED}❌ 缺少 iptables，或启用 IPv6 时缺少 ip6tables，无法安全启用仅保留 SSH 模式。${PLAIN}" "${RED}❌ SSH-only mode requires iptables and, when IPv6 is enabled, ip6tables.${PLAIN}" "${RED}❌ Для режима «только SSH» требуется iptables, а при включённом IPv6 — также ip6tables.${PLAIN}")"
+                    pause_return
+                    return 1
+                }
+                ssh_port=$(traffic_guard_detect_ssh_port) || {
+                    echo -e "$(localized_text "${RED}❌ 未检测到唯一可用的 SSH 监听端口，无法安全启用仅保留 SSH 模式。${PLAIN}" "${RED}❌ A single usable SSH listening port was not detected; SSH-only mode cannot be enabled safely.${PLAIN}" "${RED}❌ Не удалось определить единственный доступный порт SSH; безопасно включить режим «только SSH» невозможно.${PLAIN}")"
+                    pause_return
+                    return 1
+                }
+                action="ssh-only"
+                break
+                ;;
+            3)
+                action="log"
+                break
+                ;;
+            *)
+                echo -e "$(localized_text "${YELLOW}请输入 1、2 或 3；直接回车使用安全默认值 3。${PLAIN}" "${YELLOW}Enter 1, 2, or 3. Press Enter for the safe default, 3.${PLAIN}" "${YELLOW}Введите 1, 2 или 3. Нажмите Enter для безопасного варианта 3.${PLAIN}")"
+                ;;
+        esac
+    done
 
     echo -e "------------------------------------------------"
     echo -e "$(localized_text "网卡：${CYAN}${iface}${PLAIN}" "Network card: ${CYAN}${iface}${PLAIN}" "Сетевая карта: ${CYAN}${iface}${PLAIN}")"
@@ -1651,9 +1663,14 @@ configure_traffic_guard() {
         return 1
     }
 
-    /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || true
-    reset_traffic_guard_failed_state
-    echo -e "$(localized_text "${GREEN}✅ 流量达量保护已启用。${PLAIN}" "${GREEN}✅ Traffic volume protection is enabled.${PLAIN}" "${GREEN}✅ Включена защита объема трафика.${PLAIN}")"
+    local checker_rc=0
+    /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || checker_rc=$?
+    if (( checker_rc == 0 )); then
+        reset_traffic_guard_failed_state
+        echo -e "$(localized_text "${GREEN}✅ 流量达量保护已启用，首次检查通过。${PLAIN}" "${GREEN}✅ Traffic Guard is enabled and the first check passed.${PLAIN}" "${GREEN}✅ Traffic Guard включён; первая проверка выполнена успешно.${PLAIN}")"
+    else
+        echo -e "$(localized_text "${YELLOW}⚠️ 流量达量保护已启用，但首次检查失败（rc=${checker_rc}）。请先查看日志和菜单 [2] 状态。${PLAIN}" "${YELLOW}⚠️ Traffic Guard is enabled, but the first check failed (rc=${checker_rc}). Review the log and menu [2] status.${PLAIN}" "${YELLOW}⚠️ Traffic Guard включён, но первая проверка завершилась ошибкой (rc=${checker_rc}). Проверьте журнал и состояние в пункте [2].${PLAIN}")"
+    fi
     echo -e "$(localized_text "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}The status can be viewed in this menu [2]; log: ${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}Статус можно просмотреть в этом меню [2]; журнал: ${TRAFFIC_GUARD_LOG}${PLAIN}")"
     pause_return
 }

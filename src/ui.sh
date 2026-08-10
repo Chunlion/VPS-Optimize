@@ -17,42 +17,141 @@ pause_return() {
     echo ""
 }
 
+print_action_summary() {
+    local level="$1"
+    local title="$2"
+    local impact="$3"
+    local rollback="$4"
+    local advice="${5:-}"
+    local snapshot_advice="${6:-}"
+
+    if [[ -z "$snapshot_advice" ]]; then
+        if [[ "$level" == "danger" ]]; then
+            snapshot_advice="$(localized_text \
+                "建议先创建 VPS 快照，或确认云厂商快照/救援控制台可用。" \
+                "Create a VPS snapshot first, or confirm that snapshot or rescue-console access is available." \
+                "Сначала создайте снимок VPS или убедитесь, что доступны снимок либо аварийная консоль.")"
+        else
+            snapshot_advice="$(localized_text \
+                "确认上方参数无误。" \
+                "Verify the values above." \
+                "Проверьте указанные выше значения.")"
+        fi
+    fi
+
+    if [[ "$level" == "danger" ]]; then
+        echo -e "$(localized_text "${RED}⚠️ 高风险操作：${title}${PLAIN}" "${RED}⚠️ High-risk operation: ${title}${PLAIN}" "${RED}⚠️ Операция высокого риска: ${title}${PLAIN}")"
+    else
+        echo -e "$(localized_text "${YELLOW}⚠️ 操作确认：${title}${PLAIN}" "${YELLOW}⚠️ Confirm operation: ${title}${PLAIN}" "${YELLOW}⚠️ Подтвердите операцию: ${title}${PLAIN}")"
+    fi
+    echo -e "$(localized_text "${YELLOW}将修改：${PLAIN}${impact}" "${YELLOW}Changes:${PLAIN} ${impact}" "${YELLOW}Изменения:${PLAIN} ${impact}")"
+    echo -e "$(localized_text "${BLUE}恢复方式：${PLAIN}${rollback}" "${BLUE}Recovery:${PLAIN} ${rollback}" "${BLUE}Восстановление:${PLAIN} ${rollback}")"
+    echo -e "$(localized_text "${CYAN}操作前：${PLAIN}${snapshot_advice}" "${CYAN}Before continuing:${PLAIN} ${snapshot_advice}" "${CYAN}Перед продолжением:${PLAIN} ${snapshot_advice}")"
+    [[ -n "$advice" ]] && echo -e "$(localized_text "${CYAN}注意：${PLAIN}${advice}" "${CYAN}Note:${PLAIN} ${advice}" "${CYAN}Важно:${PLAIN} ${advice}")"
+}
+
+confirm_default_yes() {
+    local confirm
+    while true; do
+        read_trimmed confirm "$(localized_text "确认执行？(Y/n，默认 Y): " "Proceed? (Y/n, default Y): " "Продолжить? (Y/n, по умолчанию Y): ")" || return 1
+        case "$(trim_input "$confirm" | tr '[:upper:]' '[:lower:]')" in
+            y|yes) return 0 ;;
+            n|no) return 1 ;;
+            *)
+                echo -e "$(localized_text "${YELLOW}请输入 Y 或 n。${PLAIN}" "${YELLOW}Enter Y or n.${PLAIN}" "${YELLOW}Введите Y или n.${PLAIN}")"
+                ;;
+        esac
+    done
+}
+
+confirm_default_no() {
+    local prompt="${1:-$(localized_text "确认继续？(y/N): " "Continue? (y/N): " "Продолжить? (y/N): ")}"
+    local confirm
+    while true; do
+        read_trimmed confirm "$prompt" || return 1
+        case "$(trim_input "$confirm" | tr '[:upper:]' '[:lower:]')" in
+            y|yes) return 0 ;;
+            n|no) return 1 ;;
+            "")
+                echo -e "$(localized_text "${GREEN}尚未执行；已填写参数仍保留。输入 y 继续，输入 n 取消。${PLAIN}" "${GREEN}Not executed; entered values are preserved. Enter y to continue or n to cancel.${PLAIN}" "${GREEN}Операция не запущена; введённые значения сохранены. Введите y для продолжения или n для отмены.${PLAIN}")"
+                ;;
+            *)
+                echo -e "$(localized_text "${YELLOW}请输入 y 或 N。${PLAIN}" "${YELLOW}Enter y or N.${PLAIN}" "${YELLOW}Введите y или N.${PLAIN}")"
+                ;;
+        esac
+    done
+}
+
 confirm_danger() {
     local title="$1"
     local impact="$2"
     local rollback="$3"
     local advice="${4:-}"
-    local snapshot_advice="$(localized_text "${5:-建议先创建 VPS 快照，或确认云厂商快照/救援控制台可用。}" "${5:-建议先创建 VPS 快照，或确认云厂商快照/救援控制台可用。}" "${5:-建议先创建 VPS 快照，或确认云厂商快照/救援控制台可用。}")"
-    local confirm
-    echo -e "$(localized_text "${RED}⚠️ 高风险操作：${title}${PLAIN}" "${RED}⚠️ High-risk operation: ${title}${PLAIN}" "${RED}⚠️ Операция высокого риска: ${title}${PLAIN}")"
-    echo ""
-    echo -e "$(localized_text "${YELLOW}操作名称：${PLAIN}${title}" "${YELLOW}Operation name:${PLAIN}${title}" "${YELLOW}Имя операции:${PLAIN}${title}")"
-    echo -e "$(localized_text "${YELLOW}将修改的内容：${PLAIN}" "${YELLOW}Will modify the content:${PLAIN}" "${YELLOW}изменит содержимое:${PLAIN}")"
-    echo -e "- ${impact}"
-    echo ""
-    echo -e "$(localized_text "${YELLOW}可能风险：${PLAIN}" "${YELLOW}Possible risks:${PLAIN}" "${YELLOW}Возможные риски:${PLAIN}")"
-    echo "$(localized_text "- 操作失败可能导致 SSH、面板、反代、证书、容器或网络服务短暂不可用。" "- Operation failure may cause SSH, panel, reverse proxy, certificate, container or network service to be temporarily unavailable." "- Сбой в работе может привести к временной недоступности SSH, панели, обратный прокси, сертификата, контейнера или сетевой службы.")"
-    echo "$(localized_text "- 如果云厂商安全组、防火墙、监听地址或证书配置不匹配，可能导致远程访问中断。" "- If the cloud vendor's security group, firewall, listening address, or certificate configurations do not match, remote access may be interrupted." "- Если конфигурация группы безопасности, брандмауэра, адреса прослушивания или сертификата поставщика облака не совпадает, удаленный доступ может быть прерван.")"
-    echo ""
-    echo -e "$(localized_text "${BLUE}出错恢复方式：${PLAIN}" "${BLUE}Error recovery method:${PLAIN}" "${BLUE}Метод восстановления ошибки :${PLAIN}")"
-    echo -e "- ${rollback}"
-    echo "$(localized_text "- 使用当前未断开的 SSH 会话恢复配置。" "- Restore the configuration using a currently undisconnected SSH session." "- Восстановите конфигурацию, используя в данный момент неотключенный сеанс SSH.")"
-    echo "$(localized_text "- 使用云厂商控制台、VNC 或救援模式恢复。" "- Restore using cloud vendor console, VNC or rescue mode." "- Восстановление с помощью консоли облачного поставщика, VNC или режима восстановления.")"
-    echo "$(localized_text "- 使用备份与回滚入口恢复已纳入备份的配置。" "- Use the backup and rollback menu to restore configurations that have been included in the backup." "- Используйте точка входа резервного копирования и отката для восстановления конфигураций, включенных в резервную копию.")"
-    echo ""
-    echo -e "$(localized_text "${CYAN}是否建议先做快照：${PLAIN}${snapshot_advice}" "${CYAN}Is it recommended to take a snapshot first:${PLAIN}${snapshot_advice}" "${CYAN}Рекомендуется ли сначала сделать снимок:${PLAIN}${snapshot_advice}")"
-    echo -e "$(localized_text "${CYAN}建议：${PLAIN}" "${CYAN}Recommendation:${PLAIN}" "${CYAN}Рекомендация:${PLAIN}")"
-    echo "$(localized_text "- 已创建 VPS 快照。" "- VPS snapshot created." "- Создан снимок VPS.")"
-    echo "$(localized_text "- 已确认云厂商安全组和系统防火墙规则。" "- The cloud vendor security group and system firewall rules have been confirmed." "— Группа безопасности поставщика облака и правила системного брандмауэра подтверждены.")"
-    echo "$(localized_text "- 当前 SSH 会话不要断开。" "- Do not disconnect the current SSH session." "- Не отключайте текущий сеанс SSH.")"
-    [[ -n "$advice" ]] && echo -e "- ${advice}"
-    echo ""
-    read_trimmed confirm "$(localized_text "直接回车继续，输入 n 取消（大小写均可）: " "Just press Enter to continue, enter n to cancel (both uppercase and lowercase are acceptable):" "Просто нажмите Enter, чтобы продолжить, введите n для отмены (допускаются как прописные, так и строчные буквы):")"
-    is_yes "$confirm"
+    local snapshot_advice="${5:-}"
+    local confirm confirm_word
+
+    print_action_summary "danger" "$title" "$impact" "$rollback" "$advice" "$snapshot_advice"
+    echo -e "$(localized_text \
+        "${BOLD}${GREEN}默认 N：${PLAIN}直接回车仅停留在本页，已填写参数不会丢失。" \
+        "${BOLD}${GREEN}Default N:${PLAIN} Enter keeps this page open and preserves the values you entered." \
+        "${BOLD}${GREEN}По умолчанию N:${PLAIN} Enter оставляет эту страницу открытой и сохраняет введённые значения.")"
+
+    while true; do
+        read_trimmed confirm "$(localized_text "继续执行？(y/N): " "Continue? (y/N): " "Продолжить? (y/N): ")" || return 1
+        case "$(trim_input "$confirm" | tr '[:upper:]' '[:lower:]')" in
+            "")
+                echo -e "$(localized_text "${GREEN}尚未执行；参数已保留。输入 y 继续，输入 n 取消。${PLAIN}" "${GREEN}Not executed; values are preserved. Enter y to continue or n to cancel.${PLAIN}" "${GREEN}Операция не запущена; значения сохранены. Введите y для продолжения или n для отмены.${PLAIN}")"
+                ;;
+            n|no) return 1 ;;
+            y|yes)
+                while true; do
+                    read_trimmed confirm_word "$(localized_text "再次确认：输入 YES 执行，直接回车返回上一步: " "Final confirmation: enter YES to proceed, or press Enter to go back: " "Повторное подтверждение: введите YES для запуска или нажмите Enter, чтобы вернуться: ")" || return 1
+                    case "$(trim_input "$confirm_word" | tr '[:lower:]' '[:upper:]')" in
+                        YES) return 0 ;;
+                        "")
+                            echo -e "$(localized_text "${GREEN}已返回上一步；参数仍保留。${PLAIN}" "${GREEN}Back to the previous confirmation; values are still preserved.${PLAIN}" "${GREEN}Возврат к предыдущему подтверждению; значения сохранены.${PLAIN}")"
+                            break
+                            ;;
+                        *)
+                            echo -e "$(localized_text "${YELLOW}确认词不匹配，操作尚未执行。请输入 YES，或直接回车返回上一步。${PLAIN}" "${YELLOW}Confirmation did not match; nothing was executed. Enter YES, or press Enter to go back.${PLAIN}" "${YELLOW}Подтверждение не совпало; операция не запущена. Введите YES или нажмите Enter, чтобы вернуться.${PLAIN}")"
+                            ;;
+                    esac
+                done
+                ;;
+            *)
+                echo -e "$(localized_text "${YELLOW}请输入 y 或 N。${PLAIN}" "${YELLOW}Enter y or N.${PLAIN}" "${YELLOW}Введите y или N.${PLAIN}")"
+                ;;
+        esac
+    done
+
+}
+
+action_needs_safe_default() {
+    local title
+    local impact
+    title=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')
+    impact=$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')
+
+    case "$title" in
+        *删除*|*清理*|*清空*|*隔离*|*卸载*|*重装*|*重启*|*关机*|*停机*|*恢复*|*回滚*|*停止*|*停用*|*关闭*|*覆盖*|*白名单*|*防火墙*|*监听公网*|*重置*|*切换*|*迁移*|*应用*|*重签*|*公网\ 443*|*delete*|*remove*|*prune*|*clean*|*clear*|*quarantine*|*isolate*|*uninstall*|*reinstall*|*restart*|*reboot*|*shutdown*|*poweroff*|*restore*|*rollback*|*stop*|*disable*|*overwrite*|*whitelist*|*allowlist*|*firewall*|*publicly*|*public\ port\ 443*|*reset*|*switch*|*migrate*|*apply*|*re-sign*|*удал*|*Удал*|*очист*|*Очист*|*карантин*|*Карантин*|*изолир*|*Изолир*|*переустанов*|*Переустанов*|*перезап*|*Перезап*|*перезагруз*|*Перезагруз*|*выключ*|*Выключ*|*восстанов*|*Восстанов*|*откат*|*Откат*|*останов*|*Останов*|*отключ*|*Отключ*|*сброс*|*Сброс*|*переключ*|*Переключ*|*мигр*|*Мигр*|*примен*|*Примен*|*переподп*|*Переподп*|*белый\ список*|*Белый\ список*|*список\ разреш*|*Список\ разреш*|*брандмауэр*|*Брандмауэр*|*публичн*443*|*Публичн*443*)
+            return 0
+            ;;
+    esac
+    case "$impact" in
+        *删除*|*清空*|*关机*|*重启*|*覆盖*|*公网\ 443*|*erase*|*delete*|*shutdown*|*poweroff*|*restart*|*overwrite*|*public\ port\ 443*|*удал*|*Удал*|*очист*|*Очист*|*перезагруз*|*Перезагруз*|*выключ*|*Выключ*|*перезапис*|*Перезапис*|*публичн*443*|*Публичн*443*)
+            return 0
+            ;;
+    esac
+    return 1
 }
 
 confirm_risk_action() {
-    confirm_danger "$@"
+    if action_needs_safe_default "$1" "$2"; then
+        confirm_danger "$@"
+        return $?
+    fi
+    print_action_summary "risk" "$1" "$2" "$3" "${4:-}" "${5:-}"
+    confirm_default_yes
 }
 
 render_menu() {

@@ -60,35 +60,43 @@ EOF
 }
 
 harden_single_443_firewall() {
-    local yn ssh_port remove_ports port
-    echo -e "$(localized_text "${YELLOW}可选：防火墙只保留 SSH 与 Nginx 公网入口端口。${PLAIN}" "${YELLOW}Is optional: the firewall only reserves SSH and Nginx public entry ports.${PLAIN}" "${YELLOW}является необязательным: межсетевой экран резервирует только порты входа в публичную сеть SSH и Nginx.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}提醒：若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，脚本的“自动追加当前活动端口”功能可能再次放行它。${PLAIN}" "${YELLOW}Reminder: if 3x-ui still listens on 0.0.0.0:${PANEL_LISTEN_PORT}, automatic active-port detection may allow that port again.${PLAIN}" "${YELLOW}Напоминание: если 3x-ui по-прежнему слушает 0.0.0.0:${PANEL_LISTEN_PORT}, автоматическое обнаружение активных портов может снова разрешить этот порт.${PLAIN}")"
-    read_trimmed yn "$(localized_text "是否现在收紧防火墙？(Y/n，默认 y): " "Tighten the firewall now? (Y/n, default y):" "Ужесточить брандмауэр сейчас? (Да/нет, по умолчанию y):")"
-    [[ "$yn" =~ ^[Yy]$ ]] || return 0
+    local ssh_port remove_ports port
+    local failures=()
     ssh_port=$(ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
     ssh_port=${ssh_port:-22}
+    confirm_danger \
+        "$(localized_text "收紧 443 入口防火墙" "Tighten the Port 443 firewall" "Ужесточить правила брандмауэра для порта 443")" \
+        "$(localized_text "只保留 SSH ${ssh_port:-22}/tcp 与公网入口 ${NGINX_LISTEN_PORT}/tcp，并撤销已知后端端口的公网放行规则。" "Keep only SSH ${ssh_port:-22}/tcp and public entry ${NGINX_LISTEN_PORT}/tcp, and revoke public allow rules for known backend ports." "Оставить только SSH ${ssh_port:-22}/tcp и публичный вход ${NGINX_LISTEN_PORT}/tcp, удалив разрешающие правила для известных внутренних портов.")" \
+        "$(localized_text "保持当前 SSH 会话；可通过云厂商控制台重新放行端口或恢复防火墙规则。" "Keep the current SSH session open; use the provider console to restore firewall rules or allow ports again." "Не закрывайте текущий сеанс SSH; правила можно восстановить через консоль провайдера.")" \
+        "$(localized_text "若 3x-ui 仍监听 0.0.0.0:${PANEL_LISTEN_PORT}，自动活动端口检测以后可能再次放行该端口。" "If 3x-ui still listens on 0.0.0.0:${PANEL_LISTEN_PORT}, automatic active-port detection may allow it again later." "Если 3x-ui продолжает слушать 0.0.0.0:${PANEL_LISTEN_PORT}, автоматическое обнаружение активных портов позднее может снова разрешить этот порт.")" || return 0
     remove_ports=("$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}" "${TCP_ROUTE_PORTS[@]}" "${XRAY_SNI_ROUTE_PORTS[@]}" "40000" "8443" "1443" "2096" "3000")
     if command -v ufw >/dev/null 2>&1; then
-        ufw allow "${ssh_port}/tcp" >/dev/null 2>&1 || true
-        ufw allow "${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || true
+        ufw allow "${ssh_port}/tcp" >/dev/null 2>&1 || failures+=("SSH ${ssh_port}/tcp")
+        ufw allow "${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || failures+=("entry ${NGINX_LISTEN_PORT}/tcp")
         for port in "${remove_ports[@]}"; do
             [[ "$port" == "$ssh_port" || "$port" == "$NGINX_LISTEN_PORT" ]] && continue
-            ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
-            ufw delete allow "${port}/udp" >/dev/null 2>&1 || true
+            ufw delete allow "${port}/tcp" >/dev/null 2>&1 || :
+            ufw delete allow "${port}/udp" >/dev/null 2>&1 || :
         done
     elif command -v firewall-cmd >/dev/null 2>&1; then
-        systemctl enable --now firewalld >/dev/null 2>&1 || true
-        firewall-cmd --permanent --add-port="${ssh_port}/tcp" >/dev/null 2>&1 || true
-        firewall-cmd --permanent --add-port="${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || true
+        systemctl enable --now firewalld >/dev/null 2>&1 || failures+=("firewalld")
+        firewall-cmd --permanent --add-port="${ssh_port}/tcp" >/dev/null 2>&1 || failures+=("SSH ${ssh_port}/tcp")
+        firewall-cmd --permanent --add-port="${NGINX_LISTEN_PORT}/tcp" >/dev/null 2>&1 || failures+=("entry ${NGINX_LISTEN_PORT}/tcp")
         for port in "${remove_ports[@]}"; do
             [[ "$port" == "$ssh_port" || "$port" == "$NGINX_LISTEN_PORT" ]] && continue
-            firewall-cmd --permanent --remove-port="${port}/tcp" >/dev/null 2>&1 || true
-            firewall-cmd --permanent --remove-port="${port}/udp" >/dev/null 2>&1 || true
+            firewall-cmd --permanent --remove-port="${port}/tcp" >/dev/null 2>&1 || :
+            firewall-cmd --permanent --remove-port="${port}/udp" >/dev/null 2>&1 || :
         done
-        firewall-cmd --reload >/dev/null 2>&1 || true
+        firewall-cmd --reload >/dev/null 2>&1 || failures+=("firewalld reload")
     else
         echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 ufw/firewalld，跳过防火墙收紧。${PLAIN}" "${YELLOW}⚠️ ufw/firewalld not detected, skipping firewall tightening.${PLAIN}" "${YELLOW}⚠️ ufw/firewalld не обнаружен, пропускается ужесточение брандмауэра.${PLAIN}")"
+        return 0
     fi
+    if (( ${#failures[@]} > 0 )); then
+        echo -e "$(localized_text "${RED}❌ 防火墙收紧未完整应用：${failures[*]}。请保持当前 SSH 会话并检查防火墙状态。${PLAIN}" "${RED}❌ Firewall tightening was only partially applied: ${failures[*]}. Keep the current SSH session open and inspect the firewall state.${PLAIN}" "${RED}❌ Правила брандмауэра применены не полностью: ${failures[*]}. Не закрывайте текущий сеанс SSH и проверьте состояние брандмауэра.${PLAIN}")"
+        return 1
+    fi
+    echo -e "$(localized_text "${GREEN}✅ 防火墙规则已应用：保留 SSH ${ssh_port}/tcp 与入口 ${NGINX_LISTEN_PORT}/tcp。${PLAIN}" "${GREEN}✅ Firewall rules applied: SSH ${ssh_port}/tcp and entry ${NGINX_LISTEN_PORT}/tcp are allowed.${PLAIN}" "${GREEN}✅ Правила применены: разрешены SSH ${ssh_port}/tcp и вход ${NGINX_LISTEN_PORT}/tcp.${PLAIN}")"
 }
 
 print_sni_stack_result() {

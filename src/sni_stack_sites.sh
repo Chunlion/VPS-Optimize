@@ -112,7 +112,7 @@ add_sni_stack_site() {
     confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${site_domain}" "Website/reverse proxy backend ${site_domain}" "Сайт/бэкенд обратного прокси ${site_domain}")" "$site_addr" "$site_port" || return 1
 
     if web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "$web_engine"; then
-        read_trimmed enable_ip_whitelist "$(localized_text "是否为 ${site_domain} 启用 IP 白名单？(Y/n，默认 y): " "Enable IP whitelisting for ${site_domain}? (Y/n, default y):" "Включить белый список IP-адресов для ${site_domain}? (Да/нет, по умолчанию y):")"
+        read_trimmed enable_ip_whitelist "$(localized_text "是否为 ${site_domain} 启用 IP 白名单？(y/N，默认 N): " "Enable an IP allowlist for ${site_domain}? (y/N, default N): " "Включить список разрешённых IP-адресов для ${site_domain}? (y/N, по умолчанию N): ")"
     else
         echo -e "$(localized_text "${YELLOW}xray-fallback 无法让本地 Web 反代引擎可靠获取真实客户端源 IP，本次禁止为新域名启用 Web 白名单。${PLAIN}" "${YELLOW}Xray-fallback cannot allow the local web reverse proxy engine to reliably obtain the real client source IP. This time, it is prohibited to enable the web whitelist for new domains.${PLAIN}" "${YELLOW}xray-резервный вариант не может позволить локальному механизму веб-прокси надежно получить реальный исходный IP-адрес клиента. На этот раз запрещено включать белый список веб-сайтов для новых доменных имен.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}如需 Web 白名单，请改用 Nginx Stream/TCP Peek 入口模式。${PLAIN}" "${YELLOW}If you need Web whitelist, please use Nginx Stream/TCP Peek entry mode instead.${PLAIN}" "${YELLOW}Если вам нужен белый список веб-страниц, используйте вместо этого режим входа Nginx Stream/TCP Peek.${PLAIN}")"
@@ -168,7 +168,7 @@ edit_sni_stack_site_backend() {
     echo -e "------------------------------------------------"
     read_trimmed choice "$(localized_text "请输入要修改的序号: " "Please enter the serial number to be modified:" "Пожалуйста, введите серийный номер, который необходимо изменить:")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消修改。${PLAIN}" "${BLUE}Has been modified.${PLAIN}" "${BLUE}был изменен.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消修改。${PLAIN}" "${BLUE}Edit canceled.${PLAIN}" "${BLUE}Изменение отменено.${PLAIN}")"
         return 0
     fi
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#SITE_DOMAINS[@]} )); then
@@ -221,7 +221,7 @@ remove_sni_stack_site() {
     echo -e "------------------------------------------------"
     read_trimmed choice "$(localized_text "请输入要删除的序号: " "Please enter the serial number to be deleted:" "Пожалуйста, введите серийный номер, который необходимо удалить:")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Has been canceled.${PLAIN}" "${BLUE}отменен.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Removal canceled.${PLAIN}" "${BLUE}Удаление отменено.${PLAIN}")"
         return 0
     fi
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#SITE_DOMAINS[@]} )); then
@@ -253,7 +253,7 @@ remove_sni_stack_site() {
 
     apply_sni_stack_runtime_config || return 1
 
-    read_trimmed delete_cert "$(localized_text "是否同时隔离 ${domain} 的 Caddy 证书文件？(Y/n，默认 y): " "Are the Caddy certificate files of ${domain} also quarantined? (Y/n, default y):" "Файлы сертификатов Caddy ${domain} также помещены в карантин? (Да/нет, по умолчанию y):")"
+    read_trimmed delete_cert "$(localized_text "是否同时隔离 ${domain} 的 Caddy 证书文件？(y/N，默认 N): " "Also quarantine the Caddy certificate files for ${domain}? (y/N, default N): " "Также поместить файлы сертификата Caddy для ${domain} в карантин? (y/N, по умолчанию N): ")"
     if is_yes "$delete_cert"; then
         quarantine_path "/etc/caddy/certs/${domain}.crt" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
         quarantine_path "/etc/caddy/certs/${domain}.key" "/etc/vps-optimize/quarantine/caddy-certs" >/dev/null 2>&1 || true
@@ -426,7 +426,7 @@ edit_sni_stack_tcp_route() {
     echo -e "------------------------------------------------"
     read_trimmed choice "$(localized_text "请输入要修改的序号: " "Please enter the serial number to be modified:" "Пожалуйста, введите серийный номер, который необходимо изменить:")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消修改。${PLAIN}" "${BLUE}Has been modified.${PLAIN}" "${BLUE}был изменен.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消修改。${PLAIN}" "${BLUE}Edit canceled.${PLAIN}" "${BLUE}Изменение отменено.${PLAIN}")"
         return 0
     fi
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#TCP_ROUTE_SNIS[@]} )); then
@@ -502,7 +502,7 @@ remove_sni_stack_tcp_route() {
     echo -e "------------------------------------------------"
     read_trimmed choice "$(localized_text "请输入要删除的序号: " "Please enter the serial number to be deleted:" "Пожалуйста, введите серийный номер, который необходимо удалить:")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Has been canceled.${PLAIN}" "${BLUE}отменен.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Removal canceled.${PLAIN}" "${BLUE}Удаление отменено.${PLAIN}")"
         return 0
     fi
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#TCP_ROUTE_SNIS[@]} )); then

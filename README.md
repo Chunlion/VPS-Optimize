@@ -53,7 +53,7 @@ cy
 | 面板与订阅 | 3x-ui、S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari |
 | 转发与组网 | Realm、Gost、FLVX 哆啦转发面板、EasyTier、Tailscale |
 | 443端口复用 | Web、面板、订阅和节点共用公网 `443`，按 SNI 路由 |
-| 诊断与回滚 | 服务健康、443 链路体检、配置备份、恢复和隔离归档 |
+| 诊断与回滚 | 服务健康、443 链路体检、空间预检、可选加密备份、恢复和隔离归档 |
 
 ## 📚 文档与反馈
 

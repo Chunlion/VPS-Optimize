@@ -167,7 +167,7 @@ check_domain_dns_sanity() {
     local domain="$1"
     local label="$(localized_text "${2:-域名}" "${2:-域名}" "${2:-域名}")"
     local mode="${3:-warn}"
-    local ips ip suspect=0 confirm
+    local ips ip suspect=0
 
     ips=$(resolve_domain_a_records "$domain")
     if [[ -z "$ips" ]]; then
@@ -188,8 +188,7 @@ check_domain_dns_sanity() {
         echo -e "$(localized_text "${YELLOW}请在 VPS 上复查 DNS。若只在本地电脑开启了 fake-ip，198.18.x.x 可能只是本地代理映射；若 VPS/公共 DNS 也看到此地址，请把 A 记录改成真实 VPS 公网 IP。${PLAIN}" "${YELLOW}Please review DNS on VPS. If fake-ip is only enabled on the local computer, 198.18.x.x may only be local proxy mapping; if VPS/public DNS also sees this address, please change the A record to the real VPS public IP.${PLAIN}" "${YELLOW}Пожалуйста, просмотрите DNS на VPS. Если поддельный IP-адрес включен только на локальном компьютере, 198.18.x.x может быть сопоставлением только локального прокси-сервера; если VPS/public DNS также видит этот адрес, измените запись A на реальный IP-адрес VPS в Интернете.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}如果使用 Cloudflare 小云朵，公共 DNS 应看到 Cloudflare 边缘 IP，而不是 198.18/10/127/192.168 等地址。${PLAIN}" "${YELLOW}If using the Cloudflare cloudlet, the public DNS should see the Cloudflare edge IP instead of 198.18/10/127/192.168 etc. addresses.${PLAIN}" "${YELLOW}При использовании облака Cloudflare общедоступный DNS должен видеть граничный IP-адрес Cloudflare вместо адресов 198.18/10/127/192.168 и т. д.${PLAIN}")"
         if [[ "$mode" == "prompt" ]]; then
-            read_trimmed confirm "$(localized_text "仍要继续？(Y/n，不推荐): " "Still want to continue? (Y/n, not recommended):" "Все еще хотите продолжить? (Да/нет, не рекомендуется):")"
-            is_yes "$confirm" || return 1
+            confirm_default_no "$(localized_text "仍要继续？(y/N，不推荐): " "Continue anyway? (y/N, not recommended): " "Всё равно продолжить? (y/N, не рекомендуется): ")" || return 1
         else
             return 1
         fi
@@ -501,7 +500,7 @@ confirm_backend_target_or_continue() {
     local label="$1"
     local addr="$2"
     local port="$3"
-    local probe_rc continue_confirm
+    local probe_rc
 
     if probe_backend_target "$label" "$addr" "$port"; then
         return 0
@@ -509,12 +508,11 @@ confirm_backend_target_or_continue() {
     probe_rc=$?
     [[ "$probe_rc" -eq 2 ]] && return 0
 
-    read_trimmed continue_confirm "$(localized_text "后端当前不可连接，仍要继续保存吗？(Y/n，默认 y): " "The backend is currently unavailable. Do you still want to save? (Y/n, default y):" "бэкенд в настоящее время недоступна. Вы все еще хотите сэкономить? (Да/нет, по умолчанию y):")"
-    if is_yes "$continue_confirm"; then
+    if confirm_default_no "$(localized_text "后端当前不可连接，仍要继续保存吗？(y/N，默认 N): " "The backend is unreachable. Save anyway? (y/N, default N): " "Бэкенд недоступен. Всё равно сохранить? (y/N, по умолчанию N): ")"; then
         echo -e "$(localized_text "${YELLOW}⚠️ 已选择继续；保存后请检查后端服务、地址和端口。${PLAIN}" "${YELLOW}⚠️ Selected to continue; please check the backend service, address and port after saving.${PLAIN}" "${YELLOW}⚠️ Выбрано для продолжения; пожалуйста, проверьте серверную службу, адрес и порт после сохранения.${PLAIN}")"
         return 0
     fi
-    echo -e "$(localized_text "${BLUE}已取消保存。${PLAIN}" "${BLUE}Has been canceled.${PLAIN}" "${BLUE}отменен.${PLAIN}")"
+    echo -e "$(localized_text "${BLUE}已取消保存。${PLAIN}" "${BLUE}Save canceled.${PLAIN}" "${BLUE}Сохранение отменено.${PLAIN}")"
     return 1
 }
 

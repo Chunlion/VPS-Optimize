@@ -100,7 +100,7 @@ edit_sni_stack_tcp_route() {
     echo -e "------------------------------------------------"
     read_trimmed choice "$(localized_text "请输入要修改的序号: " "Please enter the serial number to be modified:" "Пожалуйста, введите серийный номер, который необходимо изменить:")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消修改。${PLAIN}" "${BLUE}Has been modified.${PLAIN}" "${BLUE}был изменен.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消修改。${PLAIN}" "${BLUE}Edit canceled.${PLAIN}" "${BLUE}Изменение отменено.${PLAIN}")"
         return 0
     fi
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#TCP_ROUTE_SNIS[@]} )); then
@@ -175,7 +175,7 @@ remove_sni_stack_tcp_route() {
     echo -e "------------------------------------------------"
     read_trimmed choice "$(localized_text "请输入要删除的序号: " "Please enter the serial number to be deleted:" "Пожалуйста, введите серийный номер, который необходимо удалить:")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Has been canceled.${PLAIN}" "${BLUE}отменен.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Removal canceled.${PLAIN}" "${BLUE}Удаление отменено.${PLAIN}")"
         return 0
     fi
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#TCP_ROUTE_SNIS[@]} )); then

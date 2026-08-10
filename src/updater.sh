@@ -176,8 +176,9 @@ func_update_script() {
         && ! grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' "$tmp_file" 2>/dev/null \
         && copy_shortcut_candidate "$tmp_file" /usr/local/bin/cy "$(localized_text "已验证更新脚本" "Verified update script" "Проверенный скрипт обновления")"; then
         rm -f "$tmp_file" "$SCRIPT_UPDATE_CACHE"
-        echo -e "$(localized_text "${GREEN}✅ 更新下载并覆盖完成！正在重启面板...${PLAIN}" "${GREEN}✅ Update download and coverage completed! Restarting panel...${PLAIN}" "${GREEN}✅ Загрузка обновления и покрытие завершены! Перезапуск панели...${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}✅ 更新已安装，正在重新打开面板...${PLAIN}" "${GREEN}✅ Update installed. Reopening the panel...${PLAIN}" "${GREEN}✅ Обновление установлено. Панель запускается заново...${PLAIN}")"
         sleep 1
+        release_vpso_session_lock
         exec bash /usr/local/bin/cy
     else
         rm -f "$tmp_file"
