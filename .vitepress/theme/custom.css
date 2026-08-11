@@ -13,10 +13,11 @@
   --vp-nav-bg: rgba(255, 255, 255, 0.9);
   --vp-nav-border: rgba(90, 120, 160, 0.14);
   --vp-nav-text: #17233a;
+  --vp-nav-hover: rgba(76, 101, 139, 0.07);
   --vp-doc-surface: #ffffff;
   --vp-doc-shell: #f7faff;
   --vp-layout-max-width: 1440px;
-  --vp-nav-height: 72px;
+  --vp-nav-height: 60px;
   --vp-font-family-base: "Inter Variable", "Noto Sans SC Variable", "Segoe UI", sans-serif;
 }
 
@@ -29,6 +30,7 @@
   --vp-nav-bg: rgba(11, 20, 35, 0.9);
   --vp-nav-border: rgba(139, 185, 244, 0.14);
   --vp-nav-text: #edf5ff;
+  --vp-nav-hover: rgba(169, 199, 238, 0.09);
   --vp-doc-surface: #111d30;
   --vp-doc-shell: #0b1424;
 }
@@ -67,11 +69,11 @@ html[lang="zh-CN"] body {
 
 .VPNavBar {
   border-bottom: 1px solid var(--vp-nav-border);
-  box-shadow: 0 8px 28px rgba(27, 57, 103, 0.06);
+  box-shadow: 0 1px 0 rgba(27, 57, 103, 0.025), 0 8px 24px rgba(27, 57, 103, 0.035);
 }
 
 .VPNavBar .container {
-  max-width: 1360px !important;
+  max-width: 1200px !important;
 }
 
 .VPNavBar .content,
@@ -85,9 +87,9 @@ html[lang="zh-CN"] body {
 .VPNavBarTitle .title,
 .VPNavBarTitle .title span {
   color: var(--vp-c-brand-1);
-  font-size: 19px;
-  font-weight: 720;
-  letter-spacing: -0.02em;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.018em;
 }
 
 .VPNavBarMenuLink,
@@ -111,29 +113,70 @@ html[lang="zh-CN"] body {
 }
 
 .VPNavBarMenuLink {
-  min-height: 38px;
-  padding: 0 13px;
-  border-radius: 10px;
+  position: relative;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 11px;
+  border-radius: 999px;
+  line-height: 34px;
+  font-size: 14px;
+  font-weight: 540;
+  transition: color 0.2s ease, background-color 0.2s ease;
 }
 
 .VPNavBarMenuLink.active {
-  background: rgba(21, 101, 232, 0.08);
+  background: transparent;
+  font-weight: 620;
+}
+
+.VPNavBarMenuLink.active::after {
+  position: absolute;
+  right: 11px;
+  bottom: 2px;
+  left: 11px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  opacity: 0.72;
+}
+
+.VPNavBarMenuLink:hover,
+.VPNavBarMenuGroup .button:hover,
+.VPNavBarTranslations .button:hover,
+.VPNavBar .VPSwitchAppearance:hover,
+.VPNavBar .VPSocialLink:hover {
+  background: var(--vp-nav-hover);
+}
+
+.VPNavBarMenuGroup .button {
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 999px;
+}
+
+.VPNavBarMenuGroup .text {
+  line-height: 34px;
+  font-size: 14px;
+  font-weight: 540;
 }
 
 .VPNavBarTranslations .button,
 .VPNavBar .VPSwitchAppearance {
-  min-height: 38px;
-  padding: 0 12px;
-  border: 1px solid var(--vp-nav-border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--vp-nav-bg) 76%, transparent);
+  height: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  transition: color 0.2s ease, background-color 0.2s ease;
 }
 
 .VPNavBar .VPSwitchAppearance {
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  min-height: 44px;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
   padding: 0;
 }
 
@@ -163,10 +206,10 @@ html[lang="zh-CN"] body {
 }
 
 .VPNavBarTranslations .button::after {
-  margin-left: 7px;
+  margin-left: 6px;
   color: var(--vp-nav-text);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 580;
 }
 
 html[lang="zh-CN"] .VPNavBarTranslations .button::after {
@@ -182,10 +225,23 @@ html[lang="ru-RU"] .VPNavBarTranslations .button::after {
 }
 
 .VPNavBar .DocSearch-Button {
-  min-width: 164px;
-  border: 1px solid var(--vp-nav-border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--vp-nav-bg) 76%, transparent);
+  min-width: 150px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--vp-nav-hover);
+}
+
+.VPNavBar .appearance + .social-links::before,
+.VPNavBar .menu + .appearance::before,
+.VPNavBar .translations + .appearance::before {
+  height: 18px;
+  background-color: var(--vp-nav-border);
+}
+
+.VPNavBar .VPSocialLink {
+  border-radius: 999px;
+  transition: color 0.2s ease, background-color 0.2s ease;
 }
 
 .VPNavScreen {
