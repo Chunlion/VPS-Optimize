@@ -1,712 +1,338 @@
-# 443端口复用：部署与配置
+---
+outline: 2
+---
 
-## 前言
+# 443 端口复用：部署与配置
 
-REALITY 的 `serverName` / `target` 优先选择稳定、可直连且未启用 CDN 防护的真实 HTTPS 网站。若确需使用 Cloudflare 等 CDN 站点，务必开启适合当前入口模式的 [REALITY 回落流量防护](#reality-回落流量防护)：Nginx Stream / TCP Peek 同时开启严格 SNI 门禁（SNI 清洗）和 REALITY 回落限速；`xray-fallback` 没有前置门禁，但可以直接使用回落限速。回落限速要求 REALITY 入站使用本机 3x-ui SQLite；若无法启用，不应使用 CDN 目标。否则，验证失败的连接可能使服务器成为 CDN 转发器，持续占用带宽并消耗流量。
+这篇教程把面板、订阅、网站和 REALITY 节点放到同一个公网 `443` 端口。第一次部署时，按页面顺序操作即可；示例域名和端口都要替换成你的实际值。
 
-严格 SNI 门禁会在生成入口配置时，根据已登记的 Web 域名、TCP/Xray SNI 路由和 REALITY SNI 自动生成放行清单。它只过滤未知或无 SNI 的连接，不负责 REALITY 身份验证；使用已登记 REALITY SNI 的连接仍会进入 Xray。回落限速只限制未通过 REALITY 验证的 fallback 连接。
+## 先选一种入口模式
 
-## 这组文档怎么选
+不确定时，直接选 **Nginx Stream**。它是本文的默认路线，最适合第一次部署。
 
-| 目标 | 阅读入口 |
-| --- | --- |
-| 从零部署或调整 3x-ui、REALITY、面板、订阅和三种 443 入口模式 | 当前页面 |
-| 把 SublinkPro、Sub-Store 等订阅工具接入反向代理或 443端口复用 | [订阅工具接入](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
-| 了解 Nginx Stream、TCP Peek 和 Xray Fallback 的实现与切换原理 | [入口模式与原理](443-tcp-peek-engine.md) |
-| 处理面板打不开、订阅 404、证书失败、端口冲突或 REALITY 连接失败 | [排错与恢复](443-single-entry-troubleshooting.md) |
+| 模式 | 适合场景 | 建议 |
+| --- | --- | --- |
+| **Nginx Stream** | 第一次部署，想要稳定易排错 | **推荐**，先用它跑通 |
+| **TCP Peek + Splice** | 已经跑通 Nginx Stream，想改用轻量的 TCP 分流 | 可在部署完成后切换 |
+| **Xray Fallback** | 已经有一个能接管公网 `443` 的 Xray 主入站 | 进阶用法，不建议作为第一次方案 |
 
-这篇文档教你把 VPS 的公网 `443` 统一接入 VPS-Optimize 的 443端口复用。默认推荐 Nginx Stream，也可以在配置完成后切换到 TCP Peek + Splice 或 Xray Fallback。无论选择哪种入口模式，公网 `443` 同一时间只由当前 `ENTRY_MODE` 对应的单个服务监听。
-
-当前 443端口复用链路是：
+三种模式都只允许一个服务监听公网 `443`。当前实际链路是：
 
 ```text
 公网 443 -> 当前 ENTRY_MODE 对应的单个入口服务
-  nginx-stream  -> nginx 按 SNI 分流
-  tcp-peek      -> vpso-mux 按 SNI 分流
-  xray-fallback -> Xray 主入站接管 443，并 fallback 普通 HTTPS
-
-普通 HTTPS / Web 域名 -> 当前选择的本地 Web 反代引擎（Caddy 或 Nginx）-> 本机可达的 HTTP 后端
-3x-ui 面板            -> 当前选择的本地 Web 反代引擎 -> 127.0.0.1:40000
-3x-ui 订阅            -> 当前选择的本地 Web 反代引擎 -> 127.0.0.1:2096
-REALITY / Xray SNI    -> 本地 Xray / 3x-ui 入站 -> 127.0.0.1:1443
+普通 HTTPS / 网站 -> Caddy 或 Nginx -> 你的本地网站
+面板 / 订阅 -> Caddy 或 Nginx -> 3x-ui 的本地 HTTP 端口
+REALITY 节点 -> Xray / 3x-ui 的本地入站
 ```
 
-图里的 `127.0.0.1:40000`、`127.0.0.1:2096`、`127.0.0.1:1443` 都只是示例值。这样做的好处是：公网只暴露一个 `443`，普通 HTTPS 落到当前选择的本地 Web 反代引擎（Caddy 或 Nginx），证书由 VPS-Optimize 使用 `acme.sh + Cloudflare DNS API` 申请和安装。3x-ui 面板和订阅服务只做本机 HTTP 后端，3x-ui 自带证书不作为最终公网证书方案，避免重复 HTTPS、端口冲突、重定向循环和证书路径混乱。
+如果你只是想把 3x-ui、网站和 REALITY 放在一起，选择 Nginx Stream，继续往下做即可。
 
-新增网站/反代默认使用 `127.0.0.1` 后端。Docker 服务建议把容器端口发布到宿主机回环地址，再填写对应的宿主机端口；只有当前 VPS 确实能解析并访问内网 IP 或 hostname 时，才填写自定义后端地址。保存前脚本会检查后端是否可连接，失败时需要明确确认才能继续。不要把后端端口直接暴露公网。
+## 先看一组完整示例
 
-## 示例说明
+下面的值只用于说明“每一栏填什么”，不要原样复制到生产环境：
 
-本文中出现的域名、路径和端口都只是示例，方便理解架构，不是必须照抄的固定值。
-
-例如：
-
-- `panel.example.com` = 示例面板域名
-- `node.example.com` = 示例节点域名
-- `site.example.com` = 示例网站域名
-- `40000` = 示例 3x-ui 面板端口
-- `2096` = 示例订阅端口
-- `8443` = 示例 Web 反代引擎本地 HTTPS 端口
-- `1443` = 示例 Xray/REALITY 本地端口
-
-实际部署时，请替换成你自己的域名、路径和端口。如果你已经在脚本里填写过端口，以脚本保存的配置为准，不要盲目照抄文档示例。
-
-| 项目 | 文档示例 | 你的实际值 |
-|---|---|---|
-| 面板域名 | panel.example.com | 请改成你自己的 |
-| 节点域名 | node.example.com | 请改成你自己的 |
-| 网站域名 | site.example.com | 请改成你自己的 |
-| 3x-ui 面板端口 | 40000 | 以你面板实际端口为准 |
-| 订阅端口 | 2096 | 以你订阅服务实际端口为准 |
-| Web 反代引擎本地端口 | 8443 | 以脚本当前配置为准 |
-| Xray/REALITY 本地端口 | 1443 | 以脚本当前配置为准 |
-| 面板路径 | /panel/ | 以你面板设置为准 |
-| 普通订阅路径 | /sub/ | 以你订阅设置为准 |
-| Clash/Mihomo 路径 | /clash/ | 以你订阅设置为准 |
-
-## 快速结论
-
-最终你应该这样访问：
-
-| 类型 | 正确访问方式 |
-| --- | --- |
-| 3x-ui 面板 | `https://panel.example.com/panel/` |
-| 普通订阅 | `https://panel.example.com/sub/客户端 Subscription` |
-| Clash/Mihomo | `https://panel.example.com/clash/客户端 Subscription` |
-| REALITY 节点 | `node.example.com:443` 或 `服务器公网IP:443` |
-| 新增网站 | `https://site.example.com/` |
-
-不要从公网访问这些内部端口：
-
-```text
-https://panel.example.com:40000/
-https://panel.example.com:2096/sub/xxxx
-https://panel.example.com:8443/
-https://panel.example.com:1443/
-```
-
-## 先看这张表
-
-| 组件 | 监听位置 | 职责 |
+| 项目 | 示例值 | 用途 |
 | --- | --- | --- |
-| Nginx stream | `0.0.0.0:443` | 默认入口模式，按 SNI 分流 |
-| vpso-mux | `0.0.0.0:443` | TCP Peek + Splice 模式入口，和 Nginx Stream 二选一 |
-| Xray/3x-ui 主入站 | `0.0.0.0:443` | Xray Fallback 模式入口，和前两者二选一 |
-| Caddy 或 Nginx 本地 Web 反代 | `127.0.0.1:8443` | 托管 Web 证书，反代面板、订阅和网站 |
-| 3x-ui 面板 | `127.0.0.1:40000` | 本机 HTTP 后端，不使用自带证书作为公网 HTTPS |
-| 3x-ui 订阅 | `127.0.0.1:2096` | 本机 HTTP 后端，由 Web 反代引擎代理公网 HTTPS |
-| REALITY / Xray 本地入站 | `127.0.0.1:1443` | 在 Nginx Stream 或 TCP Peek 模式下由入口按 SNI 转发 |
+| 面板域名 | `panel.example.com` | 浏览器打开 3x-ui 面板 |
+| 节点域名 | `node.example.com` | 客户端节点地址、订阅域名 |
+| 网站域名 | `site.example.com` | 普通 HTTPS 网站 |
+| REALITY 目标 | `www.example.org` | REALITY 的伪装 HTTPS 网站；示例值 |
+| 面板本地端口 | `40000` | 3x-ui 只在 VPS 本机监听 |
+| 订阅本地端口 | `2096` | 订阅服务只在 VPS 本机监听 |
+| REALITY 本地端口 | `1443` | Xray / 3x-ui 入站，只供本机入口转发 |
+| 网站后端 | `127.0.0.1:3000` | 入口转发到你的网站程序 |
 
-核心原则：
+照这组例子，外部用户看到的是 `https://panel.example.com`、`https://node.example.com/sub/` 和节点端口 `443`；`40000`、`2096`、`1443`、`3000` 都不应直接暴露到公网。
 
-1. 公网 `443` 同一时间只给一个入口进程：`nginx`、`vpso-mux` 或 Xray 主入站。
-2. Caddy 或 Nginx 本地 Web 反代负责浏览器 HTTPS，3x-ui 面板和订阅只作为本地 HTTP 后端。
-3. REALITY 的 `dest` / `Target` 和 `serverNames` / `SNI` 写外部真实 HTTPS 站点，不要写自己的面板域名。
+记住一个最容易填错的区别：
 
-## 3x-ui 三种入口模式配置速查
+- `panel.example.com`、`node.example.com` 是用户从公网访问的域名；
+- `127.0.0.1:40000`、`127.0.0.1:2096`、`127.0.0.1:1443` 是 VPS 内部转发的地址；
+- REALITY 的 `serverName` 是伪装目标，例如 `www.example.org`，它不是你的面板域名，也不是节点域名。
 
-三种入口模式共享面板域名、订阅路径、网站反代、Web 反代引擎、本地 TLS 端口和证书配置。Nginx Stream 与 TCP Peek 还共享 Web 白名单；`xray-fallback` 不支持 Web 白名单，因为 Xray fallback 到本地 Web 反代引擎后，Caddy/Nginx 无法可靠获得真实客户端源 IP。其他区别只是谁监听公网 `443`，以及 3x-ui/Xray 主入站是否需要直接占用公网 `443`。
+## 部署前准备
 
-### Web 反代引擎选择
+### 1. 准备域名和 DNS
 
-首次使用 `[2 安装 / 切换 443 入口模式]` 时可以选择 Caddy 或 Nginx 作为 443端口复用下的本地 Web 反代引擎。后续也可以从：
+- 准备一个面板域名、一个节点域名（例如 `panel.example.com`、`node.example.com`）。
+- 在 DNS 服务商处把它们解析到 VPS。面板和节点域名可以使用 CDN，但 REALITY 的 `serverName` / `target` 最好选一个稳定、能直接访问且没有 CDN 防护的真实 HTTPS 网站。
+- 如果坚持把 CDN 域名作为 REALITY SNI，请在完成部署后打开 [REALITY 回落流量防护](#reality-回落流量防护)。否则，未通过 REALITY 验证的请求可能把服务器当作 CDN 转发器，持续消耗带宽。
+- 保留当前 SSH 连接，并确认云平台安全组和系统防火墙允许 SSH 与 TCP `443`。
 
-```text
-主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [8 切换 Web 反代引擎]
-```
+域名用途可以按下面的方式分配：
 
-切换时脚本会复用当前域名、证书和后端；在支持白名单的入口模式下也会复用 Web 白名单。脚本会重新渲染所选引擎配置，并把另一套 443 本地 Web 反代配置隔离起来，避免 Caddy/Nginx 同时处理同一批 443 Web 域名。证书路径仍保持 `/etc/caddy/certs/${domain}.crt|key` 和 `/root/cert/${domain}.crt|key`，不改变证书策略。
+| 域名 | DNS 指向 | 用在什么地方 |
+| --- | --- | --- |
+| `panel.example.com` | VPS 公网 IP | 面板域名、Web 反代域名 |
+| `node.example.com` | VPS 公网 IP | 节点地址、订阅域名、Hosts 地址 |
+| `www.example.org` | 目标网站自己的地址 | REALITY `serverName` / `target`，不要改成 VPS IP |
 
-如果之前在 `主菜单 [4 反代]` 配过独立 Caddy/Nginx HTTPS 反代，启用或重新应用 443端口复用时，脚本会隔离这些可能抢占公网 `443` 的旧配置。之后新增网站请统一走 `[19] -> [8 管理 Web 域名/反代]`。
+面板域名和节点域名是否经过 CDN，取决于你的访问需求；REALITY 目标则优先选择不经过 CDN 的真实 HTTPS 网站。不要把三者混成一个域名，也不要把 `node.example.com` 填到 REALITY 的伪装目标栏。
 
-### 三种模式都相同的 3x-ui 设置
+### 2. 准备 Cloudflare DNS API（使用 Cloudflare 时）
 
-这些设置在 Nginx Stream、TCP Peek + Splice、Xray Fallback 三种模式下都一样：
+脚本使用 `acme.sh + Cloudflare DNS API` 申请证书。创建 Token 时只给目标 Zone 的 DNS 编辑权限，不要把 Token 写进文档或发给别人。脚本会用 DNS-01 验证域名，证书交给当前 Web 反代引擎使用；你不需要再给 3x-ui 面板和订阅服务各申请一套公网证书。
 
-| 3x-ui 位置 | 应填写的内容 |
-| --- | --- |
-| `webListen` | `127.0.0.1` |
-| `webPort` | `40000`，或你的实际面板端口 |
-| `webBasePath` | `/panel/`，或你的实际面板路径 |
-| `webDomain` | 留空；公网域名由 Web 反代引擎接管 |
-| `webCertFile` / `webKeyFile` | 清空 |
-| `subListen` | `127.0.0.1` |
-| `subPort` | `2096`，或你的实际订阅端口 |
-| `subPath` | `/sub/`，或你的实际普通订阅路径前缀 |
-| `subClashPath` | `/clash/`，或你的实际 Clash/Mihomo 路径前缀 |
-| `subDomain` | 公网订阅域名，例如 `panel.example.com`；不填协议、端口或路径 |
-| `subCertFile` / `subKeyFile` | 清空 |
+如果域名记录显示为橙色云朵，面板和普通网站可以保持原样；REALITY 的 `serverName` 不要选择这个 CDN 域名，除非你愿意同时开启后面的 SNI 清洗和回落限速。
 
-`panel.example.com`、`/sub/`、`/clash/` 都是示例值，请替换成你的实际面板域名和路径。
+### 3. 先确认 443 没有被别的服务占用
 
-### 3x-ui 3.4.0+ Hosts / 旧版 External Proxy
+在 VPS 上执行：
 
-3x-ui v3.4.0 及之后，订阅节点公网地址在 `Hosts / 主机` 中配置。旧版 3x-ui 仍使用入站里的 `External Proxy`。
-
-3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host：
-
-```text
-入站：选择对应的 REALITY 或本地 Xray 入站
-地址：node.example.com 或服务器公网 IP
-端口：443
-Security：相同，或按该入站实际安全类型填写
-SNI / Fingerprint / ALPN：按该入站和客户端实际值保持一致
-```
-
-3x-ui v3.3.1 及之前：在对应 REALITY 入站里打开 `External Proxy`：
-
-```text
-类型：相同
-地址：node.example.com 或服务器公网 IP
-端口：443
-```
-
-升级前已经设置 `External Proxy` 的面板，升级后仍应检查 `Hosts / 主机` 中地址和端口是否为公网 `443`。
-
-### 模式 1：Nginx Stream
-
-这是默认稳定模式。3x-ui/Xray 节点入站不要监听公网 `443`，只监听本机端口。
-
-| 3x-ui / Xray 入站设置 | 示例值 |
-| --- | --- |
-| REALITY 或其他本地 Xray 入站监听地址 | `127.0.0.1` |
-| REALITY 或其他本地 Xray 入站监听端口 | `1443`，或你的实际本地入站端口 |
-| 客户端连接地址 | `node.example.com` 或服务器公网 IP |
-| 客户端连接端口 | `443` |
-| REALITY `dest` / `Target` | 外部真实 HTTPS 站点，例如 `www.microsoft.com:443` |
-| REALITY `serverNames` / `SNI` | 同一个外部真实 HTTPS 站点，例如 `www.microsoft.com` |
-| Hosts / External Proxy | 3x-ui v3.4.0+ 在 `Hosts / 主机` 中新增 Host；旧版在入站 `External Proxy` 中设置。地址填 `node.example.com` 或服务器公网 IP，端口填 `443` |
-
-如果要多个本地 Xray 入站共用公网 `443`，先在 3x-ui 里创建多个本地入站，每个入站使用不同的 `127.0.0.1:端口`，再到：
-
-```text
-主菜单 [19 443端口复用管理中心] -> [15 Xray 入站管理]
-```
-
-只记录 `SNI -> 本地地址:端口`，用于当前支持的端口复用模式渲染分流规则。脚本不会创建、删除或修改 3x-ui/Xray 入站内部配置。
-
-### 模式 2：TCP Peek + Splice
-
-TCP Peek + Splice 模式下，配置过程和 Nginx Stream 一样：面板、订阅和 Xray 入站仍然监听本机地址，客户端仍然连接公网 `443`。切换 TCP Peek 时复用同一套域名、证书、Web 反代后端、Web 白名单和 Xray SNI 分流记录。
-
-| 项目 | 说明 |
-| --- | --- |
-| 3x-ui 面板和订阅 | 保持 `127.0.0.1` 本地 HTTP 后端，证书路径清空 |
-| REALITY 或其他 Xray 入站 | 保持 `127.0.0.1:1443` 这类本地监听 |
-| 客户端连接端口 | 仍然是 `443` |
-| Hosts / External Proxy | 仍然输出 `node.example.com:443` 或 `服务器公网 IP:443` |
-| Xray 入站管理 | 和 Nginx Stream 一样支持多个本地 Xray 入站按 SNI 分流 |
-
-从 Nginx Stream 切到 TCP Peek + Splice 时，通常不需要改 3x-ui 面板里的任何配置。变化的是公网 `443` 的监听进程：从 `nginx` 换成 `vpso-mux`。
-
-TCP Peek 的优点：
-
-1. 配置过程和 Nginx Stream 相同，不需要重新填写 3x-ui、Web 反代引擎、证书或 Xray SNI 路由。
-2. `MSG_PEEK` 只查看 ClientHello，不消费首包，后端仍收到原始 TLS 握手。
-3. 转发优先使用 splice，减少用户态数据拷贝；不可用时自动回退普通 copy。
-4. `vpso-mux` 有独立状态、日志、配置校验和 8444 预检，方便确认切换前后链路。
-
-切换前检查：
-
-1. 进入 `[2 安装 / 切换 443 入口模式]` 并选择 TCP Peek。缺少 `vpso-mux` 或 Go 时，脚本会尝试安装并构建。
-2. 脚本自动生成并校验配置，再通过独立的 `8444` 服务检查 SNI 路由和本地后端；失败时不会改动公网 `443`，并输出预检服务状态和日志。
-3. 如果当前 SSH 会话连接在入口端口，例如 `443`，脚本会拒绝切换。请改用云厂商 VNC/Serial Console，或先用其他 SSH 端口登录。
-4. Web 反代引擎本地端口和 Xray/REALITY 本地入站必须能连通；如果 `127.0.0.1:1443` 这类本地入站没监听，先在 3x-ui 启用对应入站或修改脚本保存的端口。
-
-### 模式 3：Xray Fallback
-
-Xray Fallback 是特殊模式。公网 `443` 由你已经配置好的 3x-ui/Xray 主入站监听，HTTPS 再由这个主入站 fallback 到当前 Web 反代引擎本地端口。脚本不会替你编辑 3x-ui/Xray 入站内部配置。
-
-切到 xray-fallback 之前，你需要先在 3x-ui 里准备一个“主入站”：
-
-| 3x-ui / Xray 主入站设置 | 示例值 |
-| --- | --- |
-| 主入站监听地址 | `0.0.0.0`，或面板允许的公网监听方式 |
-| 主入站监听端口 | `443` |
-| fallback / fallback dest / 回落目标 | `127.0.0.1:8443`，端口以脚本里的 Web 反代引擎本地端口为准 |
-| 客户端连接地址 | `node.example.com` 或服务器公网 IP |
-| 客户端连接端口 | `443` |
-| Hosts / External Proxy | 如果订阅链接没有输出 `:443`，3x-ui v3.4.0+ 在 `Hosts / 主机` 中设置；旧版在入站 `External Proxy` 中设置。地址填节点域名或服务器公网 IP，端口填 `443` |
-
-Web 面板和订阅仍然走当前 Web 反代引擎，所以面板证书路径、订阅证书路径仍然必须清空。`panel.example.com` 访问链路应是：
-
-```text
-浏览器 -> 公网 443 -> Xray 主入站 fallback -> Web 反代引擎 127.0.0.1:8443 -> 3x-ui 面板/订阅
-```
-
-xray-fallback 模式不支持脚本继续把多个 SNI 分流到多个本地 Xray 入站。`Xray 入站管理` 菜单只能查看已有规则和当前主入站候选，不能新增、删除或同步规则。需要多个本地 Xray 入站时，请使用 Nginx Stream 或 TCP Peek + Splice。
-
-如果你的主入站是 REALITY，请确认你使用的 3x-ui/Xray 入站类型确实能把 HTTPS fallback 到当前 Web 反代引擎。本脚本只检查公网 `443` 是否由 Xray 监听、Web 反代引擎 fallback 后端是否可达，不会替你生成 Xray fallback 规则。
-
-### 模式切换时 3x-ui 要不要改
-
-| 切换方向 | 3x-ui 需要做什么 |
-| --- | --- |
-| Nginx Stream -> TCP Peek + Splice | 通常不用改 3x-ui。保持面板/订阅/Xray 入站都监听本机地址，客户端端口仍是 `443`。 |
-| TCP Peek + Splice -> Nginx Stream | 通常不用改 3x-ui。切回后公网 `443` 由 Nginx stream 监听。 |
-| Nginx Stream 或 TCP Peek + Splice -> Xray Fallback | 先在 3x-ui 里把一个主入站改为公网 `443`，并配置 fallback 到 Web 反代引擎本地端口，再执行脚本切换。 |
-| Xray Fallback -> Nginx Stream 或 TCP Peek + Splice | 先把 3x-ui/Xray 主入站从公网 `443` 移走，改回 `127.0.0.1:1443` 这类本地端口，或先禁用该公网 443 主入站，再执行脚本切换。 |
-| 重新应用当前模式 | 如果只是重建配置，不需要改 3x-ui；如果你改过面板端口、订阅路径或 Xray 本地端口，先在 `[10 修改 443端口复用参数]` 同步脚本保存值。 |
-
-从 xray-fallback 切回 Nginx Stream 或 TCP Peek + Splice 前，最容易出错的是忘记把 3x-ui/Xray 主入站从公网 `443` 移走。否则 Nginx 或 `vpso-mux` 会和 Xray 抢同一个公网端口，切换会失败或自动回滚。
-
-### 切换前后检查清单
-
-切换前检查：
-
-```text
-主菜单 [19 443端口复用管理中心] -> [1 查看当前入口状态 / 监听详情]
+```bash
 ss -lntp | grep ':443'
 ```
 
-切换 TCP Peek + Splice：
+如果已经有 Nginx、Caddy 或其他程序占用 `443`，先记下它的用途。切换入口时脚本会检查冲突，但不会替你猜测哪些服务可以停止。
+
+## 按顺序部署
+
+### 1. 安装 3x-ui，并让面板只在本机提供服务
+
+安装 3x-ui 时：
+
+1. 面板证书选择 `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)`。
+2. 监听 IP：`127.0.0.1`（即 `监听 IP：127.0.0.1`）。
+3. 面板端口和访问路径按你的习惯设置，记下它们，后面会填入反代配置。为了对应本文示例，可以填写：
+
+   ```text
+   面板端口：40000
+   面板路径：/panel/
+   ```
+
+   如果安装器没有让你设置路径，就记下它显示的默认路径，不要自行猜一个新路径。
+
+这样面板不会直接暴露到公网，外部访问统一经过 `443`。
+
+安装完成后不要用 `http://服务器IP:40000` 作为长期访问方式；先完成本文的 443 配置，再使用 `https://panel.example.com/panel/`（路径以你的面板实际显示为准）。
+
+如果面板设置页还能看到“证书文件”和“证书密钥文件”，两项都清空。公网 HTTPS 由 Caddy 或 Nginx 处理，3x-ui 只提供本机 HTTP 页面。
+
+### 2. 设置订阅服务的本地地址
+
+在 3x-ui 的订阅设置中：
+
+- 监听地址填 `127.0.0.1`；
+- 订阅端口使用一个未占用的本地端口，例如 `2096`；
+- 订阅域名填你的节点域名；
+- 订阅路径按面板显示的默认值填写，例如 `/sub/`、`/clash/`；
+- 不要给订阅服务单独配置公网证书，公网证书由 VPS-Optimize 的 Web 反代引擎统一处理。
+
+按示例填写时，订阅服务的本地部分是：
 
 ```text
-主菜单 [19 443端口复用管理中心] -> [2 安装 / 切换 443 入口模式] -> [3 TCP Peek + Splice]
+监听地址：127.0.0.1
+监听端口：2096
+订阅域名：node.example.com
+订阅路径：/sub/
+Clash/Mihomo 路径：/clash/
 ```
 
-脚本会自动安装缺少的构建依赖、执行配置校验和 `8444` 预检，通过后再切换公网 `443`。如需撤销最近一次入口模式切换，使用 `主菜单 [19 443端口复用管理中心] -> [7 回滚上一次入口模式切换]`。
+这里的 `node.example.com` 是用户访问的域名，`2096` 只是 VPS 内部端口。客户端最终使用 `https://node.example.com/sub/`，不能把 `:2096` 写进分享链接。
 
-切换后检查：
+如果订阅设置页有“订阅证书文件”和“订阅密钥文件”，同样清空；否则 3x-ui 可能继续尝试在本机端口上提供另一套 HTTPS，造成端口或重定向混乱。
 
-```text
-主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]
-主菜单 [19 443端口复用管理中心] -> [14 443 网络访问测试]
-```
+### 3. 配置 REALITY 入站
 
-预期监听方：
+在 3x-ui 新建或编辑 VLESS REALITY 入站，按下面的原则填写：
 
-| ENTRY_MODE | 公网 443 应由谁监听 |
-| --- | --- |
-| `nginx-stream` | `nginx` |
-| `tcp-peek` | `vpso-mux` |
-| `xray-fallback` | `xray` / `3x-ui` / `x-ui` 托管的 Xray |
+- 监听地址：`127.0.0.1`；
+- 监听端口：例如 `1443`，不要直接占用公网 `443`；
+- 传输：TCP；
+- 安全：REALITY；
+- `serverName` / `target`：填写你准备好的真实 HTTPS 网站；
+- `serverNames`：与上面的 SNI 保持一致；
+- 指纹：常用的 `chrome` 即可；
+- `Fallbacks`：留空，除非你明确知道自己在配置什么。
 
-`ENTRY_MODE` 的新配置值只写入 `nginx-stream`、`xray-fallback`、`tcp-peek`。如果旧配置里没有 `ENTRY_MODE`，脚本按 `nginx-stream` 读取；如果旧配置或 `/etc/vps-optimize/443-engine.conf` 里还有 `nginx_stream`、`xray_fallback`、`tcp_peek`，脚本会按对应的新值兼容读取。单个简单赋值会自动改写为新命名；无法安全改写时，状态页会继续提示迁移。
-
-无论哪种模式，都不要让 Web 反代引擎、3x-ui 面板端口、订阅端口或额外本地入站直接暴露公网。
-
-## Xray 入站管理边界
-
-`Xray 入站管理` 只记录 `SNI -> 本地地址:端口` 分流记录，用于当前支持的端口复用模式渲染分流规则，它不是 3x-ui/Xray 入站编辑器。用户需要先在 3x-ui/Xray 中创建并启用本地入站，然后再把对应的 SNI、本地监听地址和端口写入脚本。
-
-TCP Peek + Splice 模式：基于 MSG_PEEK 读取 TLS ClientHello 中的 SNI，不消费首包，并根据 SNI 将连接分流到 Web 反代引擎或 Xray 本地后端；转发时优先使用 splice 零拷贝，失败时自动回退普通 copy。实际运行的分流器程序为 vpso-mux。
-
-Nginx Stream 模式和 TCP Peek + Splice 模式支持根据同一份 Xray 入站分流规则，把多个 SNI 转发到多个本地 Xray 入站。Web 域名仍然转发到当前 Web 反代引擎，Xray 入站不受 Web 白名单影响。
-
-Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 `443` 默认由一个 Xray 主入站接管。脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。如需多个本地 Xray 入站分流，请使用 Nginx Stream 模式或 TCP Peek + Splice 模式。
-
-切换到 xray-fallback 后，脚本会保留 `/etc/vps-optimize/xray-sni-routes.conf` 中已有的规则，不会删除。被选中的规则作为 xray-fallback 主入站使用；其他规则会标记为“已保留，但当前 xray-fallback 模式下不生效”。以后切回 Nginx Stream 模式或 TCP Peek + Splice 模式时，这些规则可以重新用于按 SNI 分流。
-
-xray-fallback 模式下，`Xray 入站管理` 菜单允许查看规则和当前主入站，但不允许新增、删除或同步规则。该菜单不会修改 3x-ui/Xray 入站内部配置；独立的 REALITY 回落流量防护只允许修改下文说明的两个限速字段。
-
-## 普通 TLS 与 REALITY 的区别
-
-普通 TLS 节点更关注本机证书、Web fallback、Host/SNI 是否匹配。例如 VLESS + TLS、Trojan + TLS、VMess + WS + TLS、VLESS + gRPC + TLS 这类节点，排查时应确认节点域名是否由用户控制、本机证书是否覆盖该 SNI、Web 反代引擎是否有匹配 fallback，以及浏览器访问是否返回 200/301/302。
-
-REALITY 节点不同。REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定、`serverName` 和 `dest` 是否逻辑一致。不要要求 REALITY `serverName` 加入 Web 反代引擎，也不要要求本机证书覆盖 REALITY `serverName`。
-
-## REALITY 回落流量防护
-
-REALITY 会把验证失败的连接转发到 `target`。扫描者不需要 UUID、shortId 或密钥就能触发这条回落链路；当 `target` 是 CDN 站点时，服务器可能被当作转发节点消耗流量。
-
-使用 `主菜单 [19 443端口复用管理中心] -> [17 REALITY 回落流量防护]` 管理两项作用不同的防护：
-
-- 严格 SNI 门禁（SNI 清洗）：适用于 Nginx Stream 和 TCP Peek。只放行当前已登记的面板域名、网站域名、TCP/Xray SNI 路由和 REALITY SNI；未知 SNI 和无 SNI 连接直接丢弃。它不验证 REALITY 客户端，使用已登记 REALITY SNI 的连接仍会进入 Xray。放行清单不单独保存，每次生成入口配置时都从现有配置自动派生。新增、删除或修改域名和路由后，执行对应菜单中的“同步”或重新应用当前入口即可自动更新。
-- REALITY 回落限速：适用于本机 3x-ui SQLite，无论 Xray 直接监听公网 443，还是位于 Nginx Stream / TCP Peek 后端，都只限制所选 REALITY 入站中未通过验证的 fallback 连接。脚本先备份数据库，只修改 `limitFallbackUpload` 和 `limitFallbackDownload`；UUID、shortId、密钥、协议、传输方式及其他入站字段不会修改。PostgreSQL 不自动修改。
-
-使用 CDN 目标时，Nginx Stream / TCP Peek 应同时启用严格 SNI 门禁和回落限速；`xray-fallback` 没有独立的前置 SNI 门禁，但可以使用回落限速。SNI 门禁放行了已登记的 REALITY SNI 后，认证失败的连接仍可能触发 fallback，因此回落限速并非重复防护。
-
-回落限速本身可能形成可识别特征。脚本每次设置都会随机生成限速参数，只能降低不同部署使用完全相同参数的特征，不能消除风险。仍应优先选择网络位置合理的非 CDN 目标；只有无法避免 CDN 目标时再启用回落限速。
-
-## 证书策略
-
-443端口复用继续使用 `acme.sh + Cloudflare DNS API` 签发和安装 Web 域名证书。不使用 Caddy DNS 模块，不需要 `xcaddy`，也不让 Caddy 负责 DNS-01 证书申请。
-
-DNS-01 通过 `_acme-challenge` TXT 记录验证域名控制权。Cloudflare 橙云本身不是 `dns_cf` 签发失败的直接原因；签发失败应优先检查 Token 权限、授权 zone、TXT 传播、服务器时间和 acme.sh 日志。橙云仍会改变 Web 请求的来源 IP，也不适合需要直连 VPS 的 REALITY/节点域名，因此要把“证书签发”和“公网访问链路”分开排查。
-
-3x-ui 安装阶段出现的证书选择，只是为了完成 3x-ui 安装流程；它不是 443端口复用最终使用的证书方案。最终架构是：公网 HTTPS 由当前 Web 反代引擎统一处理，3x-ui 面板和订阅只作为本地 HTTP 后端。
-
-## 域名 IP 白名单
-
-如果只想让固定 IP 访问 3x-ui 面板域名，可以给指定 Web 域名启用 IP 白名单。这个限制是“按域名”生效的：给 `panel.example.com` 加白名单，只会限制这个 Web 域名；没有加入白名单的站点域名、Xray 入站、REALITY SNI 和未知 SNI 会继续按原来的 443 分流规则工作。
-
-两种部署方式的实现不同：
-
-| 部署方式 | 使用入口 | 生效位置 | 影响范围 |
-| --- | --- | --- | --- |
-| 未启用 443端口复用，只用 Caddy/Nginx 反代 | 新增时用 `主菜单 [4 反代] -> [1 添加 Caddy 反代]` 或 `[2 添加 Nginx HTTPS 反代]`；已有域名用 `[4] -> [5 域名 IP 白名单]`；直接编辑配置用 `[4] -> [6 查看/编辑已应用配置文件]` | Caddy 当前域名站点块使用 `remote_ip` 匹配；Nginx HTTPS 反代使用 `allow/deny` 匹配 | 只影响当前 Caddy/Nginx Web 域名 |
-| 已启用 443 Nginx Stream 端口复用 | `主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]` | Nginx stream 入口层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
-| 已启用 443 TCP Peek + Splice 端口复用 | `主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]` | vpso-mux 入口层，按 `SNI + 源 IP` 判断 | 只影响被选择的 SNI 域名 |
-| `xray-fallback`，无论使用 Caddy 还是 Nginx 本地 Web 反代 | 不允许新增、保留或应用 Web 白名单 | 禁止使用；Xray fallback 后本地 Web 反代引擎无法可靠获得真实客户端源 IP | 如需白名单，请切到 Nginx Stream 或 TCP Peek |
-
-白名单支持单个 IP 和 CIDR，例如：
+按上面的示例，关键几栏会是：
 
 ```text
-1.2.3.4
-1.2.3.0/24
-2001:db8::/32
-```
-
-启用前请把当前管理 IP 放进白名单，否则可能把自己挡在面板外。脚本会提示当前 SSH 来源 IP，并会自动尝试把 VPS 本机公网 IPv4/IPv6、loopback 地址和当前 Docker 网络子网加入白名单；如果自动探测失败，请手动补上 VPS 公网 IP 或订阅工具所在的 Docker 子网。
-
-注意：本方案建议相关域名保持 Cloudflare 灰云 / DNS only。若域名开了橙云代理，服务器看到的源 IP 可能是 Cloudflare 边缘 IP，而不是你的真实访问 IP，白名单应改为 Cloudflare 边缘段或先关闭代理。
-
-## 准备工作
-
-首次接管公网 `443` 前，先确认：
-
-| 检查项 | 要求 |
-| --- | --- |
-| VPS 快照或可用备份 | 能在入口切换失败时恢复 |
-| 当前 SSH 会话 | 保持连接，确认备用 SSH 端口或云厂商控制台可用 |
-| 公网 `443` 占用 | 使用 `ss -lntp | grep ':443'` 查清当前监听进程 |
-| 云安全组和防火墙 | 已放行实际 SSH 端口与 `443/tcp` |
-
-至少准备一个面板域名：
-
-```text
-panel.example.com -> 当前 VPS IP
-```
-
-建议再准备一个节点域名：
-
-```text
-node.example.com -> 当前 VPS IP
-```
-
-Cloudflare 建议：
-
-| 域名 | 建议 |
-| --- | --- |
-| 面板域名 | 灰云 / DNS only |
-| 节点域名 | 灰云 / DNS only，必须能直连 VPS |
-| 网站或反代域名 | 灰云 / DNS only |
-| REALITY 伪装 SNI | 写外部真实 HTTPS 站点，不要指向你的 VPS |
-
-不推荐给本方案相关域名开启 Cloudflare 代理。灰云直连更适合 Nginx stream 按 SNI 分流，也能减少 REALITY、订阅链接和 Hosts / External Proxy 的异常。
-
-REALITY 伪装 SNI 建议选没有 CDN 防护、HTTPS 稳定、国内外都容易访问的外部网站。不要选自己的面板域名、节点域名、订阅域名，也不要选会频繁跳转、拦截异常请求或强制人机验证的网站。新版 3x-ui 的 `Min Client Ver` 留空并不代表不限版本，而是使用 Xray core 的内置最低版本；第三方客户端失败时先升级客户端核心，只有确认兼容性需求并接受旧指纹风险后才考虑设为 `1.0.0`。
-
-如果使用 Cloudflare DNS 签证书，API Token 至少需要：
-
-```text
-Zone.Zone.Read
-Zone.DNS.Edit
-```
-
-## 推荐部署流程
-
-按这个顺序走，最不容易绕晕：
-
-```text
-1. 准备域名和 Cloudflare Token
-2. 安装 3x-ui
-3. 让 3x-ui 面板和订阅使用 Skip SSL / 本机 HTTP 后端
-4. 配置 REALITY 入站
-5. 进入 `主菜单 [19 443端口复用管理中心] -> [2 安装 / 切换 443 入口模式]`
-6. 回到 3x-ui 收尾：确认本机监听、订阅字段、Hosts / External Proxy
-7. 进入 `主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]`
-```
-
-### 1. 安装 3x-ui
-
-当前 3x-ui 安装器询问 SSL 设置时，选择第 4 项 `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)`；随后询问是否仅绑定 `127.0.0.1` 时输入 `y`。这只适用于已使用反向代理或 SSH 隧道的场景，不能暴露未加密的公网 HTTP 面板。2.x 或旧配置若已设置 SSL，接入 443 前清空面板和订阅证书路径。
-
-| 安装器选项 | 在本教程中的作用 | 后续处理 |
-|---|---|---|
-| Skip SSL | 推荐，作为本机 HTTP 后端 | 选择仅绑定 `127.0.0.1` |
-| 为域名申请证书 | 可用于临时完成 3x-ui 安装 | 接入 443 前清空 3x-ui 证书路径 |
-| 为 IP 申请证书 | 仅作为临时过渡，不推荐作为正式公网 HTTPS | 接入 443 前清空 3x-ui 证书路径 |
-| 选择已有证书路径 | 可用于临时完成安装 | 接入 443 前清空 3x-ui 证书路径 |
-
-示例：
-
-```text
-证书域名：panel.example.com
-是否设置给面板：可以选择是
-```
-
-上面的值只是示例，请替换成你的实际域名。后面正式接入 443端口复用时，需要把 3x-ui 自带证书路径清空，让 Web 反代引擎接管公网 HTTPS。
-
-建议自定义这些值，并记下来：
-
-```text
-面板端口：40000
-面板 url 根路径：/panel/
-用户名/密码：自己设置
-监听 IP：127.0.0.1
-SSL：Skip SSL / 不申请 SSL
-```
-
-本机后端检查地址：
-
-```text
-http://127.0.0.1:40000/panel/
-```
-
-如果你的端口或路径不同，替换成自己的值。面板路径建议带前后 `/`。
-
-### 2. 清空 3x-ui 面板证书
-
-只要你准备接入 VPS-Optimize 的 443端口复用，就应清空 3x-ui 面板和订阅证书路径，让 Web 反代引擎接管公网 HTTPS。
-
-进入：
-
-```text
-面板设置中的 `webCertFile` / `webKeyFile`
-```
-
-把下面这类路径全部清空：
-
-```text
-证书路径
-私钥路径
-公钥文件路径
-私钥文件路径
-```
-
-保存并重启面板。
-
-如果不清空，可能导致 502 Bad Gateway、HTTP/HTTPS 后端协议不匹配、重定向循环、证书路径混乱、面板或订阅异常。
-
-清空后，3x-ui 面板只作为本机 HTTP 后端：
-
-```text
-http://127.0.0.1:40000/panel/
-```
-
-公网只访问 443端口复用地址：`https://panel.example.com/panel/`。
-
-### 3. 清空 3x-ui 订阅证书
-
-进入：
-
-```text
-订阅设置中的 `subCertFile` / `subKeyFile`
-```
-
-同样清空证书路径和私钥路径。接入 443端口复用后，订阅公网 HTTPS 也由当前 Web 反代引擎统一处理，3x-ui 订阅服务只作为本地 HTTP 后端。
-
-再设置订阅服务：
-
-```text
-subListen：127.0.0.1
-subDomain：panel.example.com
-subPort：2096
-subPath：/sub/
-subClashPath：/clash/
-```
-
-`subDomain` 只填域名，不填协议、端口或路径。订阅路径不会自动补 `/`，请写成：
-
-```text
-/sub/
-/clash/
-/mihomo/
-```
-
-不要写成：
-
-```text
-sub
-/sub
-sub/
-/sub/客户端 Subscription
-```
-
-443 向导里填的是路径前缀，例如 `/sub/`、`/clash/`，不要填域名，也不要填入站下面客户端的 `Subscription`。
-
-### 4. 配置 REALITY 入站
-
-在 3x-ui 新增 VLESS REALITY 入站：
-
-```text
-协议：VLESS
 监听地址：127.0.0.1
 监听端口：1443
-传输：TCP / RAW
-Security：Reality
-uTLS：chrome
-Target / dest：外部真实 HTTPS 站点:443，例如 www.microsoft.com:443
-serverNames / SNI：同一个外部真实 HTTPS 站点，例如 www.microsoft.com
-SpiderX：/
-Fallbacks：留空
+serverName / target：www.example.org
+serverNames：www.example.org
+Fingerprint：chrome
 ```
 
-不要把 REALITY 的 `dest` 或 `serverNames` 写成：
+UUID、私钥、公钥和 shortId 由 3x-ui 的生成按钮创建；不要把别人的示例值直接复制过来。创建完成后，记下入站名称（例如 `VLESS-REALITY`），后面的 Hosts 需要选择它。
 
-```text
-panel.example.com:443
-node.example.com:443
-127.0.0.1:8443
-```
+节点分享链接中的地址最后应使用你的节点域名和端口 `443`，而不是 `127.0.0.1:1443`。
 
-后续要修改 REALITY SNI，可以走：
+### 4. 运行 443 配置向导
 
-```text
-主菜单 [19 443端口复用管理中心] -> [10 修改 443端口复用参数] -> [2 修改 REALITY 本地监听 / 伪装 SNI]
-```
-
-### 5. 运行 443 首次配置
-
-确认面板证书和订阅证书都清空后，再运行：
+在脚本主菜单选择：
 
 ```text
 主菜单 [19 443端口复用管理中心] -> [2 安装 / 切换 443 入口模式]
 ```
 
-示例填写：
+第一次部署建议这样填：
 
-| 项目 | 示例值 |
-| --- | --- |
-| 面板域名 | `panel.example.com` |
-| 网站/反代域名 | 首次可以留空 |
-| REALITY 伪装 SNI | `www.microsoft.com` 或其他外部真实 HTTPS 站点 |
-| Nginx 公网监听地址 | `0.0.0.0` |
-| Nginx 公网监听端口 | `443` |
-| Web 反代引擎 | `Caddy` 或 `Nginx` |
-| Web 反代引擎本地监听地址 | `127.0.0.1` |
-| Web 反代引擎本地监听端口 | `8443` |
-| Xray REALITY 本地监听地址 | `127.0.0.1` |
-| Xray REALITY 本地监听端口 | `1443` |
-| 3x-ui 面板监听地址 | `127.0.0.1` |
-| 3x-ui 面板端口 | `40000` |
-| 3x-ui 面板公网路径 | `/panel/` |
-| 3x-ui 订阅监听地址 | `127.0.0.1` |
-| 3x-ui 订阅端口 | `2096` |
-| 普通订阅路径前缀 | `/sub/` |
-| Clash/Mihomo 路径前缀 | `/clash/` |
-| Cloudflare API Token | 你的 CF Token |
+1. 入口模式选择 **Nginx Stream**。
+2. Web 反代引擎选择 Caddy 或 Nginx；不确定时用默认值。
+3. 填写面板域名、节点域名和 REALITY SNI。
+4. 面板后端按示例填写 `127.0.0.1` 和 `40000`；订阅后端填写 `127.0.0.1` 和 `2096`。
+5. 新增普通网站时，`后端地址：127.0.0.1`，端口例如 `3000`。如果网站在 Docker 中，请把容器端口发布到宿主机回环地址（例如 `127.0.0.1:3000:3000`），然后在这里填主机端口 `3000`。
+6. 确认域名、端口和服务用途后再保存。
 
-面板路径、普通订阅路径、Clash/Mihomo 路径必须和 3x-ui 里完全一致。
+保存前脚本会检查后端是否可连接。检查失败时先修正地址或端口，不要为了继续而强行保存。后端端口不应直接开放到公网。
 
-脚本每次首次配置、重新应用、切换 Web 反代引擎或增删网站时，都会先创建 SNI stack 备份。若 `nginx -t`、`caddy validate` 或服务重启失败，会尝试回滚，并把异常配置移入隔离目录。
+### 5. 回到 3x-ui 完成域名关联
 
-常见备份和隔离目录：
+配置向导完成后回到 3x-ui：
+
+- 确认面板仍监听 `127.0.0.1`；
+- 确认订阅地址、路径和端口正确；
+- **3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host**，把节点域名指向对应的 REALITY 入站。按本文示例逐项填写：
+  - 入站：选择刚才创建的 VLESS REALITY 入站（本地监听 `127.0.0.1:1443`）；
+  - 地址：`node.example.com`；
+  - 端口：`443`；
+  - Security / SNI / Fingerprint / ALPN：与该 REALITY 入站和客户端保持一致，例如 `REALITY`、`www.example.org`、`chrome`，ALPN 按入站实际值填写。
+- **3x-ui v3.3.1 及之前：在对应 REALITY 入站里打开 `External Proxy`**。类型选择与入站一致，地址填 `node.example.com`，端口填 `443`；不要填 `127.0.0.1:1443`。
+- 复制节点链接，确认客户端地址是节点域名、端口是 `443`。
+
+`Hosts` 里的“地址”是用户访问的公网节点域名，不是本机监听地址；“入站”才是把这个域名关联到哪个 REALITY 入站。按示例，正确结果应当是：
 
 ```text
-/etc/vps-optimize/backups/sni-stack_*
-/etc/vps-optimize/quarantine/nginx-sni
-/etc/vps-optimize/quarantine/nginx-sni-web
-/etc/vps-optimize/quarantine/nginx-proxy-to-443-entry
-/etc/vps-optimize/quarantine/caddy-sni
-/etc/vps-optimize/quarantine/caddy-sni-web
-/etc/vps-optimize/quarantine/caddy-certs
-```
-
-### 6. 回到 3x-ui 收尾
-
-确认 3x-ui 仍是本机 HTTP 后端：
-
-```text
-面板监听 IP：127.0.0.1
-订阅监听 IP：127.0.0.1
-```
-
-确认新版订阅字段：
-
-```text
-subDomain：panel.example.com
-subPath：/sub/
-subClashPath：/clash/
-```
-
-`subDomain` 不填协议、端口或路径；自定义订阅路径应同时更新脚本保存的路径前缀。
-
-然后按 3x-ui 版本设置节点公网地址。
-
-3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host：
-
-```text
-入站：选择对应的 REALITY 或本地 Xray 入站
-地址：node.example.com 或服务器公网 IP
-端口：443
-Security：相同，或按该入站实际安全类型填写
-SNI / Fingerprint / ALPN：按该入站和客户端实际值保持一致
-```
-
-3x-ui v3.3.1 及之前：在 REALITY 入站里打开 `External Proxy`：
-
-```text
-类型：相同
-地址：node.example.com 或服务器公网 IP
-端口：443
-```
-
-保存后重新复制节点链接，端口应该是 `:443`。如果还是 `:1443`，3x-ui v3.4.0+ 请检查 `Hosts / 主机`，旧版请检查 `External Proxy`。
-
-最后运行：
-
-```text
-主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]
-```
-
-体检通过后，进入 `主菜单 [16 配置备份与回滚] -> [1 创建全量配置备份]` 保存当前可用配置。
-
-## 后续维护
-
-不要为了小改动重跑首次配置。常用入口如下：
-
-| 你想做什么 | 入口 |
-| --- | --- |
-| 新增网站或反代域名 | `主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]` |
-| 切换 Caddy/Nginx Web 反代引擎 | `主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [8 切换 Web 反代引擎]` |
-| 检查 443 链路 | `主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]` |
-| 修改面板/订阅端口与路径 | `主菜单 [19 443端口复用管理中心] -> [10 修改 443端口复用参数] -> [1 修改面板/订阅端口与路径]` |
-| 修改 REALITY 本地监听 / 伪装 SNI | `主菜单 [19 443端口复用管理中心] -> [10 修改 443端口复用参数] -> [2 修改 REALITY 本地监听 / 伪装 SNI]` |
-| 修改 Nginx / Web 反代监听 | `主菜单 [19 443端口复用管理中心] -> [10 修改 443端口复用参数] -> [3 修改 Nginx 公网入口 / Web 反代本地 TLS]` |
-| 修改面板域名 | `主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]` |
-| 重新应用当前配置 | `主菜单 [19 443端口复用管理中心] -> [10 修改 443端口复用参数] -> [5 重新应用当前保存的配置]` |
-| 证书维护 | `主菜单 [19 443端口复用管理中心] -> [12 CF DNS / Caddy 证书维护]` |
-| 回滚 443端口复用配置 | `主菜单 [19 443端口复用管理中心] -> [12 CF DNS / Caddy 证书维护]` 中的回滚入口 |
-
-新增网站/反代时，填写当前 VPS 可访问的后端。Docker 服务可先把容器端口发布到 `127.0.0.1`：
-
-```text
-网站域名：dockge.example.com
-后端地址：127.0.0.1
-后端端口：5001
-```
-
-`127.0.0.1:5001` 是示例值，请替换为 Docker 实际发布到宿主机的地址和端口。内网服务也可以使用实际内网 IP 或 hostname，但必须先确认当前 VPS 能直接访问。
-
-然后浏览器访问：
-
-```text
-https://dockge.example.com/
-```
-
-适合接入的服务包括 SublinkPro、Sub-Store、Dockge、Komari、博客和其他本机 HTTP 服务。
-
-## 排错入口
-
-遇到面板打不开、订阅 404、证书失败、端口被占用或 REALITY 连接失败，统一看：[443端口复用排错指南](443-single-entry-troubleshooting.md)。
-
-## 一组完整示例，仅供参考
-
-```text
-面板：https://panel.example.com/panel/
-普通订阅：https://panel.example.com/sub/客户端 Subscription
-Clash/Mihomo：https://panel.example.com/clash/客户端 Subscription
-REALITY 节点：node.example.com:443
-
-3x-ui 面板监听：127.0.0.1:40000
-3x-ui 订阅监听：127.0.0.1:2096
+客户端地址：node.example.com
+客户端端口：443
+Hosts 地址：node.example.com
+Hosts 端口：443
 REALITY 入站监听：127.0.0.1:1443
-Web 反代引擎监听：127.0.0.1:8443（示例，实际以脚本当前配置为准）
-公网 443 入口监听：当前 ENTRY_MODE 对应服务（nginx-stream=nginx；xray-fallback=Xray 主入站；tcp-peek=vpso-mux）
+REALITY SNI：www.example.org
 ```
 
-## 绝对不要这样做
+如果生成的节点链接仍然是 `127.0.0.1:1443` 或 `node.example.com:1443`，说明 Hosts / External Proxy 没有填好，先修正这里再测试客户端。
+
+### 6. 验证并备份
+
+先用浏览器打开面板域名，再用客户端测试节点。确认无误后运行菜单中的配置备份。
+
+可以在 VPS 上做两个不会改配置的检查：
+
+```bash
+ss -lntp | grep -E ':(443|40000|2096|1443)'
+curl -I https://panel.example.com/panel/
+curl -I https://node.example.com/sub/
+```
+
+预期是：公网只需要看到入口监听 `443`；`40000`、`2096`、`1443` 可以只绑定 `127.0.0.1`；面板和订阅返回 HTTP 响应。示例路径如果与你的面板不同，以实际路径为准。
+
+如果面板打不开，先检查本机端口和当前入口状态，再看[排错与恢复](443-single-entry-troubleshooting.md)。
+
+## 模式切换与回滚
+
+### 切换到 TCP Peek + Splice
+
+TCP Peek 的优点是分流组件更轻量，并且能在连接早期按 SNI 处理流量。它不是另一套面板配置，**配置过程和 Nginx Stream 一样**：先把域名、面板、订阅和 REALITY 跑通，再切换入口。
+
+执行：
 
 ```text
-公网访问 https://panel.example.com:40000/
-公网访问 https://panel.example.com:2096/sub/xxxx
-把 REALITY dest 写成 panel.example.com:443
-把 REALITY serverNames 写成面板域名
-3x-ui 证书路径没清空就跑 443 分流
-订阅 URI 路径写成 sub 或 /sub
-把客户端 Subscription 填进 443 向导的路径前缀
-让 Web 反代引擎、Xray、3x-ui 面板同时抢公网 443
+主菜单 [19 443端口复用管理中心] -> [2 安装 / 切换 443 入口模式] -> [3 TCP Peek + Splice]
 ```
+
+脚本会先检查依赖、端口和后端连通性。切换期间保留当前 SSH 连接，确认新入口正常后再关闭旧连接。
+
+### 使用 Xray Fallback
+
+只有在你已经有一个配置完整的 Xray 主入站时才选择此模式。它由 Xray 接管公网 `443`，普通 HTTPS 再回落到 Caddy 或 Nginx。本模式不适合用脚本的 SNI 路由菜单管理多个 Xray 入站。
+
+### 回滚上一次切换
+
+如果切换后服务异常，执行：
+
+```text
+主菜单 [19 443端口复用管理中心] -> [7 回滚上一次入口模式切换]
+```
+
+回滚后重新检查面板域名、节点链接和 `ss -lntp | grep ':443'` 的监听结果。
+
+## 常用维护
+
+### 管理 Web 域名和反代
+
+新增或修改网站时使用：
+
+```text
+主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]
+```
+
+切换 Caddy / Nginx：选择 `[8 切换 Web 反代引擎]`。两者共用域名和证书配置，切换前先确认后端端口可访问。
+
+完整路径是：
+
+```text
+主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [8 切换 Web 反代引擎]
+```
+
+脚本会重新生成所选引擎的配置，并继续使用已有域名、证书和后端。不要同时手动启动另一套 Caddy/Nginx 配置，否则它可能抢占 `443` 或本地 Web 端口。
+
+新增网站时，按“域名 -> 后端地址 -> 后端端口”的顺序填写。例如你的程序在 VPS 上监听 `127.0.0.1:3000`，就填写：
+
+```text
+域名：site.example.com
+后端地址：127.0.0.1
+后端端口：3000
+```
+
+保存后用浏览器打开 `https://site.example.com`。如果程序实际只监听 Docker 容器内部地址，先发布到宿主机的 `127.0.0.1`，不要把容器名或容器内部专用主机名当作 VPS 后端地址。
+
+### 管理域名 IP 白名单
+
+Web 白名单只限制网站和面板域名，不限制 REALITY 节点流量。入口模式为 `nginx-stream` 或 `tcp-peek` 时，可在入口菜单选择 `[4] -> [5 域名 IP 白名单]`；管理 Web 域名时也可使用：
+
+```text
+主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]
+```
+
+`xray-fallback`，无论使用 Caddy 还是 Nginx 本地 Web 反代，都只把白名单用于 Web 域名，不能把它当作 REALITY 用户鉴权。
+
+## REALITY 回落流量防护
+
+当 REALITY 的 SNI 使用 CDN 域名时，建议同时打开：
+
+1. **SNI 清洗**：只允许已经登记的 Web 域名、SNI 路由和 REALITY SNI 进入入口；未知 SNI 直接丢弃。
+2. **回落限速**：只限制没有通过 REALITY 验证、又被回落处理的连接。
+
+Nginx Stream 和 TCP Peek 支持这两项保护；Xray Fallback 没有前置的 SNI 清洗，但仍可使用回落限速。SNI 清洗不会代替 REALITY 密钥、UUID 等正常验证，也不会影响已经正确配置的节点。
+
+在脚本中打开：
+
+```text
+主菜单 [19 443端口复用管理中心] -> [17 REALITY 回落流量防护]
+```
+
+常用操作：
+
+1. `[1] 启用严格 SNI 门禁`：Nginx Stream / TCP Peek 只放行已登记的 SNI。
+2. `[3] 重新同步当前 SNI 清单`：新增域名或路由后使用，避免新域名被误拦截。
+3. `[4] 设置 REALITY 回落限速`：只限制验证失败后进入回落的连接；脚本会生成一组随机参数，并在修改前要求确认。
+4. `[5] 清除 REALITY 回落限速`：恢复 Xray 默认行为，同样需要确认。
+
+修改回落限速会重启面板或 Xray 服务。先确认节点没有正在进行的重要传输，并保留脚本生成的备份；如果只是普通非 CDN 目标，通常不需要额外开启回落限速。
+
+严格 SNI 门禁的清单会根据已经登记的 Web 域名、SNI 路由和 REALITY SNI 自动生成。新增域名、修改节点 SNI 后，先保存配置，再执行 `[3] 重新同步当前 SNI 清单`；否则新域名可能被当成未知 SNI 拒绝。它只负责过滤未知 SNI，不负责验证 UUID、密钥或其他 REALITY 身份信息。
+
+如果可以选择，仍然优先使用没有 CDN 防护的真实 HTTPS 网站作为 REALITY 目标；这能减少误配置时的流量风险。
+
+## 验证与排错
+
+按下面顺序检查，通常不需要重装：
+
+1. `ss -lntp | grep ':443'`：确认只有当前入口服务监听公网 `443`。
+2. 浏览器打开面板域名：确认 Web 反代和证书正常。
+3. 浏览器打开订阅地址：确认路径、端口和域名一致。
+4. 客户端连接节点：确认分享链接使用域名和端口 `443`，REALITY 的 SNI 使用目标网站。
+5. `403/401` 优先检查 Web 白名单、CDN/WAF 和 Host/SNI；`502` 检查后端地址和端口；超时检查防火墙、云安全组和 `443` 监听。
+6. 在脚本中使用 `主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]` 查看入口、证书、Web 和 Xray 路由；需要测试公网 DNS/TCP/TLS 时使用 `[14 443 网络访问测试]`。
+7. 仍然失败时查看[排错与恢复](443-single-entry-troubleshooting.md)；需要了解入口差异时查看[入口模式与原理](443-tcp-peek-engine.md)。
+
+## 不要这样做
+
+- 不要让 3x-ui 面板、订阅或后端端口直接监听公网。
+- 不要让两个服务同时监听公网 `443`。
+- 不要把面板域名、节点域名或本机地址当作 REALITY 的伪装目标。
+- 不要在没有 SSH 保底连接和备份的情况下切换入口。
+- 不要把示例域名、端口和路径原样复制到生产环境。
