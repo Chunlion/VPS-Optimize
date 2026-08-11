@@ -34,6 +34,25 @@ cy
 
 On the first interactive run, the installer asks in English whether to use Simplified Chinese, English, or Russian. Press Enter for English. Change it later from main-menu item `[20 Interface language]`; the setting is stored in `/etc/vps-optimize/language.conf`.
 
+### Main-menu shortcuts
+
+Shortcuts are case-insensitive and behave like selecting the corresponding main-menu number. They do not bypass later confirmations.
+
+| Shortcut | Main-menu item |
+|---|---|
+| `proxy` | `[4 Reverse proxy]` |
+| `panel` | `[5 Panels, nodes, subscriptions]` |
+| `ssh` | `[6 SSH security center]` |
+| `firewall` | `[8 Firewall rules]` |
+| `bbr` | `[10 Network and kernel tuning]` |
+| `docker` | `[11 Docker security management]` |
+| `speed` | `[12 Speed and quality tests]` |
+| `health` | `[15 Service health overview]` |
+| `backup` | `[16 Configuration backup]` |
+| `u` / `update` / `upd` | `[17 Update script]` |
+| `443` | `[19 Port 443 Reuse manager]` |
+| `lang` | `[20 Interface language]` |
+
 ## 🖥️ Supported Systems
 
 | System | Status |

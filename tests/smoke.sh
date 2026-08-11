@@ -513,6 +513,7 @@ source src/input.sh
 source src/validate.sh
 source src/rollback.sh
 source src/backup.sh
+source src/menus.sh
 
 assert_ip_cidr_valid() {
     local value="$1"
@@ -646,6 +647,17 @@ colored_confirmation=$(colorize_confirmation_prompt "Proceed? (Y/n) Continue? (y
         [[ "$(terminal_text_width "${menu_row%%(*}")" == "35" ]]
     done
 )
+for shortcut_mapping in \
+    'proxy:4' 'panel:5' 'ssh:6' 'firewall:8' 'bbr:10' 'docker:11' \
+    'speed:12' 'health:15' 'backup:16' 'u:17' 'update:17' 'upd:17' '443:19' 'lang:20'; do
+    shortcut=${shortcut_mapping%%:*}
+    expected_choice=${shortcut_mapping#*:}
+    [[ "$(normalize_main_choice "$shortcut")" == "$expected_choice" ]]
+    [[ "$(normalize_main_choice "${shortcut^^}")" == "$expected_choice" ]]
+done
+for removed_shortcut in caddy nginx xcm traffic quota reboot docker-safe; do
+    [[ "$(normalize_main_choice "$removed_shortcut")" == "$removed_shortcut" ]]
+done
 confirm_default_yes <<< ""
 action_needs_safe_default "重启 SSH 服务" ""
 action_needs_safe_default "Isolate certificate files" ""
@@ -847,7 +859,13 @@ assert_function_body_contains src/preflight.sh func_preflight_check 'return 1' "
 assert_function_body_contains src/system_core.sh func_base_init 'failed_steps+=("$(localized_text "系统软件包更新"' "Base init must preserve package update failures."
 assert_function_body_contains src/system_core.sh func_base_init 'BBR 状态验证' "Base init must verify BBR runtime state before reporting success."
 assert_file_not_contains src/menus.sh 'func_beginner_menu' "The removed hidden beginner entry must not remain in source."
-assert_file_not_contains src/menus.sh 'normalize_main_choice' "The removed hidden main-menu aliases must not remain in source."
+assert_function_body_contains src/menus.sh normalize_main_choice '443) echo "19"' "The documented 443 shortcut must open the Port 443 Reuse center."
+assert_function_body_contains src/menus.sh main_menu 'choice=$(normalize_main_choice "$choice")' "The main menu must normalize documented shortcuts before dispatch."
+assert_file_not_contains src/menus.sh '443 ·' "Main-menu descriptions must not display shortcut labels."
+assert_file_not_contains src/menus.sh 'proxy ·' "Main-menu descriptions must not display shortcut labels."
+assert_file_contains README.md '| `443` | `[19 443端口复用管理中心]` |' "The Chinese README must document the 443 shortcut."
+assert_file_contains en/README.md '| `443` | `[19 Port 443 Reuse manager]` |' "The English README must document the 443 shortcut."
+assert_file_contains ru/README.md '| `443` | `[19 Общий порт 443]` |' "The Russian README must document the 443 shortcut."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'VPSO_FIREWALLD_OFFLINE_MODE=1' "Inactive firewalld must receive allow rules before the service starts."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'systemctl enable --now firewalld' "Firewalld must start only after offline rules succeed."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'firewall_build_minimum_plan' "Firewall enable flow must build a least-privilege plan."
@@ -3013,8 +3031,8 @@ grep -q 'wget -q --timeout=15 --tries=3' dist/vps.sh
 grep -q '"${sublink_bind_addr}:${sublink_port}:8000"' dist/vps.sh
 grep -q '"${mmw_bind_addr}:${mmw_port}:${mmw_port}"' dist/vps.sh
 grep -q 'confirm_risk_action' dist/vps.sh
-if grep -q 'func_beginner_menu\|normalize_main_choice' dist/vps.sh; then
-    echo "Release script must not contain removed hidden menu entries." >&2
+if grep -q 'func_beginner_menu' dist/vps.sh; then
+    echo "Release script must not contain the removed hidden beginner menu." >&2
     exit 1
 fi
 grep -q 'generate_issue_diagnostics' dist/vps.sh

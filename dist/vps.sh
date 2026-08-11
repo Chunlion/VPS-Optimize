@@ -22806,6 +22806,28 @@ func_sni_stack_quick_menu() {
 # ---------------------------------------------------------
 # 界面主循环 (新增 IP 防送中 & SublinkPro)
 # ---------------------------------------------------------
+normalize_main_choice() {
+    local choice
+    choice="$(trim_input "$1")"
+    choice=$(printf '%s' "$choice" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+
+    case "$choice" in
+        proxy) echo "4" ;;
+        panel) echo "5" ;;
+        ssh) echo "6" ;;
+        firewall) echo "8" ;;
+        bbr) echo "10" ;;
+        docker) echo "11" ;;
+        speed) echo "12" ;;
+        health) echo "15" ;;
+        backup) echo "16" ;;
+        u|update|upd) echo "17" ;;
+        443) echo "19" ;;
+        lang) echo "20" ;;
+        *) echo "$choice" ;;
+    esac
+}
+
 main_menu() {
     create_shortcut
     while true; do
@@ -22841,7 +22863,7 @@ main_menu() {
             print_menu_item 14 "Сведения о системе" "CPU, память, диски и сеть в реальном времени"
             print_menu_item 15 "Состояние служб" "службы, сертификаты и слушающие порты"
             print_menu_item 16 "Резервная копия и откат" "создание, просмотр, восстановление и очистка"
-            print_menu_item 17 "Обновить скрипт" "команды: u / update / upd" 28 "${BOLD}${YELLOW}" "$CYAN"
+            print_menu_item 17 "Обновить скрипт" "проверка и установка последней версии" 28 "${BOLD}${YELLOW}" "$CYAN"
             echo -e " ${RED}18.${PLAIN} Перезагрузить сервер"
             echo -e ""
             echo -e " ${BOLD}${BLUE}▶ ⑤ Часто используемые функции${PLAIN}"
@@ -22881,7 +22903,7 @@ main_menu() {
             print_menu_item 14 "System hardware probe" "live CPU, memory, disk, and network details"
             print_menu_item 15 "Service health overview" "services, certificates, and listening ports"
             print_menu_item 16 "Configuration backup" "back up, list, restore, and clean up"
-            print_menu_item 17 "Update script" "shortcut: u / update / upd" 28 "${BOLD}${YELLOW}" "$CYAN"
+            print_menu_item 17 "Update script" "check for and install the latest version" 28 "${BOLD}${YELLOW}" "$CYAN"
             echo -e " ${RED}18.${PLAIN} Reboot server"
             echo -e ""
             echo -e " ${BOLD}${BLUE}▶ ⑤ Frequently used${PLAIN}"
@@ -22921,7 +22943,7 @@ main_menu() {
         print_menu_item 14 "系统硬件探针" "CPU/内存/磁盘/网络实时信息"
         print_menu_item 15 "服务健康总览" "服务状态/证书摘要/端口概览"
         print_menu_item 16 "配置备份与回滚" "备份/列表/恢复/清理"
-        print_menu_item 17 "更新脚本" "快捷词：u / update / upd" 28 "${BOLD}${YELLOW}" "$CYAN"
+        print_menu_item 17 "更新脚本" "检查并安装最新版本" 28 "${BOLD}${YELLOW}" "$CYAN"
         echo -e " ${RED}18.${PLAIN} 重启服务器"
         echo -e ""
         echo -e " ${BOLD}${BLUE}▶ ⑤ 高频直达${PLAIN}"
@@ -22933,7 +22955,8 @@ main_menu() {
         fi
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请输入菜单编号、? 或已标出的快捷词: " "👉 Enter a menu number, ?, or a shortcut shown above: " "👉 Введите номер меню, ? или указанную выше команду: ")"
+        read_trimmed choice "$(localized_text "👉 请输入菜单编号、? 或快捷词: " "👉 Enter a menu number, ?, or shortcut: " "👉 Введите номер меню, ? или команду: ")"
+        choice=$(normalize_main_choice "$choice")
 
         case $choice in
             "?") show_main_help; echo ""; pause_return ;;
@@ -22954,15 +22977,15 @@ main_menu() {
             14) func_system_info ;;
             15) func_health_dashboard ;;
             16) func_backup_center ;;
-            17|u|U|update|UPDATE|upd|UPD) func_update_script ;;
+            17) func_update_script ;;
             18) func_reboot_server ;;
             19) func_sni_stack_quick_menu ;;
             0) exit 0 ;;
             *)
                 localized_echo \
-                    "${RED}❌ 无效的输入，请输入菜单中存在的数字！${PLAIN}" \
-                    "${RED}❌ Invalid input. Enter a menu number, ?, or a shortcut shown above.${PLAIN}" \
-                    "${RED}❌ Неверный ввод. Введите номер меню, ? или указанную выше команду.${PLAIN}"
+                    "${RED}❌ 无效输入，请输入菜单编号、? 或有效快捷词。${PLAIN}" \
+                    "${RED}❌ Invalid input. Enter a menu number, ?, or valid shortcut.${PLAIN}" \
+                    "${RED}❌ Неверный ввод. Введите номер меню, ? или допустимую команду.${PLAIN}"
                 sleep 1
                 ;;
         esac
