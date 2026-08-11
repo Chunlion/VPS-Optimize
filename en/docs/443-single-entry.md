@@ -2,9 +2,9 @@
 
 ## Before you begin
 
-For REALITY `serverName` / `target`, prefer a stable, directly reachable HTTPS site that is not protected by a CDN. If a CDN-backed domain such as a Cloudflare site is unavoidable, enable the protection appropriate for the current entry mode under [REALITY fallback traffic protection](#reality-fallback-traffic-protection): use the strict SNI gate (SNI filtering) with Nginx Stream / TCP Peek, or REALITY fallback rate limiting with `xray-fallback`. Otherwise, failed-authentication connections can turn the server into a CDN relay, occupying bandwidth and consuming data transfer.
+For REALITY `serverName` / `target`, prefer a stable, directly reachable HTTPS site that is not protected by a CDN. If a CDN-backed domain such as a Cloudflare site is unavoidable, enable the applicable controls under [REALITY fallback traffic protection](#reality-fallback-traffic-protection): with Nginx Stream / TCP Peek, enable both the strict SNI gate (SNI filtering) and REALITY fallback rate limiting; `xray-fallback` has no front gate but can use fallback rate limiting directly. The script requires a local 3x-ui SQLite database for fallback rate limiting. Do not use a CDN target when this limit cannot be applied. Otherwise, failed-authentication connections can turn the server into a CDN relay, occupying bandwidth and consuming data transfer.
 
-The strict SNI gate derives its allowlist from registered Web domains, TCP/Xray SNI routes, and the REALITY SNI whenever the entry configuration is generated. Fallback rate limiting applies only to REALITY fallback connections that fail authentication.
+The strict SNI gate derives its allowlist from registered Web domains, TCP/Xray SNI routes, and the REALITY SNI whenever the entry configuration is generated. It filters only unknown or missing SNI and does not authenticate REALITY clients; a connection using the registered REALITY SNI still reaches Xray. Fallback rate limiting applies only to REALITY fallback connections that fail authentication.
 
 When encountering panel failure to open, subscription 404, certificate failure, or REALITY connection failure, first read: [Port 443 Reuse Troubleshooting](443-single-entry-troubleshooting.md).
 
@@ -308,12 +308,14 @@ REALITY nodes are different. REALITY pays more attention to whether the external
 
 REALITY forwards failed-authentication connections to `target`. A scanner does not need a UUID, shortId, or key to trigger this fallback path. When `target` is a CDN site, the server can be abused as a relay and consume traffic.
 
-Use `Main menu [19 Port 443 Reuse Manager] -> [17 REALITY fallback traffic protection]` to manage two protection layers:
+Use `Main menu [19 Port 443 Reuse Manager] -> [17 REALITY fallback traffic protection]` to manage two complementary controls:
 
-- Strict SNI gate (SNI filtering): available in Nginx Stream and TCP Peek modes. It allows only the registered panel domain, site domains, TCP/Xray SNI routes, and REALITY SNI, and drops unknown or missing SNI. The allowlist is not stored separately; it is derived from the current configuration whenever the entry configuration is generated. After adding, removing, or changing a domain or route, use its Sync action or reapply the current entry to update the gate automatically.
-- REALITY fallback rate limiting: available for 3x-ui SQLite. The script backs up the database first, changes only `limitFallbackUpload` and `limitFallbackDownload` on the selected REALITY inbound, and randomizes the values for each operation. It does not change UUIDs, shortIds, keys, protocols, transports, or other inbound fields. PostgreSQL is not modified automatically.
+- Strict SNI gate (SNI filtering): available in Nginx Stream and TCP Peek modes. It allows only the registered panel domain, site domains, TCP/Xray SNI routes, and REALITY SNI, and drops unknown or missing SNI. It does not authenticate REALITY clients, so a connection using the registered REALITY SNI still reaches Xray. The allowlist is not stored separately; it is derived from the current configuration whenever the entry configuration is generated. After adding, removing, or changing a domain or route, use its Sync action or reapply the current entry to update the gate automatically.
+- REALITY fallback rate limiting: available for local 3x-ui SQLite. Whether Xray listens on public port 443 directly or runs behind Nginx Stream / TCP Peek, the limit applies only to failed-verification fallback connections on the selected REALITY inbound. The script backs up the database first and changes only `limitFallbackUpload` and `limitFallbackDownload`. It does not change UUIDs, shortIds, keys, protocols, transports, or other inbound fields. PostgreSQL is not modified automatically.
 
-In `xray-fallback` mode, Xray listens on public port 443 directly, so there is no separate front SNI gate; only fallback rate limiting is available. Rate limiting is itself a fingerprint. Prefer a non-CDN REALITY target with a network location appropriate for the server, and enable rate limiting only when a CDN target is unavoidable.
+With a CDN target, enable both controls in Nginx Stream / TCP Peek modes. In `xray-fallback` mode, Xray listens on public port 443 directly, so there is no separate front SNI gate, but fallback rate limiting remains available. Once the SNI gate allows the registered REALITY SNI, a failed-authentication connection can still trigger fallback, so the rate limit is not redundant.
+
+Fallback rate limiting can itself create a recognizable fingerprint. The script randomizes the values on each setup to reduce identical parameters across deployments, but this does not remove the risk. Prefer a non-CDN REALITY target with a network location appropriate for the server, and enable fallback rate limiting only when a CDN target is unavoidable.
 
 ## Certificate policy
 

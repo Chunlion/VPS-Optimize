@@ -2,9 +2,9 @@
 
 ## 前言
 
-REALITY 的 `serverName` / `target` 优先选择稳定、可直连且未启用 CDN 防护的真实 HTTPS 网站。若确需使用 Cloudflare 等 CDN 站点，务必开启适合当前入口模式的 [REALITY 回落流量防护](#reality-回落流量防护)：Nginx Stream / TCP Peek 开启严格 SNI 门禁（SNI 清洗），`xray-fallback` 开启 REALITY 回落限速。否则，验证失败的连接可能使服务器成为 CDN 转发器，持续占用带宽并消耗流量。
+REALITY 的 `serverName` / `target` 优先选择稳定、可直连且未启用 CDN 防护的真实 HTTPS 网站。若确需使用 Cloudflare 等 CDN 站点，务必开启适合当前入口模式的 [REALITY 回落流量防护](#reality-回落流量防护)：Nginx Stream / TCP Peek 同时开启严格 SNI 门禁（SNI 清洗）和 REALITY 回落限速；`xray-fallback` 没有前置门禁，但可以直接使用回落限速。回落限速要求 REALITY 入站使用本机 3x-ui SQLite；若无法启用，不应使用 CDN 目标。否则，验证失败的连接可能使服务器成为 CDN 转发器，持续占用带宽并消耗流量。
 
-严格 SNI 门禁会在生成入口配置时，根据已登记的 Web 域名、TCP/Xray SNI 路由和 REALITY SNI 自动生成放行清单；回落限速只限制未通过 REALITY 验证的 fallback 连接。
+严格 SNI 门禁会在生成入口配置时，根据已登记的 Web 域名、TCP/Xray SNI 路由和 REALITY SNI 自动生成放行清单。它只过滤未知或无 SNI 的连接，不负责 REALITY 身份验证；使用已登记 REALITY SNI 的连接仍会进入 Xray。回落限速只限制未通过 REALITY 验证的 fallback 连接。
 
 遇到面板打不开、订阅 404、证书失败或 REALITY 连接失败时，先看：[443端口复用排错指南](443-single-entry-troubleshooting.md)。
 
@@ -303,12 +303,14 @@ REALITY 节点不同。REALITY 更关注外部目标站点是否真实可访问�
 
 REALITY 会把验证失败的连接转发到 `target`。扫描者不需要 UUID、shortId 或密钥就能触发这条回落链路；当 `target` 是 CDN 站点时，服务器可能被当作转发节点消耗流量。
 
-使用 `主菜单 [19 443端口复用管理中心] -> [17 REALITY 回落流量防护]` 管理两层防护：
+使用 `主菜单 [19 443端口复用管理中心] -> [17 REALITY 回落流量防护]` 管理两项作用不同的防护：
 
-- 严格 SNI 门禁（SNI 清洗）：适用于 Nginx Stream 和 TCP Peek。只放行当前已登记的面板域名、网站域名、TCP/Xray SNI 路由和 REALITY SNI；未知 SNI 和无 SNI 连接直接丢弃。放行清单不单独保存，每次生成入口配置时都从现有配置自动派生。新增、删除或修改域名和路由后，执行对应菜单中的“同步”或重新应用当前入口即可自动更新。
-- REALITY 回落限速：适用于 3x-ui SQLite。脚本先备份数据库，只修改所选 REALITY 入站的 `limitFallbackUpload` 和 `limitFallbackDownload`，并为每次设置随机生成参数。UUID、shortId、密钥、协议、传输方式及其他入站字段不会修改。PostgreSQL 不自动修改。
+- 严格 SNI 门禁（SNI 清洗）：适用于 Nginx Stream 和 TCP Peek。只放行当前已登记的面板域名、网站域名、TCP/Xray SNI 路由和 REALITY SNI；未知 SNI 和无 SNI 连接直接丢弃。它不验证 REALITY 客户端，使用已登记 REALITY SNI 的连接仍会进入 Xray。放行清单不单独保存，每次生成入口配置时都从现有配置自动派生。新增、删除或修改域名和路由后，执行对应菜单中的“同步”或重新应用当前入口即可自动更新。
+- REALITY 回落限速：适用于本机 3x-ui SQLite，无论 Xray 直接监听公网 443，还是位于 Nginx Stream / TCP Peek 后端，都只限制所选 REALITY 入站中未通过验证的 fallback 连接。脚本先备份数据库，只修改 `limitFallbackUpload` 和 `limitFallbackDownload`；UUID、shortId、密钥、协议、传输方式及其他入站字段不会修改。PostgreSQL 不自动修改。
 
-`xray-fallback` 由 Xray 直接监听公网 443，没有独立的前置 SNI 门禁，只能使用回落限速。回落限速本身会形成特征，优先选择与服务器网络位置合理、非 CDN 的 REALITY 目标；只有被迫使用 CDN 目标时再启用。
+使用 CDN 目标时，Nginx Stream / TCP Peek 应同时启用严格 SNI 门禁和回落限速；`xray-fallback` 没有独立的前置 SNI 门禁，但可以使用回落限速。SNI 门禁放行了已登记的 REALITY SNI 后，认证失败的连接仍可能触发 fallback，因此回落限速并非重复防护。
+
+回落限速本身可能形成可识别特征。脚本每次设置都会随机生成限速参数，只能降低不同部署使用完全相同参数的特征，不能消除风险。仍应优先选择网络位置合理的非 CDN 目标；只有无法避免 CDN 目标时再启用回落限速。
 
 ## 证书策略
 
