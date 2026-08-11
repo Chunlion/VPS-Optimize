@@ -282,34 +282,9 @@ Then open `https://site.example.com` in a browser. If the app is inside a contai
 
 ### How to fill in the reverse-proxy URL
 
-This section applies only to a separately deployed subscription tool such as SublinkPro or Sub-Store. It does not apply to the 3x-ui subscription service above, which always uses `https://panel.example.com + URI path`.
+First identify the service. A 3x-ui subscription uses `https://panel.example.com + URI path`, such as `https://panel.example.com/sub/`. A standalone tool such as SublinkPro or Sub-Store uses its own Web domain and must not reuse the 3x-ui field values.
 
-For a separate tool, first point `tool.example.com` at the VPS, then add that domain and its backend through the script's Web domain/reverse-proxy management. Only then does the script configure its Web entry and certificate. It does not belong in node `Hosts` or REALITY SNI routing.
-
-For the separate tool, these are two different inputs:
-
-| Where you enter it | Correct example | Do not enter |
-| --- | --- | --- |
-| Script menu `Website/reverse domain` | `tool.example.com` | `https://tool.example.com/`, `127.0.0.1:3000` |
-| Separate tool's `External URL` / `Public URL` / `Base URL` / reverse-proxy URL | `https://tool.example.com/` | `http://127.0.0.1:3000/`, `https://tool.example.com:3000/` |
-| Script menu `Backend address` | `127.0.0.1` | `https://tool.example.com/` |
-| Script menu `Backend port` | `3000` | `443` unless the backend really listens on 443 |
-
-Using the example values:
-
-```text
-Script menu:
-  Website/reverse domain: tool.example.com
-  Backend address: 127.0.0.1
-  Backend port: 3000
-
-Subscription tool:
-  Reverse-proxy URL / External URL: https://tool.example.com/
-```
-
-Users open `https://tool.example.com/`, and VPS-Optimize forwards the request to `127.0.0.1:3000`. The public URL uses `https://` and the domain; normally omit `:443`. The backend address and port belong only in the script's reverse-proxy settings.
-
-If the tool is published under a path such as `https://tool.example.com/app/`, enter the complete URL including `/app/`. Open that exact URL after saving and confirm that generated subscription links use `https://tool.example.com/` without `:3000`, `:2096`, or `127.0.0.1`. For SublinkPro, Sub-Store, and similar tools, see [Connect Subscription Tools](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md).
+The DNS record, Web domain, backend, external URL, and verification steps for a standalone tool are documented in [Standalone Subscription Tool Reverse Proxy](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md). Do not enter `https://tool.example.com/` before its DNS and Web reverse proxy are configured.
 
 ### Manage the Web IP allowlist
 
@@ -343,6 +318,8 @@ The useful actions are:
 3. `[4] Set REALITY fallback rate limits`: limit only failed-authentication fallback connections; the script generates randomized values and asks for confirmation.
 4. `[5] Clear REALITY fallback rate limits`: restore Xray's default behavior; confirmation is required.
 
+Fallback limits support only 3x-ui with a local SQLite database. When PostgreSQL is detected, actions `[4]` and `[5]` are marked unavailable and the script does not modify the remote database.
+
 Changing fallback limits restarts the panel or Xray service. Do it outside important transfers and keep the generated backup. For a non-CDN REALITY target, fallback limiting is usually unnecessary.
 
 The strict SNI list is generated from registered Web domains, SNI routes, and the REALITY SNI. After adding a domain or changing a node SNI, save the configuration and run `[3] Resynchronize the current SNI list`; otherwise the new name may be rejected as unknown. This filter does not verify UUIDs, keys, or other REALITY credentials.
@@ -362,9 +339,9 @@ Use this order:
 
 1. Create both REALITY inbounds in 3x-ui, each with a different local port and distinguishable SNI. The script records routes; it does not create or edit 3x-ui inbounds.
 2. Keep Nginx Stream or TCP Peek as the entry mode.
-3. Open `Main menu [19 Port 443 Reuse Management] -> [15 Xray inbound management]` and add one `SNI -> local address -> local port` route for each inbound.
+3. Open `Main menu [19 Port 443 Reuse Management] -> [15 Xray inbound management]` and add one `SNI -> local address -> local port` route for each inbound. After each save, the script offers to apply the routes to the current entry. When entering several routes, you can defer this and synchronize once after all routes are saved.
 4. Open `Main menu [19 Port 443 Reuse Management] -> [17 REALITY fallback traffic protection] -> [4 Set REALITY fallback rate limits]`. The menu lists every REALITY inbound. Each run modifies only the selected inbound, so repeat it for every inbound that needs protection.
-5. Run `[3] Resynchronize the current SNI list` after adding or changing an SNI.
+5. Synchronizing the routes also regenerates the strict SNI list from the saved domains and routes.
 
 Fallback limits are stored per inbound, not as one global switch and not per user. Each inbound must use a distinct local port and SNI; enabling the limit for inbound A does not protect inbound B. There is currently no batch action to set limits for every inbound, so select and configure each inbound separately. The strict SNI gate is shared by the entry and covers all registered SNIs. When 3x-ui uses PostgreSQL, the script does not support fallback limits because it avoids modifying a remote database; this feature supports only local SQLite 3x-ui.
 

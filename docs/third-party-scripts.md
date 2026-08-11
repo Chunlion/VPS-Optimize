@@ -10,6 +10,7 @@
 |---|---|---|
 | acme.sh 证书安装 | acme.sh | <https://github.com/acmesh-official/acme.sh> |
 | Docker 引擎安装 | Docker Engine | <https://github.com/docker/docker-install> |
+| Docker Compose 二进制 | Docker Compose | <https://github.com/docker/compose> |
 | Python 环境安装 | lxspacepy | <https://github.com/lx969788249/lxspacepy> |
 | WARP 解锁/网络工具 | WARP | <https://gitlab.com/fscarmen/warp> |
 | Realm 端口转发 | Realm-xwPF | <https://github.com/zywe03/realm-xwPF> |

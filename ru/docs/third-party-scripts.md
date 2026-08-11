@@ -10,6 +10,7 @@
 |---|---|---|
 | Установка сертификата acme.sh | acme.sh | <https://github.com/acmesh-official/acme.sh> |
 | Установка Docker Engine | Docker Engine | <https://github.com/docker/docker-install> |
+| Бинарный файл Docker Compose | Docker Compose | <https://github.com/docker/compose> |
 | Установка среды Python | lxspacepy | <https://github.com/lx969788249/lxspacepy> |
 | Инструмент разблокировки/сети WARP | WARP | <https://gitlab.com/fscarmen/warp> |
 | Перенаправление портов Realm | Realm-xwPF | <https://github.com/zywe03/realm-xwPF> |

@@ -23,7 +23,7 @@ The menu path in this article is written in the format of "main menu [number men
 | VPS Snapshot | Must do before migration |
 | Current SSH session | Remain uninterrupted throughout the process |
 | cloud provider security group | Port SSH and `443/tcp` have been released |
-| domain list | Panel domain, subscription domain, website domain, node domain |
+| Domain list | Panel domain, the 3x-ui subscription URI under that domain, website domains, and node domains; record a separate domain only when using a standalone subscription tool |
 | backend manifest | Local listening address and port for each service |
 | Cloudflare Token | Used to issue certificates for DNS |
 | Old configuration backup | Caddy/Nginx/panel/Docker Compose must be backed up |
@@ -278,7 +278,7 @@ If the Port 443 Reuse is not enabled temporarily, enter:
 Main menu [4 reverse proxy]
 ```
 
-Select `[1 add Caddy reverse proxy]` or `[2 add Nginx HTTPS reverse proxy]` to reverse proxy the subscribed domain to the local backend port. Nginx HTTPS reverse proxy will apply for or reuse the `/etc/caddy/certs/${domain}.crt|key` certificate, and Nginx will be directly bound to the Internet 80/443; this method cannot share the entry with 443 and grab the Internet `443` at the same time.
+Select `[1 Add Caddy reverse proxy]` or `[2 Add Nginx HTTPS reverse proxy]` and point the standalone subscription tool domain at its local backend port. Nginx HTTPS reverse proxy requests or reuses `/etc/caddy/certs/${domain}.crt|key` and listens directly on public ports 80/443, so it cannot own public `443` at the same time as Port 443 Reuse.
 
 If the Port 443 Reuse has been enabled or is ready to be enabled, add an external domain through the Port 443 Reuse:
 

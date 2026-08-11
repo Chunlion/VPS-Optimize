@@ -45,8 +45,9 @@ func_sublinkpro() {
     echo -e "$(localized_text "${YELLOW}部署完成后请尽快登录管理后台修改默认密码。${PLAIN}" "${YELLOW}After deployment, sign in to the admin panel and change the default password promptly.${PLAIN}" "${YELLOW}После развёртывания войдите в панель администратора и сразу измените пароль по умолчанию.${PLAIN}")"
     echo -e "------------------------------------------------"
     
-    read_trimmed yn "$(localized_text "❓ 确认现在开始一键安装吗？(Y/n): " "❓ Are you sure you want to start the one-click installation now? (Y/n):" "❓ Вы уверены, что хотите начать установку в один клик сейчас? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "部署 SublinkPro" "Deploy SublinkPro" "Развернуть SublinkPro")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir"
         cd "$install_dir" || return
 
@@ -130,9 +131,9 @@ func_miaomiaowu() {
     echo -e "$(localized_text "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}" "${YELLOW}When opens the panel for the first time, it will enter the initialization page. Please create an administrator account and password on the page.${PLAIN}" "${YELLOW}Когда впервые откроет панель, он перейдет на страницу инициализации. Пожалуйста, создайте учетную запись администратора и пароль на странице.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    local yn
-    read_trimmed yn "$(localized_text "确认现在部署 妙妙屋订阅管理 吗？(Y/n): " "Are you sure to deploy Miaomiaowu Subscription Management now? (Y/n):" "Вы уверены, что развернете управление подписками Miaomiaowu сейчас? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "部署妙妙屋订阅管理" "Deploy Miaomiaowu Subscription Management" "Развернуть Miaomiaowu Subscription Management")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir"/{data,subscribes,rule_templates}
         cd "$install_dir" || return
 
@@ -224,9 +225,9 @@ func_substore() {
     echo -e "$(localized_text "${YELLOW}请保存随机后端路径；如对公网开放，请在反代侧额外加认证。${PLAIN}" "${YELLOW}Please save the random backend path; if it is open to the public, please add additional authentication on the reverse proxy side.${PLAIN}" "${YELLOW}Сохраните случайный путь к серверу; если он открыт для доступа в Интернет, добавьте дополнительную аутентификацию на стороне обратного прокси-сервера.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    local yn
-    read_trimmed yn "$(localized_text "确认现在部署 Sub-Store 吗？(Y/n): " "Are you sure you want to deploy Sub-Store now? (Y/n):" "Вы уверены, что хотите развернуть дополнительный магазин сейчас? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "部署 Sub-Store" "Deploy Sub-Store" "Развернуть Sub-Store")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 
@@ -302,9 +303,9 @@ func_dockge() {
     echo -e "$(localized_text "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}" "${YELLOW}When opens the panel for the first time, it will enter the initialization page. Please create an administrator account and password on the page.${PLAIN}" "${YELLOW}Когда впервые откроет панель, он перейдет на страницу инициализации. Пожалуйста, создайте учетную запись администратора и пароль на странице.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    local yn
-    read_trimmed yn "$(localized_text "确认现在部署 Dockge 吗？(Y/n): " "Are you sure you want to deploy Dockge now? (Y/n):" "Вы уверены, что хотите развернуть Dockge сейчас? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "部署 Dockge" "Deploy Dockge" "Развернуть Dockge")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目即可回退；删除 Stacks 目录前请先备份" "stop the Compose project to roll back; back up the Stacks directory before deleting it" "для отката остановите проект Compose; перед удалением каталога Stacks создайте резервную копию")"; then
         mkdir -p "$install_dir" "$stacks_dir"
         cd "$install_dir" || return
 
@@ -358,7 +359,6 @@ func_komari() {
     local custom_admin="n"
     local admin_username=""
     local admin_password=""
-    local yn
 
     komari_bind_addr=$(ask_with_default "$(localized_text "Komari 监听地址" "Komari listening address" "Адрес прослушивания Комари")" "$komari_bind_addr")
     is_valid_listen_addr "$komari_bind_addr" || { echo -e "$(localized_text "${RED}❌ 监听地址无效。${PLAIN}" "${RED}❌ The listening address is invalid.${PLAIN}" "${RED}❌ Неверный адрес прослушивания.${PLAIN}")"; read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
@@ -405,8 +405,9 @@ func_komari() {
         echo -e "$(localized_text "${YELLOW}初始管理员：${CYAN}使用 Komari 默认生成账号，请安装后查看容器日志${PLAIN}" "${YELLOW}Initial administrator: uses Komari to generate an account by default. Please check the container log after installation.${PLAIN}" "${YELLOW}Начальный администратор : по умолчанию использует Komari для создания учетной записи. Пожалуйста, проверьте журнал контейнера после установки.${PLAIN}")"
     fi
     echo -e "------------------------------------------------"
-    read_trimmed yn "$(localized_text "确认现在部署 Komari 吗？(Y/n): " "Are you sure you want to deploy Komari now? (Y/n):" "Вы уверены, что хотите развернуть Комари сейчас? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "部署 Komari" "Deploy Komari" "Развернуть Komari")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 

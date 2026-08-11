@@ -1,4 +1,4 @@
-# 订阅工具接入 Caddy/Nginx 反代与 443端口复用
+# 独立订阅工具接入 Caddy/Nginx 反代与 443端口复用
 
 本教程说明如何通过 HTTPS 安全对外提供 SublinkPro、Sub-Store、妙妙屋订阅管理等服务。未启用 443端口复用时，使用 `主菜单 [4 反代]` 的 Caddy 或 Nginx HTTPS 反代；启用后，统一从 443端口复用的 Web 域名/反代入口添加域名，并在那里选择 Caddy 或 Nginx 作为本地 Web 反代引擎。
 

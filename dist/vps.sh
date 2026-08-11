@@ -867,6 +867,11 @@ action_needs_safe_default() {
     title=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')
     impact=$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')
 
+    case "$title $impact" in
+        *安装*|*部署*|*install*|*deploy*|*установ*|*развер*)
+            return 0
+            ;;
+    esac
     case "$title" in
         *删除*|*清理*|*清空*|*隔离*|*卸载*|*重装*|*重启*|*关机*|*停机*|*恢复*|*回滚*|*停止*|*停用*|*关闭*|*覆盖*|*白名单*|*防火墙*|*监听公网*|*重置*|*切换*|*迁移*|*应用*|*重签*|*公网\ 443*|*delete*|*remove*|*prune*|*clean*|*clear*|*quarantine*|*isolate*|*uninstall*|*reinstall*|*restart*|*reboot*|*shutdown*|*poweroff*|*restore*|*rollback*|*stop*|*disable*|*overwrite*|*whitelist*|*allowlist*|*firewall*|*publicly*|*public\ port\ 443*|*reset*|*switch*|*migrate*|*apply*|*re-sign*|*удал*|*Удал*|*очист*|*Очист*|*карантин*|*Карантин*|*изолир*|*Изолир*|*переустанов*|*Переустанов*|*перезап*|*Перезап*|*перезагруз*|*Перезагруз*|*выключ*|*Выключ*|*восстанов*|*Восстанов*|*откат*|*Откат*|*останов*|*Останов*|*отключ*|*Отключ*|*сброс*|*Сброс*|*переключ*|*Переключ*|*мигр*|*Мигр*|*примен*|*Примен*|*переподп*|*Переподп*|*белый\ список*|*Белый\ список*|*список\ разреш*|*Список\ разреш*|*брандмауэр*|*Брандмауэр*|*публичн*443*|*Публичн*443*)
             return 0
@@ -11336,7 +11341,7 @@ check_sni_stack_subscription_hint() {
 # Port 443 Reuse profile editing and reapply helpers.
 
 save_and_offer_reapply_sni_stack() {
-    local yn env_file env_backup
+    local env_file env_backup
     env_file="/etc/vps-optimize/sni-stack.env"
     env_backup=""
     if [[ -f "$env_file" ]]; then
@@ -11346,8 +11351,10 @@ save_and_offer_reapply_sni_stack() {
     save_sni_stack_env
     echo -e "$(localized_text "${GREEN}✅ 已保存新的 443端口复用运行参数。${PLAIN}" "${GREEN}✅ New Port 443 Reuse operating parameters have been saved.${PLAIN}" "${GREEN}. Сохранены новые 443 отдельных рабочих параметра.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的域名、端口或路径。${PLAIN}" "${YELLOW}Tips: You need to reapply after saving, so that Nginx/Caddy will use the new domain, port or path.${PLAIN}" "${YELLOW}Советы: вам необходимо повторно подать заявку после сохранения, чтобы Nginx/Caddy использовал новое имя домена, порт или путь.${PLAIN}")"
-    read_trimmed yn "$(localized_text "是否现在重新应用并重启 Nginx/Caddy？直接回车继续，输入 n 取消（大小写均可）: " "Do you want to reapply and restart Nginx/Caddy now? Just press Enter to continue, enter n to cancel (both uppercase and lowercase are acceptable):" "Хотите повторно подать заявку и перезапустить Nginx/Caddy сейчас? Просто нажмите Enter, чтобы продолжить, введите n для отмены (допускаются как прописные, так и строчные буквы):")"
-    if is_yes "$yn"; then
+    if confirm_danger \
+        "$(localized_text "重新应用 443 配置" "Reapply the port 443 configuration" "Повторно применить конфигурацию порта 443")" \
+        "$(localized_text "重新生成入口配置并重启 Nginx/Caddy" "regenerate the entry configuration and restart Nginx/Caddy" "заново создать конфигурацию точки входа и перезапустить Nginx/Caddy")" \
+        "$(localized_text "失败时自动恢复本次修改前的参数文件" "restore the parameter file saved before this change if reapplication fails" "при ошибке восстановить файл параметров, сохранённый до этого изменения")"; then
         if ! reapply_sni_stack_from_env --yes; then
             if [[ -n "$env_backup" && -f "$env_backup" ]]; then
                 cp -p "$env_backup" "$env_file" 2>/dev/null || true
@@ -11382,7 +11389,7 @@ update_xui_panel_domain_settings_for_single_443() {
     local checked=0 updated=0 failed=0 timestamp
 
     if xui_uses_postgresql; then
-        echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL，跳过数据库自动同步。443端口复用已更新；请在 3x-ui 中手动确认订阅域名和公开节点地址。${PLAIN}" "${YELLOW}⚠️ 3x-ui is using PostgreSQL, so database synchronization is skipped. The Port 443 Reuse has been updated; manually verify the subscription domain and public node address in 3x-ui.${PLAIN}" "${YELLOW}⚠️ 3x-ui использует PostgreSQL, поэтому синхронизация базы данных пропущена. Повторное использование порта 443 обновлён; вручную проверьте домен подписки и публичный адрес узла в 3x-ui.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL，跳过数据库自动同步。请在 3x-ui 中保持订阅监听 IP 为 127.0.0.1、监听域名留空，并将反向代理 URI 设置为 https://${new_domain}${SUB_URI_PATH}；节点 Host 使用实际节点域名和公网 443。${PLAIN}" "${YELLOW}⚠️ 3x-ui uses PostgreSQL, so database synchronization was skipped. In 3x-ui, keep the subscription listen IP at 127.0.0.1, leave the listen domain empty, and set Reverse Proxy URI to https://${new_domain}${SUB_URI_PATH}; use the actual node domain and public port 443 for the node Host.${PLAIN}" "${YELLOW}⚠️ 3x-ui использует PostgreSQL, поэтому синхронизация базы пропущена. В 3x-ui оставьте IP прослушивания подписки 127.0.0.1, домен прослушивания — пустым, задайте URI обратного прокси https://${new_domain}${SUB_URI_PATH}; в Host узла укажите фактический домен узла и публичный порт 443.${PLAIN}")"
         return 0
     fi
 
@@ -11413,7 +11420,7 @@ update_xui_panel_domain_settings_for_single_443() {
 
         sql="
 update ${table_name} set value='' where lower(key)='webdomain';
-update ${table_name} set value='${new_domain}' where lower(key)='subdomain';
+update ${table_name} set value='' where lower(key)='subdomain';
 update ${table_name} set value='https://${new_domain}${SUB_URI_PATH}' where lower(key)='suburi';
 update ${table_name} set value='https://${new_domain}${CLASH_URI_PATH}' where lower(key)='subclashuri';
 update ${table_name} set value=replace(replace(value,'https://${old_domain}','https://${new_domain}'),'http://${old_domain}','https://${new_domain}') where lower(key)='subjsonuri' and value like '%${old_domain}%';
@@ -13352,6 +13359,27 @@ xray_sni_routes_fallback_notice() {
     print_xray_fallback_mode_explanation
 }
 
+offer_sync_xray_sni_routes() {
+    echo -e "$(localized_text "${YELLOW}规则已保存，但尚未应用到公网 443。${PLAIN}" "${YELLOW}The rule is saved but is not active on public port 443 yet.${PLAIN}" "${YELLOW}Правило сохранено, но ещё не применяется на публичном порту 443.${PLAIN}")"
+    if confirm_risk_action \
+        "$(localized_text "立即应用 Xray SNI 路由" "Apply Xray SNI routes now" "Применить маршруты Xray SNI сейчас")" \
+        "$(localized_text "重新生成当前入口配置；运行中的 Nginx 或 vpso-mux 可能重启" "regenerate the active entry configuration; the running Nginx or vpso-mux service may restart" "будет заново создана конфигурация текущей точки входа; работающий Nginx или vpso-mux может быть перезапущен")" \
+        "$(localized_text "原路由文件仍保留；可修正后再次同步或重新应用 443 配置" "the route file remains available; correct it and sync again or reapply the port 443 configuration" "файл маршрутов сохранится; исправьте его и повторите синхронизацию или применение конфигурации порта 443")"; then
+        sync_xray_sni_routes_to_entry_mode
+    else
+        echo -e "$(localized_text "${YELLOW}未应用。稍后可在 Xray 入站管理中选择“同步到当前入口模式”。${PLAIN}" "${YELLOW}Not applied. Use “Sync to current entry mode” in Xray inbound management later.${PLAIN}" "${YELLOW}Изменения не применены. Позже выберите «Синхронизировать с текущим режимом входа» в меню управления входящими подключениями Xray.${PLAIN}")"
+    fi
+}
+
+confirm_non_xray_route_listener() {
+    local listen_line="$1"
+    if echo "$listen_line" | grep -Eqi 'xray|x-ui|3x-ui'; then
+        return 0
+    fi
+    echo -e "$(localized_text "${YELLOW}⚠️ 无法确认该端口由 Xray/3x-ui 监听：${listen_line}${PLAIN}" "${YELLOW}⚠️ The listener does not appear to be Xray/3x-ui: ${listen_line}${PLAIN}" "${YELLOW}⚠️ Не удалось подтвердить, что порт прослушивает Xray/3x-ui: ${listen_line}${PLAIN}")"
+    confirm_default_no "$(localized_text "仍要保存此路由吗？(y/N): " "Save this route anyway? (y/N): " "Всё равно сохранить этот маршрут? (y/N): ")"
+}
+
 list_xray_sni_routes() {
     load_sni_stack_env || return 1
     local mode fallback_idx
@@ -13440,11 +13468,14 @@ add_xray_sni_route() {
         return 1
     fi
 
+    local listen_line
     print_xray_route_port_status "$route_sni" "$route_addr" "$route_port"
-    if [[ -z "$(xray_route_listen_line_by_addr_port "$route_addr" "$route_port")" ]]; then
+    listen_line=$(xray_route_listen_line_by_addr_port "$route_addr" "$route_port")
+    if [[ -z "$listen_line" ]]; then
         echo -e "$(localized_text "${RED}❌ 端口未监听，请先去 3x-ui 创建并启用对应入站。${PLAIN}" "${RED}Port ❌ is not listening. Please go to 3x-ui to create and enable the corresponding inbound port first.${PLAIN}" "${RED}Порт ❌ не прослушивается. Пожалуйста, перейдите к 3x-ui, чтобы сначала создать и включить соответствующий входящий порт.${PLAIN}")"
         return 1
     fi
+    confirm_non_xray_route_listener "$listen_line" || return 0
 
     idx=${#XRAY_SNI_ROUTE_SNIS[@]}
     XRAY_SNI_ROUTE_SNIS[$idx]="$route_sni"
@@ -13452,7 +13483,7 @@ add_xray_sni_route() {
     XRAY_SNI_ROUTE_PORTS[$idx]="$route_port"
     save_xray_sni_route_arrays
     echo -e "$(localized_text "${GREEN}✅ 已保存 Xray 入站分流规则：${route_sni} -> ${route_addr}:${route_port}${PLAIN}" "${GREEN}✅ Saved Xray inbound routing rule: ${route_sni} -> ${route_addr}:${route_port}${PLAIN}" "${GREEN}✅ Правило маршрутизации входящего подключения Xray сохранено: ${route_sni} -> ${route_addr}:${route_port}${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}提示：保存后需要执行“同步到当前入口模式”或重新应用当前入口模式，公网 443 才会使用新规则。${PLAIN}" "${YELLOW}After saving, sync or reapply the current entry mode before public port 443 uses the new rule.${PLAIN}" "${YELLOW}После сохранения синхронизируйте или повторно примените текущий режим входа, чтобы публичный порт 443 использовал новое правило.${PLAIN}")"
+    offer_sync_xray_sni_routes
 }
 
 remove_xray_sni_route() {
@@ -13485,6 +13516,10 @@ remove_xray_sni_route() {
 
     idx=$((choice - 1))
     route_sni="${XRAY_SNI_ROUTE_SNIS[$idx]}"
+    confirm_risk_action \
+        "$(localized_text "删除 Xray SNI 路由" "Delete Xray SNI route" "Удалить маршрут Xray SNI")" \
+        "$(localized_text "从路由文件中删除 ${route_sni}" "remove ${route_sni} from the route file" "удалить ${route_sni} из файла маршрутов")" \
+        "$(localized_text "重新添加相同的 SNI、本地地址和端口" "add the same SNI, local address, and port again" "повторно добавить тот же SNI, локальный адрес и порт")" || return 0
     for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
         [[ "$i" -eq "$idx" ]] && continue
         new_snis+=("${XRAY_SNI_ROUTE_SNIS[$i]}")
@@ -13496,7 +13531,7 @@ remove_xray_sni_route() {
     XRAY_SNI_ROUTE_PORTS=("${new_ports[@]}")
     save_xray_sni_route_arrays
     echo -e "$(localized_text "${GREEN}✅ 已删除 Xray 入站分流规则：${route_sni}${PLAIN}" "${GREEN}✅ Deleted Xray inbound routing rule: ${route_sni}${PLAIN}" "${GREEN}✅ Правило маршрутизации входящего подключения Xray удалено: ${route_sni}.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}提示：删除后需要执行“同步到当前入口模式”或重新应用当前入口模式。${PLAIN}" "${YELLOW}After deletion, sync or reapply the current entry mode.${PLAIN}" "${YELLOW}После удаления синхронизируйте или повторно примените текущий режим входа.${PLAIN}")"
+    offer_sync_xray_sni_routes
 }
 
 check_xray_sni_route_ports() {
@@ -13836,9 +13871,13 @@ set_strict_sni_gate() {
         return 1
     fi
     if [[ "$target" == "true" ]]; then
-        confirm_default_no "$(localized_text "启用后，未登记或不带 SNI 的连接会被直接丢弃。确认启用？(y/N): " "After enabling, connections with an unregistered or missing SNI will be dropped. Enable? (y/N): " "После включения подключения с незарегистрированным или отсутствующим SNI будут отклоняться. Включить? (y/N): ")" || return 0
+        confirm_danger "$(localized_text "启用严格 SNI 门禁" "Enable the strict SNI gate" "Включить строгий контроль SNI")" \
+            "$(localized_text "未登记或不带 SNI 的连接会被直接丢弃，并重新应用当前入口" "drop connections with an unregistered or missing SNI and reapply the current entry" "отклонять подключения с незарегистрированным или отсутствующим SNI и повторно применить текущую точку входа")" \
+            "$(localized_text "可重新进入本菜单关闭门禁；已登记的 SNI 清单不会删除" "disable the gate from this menu; the registered SNI list is retained" "контроль можно отключить в этом меню; список зарегистрированных SNI сохранится")" || return 0
     else
-        confirm_default_yes "$(localized_text "关闭后，未知 SNI 将恢复转发到默认 Xray 后端。确认关闭？(Y/n): " "After disabling, unknown SNI will again be forwarded to the default Xray backend. Disable? (Y/n): " "После отключения неизвестные SNI снова будут направляться на стандартный бэкенд Xray. Отключить? (Y/n): ")" || return 0
+        confirm_danger "$(localized_text "关闭严格 SNI 门禁" "Disable the strict SNI gate" "Отключить строгий контроль SNI")" \
+            "$(localized_text "未知 SNI 将恢复转发到默认 Xray 后端，并重新应用当前入口" "resume forwarding unknown SNI to the default Xray backend and reapply the current entry" "возобновить пересылку неизвестных SNI на стандартный бэкенд Xray и повторно применить текущую точку входа")" \
+            "$(localized_text "可重新进入本菜单启用门禁" "enable the gate again from this menu" "контроль можно снова включить в этом меню")" || return 0
     fi
     STRICT_SNI_GATE="$target"
     save_sni_stack_env
@@ -14015,9 +14054,13 @@ patch_reality_fallback_limits() {
         echo -e "$(localized_text "将使用本次随机生成的回落限速参数（字节）：" "Randomized fallback limits for this operation (bytes):" "Случайные параметры ограничения fallback для этой операции (байты):")"
         echo "  upload:   afterBytes=${upload_after}, bytesPerSec=${upload_rate}, burstBytesPerSec=${upload_burst}"
         echo "  download: afterBytes=${download_after}, bytesPerSec=${download_rate}, burstBytesPerSec=${download_burst}"
-        confirm_default_no "$(localized_text "只会修改所选入站的两个 limitFallback 字段，并重启面板/Xray。确认继续？(y/N): " "Only the two limitFallback fields of the selected inbound will be changed, then the panel/Xray will restart. Continue? (y/N): " "Будут изменены только два поля limitFallback выбранного входящего подключения, затем панель/Xray перезапустится. Продолжить? (y/N): ")" || return 0
+        confirm_danger "$(localized_text "设置 REALITY 回落限速" "Set REALITY fallback rate limits" "Настроить ограничение REALITY fallback")" \
+            "$(localized_text "只修改所选入站的两个 limitFallback 字段，并重启面板/Xray" "change only the two limitFallback fields of the selected inbound, then restart the panel/Xray" "изменить только два поля limitFallback выбранного входящего подключения, затем перезапустить панель/Xray")" \
+            "$(localized_text "脚本会先备份数据库；可用本菜单清除限速或从备份恢复" "the database is backed up first; clear the limits from this menu or restore the backup" "сначала будет создана резервная копия базы; ограничения можно удалить в этом меню или восстановить базу из копии")" || return 0
     else
-        confirm_default_no "$(localized_text "将删除所选入站的两个 limitFallback 字段并重启面板/Xray。确认继续？(y/N): " "The two limitFallback fields will be removed from the selected inbound, then the panel/Xray will restart. Continue? (y/N): " "Два поля limitFallback будут удалены из выбранного входящего подключения, затем панель/Xray перезапустится. Продолжить? (y/N): ")" || return 0
+        confirm_danger "$(localized_text "清除 REALITY 回落限速" "Clear REALITY fallback rate limits" "Удалить ограничение REALITY fallback")" \
+            "$(localized_text "删除所选入站的两个 limitFallback 字段，并重启面板/Xray" "remove the two limitFallback fields from the selected inbound, then restart the panel/Xray" "удалить два поля limitFallback выбранного входящего подключения, затем перезапустить панель/Xray")" \
+            "$(localized_text "脚本会先备份数据库；可从备份恢复原参数" "the database is backed up first; restore the original values from the backup" "сначала будет создана резервная копия базы; исходные значения можно восстановить из неё")" || return 0
     fi
 
     backup_file=$(backup_reality_guard_database "$db_path" "$inbound_id") || { echo -e "$(localized_text "${RED}数据库备份失败，未执行修改。${PLAIN}" "${RED}Database backup failed; no changes were made.${PLAIN}" "${RED}Не удалось создать резервную копию базы; изменения не внесены.${PLAIN}")"; return 1; }
@@ -14040,8 +14083,10 @@ patch_reality_fallback_limits() {
 
 manage_reality_traffic_guard() {
     while true; do
+        local postgresql_mode=0
         clear
         load_sni_stack_env || return 1
+        xui_uses_postgresql && postgresql_mode=1
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}REALITY 回落流量防护${PLAIN}" "${BOLD}REALITY fallback traffic protection${PLAIN}" "${BOLD}Защита трафика REALITY fallback${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -14051,17 +14096,41 @@ manage_reality_traffic_guard() {
         echo -e "$(localized_text "${GREEN}  1. 启用严格 SNI 门禁${PLAIN}      ${YELLOW}(仅放行自动登记的 SNI)${PLAIN}" "${GREEN}1. Enable strict SNI gate${PLAIN} (allow only automatically registered SNIs)" "${GREEN}1. Включить строгий контроль SNI${PLAIN} (только автоматически зарегистрированные SNI)")"
         echo -e "$(localized_text "${CYAN}  2. 关闭严格 SNI 门禁${PLAIN}      ${YELLOW}(恢复未知 SNI 默认转发)${PLAIN}" "${CYAN}2. Disable strict SNI gate${PLAIN} (restore default forwarding for unknown SNI)" "${CYAN}2. Отключить строгий контроль SNI${PLAIN} (вернуть стандартную пересылку неизвестных SNI)")"
         echo -e "$(localized_text "${CYAN}  3. 重新同步当前 SNI 清单${PLAIN}    ${YELLOW}(按已保存的域名和路由生成)${PLAIN}" "${CYAN}3. Resynchronize the current SNI list${PLAIN} (generated from saved domains and routes)" "${CYAN}3. Повторно синхронизировать список SNI${PLAIN} (из сохранённых доменов и маршрутов)")"
-        echo -e "$(localized_text "${GREEN}  4. 设置 REALITY 回落限速${PLAIN}  ${YELLOW}(仅修改两个 limitFallback 字段)${PLAIN}" "${GREEN}4. Set REALITY fallback rate limits${PLAIN} (changes only the two limitFallback fields)" "${GREEN}4. Настроить ограничение REALITY fallback${PLAIN} (только два поля limitFallback)")"
-        echo -e "$(localized_text "${YELLOW}  5. 清除 REALITY 回落限速${PLAIN}  ${YELLOW}(恢复 Xray 默认行为)${PLAIN}" "${YELLOW}5. Clear REALITY fallback rate limits${PLAIN} (restore Xray defaults)" "${YELLOW}5. Удалить ограничение REALITY fallback${PLAIN} (вернуть настройки Xray по умолчанию)")"
+        if [[ "$postgresql_mode" -eq 1 ]]; then
+            echo -e "$(localized_text "${YELLOW}  4. 设置 REALITY 回落限速${PLAIN}  ${RED}(不可用：仅支持本机 SQLite)${PLAIN}" "${YELLOW}4. Set REALITY fallback rate limits${PLAIN} ${RED}(unavailable: local SQLite only)${PLAIN}" "${YELLOW}4. Настроить ограничение REALITY fallback${PLAIN} ${RED}(недоступно: только локальный SQLite)${PLAIN}")"
+            echo -e "$(localized_text "${YELLOW}  5. 清除 REALITY 回落限速${PLAIN}  ${RED}(不可用：仅支持本机 SQLite)${PLAIN}" "${YELLOW}5. Clear REALITY fallback rate limits${PLAIN} ${RED}(unavailable: local SQLite only)${PLAIN}" "${YELLOW}5. Удалить ограничение REALITY fallback${PLAIN} ${RED}(недоступно: только локальный SQLite)${PLAIN}")"
+        else
+            echo -e "$(localized_text "${GREEN}  4. 设置 REALITY 回落限速${PLAIN}  ${YELLOW}(仅修改两个 limitFallback 字段)${PLAIN}" "${GREEN}4. Set REALITY fallback rate limits${PLAIN} (changes only the two limitFallback fields)" "${GREEN}4. Настроить ограничение REALITY fallback${PLAIN} (только два поля limitFallback)")"
+            echo -e "$(localized_text "${YELLOW}  5. 清除 REALITY 回落限速${PLAIN}  ${YELLOW}(恢复 Xray 默认行为)${PLAIN}" "${YELLOW}5. Clear REALITY fallback rate limits${PLAIN} (restore Xray defaults)" "${YELLOW}5. Удалить ограничение REALITY fallback${PLAIN} (вернуть настройки Xray по умолчанию)")"
+        fi
         echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         local choice
         read_trimmed choice "$(localized_text "请选择操作: " "Select an action: " "Выберите действие: ")"
         case "$choice" in
             1) set_strict_sni_gate true ; pause_return ;;
             2) set_strict_sni_gate false ; pause_return ;;
-            3) sync_strict_sni_gate_to_current_entry ; pause_return ;;
-            4) patch_reality_fallback_limits apply ; pause_return ;;
-            5) patch_reality_fallback_limits clear ; pause_return ;;
+            3)
+                confirm_danger "$(localized_text "重新同步严格 SNI 清单" "Resynchronize the strict SNI list" "Повторно синхронизировать строгий список SNI")" \
+                    "$(localized_text "重新生成当前入口配置；运行中的 Nginx 或 vpso-mux 可能重启" "regenerate the current entry configuration; the running Nginx or vpso-mux service may restart" "заново создать текущую конфигурацию точки входа; работающий Nginx или vpso-mux может быть перезапущен")" \
+                    "$(localized_text "已保存的域名与路由不会删除；修正后可再次同步" "saved domains and routes are retained; correct them and synchronize again" "сохранённые домены и маршруты останутся; исправьте их и повторите синхронизацию")" && sync_strict_sni_gate_to_current_entry
+                pause_return
+                ;;
+            4)
+                if [[ "$postgresql_mode" -eq 1 ]]; then
+                    echo -e "$(localized_text "${RED}当前 3x-ui 使用 PostgreSQL，回落限速仅支持本机 SQLite。${PLAIN}" "${RED}3x-ui currently uses PostgreSQL; fallback limits support only local SQLite.${PLAIN}" "${RED}3x-ui использует PostgreSQL; ограничение fallback поддерживает только локальный SQLite.${PLAIN}")"
+                else
+                    patch_reality_fallback_limits apply
+                fi
+                pause_return
+                ;;
+            5)
+                if [[ "$postgresql_mode" -eq 1 ]]; then
+                    echo -e "$(localized_text "${RED}当前 3x-ui 使用 PostgreSQL，回落限速仅支持本机 SQLite。${PLAIN}" "${RED}3x-ui currently uses PostgreSQL; fallback limits support only local SQLite.${PLAIN}" "${RED}3x-ui использует PostgreSQL; ограничение fallback поддерживает только локальный SQLite.${PLAIN}")"
+                else
+                    patch_reality_fallback_limits clear
+                fi
+                pause_return
+                ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}无效选择。${PLAIN}" "${RED}Invalid selection.${PLAIN}" "${RED}Неверный выбор.${PLAIN}")"; sleep 1 ;;
         esac
@@ -18090,9 +18159,9 @@ func_xpanel_manage() {
 
     if [[ -z "$panel_cmd" ]]; then
         echo -e "$(localized_text "${YELLOW}未检测到 x-ui / 3x-ui 命令，当前机器可能尚未安装 3x-ui 面板。${PLAIN}" "${YELLOW}Does not detect the x-ui / 3x-ui command. The current machine may not have the 3x-ui panel installed.${PLAIN}" "${YELLOW}не обнаруживает команду x-ui/3x-ui. Возможно, на текущем компьютере не установлена ​​панель 3x-ui.${PLAIN}")"
-        local yn
-        read_trimmed yn "$(localized_text "是否现在安装 3x-ui 面板？(Y/n): " "Do you want to install the 3x-ui panel now? (Y/n):" "Хотите установить панель 3x-ui сейчас? (Да/Нет):")"
-        if is_yes "$yn"; then
+        if confirm_danger "$(localized_text "安装 3x-ui 面板" "Install the 3x-ui panel" "Установить панель 3x-ui")" \
+            "$(localized_text "下载并执行 3x-ui 官方安装脚本" "download and run the official 3x-ui installer" "скачать и запустить официальный установщик 3x-ui")" \
+            "$(localized_text "安装前备份现有面板配置；卸载方式以 3x-ui 官方菜单为准" "back up any existing panel configuration first; use the official 3x-ui menu to uninstall" "сначала сохраните существующую конфигурацию панели; для удаления используйте официальное меню 3x-ui")"; then
             func_xpanel
         else
             echo -e "$(localized_text "${BLUE}已取消操作。${PLAIN}" "${BLUE}The operation has been canceled.${PLAIN}" "${BLUE}Операция отменена.${PLAIN}")"
@@ -18145,9 +18214,9 @@ func_sui_manage() {
 
     if ! command -v s-ui >/dev/null 2>&1; then
         echo -e "$(localized_text "${YELLOW}未检测到 s-ui 命令，当前机器可能尚未安装 S-UI。${PLAIN}" "${YELLOW}Does not detect the s-ui command. S-UI may not be installed on the current machine.${PLAIN}" "${YELLOW}не обнаруживает команду s-ui. S-UI может быть не установлен на текущем компьютере.${PLAIN}")"
-        local yn
-        read_trimmed yn "$(localized_text "是否现在安装 S-UI？(Y/n): " "Do you want to install S-UI now? (Y/n):" "Хотите установить S-UI сейчас? (Да/Нет):")"
-        if is_yes "$yn"; then
+        if confirm_danger "$(localized_text "安装 S-UI" "Install S-UI" "Установить S-UI")" \
+            "$(localized_text "下载并执行 S-UI 官方安装脚本" "download and run the official S-UI installer" "скачать и запустить официальный установщик S-UI")" \
+            "$(localized_text "安装前备份现有配置；卸载方式以 S-UI 官方菜单为准" "back up existing configuration first; use the official S-UI menu to uninstall" "сначала сохраните существующую конфигурацию; для удаления используйте официальное меню S-UI")"; then
             func_sui_panel
         else
             echo -e "$(localized_text "${BLUE}已取消操作。${PLAIN}" "${BLUE}The operation has been canceled.${PLAIN}" "${BLUE}Операция отменена.${PLAIN}")"
@@ -18222,9 +18291,9 @@ func_xray_manage() {
 
     if ! command -v xray >/dev/null 2>&1; then
         echo -e "$(localized_text "${YELLOW}未检测到 xray 管理命令，当前机器可能尚未安装 233boy Xray 脚本。${PLAIN}" "${YELLOW}Does not detect the xray management command. The current machine may not have the 233boy Xray script installed.${PLAIN}" "${YELLOW}не обнаруживает команду управления xray. На текущей машине может не быть установлен скрипт 233boy Xray.${PLAIN}")"
-        local yn
-        read_trimmed yn "$(localized_text "是否现在安装 Xray？(Y/n): " "Do you want to install Xray now? (Y/n):" "Хотите установить Xray сейчас? (Да/Нет):")"
-        if is_yes "$yn"; then
+        if confirm_danger "$(localized_text "安装 233boy Xray" "Install 233boy Xray" "Установить 233boy Xray")" \
+            "$(localized_text "下载并执行 233boy Xray 安装脚本" "download and run the 233boy Xray installer" "скачать и запустить установщик 233boy Xray")" \
+            "$(localized_text "安装前备份现有 Xray 配置；卸载方式以该项目菜单为准" "back up existing Xray configuration first; use the project menu to uninstall" "сначала сохраните существующую конфигурацию Xray; для удаления используйте меню проекта")"; then
             func_xray_233boy
         else
             echo -e "$(localized_text "${BLUE}已取消操作。${PLAIN}" "${BLUE}The operation has been canceled.${PLAIN}" "${BLUE}Операция отменена.${PLAIN}")"
@@ -18257,9 +18326,9 @@ func_dns_unlock() {
     echo -e "$(localized_text "    如果您不懂如何自行配置解锁机的 DNS 记录，请务必先查阅项目文档！" "If you don’t know how to configure the DNS record of the unlocking machine yourself, please be sure to check the project documentation first!" "Если вы не знаете, как самостоятельно настроить запись DNS устройства разблокировки, обязательно сначала ознакомьтесь с проектной документацией!")"
     echo -e "------------------------------------------------"
     
-    local yn
-    read_trimmed yn "$(localized_text "❓ 确认现在运行 Alice DNS 解锁脚本吗？(Y/n): " "❓ Are you sure to run the Alice DNS unlocking script now? (Y/n):" "❓ Вы уверены, что сейчас запустите скрипт разблокировки Алисы DNS? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "运行 Alice DNS 解锁脚本" "Run the Alice DNS unlock script" "Запустить сценарий Alice DNS Unlock")" \
+        "$(localized_text "执行远程脚本并修改 /etc/resolv.conf" "run a remote script and modify /etc/resolv.conf" "запустить удалённый сценарий и изменить /etc/resolv.conf")" \
+        "$(localized_text "运行前备份 DNS 配置；恢复方式以项目文档为准" "back up the DNS configuration first; follow the project documentation to restore it" "сначала сохраните конфигурацию DNS; восстановление выполняйте по документации проекта")"; then
         run_remote_script "$(localized_text "运行 Alice DNS 解锁脚本" "Run the Alice DNS unlocking script" "Запустите скрипт разблокировки Алисы DNS.")" "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"
     else
         echo -e "$(localized_text "${BLUE}已安全取消操作。${PLAIN}" "${BLUE}The operation has been safely canceled.${PLAIN}" "${BLUE}Операция была благополучно отменена.${PLAIN}")"
@@ -18277,8 +18346,9 @@ func_ip_sentinel() {
     echo -e "$(localized_text "${YELLOW}该脚本将持续监控并修正路由，防止服务器 IP 被错误定位至中国大陆。${PLAIN}" "${YELLOW}This script will continuously monitor and correct routing to prevent the server IP from being incorrectly located in mainland China.${PLAIN}" "${YELLOW}Этот сценарий будет постоянно отслеживать и корректировать маршрутизацию, чтобы предотвратить неправильное определение IP-адреса сервера в материковом Китае.${PLAIN}")"
     echo -e "------------------------------------------------"
     
-    read_trimmed yn "$(localized_text "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(Y/n): " "❓ Are you sure you want to install and configure IP Sentinel (Public Gateway)? (Y/n):" "❓ Вы уверены, что хотите установить и настроить IP Sentinel (публичный шлюз)? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "安装并配置 IP Sentinel" "Install and configure IP Sentinel" "Установить и настроить IP Sentinel")" \
+        "$(localized_text "执行远程安装脚本并持续修改网络路由" "run a remote installer that continuously adjusts network routes" "запустить удалённый установщик, который будет постоянно изменять сетевые маршруты")" \
+        "$(localized_text "运行前备份网络配置；停止与卸载方式以项目文档为准" "back up the network configuration first; follow the project documentation to stop or uninstall it" "сначала сохраните сетевую конфигурацию; остановку и удаление выполняйте по документации проекта")"; then
         run_remote_script "$(localized_text "安装并配置 IP Sentinel" "Install and configure IP Sentinel" "Установка и настройка IP Sentinel")" "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh"
     else
         echo -e "$(localized_text "${BLUE}已取消操作。${PLAIN}" "${BLUE}The operation has been canceled.${PLAIN}" "${BLUE}Операция отменена.${PLAIN}")"
@@ -18552,8 +18622,9 @@ func_sublinkpro() {
     echo -e "$(localized_text "${YELLOW}部署完成后请尽快登录管理后台修改默认密码。${PLAIN}" "${YELLOW}After deployment, sign in to the admin panel and change the default password promptly.${PLAIN}" "${YELLOW}После развёртывания войдите в панель администратора и сразу измените пароль по умолчанию.${PLAIN}")"
     echo -e "------------------------------------------------"
     
-    read_trimmed yn "$(localized_text "❓ 确认现在开始一键安装吗？(Y/n): " "❓ Are you sure you want to start the one-click installation now? (Y/n):" "❓ Вы уверены, что хотите начать установку в один клик сейчас? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "部署 SublinkPro" "Deploy SublinkPro" "Развернуть SublinkPro")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir"
         cd "$install_dir" || return
 
@@ -18637,9 +18708,9 @@ func_miaomiaowu() {
     echo -e "$(localized_text "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}" "${YELLOW}When opens the panel for the first time, it will enter the initialization page. Please create an administrator account and password on the page.${PLAIN}" "${YELLOW}Когда впервые откроет панель, он перейдет на страницу инициализации. Пожалуйста, создайте учетную запись администратора и пароль на странице.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    local yn
-    read_trimmed yn "$(localized_text "确认现在部署 妙妙屋订阅管理 吗？(Y/n): " "Are you sure to deploy Miaomiaowu Subscription Management now? (Y/n):" "Вы уверены, что развернете управление подписками Miaomiaowu сейчас? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "部署妙妙屋订阅管理" "Deploy Miaomiaowu Subscription Management" "Развернуть Miaomiaowu Subscription Management")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir"/{data,subscribes,rule_templates}
         cd "$install_dir" || return
 
@@ -18731,9 +18802,9 @@ func_substore() {
     echo -e "$(localized_text "${YELLOW}请保存随机后端路径；如对公网开放，请在反代侧额外加认证。${PLAIN}" "${YELLOW}Please save the random backend path; if it is open to the public, please add additional authentication on the reverse proxy side.${PLAIN}" "${YELLOW}Сохраните случайный путь к серверу; если он открыт для доступа в Интернет, добавьте дополнительную аутентификацию на стороне обратного прокси-сервера.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    local yn
-    read_trimmed yn "$(localized_text "确认现在部署 Sub-Store 吗？(Y/n): " "Are you sure you want to deploy Sub-Store now? (Y/n):" "Вы уверены, что хотите развернуть дополнительный магазин сейчас? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "部署 Sub-Store" "Deploy Sub-Store" "Развернуть Sub-Store")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 
@@ -18809,9 +18880,9 @@ func_dockge() {
     echo -e "$(localized_text "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}" "${YELLOW}When opens the panel for the first time, it will enter the initialization page. Please create an administrator account and password on the page.${PLAIN}" "${YELLOW}Когда впервые откроет панель, он перейдет на страницу инициализации. Пожалуйста, создайте учетную запись администратора и пароль на странице.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    local yn
-    read_trimmed yn "$(localized_text "确认现在部署 Dockge 吗？(Y/n): " "Are you sure you want to deploy Dockge now? (Y/n):" "Вы уверены, что хотите развернуть Dockge сейчас? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "部署 Dockge" "Deploy Dockge" "Развернуть Dockge")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目即可回退；删除 Stacks 目录前请先备份" "stop the Compose project to roll back; back up the Stacks directory before deleting it" "для отката остановите проект Compose; перед удалением каталога Stacks создайте резервную копию")"; then
         mkdir -p "$install_dir" "$stacks_dir"
         cd "$install_dir" || return
 
@@ -18865,7 +18936,6 @@ func_komari() {
     local custom_admin="n"
     local admin_username=""
     local admin_password=""
-    local yn
 
     komari_bind_addr=$(ask_with_default "$(localized_text "Komari 监听地址" "Komari listening address" "Адрес прослушивания Комари")" "$komari_bind_addr")
     is_valid_listen_addr "$komari_bind_addr" || { echo -e "$(localized_text "${RED}❌ 监听地址无效。${PLAIN}" "${RED}❌ The listening address is invalid.${PLAIN}" "${RED}❌ Неверный адрес прослушивания.${PLAIN}")"; read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
@@ -18912,8 +18982,9 @@ func_komari() {
         echo -e "$(localized_text "${YELLOW}初始管理员：${CYAN}使用 Komari 默认生成账号，请安装后查看容器日志${PLAIN}" "${YELLOW}Initial administrator: uses Komari to generate an account by default. Please check the container log after installation.${PLAIN}" "${YELLOW}Начальный администратор : по умолчанию использует Komari для создания учетной записи. Пожалуйста, проверьте журнал контейнера после установки.${PLAIN}")"
     fi
     echo -e "------------------------------------------------"
-    read_trimmed yn "$(localized_text "确认现在部署 Komari 吗？(Y/n): " "Are you sure you want to deploy Komari now? (Y/n):" "Вы уверены, что хотите развернуть Комари сейчас? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "部署 Komari" "Deploy Komari" "Развернуть Komari")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 
@@ -19919,14 +19990,15 @@ func_preflight_check() {
     fi
 
     if ! $pkg_busy && { $can_fix_ntp || [[ ${#cmd_miss[@]} -gt 0 ]] || [[ ${#minimal_miss[@]} -gt 0 ]]; }; then
-        local fix_confirm rerun_confirm
+        local rerun_confirm
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${CYAN}🛠️ 可自动处理的简单问题:${PLAIN}" "${CYAN}🛠️ Simple questions that can be automatically handled:${PLAIN}" "${CYAN}🛠️ Простые вопросы, которые можно обрабатывать автоматически:${PLAIN}")"
         $can_fix_ntp && echo -e "$(localized_text "  - 开启 NTP 时间同步" "- Enable NTP time synchronization" "- Включить синхронизацию времени NTP")"
         [[ ${#cmd_miss[@]} -gt 0 ]] && echo -e "$(localized_text "  - 安装缺失基础命令: ${cmd_miss[*]}" "- Installation missing basic command: ${cmd_miss[*]}" "- При установке отсутствует базовая команда: ${cmd_miss[*]}.")"
         [[ ${#minimal_miss[@]} -gt 0 ]] && echo -e "$(localized_text "  - 补齐精简系统兼容组件" "- Completed streamlined system compatible components" "- Завершены оптимизированные компоненты, совместимые с системой.")"
-        read_trimmed fix_confirm "$(localized_text "是否现在自动修复这些简单问题？(Y/n): " "Are these simple issues now automatically fixed? (Y/n):" "Эти простые проблемы теперь устраняются автоматически? (Да/Нет):")"
-        if is_yes "$fix_confirm"; then
+        if confirm_danger "$(localized_text "自动修复预检问题" "Automatically fix preflight issues" "Автоматически исправить проблемы предварительной проверки")" \
+            "$(localized_text "可能安装基础软件包并启用 NTP 时间同步" "may install base packages and enable NTP time synchronization" "может установить базовые пакеты и включить синхронизацию времени NTP")" \
+            "$(localized_text "软件包变更需按系统包管理器回退；NTP 可在系统服务中关闭" "revert package changes with the system package manager; disable NTP through the system service" "изменения пакетов отменяются через системный менеджер пакетов; NTP можно отключить в системной службе")"; then
             [[ ${#minimal_miss[@]} -gt 0 ]] && ensure_minimal_system_compat
             $can_fix_ntp && preflight_enable_ntp
             [[ ${#cmd_miss[@]} -gt 0 ]] && preflight_install_missing_commands "${cmd_miss[@]}"

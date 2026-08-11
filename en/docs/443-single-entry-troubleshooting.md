@@ -80,7 +80,7 @@ curl -I http://127.0.0.1:40000/panel/
 ### Related menu entry
 
 ```text
-Main menu [5 panel、Nodes and subscription tools] -> [3 panel SSL Repair]
+Main menu [5 Panels, Nodes, and Subscription Tools] -> [3 Panel SSL Repair]
 Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
 Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
@@ -205,7 +205,7 @@ Main menu [8 Firewall rules] -> [5 Port concurrent connection limit]
 
 ### phenomenon
 
-`current 443 Entry status` shows `configuration mode：nginx-stream`, `nginx：Running`, but not `public port `443`：not listening`.
+`Current Port 443 Entry Status` shows `Configuration mode: nginx-stream` and `nginx: running`, but public port `443` is not listening.
 
 If the status page also displays an old naming compatibility prompt, such as `nginx_stream` or `tcp_peek`, it means that the script cannot safely automatically rewrite the file. Follow the prompts to reapply the current entry mode. The script will read and write back `nginx-stream`, `xray-fallback` or `tcp-peek` according to the new name.
 
@@ -258,8 +258,8 @@ grep -n "reverse_proxy" /etc/caddy/conf.d/panel.example.com.caddy
 For example, when Clash/Mihomo uses `/clash/`, the three places should be consistent:
 
 ```text
-3x-ui URI path (Clash)：/clash/
-443 wizard Clash/Mihomo path prefix：/clash/
+3x-ui URI path (Clash): /clash/
+Port 443 wizard Clash/Mihomo path prefix: /clash/
 https://panel.example.com/clash/CLIENT_SUBSCRIPTION
 ```
 
@@ -331,7 +331,7 @@ If the test works according to the actual backend address, but the Internet is s
 ### Related menu entry
 
 ```text
-Main menu [5 panel、Nodes and subscription tools] -> [1 3x-ui panel script]
+Main menu [5 Panels, Nodes, and Subscription Tools] -> [1 3x-ui Panel Script]
 Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
 Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
@@ -348,29 +348,22 @@ https://panel.example.com:2096/sub/xxxx
 
 ### Common causes
 
-- `subDomain` is unset or includes a scheme, port, or path.
+- Reverse Proxy URI is empty, so 3x-ui builds the URL from its local listening port.
+- Listen Domain was set to the public domain instead of being left empty.
 - If the node in the subscription content still has a local port, check `Hosts / Host` or `External Proxy` in the next section.
 
 ### Solution
 
-Return to 3x-ui:
+Open the 3x-ui subscription settings and enter the values for your actual path:
 
 ```text
-The `subDomain` field in Subscription Settings
+Listen IP: 127.0.0.1
+Listen Domain: leave empty
+URI Path: /sub/
+Reverse Proxy URI: https://panel.example.com/sub/
 ```
 
-Fill in the public internet address:
-
-```text
-subDomain：panel.example.com
-```
-
-Don't write:
-
-```text
-https://panel.example.com/sub/
-panel.example.com:2096
-```
+Reverse Proxy URI must include `https://`, the panel domain, and the complete URI path. Do not use `127.0.0.1:2096` or `https://panel.example.com:2096/sub/`. Save the settings, restart the panel, and copy the subscription URL again.
 
 After saving and restarting the panel, copy the subscription link again.
 
@@ -398,19 +391,19 @@ The client node link still contains `:1443`, and the public port `443` is not us
 3x-ui v3.4.0 and later: Left sidebar -> `Hosts / Host` -> New Host:
 
 ```text
-inbound：Select the corresponding REALITY inbound
-address：node.example.com Or server public IP
-port：443
-Security：Same, Or fill in the actual security type of the inbound
-SNI / Fingerprint / ALPN：Keep the actual value of the inbound and client consistent
+Inbound: select the corresponding REALITY inbound
+Address: node.example.com or the server's public IP
+Port: 443
+Security: keep the inbound's actual security type
+SNI / Fingerprint / ALPN: keep the client values consistent with the inbound
 ```
 
 3x-ui v3.3.1 and before: Return to REALITY inbound and set `External Proxy`:
 
 ```text
-Type：Same
-address：node.example.com Or server public IP
-port：443
+Type: keep the existing value
+Address: node.example.com or the server's public IP
+Port: 443
 ```
 
 If the node domain is Cloudflare, it must be Huiyun/DNS only.
@@ -607,7 +600,7 @@ Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 
 - 3x-ui The subscription service is not enabled.
 - The subscription path prefix is inconsistent with the Caddy configuration.
-- `subDomain` is unset or does not match the access domain.
+- Listen Domain is not empty, or Reverse Proxy URI does not match the public panel domain and subscription path.
 - 3x-ui v3.4.0+ of `Hosts / Host` or older `External Proxy` still output internal ports.
 
 ### check command

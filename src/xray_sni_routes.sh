@@ -6,6 +6,27 @@ xray_sni_routes_fallback_notice() {
     print_xray_fallback_mode_explanation
 }
 
+offer_sync_xray_sni_routes() {
+    echo -e "$(localized_text "${YELLOW}规则已保存，但尚未应用到公网 443。${PLAIN}" "${YELLOW}The rule is saved but is not active on public port 443 yet.${PLAIN}" "${YELLOW}Правило сохранено, но ещё не применяется на публичном порту 443.${PLAIN}")"
+    if confirm_risk_action \
+        "$(localized_text "立即应用 Xray SNI 路由" "Apply Xray SNI routes now" "Применить маршруты Xray SNI сейчас")" \
+        "$(localized_text "重新生成当前入口配置；运行中的 Nginx 或 vpso-mux 可能重启" "regenerate the active entry configuration; the running Nginx or vpso-mux service may restart" "будет заново создана конфигурация текущей точки входа; работающий Nginx или vpso-mux может быть перезапущен")" \
+        "$(localized_text "原路由文件仍保留；可修正后再次同步或重新应用 443 配置" "the route file remains available; correct it and sync again or reapply the port 443 configuration" "файл маршрутов сохранится; исправьте его и повторите синхронизацию или применение конфигурации порта 443")"; then
+        sync_xray_sni_routes_to_entry_mode
+    else
+        echo -e "$(localized_text "${YELLOW}未应用。稍后可在 Xray 入站管理中选择“同步到当前入口模式”。${PLAIN}" "${YELLOW}Not applied. Use “Sync to current entry mode” in Xray inbound management later.${PLAIN}" "${YELLOW}Изменения не применены. Позже выберите «Синхронизировать с текущим режимом входа» в меню управления входящими подключениями Xray.${PLAIN}")"
+    fi
+}
+
+confirm_non_xray_route_listener() {
+    local listen_line="$1"
+    if echo "$listen_line" | grep -Eqi 'xray|x-ui|3x-ui'; then
+        return 0
+    fi
+    echo -e "$(localized_text "${YELLOW}⚠️ 无法确认该端口由 Xray/3x-ui 监听：${listen_line}${PLAIN}" "${YELLOW}⚠️ The listener does not appear to be Xray/3x-ui: ${listen_line}${PLAIN}" "${YELLOW}⚠️ Не удалось подтвердить, что порт прослушивает Xray/3x-ui: ${listen_line}${PLAIN}")"
+    confirm_default_no "$(localized_text "仍要保存此路由吗？(y/N): " "Save this route anyway? (y/N): " "Всё равно сохранить этот маршрут? (y/N): ")"
+}
+
 list_xray_sni_routes() {
     load_sni_stack_env || return 1
     local mode fallback_idx
@@ -94,11 +115,14 @@ add_xray_sni_route() {
         return 1
     fi
 
+    local listen_line
     print_xray_route_port_status "$route_sni" "$route_addr" "$route_port"
-    if [[ -z "$(xray_route_listen_line_by_addr_port "$route_addr" "$route_port")" ]]; then
+    listen_line=$(xray_route_listen_line_by_addr_port "$route_addr" "$route_port")
+    if [[ -z "$listen_line" ]]; then
         echo -e "$(localized_text "${RED}❌ 端口未监听，请先去 3x-ui 创建并启用对应入站。${PLAIN}" "${RED}Port ❌ is not listening. Please go to 3x-ui to create and enable the corresponding inbound port first.${PLAIN}" "${RED}Порт ❌ не прослушивается. Пожалуйста, перейдите к 3x-ui, чтобы сначала создать и включить соответствующий входящий порт.${PLAIN}")"
         return 1
     fi
+    confirm_non_xray_route_listener "$listen_line" || return 0
 
     idx=${#XRAY_SNI_ROUTE_SNIS[@]}
     XRAY_SNI_ROUTE_SNIS[$idx]="$route_sni"
@@ -106,7 +130,7 @@ add_xray_sni_route() {
     XRAY_SNI_ROUTE_PORTS[$idx]="$route_port"
     save_xray_sni_route_arrays
     echo -e "$(localized_text "${GREEN}✅ 已保存 Xray 入站分流规则：${route_sni} -> ${route_addr}:${route_port}${PLAIN}" "${GREEN}✅ Saved Xray inbound routing rule: ${route_sni} -> ${route_addr}:${route_port}${PLAIN}" "${GREEN}✅ Правило маршрутизации входящего подключения Xray сохранено: ${route_sni} -> ${route_addr}:${route_port}${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}提示：保存后需要执行“同步到当前入口模式”或重新应用当前入口模式，公网 443 才会使用新规则。${PLAIN}" "${YELLOW}After saving, sync or reapply the current entry mode before public port 443 uses the new rule.${PLAIN}" "${YELLOW}После сохранения синхронизируйте или повторно примените текущий режим входа, чтобы публичный порт 443 использовал новое правило.${PLAIN}")"
+    offer_sync_xray_sni_routes
 }
 
 remove_xray_sni_route() {
@@ -139,6 +163,10 @@ remove_xray_sni_route() {
 
     idx=$((choice - 1))
     route_sni="${XRAY_SNI_ROUTE_SNIS[$idx]}"
+    confirm_risk_action \
+        "$(localized_text "删除 Xray SNI 路由" "Delete Xray SNI route" "Удалить маршрут Xray SNI")" \
+        "$(localized_text "从路由文件中删除 ${route_sni}" "remove ${route_sni} from the route file" "удалить ${route_sni} из файла маршрутов")" \
+        "$(localized_text "重新添加相同的 SNI、本地地址和端口" "add the same SNI, local address, and port again" "повторно добавить тот же SNI, локальный адрес и порт")" || return 0
     for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
         [[ "$i" -eq "$idx" ]] && continue
         new_snis+=("${XRAY_SNI_ROUTE_SNIS[$i]}")
@@ -150,7 +178,7 @@ remove_xray_sni_route() {
     XRAY_SNI_ROUTE_PORTS=("${new_ports[@]}")
     save_xray_sni_route_arrays
     echo -e "$(localized_text "${GREEN}✅ 已删除 Xray 入站分流规则：${route_sni}${PLAIN}" "${GREEN}✅ Deleted Xray inbound routing rule: ${route_sni}${PLAIN}" "${GREEN}✅ Правило маршрутизации входящего подключения Xray удалено: ${route_sni}.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}提示：删除后需要执行“同步到当前入口模式”或重新应用当前入口模式。${PLAIN}" "${YELLOW}After deletion, sync or reapply the current entry mode.${PLAIN}" "${YELLOW}После удаления синхронизируйте или повторно примените текущий режим входа.${PLAIN}")"
+    offer_sync_xray_sni_routes
 }
 
 check_xray_sni_route_ports() {

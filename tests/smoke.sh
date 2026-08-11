@@ -665,6 +665,8 @@ confirm_default_yes <<< ""
 action_needs_safe_default "重启 SSH 服务" ""
 action_needs_safe_default "Isolate certificate files" ""
 action_needs_safe_default "Apply sysctl configuration" ""
+action_needs_safe_default "Install 3x-ui" "download and run the official installer"
+action_needs_safe_default "Deploy Sub-Store" "start a Compose project"
 action_needs_safe_default "Перезапустить Docker" ""
 action_needs_safe_default "Переключить режим входа" ""
 if action_needs_safe_default "查看服务状态" "仅读取状态"; then
@@ -1460,7 +1462,7 @@ conn.close()
 PY
 )
         grep -Fxq 'webDomain=' <<<"$xui_domain_values"
-        grep -Fxq 'subDomain=new.panel.example.com' <<<"$xui_domain_values"
+        grep -Fxq 'subDomain=' <<<"$xui_domain_values"
         grep -Fxq 'subURI=https://new.panel.example.com/sub/' <<<"$xui_domain_values"
         grep -Fxq 'subClashURI=https://new.panel.example.com/clash/' <<<"$xui_domain_values"
         grep -Fxq 'subJsonURI=https://new.panel.example.com/json/sub?token=1' <<<"$xui_domain_values"
@@ -1802,6 +1804,11 @@ grep -q 'manage_sni_stack_tcp_routes' dist/vps.sh
 grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh
 grep -q 'single_443_current_engine' dist/vps.sh
 assert_file_contains "src/xray_sni_routes.sh" 'Xray 入站管理' "Xray inbound menu must use the current menu name."
+assert_function_body_contains "src/xray_sni_routes.sh" add_xray_sni_route 'offer_sync_xray_sni_routes' "Adding an Xray SNI route must offer to apply the saved route."
+assert_function_body_contains "src/xray_sni_routes.sh" remove_xray_sni_route 'offer_sync_xray_sni_routes' "Deleting an Xray SNI route must offer to apply the saved route."
+assert_function_body_contains "src/xray_sni_routes.sh" offer_sync_xray_sni_routes 'confirm_risk_action' "Applying saved Xray SNI routes must use the high-risk confirmation flow."
+assert_function_body_contains "src/xray_sni_routes.sh" offer_sync_xray_sni_routes 'sync_xray_sni_routes_to_entry_mode' "Accepted Xray SNI route changes must sync to the active entry mode."
+assert_function_body_contains "src/xray_sni_routes.sh" confirm_non_xray_route_listener 'grep -Eqi' "Xray SNI route creation must inspect the listener owner."
 assert_file_not_contains "src/xray_sni_routes.sh" '443 TCP/SNI 本地入站管理' "Xray inbound menu must not use the old TCP/SNI title."
 assert_file_contains "src/xray_sni_routes.sh" '用于当前支持的端口复用模式渲染分流规则' "Xray inbound menu must describe route records as entry-mode render input."
 assert_file_not_contains "src/xray_sni_routes.sh" '只写 Nginx stream SNI -> 本地端口规则' "Xray inbound menu must not describe route records as nginx-stream-only."
@@ -1961,6 +1968,11 @@ for file in "${renumbered_sni_doc_files[@]}"; do
 done
 
 assert_file_contains "docs/443-single-entry.md" '3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host' "443 tutorial must document the 3x-ui v3.4.0+ Hosts path."
+assert_file_contains "docs/443-single-entry.md" '回落限速只支持使用本机 SQLite 的 3x-ui' "443 tutorial must place the PostgreSQL limitation next to fallback limits."
+assert_file_contains "src/reality_guard.sh" '不可用：仅支持本机 SQLite' "REALITY guard menu must disable fallback-limit actions for PostgreSQL."
+assert_file_contains "docs/443-single-entry-troubleshooting.md" '反向代理 URI：https://panel.example.com/sub/' "Troubleshooting must show the public 3x-ui reverse proxy URI."
+assert_file_not_contains "docs/443-single-entry-troubleshooting.md" 'subDomain：panel.example.com' "Troubleshooting must not tell users to fill the subscription listen domain."
+assert_file_contains "docs/third-party-scripts.md" 'https://github.com/docker/compose' "Third-party sources must list the Docker Compose binary upstream."
 assert_file_contains "docs/443-single-entry.md" '3x-ui v3.3.1 及之前：在对应 REALITY 入站里打开 `External Proxy`' "443 tutorial must keep the legacy External Proxy path."
 assert_file_contains "tutorials/01-3x-ui-reality-443.md" '3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host' "REALITY tutorial must document the 3x-ui v3.4.0+ Hosts path."
 assert_file_contains "tutorials/01-3x-ui-reality-443.md" '3x-ui v3.3.1 及之前：在 REALITY 入站里打开 `External Proxy`' "REALITY tutorial must keep the legacy External Proxy path."
@@ -3094,6 +3106,24 @@ assert "limitFallbackUpload" not in reality
 assert "limitFallbackDownload" not in reality
 assert reality["privateKey"] == "keep-private-key"
 PY
+
+(
+    clear() { :; }
+    load_sni_stack_env() { ENTRY_MODE="nginx-stream"; return 0; }
+    xui_uses_postgresql() { return 0; }
+    print_strict_sni_gate_summary() { :; }
+    read_trimmed() { printf -v "$1" '%s' '0'; }
+    postgresql_menu_output=$(manage_reality_traffic_guard)
+    [[ "$postgresql_menu_output" == *"不可用：仅支持本机 SQLite"* ]]
+)
+
+source src/xray_sni_routes.sh
+(
+    confirm_risk_action() { return 0; }
+    sync_xray_sni_routes_to_entry_mode() { printf '%s\n' 'XRAY_ROUTES_SYNCED'; }
+    sync_output=$(offer_sync_xray_sni_routes)
+    [[ "$sync_output" == *"XRAY_ROUTES_SYNCED"* ]]
+)
 rm -f "$reality_guard_smoke_db"
 rmdir "$reality_guard_smoke_tmp"
 

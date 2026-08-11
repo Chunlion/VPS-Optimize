@@ -66,9 +66,9 @@ func_xpanel_manage() {
 
     if [[ -z "$panel_cmd" ]]; then
         echo -e "$(localized_text "${YELLOW}未检测到 x-ui / 3x-ui 命令，当前机器可能尚未安装 3x-ui 面板。${PLAIN}" "${YELLOW}Does not detect the x-ui / 3x-ui command. The current machine may not have the 3x-ui panel installed.${PLAIN}" "${YELLOW}не обнаруживает команду x-ui/3x-ui. Возможно, на текущем компьютере не установлена ​​панель 3x-ui.${PLAIN}")"
-        local yn
-        read_trimmed yn "$(localized_text "是否现在安装 3x-ui 面板？(Y/n): " "Do you want to install the 3x-ui panel now? (Y/n):" "Хотите установить панель 3x-ui сейчас? (Да/Нет):")"
-        if is_yes "$yn"; then
+        if confirm_danger "$(localized_text "安装 3x-ui 面板" "Install the 3x-ui panel" "Установить панель 3x-ui")" \
+            "$(localized_text "下载并执行 3x-ui 官方安装脚本" "download and run the official 3x-ui installer" "скачать и запустить официальный установщик 3x-ui")" \
+            "$(localized_text "安装前备份现有面板配置；卸载方式以 3x-ui 官方菜单为准" "back up any existing panel configuration first; use the official 3x-ui menu to uninstall" "сначала сохраните существующую конфигурацию панели; для удаления используйте официальное меню 3x-ui")"; then
             func_xpanel
         else
             echo -e "$(localized_text "${BLUE}已取消操作。${PLAIN}" "${BLUE}The operation has been canceled.${PLAIN}" "${BLUE}Операция отменена.${PLAIN}")"
@@ -121,9 +121,9 @@ func_sui_manage() {
 
     if ! command -v s-ui >/dev/null 2>&1; then
         echo -e "$(localized_text "${YELLOW}未检测到 s-ui 命令，当前机器可能尚未安装 S-UI。${PLAIN}" "${YELLOW}Does not detect the s-ui command. S-UI may not be installed on the current machine.${PLAIN}" "${YELLOW}не обнаруживает команду s-ui. S-UI может быть не установлен на текущем компьютере.${PLAIN}")"
-        local yn
-        read_trimmed yn "$(localized_text "是否现在安装 S-UI？(Y/n): " "Do you want to install S-UI now? (Y/n):" "Хотите установить S-UI сейчас? (Да/Нет):")"
-        if is_yes "$yn"; then
+        if confirm_danger "$(localized_text "安装 S-UI" "Install S-UI" "Установить S-UI")" \
+            "$(localized_text "下载并执行 S-UI 官方安装脚本" "download and run the official S-UI installer" "скачать и запустить официальный установщик S-UI")" \
+            "$(localized_text "安装前备份现有配置；卸载方式以 S-UI 官方菜单为准" "back up existing configuration first; use the official S-UI menu to uninstall" "сначала сохраните существующую конфигурацию; для удаления используйте официальное меню S-UI")"; then
             func_sui_panel
         else
             echo -e "$(localized_text "${BLUE}已取消操作。${PLAIN}" "${BLUE}The operation has been canceled.${PLAIN}" "${BLUE}Операция отменена.${PLAIN}")"
@@ -198,9 +198,9 @@ func_xray_manage() {
 
     if ! command -v xray >/dev/null 2>&1; then
         echo -e "$(localized_text "${YELLOW}未检测到 xray 管理命令，当前机器可能尚未安装 233boy Xray 脚本。${PLAIN}" "${YELLOW}Does not detect the xray management command. The current machine may not have the 233boy Xray script installed.${PLAIN}" "${YELLOW}не обнаруживает команду управления xray. На текущей машине может не быть установлен скрипт 233boy Xray.${PLAIN}")"
-        local yn
-        read_trimmed yn "$(localized_text "是否现在安装 Xray？(Y/n): " "Do you want to install Xray now? (Y/n):" "Хотите установить Xray сейчас? (Да/Нет):")"
-        if is_yes "$yn"; then
+        if confirm_danger "$(localized_text "安装 233boy Xray" "Install 233boy Xray" "Установить 233boy Xray")" \
+            "$(localized_text "下载并执行 233boy Xray 安装脚本" "download and run the 233boy Xray installer" "скачать и запустить установщик 233boy Xray")" \
+            "$(localized_text "安装前备份现有 Xray 配置；卸载方式以该项目菜单为准" "back up existing Xray configuration first; use the project menu to uninstall" "сначала сохраните существующую конфигурацию Xray; для удаления используйте меню проекта")"; then
             func_xray_233boy
         else
             echo -e "$(localized_text "${BLUE}已取消操作。${PLAIN}" "${BLUE}The operation has been canceled.${PLAIN}" "${BLUE}Операция отменена.${PLAIN}")"
@@ -233,9 +233,9 @@ func_dns_unlock() {
     echo -e "$(localized_text "    如果您不懂如何自行配置解锁机的 DNS 记录，请务必先查阅项目文档！" "If you don’t know how to configure the DNS record of the unlocking machine yourself, please be sure to check the project documentation first!" "Если вы не знаете, как самостоятельно настроить запись DNS устройства разблокировки, обязательно сначала ознакомьтесь с проектной документацией!")"
     echo -e "------------------------------------------------"
     
-    local yn
-    read_trimmed yn "$(localized_text "❓ 确认现在运行 Alice DNS 解锁脚本吗？(Y/n): " "❓ Are you sure to run the Alice DNS unlocking script now? (Y/n):" "❓ Вы уверены, что сейчас запустите скрипт разблокировки Алисы DNS? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "运行 Alice DNS 解锁脚本" "Run the Alice DNS unlock script" "Запустить сценарий Alice DNS Unlock")" \
+        "$(localized_text "执行远程脚本并修改 /etc/resolv.conf" "run a remote script and modify /etc/resolv.conf" "запустить удалённый сценарий и изменить /etc/resolv.conf")" \
+        "$(localized_text "运行前备份 DNS 配置；恢复方式以项目文档为准" "back up the DNS configuration first; follow the project documentation to restore it" "сначала сохраните конфигурацию DNS; восстановление выполняйте по документации проекта")"; then
         run_remote_script "$(localized_text "运行 Alice DNS 解锁脚本" "Run the Alice DNS unlocking script" "Запустите скрипт разблокировки Алисы DNS.")" "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"
     else
         echo -e "$(localized_text "${BLUE}已安全取消操作。${PLAIN}" "${BLUE}The operation has been safely canceled.${PLAIN}" "${BLUE}Операция была благополучно отменена.${PLAIN}")"
@@ -253,8 +253,9 @@ func_ip_sentinel() {
     echo -e "$(localized_text "${YELLOW}该脚本将持续监控并修正路由，防止服务器 IP 被错误定位至中国大陆。${PLAIN}" "${YELLOW}This script will continuously monitor and correct routing to prevent the server IP from being incorrectly located in mainland China.${PLAIN}" "${YELLOW}Этот сценарий будет постоянно отслеживать и корректировать маршрутизацию, чтобы предотвратить неправильное определение IP-адреса сервера в материковом Китае.${PLAIN}")"
     echo -e "------------------------------------------------"
     
-    read_trimmed yn "$(localized_text "❓ 确定要安装并配置 IP Sentinel(公共网关) 吗？(Y/n): " "❓ Are you sure you want to install and configure IP Sentinel (Public Gateway)? (Y/n):" "❓ Вы уверены, что хотите установить и настроить IP Sentinel (публичный шлюз)? (Да/Нет):")"
-    if is_yes "$yn"; then
+    if confirm_danger "$(localized_text "安装并配置 IP Sentinel" "Install and configure IP Sentinel" "Установить и настроить IP Sentinel")" \
+        "$(localized_text "执行远程安装脚本并持续修改网络路由" "run a remote installer that continuously adjusts network routes" "запустить удалённый установщик, который будет постоянно изменять сетевые маршруты")" \
+        "$(localized_text "运行前备份网络配置；停止与卸载方式以项目文档为准" "back up the network configuration first; follow the project documentation to stop or uninstall it" "сначала сохраните сетевую конфигурацию; остановку и удаление выполняйте по документации проекта")"; then
         run_remote_script "$(localized_text "安装并配置 IP Sentinel" "Install and configure IP Sentinel" "Установка и настройка IP Sentinel")" "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh"
     else
         echo -e "$(localized_text "${BLUE}已取消操作。${PLAIN}" "${BLUE}The operation has been canceled.${PLAIN}" "${BLUE}Операция отменена.${PLAIN}")"

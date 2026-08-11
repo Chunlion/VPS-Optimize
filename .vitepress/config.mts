@@ -14,7 +14,7 @@ const zhTheme = {
       items: [
         { text: '文档首页', link: '/' },
         { text: '443端口复用：部署与配置', link: '/docs/443-single-entry' },
-        { text: '443端口复用：订阅工具接入', link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+        { text: '443端口复用：独立订阅工具反代', link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
         { text: '安全与回滚', link: '/docs/security-rollback' },
         { text: '常见问题', link: '/docs/faq' }
       ]
@@ -36,7 +36,7 @@ const zhTheme = {
         text: '443端口复用',
         items: [
           { text: '部署与配置', link: '/docs/443-single-entry' },
-          { text: '订阅工具接入', link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+          { text: '独立订阅工具反代', link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
           { text: '入口模式与原理', link: '/docs/443-tcp-peek-engine' },
           { text: '排错与恢复', link: '/docs/443-single-entry-troubleshooting' }
         ]
@@ -104,7 +104,7 @@ const enTheme = {
       items: [
         { text: 'Documentation Home', link: '/en/' },
         { text: 'Port 443 Reuse: Setup and Configuration', link: '/en/docs/443-single-entry' },
-        { text: 'Port 443 Reuse: Subscription Tools', link: '/en/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+        { text: 'Port 443 Reuse: Standalone Subscription Tool Proxy', link: '/en/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
         { text: 'Security and Rollback', link: '/en/docs/security-rollback' },
         { text: 'FAQ', link: '/en/docs/faq' }
       ]
@@ -126,7 +126,7 @@ const enTheme = {
         text: 'Port 443 Reuse',
         items: [
           { text: 'Setup and Configuration', link: '/en/docs/443-single-entry' },
-          { text: 'Connect Subscription Tools', link: '/en/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+          { text: 'Standalone Subscription Tool Proxy', link: '/en/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
           { text: 'Entry Modes and Internals', link: '/en/docs/443-tcp-peek-engine' },
           { text: 'Troubleshooting and Recovery', link: '/en/docs/443-single-entry-troubleshooting' }
         ]
@@ -176,7 +176,7 @@ const ruTheme = {
       items: [
         { text: 'Главная документации', link: '/ru/' },
         { text: 'Порт 443: развёртывание и настройка', link: '/ru/docs/443-single-entry' },
-        { text: 'Порт 443: подключение сервисов подписок', link: '/ru/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+        { text: 'Порт 443: прокси отдельного сервиса подписок', link: '/ru/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
         { text: 'Безопасность и откат', link: '/ru/docs/security-rollback' },
         { text: 'Частые вопросы', link: '/ru/docs/faq' }
       ]
@@ -198,7 +198,7 @@ const ruTheme = {
         text: 'Порт 443',
         items: [
           { text: 'Развёртывание и настройка', link: '/ru/docs/443-single-entry' },
-          { text: 'Подключение сервисов подписок', link: '/ru/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+          { text: 'Прокси отдельного сервиса подписок', link: '/ru/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
           { text: 'Режимы входа и принципы работы', link: '/ru/docs/443-tcp-peek-engine' },
           { text: 'Диагностика и восстановление', link: '/ru/docs/443-single-entry-troubleshooting' }
         ]

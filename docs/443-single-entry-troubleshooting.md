@@ -348,29 +348,22 @@ https://panel.example.com:2096/sub/xxxx
 
 ### 常见原因
 
-- `subDomain` 未设置或包含协议、端口、路径。
+- “反向代理 URI”留空，3x-ui 因此使用本地监听端口生成链接。
+- “监听域名”被误填成公网域名，而不是保持为空。
 - 如果是订阅内容里的节点仍带本地端口，按下一节检查 `Hosts / 主机` 或 `External Proxy`。
 
 ### 解决方法
 
-回到 3x-ui：
+回到 3x-ui 的订阅设置，按实际路径填写：
 
 ```text
-订阅设置中的 `subDomain`
+监听 IP：127.0.0.1
+监听域名：留空
+URI 路径：/sub/
+反向代理 URI：https://panel.example.com/sub/
 ```
 
-填写公网地址：
-
-```text
-subDomain：panel.example.com
-```
-
-不要写：
-
-```text
-https://panel.example.com/sub/
-panel.example.com:2096
-```
+“反向代理 URI”必须包含 `https://`、面板域名和完整 URI 路径，不要写 `127.0.0.1:2096` 或 `https://panel.example.com:2096/sub/`。保存并重启面板后重新复制订阅链接。
 
 保存并重启面板后，重新复制订阅链接。
 
@@ -607,7 +600,7 @@ grep -R "listen" /etc/nginx /etc/caddy 2>/dev/null
 
 - 3x-ui 订阅服务没有开启。
 - 订阅路径前缀与 Caddy 配置不一致。
-- `subDomain` 未设置或不匹配访问域名。
+- “监听域名”没有留空，或“反向代理 URI”与实际面板域名和订阅路径不一致。
 - 3x-ui v3.4.0+ 的 `Hosts / 主机` 或旧版 `External Proxy` 仍输出内部端口。
 
 ### 检查命令

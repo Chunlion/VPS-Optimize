@@ -282,34 +282,9 @@ TCP Peek 的优点是分流组件更轻量，并且能在连接早期按 SNI 处
 
 ### 反向代理 URL 怎么填
 
-本节只适用于另行部署的 SublinkPro、Sub-Store 等独立订阅工具，不是上面 3x-ui 的订阅服务。3x-ui 订阅统一使用 `https://panel.example.com + URI 路径`。
+先分清服务类型：3x-ui 订阅填写 `https://panel.example.com + URI 路径`，例如 `https://panel.example.com/sub/`；SublinkPro、Sub-Store 等独立订阅工具使用自己的 Web 域名，不能套用 3x-ui 的填写方式。
 
-独立工具必须先把 `tool.example.com` 解析到 VPS，再在脚本的“管理 Web 域名/反代”中新增该域名和后端；脚本才会为它配置 Web 入口和证书。它不填入节点 `Hosts`，也不属于 REALITY 的 SNI 路由。
-
-独立工具配置时，分清这两个地方：
-
-| 填写位置 | 正确示例 | 不要填写 |
-| --- | --- | --- |
-| 脚本菜单“网站/反代域名” | `tool.example.com` | `https://tool.example.com/`、`127.0.0.1:3000` |
-| 独立订阅工具里的 `External URL` / `Public URL` / `Base URL` / “反向代理 URL” | `https://tool.example.com/` | `http://127.0.0.1:3000/`、`https://tool.example.com:3000/` |
-| 脚本菜单“后端地址” | `127.0.0.1` | `https://tool.example.com/` |
-| 脚本菜单“后端端口” | `3000` | `443`（除非后端程序确实监听 443） |
-
-按示例完整填写：
-
-```text
-脚本菜单：
-  网站/反代域名：tool.example.com
-  后端地址：127.0.0.1
-  后端端口：3000
-
-订阅工具：
-  反向代理 URL / External URL：https://tool.example.com/
-```
-
-含义是：用户访问 `https://tool.example.com/`，VPS-Optimize 再把请求转给 VPS 本机的 `127.0.0.1:3000`。公网 URL 使用 `https://` 和域名，通常不写 `:443`；后端地址和后端端口只写在脚本的反代配置中。
-
-如果工具部署在子路径，例如反代后从 `https://tool.example.com/app/` 访问，URL 就填写 `https://tool.example.com/app/`，不要只填域名。保存后用浏览器打开这个完整地址，并确认工具生成的订阅链接也使用 `https://tool.example.com/`，没有出现 `:3000`、`:2096` 或 `127.0.0.1`。需要接入 SublinkPro、Sub-Store 等工具时，参阅[订阅工具接入教程](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。
+独立工具的 DNS、Web 域名、后端地址、外部 URL 和验证步骤统一放在[独立订阅工具反代教程](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。在完成域名解析和 Web 反代之前，不要直接填写 `https://tool.example.com/`。
 
 ### 管理域名 IP 白名单
 
@@ -343,6 +318,8 @@ Nginx Stream 和 TCP Peek 支持这两项保护；Xray Fallback 没有前置的 
 3. `[4] 设置 REALITY 回落限速`：只限制验证失败后进入回落的连接；脚本会生成一组随机参数，并在修改前要求确认。
 4. `[5] 清除 REALITY 回落限速`：恢复 Xray 默认行为，同样需要确认。
 
+回落限速只支持使用本机 SQLite 的 3x-ui。检测到 PostgreSQL 时，菜单 `[4]` 和 `[5]` 会标记为不可用，脚本不会修改远程数据库。
+
 修改回落限速会重启面板或 Xray 服务。先确认节点没有正在进行的重要传输，并保留脚本生成的备份；如果只是普通非 CDN 目标，通常不需要额外开启回落限速。
 
 严格 SNI 门禁的清单会根据已经登记的 Web 域名、SNI 路由和 REALITY SNI 自动生成。新增域名、修改节点 SNI 后，先保存配置，再执行 `[3] 重新同步当前 SNI 清单`；否则新域名可能被当成未知 SNI 拒绝。它只负责过滤未知 SNI，不负责验证 UUID、密钥或其他 REALITY 身份信息。
@@ -362,9 +339,9 @@ Nginx Stream 和 TCP Peek 支持这两项保护；Xray Fallback 没有前置的 
 
 1. 在 3x-ui 中分别创建两个 REALITY 入站；每个入站使用不同的本地端口和可区分的 SNI。脚本只负责记录分流，不会创建或修改 3x-ui 入站。
 2. 入口模式保持 Nginx Stream 或 TCP Peek。
-3. 打开 `主菜单 [19 443端口复用管理中心] -> [15 Xray 入站管理]`，分别添加两条 `SNI -> 本地地址 -> 本地端口` 记录。
+3. 打开 `主菜单 [19 443端口复用管理中心] -> [15 Xray 入站管理]`，分别添加两条 `SNI -> 本地地址 -> 本地端口` 记录。每次保存后，脚本都会提示是否立即同步到当前入口；连续添加多条时可以先不应用，全部录入后再执行一次“同步到当前入口模式”。
 4. 打开 `主菜单 [19 443端口复用管理中心] -> [17 REALITY 回落流量防护] -> [4 设置 REALITY 回落限速]`。菜单会列出所有 REALITY 入站；每次选择一个入站，设置只会应用到当前选中的入站，两个入站都要保护就重复执行两次。
-5. 新增或修改 SNI 后执行 `[3] 重新同步当前 SNI 清单`。
+5. 路由同步到当前入口时，严格 SNI 清单也会按已保存的域名和路由重新生成。
 
 回落限速是“按入站保存”的，不是全局总开关，也不是按用户区分。每个入站必须使用不同的本地端口和不同的 SNI；对 A 入站开启限速，不会自动保护 B 入站。当前没有一次为所有入站批量设置限速的功能，需要逐个选择并设置。严格 SNI 门禁是共享入口规则，会同时覆盖所有已登记的 SNI。使用 PostgreSQL 的 3x-ui 时，脚本为避免误改远程数据库，不支持此回落限速功能；该功能仅支持本机 SQLite 3x-ui。
 

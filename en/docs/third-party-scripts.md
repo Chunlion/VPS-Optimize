@@ -10,6 +10,7 @@ Remote scripts can change upstream. Review the project URL and script content be
 |---|---|---|
 | acme.sh certificate installation | acme.sh | <https://github.com/acmesh-official/acme.sh> |
 | Docker Engine installation | Docker Engine | <https://github.com/docker/docker-install> |
+| Docker Compose binary | Docker Compose | <https://github.com/docker/compose> |
 | Python environment installation | lxspacepy | <https://github.com/lx969788249/lxspacepy> |
 | WARP unlock/network tool | WARP | <https://gitlab.com/fscarmen/warp> |
 | Realm port forwarding | Realm-xwPF | <https://github.com/zywe03/realm-xwPF> |

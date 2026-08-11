@@ -61,9 +61,13 @@ set_strict_sni_gate() {
         return 1
     fi
     if [[ "$target" == "true" ]]; then
-        confirm_default_no "$(localized_text "启用后，未登记或不带 SNI 的连接会被直接丢弃。确认启用？(y/N): " "After enabling, connections with an unregistered or missing SNI will be dropped. Enable? (y/N): " "После включения подключения с незарегистрированным или отсутствующим SNI будут отклоняться. Включить? (y/N): ")" || return 0
+        confirm_danger "$(localized_text "启用严格 SNI 门禁" "Enable the strict SNI gate" "Включить строгий контроль SNI")" \
+            "$(localized_text "未登记或不带 SNI 的连接会被直接丢弃，并重新应用当前入口" "drop connections with an unregistered or missing SNI and reapply the current entry" "отклонять подключения с незарегистрированным или отсутствующим SNI и повторно применить текущую точку входа")" \
+            "$(localized_text "可重新进入本菜单关闭门禁；已登记的 SNI 清单不会删除" "disable the gate from this menu; the registered SNI list is retained" "контроль можно отключить в этом меню; список зарегистрированных SNI сохранится")" || return 0
     else
-        confirm_default_yes "$(localized_text "关闭后，未知 SNI 将恢复转发到默认 Xray 后端。确认关闭？(Y/n): " "After disabling, unknown SNI will again be forwarded to the default Xray backend. Disable? (Y/n): " "После отключения неизвестные SNI снова будут направляться на стандартный бэкенд Xray. Отключить? (Y/n): ")" || return 0
+        confirm_danger "$(localized_text "关闭严格 SNI 门禁" "Disable the strict SNI gate" "Отключить строгий контроль SNI")" \
+            "$(localized_text "未知 SNI 将恢复转发到默认 Xray 后端，并重新应用当前入口" "resume forwarding unknown SNI to the default Xray backend and reapply the current entry" "возобновить пересылку неизвестных SNI на стандартный бэкенд Xray и повторно применить текущую точку входа")" \
+            "$(localized_text "可重新进入本菜单启用门禁" "enable the gate again from this menu" "контроль можно снова включить в этом меню")" || return 0
     fi
     STRICT_SNI_GATE="$target"
     save_sni_stack_env
@@ -240,9 +244,13 @@ patch_reality_fallback_limits() {
         echo -e "$(localized_text "将使用本次随机生成的回落限速参数（字节）：" "Randomized fallback limits for this operation (bytes):" "Случайные параметры ограничения fallback для этой операции (байты):")"
         echo "  upload:   afterBytes=${upload_after}, bytesPerSec=${upload_rate}, burstBytesPerSec=${upload_burst}"
         echo "  download: afterBytes=${download_after}, bytesPerSec=${download_rate}, burstBytesPerSec=${download_burst}"
-        confirm_default_no "$(localized_text "只会修改所选入站的两个 limitFallback 字段，并重启面板/Xray。确认继续？(y/N): " "Only the two limitFallback fields of the selected inbound will be changed, then the panel/Xray will restart. Continue? (y/N): " "Будут изменены только два поля limitFallback выбранного входящего подключения, затем панель/Xray перезапустится. Продолжить? (y/N): ")" || return 0
+        confirm_danger "$(localized_text "设置 REALITY 回落限速" "Set REALITY fallback rate limits" "Настроить ограничение REALITY fallback")" \
+            "$(localized_text "只修改所选入站的两个 limitFallback 字段，并重启面板/Xray" "change only the two limitFallback fields of the selected inbound, then restart the panel/Xray" "изменить только два поля limitFallback выбранного входящего подключения, затем перезапустить панель/Xray")" \
+            "$(localized_text "脚本会先备份数据库；可用本菜单清除限速或从备份恢复" "the database is backed up first; clear the limits from this menu or restore the backup" "сначала будет создана резервная копия базы; ограничения можно удалить в этом меню или восстановить базу из копии")" || return 0
     else
-        confirm_default_no "$(localized_text "将删除所选入站的两个 limitFallback 字段并重启面板/Xray。确认继续？(y/N): " "The two limitFallback fields will be removed from the selected inbound, then the panel/Xray will restart. Continue? (y/N): " "Два поля limitFallback будут удалены из выбранного входящего подключения, затем панель/Xray перезапустится. Продолжить? (y/N): ")" || return 0
+        confirm_danger "$(localized_text "清除 REALITY 回落限速" "Clear REALITY fallback rate limits" "Удалить ограничение REALITY fallback")" \
+            "$(localized_text "删除所选入站的两个 limitFallback 字段，并重启面板/Xray" "remove the two limitFallback fields from the selected inbound, then restart the panel/Xray" "удалить два поля limitFallback выбранного входящего подключения, затем перезапустить панель/Xray")" \
+            "$(localized_text "脚本会先备份数据库；可从备份恢复原参数" "the database is backed up first; restore the original values from the backup" "сначала будет создана резервная копия базы; исходные значения можно восстановить из неё")" || return 0
     fi
 
     backup_file=$(backup_reality_guard_database "$db_path" "$inbound_id") || { echo -e "$(localized_text "${RED}数据库备份失败，未执行修改。${PLAIN}" "${RED}Database backup failed; no changes were made.${PLAIN}" "${RED}Не удалось создать резервную копию базы; изменения не внесены.${PLAIN}")"; return 1; }
@@ -265,8 +273,10 @@ patch_reality_fallback_limits() {
 
 manage_reality_traffic_guard() {
     while true; do
+        local postgresql_mode=0
         clear
         load_sni_stack_env || return 1
+        xui_uses_postgresql && postgresql_mode=1
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}REALITY 回落流量防护${PLAIN}" "${BOLD}REALITY fallback traffic protection${PLAIN}" "${BOLD}Защита трафика REALITY fallback${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -276,17 +286,41 @@ manage_reality_traffic_guard() {
         echo -e "$(localized_text "${GREEN}  1. 启用严格 SNI 门禁${PLAIN}      ${YELLOW}(仅放行自动登记的 SNI)${PLAIN}" "${GREEN}1. Enable strict SNI gate${PLAIN} (allow only automatically registered SNIs)" "${GREEN}1. Включить строгий контроль SNI${PLAIN} (только автоматически зарегистрированные SNI)")"
         echo -e "$(localized_text "${CYAN}  2. 关闭严格 SNI 门禁${PLAIN}      ${YELLOW}(恢复未知 SNI 默认转发)${PLAIN}" "${CYAN}2. Disable strict SNI gate${PLAIN} (restore default forwarding for unknown SNI)" "${CYAN}2. Отключить строгий контроль SNI${PLAIN} (вернуть стандартную пересылку неизвестных SNI)")"
         echo -e "$(localized_text "${CYAN}  3. 重新同步当前 SNI 清单${PLAIN}    ${YELLOW}(按已保存的域名和路由生成)${PLAIN}" "${CYAN}3. Resynchronize the current SNI list${PLAIN} (generated from saved domains and routes)" "${CYAN}3. Повторно синхронизировать список SNI${PLAIN} (из сохранённых доменов и маршрутов)")"
-        echo -e "$(localized_text "${GREEN}  4. 设置 REALITY 回落限速${PLAIN}  ${YELLOW}(仅修改两个 limitFallback 字段)${PLAIN}" "${GREEN}4. Set REALITY fallback rate limits${PLAIN} (changes only the two limitFallback fields)" "${GREEN}4. Настроить ограничение REALITY fallback${PLAIN} (только два поля limitFallback)")"
-        echo -e "$(localized_text "${YELLOW}  5. 清除 REALITY 回落限速${PLAIN}  ${YELLOW}(恢复 Xray 默认行为)${PLAIN}" "${YELLOW}5. Clear REALITY fallback rate limits${PLAIN} (restore Xray defaults)" "${YELLOW}5. Удалить ограничение REALITY fallback${PLAIN} (вернуть настройки Xray по умолчанию)")"
+        if [[ "$postgresql_mode" -eq 1 ]]; then
+            echo -e "$(localized_text "${YELLOW}  4. 设置 REALITY 回落限速${PLAIN}  ${RED}(不可用：仅支持本机 SQLite)${PLAIN}" "${YELLOW}4. Set REALITY fallback rate limits${PLAIN} ${RED}(unavailable: local SQLite only)${PLAIN}" "${YELLOW}4. Настроить ограничение REALITY fallback${PLAIN} ${RED}(недоступно: только локальный SQLite)${PLAIN}")"
+            echo -e "$(localized_text "${YELLOW}  5. 清除 REALITY 回落限速${PLAIN}  ${RED}(不可用：仅支持本机 SQLite)${PLAIN}" "${YELLOW}5. Clear REALITY fallback rate limits${PLAIN} ${RED}(unavailable: local SQLite only)${PLAIN}" "${YELLOW}5. Удалить ограничение REALITY fallback${PLAIN} ${RED}(недоступно: только локальный SQLite)${PLAIN}")"
+        else
+            echo -e "$(localized_text "${GREEN}  4. 设置 REALITY 回落限速${PLAIN}  ${YELLOW}(仅修改两个 limitFallback 字段)${PLAIN}" "${GREEN}4. Set REALITY fallback rate limits${PLAIN} (changes only the two limitFallback fields)" "${GREEN}4. Настроить ограничение REALITY fallback${PLAIN} (только два поля limitFallback)")"
+            echo -e "$(localized_text "${YELLOW}  5. 清除 REALITY 回落限速${PLAIN}  ${YELLOW}(恢复 Xray 默认行为)${PLAIN}" "${YELLOW}5. Clear REALITY fallback rate limits${PLAIN} (restore Xray defaults)" "${YELLOW}5. Удалить ограничение REALITY fallback${PLAIN} (вернуть настройки Xray по умолчанию)")"
+        fi
         echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         local choice
         read_trimmed choice "$(localized_text "请选择操作: " "Select an action: " "Выберите действие: ")"
         case "$choice" in
             1) set_strict_sni_gate true ; pause_return ;;
             2) set_strict_sni_gate false ; pause_return ;;
-            3) sync_strict_sni_gate_to_current_entry ; pause_return ;;
-            4) patch_reality_fallback_limits apply ; pause_return ;;
-            5) patch_reality_fallback_limits clear ; pause_return ;;
+            3)
+                confirm_danger "$(localized_text "重新同步严格 SNI 清单" "Resynchronize the strict SNI list" "Повторно синхронизировать строгий список SNI")" \
+                    "$(localized_text "重新生成当前入口配置；运行中的 Nginx 或 vpso-mux 可能重启" "regenerate the current entry configuration; the running Nginx or vpso-mux service may restart" "заново создать текущую конфигурацию точки входа; работающий Nginx или vpso-mux может быть перезапущен")" \
+                    "$(localized_text "已保存的域名与路由不会删除；修正后可再次同步" "saved domains and routes are retained; correct them and synchronize again" "сохранённые домены и маршруты останутся; исправьте их и повторите синхронизацию")" && sync_strict_sni_gate_to_current_entry
+                pause_return
+                ;;
+            4)
+                if [[ "$postgresql_mode" -eq 1 ]]; then
+                    echo -e "$(localized_text "${RED}当前 3x-ui 使用 PostgreSQL，回落限速仅支持本机 SQLite。${PLAIN}" "${RED}3x-ui currently uses PostgreSQL; fallback limits support only local SQLite.${PLAIN}" "${RED}3x-ui использует PostgreSQL; ограничение fallback поддерживает только локальный SQLite.${PLAIN}")"
+                else
+                    patch_reality_fallback_limits apply
+                fi
+                pause_return
+                ;;
+            5)
+                if [[ "$postgresql_mode" -eq 1 ]]; then
+                    echo -e "$(localized_text "${RED}当前 3x-ui 使用 PostgreSQL，回落限速仅支持本机 SQLite。${PLAIN}" "${RED}3x-ui currently uses PostgreSQL; fallback limits support only local SQLite.${PLAIN}" "${RED}3x-ui использует PostgreSQL; ограничение fallback поддерживает только локальный SQLite.${PLAIN}")"
+                else
+                    patch_reality_fallback_limits clear
+                fi
+                pause_return
+                ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}无效选择。${PLAIN}" "${RED}Invalid selection.${PLAIN}" "${RED}Неверный выбор.${PLAIN}")"; sleep 1 ;;
         esac

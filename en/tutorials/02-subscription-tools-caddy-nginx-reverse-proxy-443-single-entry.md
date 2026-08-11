@@ -1,4 +1,4 @@
-# Subscription Tools with Caddy/Nginx and Port 443 Reuse
+# Reverse Proxy a Standalone Subscription Tool through Caddy/Nginx and Port 443 Reuse
 
 Use this guide to publish subscription tools such as SublinkPro, Sub-Store, and Miaomiaowu Subscription Management over HTTPS. Before Port 443 Reuse is enabled, use the Caddy or Nginx HTTPS reverse proxy in `Main menu [4 Reverse proxy]`. After it is enabled, add the domain through Port 443 Reuse's Web-domain/reverse-proxy menu, where you can choose Caddy or Nginx as the local Web reverse-proxy engine.
 

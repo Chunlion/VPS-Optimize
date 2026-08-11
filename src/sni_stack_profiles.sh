@@ -2,7 +2,7 @@
 # Port 443 Reuse profile editing and reapply helpers.
 
 save_and_offer_reapply_sni_stack() {
-    local yn env_file env_backup
+    local env_file env_backup
     env_file="/etc/vps-optimize/sni-stack.env"
     env_backup=""
     if [[ -f "$env_file" ]]; then
@@ -12,8 +12,10 @@ save_and_offer_reapply_sni_stack() {
     save_sni_stack_env
     echo -e "$(localized_text "${GREEN}✅ 已保存新的 443端口复用运行参数。${PLAIN}" "${GREEN}✅ New Port 443 Reuse operating parameters have been saved.${PLAIN}" "${GREEN}. Сохранены новые 443 отдельных рабочих параметра.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的域名、端口或路径。${PLAIN}" "${YELLOW}Tips: You need to reapply after saving, so that Nginx/Caddy will use the new domain, port or path.${PLAIN}" "${YELLOW}Советы: вам необходимо повторно подать заявку после сохранения, чтобы Nginx/Caddy использовал новое имя домена, порт или путь.${PLAIN}")"
-    read_trimmed yn "$(localized_text "是否现在重新应用并重启 Nginx/Caddy？直接回车继续，输入 n 取消（大小写均可）: " "Do you want to reapply and restart Nginx/Caddy now? Just press Enter to continue, enter n to cancel (both uppercase and lowercase are acceptable):" "Хотите повторно подать заявку и перезапустить Nginx/Caddy сейчас? Просто нажмите Enter, чтобы продолжить, введите n для отмены (допускаются как прописные, так и строчные буквы):")"
-    if is_yes "$yn"; then
+    if confirm_danger \
+        "$(localized_text "重新应用 443 配置" "Reapply the port 443 configuration" "Повторно применить конфигурацию порта 443")" \
+        "$(localized_text "重新生成入口配置并重启 Nginx/Caddy" "regenerate the entry configuration and restart Nginx/Caddy" "заново создать конфигурацию точки входа и перезапустить Nginx/Caddy")" \
+        "$(localized_text "失败时自动恢复本次修改前的参数文件" "restore the parameter file saved before this change if reapplication fails" "при ошибке восстановить файл параметров, сохранённый до этого изменения")"; then
         if ! reapply_sni_stack_from_env --yes; then
             if [[ -n "$env_backup" && -f "$env_backup" ]]; then
                 cp -p "$env_backup" "$env_file" 2>/dev/null || true
@@ -48,7 +50,7 @@ update_xui_panel_domain_settings_for_single_443() {
     local checked=0 updated=0 failed=0 timestamp
 
     if xui_uses_postgresql; then
-        echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL，跳过数据库自动同步。443端口复用已更新；请在 3x-ui 中手动确认订阅域名和公开节点地址。${PLAIN}" "${YELLOW}⚠️ 3x-ui is using PostgreSQL, so database synchronization is skipped. The Port 443 Reuse has been updated; manually verify the subscription domain and public node address in 3x-ui.${PLAIN}" "${YELLOW}⚠️ 3x-ui использует PostgreSQL, поэтому синхронизация базы данных пропущена. Повторное использование порта 443 обновлён; вручную проверьте домен подписки и публичный адрес узла в 3x-ui.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ 检测到 3x-ui 使用 PostgreSQL，跳过数据库自动同步。请在 3x-ui 中保持订阅监听 IP 为 127.0.0.1、监听域名留空，并将反向代理 URI 设置为 https://${new_domain}${SUB_URI_PATH}；节点 Host 使用实际节点域名和公网 443。${PLAIN}" "${YELLOW}⚠️ 3x-ui uses PostgreSQL, so database synchronization was skipped. In 3x-ui, keep the subscription listen IP at 127.0.0.1, leave the listen domain empty, and set Reverse Proxy URI to https://${new_domain}${SUB_URI_PATH}; use the actual node domain and public port 443 for the node Host.${PLAIN}" "${YELLOW}⚠️ 3x-ui использует PostgreSQL, поэтому синхронизация базы пропущена. В 3x-ui оставьте IP прослушивания подписки 127.0.0.1, домен прослушивания — пустым, задайте URI обратного прокси https://${new_domain}${SUB_URI_PATH}; в Host узла укажите фактический домен узла и публичный порт 443.${PLAIN}")"
         return 0
     fi
 
@@ -79,7 +81,7 @@ update_xui_panel_domain_settings_for_single_443() {
 
         sql="
 update ${table_name} set value='' where lower(key)='webdomain';
-update ${table_name} set value='${new_domain}' where lower(key)='subdomain';
+update ${table_name} set value='' where lower(key)='subdomain';
 update ${table_name} set value='https://${new_domain}${SUB_URI_PATH}' where lower(key)='suburi';
 update ${table_name} set value='https://${new_domain}${CLASH_URI_PATH}' where lower(key)='subclashuri';
 update ${table_name} set value=replace(replace(value,'https://${old_domain}','https://${new_domain}'),'http://${old_domain}','https://${new_domain}') where lower(key)='subjsonuri' and value like '%${old_domain}%';

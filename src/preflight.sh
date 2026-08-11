@@ -233,14 +233,15 @@ func_preflight_check() {
     fi
 
     if ! $pkg_busy && { $can_fix_ntp || [[ ${#cmd_miss[@]} -gt 0 ]] || [[ ${#minimal_miss[@]} -gt 0 ]]; }; then
-        local fix_confirm rerun_confirm
+        local rerun_confirm
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${CYAN}🛠️ 可自动处理的简单问题:${PLAIN}" "${CYAN}🛠️ Simple questions that can be automatically handled:${PLAIN}" "${CYAN}🛠️ Простые вопросы, которые можно обрабатывать автоматически:${PLAIN}")"
         $can_fix_ntp && echo -e "$(localized_text "  - 开启 NTP 时间同步" "- Enable NTP time synchronization" "- Включить синхронизацию времени NTP")"
         [[ ${#cmd_miss[@]} -gt 0 ]] && echo -e "$(localized_text "  - 安装缺失基础命令: ${cmd_miss[*]}" "- Installation missing basic command: ${cmd_miss[*]}" "- При установке отсутствует базовая команда: ${cmd_miss[*]}.")"
         [[ ${#minimal_miss[@]} -gt 0 ]] && echo -e "$(localized_text "  - 补齐精简系统兼容组件" "- Completed streamlined system compatible components" "- Завершены оптимизированные компоненты, совместимые с системой.")"
-        read_trimmed fix_confirm "$(localized_text "是否现在自动修复这些简单问题？(Y/n): " "Are these simple issues now automatically fixed? (Y/n):" "Эти простые проблемы теперь устраняются автоматически? (Да/Нет):")"
-        if is_yes "$fix_confirm"; then
+        if confirm_danger "$(localized_text "自动修复预检问题" "Automatically fix preflight issues" "Автоматически исправить проблемы предварительной проверки")" \
+            "$(localized_text "可能安装基础软件包并启用 NTP 时间同步" "may install base packages and enable NTP time synchronization" "может установить базовые пакеты и включить синхронизацию времени NTP")" \
+            "$(localized_text "软件包变更需按系统包管理器回退；NTP 可在系统服务中关闭" "revert package changes with the system package manager; disable NTP through the system service" "изменения пакетов отменяются через системный менеджер пакетов; NTP можно отключить в системной службе")"; then
             [[ ${#minimal_miss[@]} -gt 0 ]] && ensure_minimal_system_compat
             $can_fix_ntp && preflight_enable_ntp
             [[ ${#cmd_miss[@]} -gt 0 ]] && preflight_install_missing_commands "${cmd_miss[@]}"

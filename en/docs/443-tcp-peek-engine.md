@@ -1,47 +1,45 @@
 # Port 443 Reuse: Entry Modes and Internals
 
-This article explains three Port 443 Reuse point implementations of VPS-Optimize: Nginx Stream default stable implementation, TCP Peek + Splice / vpso-mux same configuration implementation, Xray Fallback special implementation.
+VPS-Optimize provides three ways to share public port 443: Nginx Stream, TCP Peek + Splice (`vpso-mux`), and Xray Fallback. Start with Nginx Stream unless you have a specific reason to use another mode.
 
-`panel.example.com`, `site.example.com`, `node.example.com`, `SERVER_IP`, `8443`, `8444`, and `1443` in the example are all example values and are only used to illustrate the link relationship. During actual deployment, please replace it with your real domain, server IP and port where the script is currently saved.
+`panel.example.com`, `site.example.com`, `node.example.com`, `SERVER_IP`, `8443`, `8444`, and `1443` are example values. Replace them with your actual domains, server IP, and the ports saved by the script.
 
-## common configuration boundaries
+## Choose a mode
+
+| Mode | 3x-ui/Xray listener | Use it when |
+| --- | --- | --- |
+| `nginx-stream` | Panel, subscription service, and Xray inbounds listen on local `127.0.0.1` ports | Recommended default; broadest compatibility and simplest recovery |
+| `tcp-peek` | Same local listeners as `nginx-stream` | You want `vpso-mux` while keeping the same domains, certificates, backends, and routes |
+| `xray-fallback` | One Xray main inbound listens on public `443` and falls back to the local Web proxy | You already understand and maintain the Xray fallback chain yourself |
+
+Only one process may listen on public port `443`: `nginx`, `vpso-mux`, or the Xray main inbound.
+
+## Shared configuration
 
 The three entry modes share the same set of public configurations:
 
-- Web domains, Web reverse proxy engine backend mappings, and certificates are shared; the Web whitelist is only shared between Nginx Stream and TCP Peek.
+- Web domains, Web reverse-proxy backend mappings, and certificates are shared by all modes. Web allowlists are shared only between Nginx Stream and TCP Peek.
 - The certificate still uses the existing `acme.sh + Cloudflare DNS API` process, does not introduce the Caddy DNS module, and does not use `xcaddy`.
-- The web whitelist only protects web domains and is not used to limit Xray node traffic.
-- 443 The Web reverse proxy engine under Port 443 Reuse can choose Caddy or Nginx, and the same configuration can be reused when switching the entry mode.
-- When using Nginx Stream or TCP Peek, the web whitelist takes effect at the entry layer as `SNI + source IP`; `xray-fallback` does not allow new, reserved or applied web whitelists regardless of whether Caddy or Nginx local web reverse proxy is selected.
-- Only one service can listen to the public port `443`: `nginx`, `xray` or `vpso-mux`.
-- If `/etc/vps-optimize/sni-stack.env` does not have `ENTRY_MODE`, it will be processed as `nginx-stream` compatible.
-- `engine` of `ENTRY_MODE` and `/etc/vps-optimize/443-engine.conf` are written uniformly to `nginx-stream`, `xray-fallback`, and `tcp-peek`. `nginx_stream`, `xray_fallback`, and `tcp_peek` written in the old version are only reserved as read-compatible aliases; a single simple assignment will be automatically rewritten to a new name. If it cannot be safely rewritten, the status page will continue to prompt.
+- The Web allowlist protects Web domains only; it never filters Xray node traffic.
+- The local Web reverse proxy may be Caddy or Nginx, and the same mapping is reused when switching entry modes.
+- In Nginx Stream and TCP Peek, the Web allowlist is checked at the entry layer using `SNI + source IP`. Xray Fallback does not support that front allowlist.
+- If `/etc/vps-optimize/sni-stack.env` has no `ENTRY_MODE`, the script reads it as `nginx-stream` for compatibility.
+- New configurations use `nginx-stream`, `xray-fallback`, or `tcp-peek`. The old names `nginx_stream`, `xray_fallback`, and `tcp_peek` remain read-compatible.
 
 Common menu paths:
 
 ```text
-Main menu [19 Port 443 Reuse manager]
-  -> [2] initial setup/installation Port 443 Reuse
-  -> [3] switch to Nginx Stream mode
-  -> [4] switch to Xray Fallback mode
-  -> [5] switch to TCP Peek + Splice mode
+Main menu [19 Port 443 Reuse Management]
+  -> [2] Install / switch the port 443 entry mode
   -> [7] Roll back the last entry-mode switch
-  -> [16] View TCP Peek + Splice Status / 8444 Preflight
-  -> [17] TCP Peek routing rule validation
-  -> [18] View TCP Peek + Splice Log
+  -> [16] View the current entry log
 ```
 
-For 3x-ui panel, subscription, and Xray inbound settings, see [Port 443 Reuse: Setup and Configuration](443-single-entry.md), section "3x-ui Three Entry Mode Configuration Quick Check".
-
-| ENTRY_MODE | How to bind 3x-ui/Xray | The most important considerations when switching |
-| --- | --- | --- |
-| `nginx-stream` | Panels, subscriptions, and Xray inbound all listen on the `127.0.0.1` local port | 3x-ui/Xray Do not directly occupy the public port `443` |
-| `tcp-peek` | Same as `nginx-stream`, still a local port | The configuration process is the same; public port `443` only changes from `nginx` to `vpso-mux` |
-| `xray-fallback` | Requires a 3x-ui/Xray primary inbound connection to bind the Internet `443` and fallback to the web reverse proxy engine local port | Before switching back to other modes, the main inbound Xray must be moved from the public port `443` |
+For exact 3x-ui panel, subscription, and inbound fields, see [Port 443 Reuse: Setup and Configuration](443-single-entry.md).
 
 ## Nginx Stream default stable implementation
 
-Nginx Stream is the default stable mode. Internet `443` is bound by Nginx stream. Use `ssl_preread` to read SNI in TLS ClientHello, but does not terminate TLS and does not decrypt the traffic.
+Nginx Stream is the stable default. Nginx listens on public port `443` and uses `ssl_preread` to read SNI from the TLS ClientHello. It does not terminate TLS or decrypt traffic.
 
 ```text
 public port `443`
@@ -51,13 +49,13 @@ public port `443`
   -> unknown SNI        -> Default Xray/REALITY backend
 ```
 
-This implementation has the most complete coverage and is suitable as a long-term default entry. It is responsible for stable access to the web reverse proxy engine, REALITY, panels, subscriptions, websites, web whitelists and rollback processes.
+This is the recommended long-term default. It supports the complete Web, REALITY, panel, subscription, allowlist, and rollback workflow.
 
 ## TCP Peek + Splice / vpso-mux implementation
 
-TCP Peek + Splice / vpso-mux and Nginx Stream use the same set of Port 443 Reuse configuration. There is no need to create a new set of web domains, certificates, web reverse proxy engine backends, web whitelists, and Xray SNI routing records; 3x-ui panels, subscriptions, and Xray inbound connections are still filled in according to local bindings. When using it for the first time, run `Main menu [19 Port 443 Reuse Manager] -> [16] View TCP Peek + Splice Status / 8444 Check before switching` first to confirm that `vpso-mux` can start and forward in `8444`; then run `[17] TCP Peek Routing rule verification`. Only when the user subsequently executes `[5] switch to TCP Peek + Splice mode` will the Internet `443` be switched from Nginx Stream to `vpso-mux`.
+TCP Peek and Nginx Stream use the same saved configuration. Do not create a second set of domains, certificates, Web backends, allowlists, or Xray SNI routes. Open `[2 Install / switch the port 443 entry mode]` and choose TCP Peek. The script builds `vpso-mux` when required, validates its configuration, and tests the routes on the isolated port `8444`. Public port `443` changes hands only after the preflight succeeds.
 
-`vpso-mux` uses `MSG_PEEK` to view SNI in TLS ClientHello without consuming the first packet; the ClientHello received by the backend is still consistent with the client's original data. For forwarding, splice is used first, and ordinary copy is fallbacked when it fails or is unavailable.
+`vpso-mux` uses `MSG_PEEK` to inspect SNI in the TLS ClientHello without consuming the first packet. The backend receives the original ClientHello. Forwarding uses splice when available and falls back to ordinary copy when necessary.
 
 ### Connection life cycle of TCP Peek
 
@@ -66,14 +64,14 @@ After a client connection enters `vpso-mux`, it is processed roughly in the foll
 ```text
 client TCP connect
   -> vpso-mux accept
-  -> recv(MSG_PEEK) Only view what is in the receive buffer ClientHello
-  -> from ClientHello Analysis in extension SNI
-  -> route by SNI Heyuan IP Whitelist selection backend
-  -> dial Backend local port
-  -> Forward original in both directions TCP byte stream
+  -> recv(MSG_PEEK) inspects ClientHello in the receive buffer
+  -> parse SNI from the ClientHello extension
+  -> select a backend using SNI and the source-IP allowlist
+  -> connect to the local backend
+  -> forward the original TCP byte stream in both directions
 ```
 
-The most critical thing here is `MSG_PEEK`. Ordinary `recv` will take the data from the socket receiving buffer, and the first packet that has been read needs to be rewritten to the backend during subsequent forwarding; `MSG_PEEK` just "takes a look" and will not move the reading position. Therefore, after `vpso-mux` parses SNI, the TLS ClientHello sent by the client still remains in the original socket buffer. After the backend connection is established, the first batch of bytes forwarded is still the client's original ClientHello.
+Unlike an ordinary `recv`, `MSG_PEEK` does not remove data from the socket buffer. After `vpso-mux` parses SNI, the original ClientHello remains available and is forwarded unchanged when the backend connection is established.
 
 So TCP Peek is not terminated by TLS, nor is it decrypted by a man-in-the-middle:
 
@@ -121,7 +119,7 @@ When matching, first do the exact SNI match, and then do the wildcard domain mat
 | mode | working method | Suitable for the situation |
 | --- | --- | --- |
 | `splice` | The Linux kernel transfers data between sockets and pipes to minimize user state copying. | Normal priority path |
-| `copy` | Go process forwards data using ordinary read and write cycles | Fallback path when splice is unavailable, fails or is closed |
+| `copy` | The Go process forwards data with ordinary read/write loops | Fallback when splice is unavailable, fails, or is disabled |
 
 The default configuration is:
 
@@ -134,9 +132,9 @@ splice:
 
 In other words, `vpso-mux` will try splice first. If the current kernel, socket status or operating environment is not suitable for splice, and `fallback_to_copy` is `true`, it will automatically fall back to normal copy. copy is not an error, it just lacks zero-copy optimization; the status page or `copy_fallback` in `status.json` can be used to observe whether there are frequent rollbacks.
 
-It should be noted that splice optimizes "byte forwarding after the selected backend" and does not change the routing logic. The SNI judgment still occurs in the ClientHello phase at the beginning of the connection; once the backend is selected, subsequent TCP connections will not be rerouted based on the content.
+Splice changes only how bytes are forwarded after a backend is selected. SNI routing still happens once during the initial ClientHello; application data does not trigger another routing decision.
 
-The splice path will also be controlled by `timeouts.idle`. `vpso-mux` uses non-blocking splice and waits for readable/writable events before reading and writing file descriptors; if the connection has no data for a long time, it will be closed according to the idle timeout instead of letting the idle connection occupy the forwarding goroutine. The copy path continues to use normal read and write deadlines.
+`timeouts.idle` applies to the splice path. An idle connection is closed after the configured timeout instead of occupying forwarding resources indefinitely. The copy path uses ordinary read/write deadlines.
 
 ### Concurrency protection and status refresh
 
@@ -149,9 +147,9 @@ limits:
 
 The old `vpso-mux.yaml` even without the `limits` field will automatically use the same default value by the program; users do not need to manually migrate the configuration. If you really want to turn off this restriction, you can set `max_connections` to `0`, which means there is no limit on the number of connections within the program.
 
-The slow handshake is also protected: if the client does not send a complete ClientHello within the `timeouts.peek` time after connecting, `vpso-mux` will close the connection instead of forwarding it to the default Xray/REALITY backend. The default `timeouts.peek` is `3s`, and normal browsers and proxy clients will not perceive this change.
+If the client does not send a complete ClientHello within `timeouts.peek`, `vpso-mux` closes the connection instead of forwarding it to the default Xray/REALITY backend. The generated default is `3s`.
 
-The running status is written to `/var/lib/vps-optimize/vpso-mux/status.json`. The new version no longer writes to disk immediately for each connection. Instead, it saves the count in memory and refreshes it regularly, and writes it again before exiting. The status page will display the current number of connections, the upper limit of connections, the number of rejected connections, backend dialing errors, peek errors, peek timeouts, and the number of bidirectional forwarded bytes, making it easy to determine whether there is a connection flood, slow handshake occupation, or backend port exception.
+Runtime counters are written to `/var/lib/vps-optimize/vpso-mux/status.json` at intervals and again on exit. The status view reports active and rejected connections, connection limits, backend dial errors, peek errors and timeouts, route hits, and forwarded bytes.
 
 ### Route index
 
@@ -164,33 +162,33 @@ Main advantages of TCP Peek:
 - For forwarding, splice is used first to reduce user-mode data copy; when it is unavailable, it automatically falls back to ordinary copy.
 - `vpso-mux` is an entry program specially prepared for 443 SNI routing. Status, logs, configuration validation and 8444 pre-switching checks all revolve around this link.
 
-The `vpso-mux.yaml` generated by TCP Peek will only write one listening item according to the public internet listening address saved by the script. By default, `0.0.0.0:443` only listens to IPv4; if you clearly need the IPv6 entry, please set the public internet listening address to `::` and then regenerate the configuration to avoid dual-stack binding conflicts caused by writing `0.0.0.0` and `[::]` at the same time on the same port.
+The generated `vpso-mux.yaml` contains one public listener. `0.0.0.0:443` is IPv4 only. To accept IPv6, set the public listen address to `::` and regenerate the configuration; do not add both listeners manually on the same port.
 
 ```text
 public port `443`
   -> vpso-mux
   -> recv(MSG_PEEK) View TLS ClientHello SNI
   -> route by SNI / whitelist Select backend
-  -> splice Two-way forwarding, Fallback on failure copy
+  -> bidirectional splice forwarding, with copy fallback
 ```
 
 Core differences from Nginx Stream:
 
-| Project | Nginx Stream | TCP Peek + Splice / vpso-mux |
+| Item | Nginx Stream | TCP Peek + Splice / vpso-mux |
 | --- | --- | --- |
 | Configuration process | Use Port 443 Reuse configuration | Use the same Port 443 Reuse configuration |
 | Entry process | `nginx` | `vpso-mux` |
-| SNI Get | `ssl_preread` | `MSG_PEEK` parsing ClientHello |
+| SNI inspection | `ssl_preread` | Parse ClientHello with `MSG_PEEK` |
 | TLS processing | Do not terminate TLS | Do not terminate TLS |
 | Certificate | Current web reverse proxy engine handles web/panel certificates | Current web reverse proxy engine handles web/panel certificates |
 | Unknown SNI | Default Xray/REALITY backend | Default Xray/REALITY backend |
-| forward | Nginx stream proxy | splice, fallback on failure copy |
+| Forwarding | Nginx stream proxy | splice with copy fallback |
 
 View status and logs:
 
 ```text
-Main menu [19 Port 443 Reuse manager]
-  -> [18] View TCP Peek + Splice Log
+Main menu [19 Port 443 Reuse Management]
+  -> [16] View the current entry log
 ```
 
 Commonly used diagnostic commands:
@@ -209,31 +207,30 @@ splice:
   fallback_to_copy: true
 ```
 
-## Xray Fallback special implementation
+## Xray Fallback
 
-Xray Fallback is a special mode: Internet `443` is bound by the existing Xray/3x-ui main inbound connection connection, and HTTPS fallback to the current Web reverse proxy engine. This script does not create, delete, or modify the 3x-ui/Xray inbound connection internal configuration.
+In Xray Fallback mode, an existing Xray/3x-ui main inbound owns public port `443` and sends ordinary HTTPS fallback traffic to the local Web reverse proxy. VPS-Optimize does not create or edit the internal 3x-ui/Xray inbound configuration.
 
 ```text
 public port `443`
   -> Xray/3x-ui main inbound
-  -> Xray Node traffic is handled inbound by this master
-  -> HTTPS fallback Arrive Caddy/Nginx local Web reverse proxy backend
+  -> the main inbound handles Xray node traffic
+  -> ordinary HTTPS falls back to the local Caddy/Nginx Web backend
 ```
 
-In xray-fallback mode, the `Xray Inbound connection management` menu is not available for connecting to SNI routes with multiple local inbound connections. The reason is that the Internet `443` has been taken over by the Xray main inbound connection, and the script currently does not support continuing to route multiple SNI to multiple local Xray inbound connections in this mode. To route multiple local Xray inbound connections, use Nginx Stream mode or TCP Peek + Splice / vpso-mux mode.
+The Xray inbound route menu cannot add multi-inbound SNI routes in this mode because the Xray main inbound already owns public `443`. Use Nginx Stream or TCP Peek when several local Xray inbounds must share port `443`.
 
 ## Switch and rollback
 
-Switch to TCP Peek + Splice:
+To switch to TCP Peek + Splice:
 
 ```text
-Main menu [19 Port 443 Reuse manager]
-  -> [16] View TCP Peek + Splice Status / 8444 Preflight
-  -> [17] TCP Peek routing rule validation
-  -> [5] switch to TCP Peek + Splice mode
+Main menu [19 Port 443 Reuse Management]
+  -> [2] Install / switch the port 443 entry mode
+  -> [3] TCP Peek + Splice
 ```
 
-The switching process will not automatically download the Go tool chain or remotely compile `vpso-mux` in the Internet `443` switching path. If `/usr/local/bin/vpso-mux` does not exist, the script will reject the switch and require the `8444` pre-switch check of `[16]` to be performed first. Before the official switch, the script will start the independent `vpso-mux-preflight.service` binding `8444` again to confirm that the web reverse proxy engine and Xray local backend are reachable; if the pre-switch check fails, the Internet `443` will not be replaced.
+If `/usr/local/bin/vpso-mux` or Go is missing, the installer attempts to add the required toolchain and build the binary. It then starts `vpso-mux-preflight.service` on isolated port `8444` to test Web and Xray backends. A failed preflight leaves public port `443` unchanged and shows the service status and recent logs.
 
 Formal switching will generate and verify `vpso-mux.yaml`, create a backup, isolate the Nginx stream 443 configuration currently managed by VPS-Optimize, start `vpso-mux` to take over the public port `443`, and check that the web reverse proxy engine and Xray local backend are reachable. Automatic rollback is attempted on failure.
 
@@ -244,7 +241,7 @@ If the current SSH session is connected to the ingress port, such as `443`, the 
 Roll back the previous round of entry mode switching:
 
 ```text
-Main menu [19 Port 443 Reuse manager]
+Main menu [19 Port 443 Reuse Management]
   -> [7] Roll back the last entry-mode switch
 ```
 
