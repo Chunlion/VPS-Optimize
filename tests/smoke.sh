@@ -3045,4 +3045,56 @@ fi
 grep -q 'generate_issue_diagnostics' dist/vps.sh
 grep -q 'install_update_script' dog.sh
 
+reality_guard_smoke_tmp=$(mktemp -d /tmp/vps-reality-guard-smoke.XXXXXX)
+reality_guard_smoke_db="$reality_guard_smoke_tmp/x-ui.db"
+source src/reality_guard.sh
+python3 - "$reality_guard_smoke_db" <<'PY'
+import json
+import sqlite3
+import sys
+
+conn = sqlite3.connect(sys.argv[1])
+conn.execute("create table inbounds (id integer primary key, port integer, remark text, stream_settings text)")
+stream = {
+    "network": "tcp",
+    "security": "reality",
+    "realitySettings": {
+        "target": "cdn.example.com:443",
+        "serverNames": ["cdn.example.com"],
+        "privateKey": "keep-private-key",
+        "shortIds": ["aabbccdd"],
+    },
+}
+conn.execute("insert into inbounds values (1, 1443, 'reality-test', ?)", (json.dumps(stream),))
+conn.commit()
+PY
+grep -Fq $'1\t1443\treality-test\tcdn.example.com\tdisabled' < <(reality_guard_python list "$reality_guard_smoke_db")
+reality_guard_python apply "$reality_guard_smoke_db" 1 100 10 20 200 30 40
+python3 - "$reality_guard_smoke_db" <<'PY'
+import json
+import sqlite3
+import sys
+
+stream = json.loads(sqlite3.connect(sys.argv[1]).execute("select stream_settings from inbounds where id=1").fetchone()[0])
+reality = stream["realitySettings"]
+assert reality["privateKey"] == "keep-private-key"
+assert reality["shortIds"] == ["aabbccdd"]
+assert reality["limitFallbackUpload"] == {"afterBytes": 100, "bytesPerSec": 10, "burstBytesPerSec": 20}
+assert reality["limitFallbackDownload"] == {"afterBytes": 200, "bytesPerSec": 30, "burstBytesPerSec": 40}
+assert set(stream) == {"network", "security", "realitySettings"}
+PY
+reality_guard_python clear "$reality_guard_smoke_db" 1
+python3 - "$reality_guard_smoke_db" <<'PY'
+import json
+import sqlite3
+import sys
+
+reality = json.loads(sqlite3.connect(sys.argv[1]).execute("select stream_settings from inbounds where id=1").fetchone()[0])["realitySettings"]
+assert "limitFallbackUpload" not in reality
+assert "limitFallbackDownload" not in reality
+assert reality["privateKey"] == "keep-private-key"
+PY
+rm -f "$reality_guard_smoke_db"
+rmdir "$reality_guard_smoke_tmp"
+
 echo "Smoke tests passed."

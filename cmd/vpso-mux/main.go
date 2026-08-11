@@ -49,6 +49,7 @@ type runtimeStatus struct {
 	SpliceSuccess        uint64            `json:"splice_success"`
 	CopyFallback         uint64            `json:"copy_fallback"`
 	WhitelistBlocked     uint64            `json:"whitelist_blocked"`
+	UnknownSNIBlocked    uint64            `json:"unknown_sni_blocked"`
 	NoSNI                uint64            `json:"no_sni"`
 	PeekErrors           uint64            `json:"peek_errors"`
 	PeekTimeouts         uint64            `json:"peek_timeouts"`
@@ -359,7 +360,11 @@ func (s *statusTracker) RecordConnection(match mux.Match, sni, transferMode stri
 		s.data.NoSNI++
 	}
 	if !match.Allowed || match.Blocked {
-		s.data.WhitelistBlocked++
+		if match.RouteName == "strict_sni_gate" {
+			s.data.UnknownSNIBlocked++
+		} else {
+			s.data.WhitelistBlocked++
+		}
 		s.data.RejectedConnections++
 	}
 	if backendDialError {
@@ -558,7 +563,11 @@ func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *m
 	}
 
 	if !match.Allowed && match.Backend == "" {
-		event.Error = "blocked by route whitelist"
+		if match.RouteName == "strict_sni_gate" {
+			event.Error = "blocked by strict sni gate"
+		} else {
+			event.Error = "blocked by route whitelist"
+		}
 		logger.Emit("info", event)
 		status.RecordConnection(match, sni, "", false, 0, 0, false, false, nil)
 		return

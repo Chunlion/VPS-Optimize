@@ -47,7 +47,7 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 
 | 路径 | 说明 |
 |---|---|
-| `/etc/vps-optimize/sni-stack.env` | 443端口复用保存的核心参数，`ENTRY_MODE` 使用 `nginx-stream` / `xray-fallback` / `tcp-peek` |
+| `/etc/vps-optimize/sni-stack.env` | 443端口复用核心参数；`ENTRY_MODE` 保存入口模式，`STRICT_SNI_GATE` 保存严格 SNI 门禁状态 |
 | `/etc/vps-optimize/443-engine.conf` | 当前 443端口复用引擎状态，默认 `nginx-stream` |
 | `/etc/vps-optimize/vpso-mux.yaml` | `tcp-peek` / `vpso-mux` 分流器配置 |
 | `/etc/vps-optimize/sni-stack.last-backup` | 最近一次 443端口复用备份路径记录 |
@@ -66,7 +66,7 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 检查当前 443 参数：
 
 ```bash
-grep -E '^(PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null
+grep -E '^(ENTRY_MODE|STRICT_SNI_GATE|PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null
 ```
 
 检查 Nginx / Caddy：

@@ -77,6 +77,7 @@ show_sni_help() {
     echo "$(localized_text "14 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅响应。" "14 Network access test: check DNS, TCP, TLS SNI, panel, and subscription responses." "14 Проверка доступа: DNS, TCP, TLS SNI, ответы панели и подписки.")"
     echo "$(localized_text "15 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。" "15 Manage Xray routes: record SNI -> local address:port without editing 3x-ui/Xray inbounds." "15 Маршруты Xray: запись SNI -> локальный адрес:порт без изменения входящих подключений 3x-ui/Xray.")"
     echo "$(localized_text "16 当前入口日志：按 ENTRY_MODE 查看 Nginx、Xray/3x-ui 或 vpso-mux。" "16 Current entry logs: show Nginx, Xray/3x-ui, or vpso-mux based on ENTRY_MODE." "16 Журналы текущего входа: Nginx, Xray/3x-ui или vpso-mux согласно ENTRY_MODE.")"
+    echo "$(localized_text "17 REALITY 回落流量防护：管理严格 SNI 门禁和回落限速。" "17 REALITY fallback traffic protection: manage the strict SNI gate and fallback rate limits." "17 Защита трафика REALITY fallback: строгий контроль SNI и ограничение скорости fallback.")"
     echo "$(localized_text "修改面板域名请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。" "To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain]." "Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].")"
     echo "$(localized_text "未接入 443端口复用时，用主菜单 [4 反代] -> [5] 管理 Caddy/Nginx 域名 IP 白名单。" "When the Port 443 Reuse is not connected, use the main menu [4 reverse proxy] -> [5] to manage the Caddy/Nginx domain IP whitelist." "Если повторное использование порта 443 не подключен, используйте главное меню [4 обратный прокси] -> [5] для управления белым списком IP-адресов доменного имени Caddy/Nginx.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
@@ -311,6 +312,7 @@ func_sni_stack_quick_menu() {
         echo -e "$(localized_text "${CYAN} 14. 443 网络访问测试${PLAIN}          ${YELLOW}(DNS/TCP/TLS/面板/订阅路径)${PLAIN}" "${CYAN}14. 443 Network access test (DNS/TCP/TLS/panel/subscription path)${PLAIN}" "${CYAN}14. 443 Проверка доступа к сети (DNS/TCP/TLS/панель/путь подписки)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 15. Xray 入站管理${PLAIN}             ${YELLOW}(SNI -> 本地地址:端口 分流记录)${PLAIN}" "${CYAN}15. Manage Xray inbounds (SNI -> local address:port routes)${PLAIN}" "${CYAN}15. Управление входящими подключениями Xray (SNI -> локальный адрес:порт)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 16. 查看当前入口日志${PLAIN}          ${YELLOW}(自动识别 Nginx / Xray / vpso-mux)${PLAIN}" "${CYAN}16. View current entry logs (detects Nginx / Xray / vpso-mux automatically)${PLAIN}" "${CYAN}16. Журналы текущего входа (автовыбор Nginx / Xray / vpso-mux)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 17. REALITY 回落流量防护${PLAIN}      ${YELLOW}(严格 SNI 门禁 / 回落限速)${PLAIN}" "${GREEN}17. REALITY fallback traffic protection (strict SNI gate / fallback rate limits)${PLAIN}" "${GREEN}17. Защита трафика REALITY fallback (строгий контроль SNI / ограничение скорости)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
@@ -332,6 +334,7 @@ func_sni_stack_quick_menu() {
             14) func_443_network_test; continue ;;
             15) manage_xray_inbound_routes; continue ;;
             16) view_current_entry_logs ;;
+            17) manage_reality_traffic_guard; continue ;;
             "?") show_sni_help; pause_return; continue ;;
             0) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;

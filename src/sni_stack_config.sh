@@ -896,6 +896,7 @@ load_sni_stack_env() {
     # shellcheck disable=SC1090
     source "$env_file"
     ENTRY_MODE=$(get_entry_mode)
+    STRICT_SNI_GATE=$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")
     WEB_PROXY_ENGINE=$(normalize_web_proxy_engine "${WEB_PROXY_ENGINE:-caddy}" 2>/dev/null || echo "caddy")
     PANEL_WEB_PATH=$(normalize_path_prefix "${PANEL_WEB_PATH:-/panel/}")
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")

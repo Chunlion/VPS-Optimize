@@ -61,6 +61,13 @@ collect_sni_stack_config() {
     echo -e "$(localized_text "${YELLOW}模板示例：your-reality-sni.example.com（请替换成你自己选择的真实站点）${PLAIN}" "${YELLOW}Template example: your-reality-sni.example.com (please replace it with the real site of your choice)${PLAIN}" "${YELLOW}Пример шаблона : your-reality-sni.example.com (замените его реальным сайтом по вашему выбору)${PLAIN}")"
     read_trimmed reality_sni_input "$(localized_text "REALITY 伪装 SNI（必填）: " "REALITY Disguise SNI (required):" "REALITY Маскировка SNI (обязательно):")"
     REALITY_SNI="$reality_sni_input"
+    STRICT_SNI_GATE="false"
+    if strict_sni_gate_mode_supported "${ENTRY_MODE:-nginx-stream}"; then
+        echo -e "$(localized_text "${YELLOW}若 REALITY target 使用 CDN，验证失败的连接可能把服务器变成转发节点。严格 SNI 门禁会自动放行面板、网站、TCP/Xray 路由和 REALITY SNI，其他 SNI 直接丢弃。${PLAIN}" "${YELLOW}If the REALITY target uses a CDN, failed-authentication connections can turn the server into a relay. The strict SNI gate automatically allows panel, site, TCP/Xray route, and REALITY SNIs, and drops all other SNIs.${PLAIN}" "${YELLOW}Если REALITY target использует CDN, подключения с ошибкой проверки могут превратить сервер в ретранслятор. Строгий контроль автоматически разрешает SNI панели, сайтов, маршрутов TCP/Xray и REALITY, а остальные отклоняет.${PLAIN}")"
+        if confirm_default_no "$(localized_text "是否启用严格 SNI 门禁？(y/N): " "Enable the strict SNI gate? (y/N): " "Включить строгий контроль SNI? (y/N): ")"; then
+            STRICT_SNI_GATE="true"
+        fi
+    fi
     NGINX_LISTEN_ADDR=$(ask_with_default "$(localized_text "Nginx 公网监听地址" "Nginx public listening address" "Nginx адрес прослушивания публичной сети")" "0.0.0.0")
     NGINX_LISTEN_PORT=$(ask_with_default "$(localized_text "Nginx 公网监听端口" "Nginx public listening port" "Порт прослушивания публичной сети Nginx")" "443")
 
@@ -378,10 +385,16 @@ write_nginx_sni_stream_config() {
     local web_backend
     local xray_backend
     local guarded_backend_var="\$vps_sni_backend"
+    local default_backend_name="xray_backend"
+    local reject_backend_required="false"
     local -a whitelist_block_vars=()
     listen_directives=$(nginx_stream_listen_directives "$NGINX_LISTEN_ADDR" "$NGINX_LISTEN_PORT")
     web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
+    if strict_sni_gate_enabled; then
+        default_backend_name="vps_ip_reject_backend"
+        reject_backend_required="true"
+    fi
 
     : > "$conf_file"
     if [[ ${#SNI_IP_WHITELIST_DOMAINS[@]} -gt 0 ]]; then
@@ -440,11 +453,12 @@ EOF
     fi
     cat <<EOF >> "$conf_file"
     ${REALITY_SNI} xray_backend;
-    default xray_backend;
+    default ${default_backend_name};
 }
 
 EOF
     if [[ ${#whitelist_block_vars[@]} -gt 0 ]]; then
+        reject_backend_required="true"
         local whitelist_key
         whitelist_key=$(printf '%s' "${whitelist_block_vars[@]}")
         guarded_backend_var="\$vps_sni_guarded_backend"
@@ -501,7 +515,7 @@ upstream vps_xray_route_${xray_route_i}_backend {
 EOF
         done
     fi
-    if [[ ${#whitelist_block_vars[@]} -gt 0 ]]; then
+    if [[ "$reject_backend_required" == "true" ]]; then
         cat <<'EOF' >> "$conf_file"
 upstream vps_ip_reject_backend {
     server 127.0.0.1:9;
@@ -878,7 +892,7 @@ issue_and_install_cert_for_domain() {
 
 save_sni_stack_env() {
     mkdir -p /etc/vps-optimize
-    local entry_mode web_proxy_engine site_domains_csv site_backend_addrs_csv site_backend_ports_csv
+    local entry_mode web_proxy_engine strict_sni_gate site_domains_csv site_backend_addrs_csv site_backend_ports_csv
     local tcp_route_snis_csv tcp_route_addrs_csv tcp_route_ports_csv
     local sni_ip_whitelist_domains_csv sni_ip_whitelist_ranges_pipe
     entry_mode="${ENTRY_MODE:-$(get_entry_mode)}"
@@ -892,6 +906,7 @@ save_sni_stack_env() {
         *) entry_mode="nginx-stream" ;;
     esac
     web_proxy_engine=$(normalize_web_proxy_engine "${WEB_PROXY_ENGINE:-caddy}" 2>/dev/null || echo "caddy")
+    strict_sni_gate=$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")
     site_domains_csv=$(IFS=','; echo "${SITE_DOMAINS[*]}")
     site_backend_addrs_csv=$(IFS=','; echo "${SITE_BACKEND_ADDRS[*]}")
     site_backend_ports_csv=$(IFS=','; echo "${SITE_BACKEND_PORTS[*]}")
@@ -902,6 +917,7 @@ save_sni_stack_env() {
     sni_ip_whitelist_ranges_pipe=$(IFS='|'; echo "${SNI_IP_WHITELIST_RANGES[*]}")
     cat <<EOF > /etc/vps-optimize/sni-stack.env
 ENTRY_MODE='${entry_mode}'
+STRICT_SNI_GATE='${strict_sni_gate}'
 WEB_PROXY_ENGINE='${web_proxy_engine}'
 PANEL_DOMAIN='${PANEL_DOMAIN}'
 SITE_DOMAIN='${SITE_DOMAINS[0]:-}'

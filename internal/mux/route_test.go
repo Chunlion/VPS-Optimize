@@ -130,3 +130,24 @@ func TestDefaultBackend(t *testing.T) {
 		t.Fatalf("unexpected default match: %+v", match)
 	}
 }
+
+func TestStrictSNIGateRejectsUnknownAndNoSNI(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Listen.TCP = []string{"127.0.0.1:443"}
+	cfg.DefaultBackend = "127.0.0.1:1443"
+	cfg.RejectUnknownSNI = true
+	cfg.Routes = []Route{{Name: "reality", SNI: []string{"reality.example.com"}, Backend: "127.0.0.1:1443"}}
+	if _, err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("ValidateConfig: %v", err)
+	}
+	for _, sni := range []string{"unknown.example.com", ""} {
+		match := MatchRoute(cfg, sni, netip.MustParseAddr("203.0.113.8"))
+		if match.Allowed || !match.Blocked || match.Backend != "" || match.RouteName != "strict_sni_gate" {
+			t.Fatalf("SNI %q unexpected strict-gate match: %+v", sni, match)
+		}
+	}
+	match := MatchRoute(cfg, "reality.example.com", netip.MustParseAddr("203.0.113.8"))
+	if !match.Allowed || match.Blocked || match.RouteName != "reality" {
+		t.Fatalf("registered SNI should remain allowed: %+v", match)
+	}
+}

@@ -64,7 +64,11 @@ sni_stack_route_summary_for_state() {
     local web_backend xray_backend summary i domain
     web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
-    summary="panel:${PANEL_DOMAIN}->${web_backend},reality:${REALITY_SNI}->${xray_backend},default->${xray_backend}"
+    if strict_sni_gate_enabled; then
+        summary="panel:${PANEL_DOMAIN}->${web_backend},reality:${REALITY_SNI}->${xray_backend},default->reject"
+    else
+        summary="panel:${PANEL_DOMAIN}->${web_backend},reality:${REALITY_SNI}->${xray_backend},default->${xray_backend}"
+    fi
     for i in "${!SITE_DOMAINS[@]}"; do
         domain="${SITE_DOMAINS[$i]}"
         [[ -n "$domain" ]] && summary+=",site:${domain}->${web_backend}"
@@ -116,6 +120,7 @@ web_proxy_backend='${web_backend}'
 caddy_backend='${web_backend}'
 xray_backend='${xray_backend}'
 default_backend='${xray_backend}'
+strict_sni_gate='$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")'
 routes='${routes}'
 whitelist_rules='${whitelist_rules}'
 last_backup_id='${backup_id}'
@@ -216,7 +221,7 @@ labels = {
         "rejected": "拒绝连接数", "dial_errors": "后端拨号错误",
         "retry_attempts": "后端重试尝试", "retry_success": "后端重试成功",
         "retry_failed": "后端重试失败", "splice": "splice 成功次数",
-        "fallback": "copy fallback 次数", "blocked": "白名单拦截次数",
+        "fallback": "copy fallback 次数", "blocked": "白名单拦截次数", "unknown_blocked": "严格 SNI 门禁拦截次数",
         "no_sni": "no_sni 次数", "peek_errors": "peek 错误次数",
         "peek_timeouts": "peek 超时次数", "up": "客户端->后端字节",
         "down": "后端->客户端字节", "routes": "按 route 命中次数 Top 10",
@@ -228,7 +233,7 @@ labels = {
         "rejected": "Rejected connections", "dial_errors": "Backend dial errors",
         "retry_attempts": "Backend retry attempts", "retry_success": "Successful backend retries",
         "retry_failed": "Failed backend retries", "splice": "Successful splice operations",
-        "fallback": "copy fallback operations", "blocked": "Whitelist blocks",
+        "fallback": "copy fallback operations", "blocked": "Whitelist blocks", "unknown_blocked": "Strict SNI gate blocks",
         "no_sni": "no_sni connections", "peek_errors": "peek errors",
         "peek_timeouts": "peek timeouts", "up": "Client-to-backend bytes",
         "down": "Backend-to-client bytes", "routes": "Top 10 route hits",
@@ -240,7 +245,7 @@ labels = {
         "rejected": "Отклонённые подключения", "dial_errors": "Ошибки подключения к бэкенду",
         "retry_attempts": "Попытки повтора подключения", "retry_success": "Успешные повторы подключения",
         "retry_failed": "Неудачные повторы подключения", "splice": "Успешные операции splice",
-        "fallback": "Операции copy fallback", "blocked": "Блокировки белым списком",
+        "fallback": "Операции copy fallback", "blocked": "Блокировки белым списком", "unknown_blocked": "Блокировки строгим контролем SNI",
         "no_sni": "Подключения no_sni", "peek_errors": "Ошибки peek",
         "peek_timeouts": "Тайм-ауты peek", "up": "Байты от клиента к бэкенду",
         "down": "Байты от бэкенда к клиенту", "routes": "10 самых частых маршрутов",
@@ -268,6 +273,7 @@ print(f"{text['retry_failed']}: {value('backend_retry_failed')}")
 print(f"{text['splice']}: {value('splice_success')}")
 print(f"{text['fallback']}: {value('copy_fallback')}")
 print(f"{text['blocked']}: {value('whitelist_blocked')}")
+print(f"{text['unknown_blocked']}: {value('unknown_sni_blocked')}")
 print(f"{text['no_sni']}: {value('no_sni')}")
 print(f"{text['peek_errors']}: {value('peek_errors')}")
 print(f"{text['peek_timeouts']}: {value('peek_timeouts')}")

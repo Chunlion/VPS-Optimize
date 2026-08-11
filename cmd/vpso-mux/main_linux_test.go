@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Chunlion/VPS-Optimize/internal/mux"
 )
 
 func TestDialBackendWithRetryDefaultDoesNotRetry(t *testing.T) {
@@ -145,5 +147,17 @@ func TestStatusWriteDoesNotBlockConcurrentUpdates(t *testing.T) {
 	}
 	if active != 1 {
 		t.Fatalf("active connections = %d, want 1", active)
+	}
+}
+
+func TestStatusTracksStrictSNIGateSeparately(t *testing.T) {
+	status := newStatusTracker([]string{"127.0.0.1:443"}, 10)
+	status.RecordConnection(mux.Match{RouteName: "strict_sni_gate", Blocked: true}, "unknown.example.com", "", false, 0, 0, false, false, nil)
+	status.RecordConnection(mux.Match{RouteName: "panel", Blocked: true}, "panel.example.com", "", false, 0, 0, false, false, nil)
+
+	status.mu.Lock()
+	defer status.mu.Unlock()
+	if status.data.UnknownSNIBlocked != 1 || status.data.WhitelistBlocked != 1 || status.data.RejectedConnections != 2 {
+		t.Fatalf("unexpected blocked counters: %+v", status.data)
 	}
 }

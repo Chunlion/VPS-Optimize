@@ -21,6 +21,7 @@ limits:
   max_connections: 4096
 
 default_backend: '127.0.0.1:1443'
+reject_unknown_sni: false
 
 routes:
   - name: 'panel'

@@ -61,6 +61,7 @@ write_vpso_mux_config_from_sni_stack() {
         echo "  max_connections: 4096"
         echo ""
         echo "default_backend: $(yaml_quote "$xray_backend")"
+        echo "reject_unknown_sni: $(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")"
         echo ""
         echo "routes:"
     } > "$output_file"

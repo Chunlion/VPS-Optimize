@@ -46,6 +46,33 @@ routes:
 	}
 }
 
+func TestLoadConfigReadsStrictSNIGate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "vpso-mux.yaml")
+	data := []byte(`
+listen:
+  tcp:
+    - "127.0.0.1:443"
+default_backend: "127.0.0.1:1443"
+reject_unknown_sni: true
+routes:
+  - name: "reality"
+    sni:
+      - "reality.example.com"
+    backend: "127.0.0.1:1443"
+`)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.RejectUnknownSNI {
+		t.Fatal("reject_unknown_sni = false, want true")
+	}
+}
+
 func TestLoadConfigRejectsUnknownFields(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "vpso-mux.yaml")

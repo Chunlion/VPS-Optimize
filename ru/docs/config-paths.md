@@ -47,7 +47,7 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 
 | путь | Описание |
 |---|---|
-| `/etc/vps-optimize/sni-stack.env` | Повторное использование порта 443 сохраняет основные параметры, `ENTRY_MODE` использует `nginx-stream` / `xray-fallback` / `tcp-peek` |
+| `/etc/vps-optimize/sni-stack.env` | Основные параметры повторного использования порта 443; `ENTRY_MODE` хранит режим входа, а `STRICT_SNI_GATE` — состояние строгого контроля SNI |
 | `/etc/vps-optimize/443-engine.conf` | Текущее состояние механизма общих записей 443, по умолчанию `nginx-stream` |
 | `/etc/vps-optimize/vpso-mux.yaml` | Конфигурация маршрутизацияа `tcp-peek` / `vpso-mux` |
 | `/etc/vps-optimize/sni-stack.last-backup` | Самая последняя запись пути резервного копирования повторного использования порта 443. |
@@ -66,7 +66,7 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 Проверьте текущие 443 параметра:
 
 ```bash
-grep -E '^(PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null
+grep -E '^(ENTRY_MODE|STRICT_SNI_GATE|PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null
 ```
 
 Проверьте Nginx/Caddy:

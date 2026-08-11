@@ -268,6 +268,9 @@ assert_file_contains aliyun-cdt-watchdog.sh 'answer=${answer:-yes}' "Aliyun watc
 
 assert_file_contains docs/443-single-entry.md 'Skip SSL (advanced — behind reverse proxy / SSH tunnel only)' "Port 443 Reuse doc must explain the current 3x-ui Skip SSL flow."
 assert_file_contains docs/443-single-entry.md '监听 IP：127.0.0.1' "Port 443 Reuse doc must keep 3x-ui listeners on loopback."
+assert_file_contains docs/443-single-entry.md 'REALITY 回落流量防护' "Port 443 Reuse doc must explain REALITY fallback traffic protection."
+assert_file_contains en/docs/443-single-entry.md 'REALITY fallback traffic protection' "English Port 443 Reuse doc must explain REALITY fallback traffic protection."
+assert_file_contains ru/docs/443-single-entry.md 'Защита трафика REALITY fallback' "Russian Port 443 Reuse doc must explain REALITY fallback traffic protection."
 assert_file_contains src/sni_stack_config.sh 'xui_database_backend()' "443 helpers must detect the configured 3x-ui database backend."
 assert_file_contains src/sni_stack_config.sh 'xui_uses_postgresql && return 1' "443 helpers must not query PostgreSQL through sqlite3."
 assert_file_contains src/sni_stack_profiles.sh 'xui_uses_postgresql' "443 profile updates must skip PostgreSQL database synchronization."
@@ -282,6 +285,9 @@ assert_file_contains dist/vps.sh '/var/log/vps-traffic-guard.log'
 assert_file_contains dist/vps.sh 'traffic_guard_install_checker_once'
 assert_file_contains dist/vps.sh 'traffic_guard_install_checker_or_report'
 assert_file_contains dist/vps.sh 'backend_retry_attempts'
+assert_file_contains dist/vps.sh "STRICT_SNI_GATE='\${strict_sni_gate}'" "Release script must persist the strict SNI gate setting."
+assert_file_contains dist/vps.sh 'limitFallbackUpload' "Release script must include the limited REALITY fallback patcher."
+assert_file_contains dist/vps.sh '17) manage_reality_traffic_guard' "Port 443 Reuse menu must expose REALITY fallback traffic protection."
 assert_file_contains dist/vps.sh '日志容量摘要'
 assert_file_contains dist/vps.sh '配置与状态文件权限体检'
 

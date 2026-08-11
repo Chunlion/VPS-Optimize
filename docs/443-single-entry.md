@@ -285,13 +285,24 @@ Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 `443`
 
 切换到 xray-fallback 后，脚本会保留 `/etc/vps-optimize/xray-sni-routes.conf` 中已有的规则，不会删除。被选中的规则作为 xray-fallback 主入站使用；其他规则会标记为“已保留，但当前 xray-fallback 模式下不生效”。以后切回 Nginx Stream 模式或 TCP Peek + Splice 模式时，这些规则可以重新用于按 SNI 分流。
 
-xray-fallback 模式下，`Xray 入站管理` 菜单允许查看规则和当前主入站，但不允许新增、删除或同步规则。本脚本不会自动修改 3x-ui/Xray 入站内部配置。
+xray-fallback 模式下，`Xray 入站管理` 菜单允许查看规则和当前主入站，但不允许新增、删除或同步规则。该菜单不会修改 3x-ui/Xray 入站内部配置；独立的 REALITY 回落流量防护只允许修改下文说明的两个限速字段。
 
 ## 普通 TLS 与 REALITY 的区别
 
 普通 TLS 节点更关注本机证书、Web fallback、Host/SNI 是否匹配。例如 VLESS + TLS、Trojan + TLS、VMess + WS + TLS、VLESS + gRPC + TLS 这类节点，排查时应确认节点域名是否由用户控制、本机证书是否覆盖该 SNI、Web 反代引擎是否有匹配 fallback，以及浏览器访问是否返回 200/301/302。
 
 REALITY 节点不同。REALITY 更关注外部目标站点是否真实可访问、TLS 特征是否稳定、`serverName` 和 `dest` 是否逻辑一致。不要要求 REALITY `serverName` 加入 Web 反代引擎，也不要要求本机证书覆盖 REALITY `serverName`。
+
+## REALITY 回落流量防护
+
+REALITY 会把验证失败的连接转发到 `target`。扫描者不需要 UUID、shortId 或密钥就能触发这条回落链路；当 `target` 是 CDN 站点时，服务器可能被当作转发节点消耗流量。
+
+使用 `主菜单 [19 443端口复用管理中心] -> [17 REALITY 回落流量防护]` 管理两层防护：
+
+- 严格 SNI 门禁：适用于 Nginx Stream 和 TCP Peek。只放行当前已登记的面板域名、网站域名、TCP/Xray SNI 路由和 REALITY SNI；未知 SNI 和无 SNI 连接直接丢弃。放行清单不单独保存，每次生成入口配置时都从现有配置自动派生。新增、删除或修改域名和路由后，执行对应菜单中的“同步”或重新应用当前入口即可自动更新。
+- REALITY 回落限速：适用于 3x-ui SQLite。脚本先备份数据库，只修改所选 REALITY 入站的 `limitFallbackUpload` 和 `limitFallbackDownload`，并为每次设置随机生成参数。UUID、shortId、密钥、协议、传输方式及其他入站字段不会修改。PostgreSQL 不自动修改。
+
+`xray-fallback` 由 Xray 直接监听公网 443，没有独立的前置 SNI 门禁，只能使用回落限速。回落限速本身会形成特征，优先选择与服务器网络位置合理、非 CDN 的 REALITY 目标；只有被迫使用 CDN 目标时再启用。
 
 ## 证书策略
 

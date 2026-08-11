@@ -24,6 +24,7 @@ sni_stack_profiles
 sni_stack_install
 sni_stack_sites
 xray_sni_routes
+reality_guard
 sni_stack_menus
 caddy_maintenance
 ssh_security

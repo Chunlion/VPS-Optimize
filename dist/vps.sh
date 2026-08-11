@@ -8735,6 +8735,7 @@ load_sni_stack_env() {
     # shellcheck disable=SC1090
     source "$env_file"
     ENTRY_MODE=$(get_entry_mode)
+    STRICT_SNI_GATE=$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")
     WEB_PROXY_ENGINE=$(normalize_web_proxy_engine "${WEB_PROXY_ENGINE:-caddy}" 2>/dev/null || echo "caddy")
     PANEL_WEB_PATH=$(normalize_path_prefix "${PANEL_WEB_PATH:-/panel/}")
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
@@ -9443,7 +9444,11 @@ sni_stack_route_summary_for_state() {
     local web_backend xray_backend summary i domain
     web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
-    summary="panel:${PANEL_DOMAIN}->${web_backend},reality:${REALITY_SNI}->${xray_backend},default->${xray_backend}"
+    if strict_sni_gate_enabled; then
+        summary="panel:${PANEL_DOMAIN}->${web_backend},reality:${REALITY_SNI}->${xray_backend},default->reject"
+    else
+        summary="panel:${PANEL_DOMAIN}->${web_backend},reality:${REALITY_SNI}->${xray_backend},default->${xray_backend}"
+    fi
     for i in "${!SITE_DOMAINS[@]}"; do
         domain="${SITE_DOMAINS[$i]}"
         [[ -n "$domain" ]] && summary+=",site:${domain}->${web_backend}"
@@ -9495,6 +9500,7 @@ web_proxy_backend='${web_backend}'
 caddy_backend='${web_backend}'
 xray_backend='${xray_backend}'
 default_backend='${xray_backend}'
+strict_sni_gate='$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")'
 routes='${routes}'
 whitelist_rules='${whitelist_rules}'
 last_backup_id='${backup_id}'
@@ -9595,7 +9601,7 @@ labels = {
         "rejected": "拒绝连接数", "dial_errors": "后端拨号错误",
         "retry_attempts": "后端重试尝试", "retry_success": "后端重试成功",
         "retry_failed": "后端重试失败", "splice": "splice 成功次数",
-        "fallback": "copy fallback 次数", "blocked": "白名单拦截次数",
+        "fallback": "copy fallback 次数", "blocked": "白名单拦截次数", "unknown_blocked": "严格 SNI 门禁拦截次数",
         "no_sni": "no_sni 次数", "peek_errors": "peek 错误次数",
         "peek_timeouts": "peek 超时次数", "up": "客户端->后端字节",
         "down": "后端->客户端字节", "routes": "按 route 命中次数 Top 10",
@@ -9607,7 +9613,7 @@ labels = {
         "rejected": "Rejected connections", "dial_errors": "Backend dial errors",
         "retry_attempts": "Backend retry attempts", "retry_success": "Successful backend retries",
         "retry_failed": "Failed backend retries", "splice": "Successful splice operations",
-        "fallback": "copy fallback operations", "blocked": "Whitelist blocks",
+        "fallback": "copy fallback operations", "blocked": "Whitelist blocks", "unknown_blocked": "Strict SNI gate blocks",
         "no_sni": "no_sni connections", "peek_errors": "peek errors",
         "peek_timeouts": "peek timeouts", "up": "Client-to-backend bytes",
         "down": "Backend-to-client bytes", "routes": "Top 10 route hits",
@@ -9619,7 +9625,7 @@ labels = {
         "rejected": "Отклонённые подключения", "dial_errors": "Ошибки подключения к бэкенду",
         "retry_attempts": "Попытки повтора подключения", "retry_success": "Успешные повторы подключения",
         "retry_failed": "Неудачные повторы подключения", "splice": "Успешные операции splice",
-        "fallback": "Операции copy fallback", "blocked": "Блокировки белым списком",
+        "fallback": "Операции copy fallback", "blocked": "Блокировки белым списком", "unknown_blocked": "Блокировки строгим контролем SNI",
         "no_sni": "Подключения no_sni", "peek_errors": "Ошибки peek",
         "peek_timeouts": "Тайм-ауты peek", "up": "Байты от клиента к бэкенду",
         "down": "Байты от бэкенда к клиенту", "routes": "10 самых частых маршрутов",
@@ -9647,6 +9653,7 @@ print(f"{text['retry_failed']}: {value('backend_retry_failed')}")
 print(f"{text['splice']}: {value('splice_success')}")
 print(f"{text['fallback']}: {value('copy_fallback')}")
 print(f"{text['blocked']}: {value('whitelist_blocked')}")
+print(f"{text['unknown_blocked']}: {value('unknown_sni_blocked')}")
 print(f"{text['no_sni']}: {value('no_sni')}")
 print(f"{text['peek_errors']}: {value('peek_errors')}")
 print(f"{text['peek_timeouts']}: {value('peek_timeouts')}")
@@ -9759,6 +9766,7 @@ write_vpso_mux_config_from_sni_stack() {
         echo "  max_connections: 4096"
         echo ""
         echo "default_backend: $(yaml_quote "$xray_backend")"
+        echo "reject_unknown_sni: $(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")"
         echo ""
         echo "routes:"
     } > "$output_file"
@@ -11248,7 +11256,11 @@ sni_stack_health_check_enhanced() {
     echo -e "$(localized_text "${BOLD}路由摘要${PLAIN}" "${BOLD}Route Summary${PLAIN}" "${BOLD}Сводка маршрута${PLAIN}")"
     echo -e "$(localized_text "default_backend 当前指向：${xray_backend}" "default_backend currently points to: ${xray_backend}" "default_backend в настоящее время указывает на: ${xray_backend}")"
     echo -e "$(localized_text "routes 数量：${route_count}" "routes quantity: ${route_count}" "количество маршрутов: ${route_count}")"
-    echo -e "$(localized_text "unknown SNI 策略：default_backend -> ${xray_backend}" "unknown SNI policy: default_backend -> ${xray_backend}" "неизвестная политика SNI: default_backend -> ${xray_backend}")"
+    if strict_sni_gate_enabled && strict_sni_gate_mode_supported "$mode"; then
+        echo -e "$(localized_text "unknown SNI 策略：严格门禁直接丢弃" "unknown SNI policy: dropped by the strict SNI gate" "Политика неизвестного SNI: отклонение строгим контролем SNI")"
+    else
+        echo -e "$(localized_text "unknown SNI 策略：default_backend -> ${xray_backend}" "unknown SNI policy: default_backend -> ${xray_backend}" "Политика неизвестного SNI: default_backend -> ${xray_backend}")"
+    fi
     ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
     echo -e "$(localized_text "web panel: ${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${web_label} ${web_backend} -> 面板后端 ${panel_backend}" "web panel: ${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${web_label} ${web_backend} -> panel backend ${panel_backend}" "веб-панель: ${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${web_label} ${web_backend} -> бэкенд панели ${panel_backend}")"
     echo -e "$(localized_text "web subscription: ${PANEL_DOMAIN}${SUB_URI_PATH} -> ${web_label} ${web_backend} -> 订阅后端 ${sub_backend}" "web subscription: ${PANEL_DOMAIN}${SUB_URI_PATH} -> ${web_label} ${web_backend} -> Subscription backend ${sub_backend}" "веб-подписка: ${PANEL_DOMAIN}${SUB_URI_PATH} -> ${web_label} ${web_backend} -> Сервер подписки ${sub_backend}")"
@@ -11702,6 +11714,13 @@ collect_sni_stack_config() {
     echo -e "$(localized_text "${YELLOW}模板示例：your-reality-sni.example.com（请替换成你自己选择的真实站点）${PLAIN}" "${YELLOW}Template example: your-reality-sni.example.com (please replace it with the real site of your choice)${PLAIN}" "${YELLOW}Пример шаблона : your-reality-sni.example.com (замените его реальным сайтом по вашему выбору)${PLAIN}")"
     read_trimmed reality_sni_input "$(localized_text "REALITY 伪装 SNI（必填）: " "REALITY Disguise SNI (required):" "REALITY Маскировка SNI (обязательно):")"
     REALITY_SNI="$reality_sni_input"
+    STRICT_SNI_GATE="false"
+    if strict_sni_gate_mode_supported "${ENTRY_MODE:-nginx-stream}"; then
+        echo -e "$(localized_text "${YELLOW}若 REALITY target 使用 CDN，验证失败的连接可能把服务器变成转发节点。严格 SNI 门禁会自动放行面板、网站、TCP/Xray 路由和 REALITY SNI，其他 SNI 直接丢弃。${PLAIN}" "${YELLOW}If the REALITY target uses a CDN, failed-authentication connections can turn the server into a relay. The strict SNI gate automatically allows panel, site, TCP/Xray route, and REALITY SNIs, and drops all other SNIs.${PLAIN}" "${YELLOW}Если REALITY target использует CDN, подключения с ошибкой проверки могут превратить сервер в ретранслятор. Строгий контроль автоматически разрешает SNI панели, сайтов, маршрутов TCP/Xray и REALITY, а остальные отклоняет.${PLAIN}")"
+        if confirm_default_no "$(localized_text "是否启用严格 SNI 门禁？(y/N): " "Enable the strict SNI gate? (y/N): " "Включить строгий контроль SNI? (y/N): ")"; then
+            STRICT_SNI_GATE="true"
+        fi
+    fi
     NGINX_LISTEN_ADDR=$(ask_with_default "$(localized_text "Nginx 公网监听地址" "Nginx public listening address" "Nginx адрес прослушивания публичной сети")" "0.0.0.0")
     NGINX_LISTEN_PORT=$(ask_with_default "$(localized_text "Nginx 公网监听端口" "Nginx public listening port" "Порт прослушивания публичной сети Nginx")" "443")
 
@@ -12019,10 +12038,16 @@ write_nginx_sni_stream_config() {
     local web_backend
     local xray_backend
     local guarded_backend_var="\$vps_sni_backend"
+    local default_backend_name="xray_backend"
+    local reject_backend_required="false"
     local -a whitelist_block_vars=()
     listen_directives=$(nginx_stream_listen_directives "$NGINX_LISTEN_ADDR" "$NGINX_LISTEN_PORT")
     web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
+    if strict_sni_gate_enabled; then
+        default_backend_name="vps_ip_reject_backend"
+        reject_backend_required="true"
+    fi
 
     : > "$conf_file"
     if [[ ${#SNI_IP_WHITELIST_DOMAINS[@]} -gt 0 ]]; then
@@ -12081,11 +12106,12 @@ EOF
     fi
     cat <<EOF >> "$conf_file"
     ${REALITY_SNI} xray_backend;
-    default xray_backend;
+    default ${default_backend_name};
 }
 
 EOF
     if [[ ${#whitelist_block_vars[@]} -gt 0 ]]; then
+        reject_backend_required="true"
         local whitelist_key
         whitelist_key=$(printf '%s' "${whitelist_block_vars[@]}")
         guarded_backend_var="\$vps_sni_guarded_backend"
@@ -12142,7 +12168,7 @@ upstream vps_xray_route_${xray_route_i}_backend {
 EOF
         done
     fi
-    if [[ ${#whitelist_block_vars[@]} -gt 0 ]]; then
+    if [[ "$reject_backend_required" == "true" ]]; then
         cat <<'EOF' >> "$conf_file"
 upstream vps_ip_reject_backend {
     server 127.0.0.1:9;
@@ -12519,7 +12545,7 @@ issue_and_install_cert_for_domain() {
 
 save_sni_stack_env() {
     mkdir -p /etc/vps-optimize
-    local entry_mode web_proxy_engine site_domains_csv site_backend_addrs_csv site_backend_ports_csv
+    local entry_mode web_proxy_engine strict_sni_gate site_domains_csv site_backend_addrs_csv site_backend_ports_csv
     local tcp_route_snis_csv tcp_route_addrs_csv tcp_route_ports_csv
     local sni_ip_whitelist_domains_csv sni_ip_whitelist_ranges_pipe
     entry_mode="${ENTRY_MODE:-$(get_entry_mode)}"
@@ -12533,6 +12559,7 @@ save_sni_stack_env() {
         *) entry_mode="nginx-stream" ;;
     esac
     web_proxy_engine=$(normalize_web_proxy_engine "${WEB_PROXY_ENGINE:-caddy}" 2>/dev/null || echo "caddy")
+    strict_sni_gate=$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")
     site_domains_csv=$(IFS=','; echo "${SITE_DOMAINS[*]}")
     site_backend_addrs_csv=$(IFS=','; echo "${SITE_BACKEND_ADDRS[*]}")
     site_backend_ports_csv=$(IFS=','; echo "${SITE_BACKEND_PORTS[*]}")
@@ -12543,6 +12570,7 @@ save_sni_stack_env() {
     sni_ip_whitelist_ranges_pipe=$(IFS='|'; echo "${SNI_IP_WHITELIST_RANGES[*]}")
     cat <<EOF > /etc/vps-optimize/sni-stack.env
 ENTRY_MODE='${entry_mode}'
+STRICT_SNI_GATE='${strict_sni_gate}'
 WEB_PROXY_ENGINE='${web_proxy_engine}'
 PANEL_DOMAIN='${PANEL_DOMAIN}'
 SITE_DOMAIN='${SITE_DOMAINS[0]:-}'
@@ -13738,6 +13766,304 @@ manage_sni_stack_ip_whitelist() {
                 echo -e "$(localized_text "${RED}❌ 无效操作。${PLAIN}" "${RED}❌ Invalid operation.${PLAIN}" "${RED}❌ Недопустимая операция.${PLAIN}")"
                 pause_return
                 ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------
+# Module: reality_guard.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# REALITY fallback traffic controls for the shared 443 entry.
+
+normalize_strict_sni_gate() {
+    case "${1:-false}" in
+        1|true|TRUE|yes|YES|on|ON) printf '%s' "true" ;;
+        *) printf '%s' "false" ;;
+    esac
+}
+
+strict_sni_gate_enabled() {
+    [[ "$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")" == "true" ]]
+}
+
+registered_443_snis() {
+    printf '%s\n' "${PANEL_DOMAIN:-}" "${SITE_DOMAINS[@]:-}" "${TCP_ROUTE_SNIS[@]:-}" "${XRAY_SNI_ROUTE_SNIS[@]:-}" "${REALITY_SNI:-}" |
+        awk 'NF && !seen[tolower($0)]++'
+}
+
+strict_sni_gate_mode_supported() {
+    local mode="${1:-$(get_entry_mode)}"
+    [[ "$mode" == "nginx-stream" || "$mode" == "tcp-peek" ]]
+}
+
+print_strict_sni_gate_summary() {
+    local state mode
+    mode=$(get_entry_mode)
+    if strict_sni_gate_enabled && strict_sni_gate_mode_supported "$mode"; then
+        state="$(localized_text "${GREEN}已启用${PLAIN}" "${GREEN}Enabled${PLAIN}" "${GREEN}Включён${PLAIN}")"
+    elif strict_sni_gate_enabled; then
+        state="$(localized_text "${YELLOW}已保存，当前模式不生效${PLAIN}" "${YELLOW}Saved, inactive in the current mode${PLAIN}" "${YELLOW}Сохранён, не действует в текущем режиме${PLAIN}")"
+    else
+        state="$(localized_text "${YELLOW}未启用${PLAIN}" "${YELLOW}Disabled${PLAIN}" "${YELLOW}Выключен${PLAIN}")"
+    fi
+    echo -e "$(localized_text "严格 SNI 门禁：${state}" "Strict SNI gate: ${state}" "Строгий контроль SNI: ${state}")"
+    echo -e "$(localized_text "当前入口模式：${mode}" "Current entry mode: ${mode}" "Текущий режим входа: ${mode}")"
+    echo -e "$(localized_text "自动放行的已登记 SNI：" "Automatically allowed registered SNIs:" "Автоматически разрешённые зарегистрированные SNI:")"
+    registered_443_snis | sed 's/^/  - /'
+}
+
+sync_strict_sni_gate_to_current_entry() {
+    local mode
+    mode=$(get_entry_mode)
+    case "$mode" in
+        nginx-stream) reapply_sni_stack_from_env --yes ;;
+        tcp-peek) sync_xray_sni_routes_to_entry_mode ;;
+        xray-fallback)
+            echo -e "$(localized_text "${YELLOW}xray-fallback 由 Xray 直接监听公网 443，没有独立前置门禁；请使用 REALITY 回落限速。${PLAIN}" "${YELLOW}In xray-fallback mode, Xray listens on public port 443 directly, so there is no separate front gate. Use REALITY fallback rate limiting instead.${PLAIN}" "${YELLOW}В режиме xray-fallback Xray напрямую слушает публичный порт 443, поэтому отдельного входного фильтра нет. Используйте ограничение скорости REALITY fallback.${PLAIN}")"
+            return 1
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+set_strict_sni_gate() {
+    local target="$1" mode
+    load_sni_stack_env || return 1
+    mode=$(get_entry_mode)
+    if [[ "$target" == "true" ]] && ! strict_sni_gate_mode_supported "$mode"; then
+        echo -e "$(localized_text "${RED}当前模式不支持前置严格 SNI 门禁。${PLAIN}" "${RED}The current mode does not support a front strict SNI gate.${PLAIN}" "${RED}Текущий режим не поддерживает строгий входной контроль SNI.${PLAIN}")"
+        return 1
+    fi
+    if [[ "$target" == "true" ]]; then
+        confirm_default_no "$(localized_text "启用后，未登记或不带 SNI 的连接会被直接丢弃。确认启用？(y/N): " "After enabling, connections with an unregistered or missing SNI will be dropped. Enable? (y/N): " "После включения подключения с незарегистрированным или отсутствующим SNI будут отклоняться. Включить? (y/N): ")" || return 0
+    else
+        confirm_default_yes "$(localized_text "关闭后，未知 SNI 将恢复转发到默认 Xray 后端。确认关闭？(Y/n): " "After disabling, unknown SNI will again be forwarded to the default Xray backend. Disable? (Y/n): " "После отключения неизвестные SNI снова будут направляться на стандартный бэкенд Xray. Отключить? (Y/n): ")" || return 0
+    fi
+    STRICT_SNI_GATE="$target"
+    save_sni_stack_env
+    if sync_strict_sni_gate_to_current_entry; then
+        echo -e "$(localized_text "${GREEN}✅ 严格 SNI 门禁已保存并同步到当前入口。${PLAIN}" "${GREEN}✅ The strict SNI gate was saved and synchronized to the current entry.${PLAIN}" "${GREEN}✅ Строгий контроль SNI сохранён и применён к текущему входу.${PLAIN}")"
+    else
+        echo -e "$(localized_text "${YELLOW}设置已保存，但未能同步到当前入口；请修复入口后重新应用。${PLAIN}" "${YELLOW}The setting was saved but could not be synchronized to the current entry. Fix the entry and reapply it.${PLAIN}" "${YELLOW}Настройка сохранена, но не применена к текущему входу. Исправьте вход и повторите применение.${PLAIN}")"
+        return 1
+    fi
+}
+
+reality_guard_python() {
+    python3 - "$@" <<'PY'
+import copy
+import json
+import sqlite3
+import sys
+
+operation, db_path = sys.argv[1:3]
+conn = sqlite3.connect(db_path)
+conn.row_factory = sqlite3.Row
+columns = {row[1] for row in conn.execute("pragma table_info(inbounds)")}
+required = {"id", "port", "remark", "stream_settings"}
+if not required.issubset(columns):
+    raise SystemExit("unsupported inbounds schema")
+
+def parse(row):
+    try:
+        stream = json.loads(row["stream_settings"] or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if str(stream.get("security", "")).lower() != "reality":
+        return None
+    reality = stream.get("realitySettings")
+    return stream if isinstance(reality, dict) else None
+
+if operation == "list":
+    for row in conn.execute("select id, port, remark, stream_settings from inbounds order by id"):
+        stream = parse(row)
+        if stream is None:
+            continue
+        reality = stream["realitySettings"]
+        names = ",".join(str(item) for item in reality.get("serverNames", []) if item)
+        upload = reality.get("limitFallbackUpload") or {}
+        download = reality.get("limitFallbackDownload") or {}
+        enabled = bool(upload.get("bytesPerSec", 0) or download.get("bytesPerSec", 0))
+        remark = str(row["remark"] or "-").replace("\t", " ").replace("\n", " ")
+        print(f"{row['id']}\t{row['port']}\t{remark}\t{names or '-'}\t{'enabled' if enabled else 'disabled'}")
+    raise SystemExit(0)
+
+inbound_id = int(sys.argv[3])
+row = conn.execute("select id, port, remark, stream_settings from inbounds where id=?", (inbound_id,)).fetchone()
+if row is None:
+    raise SystemExit("inbound not found")
+stream = parse(row)
+if stream is None:
+    raise SystemExit("selected inbound is not REALITY")
+original = copy.deepcopy(stream)
+reality = stream["realitySettings"]
+if operation == "clear":
+    reality.pop("limitFallbackUpload", None)
+    reality.pop("limitFallbackDownload", None)
+elif operation == "apply":
+    values = [int(item) for item in sys.argv[4:10]]
+    if any(item < 0 for item in values):
+        raise SystemExit("rate-limit values must be non-negative")
+    reality["limitFallbackUpload"] = dict(zip(("afterBytes", "bytesPerSec", "burstBytesPerSec"), values[:3]))
+    reality["limitFallbackDownload"] = dict(zip(("afterBytes", "bytesPerSec", "burstBytesPerSec"), values[3:]))
+else:
+    raise SystemExit("unsupported operation")
+
+expected = copy.deepcopy(original)
+expected_reality = expected["realitySettings"]
+if operation == "clear":
+    expected_reality.pop("limitFallbackUpload", None)
+    expected_reality.pop("limitFallbackDownload", None)
+else:
+    expected_reality["limitFallbackUpload"] = reality["limitFallbackUpload"]
+    expected_reality["limitFallbackDownload"] = reality["limitFallbackDownload"]
+if stream != expected:
+    raise SystemExit("refusing to modify fields outside fallback limits")
+
+payload = json.dumps(stream, ensure_ascii=False, separators=(",", ":"))
+conn.execute("begin immediate")
+cursor = conn.execute(
+    "update inbounds set stream_settings=? where id=? and stream_settings=?",
+    (payload, inbound_id, row["stream_settings"]),
+)
+if cursor.rowcount != 1:
+    conn.rollback()
+    raise SystemExit("inbound changed concurrently")
+conn.commit()
+saved = conn.execute("select stream_settings from inbounds where id=?", (inbound_id,)).fetchone()[0]
+if json.loads(saved) != expected:
+    raise SystemExit("post-write verification failed")
+PY
+}
+
+find_reality_guard_database() {
+    local db_path
+    while IFS= read -r db_path; do
+        [[ -f "$db_path" ]] || continue
+        if [[ -n "$(reality_guard_python list "$db_path" 2>/dev/null | head -n1)" ]]; then
+            printf '%s' "$db_path"
+            return 0
+        fi
+    done < <(find_xui_database_candidates)
+    return 1
+}
+
+backup_reality_guard_database() {
+    local db_path="$1" inbound_id="$2" backup_dir backup_file timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    backup_dir="/root/x-ui-backups"
+    backup_file="${backup_dir}/$(basename "$db_path").reality_guard_${inbound_id}_${timestamp}.bak"
+    mkdir -p "$backup_dir"
+    sqlite3 "$db_path" ".backup '${backup_file}'" >/dev/null 2>&1 || return 1
+    printf '%s' "$backup_file"
+}
+
+restart_reality_guard_panel_service() {
+    local service_name
+    for service_name in x-ui 3x-ui x-panel; do
+        if systemd_unit_exists "${service_name}.service"; then
+            systemctl restart "$service_name" >/dev/null 2>&1 && systemctl is-active --quiet "$service_name" && return 0
+            return 1
+        fi
+    done
+    return 2
+}
+
+show_reality_guard_inbounds() {
+    local db_path="$1" id port remark server_names state state_text
+    echo -e "$(localized_text "ID  端口  名称  serverNames  回落限速" "ID  Port  Name  serverNames  Fallback limit" "ID  Порт  Имя  serverNames  Ограничение fallback")"
+    while IFS=$'\t' read -r id port remark server_names state; do
+        [[ -n "$id" ]] || continue
+        if [[ "$state" == "enabled" ]]; then
+            state_text="$(localized_text "已启用" "enabled" "включено")"
+        else
+            state_text="$(localized_text "未启用" "disabled" "выключено")"
+        fi
+        printf '%-3s %-5s %s | %s | %s\n' "$id" "$port" "$remark" "$server_names" "$state_text"
+    done < <(reality_guard_python list "$db_path")
+}
+
+patch_reality_fallback_limits() {
+    local operation="${1:-apply}" db_path inbound_id backup_file result
+    local upload_after upload_rate upload_burst download_after download_rate download_burst
+    load_sni_stack_env || return 1
+    if xui_uses_postgresql; then
+        echo -e "$(localized_text "${RED}检测到 PostgreSQL。为避免误改远程数据库，此功能仅支持本机 3x-ui SQLite。${PLAIN}" "${RED}PostgreSQL was detected. To avoid modifying a remote database by mistake, this function supports only local 3x-ui SQLite.${PLAIN}" "${RED}Обнаружен PostgreSQL. Чтобы исключить ошибочное изменение удалённой базы, функция поддерживает только локальный SQLite 3x-ui.${PLAIN}")"
+        return 1
+    fi
+    command -v python3 >/dev/null 2>&1 || install_pkg python3 python3 >/dev/null 2>&1 || true
+    command -v sqlite3 >/dev/null 2>&1 || install_pkg sqlite3 sqlite >/dev/null 2>&1 || true
+    if ! command -v python3 >/dev/null 2>&1 || ! command -v sqlite3 >/dev/null 2>&1; then
+        echo -e "$(localized_text "${RED}需要 python3 和 sqlite3，自动安装失败。${PLAIN}" "${RED}python3 and sqlite3 are required, and automatic installation failed.${PLAIN}" "${RED}Требуются python3 и sqlite3; автоматическая установка не удалась.${PLAIN}")"
+        return 1
+    fi
+    db_path=$(find_reality_guard_database) || { echo -e "$(localized_text "${RED}未找到包含 REALITY 入站的 3x-ui SQLite 数据库。${PLAIN}" "${RED}No 3x-ui SQLite database containing a REALITY inbound was found.${PLAIN}" "${RED}Не найдена база SQLite 3x-ui с входящим REALITY.${PLAIN}")"; return 1; }
+    echo -e "$(localized_text "数据库：${db_path}" "Database: ${db_path}" "База данных: ${db_path}")"
+    show_reality_guard_inbounds "$db_path"
+    read_trimmed inbound_id "$(localized_text "输入要处理的 REALITY 入站 ID（0 取消）: " "Enter the REALITY inbound ID to modify (0 cancels): " "Введите ID входящего REALITY (0 — отмена): ")"
+    [[ "$inbound_id" == "0" || -z "$inbound_id" ]] && return 0
+    [[ "$inbound_id" =~ ^[0-9]+$ ]] || { echo -e "$(localized_text "${RED}入站 ID 无效。${PLAIN}" "${RED}Invalid inbound ID.${PLAIN}" "${RED}Недопустимый ID входящего подключения.${PLAIN}")"; return 1; }
+
+    if [[ "$operation" == "apply" ]]; then
+        upload_after=$((10485760 + (RANDOM % 4194305) - 2097152))
+        upload_rate=$((1048576 + (RANDOM % 419431) - 209715))
+        upload_burst=$((5242880 + (RANDOM % 2097153) - 1048576))
+        download_after=$((10485760 + (RANDOM % 4194305) - 2097152))
+        download_rate=$((1048576 + (RANDOM % 419431) - 209715))
+        download_burst=$((5242880 + (RANDOM % 2097153) - 1048576))
+        echo -e "$(localized_text "将使用本次随机生成的回落限速参数（字节）：" "Randomized fallback limits for this operation (bytes):" "Случайные параметры ограничения fallback для этой операции (байты):")"
+        echo "  upload:   afterBytes=${upload_after}, bytesPerSec=${upload_rate}, burstBytesPerSec=${upload_burst}"
+        echo "  download: afterBytes=${download_after}, bytesPerSec=${download_rate}, burstBytesPerSec=${download_burst}"
+        confirm_default_no "$(localized_text "只会修改所选入站的两个 limitFallback 字段，并重启面板/Xray。确认继续？(y/N): " "Only the two limitFallback fields of the selected inbound will be changed, then the panel/Xray will restart. Continue? (y/N): " "Будут изменены только два поля limitFallback выбранного входящего подключения, затем панель/Xray перезапустится. Продолжить? (y/N): ")" || return 0
+    else
+        confirm_default_no "$(localized_text "将删除所选入站的两个 limitFallback 字段并重启面板/Xray。确认继续？(y/N): " "The two limitFallback fields will be removed from the selected inbound, then the panel/Xray will restart. Continue? (y/N): " "Два поля limitFallback будут удалены из выбранного входящего подключения, затем панель/Xray перезапустится. Продолжить? (y/N): ")" || return 0
+    fi
+
+    backup_file=$(backup_reality_guard_database "$db_path" "$inbound_id") || { echo -e "$(localized_text "${RED}数据库备份失败，未执行修改。${PLAIN}" "${RED}Database backup failed; no changes were made.${PLAIN}" "${RED}Не удалось создать резервную копию базы; изменения не внесены.${PLAIN}")"; return 1; }
+    if [[ "$operation" == "apply" ]]; then
+        reality_guard_python apply "$db_path" "$inbound_id" "$upload_after" "$upload_rate" "$upload_burst" "$download_after" "$download_rate" "$download_burst" || result=$?
+    else
+        reality_guard_python clear "$db_path" "$inbound_id" || result=$?
+    fi
+    if [[ "${result:-0}" -ne 0 ]]; then
+        echo -e "$(localized_text "${RED}入站更新失败，数据库保持原样。备份：${backup_file}${PLAIN}" "${RED}Inbound update failed; the database remains unchanged. Backup: ${backup_file}${PLAIN}" "${RED}Не удалось обновить входящее подключение; база не изменена. Резервная копия: ${backup_file}${PLAIN}")"
+        return 1
+    fi
+    if restart_reality_guard_panel_service; then
+        echo -e "$(localized_text "${GREEN}✅ REALITY 回落限速已更新并生效。数据库备份：${backup_file}${PLAIN}" "${GREEN}✅ REALITY fallback rate limiting was updated and activated. Database backup: ${backup_file}${PLAIN}" "${GREEN}✅ Ограничение скорости REALITY fallback обновлено и применено. Резервная копия: ${backup_file}${PLAIN}")"
+    else
+        echo -e "$(localized_text "${YELLOW}数据库已更新，但未检测到可成功重启的面板服务。请手动重启并检查 Xray；备份：${backup_file}${PLAIN}" "${YELLOW}The database was updated, but no panel service could be restarted successfully. Restart it manually and check Xray. Backup: ${backup_file}${PLAIN}" "${YELLOW}База обновлена, но службу панели не удалось перезапустить. Перезапустите её вручную и проверьте Xray. Резервная копия: ${backup_file}${PLAIN}")"
+        return 1
+    fi
+}
+
+manage_reality_traffic_guard() {
+    while true; do
+        clear
+        load_sni_stack_env || return 1
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "$(localized_text "${BOLD}REALITY 回落流量防护${PLAIN}" "${BOLD}REALITY fallback traffic protection${PLAIN}" "${BOLD}Защита трафика REALITY fallback${PLAIN}")"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "$(localized_text "REALITY 验证失败的连接会转发到 target；使用 CDN 目标时可能被扫描后当作转发节点滥用。" "REALITY forwards failed-authentication connections to the target; a CDN target can make the server abusable as a relay after scanning." "REALITY пересылает подключения с ошибкой проверки на target; при CDN-цели сервер после сканирования может использоваться как ретранслятор.")"
+        print_strict_sni_gate_summary
+        echo -e "------------------------------------------------"
+        echo -e "$(localized_text "${GREEN}  1. 启用严格 SNI 门禁${PLAIN}      ${YELLOW}(仅放行自动登记的 SNI)${PLAIN}" "${GREEN}1. Enable strict SNI gate${PLAIN} (allow only automatically registered SNIs)" "${GREEN}1. Включить строгий контроль SNI${PLAIN} (только автоматически зарегистрированные SNI)")"
+        echo -e "$(localized_text "${CYAN}  2. 关闭严格 SNI 门禁${PLAIN}      ${YELLOW}(恢复未知 SNI 默认转发)${PLAIN}" "${CYAN}2. Disable strict SNI gate${PLAIN} (restore default forwarding for unknown SNI)" "${CYAN}2. Отключить строгий контроль SNI${PLAIN} (вернуть стандартную пересылку неизвестных SNI)")"
+        echo -e "$(localized_text "${CYAN}  3. 重新同步当前 SNI 清单${PLAIN}    ${YELLOW}(按已保存的域名和路由生成)${PLAIN}" "${CYAN}3. Resynchronize the current SNI list${PLAIN} (generated from saved domains and routes)" "${CYAN}3. Повторно синхронизировать список SNI${PLAIN} (из сохранённых доменов и маршрутов)")"
+        echo -e "$(localized_text "${GREEN}  4. 设置 REALITY 回落限速${PLAIN}  ${YELLOW}(仅修改两个 limitFallback 字段)${PLAIN}" "${GREEN}4. Set REALITY fallback rate limits${PLAIN} (changes only the two limitFallback fields)" "${GREEN}4. Настроить ограничение REALITY fallback${PLAIN} (только два поля limitFallback)")"
+        echo -e "$(localized_text "${YELLOW}  5. 清除 REALITY 回落限速${PLAIN}  ${YELLOW}(恢复 Xray 默认行为)${PLAIN}" "${YELLOW}5. Clear REALITY fallback rate limits${PLAIN} (restore Xray defaults)" "${YELLOW}5. Удалить ограничение REALITY fallback${PLAIN} (вернуть настройки Xray по умолчанию)")"
+        echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
+        local choice
+        read_trimmed choice "$(localized_text "请选择操作: " "Select an action: " "Выберите действие: ")"
+        case "$choice" in
+            1) set_strict_sni_gate true ; pause_return ;;
+            2) set_strict_sni_gate false ; pause_return ;;
+            3) sync_strict_sni_gate_to_current_entry ; pause_return ;;
+            4) patch_reality_fallback_limits apply ; pause_return ;;
+            5) patch_reality_fallback_limits clear ; pause_return ;;
+            0|q|Q) break ;;
+            *) echo -e "$(localized_text "${RED}无效选择。${PLAIN}" "${RED}Invalid selection.${PLAIN}" "${RED}Неверный выбор.${PLAIN}")"; sleep 1 ;;
         esac
     done
 }
@@ -22571,6 +22897,7 @@ show_sni_help() {
     echo "$(localized_text "14 网络访问测试：检查 DNS、TCP、TLS SNI、面板和订阅响应。" "14 Network access test: check DNS, TCP, TLS SNI, panel, and subscription responses." "14 Проверка доступа: DNS, TCP, TLS SNI, ответы панели и подписки.")"
     echo "$(localized_text "15 Xray 入站管理：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。" "15 Manage Xray routes: record SNI -> local address:port without editing 3x-ui/Xray inbounds." "15 Маршруты Xray: запись SNI -> локальный адрес:порт без изменения входящих подключений 3x-ui/Xray.")"
     echo "$(localized_text "16 当前入口日志：按 ENTRY_MODE 查看 Nginx、Xray/3x-ui 或 vpso-mux。" "16 Current entry logs: show Nginx, Xray/3x-ui, or vpso-mux based on ENTRY_MODE." "16 Журналы текущего входа: Nginx, Xray/3x-ui или vpso-mux согласно ENTRY_MODE.")"
+    echo "$(localized_text "17 REALITY 回落流量防护：管理严格 SNI 门禁和回落限速。" "17 REALITY fallback traffic protection: manage the strict SNI gate and fallback rate limits." "17 Защита трафика REALITY fallback: строгий контроль SNI и ограничение скорости fallback.")"
     echo "$(localized_text "修改面板域名请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。" "To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain]." "Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].")"
     echo "$(localized_text "未接入 443端口复用时，用主菜单 [4 反代] -> [5] 管理 Caddy/Nginx 域名 IP 白名单。" "When the Port 443 Reuse is not connected, use the main menu [4 reverse proxy] -> [5] to manage the Caddy/Nginx domain IP whitelist." "Если повторное использование порта 443 не подключен, используйте главное меню [4 обратный прокси] -> [5] для управления белым списком IP-адресов доменного имени Caddy/Nginx.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
@@ -22805,6 +23132,7 @@ func_sni_stack_quick_menu() {
         echo -e "$(localized_text "${CYAN} 14. 443 网络访问测试${PLAIN}          ${YELLOW}(DNS/TCP/TLS/面板/订阅路径)${PLAIN}" "${CYAN}14. 443 Network access test (DNS/TCP/TLS/panel/subscription path)${PLAIN}" "${CYAN}14. 443 Проверка доступа к сети (DNS/TCP/TLS/панель/путь подписки)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 15. Xray 入站管理${PLAIN}             ${YELLOW}(SNI -> 本地地址:端口 分流记录)${PLAIN}" "${CYAN}15. Manage Xray inbounds (SNI -> local address:port routes)${PLAIN}" "${CYAN}15. Управление входящими подключениями Xray (SNI -> локальный адрес:порт)${PLAIN}")"
         echo -e "$(localized_text "${CYAN} 16. 查看当前入口日志${PLAIN}          ${YELLOW}(自动识别 Nginx / Xray / vpso-mux)${PLAIN}" "${CYAN}16. View current entry logs (detects Nginx / Xray / vpso-mux automatically)${PLAIN}" "${CYAN}16. Журналы текущего входа (автовыбор Nginx / Xray / vpso-mux)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 17. REALITY 回落流量防护${PLAIN}      ${YELLOW}(严格 SNI 门禁 / 回落限速)${PLAIN}" "${GREEN}17. REALITY fallback traffic protection (strict SNI gate / fallback rate limits)${PLAIN}" "${GREEN}17. Защита трафика REALITY fallback (строгий контроль SNI / ограничение скорости)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
@@ -22826,6 +23154,7 @@ func_sni_stack_quick_menu() {
             14) func_443_network_test; continue ;;
             15) manage_xray_inbound_routes; continue ;;
             16) view_current_entry_logs ;;
+            17) manage_reality_traffic_guard; continue ;;
             "?") show_sni_help; pause_return; continue ;;
             0) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;

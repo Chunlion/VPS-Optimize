@@ -47,7 +47,7 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 
 | path | Description |
 |---|---|
-| `/etc/vps-optimize/sni-stack.env` | Port 443 Reuse point saved core parameters, `ENTRY_MODE` uses `nginx-stream` / `xray-fallback` / `tcp-peek` |
+| `/etc/vps-optimize/sni-stack.env` | Port 443 Reuse core settings; `ENTRY_MODE` stores the entry mode and `STRICT_SNI_GATE` stores the strict SNI gate state |
 | `/etc/vps-optimize/443-engine.conf` | Current Port 443 Reuse point engine status, default `nginx-stream` |
 | `/etc/vps-optimize/vpso-mux.yaml` | `tcp-peek` / `vpso-mux` routing configuration |
 | `/etc/vps-optimize/sni-stack.last-backup` | The most recent Port 443 Reuse point backup path record |
@@ -66,7 +66,7 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 Check current 443 parameters:
 
 ```bash
-grep -E '^(PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null
+grep -E '^(ENTRY_MODE|STRICT_SNI_GATE|PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null
 ```
 
 Check Nginx / Caddy:

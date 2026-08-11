@@ -33,9 +33,10 @@ type Config struct {
 	Limits struct {
 		MaxConnections int `yaml:"max_connections"`
 	} `yaml:"limits"`
-	DefaultBackend string  `yaml:"default_backend"`
-	Routes         []Route `yaml:"routes"`
-	Logging        struct {
+	DefaultBackend   string  `yaml:"default_backend"`
+	RejectUnknownSNI bool    `yaml:"reject_unknown_sni"`
+	Routes           []Route `yaml:"routes"`
+	Logging          struct {
 		Level        string `yaml:"level"`
 		Format       string `yaml:"format"`
 		File         string `yaml:"file"`

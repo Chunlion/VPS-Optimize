@@ -132,6 +132,7 @@ cleanup_golden_tmp() {
     rm -f "$tmp_dir/nginx-single-entry-web.conf"
     rm -f "$tmp_dir/nginx-reverse-proxy.conf"
     rm -f "$tmp_dir/vpso-mux.yaml"
+    rm -f "$tmp_dir/nginx-strict-sni.conf"
     rm -f "$tmp_dir/disable-ipv6"
     rmdir "$tmp_dir" 2>/dev/null || true
 }
@@ -143,6 +144,7 @@ source src/sni_stack_config.sh
 source src/sni_stack_whitelist_state.sh
 source src/vpso_mux_state.sh
 source src/vpso_mux_config.sh
+source src/reality_guard.sh
 source src/sni_stack_install.sh
 source src/caddy_proxy.sh
 
@@ -172,6 +174,7 @@ XRAY_SNI_ROUTE_PORTS=(3443)
 SNI_IP_WHITELIST_DOMAINS=(panel.example.com site.example.com)
 SNI_IP_WHITELIST_RANGES=("198.51.100.10 2001:db8::/32" "203.0.113.5")
 WEB_PROXY_ENGINE=nginx
+STRICT_SNI_GATE=false
 
 VPSO_PROC_NET_IF_INET6="$tmp_dir/no-ipv6"
 VPSO_PROC_SYS_DISABLE_IPV6="$tmp_dir/disable-ipv6"
@@ -180,6 +183,9 @@ printf '1\n' > "$VPSO_PROC_SYS_DISABLE_IPV6"
 write_nginx_single_443_web_config "$tmp_dir/nginx-single-entry-web.conf"
 write_nginx_reverse_proxy_conf "proxy.example.com" "40000" "n" "$tmp_dir/nginx-reverse-proxy.conf" "198.51.100.10 2001:db8::/32"
 write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_dir/vpso-mux.yaml" >/dev/null
+STRICT_SNI_GATE=true
+write_nginx_sni_stream_config "$tmp_dir/nginx-strict-sni.conf" no
+STRICT_SNI_GATE=false
 
 diff -u tests/golden/nginx-single-entry-web.expected "$tmp_dir/nginx-single-entry-web.conf"
 diff -u tests/golden/nginx-reverse-proxy.expected "$tmp_dir/nginx-reverse-proxy.conf"
@@ -188,5 +194,10 @@ diff -u tests/golden/vpso-mux.yaml.expected "$tmp_dir/vpso-mux.yaml"
 assert_nginx_single_entry_web_render "$tmp_dir/nginx-single-entry-web.conf"
 assert_nginx_reverse_proxy_render "$tmp_dir/nginx-reverse-proxy.conf"
 assert_vpso_mux_render "$tmp_dir/vpso-mux.yaml"
+assert_contains "$tmp_dir/nginx-strict-sni.conf" "    default vps_ip_reject_backend;"
+assert_contains "$tmp_dir/nginx-strict-sni.conf" "    panel.example.com web_proxy_backend;"
+assert_contains "$tmp_dir/nginx-strict-sni.conf" "    node.example.com vps_xray_route_0_backend;"
+assert_contains "$tmp_dir/nginx-strict-sni.conf" "    reality.example.com xray_backend;"
+assert_contains "$tmp_dir/nginx-strict-sni.conf" "upstream vps_ip_reject_backend {"
 
 echo "Golden render tests passed."

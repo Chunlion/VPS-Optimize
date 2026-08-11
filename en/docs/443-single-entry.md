@@ -290,13 +290,24 @@ Xray itself can have multiple inbounds. However, in xray-fallback mode, the publ
 
 After switching to xray-fallback, the script will retain the existing rules in `/etc/vps-optimize/xray-sni-routes.conf` and will not delete them. The selected rule is used as the xray-fallback main inbound connection; other rules will be marked as "reserved, but not effective in the current xray-fallback mode". When later switching back to Nginx Stream mode or TCP Peek + Splice mode, these rules can be reused to route by SNI.
 
-In xray-fallback mode, the `Xray inbound management` menu allows viewing of rules and the current primary inbound, but does not allow adding, deleting or synchronizing rules. This script does not automatically modify the 3x-ui/Xray inbound internal configuration.
+In xray-fallback mode, the `Xray inbound management` menu allows viewing rules and the current primary inbound, but does not allow adding, deleting, or synchronizing rules. That menu does not modify 3x-ui/Xray inbound settings; the separate REALITY fallback traffic protection feature may change only the two rate-limit fields described below.
 
 ## The difference between ordinary TLS and REALITY
 
 Ordinary TLS nodes pay more attention to whether the local certificate, Web fallback, and Host/SNI match. For example, for nodes such as VLESS + TLS, Trojan + TLS, VMess + WS + TLS, VLESS + gRPC + TLS, when troubleshooting, you should confirm whether the node domain is controlled by the user, whether the local certificate covers the SNI, whether the web reverse proxy engine has a matching fallback, and whether the browser access returns 200/301/302.
 
 REALITY nodes are different. REALITY pays more attention to whether the external target site is truly accessible, whether the characteristics of TLS are stable, and whether `serverName` and `dest` are logically consistent. Do not require REALITY `serverName` to join the Web reverse proxy engine, nor do you require native certificates to cover REALITY `serverName`.
+
+## REALITY fallback traffic protection
+
+REALITY forwards failed-authentication connections to `target`. A scanner does not need a UUID, shortId, or key to trigger this fallback path. When `target` is a CDN site, the server can be abused as a relay and consume traffic.
+
+Use `Main menu [19 Port 443 Reuse Manager] -> [17 REALITY fallback traffic protection]` to manage two protection layers:
+
+- Strict SNI gate: available in Nginx Stream and TCP Peek modes. It allows only the registered panel domain, site domains, TCP/Xray SNI routes, and REALITY SNI, and drops unknown or missing SNI. The allowlist is not stored separately; it is derived from the current configuration whenever the entry configuration is generated. After adding, removing, or changing a domain or route, use its Sync action or reapply the current entry to update the gate automatically.
+- REALITY fallback rate limiting: available for 3x-ui SQLite. The script backs up the database first, changes only `limitFallbackUpload` and `limitFallbackDownload` on the selected REALITY inbound, and randomizes the values for each operation. It does not change UUIDs, shortIds, keys, protocols, transports, or other inbound fields. PostgreSQL is not modified automatically.
+
+In `xray-fallback` mode, Xray listens on public port 443 directly, so there is no separate front SNI gate; only fallback rate limiting is available. Rate limiting is itself a fingerprint. Prefer a non-CDN REALITY target with a network location appropriate for the server, and enable rate limiting only when a CDN target is unavoidable.
 
 ## Certificate policy
 

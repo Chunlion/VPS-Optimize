@@ -76,7 +76,10 @@ func MatchRoute(c *Config, sni string, clientIP netip.Addr) Match {
 
 	if sni != "" {
 		if c.routeIndex != nil {
-			return c.routeIndex.match(sni, clientIP, c.DefaultBackend)
+			if match, ok := c.routeIndex.match(sni, clientIP); ok {
+				return match
+			}
+			return defaultRouteMatch(c)
 		}
 		for i := range c.Routes {
 			route := &c.Routes[i]
@@ -92,11 +95,14 @@ func MatchRoute(c *Config, sni string, clientIP netip.Addr) Match {
 		}
 	}
 
-	return Match{
-		Backend:   c.DefaultBackend,
-		RouteName: "default",
-		Allowed:   true,
+	return defaultRouteMatch(c)
+}
+
+func defaultRouteMatch(c *Config) Match {
+	if c.RejectUnknownSNI {
+		return Match{RouteName: "strict_sni_gate", Allowed: false, Blocked: true}
 	}
+	return Match{Backend: c.DefaultBackend, RouteName: "default", Allowed: true}
 }
 
 func buildRouteIndex(routes []Route) *routeIndex {
@@ -121,27 +127,19 @@ func buildRouteIndex(routes []Route) *routeIndex {
 	return idx
 }
 
-func (idx *routeIndex) match(sni string, clientIP netip.Addr, defaultBackend string) Match {
+func (idx *routeIndex) match(sni string, clientIP netip.Addr) (Match, bool) {
 	if idx == nil {
-		return Match{
-			Backend:   defaultBackend,
-			RouteName: "default",
-			Allowed:   true,
-		}
+		return Match{}, false
 	}
 	if route := idx.exact[sni]; route != nil {
-		return matchRouteAllowed(route, clientIP)
+		return matchRouteAllowed(route, clientIP), true
 	}
 	for _, item := range idx.wildcard {
 		if wildcardSuffixMatch(item.suffix, sni) {
-			return matchRouteAllowed(item.route, clientIP)
+			return matchRouteAllowed(item.route, clientIP), true
 		}
 	}
-	return Match{
-		Backend:   defaultBackend,
-		RouteName: "default",
-		Allowed:   true,
-	}
+	return Match{}, false
 }
 
 func routeMatches(route *Route, sni string, wildcardOnly bool) bool {

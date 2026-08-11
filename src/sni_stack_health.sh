@@ -256,7 +256,11 @@ sni_stack_health_check_enhanced() {
     echo -e "$(localized_text "${BOLD}路由摘要${PLAIN}" "${BOLD}Route Summary${PLAIN}" "${BOLD}Сводка маршрута${PLAIN}")"
     echo -e "$(localized_text "default_backend 当前指向：${xray_backend}" "default_backend currently points to: ${xray_backend}" "default_backend в настоящее время указывает на: ${xray_backend}")"
     echo -e "$(localized_text "routes 数量：${route_count}" "routes quantity: ${route_count}" "количество маршрутов: ${route_count}")"
-    echo -e "$(localized_text "unknown SNI 策略：default_backend -> ${xray_backend}" "unknown SNI policy: default_backend -> ${xray_backend}" "неизвестная политика SNI: default_backend -> ${xray_backend}")"
+    if strict_sni_gate_enabled && strict_sni_gate_mode_supported "$mode"; then
+        echo -e "$(localized_text "unknown SNI 策略：严格门禁直接丢弃" "unknown SNI policy: dropped by the strict SNI gate" "Политика неизвестного SNI: отклонение строгим контролем SNI")"
+    else
+        echo -e "$(localized_text "unknown SNI 策略：default_backend -> ${xray_backend}" "unknown SNI policy: default_backend -> ${xray_backend}" "Политика неизвестного SNI: default_backend -> ${xray_backend}")"
+    fi
     ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
     echo -e "$(localized_text "web panel: ${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${web_label} ${web_backend} -> 面板后端 ${panel_backend}" "web panel: ${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${web_label} ${web_backend} -> panel backend ${panel_backend}" "веб-панель: ${PANEL_DOMAIN}${PANEL_WEB_PATH} -> ${web_label} ${web_backend} -> бэкенд панели ${panel_backend}")"
     echo -e "$(localized_text "web subscription: ${PANEL_DOMAIN}${SUB_URI_PATH} -> ${web_label} ${web_backend} -> 订阅后端 ${sub_backend}" "web subscription: ${PANEL_DOMAIN}${SUB_URI_PATH} -> ${web_label} ${web_backend} -> Subscription backend ${sub_backend}" "веб-подписка: ${PANEL_DOMAIN}${SUB_URI_PATH} -> ${web_label} ${web_backend} -> Сервер подписки ${sub_backend}")"
