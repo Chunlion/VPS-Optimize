@@ -885,14 +885,50 @@ confirm_risk_action() {
     confirm_default_yes
 }
 
+terminal_text_width() {
+    local text="$1"
+    local width
+
+    width=$(printf '%s\n' "$text" | LC_ALL=C.UTF-8 wc -L 2>/dev/null) \
+        || width=$(printf '%s\n' "$text" | LC_ALL=C.utf8 wc -L 2>/dev/null) \
+        || width=$(printf '%s\n' "$text" | wc -L 2>/dev/null) \
+        || width=${#text}
+    [[ "$width" =~ ^[[:space:]]*[0-9]+[[:space:]]*$ ]] || width=${#text}
+    printf '%d' "$width"
+}
+
+print_menu_item() {
+    local number="$1"
+    local title="$2"
+    local description="$3"
+    local title_column="${4:-28}"
+    local number_color="${5:-$GREEN}"
+    local description_color="${6:-$YELLOW}"
+    local title_color="${7:-}"
+    local title_width padding
+
+    title_width=$(terminal_text_width "$title")
+    padding=$((title_column - title_width + 2))
+    (( padding < 2 )) && padding=2
+    printf ' %b%2s.%b %b%s%b%*s%b(%s)%b\n' \
+        "$number_color" "$number" "$PLAIN" "$title_color" "$title" "$PLAIN" \
+        "$padding" '' "$description_color" "$description" "$PLAIN"
+}
+
 render_menu() {
     local items_name="$1"
     local -n menu_items="$items_name"
-    local item number title description handler risk
+    local item number title description handler risk title_width
+    local title_column=0
 
     for item in "${menu_items[@]}"; do
         IFS='|' read -r number title description handler risk <<< "$item"
-        echo -e "${GREEN}  ${number}. ${title}${PLAIN}   ${YELLOW}(${description})${PLAIN}"
+        title_width=$(terminal_text_width "$title")
+        (( title_width > title_column )) && title_column=$title_width
+    done
+    for item in "${menu_items[@]}"; do
+        IFS='|' read -r number title description handler risk <<< "$item"
+        print_menu_item "$number" "$title" "$description" "$title_column" "$GREEN" "$YELLOW" "$GREEN"
     done
 }
 
@@ -22783,34 +22819,34 @@ main_menu() {
             echo -e "${CYAN}================================================${PLAIN}"
 
             echo -e " ${BOLD}${BLUE}▶ ① Рекомендуемый порядок для нового сервера${PLAIN}"
-            echo -e "  ${GREEN}1.${PLAIN} Предварительная проверка    ${YELLOW}(порты, система, службы и возможные риски)${PLAIN}"
-            echo -e "  ${GREEN}2.${PLAIN} Базовая настройка системы   ${YELLOW}(инструменты, часовой пояс, обновления и базовый BBR)${PLAIN}"
-            echo -e "  ${GREEN}3.${PLAIN} Компоненты и службы          ${YELLOW}(Docker, Python, WARP и распространённые инструменты)${PLAIN}"
-            echo -e "  ${GREEN}4.${PLAIN} Обратный прокси             ${YELLOW}(Caddy/Nginx вне повторного использования порта 443)${PLAIN}"
-            echo -e "  ${GREEN}5.${PLAIN} Панели, узлы и подписки     ${YELLOW}(3x-ui, Sing-box, подписки и Komari)${PLAIN}"
+            print_menu_item 1 "Предварительная проверка" "порты, система, службы и возможные риски"
+            print_menu_item 2 "Базовая настройка системы" "инструменты, часовой пояс, обновления и базовый BBR"
+            print_menu_item 3 "Компоненты и службы" "Docker, Python, WARP и распространённые инструменты"
+            print_menu_item 4 "Обратный прокси" "Caddy/Nginx вне повторного использования порта 443"
+            print_menu_item 5 "Панели, узлы и подписки" "3x-ui, Sing-box, подписки и Komari"
 
             echo -e " ${BOLD}${BLUE}▶ ② Безопасность и контроль доступа${PLAIN}"
-            echo -e "  ${GREEN}6.${PLAIN} Центр безопасности SSH      ${YELLOW}(порт, открытые ключи и вход только по ключу)${PLAIN}"
-            echo -e "  ${GREEN}7.${PLAIN} Защита Fail2ban             ${YELLOW}(автоматическая блокировка перебора паролей SSH)${PLAIN}"
-            echo -e "  ${GREEN}8.${PLAIN} Управление брандмауэром     ${YELLOW}(разрешение, удаление и просмотр правил, лимиты соединений)${PLAIN}"
-            echo -e "  ${GREEN}9.${PLAIN} Системные настройки         ${YELLOW}(IPv6, приоритет IPv4, ping, имя хоста и очистка)${PLAIN}"
+            print_menu_item 6 "Центр безопасности SSH" "порт, открытые ключи и вход только по ключу"
+            print_menu_item 7 "Защита Fail2ban" "автоматическая блокировка перебора паролей SSH"
+            print_menu_item 8 "Управление брандмауэром" "разрешение, удаление и просмотр правил, лимиты соединений"
+            print_menu_item 9 "Системные настройки" "IPv6, приоритет IPv4, ping, имя хоста и очистка"
 
             echo -e " ${BOLD}${BLUE}▶ ③ Производительность сети и контейнеры${PLAIN}"
-            echo -e " ${GREEN}10.${PLAIN} Оптимизация сети и ядра     ${YELLOW}(BBR, TCP, ZRAM, DNS и облегчённые ядра)${PLAIN}"
-            echo -e " ${GREEN}11.${PLAIN} Безопасность Docker         ${YELLOW}(блокировка или восстановление внешнего доступа)${PLAIN}"
+            print_menu_item 10 "Оптимизация сети и ядра" "BBR, TCP, ZRAM, DNS и облегчённые ядра"
+            print_menu_item 11 "Безопасность Docker" "блокировка или восстановление внешнего доступа"
 
             echo -e " ${BOLD}${BLUE}▶ ④ Диагностика, резервное копирование и обслуживание${PLAIN}"
-            echo -e " ${GREEN}12.${PLAIN} Тест скорости и качества    ${YELLOW}(YABS, стриминг, маршруты и качество IP)${PLAIN}"
-            echo -e " ${GREEN}13.${PLAIN} Диагностика портов          ${YELLOW}(поиск слушающих процессов и принудительное завершение)${PLAIN}"
-            echo -e " ${GREEN}14.${PLAIN} Сведения о системе          ${YELLOW}(CPU, память, диски и сеть в реальном времени)${PLAIN}"
-            echo -e " ${GREEN}15.${PLAIN} Состояние служб            ${YELLOW}(службы, сертификаты и слушающие порты)${PLAIN}"
-            echo -e " ${GREEN}16.${PLAIN} Резервная копия и откат    ${YELLOW}(создание, просмотр, восстановление и очистка)${PLAIN}"
-            echo -e " ${BOLD}${YELLOW}17.${PLAIN} Обновить скрипт          ${CYAN}(команды: u / update / upd)${PLAIN}"
+            print_menu_item 12 "Тест скорости и качества" "YABS, стриминг, маршруты и качество IP"
+            print_menu_item 13 "Диагностика портов" "поиск слушающих процессов и принудительное завершение"
+            print_menu_item 14 "Сведения о системе" "CPU, память, диски и сеть в реальном времени"
+            print_menu_item 15 "Состояние служб" "службы, сертификаты и слушающие порты"
+            print_menu_item 16 "Резервная копия и откат" "создание, просмотр, восстановление и очистка"
+            print_menu_item 17 "Обновить скрипт" "команды: u / update / upd" 28 "${BOLD}${YELLOW}" "$CYAN"
             echo -e " ${RED}18.${PLAIN} Перезагрузить сервер"
             echo -e ""
             echo -e " ${BOLD}${BLUE}▶ ⑤ Часто используемые функции${PLAIN}"
-            echo -e " ${GREEN}19.${PLAIN} повторное использование порта 443            ${YELLOW}(настройка, сайты, диагностика и сертификаты)${PLAIN}"
-            echo -e " ${GREEN}20.${PLAIN} Язык интерфейса           ${YELLOW}(中文 / English / Русский)${PLAIN}"
+            print_menu_item 19 "Общий порт 443" "настройка, сайты, диагностика и сертификаты"
+            print_menu_item 20 "Язык интерфейса" "中文 / English / Русский"
             echo -e "${CYAN}================================================${PLAIN}"
             echo -e " ${RED} 0.${PLAIN} Выход / ${RED}q${PLAIN} Выход"
             echo -e "${CYAN}================================================${PLAIN}"
@@ -22823,34 +22859,34 @@ main_menu() {
             echo -e "${CYAN}================================================${PLAIN}"
 
             echo -e " ${BOLD}${BLUE}▶ ① Recommended setup for a new server${PLAIN}"
-            echo -e "  ${GREEN}1.${PLAIN} Preflight and risk scan     ${YELLOW}(check ports, OS, and services before deployment)${PLAIN}"
-            echo -e "  ${GREEN}2.${PLAIN} Base system initialization  ${YELLOW}(tools, timezone, updates, and basic BBR)${PLAIN}"
-            echo -e "  ${GREEN}3.${PLAIN} Components and services      ${YELLOW}(Docker, Python, WARP, and common tools)${PLAIN}"
-            echo -e "  ${GREEN}4.${PLAIN} Reverse proxy               ${YELLOW}(Caddy/Nginx sites outside the Port 443 Reuse)${PLAIN}"
-            echo -e "  ${GREEN}5.${PLAIN} Panels, nodes, subscriptions ${YELLOW}(3x-ui, Sing-box, subscriptions, and Komari)${PLAIN}"
+            print_menu_item 1 "Preflight and risk scan" "check ports, OS, and services before deployment"
+            print_menu_item 2 "Base system initialization" "tools, timezone, updates, and basic BBR"
+            print_menu_item 3 "Components and services" "Docker, Python, WARP, and common tools"
+            print_menu_item 4 "Reverse proxy" "Caddy/Nginx sites outside the Port 443 Reuse"
+            print_menu_item 5 "Panels, nodes, subscriptions" "3x-ui, Sing-box, subscriptions, and Komari"
 
             echo -e " ${BOLD}${BLUE}▶ ② Security and access control${PLAIN}"
-            echo -e "  ${GREEN}6.${PLAIN} SSH security center         ${YELLOW}(port, public keys, and key-only login modes)${PLAIN}"
-            echo -e "  ${GREEN}7.${PLAIN} Fail2ban protection         ${YELLOW}(automatically block SSH brute-force IPs)${PLAIN}"
-            echo -e "  ${GREEN}8.${PLAIN} Firewall rules              ${YELLOW}(allow, remove, inspect, disable, and limit connections)${PLAIN}"
-            echo -e "  ${GREEN}9.${PLAIN} System switches and cleanup ${YELLOW}(IPv6, IPv4 priority, ping, hostname, and cleanup)${PLAIN}"
+            print_menu_item 6 "SSH security center" "port, public keys, and key-only login modes"
+            print_menu_item 7 "Fail2ban protection" "automatically block SSH brute-force IPs"
+            print_menu_item 8 "Firewall rules" "allow, remove, inspect, disable, and limit connections"
+            print_menu_item 9 "System switches and cleanup" "IPv6, IPv4 priority, ping, hostname, and cleanup"
 
             echo -e " ${BOLD}${BLUE}▶ ③ Network performance and containers${PLAIN}"
-            echo -e " ${GREEN}10.${PLAIN} Network and kernel tuning    ${YELLOW}(BBR, TCP, ZRAM, DNS, and lightweight kernels)${PLAIN}"
-            echo -e " ${GREEN}11.${PLAIN} Docker security management  ${YELLOW}(block or restore unintended external access)${PLAIN}"
+            print_menu_item 10 "Network and kernel tuning" "BBR, TCP, ZRAM, DNS, and lightweight kernels"
+            print_menu_item 11 "Docker security management" "block or restore unintended external access"
 
             echo -e " ${BOLD}${BLUE}▶ ④ Diagnostics, backup, and maintenance${PLAIN}"
-            echo -e " ${GREEN}12.${PLAIN} Speed and quality tests      ${YELLOW}(YABS, streaming, routes, and IP quality)${PLAIN}"
-            echo -e " ${GREEN}13.${PLAIN} Inspect and release ports    ${YELLOW}(find listeners and terminate a process)${PLAIN}"
-            echo -e " ${GREEN}14.${PLAIN} System hardware probe       ${YELLOW}(live CPU, memory, disk, and network details)${PLAIN}"
-            echo -e " ${GREEN}15.${PLAIN} Service health overview     ${YELLOW}(services, certificates, and listening ports)${PLAIN}"
-            echo -e " ${GREEN}16.${PLAIN} Configuration backup        ${YELLOW}(back up, list, restore, and clean up)${PLAIN}"
-            echo -e " ${BOLD}${YELLOW}17.${PLAIN} Update script              ${CYAN}(shortcut: u / update / upd)${PLAIN}"
+            print_menu_item 12 "Speed and quality tests" "YABS, streaming, routes, and IP quality"
+            print_menu_item 13 "Inspect and release ports" "find listeners and terminate a process"
+            print_menu_item 14 "System hardware probe" "live CPU, memory, disk, and network details"
+            print_menu_item 15 "Service health overview" "services, certificates, and listening ports"
+            print_menu_item 16 "Configuration backup" "back up, list, restore, and clean up"
+            print_menu_item 17 "Update script" "shortcut: u / update / upd" 28 "${BOLD}${YELLOW}" "$CYAN"
             echo -e " ${RED}18.${PLAIN} Reboot server"
             echo -e ""
             echo -e " ${BOLD}${BLUE}▶ ⑤ Frequently used${PLAIN}"
-            echo -e " ${GREEN}19.${PLAIN} Port 443 Reuse manager    ${YELLOW}(initialize, add sites, check health, and repair certificates)${PLAIN}"
-            echo -e " ${GREEN}20.${PLAIN} Interface language          ${YELLOW}(中文 / English / Русский)${PLAIN}"
+            print_menu_item 19 "Port 443 Reuse manager" "initialize, add sites, check health, and repair certificates"
+            print_menu_item 20 "Interface language" "中文 / English / Русский"
             echo -e "${CYAN}================================================${PLAIN}"
             echo -e " ${RED} 0.${PLAIN} Exit / ${RED}q${PLAIN} Exit"
             echo -e "${CYAN}================================================${PLAIN}"
@@ -22863,34 +22899,34 @@ main_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         echo -e " ${BOLD}${BLUE}▶ ① 推荐流程：新机器先跑这里${PLAIN}"
-        echo -e "  ${GREEN}1.${PLAIN} 运维预检与风险扫描    ${YELLOW}(部署前先看端口/系统/服务状态)${PLAIN}"
-        echo -e "  ${GREEN}2.${PLAIN} 基础环境初始化        ${YELLOW}(工具/时区/系统更新/基础 BBR)${PLAIN}"
-        echo -e "  ${GREEN}3.${PLAIN} 基础组件与常用服务    ${YELLOW}(Docker/Python/WARP/常用工具)${PLAIN}"
-        echo -e "  ${GREEN}4.${PLAIN} 反代（Caddy/Nginx）   ${YELLOW}(未接入 443端口复用的网站/面板反代)${PLAIN}"
-        echo -e "  ${GREEN}5.${PLAIN} 面板、节点与订阅工具  ${YELLOW}(3x-ui/Sing-box/订阅管理/Komari)${PLAIN}"
+        print_menu_item 1 "运维预检与风险扫描" "部署前先看端口/系统/服务状态"
+        print_menu_item 2 "基础环境初始化" "工具/时区/系统更新/基础 BBR"
+        print_menu_item 3 "基础组件与常用服务" "Docker/Python/WARP/常用工具"
+        print_menu_item 4 "反代（Caddy/Nginx）" "未接入 443端口复用的网站/面板反代"
+        print_menu_item 5 "面板、节点与订阅工具" "3x-ui/Sing-box/订阅管理/Komari"
 
         echo -e " ${BOLD}${BLUE}▶ ② 安全与访问控制${PLAIN}"
-        echo -e "  ${GREEN}6.${PLAIN} SSH 安全中心          ${YELLOW}(端口/公钥/密钥登录模式)${PLAIN}"
-        echo -e "  ${GREEN}7.${PLAIN} Fail2ban 防爆破       ${YELLOW}(自动封禁 SSH 爆破 IP)${PLAIN}"
-        echo -e "  ${GREEN}8.${PLAIN} 防火墙规则管理        ${YELLOW}(放行/删除/查看/关闭/连接数限制)${PLAIN}"
-        echo -e "  ${GREEN}9.${PLAIN} 系统开关与清理        ${YELLOW}(IPv6/IPv4优先/Ping/主机名/清理)${PLAIN}"
+        print_menu_item 6 "SSH 安全中心" "端口/公钥/密钥登录模式"
+        print_menu_item 7 "Fail2ban 防爆破" "自动封禁 SSH 爆破 IP"
+        print_menu_item 8 "防火墙规则管理" "放行/删除/查看/关闭/连接数限制"
+        print_menu_item 9 "系统开关与清理" "IPv6/IPv4优先/Ping/主机名/清理"
 
         echo -e " ${BOLD}${BLUE}▶ ③ 网络性能与容器${PLAIN}"
-        echo -e " ${GREEN}10.${PLAIN} 网络与内核优化        ${YELLOW}(BBR/TCP/ZRAM/DNS/轻量内核)${PLAIN}"
-        echo -e " ${GREEN}11.${PLAIN} Docker 管理           ${YELLOW}(容器/镜像/网络/安全)${PLAIN}"
+        print_menu_item 10 "网络与内核优化" "BBR/TCP/ZRAM/DNS/轻量内核"
+        print_menu_item 11 "Docker 管理" "容器/镜像/网络/安全"
 
         echo -e " ${BOLD}${BLUE}▶ ④ 诊断、备份与维护${PLAIN}"
-        echo -e " ${GREEN}12.${PLAIN} 测速与质量检测        ${YELLOW}(YABS/流媒体/回程/IP质量)${PLAIN}"
-        echo -e " ${GREEN}13.${PLAIN} 端口排查与释放        ${YELLOW}(查看占用并强杀进程)${PLAIN}"
-        echo -e " ${GREEN}14.${PLAIN} 系统硬件探针          ${YELLOW}(CPU/内存/磁盘/网络实时信息)${PLAIN}"
-        echo -e " ${GREEN}15.${PLAIN} 服务健康总览          ${YELLOW}(服务状态/证书摘要/端口概览)${PLAIN}"
-        echo -e " ${GREEN}16.${PLAIN} 配置备份与回滚        ${YELLOW}(备份/列表/恢复/清理)${PLAIN}"
-        echo -e " ${BOLD}${YELLOW}17.${PLAIN} 更新脚本              ${CYAN}(快捷词：u / update / upd)${PLAIN}"
+        print_menu_item 12 "测速与质量检测" "YABS/流媒体/回程/IP质量"
+        print_menu_item 13 "端口排查与释放" "查看占用并强杀进程"
+        print_menu_item 14 "系统硬件探针" "CPU/内存/磁盘/网络实时信息"
+        print_menu_item 15 "服务健康总览" "服务状态/证书摘要/端口概览"
+        print_menu_item 16 "配置备份与回滚" "备份/列表/恢复/清理"
+        print_menu_item 17 "更新脚本" "快捷词：u / update / upd" 28 "${BOLD}${YELLOW}" "$CYAN"
         echo -e " ${RED}18.${PLAIN} 重启服务器"
         echo -e ""
         echo -e " ${BOLD}${BLUE}▶ ⑤ 高频直达${PLAIN}"
-        echo -e " ${GREEN}19.${PLAIN} 443端口复用管理中心    ${YELLOW}(初始化/加网站/体检/证书修复)${PLAIN}"
-        echo -e " ${GREEN}20.${PLAIN} 界面语言              ${YELLOW}(中文 / English / Русский)${PLAIN}"
+        print_menu_item 19 "443端口复用管理中心" "初始化/加网站/体检/证书修复"
+        print_menu_item 20 "界面语言" "中文 / English / Русский"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e " ${RED} 0.${PLAIN} 退出面板 / ${RED}q${PLAIN} 退出"
         echo -e "${CYAN}================================================${PLAIN}"

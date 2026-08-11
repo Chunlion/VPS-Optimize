@@ -188,7 +188,7 @@ assert_file_not_contains dist/vps.sh '面板紧急救砖 / SSL 清理工具' "Bu
 assert_file_contains dist/vps.sh '10) func_net_kernel_menu ;;' "Main menu item 10 must still route to network/kernel optimization."
 assert_file_contains dist/vps.sh '15) func_health_dashboard ;;' "Main menu item 15 must still route to health dashboard."
 assert_file_contains dist/vps.sh '19) func_sni_stack_quick_menu ;;' "Main menu item 19 must still route to Port 443 Reuse center."
-assert_file_contains src/menus.sh '${GREEN}20.${PLAIN} 界面语言' "Main menu item 20 must expose language selection."
+assert_file_contains src/menus.sh 'print_menu_item 20 "界面语言"' "Main menu item 20 must expose language selection."
 assert_file_contains dist/vps.sh '20) select_ui_language' "Main menu item 20 must open language selection without hidden aliases."
 assert_file_contains README.md '主菜单 `[20 界面语言]`' "README must document the language menu number."
 assert_file_contains quick-start.md '3. Русский (Russian)' "Quick start must document Russian language selection."
@@ -296,7 +296,7 @@ source src/input.sh
 source src/validate.sh
 source src/kernel_tuning.sh
 
-for function_name in render_menu dispatch_menu_choice rotate_log_file format_bytes load_ui_language save_ui_language localized_text select_ui_language prompt_initial_ui_language toggle_ui_language; do
+for function_name in terminal_text_width print_menu_item render_menu dispatch_menu_choice rotate_log_file format_bytes load_ui_language save_ui_language localized_text select_ui_language prompt_initial_ui_language toggle_ui_language; do
     assert_function_loaded "$function_name"
 done
 

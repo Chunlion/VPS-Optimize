@@ -154,14 +154,50 @@ confirm_risk_action() {
     confirm_default_yes
 }
 
+terminal_text_width() {
+    local text="$1"
+    local width
+
+    width=$(printf '%s\n' "$text" | LC_ALL=C.UTF-8 wc -L 2>/dev/null) \
+        || width=$(printf '%s\n' "$text" | LC_ALL=C.utf8 wc -L 2>/dev/null) \
+        || width=$(printf '%s\n' "$text" | wc -L 2>/dev/null) \
+        || width=${#text}
+    [[ "$width" =~ ^[[:space:]]*[0-9]+[[:space:]]*$ ]] || width=${#text}
+    printf '%d' "$width"
+}
+
+print_menu_item() {
+    local number="$1"
+    local title="$2"
+    local description="$3"
+    local title_column="${4:-28}"
+    local number_color="${5:-$GREEN}"
+    local description_color="${6:-$YELLOW}"
+    local title_color="${7:-}"
+    local title_width padding
+
+    title_width=$(terminal_text_width "$title")
+    padding=$((title_column - title_width + 2))
+    (( padding < 2 )) && padding=2
+    printf ' %b%2s.%b %b%s%b%*s%b(%s)%b\n' \
+        "$number_color" "$number" "$PLAIN" "$title_color" "$title" "$PLAIN" \
+        "$padding" '' "$description_color" "$description" "$PLAIN"
+}
+
 render_menu() {
     local items_name="$1"
     local -n menu_items="$items_name"
-    local item number title description handler risk
+    local item number title description handler risk title_width
+    local title_column=0
 
     for item in "${menu_items[@]}"; do
         IFS='|' read -r number title description handler risk <<< "$item"
-        echo -e "${GREEN}  ${number}. ${title}${PLAIN}   ${YELLOW}(${description})${PLAIN}"
+        title_width=$(terminal_text_width "$title")
+        (( title_width > title_column )) && title_column=$title_width
+    done
+    for item in "${menu_items[@]}"; do
+        IFS='|' read -r number title description handler risk <<< "$item"
+        print_menu_item "$number" "$title" "$description" "$title_column" "$GREEN" "$YELLOW" "$GREEN"
     done
 }
 

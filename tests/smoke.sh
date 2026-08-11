@@ -628,6 +628,24 @@ colored_confirmation=$(colorize_confirmation_prompt "Proceed? (Y/n) Continue? (y
 [[ "$colored_confirmation" == *$'\033[1;31my'* ]]
 [[ "$colored_confirmation" == *$'\033[1;32mN'* ]]
 [[ "$(NO_COLOR= bash -c 'source src/common.sh; printf "%s%s" "$GREEN" "$RED"')" == "" ]]
+(
+    GREEN=''
+    YELLOW=''
+    CYAN=''
+    BOLD=''
+    PLAIN=''
+    [[ "$(terminal_text_width "中文")" == "4" ]]
+    [[ "$(terminal_text_width "Русский")" == "7" ]]
+    for menu_row in \
+        "$(print_menu_item 1 "基础环境初始化" "中文说明")" \
+        "$(print_menu_item 19 "443端口复用管理中心" "中文说明")" \
+        "$(print_menu_item 1 "Preflight and risk scan" "English description")" \
+        "$(print_menu_item 19 "Port 443 Reuse manager" "English description")" \
+        "$(print_menu_item 1 "Предварительная проверка" "Описание")" \
+        "$(print_menu_item 19 "Общий порт 443" "Описание")"; do
+        [[ "$(terminal_text_width "${menu_row%%(*}")" == "35" ]]
+    done
+)
 confirm_default_yes <<< ""
 action_needs_safe_default "重启 SSH 服务" ""
 action_needs_safe_default "Isolate certificate files" ""
