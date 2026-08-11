@@ -34,7 +34,7 @@ The values below show what each field means. They are examples only; replace the
 | Item | Example value | Used for |
 | --- | --- | --- |
 | Panel domain | `panel.example.com` | Open the 3x-ui panel in a browser |
-| Node domain | `node.example.com` | Client node address and subscription domain |
+| Node domain | `node.example.com` | Client node address and Hosts address |
 | Website domain | `site.example.com` | Normal HTTPS website |
 | REALITY target | `www.example.org` | Camouflage HTTPS site; example value |
 | Local panel port | `40000` | 3x-ui listens on the VPS only |
@@ -42,7 +42,7 @@ The values below show what each field means. They are examples only; replace the
 | Local REALITY port | `1443` | Xray / 3x-ui inbound used by the local entry |
 | Website backend | `127.0.0.1:3000` | The website process behind the entry |
 
-With these example values, users visit `https://panel.example.com`, `https://node.example.com/sub/`, and use node port `443`. Do not expose `40000`, `2096`, `1443`, or `3000` directly to the Internet.
+With these example values, users open the panel at `https://panel.example.com/panel/`, the subscription at `https://panel.example.com/sub/`, and connect to the node at `node.example.com:443`. Do not expose `40000`, `2096`, `1443`, or `3000` directly to the Internet.
 
 Keep these three kinds of values separate:
 
@@ -64,7 +64,7 @@ Use the example domains like this:
 | Domain | DNS points to | Used for |
 | --- | --- | --- |
 | `panel.example.com` | VPS public IP | Panel and Web reverse proxy |
-| `node.example.com` | VPS public IP | Node address, subscription domain, Hosts address |
+| `node.example.com` | VPS public IP | Node address and Hosts address |
 | `www.example.org` | The target site's own address | REALITY `serverName` / `target`, not the VPS |
 
 Panel and node domains may use a CDN if that fits your access needs. Prefer a non-CDN site for the REALITY target. Do not use the node domain as the REALITY camouflage target.
@@ -112,25 +112,26 @@ If the panel settings still show certificate and key file fields, clear both. Pu
 
 ### 2. Configure the local subscription service
 
-In the 3x-ui subscription settings:
+The 3x-ui subscription page configures only the local backend. Its public URL is the panel domain plus the URI path:
 
 - Listen address: `127.0.0.1`.
-- Subscription port: an unused local port, for example `2096`.
-- Subscription domain: your node domain.
-- Paths: use the paths shown by the panel, for example `/sub/` and `/clash/`.
-- Do not give the subscription service a separate public certificate; the selected Web reverse proxy handles public HTTPS.
+- Listen domain: leave blank.
+- Listen port: an unused local port, for example `53541` in the screenshot.
+- URI path: use your actual path, for example `/sublinkqq/`; `/sub/` and `/clash/` are example defaults.
+- Reverse Proxy URI: `https://panel.example.com/sublinkqq/`, which is `https://panel domain + URI path`.
+- Do not enter `node.example.com` and do not give the subscription service a separate public certificate.
 
 Using the example values:
 
 ```text
 Listen address: 127.0.0.1
-Listen port: 2096
-Subscription domain: node.example.com
-Subscription path: /sub/
-Clash/Mihomo path: /clash/
+Listen domain: leave blank
+Listen port: 53541
+URI path: /sublinkqq/
+Reverse Proxy URI: https://panel.example.com/sublinkqq/
 ```
 
-Users eventually open `https://node.example.com/sub/`; do not put `:2096` into the public link.
+With this example, users open `https://panel.example.com/sublinkqq/`; `53541` is an internal VPS port and must not appear in the public link. If the URI path is `/sub/`, the subscription URL is `https://panel.example.com/sub/`.
 
 If the subscription settings show subscription certificate and key fields, clear both as well. Otherwise 3x-ui may try to provide a second HTTPS service on the local port.
 
@@ -185,7 +186,7 @@ Before saving, the script checks whether the backend is reachable. Fix the addre
 Return to 3x-ui after the wizard finishes:
 
 - Confirm the panel still listens on `127.0.0.1`.
-- Confirm the subscription domain, path, and port.
+- Confirm that the subscription listens on `127.0.0.1`, its listen domain is blank, and its Reverse Proxy URI is the panel domain plus the URI path.
 - For 3x-ui v3.4.0 and later: open `Hosts` and add a Host. With the example values, fill it as follows:
   - Inbound: select the VLESS REALITY inbound listening on `127.0.0.1:1443`.
   - Address: `node.example.com`.
@@ -216,7 +217,7 @@ These read-only checks are useful on the VPS:
 ```bash
 ss -lntp | grep -E ':(443|40000|2096|1443)'
 curl -I https://panel.example.com/panel/
-curl -I https://node.example.com/sub/
+curl -I https://panel.example.com/sub/
 ```
 
 Only the shared entry needs to be public on `443`; the other example ports should be bound to `127.0.0.1`. Use the paths actually shown by your panel.
@@ -281,30 +282,34 @@ Then open `https://site.example.com` in a browser. If the app is inside a contai
 
 ### How to fill in the reverse-proxy URL
 
-There are two different inputs:
+This section applies only to a separately deployed subscription tool such as SublinkPro or Sub-Store. It does not apply to the 3x-ui subscription service above, which always uses `https://panel.example.com + URI path`.
+
+For a separate tool, first point `tool.example.com` at the VPS, then add that domain and its backend through the script's Web domain/reverse-proxy management. Only then does the script configure its Web entry and certificate. It does not belong in node `Hosts` or REALITY SNI routing.
+
+For the separate tool, these are two different inputs:
 
 | Where you enter it | Correct example | Do not enter |
 | --- | --- | --- |
-| Script menu `Website/reverse domain` | `sub.example.com` | `https://sub.example.com/`, `127.0.0.1:3000` |
-| The subscription tool's `External URL` / `Public URL` / `Base URL` / reverse-proxy URL | `https://sub.example.com/` | `http://127.0.0.1:3000/`, `https://sub.example.com:3000/` |
-| Script menu `Backend address` | `127.0.0.1` | `https://sub.example.com/` |
+| Script menu `Website/reverse domain` | `tool.example.com` | `https://tool.example.com/`, `127.0.0.1:3000` |
+| Separate tool's `External URL` / `Public URL` / `Base URL` / reverse-proxy URL | `https://tool.example.com/` | `http://127.0.0.1:3000/`, `https://tool.example.com:3000/` |
+| Script menu `Backend address` | `127.0.0.1` | `https://tool.example.com/` |
 | Script menu `Backend port` | `3000` | `443` unless the backend really listens on 443 |
 
 Using the example values:
 
 ```text
 Script menu:
-  Website/reverse domain: sub.example.com
+  Website/reverse domain: tool.example.com
   Backend address: 127.0.0.1
   Backend port: 3000
 
 Subscription tool:
-  Reverse-proxy URL / External URL: https://sub.example.com/
+  Reverse-proxy URL / External URL: https://tool.example.com/
 ```
 
-Users open `https://sub.example.com/`, and VPS-Optimize forwards the request to `127.0.0.1:3000`. The public URL uses `https://` and the domain; normally omit `:443`. The backend address and port belong only in the script's reverse-proxy settings.
+Users open `https://tool.example.com/`, and VPS-Optimize forwards the request to `127.0.0.1:3000`. The public URL uses `https://` and the domain; normally omit `:443`. The backend address and port belong only in the script's reverse-proxy settings.
 
-If the tool is published under a path such as `https://sub.example.com/app/`, enter the complete URL including `/app/`. Open that exact URL after saving and confirm that generated subscription links use `https://sub.example.com/` without `:3000`, `:2096`, or `127.0.0.1`. For SublinkPro, Sub-Store, and similar tools, see [Connect Subscription Tools](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md).
+If the tool is published under a path such as `https://tool.example.com/app/`, enter the complete URL including `/app/`. Open that exact URL after saving and confirm that generated subscription links use `https://tool.example.com/` without `:3000`, `:2096`, or `127.0.0.1`. For SublinkPro, Sub-Store, and similar tools, see [Connect Subscription Tools](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md).
 
 ### Manage the Web IP allowlist
 

@@ -34,7 +34,7 @@ REALITY 节点 -> Xray / 3x-ui 的本地入站
 | 项目 | 示例值 | 用途 |
 | --- | --- | --- |
 | 面板域名 | `panel.example.com` | 浏览器打开 3x-ui 面板 |
-| 节点域名 | `node.example.com` | 客户端节点地址、订阅域名 |
+| 节点域名 | `node.example.com` | 客户端节点地址、Hosts 地址 |
 | 网站域名 | `site.example.com` | 普通 HTTPS 网站 |
 | REALITY 目标 | `www.example.org` | REALITY 的伪装 HTTPS 网站；示例值 |
 | 面板本地端口 | `40000` | 3x-ui 只在 VPS 本机监听 |
@@ -42,7 +42,7 @@ REALITY 节点 -> Xray / 3x-ui 的本地入站
 | REALITY 本地端口 | `1443` | Xray / 3x-ui 入站，只供本机入口转发 |
 | 网站后端 | `127.0.0.1:3000` | 入口转发到你的网站程序 |
 
-照这组例子，外部用户看到的是 `https://panel.example.com`、`https://node.example.com/sub/` 和节点端口 `443`；`40000`、`2096`、`1443`、`3000` 都不应直接暴露到公网。
+照这组例子，外部用户看到的是面板 `https://panel.example.com/panel/`、订阅 `https://panel.example.com/sub/` 和节点地址 `node.example.com:443`；`40000`、`2096`、`1443`、`3000` 都不应直接暴露到公网。
 
 记住一个最容易填错的区别：
 
@@ -64,7 +64,7 @@ REALITY 节点 -> Xray / 3x-ui 的本地入站
 | 域名 | DNS 指向 | 用在什么地方 |
 | --- | --- | --- |
 | `panel.example.com` | VPS 公网 IP | 面板域名、Web 反代域名 |
-| `node.example.com` | VPS 公网 IP | 节点地址、订阅域名、Hosts 地址 |
+| `node.example.com` | VPS 公网 IP | 节点地址、Hosts 地址 |
 | `www.example.org` | 目标网站自己的地址 | REALITY `serverName` / `target`，不要改成 VPS IP |
 
 面板域名和节点域名是否经过 CDN，取决于你的访问需求；REALITY 目标则优先选择不经过 CDN 的真实 HTTPS 网站。不要把三者混成一个域名，也不要把 `node.example.com` 填到 REALITY 的伪装目标栏。
@@ -110,25 +110,26 @@ ss -lntp | grep ':443'
 
 ### 2. 设置订阅服务的本地地址
 
-在 3x-ui 的订阅设置中：
+在 3x-ui 的订阅设置中，这一页只配置本机后端；公网订阅地址由面板域名和 URI 路径组成：
 
 - 监听地址填 `127.0.0.1`；
-- 订阅端口使用一个未占用的本地端口，例如 `2096`；
-- 订阅域名填你的节点域名；
-- 订阅路径按面板显示的默认值填写，例如 `/sub/`、`/clash/`；
-- 不要给订阅服务单独配置公网证书，公网证书由 VPS-Optimize 的 Web 反代引擎统一处理。
+- 监听域名留空；
+- 订阅端口使用一个未占用的本地端口，例如截图中的 `53541`；
+- URI 路径按你实际设置填写，例如 `/sublinkqq/`；使用默认示例时可填 `/sub/`、`/clash/`；
+- 反向代理 URI 填 `https://panel.example.com/sublinkqq/`，即 `https://面板域名 + URI 路径`；
+- 不要填 `node.example.com`，也不要给订阅服务单独配置公网证书。
 
 按示例填写时，订阅服务的本地部分是：
 
 ```text
 监听地址：127.0.0.1
-监听端口：2096
-订阅域名：node.example.com
-订阅路径：/sub/
-Clash/Mihomo 路径：/clash/
+监听域名：留空
+监听端口：53541
+URI 路径：/sublinkqq/
+反向代理 URI：https://panel.example.com/sublinkqq/
 ```
 
-这里的 `node.example.com` 是用户访问的域名，`2096` 只是 VPS 内部端口。客户端最终使用 `https://node.example.com/sub/`，不能把 `:2096` 写进分享链接。
+按上例，客户端最终使用 `https://panel.example.com/sublinkqq/`；`53541` 只是 VPS 内部端口，不能写进分享链接。若 URI 路径是 `/sub/`，订阅地址就是 `https://panel.example.com/sub/`。
 
 如果订阅设置页有“订阅证书文件”和“订阅密钥文件”，同样清空；否则 3x-ui 可能继续尝试在本机端口上提供另一套 HTTPS，造成端口或重定向混乱。
 
@@ -183,7 +184,7 @@ UUID、私钥、公钥和 shortId 由 3x-ui 的生成按钮创建；不要把别
 配置向导完成后回到 3x-ui：
 
 - 确认面板仍监听 `127.0.0.1`；
-- 确认订阅地址、路径和端口正确；
+- 确认订阅监听地址为 `127.0.0.1`、监听域名留空；反向代理 URI 为“面板域名 + URI 路径”；
 - **3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host**，把节点域名指向对应的 REALITY 入站。按本文示例逐项填写：
   - 入站：选择刚才创建的 VLESS REALITY 入站（本地监听 `127.0.0.1:1443`）；
   - 地址：`node.example.com`；
@@ -214,7 +215,7 @@ REALITY SNI：www.example.org
 ```bash
 ss -lntp | grep -E ':(443|40000|2096|1443)'
 curl -I https://panel.example.com/panel/
-curl -I https://node.example.com/sub/
+curl -I https://panel.example.com/sub/
 ```
 
 预期是：公网只需要看到入口监听 `443`；`40000`、`2096`、`1443` 可以只绑定 `127.0.0.1`；面板和订阅返回 HTTP 响应。示例路径如果与你的面板不同，以实际路径为准。
@@ -281,30 +282,34 @@ TCP Peek 的优点是分流组件更轻量，并且能在连接早期按 SNI 处
 
 ### 反向代理 URL 怎么填
 
-这里要分清两个地方：
+本节只适用于另行部署的 SublinkPro、Sub-Store 等独立订阅工具，不是上面 3x-ui 的订阅服务。3x-ui 订阅统一使用 `https://panel.example.com + URI 路径`。
+
+独立工具必须先把 `tool.example.com` 解析到 VPS，再在脚本的“管理 Web 域名/反代”中新增该域名和后端；脚本才会为它配置 Web 入口和证书。它不填入节点 `Hosts`，也不属于 REALITY 的 SNI 路由。
+
+独立工具配置时，分清这两个地方：
 
 | 填写位置 | 正确示例 | 不要填写 |
 | --- | --- | --- |
-| 脚本菜单“网站/反代域名” | `sub.example.com` | `https://sub.example.com/`、`127.0.0.1:3000` |
-| 订阅工具里的 `External URL` / `Public URL` / `Base URL` / “反向代理 URL” | `https://sub.example.com/` | `http://127.0.0.1:3000/`、`https://sub.example.com:3000/` |
-| 脚本菜单“后端地址” | `127.0.0.1` | `https://sub.example.com/` |
+| 脚本菜单“网站/反代域名” | `tool.example.com` | `https://tool.example.com/`、`127.0.0.1:3000` |
+| 独立订阅工具里的 `External URL` / `Public URL` / `Base URL` / “反向代理 URL” | `https://tool.example.com/` | `http://127.0.0.1:3000/`、`https://tool.example.com:3000/` |
+| 脚本菜单“后端地址” | `127.0.0.1` | `https://tool.example.com/` |
 | 脚本菜单“后端端口” | `3000` | `443`（除非后端程序确实监听 443） |
 
 按示例完整填写：
 
 ```text
 脚本菜单：
-  网站/反代域名：sub.example.com
+  网站/反代域名：tool.example.com
   后端地址：127.0.0.1
   后端端口：3000
 
 订阅工具：
-  反向代理 URL / External URL：https://sub.example.com/
+  反向代理 URL / External URL：https://tool.example.com/
 ```
 
-含义是：用户访问 `https://sub.example.com/`，VPS-Optimize 再把请求转给 VPS 本机的 `127.0.0.1:3000`。公网 URL 使用 `https://` 和域名，通常不写 `:443`；后端地址和后端端口只写在脚本的反代配置中。
+含义是：用户访问 `https://tool.example.com/`，VPS-Optimize 再把请求转给 VPS 本机的 `127.0.0.1:3000`。公网 URL 使用 `https://` 和域名，通常不写 `:443`；后端地址和后端端口只写在脚本的反代配置中。
 
-如果工具部署在子路径，例如反代后从 `https://sub.example.com/app/` 访问，URL 就填写 `https://sub.example.com/app/`，不要只填域名。保存后用浏览器打开这个完整地址，并确认工具生成的订阅链接也使用 `https://sub.example.com/`，没有出现 `:3000`、`:2096` 或 `127.0.0.1`。需要接入 SublinkPro、Sub-Store 等工具时，参阅[订阅工具接入教程](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。
+如果工具部署在子路径，例如反代后从 `https://tool.example.com/app/` 访问，URL 就填写 `https://tool.example.com/app/`，不要只填域名。保存后用浏览器打开这个完整地址，并确认工具生成的订阅链接也使用 `https://tool.example.com/`，没有出现 `:3000`、`:2096` 或 `127.0.0.1`。需要接入 SublinkPro、Sub-Store 等工具时，参阅[订阅工具接入教程](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。
 
 ### 管理域名 IP 白名单
 
