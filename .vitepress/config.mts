@@ -283,6 +283,7 @@ export default defineConfig({
     '.github/**'
   ],
   head: [
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/VPS-Optimize/favicon.svg' }],
     ['meta', { name: 'theme-color', content: '#f7fbff' }],
     ['meta', { name: 'referrer', content: 'strict-origin-when-cross-origin' }]
   ],
