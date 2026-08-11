@@ -1,5 +1,11 @@
 # 443端口复用配置指南
 
+## 前言
+
+REALITY 的 `serverName` / `target` 优先选择稳定、可直连且未启用 CDN 防护的真实 HTTPS 网站。若确需使用 Cloudflare 等 CDN 站点，务必开启适合当前入口模式的 [REALITY 回落流量防护](#reality-回落流量防护)：Nginx Stream / TCP Peek 开启严格 SNI 门禁（SNI 清洗），`xray-fallback` 开启 REALITY 回落限速。否则，验证失败的连接可能使服务器成为 CDN 转发器，持续占用带宽并消耗流量。
+
+严格 SNI 门禁会在生成入口配置时，根据已登记的 Web 域名、TCP/Xray SNI 路由和 REALITY SNI 自动生成放行清单；回落限速只限制未通过 REALITY 验证的 fallback 连接。
+
 遇到面板打不开、订阅 404、证书失败或 REALITY 连接失败时，先看：[443端口复用排错指南](443-single-entry-troubleshooting.md)。
 
 这篇文档教你把 VPS 的公网 `443` 统一接入 VPS-Optimize 的 443端口复用。默认推荐 Nginx Stream，也可以在配置完成后切换到 TCP Peek + Splice 或 Xray Fallback。无论选择哪种入口模式，公网 `443` 同一时间只由当前 `ENTRY_MODE` 对应的单个服务监听。
@@ -299,7 +305,7 @@ REALITY 会把验证失败的连接转发到 `target`。扫描者不需要 UUID�
 
 使用 `主菜单 [19 443端口复用管理中心] -> [17 REALITY 回落流量防护]` 管理两层防护：
 
-- 严格 SNI 门禁：适用于 Nginx Stream 和 TCP Peek。只放行当前已登记的面板域名、网站域名、TCP/Xray SNI 路由和 REALITY SNI；未知 SNI 和无 SNI 连接直接丢弃。放行清单不单独保存，每次生成入口配置时都从现有配置自动派生。新增、删除或修改域名和路由后，执行对应菜单中的“同步”或重新应用当前入口即可自动更新。
+- 严格 SNI 门禁（SNI 清洗）：适用于 Nginx Stream 和 TCP Peek。只放行当前已登记的面板域名、网站域名、TCP/Xray SNI 路由和 REALITY SNI；未知 SNI 和无 SNI 连接直接丢弃。放行清单不单独保存，每次生成入口配置时都从现有配置自动派生。新增、删除或修改域名和路由后，执行对应菜单中的“同步”或重新应用当前入口即可自动更新。
 - REALITY 回落限速：适用于 3x-ui SQLite。脚本先备份数据库，只修改所选 REALITY 入站的 `limitFallbackUpload` 和 `limitFallbackDownload`，并为每次设置随机生成参数。UUID、shortId、密钥、协议、传输方式及其他入站字段不会修改。PostgreSQL 不自动修改。
 
 `xray-fallback` 由 Xray 直接监听公网 443，没有独立的前置 SNI 门禁，只能使用回落限速。回落限速本身会形成特征，优先选择与服务器网络位置合理、非 CDN 的 REALITY 目标；只有被迫使用 CDN 目标时再启用。
