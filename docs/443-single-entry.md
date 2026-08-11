@@ -71,7 +71,20 @@ REALITY 节点 -> Xray / 3x-ui 的本地入站
 
 ### 2. 准备 Cloudflare DNS API（使用 Cloudflare 时）
 
-脚本使用 `acme.sh + Cloudflare DNS API` 申请证书。创建 Token 时只给目标 Zone 的 DNS 编辑权限，不要把 Token 写进文档或发给别人。脚本会用 DNS-01 验证域名，证书交给当前 Web 反代引擎使用；你不需要再给 3x-ui 面板和订阅服务各申请一套公网证书。
+脚本使用 `acme.sh + Cloudflare DNS API` 完成 DNS-01 验证和证书签发。先把域名添加到 Cloudflare，并确认对应 Zone 处于 `Active` 状态。这里需要的是受限 API Token，不是 Global API Key。
+
+申请步骤：
+
+1. 打开 [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)，登录后选择 `Create Token`。
+2. 找到 `Edit zone DNS` 模板，选择 `Use template`。
+3. 确认权限包含 `Zone - DNS - Edit` 和 `Zone - Zone - Read`。新版界面可能把 `Edit` 显示为 `Write`，含义相同；不要添加账户管理等无关权限。
+4. 在 `Zone Resources` 中选择 `Include - Specific zone`，再选择实际使用的根域名。例如面板域名是 `panel.example.com`，这里应选择 `example.com`。需要为多个根域名签发证书时，逐个加入对应 Zone。
+5. `Client IP Address Filtering` 可以留空。若限制为 VPS 公网 IP，服务器 IP 变化后必须同步更新 Token 条件。
+6. 选择 `Continue to summary`，确认后创建 Token。Token 只完整显示一次，请立即复制并妥善保存，不要写进文档、截图或聊天记录。
+
+首次部署时，把 Token 粘贴到脚本的 `CF Token` 提示处，不要填写邮箱、Zone ID 或 Global API Key。已经部署过时，可进入主菜单 `[19 443端口复用管理中心]` → `[12 CF DNS / Caddy 证书维护]` → `[8 更新 Cloudflare API Token]`。脚本会在线校验 Token；校验失败时优先检查权限、授权 Zone 和可选的 IP 限制。
+
+Cloudflare 官方说明：[创建 API Token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)。
 
 如果域名记录显示为橙色云朵，面板和普通网站可以保持原样；REALITY 的 `serverName` 不要选择这个 CDN 域名，除非你愿意同时开启后面的 SNI 清洗和回落限速。
 

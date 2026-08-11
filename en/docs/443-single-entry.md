@@ -71,7 +71,20 @@ Panel and node domains may use a CDN if that fits your access needs. Prefer a no
 
 ### Cloudflare DNS API (when using Cloudflare)
 
-VPS-Optimize uses `acme.sh + Cloudflare DNS API` for certificates. Create a token with DNS-edit permission only for the required zone, and never paste the token into documentation or chat. DNS-01 validation lets the script issue the certificate for the Web reverse proxy; 3x-ui and the subscription service do not need separate public certificates.
+VPS-Optimize uses `acme.sh + Cloudflare DNS API` for DNS-01 validation and certificate issuance. Add the domain to Cloudflare first and confirm that its zone is `Active`. Use a restricted API Token, not the Global API Key.
+
+To create the token:
+
+1. Open [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens), sign in, and select `Create Token`.
+2. Find the `Edit zone DNS` template and select `Use template`.
+3. Confirm that the token has `Zone - DNS - Edit` and `Zone - Zone - Read`. A newer dashboard may label `Edit` as `Write`; do not add unrelated account permissions.
+4. Under `Zone Resources`, choose `Include - Specific zone`, then select the root zone you use. For example, select `example.com` for `panel.example.com`. Add each required zone separately if you issue certificates for multiple root domains.
+5. You may leave `Client IP Address Filtering` empty. If you restrict it to the VPS public IP, update the token condition whenever that IP changes.
+6. Select `Continue to summary`, review the scope, and create the token. Cloudflare shows the full token only once, so copy it immediately and keep it out of documentation, screenshots, and chat.
+
+During the first deployment, paste the token at the script's `CF Token` prompt. Do not enter an email address, Zone ID, or Global API Key. On an existing deployment, use main menu `[19 Port 443 Reuse Manager]` → `[12 CF DNS / Caddy certificate maintenance]` → `[8 Update Cloudflare API Token]`. The script verifies the token online; if verification fails, check its permissions, authorized zone, and optional IP restriction first.
+
+Cloudflare reference: [Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/).
 
 ### Keep an SSH fallback and a backup
 
