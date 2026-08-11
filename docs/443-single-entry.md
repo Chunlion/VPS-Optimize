@@ -279,6 +279,33 @@ TCP Peek 的优点是分流组件更轻量，并且能在连接早期按 SNI 处
 
 保存后用浏览器打开 `https://site.example.com`。如果程序实际只监听 Docker 容器内部地址，先发布到宿主机的 `127.0.0.1`，不要把容器名或容器内部专用主机名当作 VPS 后端地址。
 
+### 反向代理 URL 怎么填
+
+这里要分清两个地方：
+
+| 填写位置 | 正确示例 | 不要填写 |
+| --- | --- | --- |
+| 脚本菜单“网站/反代域名” | `sub.example.com` | `https://sub.example.com/`、`127.0.0.1:3000` |
+| 订阅工具里的 `External URL` / `Public URL` / `Base URL` / “反向代理 URL” | `https://sub.example.com/` | `http://127.0.0.1:3000/`、`https://sub.example.com:3000/` |
+| 脚本菜单“后端地址” | `127.0.0.1` | `https://sub.example.com/` |
+| 脚本菜单“后端端口” | `3000` | `443`（除非后端程序确实监听 443） |
+
+按示例完整填写：
+
+```text
+脚本菜单：
+  网站/反代域名：sub.example.com
+  后端地址：127.0.0.1
+  后端端口：3000
+
+订阅工具：
+  反向代理 URL / External URL：https://sub.example.com/
+```
+
+含义是：用户访问 `https://sub.example.com/`，VPS-Optimize 再把请求转给 VPS 本机的 `127.0.0.1:3000`。公网 URL 使用 `https://` 和域名，通常不写 `:443`；后端地址和后端端口只写在脚本的反代配置中。
+
+如果工具部署在子路径，例如反代后从 `https://sub.example.com/app/` 访问，URL 就填写 `https://sub.example.com/app/`，不要只填域名。保存后用浏览器打开这个完整地址，并确认工具生成的订阅链接也使用 `https://sub.example.com/`，没有出现 `:3000`、`:2096` 或 `127.0.0.1`。需要接入 SublinkPro、Sub-Store 等工具时，参阅[订阅工具接入教程](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。
+
 ### 管理域名 IP 白名单
 
 Web 白名单只限制网站和面板域名，不限制 REALITY 节点流量。入口模式为 `nginx-stream` 或 `tcp-peek` 时，可在入口菜单选择 `[4] -> [5 域名 IP 白名单]`；管理 Web 域名时也可使用：

@@ -279,6 +279,33 @@ Backend port: 3000
 
 Then open `https://site.example.com` in a browser. If the app is inside a container, publish it to the host loopback address first; do not use a container-only hostname as the VPS backend address.
 
+### How to fill in the reverse-proxy URL
+
+There are two different inputs:
+
+| Where you enter it | Correct example | Do not enter |
+| --- | --- | --- |
+| Script menu `Website/reverse domain` | `sub.example.com` | `https://sub.example.com/`, `127.0.0.1:3000` |
+| The subscription tool's `External URL` / `Public URL` / `Base URL` / reverse-proxy URL | `https://sub.example.com/` | `http://127.0.0.1:3000/`, `https://sub.example.com:3000/` |
+| Script menu `Backend address` | `127.0.0.1` | `https://sub.example.com/` |
+| Script menu `Backend port` | `3000` | `443` unless the backend really listens on 443 |
+
+Using the example values:
+
+```text
+Script menu:
+  Website/reverse domain: sub.example.com
+  Backend address: 127.0.0.1
+  Backend port: 3000
+
+Subscription tool:
+  Reverse-proxy URL / External URL: https://sub.example.com/
+```
+
+Users open `https://sub.example.com/`, and VPS-Optimize forwards the request to `127.0.0.1:3000`. The public URL uses `https://` and the domain; normally omit `:443`. The backend address and port belong only in the script's reverse-proxy settings.
+
+If the tool is published under a path such as `https://sub.example.com/app/`, enter the complete URL including `/app/`. Open that exact URL after saving and confirm that generated subscription links use `https://sub.example.com/` without `:3000`, `:2096`, or `127.0.0.1`. For SublinkPro, Sub-Store, and similar tools, see [Connect Subscription Tools](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md).
+
 ### Manage the Web IP allowlist
 
 The Web allowlist applies to websites and the panel, not REALITY node traffic. In `nginx-stream` or `tcp-peek`, use `[4] -> [5 Domain IP allowlist]`. From Web domain management, use:
