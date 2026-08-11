@@ -11,16 +11,16 @@
 </p>
 
 <p align="center">
-  面向 VPS 日常运维的 Bash 控制面板。通过 <code>cy</code> 集中完成系统初始化、安全加固、面板部署、443端口复用、订阅工具、备份回滚和故障排查。
+  面向 VPS 日常运维的 Bash 控制面板。使用 <code>cy</code> 完成系统初始化、安全加固、面板与订阅工具部署、443端口复用、备份回滚和故障排查。
 </p>
 
 <p align="center">
-  <a href="https://chunlion.github.io/VPS-Optimize/">📚 文档网站</a> · <a href="https://chunlion.github.io/VPS-Optimize/quick-start">快速开始</a> · <a href="https://chunlion.github.io/VPS-Optimize/docs/443-single-entry">443端口复用</a>
+  <a href="https://chunlion.github.io/VPS-Optimize/">📚 文档网站</a> · <a href="https://chunlion.github.io/VPS-Optimize/quick-start">快速开始</a> · <a href="https://chunlion.github.io/VPS-Optimize/docs/443-single-entry">443端口复用：部署与配置</a>
 </p>
 
 ## 🚀 快速开始
 
-> ⚠️ 不要通过来源不明的 GitHub 加速代理下载脚本后直接以 `root` 运行。
+> ⚠️ 请从本仓库或 GitHub Raw 获取脚本；不要通过来源不明的 GitHub 加速代理下载后直接以 `root` 运行。
 
 ```bash
 wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
@@ -71,12 +71,13 @@ cy
 | 安全加固 | SSH、公钥登录、Fail2ban、防火墙、端口并发限制 |
 | 面板与订阅 | 3x-ui、S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari |
 | 转发与组网 | Realm、Gost、FLVX 哆啦转发面板、EasyTier、Tailscale |
-| 443端口复用 | Web、面板、订阅和节点共用公网 `443`，按 SNI 路由 |
+| 443端口复用 | Web、面板、订阅和节点共享公网 `443`，按 SNI 路由；同一时间仅由当前入口服务监听 |
 | 诊断与回滚 | 服务健康、443 链路体检、空间预检、可选加密备份、恢复和隔离归档 |
 
 ## 📚 文档与反馈
 
 - [快速开始](https://chunlion.github.io/VPS-Optimize/quick-start)
+- [443端口复用：部署与配置](https://chunlion.github.io/VPS-Optimize/docs/443-single-entry)
 - [443端口复用排错与恢复](https://chunlion.github.io/VPS-Optimize/docs/443-single-entry-troubleshooting)
 - [失联与回滚急救](https://chunlion.github.io/VPS-Optimize/docs/recovery-runbook)
 - [提交 Issue](https://github.com/Chunlion/VPS-Optimize/issues) · [Telegram](https://t.me/cutyy_github) · [GitHub](https://github.com/Chunlion)

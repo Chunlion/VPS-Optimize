@@ -11,16 +11,16 @@
 </p>
 
 <p align="center">
-  A Bash control panel for routine VPS administration. Use <code>cy</code> to handle system setup, security hardening, panel deployment, Port 443 Reuse, subscription tools, backup and rollback, and troubleshooting.
+  A Bash control panel for day-to-day VPS operations. Use <code>cy</code> for system setup, security hardening, panel and subscription-tool deployment, Port 443 Reuse, backup and rollback, and troubleshooting.
 </p>
 
 <p align="center">
-  <a href="https://chunlion.github.io/VPS-Optimize/en/">📚 Documentation</a> · <a href="https://chunlion.github.io/VPS-Optimize/en/quick-start">Quick Start</a> · <a href="https://chunlion.github.io/VPS-Optimize/en/docs/443-single-entry">Port 443 Reuse</a>
+  <a href="https://chunlion.github.io/VPS-Optimize/en/">📚 Documentation</a> · <a href="https://chunlion.github.io/VPS-Optimize/en/quick-start">Quick Start</a> · <a href="https://chunlion.github.io/VPS-Optimize/en/docs/443-single-entry">Port 443 Reuse: Setup and Configuration</a>
 </p>
 
 ## 🚀 Quick Start
 
-> ⚠️ Do not download the script through an untrusted GitHub proxy and run it as `root`.
+> ⚠️ Download the script from this repository or GitHub Raw. Do not run a file obtained through an untrusted GitHub proxy as `root`.
 
 ```bash
 wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
@@ -71,12 +71,13 @@ Shortcuts are case-insensitive and behave like selecting the corresponding main-
 | Security hardening | SSH, public-key authentication, Fail2ban, firewall, and port concurrency limits |
 | Panels and subscriptions | 3x-ui, S-UI, Sing-box, Xray, SublinkPro, Sub-Store, Dockge, and Komari |
 | Forwarding and networking | Realm, Gost, FLVX, EasyTier, and Tailscale |
-| Port 443 Reuse | Route Web services, panels, subscriptions, and nodes through public port `443` by SNI |
+| Port 443 Reuse | Route Web services, panels, subscriptions, and nodes through public port `443` by SNI; only the active entry service listens on that port |
 | Diagnostics and rollback | Service health, port 443 diagnostics, space checks, optional encrypted backups, restore, and quarantine archives |
 
 ## 📚 Documentation and Support
 
 - [Quick Start](https://chunlion.github.io/VPS-Optimize/en/quick-start)
+- [Port 443 Reuse: Setup and Configuration](https://chunlion.github.io/VPS-Optimize/en/docs/443-single-entry)
 - [Port 443 Reuse Troubleshooting and Recovery](https://chunlion.github.io/VPS-Optimize/en/docs/443-single-entry-troubleshooting)
 - [Recovery and Rollback](https://chunlion.github.io/VPS-Optimize/en/docs/recovery-runbook)
 - [Open an Issue](https://github.com/Chunlion/VPS-Optimize/issues) · [Telegram](https://t.me/cutyy_github) · [GitHub](https://github.com/Chunlion)
