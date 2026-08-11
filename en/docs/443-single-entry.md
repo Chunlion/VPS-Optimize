@@ -342,6 +342,29 @@ Changing fallback limits restarts the panel or Xray service. Do it outside impor
 
 The strict SNI list is generated from registered Web domains, SNI routes, and the REALITY SNI. After adding a domain or changing a node SNI, save the configuration and run `[3] Resynchronize the current SNI list`; otherwise the new name may be rejected as unknown. This filter does not verify UUIDs, keys, or other REALITY credentials.
 
+### Configure multiple REALITY inbounds
+
+Yes, but use **Nginx Stream** or **TCP Peek + Splice**. These modes route public `443` to several local inbounds by SNI. `xray-fallback` does not support this multi-SNI routing.
+
+Example:
+
+| Inbound | Local 3x-ui listen | Client SNI | 443 route |
+| --- | --- | --- | --- |
+| `VLESS-REALITY-A` | `127.0.0.1:1443` | `sni-a.example.net` | `sni-a.example.net -> 127.0.0.1:1443` |
+| `VLESS-REALITY-B` | `127.0.0.1:2443` | `sni-b.example.net` | `sni-b.example.net -> 127.0.0.1:2443` |
+
+Use this order:
+
+1. Create both REALITY inbounds in 3x-ui, each with a different local port and distinguishable SNI. The script records routes; it does not create or edit 3x-ui inbounds.
+2. Keep Nginx Stream or TCP Peek as the entry mode.
+3. Open `Main menu [19 Port 443 Reuse Management] -> [15 Xray inbound management]` and add one `SNI -> local address -> local port` route for each inbound.
+4. Open `Main menu [19 Port 443 Reuse Management] -> [17 REALITY fallback traffic protection] -> [4 Set REALITY fallback rate limits]`. The menu lists every REALITY inbound. Each run modifies only the selected inbound, so repeat it for every inbound that needs protection.
+5. Run `[3] Resynchronize the current SNI list` after adding or changing an SNI.
+
+Fallback limits are stored per inbound, not as one global switch and not per user. Enabling the limit for inbound A does not protect inbound B. The strict SNI gate is shared by the entry and covers all registered SNIs. Do not give two inbounds the same SNI; the entry cannot reliably choose their local ports.
+
+`xray-fallback` may contain several inbounds inside Xray, but one Xray main inbound owns public `443`; the script does not split several SNIs to several local inbounds in that mode. Use Nginx Stream or TCP Peek + Splice when several inbounds must share `443`.
+
 If possible, use a non-CDN HTTPS site as the REALITY target; it reduces the impact of a configuration mistake.
 
 ## Verify and troubleshoot
