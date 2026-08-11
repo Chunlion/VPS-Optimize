@@ -55,7 +55,8 @@ const zhTheme = {
         items: [
           { text: '配置路径', link: '/docs/config-paths' },
           { text: '端口流量狗', link: '/docs/dog' },
-          { text: 'x-ui 增强套件', link: '/docs/xui-custom-manager' }
+          { text: 'x-ui 增强套件', link: '/docs/xui-custom-manager' },
+          { text: '第三方脚本来源', link: '/docs/third-party-scripts' }
         ]
       },
       {
@@ -146,7 +147,8 @@ const enTheme = {
         items: [
           { text: 'Configuration Paths', link: '/en/docs/config-paths' },
           { text: 'dog.sh Traffic Monitor', link: '/en/docs/dog' },
-          { text: 'x-ui Extension', link: '/en/docs/xui-custom-manager' }
+          { text: 'x-ui Extension', link: '/en/docs/xui-custom-manager' },
+          { text: 'Third-party Script Sources', link: '/en/docs/third-party-scripts' }
         ]
       },
       {
@@ -219,7 +221,8 @@ const ruTheme = {
         items: [
           { text: 'Пути конфигурации', link: '/ru/docs/config-paths' },
           { text: 'Мониторинг трафика dog.sh', link: '/ru/docs/dog' },
-          { text: 'Расширение x-ui', link: '/ru/docs/xui-custom-manager' }
+          { text: 'Расширение x-ui', link: '/ru/docs/xui-custom-manager' },
+          { text: 'Источники сторонних скриптов', link: '/ru/docs/third-party-scripts' }
         ]
       },
       {

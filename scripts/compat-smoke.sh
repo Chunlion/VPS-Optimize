@@ -84,6 +84,7 @@ for doc_entry in \
     index.md \
     quick-start.md \
     docs/443-single-entry.md \
+    docs/third-party-scripts.md \
     tutorials/01-3x-ui-reality-443.md \
     tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md \
     .vitepress/config.mts \
@@ -107,6 +108,7 @@ for locale in en ru; do
         docs/security-rollback.md \
         docs/subscription-tools.md \
         docs/supported-systems.md \
+        docs/third-party-scripts.md \
         docs/update-uninstall.md \
         docs/xui-custom-manager.md \
         tutorials/01-3x-ui-reality-443.md \
@@ -142,6 +144,7 @@ assert_file_contains quick-start.md '](tutorials/02-subscription-tools-caddy-ngi
 
 assert_file_contains .vitepress/config.mts "link: '/quick-start'" "VitePress nav/sidebar must expose quick start."
 assert_file_contains .vitepress/config.mts "link: '/docs/443-single-entry'" "VitePress nav/sidebar must expose the Port 443 Reuse doc."
+assert_file_contains .vitepress/config.mts "link: '/docs/third-party-scripts'" "VitePress sidebar must expose third-party script sources."
 assert_file_contains .vitepress/config.mts "link: '/tutorials/01-3x-ui-reality-443'" "VitePress nav/sidebar must expose the 3x-ui+Reality port 443 reuse tutorial."
 assert_file_contains .vitepress/config.mts "link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry'" "VitePress nav/sidebar must expose the subscription tools 443 tutorial."
 
@@ -207,6 +210,11 @@ assert_file_contains src/common.sh 'install_pkg curl wget' "Remote download help
 assert_file_not_contains src/common.sh 'confirm_remote_script_execution' "Remote script execution must not require interactive confirmation."
 assert_file_not_contains src/common.sh 'VPSO_REMOTE_SCRIPT_CONFIRM' "Remote script confirmation bypass flag must be removed with the prompt."
 assert_file_contains src/common.sh '该来源不是 HTTPS，已拒绝下载和执行' "Remote script execution must reject non-HTTPS sources."
+assert_file_contains src/common.sh 'https://raw.githubusercontent.com/MEILOI/VPS_BOT_X/main/vps_bot-x/install.sh' "VPS_BOT_X must be recognized as a built-in remote script source."
+assert_file_contains src/panel_installers.sh 'func_vps_bot_x()' "VPS_BOT_X installation function must be defined."
+assert_file_contains src/panel_installers.sh 'confirm_danger' "VPS_BOT_X installation must require dangerous-action confirmation."
+assert_file_contains src/panel_installers.sh 'https://raw.githubusercontent.com/MEILOI/VPS_BOT_X/main/vps_bot-x/install.sh' "VPS_BOT_X installation must use the requested upstream installer."
+assert_file_contains src/menus.sh '15) func_vps_bot_x ;;' "Panel tools menu must expose VPS_BOT_X without changing existing entries."
 
 [[ -f scripts/modules.list ]]
 assert_file_contains scripts/build.sh 'scripts/modules.list' "Release build must read the shared module list."

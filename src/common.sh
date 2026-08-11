@@ -481,6 +481,10 @@ is_trusted_remote_script_url() {
             echo "$(localized_text "233boy 官方安装脚本" "233boy official installation script" "Официальный скрипт установки 233boy")"
             return 0
             ;;
+        "https://raw.githubusercontent.com/MEILOI/VPS_BOT_X/main/vps_bot-x/install.sh")
+            echo "$(localized_text "VPS_BOT_X 项目安装脚本" "VPS_BOT_X project installation script" "Скрипт установки проекта VPS_BOT_X")"
+            return 0
+            ;;
         "https://yabs.sh"|\
         "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh"|\
         "https://about.superbench.pro"|\

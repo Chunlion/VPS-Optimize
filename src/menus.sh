@@ -252,6 +252,7 @@ func_panel_deploy_menu() {
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 网络 / 监控${PLAIN}" "${BOLD}▶ Network / Monitoring${PLAIN}" "${BOLD}▶ Сеть / Мониторинг${PLAIN}")"
         echo -e "$(localized_text " ${BOLD}${GREEN}12.${PLAIN} ${BOLD}DNS 解锁${PLAIN}            ${BOLD}${GREEN}13.${PLAIN} ${BOLD}IP-Sentinel${PLAIN}         ${BOLD}${GREEN}14.${PLAIN} ${BOLD}端口流量监控（dog）${PLAIN}" "${BOLD}${GREEN}12.${PLAIN} ${BOLD}DNS Unlock${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}14.${PLAIN} ${BOLD}Per-port traffic (dog)${PLAIN}" "${BOLD}${GREEN}12.${PLAIN} ${BOLD}Разблокировка DNS${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}14.${PLAIN} ${BOLD}Трафик по портам (dog)${PLAIN}")"
+        echo -e "$(localized_text " ${BOLD}${GREEN}15.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Return to the main menu / q Return to the previous level${PLAIN}" "${RED}0. Возврат в главное меню / q Возврат на предыдущий уровень${PLAIN}")"
@@ -274,6 +275,7 @@ func_panel_deploy_menu() {
             12) func_dns_unlock ;;
             13) func_ip_sentinel ;;
             14) func_port_dog ;;
+            15) func_vps_bot_x ;;
             "?") show_panel_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;

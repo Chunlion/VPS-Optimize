@@ -263,5 +263,31 @@ func_ip_sentinel() {
 }
 
 # ---------------------------------------------------------
+# 安装 VPS_BOT_X Telegram 远程管理机器人
+# ---------------------------------------------------------
+func_vps_bot_x() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}🤖 Telegram VPS Bot 远程管理${PLAIN}" "${BOLD}🤖 Telegram VPS Bot remote management${PLAIN}" "${BOLD}🤖 Удалённое управление Telegram VPS Bot${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}第三方脚本会安装 Telegram 管理 Bot，并要求 Bot Token 与管理员 Telegram ID。${PLAIN}" "${YELLOW}The third-party script installs a Telegram management bot and requires a Bot Token and an administrator Telegram ID.${PLAIN}" "${YELLOW}Сторонний скрипт устанавливает Telegram-бота управления; потребуются Bot Token и Telegram ID администратора.${PLAIN}")"
+
+    if ! confirm_danger \
+        "$(localized_text "安装 Telegram VPS Bot" "Install Telegram VPS Bot" "Установить Telegram VPS Bot")" \
+        "$(localized_text "将以 root 运行第三方安装脚本，写入 /root/vps_bot-x、/root/sentinel_config.json、vpsbot.service 和 /usr/bin/kk；授权账户可通过 Telegram 执行服务器管理操作。" "A third-party installer will run as root and create /root/vps_bot-x, /root/sentinel_config.json, vpsbot.service, and /usr/bin/kk; authorized accounts can perform server management through Telegram." "Сторонний установщик будет запущен от root и создаст /root/vps_bot-x, /root/sentinel_config.json, vpsbot.service и /usr/bin/kk; авторизованные аккаунты смогут управлять сервером через Telegram.")" \
+        "$(localized_text "仅授权受信任的 Telegram 账户，并妥善保管 Bot Token。" "Authorize only trusted Telegram accounts and protect the Bot Token." "Разрешайте доступ только доверенным Telegram-аккаунтам и храните Bot Token в безопасности.")" \
+        "$(localized_text "项目地址：https://github.com/MEILOI/VPS_BOT_X" "Project URL: https://github.com/MEILOI/VPS_BOT_X" "Адрес проекта: https://github.com/MEILOI/VPS_BOT_X")"; then
+        echo -e "$(localized_text "${BLUE}已取消安装。${PLAIN}" "${BLUE}Installation canceled.${PLAIN}" "${BLUE}Установка отменена.${PLAIN}")"
+        pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
+        return
+    fi
+
+    run_remote_script \
+        "$(localized_text "安装 Telegram VPS Bot" "Install Telegram VPS Bot" "Установить Telegram VPS Bot")" \
+        "https://raw.githubusercontent.com/MEILOI/VPS_BOT_X/main/vps_bot-x/install.sh"
+    pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
+}
+
+# ---------------------------------------------------------
 # 新增功能：安装 SublinkPro (强大的订阅转换与管理面板)
 # ---------------------------------------------------------
