@@ -61,8 +61,7 @@ Select interface language:
 
 | Задача | Документ |
 |---|---|
-| Настроить повторное использование порта 443 | [Повторное использование порта 443](docs/443-single-entry.md) |
-| Развернуть 3x-ui+Reality с повторным использованием порта 443 | [3x-ui+Reality: порт 443](tutorials/01-3x-ui-reality-443.md) |
+| Развернуть или настроить общий порт 443 | [Порт 443: развёртывание и настройка](docs/443-single-entry.md) |
 | Опубликовать сервисы подписок | [Сервисы подписок на порту 443](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
 | Контролировать трафик портов | [Монитор трафика dog.sh](docs/dog.md) |
 | Использовать расширение x-ui | [Расширение x-ui](docs/xui-custom-manager.md) |

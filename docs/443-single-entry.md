@@ -1,4 +1,4 @@
-# 443端口复用配置指南
+# 443端口复用：部署与配置
 
 ## 前言
 
@@ -6,7 +6,14 @@ REALITY 的 `serverName` / `target` 优先选择稳定、可直连且未启用 C
 
 严格 SNI 门禁会在生成入口配置时，根据已登记的 Web 域名、TCP/Xray SNI 路由和 REALITY SNI 自动生成放行清单。它只过滤未知或无 SNI 的连接，不负责 REALITY 身份验证；使用已登记 REALITY SNI 的连接仍会进入 Xray。回落限速只限制未通过 REALITY 验证的 fallback 连接。
 
-遇到面板打不开、订阅 404、证书失败或 REALITY 连接失败时，先看：[443端口复用排错指南](443-single-entry-troubleshooting.md)。
+## 这组文档怎么选
+
+| 目标 | 阅读入口 |
+| --- | --- |
+| 从零部署或调整 3x-ui、REALITY、面板、订阅和三种 443 入口模式 | 当前页面 |
+| 把 SublinkPro、Sub-Store 等订阅工具接入反向代理或 443端口复用 | [订阅工具接入](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
+| 了解 Nginx Stream、TCP Peek 和 Xray Fallback 的实现与切换原理 | [入口模式与原理](443-tcp-peek-engine.md) |
+| 处理面板打不开、订阅 404、证书失败、端口冲突或 REALITY 连接失败 | [排错与恢复](443-single-entry-troubleshooting.md) |
 
 这篇文档教你把 VPS 的公网 `443` 统一接入 VPS-Optimize 的 443端口复用。默认推荐 Nginx Stream，也可以在配置完成后切换到 TCP Peek + Splice 或 Xray Fallback。无论选择哪种入口模式，公网 `443` 同一时间只由当前 `ENTRY_MODE` 对应的单个服务监听。
 
@@ -347,6 +354,15 @@ DNS-01 通过 `_acme-challenge` TXT 记录验证域名控制权。Cloudflare 橙
 
 ## 准备工作
 
+首次接管公网 `443` 前，先确认：
+
+| 检查项 | 要求 |
+| --- | --- |
+| VPS 快照或可用备份 | 能在入口切换失败时恢复 |
+| 当前 SSH 会话 | 保持连接，确认备用 SSH 端口或云厂商控制台可用 |
+| 公网 `443` 占用 | 使用 `ss -lntp | grep ':443'` 查清当前监听进程 |
+| 云安全组和防火墙 | 已放行实际 SSH 端口与 `443/tcp` |
+
 至少准备一个面板域名：
 
 ```text
@@ -625,6 +641,8 @@ SNI / Fingerprint / ALPN：按该入站和客户端实际值保持一致
 ```text
 主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]
 ```
+
+体检通过后，进入 `主菜单 [16 配置备份与回滚] -> [1 创建全量配置备份]` 保存当前可用配置。
 
 ## 后续维护
 

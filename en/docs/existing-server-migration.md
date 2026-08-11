@@ -104,7 +104,7 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 | There is already a subscription tool Docker container, but the Port 443 Reuse is not enabled yet. | Keep the container, use `Main menu [4 reverse proxy]` to select Caddy or Nginx HTTPS to reverse proxy |
 | Already have subscription tool Docker container, ready to enable Port 443 Reuse | Keep the container and change external access to Port 443 Reuse point Web domain/reverse proxy |
 
-For complete steps, see [3x-ui+Reality: Port 443 Reuse Deployment Guide](../tutorials/01-3x-ui-reality-443.md).
+For complete steps, see [Port 443 Reuse: Setup and Configuration](443-single-entry.md).
 
 For subscription tool migration, see [Subscription Tools on Port 443](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md).
 

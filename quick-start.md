@@ -61,8 +61,7 @@ Select interface language:
 
 | 目标 | 文档 |
 |---|---|
-| 配置 443端口复用 | [443端口复用](docs/443-single-entry.md) |
-| 部署 3x-ui+Reality：443端口复用 | [3x-ui+Reality：443端口复用](tutorials/01-3x-ui-reality-443.md) |
+| 部署或配置 443端口复用 | [443端口复用：部署与配置](docs/443-single-entry.md) |
 | 接入订阅工具 | [订阅工具接入 443](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
 | 查看端口流量 | [端口流量狗](docs/dog.md) |
 | 使用 x-ui 增强工具 | [x-ui 增强套件](docs/xui-custom-manager.md) |

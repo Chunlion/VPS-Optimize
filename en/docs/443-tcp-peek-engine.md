@@ -1,4 +1,4 @@
-# Port 443 Reuse Entry Implementations
+# Port 443 Reuse: Entry Modes and Internals
 
 This article explains three Port 443 Reuse point implementations of VPS-Optimize: Nginx Stream default stable implementation, TCP Peek + Splice / vpso-mux same configuration implementation, Xray Fallback special implementation.
 
@@ -31,7 +31,7 @@ Main menu [19 Port 443 Reuse manager]
   -> [18] View TCP Peek + Splice Log
 ```
 
-For 3x-ui panel, subscription, and Xray inbound settings, see [Port 443 Reuse Configuration Guide](443-single-entry.md), section "3x-ui Three Entry Mode Configuration Quick Check".
+For 3x-ui panel, subscription, and Xray inbound settings, see [Port 443 Reuse: Setup and Configuration](443-single-entry.md), section "3x-ui Three Entry Mode Configuration Quick Check".
 
 | ENTRY_MODE | How to bind 3x-ui/Xray | The most important considerations when switching |
 | --- | --- | --- |

@@ -104,7 +104,7 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 | 已有订阅工具 Docker 容器，暂不启用 443端口复用 | 保留容器，用 `主菜单 [4 反代]` 选择 Caddy 或 Nginx HTTPS 反代 |
 | 已有订阅工具 Docker 容器，准备启用 443端口复用 | 保留容器，把外部访问改成 443端口复用的 Web 域名/反代 |
 
-完整步骤见 [3x-ui+Reality：443端口复用部署指南](../tutorials/01-3x-ui-reality-443.md)。
+完整步骤见 [443端口复用：部署与配置](443-single-entry.md)。
 
 订阅工具迁移见 [订阅工具接入 Caddy/Nginx 反代与 443端口复用](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。
 

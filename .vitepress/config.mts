@@ -13,9 +13,8 @@ const zhTheme = {
       text: '文档',
       items: [
         { text: '文档首页', link: '/' },
-        { text: '443端口复用配置', link: '/docs/443-single-entry' },
-        { text: '3x-ui+Reality：443端口复用部署', link: '/tutorials/01-3x-ui-reality-443' },
-        { text: '订阅工具接入 443', link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+        { text: '443端口复用：部署与配置', link: '/docs/443-single-entry' },
+        { text: '443端口复用：订阅工具接入', link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
         { text: '安全与回滚', link: '/docs/security-rollback' },
         { text: '常见问题', link: '/docs/faq' }
       ]
@@ -34,18 +33,17 @@ const zhTheme = {
         ]
       },
       {
-        text: '核心功能',
+        text: '443端口复用',
         items: [
-          { text: '443端口复用配置', link: '/docs/443-single-entry' },
-          { text: '443端口复用入口实现', link: '/docs/443-tcp-peek-engine' },
-          { text: '订阅管理与节点工具', link: '/docs/subscription-tools' }
+          { text: '部署与配置', link: '/docs/443-single-entry' },
+          { text: '订阅工具接入', link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+          { text: '入口模式与原理', link: '/docs/443-tcp-peek-engine' },
+          { text: '排错与恢复', link: '/docs/443-single-entry-troubleshooting' }
         ]
       },
       {
         text: '场景教程',
         items: [
-          { text: '3x-ui+Reality：443端口复用部署', link: '/tutorials/01-3x-ui-reality-443' },
-          { text: '订阅工具接入 443', link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
           { text: '已有服务器迁移', link: '/docs/existing-server-migration' },
           { text: '失联与回滚急救', link: '/docs/recovery-runbook' }
         ]
@@ -53,6 +51,7 @@ const zhTheme = {
       {
         text: '工具',
         items: [
+          { text: '订阅管理与节点工具', link: '/docs/subscription-tools' },
           { text: '配置路径', link: '/docs/config-paths' },
           { text: '端口流量狗', link: '/docs/dog' },
           { text: 'x-ui 增强套件', link: '/docs/xui-custom-manager' },
@@ -62,7 +61,6 @@ const zhTheme = {
       {
         text: '维护与排错',
         items: [
-          { text: '443端口复用排错', link: '/docs/443-single-entry-troubleshooting' },
           { text: '安全与回滚', link: '/docs/security-rollback' },
           { text: '更新与卸载', link: '/docs/update-uninstall' },
           { text: '常见问题', link: '/docs/faq' }
@@ -105,9 +103,8 @@ const enTheme = {
       text: 'Documentation',
       items: [
         { text: 'Documentation Home', link: '/en/' },
-        { text: 'Port 443 Reuse Configuration', link: '/en/docs/443-single-entry' },
-        { text: '3x-ui+Reality: Port 443 Reuse Deployment', link: '/en/tutorials/01-3x-ui-reality-443' },
-        { text: 'Subscription Tools on Port 443', link: '/en/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+        { text: 'Port 443 Reuse: Setup and Configuration', link: '/en/docs/443-single-entry' },
+        { text: 'Port 443 Reuse: Subscription Tools', link: '/en/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
         { text: 'Security and Rollback', link: '/en/docs/security-rollback' },
         { text: 'FAQ', link: '/en/docs/faq' }
       ]
@@ -126,18 +123,17 @@ const enTheme = {
         ]
       },
       {
-        text: 'Core Features',
+        text: 'Port 443 Reuse',
         items: [
-          { text: 'Port 443 Reuse Configuration', link: '/en/docs/443-single-entry' },
-          { text: 'Port 443 Reuse Entry Implementations', link: '/en/docs/443-tcp-peek-engine' },
-          { text: 'Subscriptions and Nodes', link: '/en/docs/subscription-tools' }
+          { text: 'Setup and Configuration', link: '/en/docs/443-single-entry' },
+          { text: 'Connect Subscription Tools', link: '/en/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+          { text: 'Entry Modes and Internals', link: '/en/docs/443-tcp-peek-engine' },
+          { text: 'Troubleshooting and Recovery', link: '/en/docs/443-single-entry-troubleshooting' }
         ]
       },
       {
         text: 'Deployment Guides',
         items: [
-          { text: '3x-ui+Reality: Port 443 Reuse Deployment', link: '/en/tutorials/01-3x-ui-reality-443' },
-          { text: 'Subscription Tools on Port 443', link: '/en/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
           { text: 'Migrate an Existing Server', link: '/en/docs/existing-server-migration' },
           { text: 'Recovery and Rollback', link: '/en/docs/recovery-runbook' }
         ]
@@ -145,6 +141,7 @@ const enTheme = {
       {
         text: 'Tools',
         items: [
+          { text: 'Subscriptions and Nodes', link: '/en/docs/subscription-tools' },
           { text: 'Configuration Paths', link: '/en/docs/config-paths' },
           { text: 'dog.sh Traffic Monitor', link: '/en/docs/dog' },
           { text: 'x-ui Extension', link: '/en/docs/xui-custom-manager' },
@@ -154,7 +151,6 @@ const enTheme = {
       {
         text: 'Maintenance',
         items: [
-          { text: 'Port 443 Reuse Troubleshooting', link: '/en/docs/443-single-entry-troubleshooting' },
           { text: 'Security and Rollback', link: '/en/docs/security-rollback' },
           { text: 'Update and Uninstall', link: '/en/docs/update-uninstall' },
           { text: 'FAQ', link: '/en/docs/faq' }
@@ -179,9 +175,8 @@ const ruTheme = {
       text: 'Документация',
       items: [
         { text: 'Главная документации', link: '/ru/' },
-        { text: 'Настройка повторного использования порта 443', link: '/ru/docs/443-single-entry' },
-        { text: '3x-ui+Reality: развёртывание с повторным использованием порта 443', link: '/ru/tutorials/01-3x-ui-reality-443' },
-        { text: 'Сервисы подписок на порту 443', link: '/ru/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+        { text: 'Порт 443: развёртывание и настройка', link: '/ru/docs/443-single-entry' },
+        { text: 'Порт 443: подключение сервисов подписок', link: '/ru/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
         { text: 'Безопасность и откат', link: '/ru/docs/security-rollback' },
         { text: 'Частые вопросы', link: '/ru/docs/faq' }
       ]
@@ -200,18 +195,17 @@ const ruTheme = {
         ]
       },
       {
-        text: 'Основные функции',
+        text: 'Порт 443',
         items: [
-          { text: 'Настройка повторного использования порта 443', link: '/ru/docs/443-single-entry' },
-          { text: 'Реализации входа с повторным использованием порта 443', link: '/ru/docs/443-tcp-peek-engine' },
-          { text: 'Подписки и узлы', link: '/ru/docs/subscription-tools' }
+          { text: 'Развёртывание и настройка', link: '/ru/docs/443-single-entry' },
+          { text: 'Подключение сервисов подписок', link: '/ru/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+          { text: 'Режимы входа и принципы работы', link: '/ru/docs/443-tcp-peek-engine' },
+          { text: 'Диагностика и восстановление', link: '/ru/docs/443-single-entry-troubleshooting' }
         ]
       },
       {
         text: 'Руководства',
         items: [
-          { text: '3x-ui+Reality: развёртывание с повторным использованием порта 443', link: '/ru/tutorials/01-3x-ui-reality-443' },
-          { text: 'Сервисы подписок на порту 443', link: '/ru/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
           { text: 'Миграция существующего сервера', link: '/ru/docs/existing-server-migration' },
           { text: 'Восстановление и откат', link: '/ru/docs/recovery-runbook' }
         ]
@@ -219,6 +213,7 @@ const ruTheme = {
       {
         text: 'Инструменты',
         items: [
+          { text: 'Подписки и узлы', link: '/ru/docs/subscription-tools' },
           { text: 'Пути конфигурации', link: '/ru/docs/config-paths' },
           { text: 'Мониторинг трафика dog.sh', link: '/ru/docs/dog' },
           { text: 'Расширение x-ui', link: '/ru/docs/xui-custom-manager' },
@@ -228,7 +223,6 @@ const ruTheme = {
       {
         text: 'Обслуживание',
         items: [
-          { text: 'Диагностика повторного использования порта 443', link: '/ru/docs/443-single-entry-troubleshooting' },
           { text: 'Безопасность и откат', link: '/ru/docs/security-rollback' },
           { text: 'Обновление и удаление', link: '/ru/docs/update-uninstall' },
           { text: 'Частые вопросы', link: '/ru/docs/faq' }

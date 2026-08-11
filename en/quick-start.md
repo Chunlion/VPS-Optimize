@@ -61,8 +61,7 @@ Press Enter to select English by default. You can change the language later from
 
 | Goal | Documentation |
 |---|---|
-| Configure Port 443 Reuse | [Port 443 Reuse](docs/443-single-entry.md) |
-| Deploy 3x-ui+Reality with Port 443 Reuse | [3x-ui+Reality: Port 443 Reuse](tutorials/01-3x-ui-reality-443.md) |
+| Deploy or configure Port 443 Reuse | [Port 443 Reuse: Setup and Configuration](docs/443-single-entry.md) |
 | Publish subscription tools | [Subscription Tools on Port 443](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
 | Monitor port traffic | [dog.sh Traffic Monitor](docs/dog.md) |
 | Use the x-ui extension | [x-ui Extension](docs/xui-custom-manager.md) |

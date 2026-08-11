@@ -1,4 +1,4 @@
-# Port 443 Reuse Configuration Guide
+# Port 443 Reuse: Setup and Configuration
 
 ## Before you begin
 
@@ -6,7 +6,14 @@ For REALITY `serverName` / `target`, prefer a stable, directly reachable HTTPS s
 
 The strict SNI gate derives its allowlist from registered Web domains, TCP/Xray SNI routes, and the REALITY SNI whenever the entry configuration is generated. It filters only unknown or missing SNI and does not authenticate REALITY clients; a connection using the registered REALITY SNI still reaches Xray. Fallback rate limiting applies only to REALITY fallback connections that fail authentication.
 
-When encountering panel failure to open, subscription 404, certificate failure, or REALITY connection failure, first read: [Port 443 Reuse Troubleshooting](443-single-entry-troubleshooting.md).
+## Choose the right page
+
+| Goal | Page |
+| --- | --- |
+| Deploy or reconfigure 3x-ui, REALITY, the panel, subscriptions, and any of the three port 443 entry modes | This page |
+| Connect SublinkPro, Sub-Store, or another subscription tool through a reverse proxy or Port 443 Reuse | [Connect Subscription Tools](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
+| Understand how Nginx Stream, TCP Peek, and Xray Fallback work and switch between them | [Entry Modes and Internals](443-tcp-peek-engine.md) |
+| Fix an inaccessible panel, subscription 404, certificate failure, port conflict, or REALITY connection failure | [Troubleshooting and Recovery](443-single-entry-troubleshooting.md) |
 
 This document teaches you how to connect the VPS Internet `443` to the Port 443 Reuse of VPS-Optimize. Nginx Stream is recommended by default, and you can also switch to TCP Peek + Splice or Xray Fallback after the configuration is completed. No matter which entry mode is selected, Internet `443` is only bound by a single service corresponding to the current `ENTRY_MODE` at the same time.
 
@@ -352,6 +359,15 @@ Note: This plan recommends that the relevant domains be kept as Cloudflare Gray 
 
 ## Preparation
 
+Before taking over public port `443`, verify the following:
+
+| Check | Requirement |
+| --- | --- |
+| VPS snapshot or usable backup | Available if the entry-mode switch fails |
+| Active SSH session | Keep it open and confirm that a backup SSH port or the provider console is available |
+| Current public port `443` listener | Identify it with `ss -lntp | grep ':443'` |
+| Cloud security group and firewall | Allow the actual SSH port and `443/tcp` |
+
 Prepare at least one panel domain:
 
 ```text
@@ -630,6 +646,8 @@ Finally run:
 ```text
 Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 ```
+
+After the health check passes, open `Main menu [16 Configuration Backup and Rollback] -> [1 Create Full Configuration Backup]` to save the working configuration.
 
 ## Follow-up maintenance
 
