@@ -366,7 +366,7 @@ Use this order:
 4. Open `Main menu [19 Port 443 Reuse Management] -> [17 REALITY fallback traffic protection] -> [4 Set REALITY fallback rate limits]`. The menu lists every REALITY inbound. Each run modifies only the selected inbound, so repeat it for every inbound that needs protection.
 5. Run `[3] Resynchronize the current SNI list` after adding or changing an SNI.
 
-Fallback limits are stored per inbound, not as one global switch and not per user. Enabling the limit for inbound A does not protect inbound B. The strict SNI gate is shared by the entry and covers all registered SNIs. Do not give two inbounds the same SNI; the entry cannot reliably choose their local ports.
+Fallback limits are stored per inbound, not as one global switch and not per user. Each inbound must use a distinct local port and SNI; enabling the limit for inbound A does not protect inbound B. There is currently no batch action to set limits for every inbound, so select and configure each inbound separately. The strict SNI gate is shared by the entry and covers all registered SNIs. When 3x-ui uses PostgreSQL, the script does not support fallback limits because it avoids modifying a remote database; this feature supports only local SQLite 3x-ui.
 
 `xray-fallback` may contain several inbounds inside Xray, but one Xray main inbound owns public `443`; the script does not split several SNIs to several local inbounds in that mode. Use Nginx Stream or TCP Peek + Splice when several inbounds must share `443`.
 
