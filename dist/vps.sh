@@ -31,7 +31,7 @@ if [[ -n "${NO_COLOR+x}" ]]; then
     BOLD=''
 fi
 
-SCRIPT_VERSION="v2.6"
+SCRIPT_VERSION="v2.7"
 UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
 UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
