@@ -457,7 +457,7 @@ assert_file_contains src/README.md '443/TCP Peek ownership:' "Source README must
 assert_file_contains src/README.md 'Do not reintroduce split shadow modules' "Source README must warn against stale split 443/TCP Peek modules."
 assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '请输入菜单编号或 ?: ' "443 Web/SNI submenu must prompt for a menu number or help."
 assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '请输入菜单编号或 ?: ' "443 Port 443 Reuse parameter submenu must prompt for a menu number or help."
-assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '请输入菜单编号或 ?: ' "Port 443 Reuse menu must prompt for a menu number or help."
+assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '输入菜单编号，? 查看帮助: ' "Port 443 Reuse menu must prompt for a menu number or help."
 assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '"?") show_sni_help; pause_return; continue ;;' "443 Web/SNI submenu must accept the displayed ? help entry."
 assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '"?") show_sni_help; pause_return; continue ;;' "443 Port 443 Reuse parameter submenu must accept the displayed ? help entry."
 assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '"?") show_sni_help; pause_return; continue ;;' "Port 443 Reuse menu must accept the displayed ? help entry."
@@ -648,6 +648,22 @@ colored_confirmation=$(colorize_confirmation_prompt "Proceed? (Y/n) Continue? (y
         "$(print_menu_item 1 "Предварительная проверка" "Описание")" \
         "$(print_menu_item 19 "Общий порт 443" "Описание")"; do
         [[ "$(terminal_text_width "${menu_row%%(*}")" == "35" ]]
+    done
+
+    for menu_row in \
+        "$(print_menu_item 1 "入口状态" "说明" 27)" \
+        "$(print_menu_item 17 "REALITY 流量防护" "说明" 27)"; do
+        [[ "$(terminal_text_width "${menu_row%%(*}")" == "34" ]]
+    done
+    for menu_row in \
+        "$(print_menu_item 1 "Entry status" "Description" 34)" \
+        "$(print_menu_item 8 "Web domains and reverse proxies" "Description" 34)"; do
+        [[ "$(terminal_text_width "${menu_row%%(*}")" == "41" ]]
+    done
+    for menu_row in \
+        "$(print_menu_item 1 "Состояние входа" "Описание" 39)" \
+        "$(print_menu_item 9 "Список разрешённых IP для Web" "Описание" 39)"; do
+        [[ "$(terminal_text_width "${menu_row%%(*}")" == "46" ]]
     done
 )
 for shortcut_mapping in \
@@ -1915,7 +1931,7 @@ assert_file_not_contains 'dist/vps.sh' '20. 从 TCP Peek 回滚到 Nginx Stream 
 assert_file_not_contains 'dist/vps.sh' '20) rollback_tcp_peek_to_nginx_stream ;;' '443 menu must not dispatch to a removed TCP Peek-specific rollback wrapper.'
 while IFS='|' read -r menu_no menu_label case_action; do
     [[ -n "$menu_no" ]] || continue
-    if ! grep -Fq " ${menu_no}. ${menu_label}" dist/vps.sh; then
+    if ! grep -Fq "\"${menu_label}\"" dist/vps.sh; then
         echo "Port 443 Reuse menu item ${menu_no} label is missing or changed." >&2
         exit 1
     fi
@@ -1924,14 +1940,14 @@ while IFS='|' read -r menu_no menu_label case_action; do
         exit 1
     fi
 done <<'SNI_MENU_MAP'
-2|安装 / 切换 443 入口模式|manage_entry_mode_install_or_switch ;;
-10|修改 443端口复用参数|edit_sni_stack_runtime_profile; continue ;;
-11|订阅链接 / External Proxy 提示|check_sni_stack_subscription_hint ;;
-12|CF DNS / Caddy 证书维护|func_caddy_cf_maintenance_menu; continue ;;
-13|443 链路体检|sni_stack_health_check_enhanced ;;
-14|443 网络访问测试|func_443_network_test; continue ;;
-15|Xray 入站管理|manage_xray_inbound_routes; continue ;;
-16|查看当前入口日志|view_current_entry_logs ;;
+2|安装 / 切换入口模式|manage_entry_mode_install_or_switch ;;
+10|共享参数|edit_sni_stack_runtime_profile; continue ;;
+11|订阅链接检查|check_sni_stack_subscription_hint ;;
+12|证书维护|func_caddy_cf_maintenance_menu; continue ;;
+13|443 配置检查|sni_stack_health_check_enhanced ;;
+14|外网访问测试|func_443_network_test; continue ;;
+15|Xray SNI 路由|manage_xray_inbound_routes; continue ;;
+16|入口日志|view_current_entry_logs ;;
 SNI_MENU_MAP
 
 docs_menu_files=(
@@ -2986,7 +3002,7 @@ panel_help_public_hint='7/8/9 订阅工具，10 更新订阅工具，11 Komari�
 assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both without Port 443 Reuse and Port 443 Reuse reverse proxy paths."
 assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
 panel_domain_menu_path='主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]'
-assert_file_contains "src/menus.sh" "$panel_domain_menu_path" "443 help must point panel-domain edits to the Web domain submenu."
+assert_file_contains "src/menus.sh" '修改面板域名：[8 Web 域名与反向代理] -> [9 修改面板域名]。' "443 help must point panel-domain edits to the Web domain submenu."
 assert_file_contains "src/sni_stack_profiles.sh" "$panel_domain_menu_path" "443 Port 443 Reuse parameters submenu must point panel-domain edits to the Web domain submenu."
 assert_dist_contains "$panel_domain_menu_path" "Release script must include the current panel-domain edit path."
 assert_file_not_contains "src/menus.sh" '共享参数可修改面板域名' "443 help must not say shared parameters modify the panel domain."
