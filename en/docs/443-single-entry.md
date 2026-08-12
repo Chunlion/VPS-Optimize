@@ -106,6 +106,8 @@ If Nginx, Caddy, or another service already uses `443`, note what it does before
 
 During 3x-ui installation:
 
+> **3x-ui 2.x, including v2.9.4 and earlier:** Older installers may not offer `Skip SSL`. If it cannot be skipped, complete the legacy installation flow. In the shared-port-443 wizard in step 4 of this guide, confirm **Clear legacy 3x-ui certificate paths**; the script clears the panel and subscription certificate paths automatically. If that fails, clear them manually in 3x-ui, restart the panel, then continue the wizard.
+
 1. Choose `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)` for the panel certificate.
 2. Set the listen IP to `127.0.0.1`.
 3. Choose a panel port and path, and keep them for the reverse-proxy step. To follow the example, use:
