@@ -25,7 +25,7 @@ manage_sni_stack_sites() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "$(localized_text "请输入菜单编号或 ?: " "Select a menu number or ?:" "Выберите номер меню или ?:")"
+        read_trimmed choice "$(localized_text "输入菜单编号或 ?: " "Enter a menu number or ?: " "Введите номер пункта или ?: ")"
         case "$choice" in
             1) list_sni_stack_sites ;;
             2) add_sni_stack_site ;;

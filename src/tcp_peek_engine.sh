@@ -347,7 +347,7 @@ preview_entry_mode_cutover() {
         echo -e "$(localized_text "${GREEN}  1. 查看 diff${PLAIN}" "${GREEN}1. View diff${PLAIN}" "${GREEN}1. Посмотреть разницу${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 继续切换${PLAIN}" "${GREEN}2. Continue to switch to${PLAIN}" "${GREEN}2. Продолжайте переходить на.${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 取消，不修改任何配置${PLAIN}" "${RED}0. Cancel without modifying any configuration${PLAIN}" "${RED}0. Отмена без изменения конфигурации.${PLAIN}")"
-        read_trimmed choice "$(localized_text "请选择操作（默认 0 取消）: " "Please select an action (default 0 cancels):" "Пожалуйста, выберите действие (по умолчанию 0 отменяет):")"
+        read_trimmed choice "$(localized_text "选择操作 [0 取消]: " "Select an option [0 cancels]: " "Выберите действие [0 — отмена]: ")"
         case "$(echo "${choice:-0}" | tr '[:upper:]' '[:lower:]')" in
             1|d|D|diff)
                 show_entry_mode_cutover_diff "$target_mode"

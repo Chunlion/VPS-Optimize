@@ -1321,11 +1321,11 @@ print_traffic_guard_diagnostic_summary() {
     [[ -r "$TRAFFIC_GUARD_LOG" ]] && has_log="yes" || has_log="no"
 
     if [[ "$has_config" == "no" && "$has_state" == "no" && "$has_log" == "no" && "$timer_active" != "active" && "$timer_enabled" == "disabled" ]]; then
-        [[ "$show_unconfigured" == "yes" ]] && echo "$(localized_text "流量达量保护摘要: 未配置" "Traffic volume protection summary: Not configured" "Сводная информация о защите объема трафика: не настроено")"
+        [[ "$show_unconfigured" == "yes" ]] && echo "$(localized_text "流量限额保护摘要：未配置" "Traffic quota protection: not configured" "Защита лимита трафика: не настроена")"
         return 0
     fi
 
-    echo "$(localized_text "流量达量保护摘要:" "Traffic volume protection summary:" "Сводная информация о защите объема трафика:")"
+    echo "$(localized_text "流量限额保护摘要：" "Traffic quota protection:" "Защита лимита трафика:")"
     echo "- timer: vps-traffic-guard.timer active=${timer_active}; enabled=${timer_enabled}"
     config_status="$(localized_text "不可读或不存在" "Unreadable or does not exist" "Нечитабельно или не существует")"
     state_status="$(localized_text "不可读或不存在" "Unreadable or does not exist" "Нечитабельно или не существует")"
@@ -1395,13 +1395,13 @@ print_traffic_guard_diagnostic_summary() {
 show_traffic_guard_status() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "网络/内核优化 > 流量达量保护" "Network/Kernel Optimization > Traffic Volume Protection" "Оптимизация сети/ядра > Защита объема трафика")"
-    echo -e "$(localized_text "${BOLD}🧯 流量达量保护状态${PLAIN}" "${BOLD}🧯 Traffic volume protection status${PLAIN}" "${BOLD}🧯 Статус защиты объема трафика${PLAIN}")"
+    print_breadcrumb "$(localized_text "网络/内核优化 > 流量限额保护" "Network/Kernel Optimization > Traffic quota protection" "Оптимизация сети/ядра > Защита лимита трафика")"
+    echo -e "$(localized_text "${BOLD}🧯 流量限额保护状态${PLAIN}" "${BOLD}🧯 Traffic quota protection status${PLAIN}" "${BOLD}🧯 Состояние защиты лимита трафика${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     if ! load_traffic_guard_config; then
-        echo -e "$(localized_text "${YELLOW}当前未配置流量达量保护。${PLAIN}" "${YELLOW}Is currently not configured with traffic volume protection.${PLAIN}" "${YELLOW}в настоящее время не настроен с защитой объема трафика.${PLAIN}")"
-        echo -e "$(localized_text "${BLUE}建议先选择 [1] 配置，避免 VPS 被刷流量产生超额账单。${PLAIN}" "${BLUE}It is recommended to select [1] configuration first to avoid excessive bills caused by VPS traffic being brushed.${PLAIN}" "${BLUE}Рекомендуется сначала выбрать конфигурацию [1], чтобы избежать чрезмерных счетов, вызванных очисткой трафика VPS.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}尚未配置流量限额保护。${PLAIN}" "${YELLOW}Traffic quota protection is not configured.${PLAIN}" "${YELLOW}Защита лимита трафика не настроена.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}选择 [1] 设置流量阈值和达到阈值后的保护动作。${PLAIN}" "${BLUE}Select [1] to set the quota and the action taken when it is reached.${PLAIN}" "${BLUE}Выберите [1], чтобы задать лимит и действие при его достижении.${PLAIN}")"
         return 0
     fi
 
@@ -1468,7 +1468,7 @@ show_traffic_guard_status() {
 
 sync_traffic_guard_now() {
     load_traffic_guard_config || {
-        echo -e "$(localized_text "${YELLOW}尚未配置流量达量保护。${PLAIN}" "${YELLOW}Has not configured traffic volume protection.${PLAIN}" "${YELLOW}не настроил защиту объема трафика.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}尚未配置流量限额保护。${PLAIN}" "${YELLOW}Traffic quota protection is not configured.${PLAIN}" "${YELLOW}Защита лимита трафика не настроена.${PLAIN}")"
         pause_return
         return 1
     }
@@ -1497,8 +1497,8 @@ sync_traffic_guard_now() {
 configure_traffic_guard() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "网络/内核优化 > 配置流量达量保护" "Network/Kernel Optimization > Configure Traffic Volume Protection" "Оптимизация сети/ядра > Настройка защиты объема трафика")"
-    echo -e "$(localized_text "${BOLD}🧯 配置流量达量保护${PLAIN}" "${BOLD}🧯 Configure traffic volume protection${PLAIN}" "${BOLD}🧯 Настройка защиты объема трафика${PLAIN}")"
+    print_breadcrumb "$(localized_text "网络/内核优化 > 配置流量限额保护" "Network/Kernel Optimization > Configure traffic quota protection" "Оптимизация сети/ядра > Настройка защиты лимита трафика")"
+    echo -e "$(localized_text "${BOLD}🧯 配置流量限额保护${PLAIN}" "${BOLD}🧯 Configure traffic quota protection${PLAIN}" "${BOLD}🧯 Настройка защиты лимита трафика${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}用途：定时读取网卡流量，达到阈值后自动关机，避免超额流量产生账单。${PLAIN}" "${YELLOW}Purpose: Read the network card traffic regularly and automatically shut down after reaching the threshold to avoid excessive traffic bills.${PLAIN}" "${YELLOW}Назначение: регулярно считывать трафик сетевой карты и автоматически отключаться после достижения порогового значения, чтобы избежать чрезмерных счетов за трафик.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}注意：脚本只能按本机网卡计数估算，云厂商后台统计可能有延迟或口径差异，请留安全余量。${PLAIN}" "${YELLOW}Note: The script can only be estimated based on the local network card count. The cloud vendor's background statistics may have delays or caliber differences, so please leave a safety margin.${PLAIN}" "${YELLOW}Примечание. Сценарий можно оценить только на основе количества локальных сетевых карт. Справочная статистика поставщика облачных услуг может иметь задержки или различия в калибре, поэтому оставляйте запас прочности.${PLAIN}")"
@@ -1544,7 +1544,7 @@ configure_traffic_guard() {
     echo -e "$(localized_text "  2. 出入总量 RX+TX" "2. Total deposits and withdrawals RX+TX" "2. Общая сумма депозитов и снятий RX+TX")"
     echo -e "$(localized_text "  3. 任一方向达量" "3. Amount in any direction" "3. Сумма в любую сторону")"
     echo -e "$(localized_text "  4. 入站 RX 计费" "4. Inbound RX billing" "4. Биллинг входящего приема")"
-    read_trimmed mode_choice "$(localized_text "请选择计费模式 (默认 1): " "Please select billing mode (default 1):" "Пожалуйста, выберите режим выставления счетов (по умолчанию 1):")"
+    read_trimmed mode_choice "$(localized_text "选择流量统计模式 [1]: " "Select traffic accounting mode [1]: " "Выберите режим учёта трафика [1]: ")"
     case "${mode_choice:-1}" in
         2) mode="total" ;;
         3) mode="max" ;;
@@ -1667,9 +1667,9 @@ configure_traffic_guard() {
     /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || checker_rc=$?
     if (( checker_rc == 0 )); then
         reset_traffic_guard_failed_state
-        echo -e "$(localized_text "${GREEN}✅ 流量达量保护已启用，首次检查通过。${PLAIN}" "${GREEN}✅ Traffic Guard is enabled and the first check passed.${PLAIN}" "${GREEN}✅ Traffic Guard включён; первая проверка выполнена успешно.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}✅ 流量限额保护已启用，首次检查通过。${PLAIN}" "${GREEN}✅ Traffic quota protection is enabled; the first check passed.${PLAIN}" "${GREEN}✅ Защита лимита трафика включена; первая проверка пройдена.${PLAIN}")"
     else
-        echo -e "$(localized_text "${YELLOW}⚠️ 流量达量保护已启用，但首次检查失败（rc=${checker_rc}）。请先查看日志和菜单 [2] 状态。${PLAIN}" "${YELLOW}⚠️ Traffic Guard is enabled, but the first check failed (rc=${checker_rc}). Review the log and menu [2] status.${PLAIN}" "${YELLOW}⚠️ Traffic Guard включён, но первая проверка завершилась ошибкой (rc=${checker_rc}). Проверьте журнал и состояние в пункте [2].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ 流量限额保护已启用，但首次检查失败（rc=${checker_rc}）。请查看日志和菜单 [2] 的状态。${PLAIN}" "${YELLOW}⚠️ Traffic quota protection is enabled, but the first check failed (rc=${checker_rc}). Check the logs and menu [2].${PLAIN}" "${YELLOW}⚠️ Защита лимита трафика включена, но первая проверка завершилась ошибкой (rc=${checker_rc}). Проверьте журнал и пункт [2].${PLAIN}")"
     fi
     echo -e "$(localized_text "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}The status can be viewed in this menu [2]; log: ${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}Статус можно просмотреть в этом меню [2]; журнал: ${TRAFFIC_GUARD_LOG}${PLAIN}")"
     pause_return
@@ -1679,7 +1679,7 @@ reset_traffic_guard_baseline() {
     local iface mode cycle_day initial_used_gb initial_used_bytes
     local detected_used_bytes detected_used_gb
     load_traffic_guard_config || {
-        echo -e "$(localized_text "${YELLOW}尚未配置流量达量保护。${PLAIN}" "${YELLOW}Has not configured traffic volume protection.${PLAIN}" "${YELLOW}не настроил защиту объема трафика.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}尚未配置流量限额保护。${PLAIN}" "${YELLOW}Traffic quota protection is not configured.${PLAIN}" "${YELLOW}Защита лимита трафика не настроена.${PLAIN}")"
         pause_return
         return 1
     }
@@ -1723,7 +1723,7 @@ reset_traffic_guard_baseline() {
 repair_traffic_guard_timer() {
     local interval
     load_traffic_guard_config || {
-        echo -e "$(localized_text "${YELLOW}尚未配置流量达量保护。${PLAIN}" "${YELLOW}Has not configured traffic volume protection.${PLAIN}" "${YELLOW}не настроил защиту объема трафика.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}尚未配置流量限额保护。${PLAIN}" "${YELLOW}Traffic quota protection is not configured.${PLAIN}" "${YELLOW}Защита лимита трафика не настроена.${PLAIN}")"
         pause_return
         return 1
     }
@@ -1776,7 +1776,7 @@ disable_traffic_guard() {
         pause_return
         return 0
     fi
-    confirm_risk_action "$(localized_text "停用流量达量保护" "Disable traffic volume protection" "Отключить защиту объема трафика")" \
+    confirm_risk_action "$(localized_text "停用流量限额保护" "Disable traffic quota protection" "Отключить защиту лимита трафика")" \
         "$(localized_text "vps-traffic-guard.timer 会停止，达到流量阈值后不再执行配置的动作。" "vps-traffic-guard.timer will stop and will no longer perform configured actions after the traffic threshold is reached." "vps-traffic-guard.timer остановится и больше не будет выполнять настроенные действия после достижения порога трафика.")" \
         "$(localized_text "重新进入本菜单选择 [1] 启用保护。" "Re-enter this menu and select [1] to enable protection." "Снова войдите в это меню и выберите [1], чтобы включить защиту.")" \
         "$(localized_text "停用后请自行监控云厂商流量，避免超额账单。" "After deactivation, please monitor the cloud provider's traffic yourself to avoid excessive bills." "После деактивации следите за трафиком облачного провайдера самостоятельно, чтобы избежать чрезмерных счетов.")" || return 1
@@ -1791,7 +1791,7 @@ disable_traffic_guard() {
     if [[ -f "$TRAFFIC_GUARD_CONFIG" ]]; then
         sed -i 's/^ENABLED=.*/ENABLED=0/' "$TRAFFIC_GUARD_CONFIG" 2>/dev/null || true
     fi
-    echo -e "$(localized_text "${GREEN}✅ 已停用流量达量保护，配置文件仍保留：${TRAFFIC_GUARD_CONFIG}${PLAIN}" "${GREEN}✅ Traffic volume protection has been disabled, the configuration file remains: ${TRAFFIC_GUARD_CONFIG}${PLAIN}" "${GREEN}✅ Защита объема трафика отключена, файл конфигурации остался: ${TRAFFIC_GUARD_CONFIG}${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}✅ 已停用流量限额保护；配置文件保留在 ${TRAFFIC_GUARD_CONFIG}${PLAIN}" "${GREEN}✅ Traffic quota protection is disabled; the configuration remains at ${TRAFFIC_GUARD_CONFIG}.${PLAIN}" "${GREEN}✅ Защита лимита трафика отключена; конфигурация сохранена в ${TRAFFIC_GUARD_CONFIG}.${PLAIN}")"
     pause_return
 }
 
@@ -1799,25 +1799,24 @@ func_traffic_guard_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "网络/内核优化 > 流量达量保护" "Network/Kernel Optimization > Traffic Volume Protection" "Оптимизация сети/ядра > Защита объема трафика")"
-        echo -e "$(localized_text "${BOLD}🧯 流量达量保护${PLAIN}" "${BOLD}🧯 Traffic volume protection${PLAIN}" "${BOLD}🧯 Защита объема трафика${PLAIN}")"
+        print_breadcrumb "$(localized_text "网络/内核优化 > 流量限额保护" "Network/Kernel Optimization > Traffic quota protection" "Оптимизация сети/ядра > Защита лимита трафика")"
+        echo -e "$(localized_text "${BOLD}🧯 流量限额保护${PLAIN}" "${BOLD}🧯 Traffic quota protection${PLAIN}" "${BOLD}🧯 Защита лимита трафика${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}达到套餐安全阈值后可自动关机或仅保留 SSH，优先防止刷流量造成天价账单。${PLAIN}" "${YELLOW}After reaches the package security threshold, it can automatically shut down or only keep SSH, giving priority to preventing excessive traffic from causing sky-high bills.${PLAIN}" "${YELLOW}После того, как достигает порога безопасности пакета, он может автоматически отключиться или оставить только SSH, отдавая приоритет предотвращению чрезмерного трафика, вызывающего заоблачные счета.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}推荐阈值低于云厂商套餐上限，并按出站 TX 或总量模式保守配置。${PLAIN}" "${YELLOW}The recommended threshold for is lower than the upper limit of the cloud vendor's package, and is configured conservatively in outbound TX or total mode.${PLAIN}" "${YELLOW}Рекомендуемый порог для ниже верхнего предела пакета поставщика облака и настраивается консервативно в исходящей передаче или общем режиме.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}达到安全阈值后自动关机或仅保留 SSH，避免流量超额。阈值应低于云厂商套餐上限。${PLAIN}" "${YELLOW}Shut down automatically or keep only SSH at the safety threshold to prevent overages. Set the threshold below the provider quota.${PLAIN}" "${YELLOW}При достижении безопасного порога сервер выключается либо оставляет только SSH. Установите порог ниже лимита провайдера.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 配置 / 启用保护${PLAIN}" "${GREEN}1. Configure / enable protection${PLAIN}" "${GREEN}1. Настроить/включить защиту${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 查看状态与已用量${PLAIN}" "${GREEN}2. Check the status and usage${PLAIN}" "${GREEN}2. Проверьте состояние и использование.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 重置本周期统计基线${PLAIN}" "${GREEN}3. Reset the statistical baseline of this period${PLAIN}" "${GREEN}3. Сброс статистической базовой линии за этот период${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 查看状态与本周期用量${PLAIN}" "${GREEN}  2. View status and current-cycle usage${PLAIN}" "${GREEN}  2. Показать состояние и расход за текущий период${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 重置本周期统计起点${PLAIN}" "${GREEN}  3. Reset the current-cycle baseline${PLAIN}" "${GREEN}  3. Сбросить исходное значение текущего периода${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}  4. 停用保护${PLAIN}" "${YELLOW}4. Disable protection${PLAIN}" "${YELLOW}4. Отключить защиту${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 查看最近日志${PLAIN}" "${GREEN}5. View the latest log${PLAIN}" "${GREEN}5. Просмотр последнего журнала${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  6. 修复/重装自动检查 timer${PLAIN}" "${GREEN}6. Repair/reinstall automatic check timer${PLAIN}" "${GREEN}6. Отремонтируйте/переустановите таймер автоматической проверки${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. 立即同步/验证检查器${PLAIN}" "${GREEN}7. Immediate synchronization/verification checker${PLAIN}" "${GREEN}7. Немедленная проверка синхронизации/проверки${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 查看最近日志${PLAIN}" "${GREEN}  5. View recent logs${PLAIN}" "${GREEN}  5. Показать последние журналы${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  6. 修复 / 重装自动检查定时器${PLAIN}" "${GREEN}  6. Repair or reinstall the check timer${PLAIN}" "${GREEN}  6. Исправить или переустановить таймер проверки${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. 立即同步并验证检查器${PLAIN}" "${GREEN}  7. Sync and verify the checker now${PLAIN}" "${GREEN}  7. Синхронизировать и проверить обработчик сейчас${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) configure_traffic_guard ;;
             2) show_traffic_guard_status; pause_return ;;

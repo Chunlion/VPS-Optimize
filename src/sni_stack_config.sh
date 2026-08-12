@@ -1177,7 +1177,7 @@ select_xray_fallback_main_route_for_switch() {
         echo -e "${GREEN}$((idx + 1)).${PLAIN} ${XRAY_SNI_ROUTE_SNIS[$idx]} -> ${XRAY_SNI_ROUTE_ADDRS[$idx]}:${XRAY_SNI_ROUTE_PORTS[$idx]}"
     done
     echo -e "$(localized_text "${RED}0. 取消切换${PLAIN}" "${RED}0. Cancel switching${PLAIN}" "${RED}0. Отменить переключение${PLAIN}")"
-    read_trimmed choice "$(localized_text "请选择 xray-fallback 主入站候选: " "Please select xray-fallback primary inbound candidate:" "Пожалуйста, выберите xray-резервный основной входящий кандидат:")"
+    read_trimmed choice "$(localized_text "选择 xray-fallback 主入站: " "Select the xray-fallback main inbound: " "Выберите основное входящее подключение xray-fallback: ")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
         echo -e "$(localized_text "${BLUE}已取消切换到 xray-fallback。${PLAIN}" "${BLUE}Canceled the switch to xray-fallback.${PLAIN}" "${BLUE}отменил переход на резервный вариант xray.${PLAIN}")"
         return 1

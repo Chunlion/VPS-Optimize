@@ -2827,7 +2827,7 @@ reload_applied_config_kind() {
         dns)
             if confirm_risk_action "$(localized_text "重启 systemd-resolved" "Restart systemd-resolved" "Перезапуск systemd-решено")" \
                 "$(localized_text "系统 DNS 解析服务和 resolved drop-in 配置" "System DNS resolution service and resolved drop-in configuration" "Служба разрешения проблем системы DNS и решенная прямая конфигурация")" \
-                "$(localized_text "恢复 ${target_file}.bak_*，或重新进入 DNS 更改优化菜单切换回原配置" "Restore ${target_file}.bak_*, or re-enter DNS and change the optimization menu to switch back to the original configuration." "Восстановите ${target_file}.bak_* или повторно введите DNS и измените меню оптимизации, чтобы вернуться к исходной конфигурации.")" \
+                "$(localized_text "恢复 ${target_file}.bak_*，或重新进入 DNS 设置菜单切换回原配置" "Restore ${target_file}.bak_*, or reopen DNS settings and select the previous configuration." "Восстановите ${target_file}.bak_* или откройте настройки DNS и выберите прежнюю конфигурацию.")" \
                 "$(localized_text "确认当前 SSH 会话保持连接，必要时可用 IP 直连排障。" "Confirm that the current SSH session remains connected, and use IP direct connection to troubleshoot if necessary." "Убедитесь, что текущий сеанс SSH остается подключенным, и при необходимости используйте прямое IP-соединение для устранения неполадок.")"; then
                 restart_named_service_if_available systemd-resolved
             else
@@ -2964,7 +2964,7 @@ func_edit_applied_config_center() {
     echo -e "${CYAN}================================================${PLAIN}"
 
     local choice idx
-    read_trimmed choice "$(localized_text "请选择要查看/编辑的配置文件: " "Please select a profile to view/edit:" "Пожалуйста, выберите профиль для просмотра/редактирования:")"
+    read_trimmed choice "$(localized_text "选择要查看 / 编辑的配置文件: " "Select a configuration file to view or edit: " "Выберите файл конфигурации для просмотра или правки: ")"
     [[ "$choice" == "0" || "$choice" == "q" || "$choice" == "Q" ]] && return 0
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#applied_config_paths[@]} )); then
         echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"
@@ -2985,24 +2985,24 @@ func_backup_center() {
         clear
         echo -e "${CYAN}================================================${PLAIN}"
         print_breadcrumb "$(localized_text "备份与回滚" "Backup and rollback" "Резервное копирование и откат")"
-        echo -e "$(localized_text "${BOLD}🗂️ 配置备份与回滚中心${PLAIN}" "${BOLD}🗂️ Configure backup and rollback center${PLAIN}" "${BOLD}🗂️ Настройка центра резервного копирования и отката${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🗂️ 配置备份与回滚${PLAIN}" "${BOLD}🗂️ Configuration backup and rollback${PLAIN}" "${BOLD}🗂️ Резервное копирование и откат конфигурации${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "当前备份目录: ${YELLOW}${backup_root}${PLAIN}" "Current backup directory: ${YELLOW}${backup_root}${PLAIN}" "Текущий каталог резервной копии: ${YELLOW}${backup_root}${PLAIN}.")"
         [[ -n "$loaded_archive" && ! -r "$loaded_archive" ]] && loaded_archive=""
         [[ -n "$loaded_archive" ]] && echo -e "$(localized_text "已加载备份包: ${YELLOW}$(basename "$loaded_archive")${PLAIN}" "Loaded backup archive: ${YELLOW}$(basename "$loaded_archive")${PLAIN}" "Загруженный архив резервной копии: ${YELLOW}$(basename "$loaded_archive")${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 创建备份${PLAIN}               ${YELLOW}(配置 / 自定义目录 / 两者)${PLAIN}" "${GREEN}1. Create backup${PLAIN} (configuration / custom directories / both)" "${GREEN}1. Создать резервную копию${PLAIN} (конфигурация / пользовательские каталоги / оба)")"
-        echo -e "$(localized_text "${GREEN}  2. 加载备份包${PLAIN}               ${YELLOW}(.tar.gz / 加密 .tar.gz.enc)${PLAIN}" "${GREEN}2. Load backup archive${PLAIN} (.tar.gz / encrypted .tar.gz.enc)" "${GREEN}2. Загрузить архив${PLAIN} (.tar.gz / зашифрованный .tar.gz.enc)")"
-        echo -e "$(localized_text "${GREEN}  3. 从备份恢复${PLAIN}             ${YELLOW}(已加载 / 自动列表 / 指定路径)${PLAIN}" "${GREEN}3. Restore from backup${PLAIN} (loaded / automatic list / specified path)" "${GREEN}3. Восстановить из копии${PLAIN} (загруженный / автоматический список / указанный путь)")"
-        echo -e "$(localized_text "${GREEN}  4. 隔离旧备份${PLAIN}             ${YELLOW}(仅保留最近 5 份，旧文件移入隔离区)${PLAIN}" "${GREEN}4. Isolate old backups (only the latest 5 copies are kept, and old files are moved to the quarantine area)${PLAIN}" "${GREEN}4. Изолировать старые резервные копии (сохраняются только последние 5 копий, а старые файлы перемещаются в зону карантина)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  5. 查看/编辑脚本已应用配置${PLAIN} ${YELLOW}(备份、校验，可选择 reload/restart)${PLAIN}" "${CYAN}5. View/edit script applied configuration (backup, verification, optional reload/restart)${PLAIN}" "${CYAN}5. Просмотр/редактирование примененной конфигурации сценария (резервное копирование, проверка, дополнительная перезагрузка/перезапуск)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 创建备份${PLAIN} ${YELLOW}(配置 / 自定义目录 / 两者)${PLAIN}" "${GREEN}  1. Create a backup${PLAIN} ${YELLOW}(configuration / custom directories / both)${PLAIN}" "${GREEN}  1. Создать резервную копию${PLAIN} ${YELLOW}(конфигурация / свои каталоги / оба варианта)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 加载备份包${PLAIN} ${YELLOW}(.tar.gz / 加密 .tar.gz.enc)${PLAIN}" "${GREEN}  2. Load a backup archive${PLAIN} ${YELLOW}(.tar.gz / encrypted .tar.gz.enc)${PLAIN}" "${GREEN}  2. Загрузить архив резервной копии${PLAIN} ${YELLOW}(.tar.gz / зашифрованный .tar.gz.enc)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 从备份恢复${PLAIN} ${YELLOW}(已加载 / 自动列表 / 指定路径)${PLAIN}" "${GREEN}  3. Restore from a backup${PLAIN} ${YELLOW}(loaded / detected / specified path)${PLAIN}" "${GREEN}  3. Восстановить из резервной копии${PLAIN} ${YELLOW}(загруженная / найденная / указанный путь)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 隔离旧备份${PLAIN} ${YELLOW}(保留最近 5 份)${PLAIN}" "${GREEN}  4. Quarantine old backups${PLAIN} ${YELLOW}(keep the latest 5)${PLAIN}" "${GREEN}  4. Изолировать старые копии${PLAIN} ${YELLOW}(сохранить последние 5)${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  5. 查看 / 编辑已应用配置${PLAIN} ${YELLOW}(备份、校验、reload / restart)${PLAIN}" "${CYAN}  5. View or edit applied configuration${PLAIN} ${YELLOW}(backup, validate, reload / restart)${PLAIN}" "${CYAN}  5. Просмотр или правка применённой конфигурации${PLAIN} ${YELLOW}(копия, проверка, reload / restart)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Return to the main menu / q Return to the previous level${PLAIN}" "${RED}0. Возврат в главное меню / q Возврат на предыдущий уровень${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local b_choice
-        read_trimmed b_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed b_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
         case $b_choice in
             1)
@@ -3430,7 +3430,7 @@ configure_system_timezone_for_init() {
     echo -e "${GREEN}  3. Asia/Tokyo${PLAIN}"
     echo -e "${GREEN}  4. UTC${PLAIN}"
     echo -e "$(localized_text "${GREEN}  5. 自定义时区${PLAIN}" "${GREEN}5. Custom time zone${PLAIN}" "${GREEN}5. Пользовательский часовой пояс${PLAIN}")"
-    read_trimmed choice "$(localized_text "请选择基础初始化时区处理方式（默认 1）: " "Please select the basic initialization time zone processing method (default 1):" "Пожалуйста, выберите основной метод обработки часового пояса при инициализации (по умолчанию 1):")"
+    read_trimmed choice "$(localized_text "选择时区处理方式 [1]: " "Select timezone handling [1]: " "Выберите настройку часового пояса [1]: ")"
 
     case "${choice:-1}" in
         1)
@@ -3804,7 +3804,7 @@ func_hosts_manage() {
         print_breadcrumb "$(localized_text "系统开关与清理 > 本机 hosts 解析" "System switch and cleanup > Local hosts resolution" "Переключение и очистка системы > Разрешение локальных хостов")"
         echo -e "$(localized_text "${BOLD}🧭 本机 hosts 解析管理${PLAIN}" "${BOLD}🧭 Local hosts resolution management${PLAIN}" "${BOLD}🧭 Управление разрешением локальных хостов${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：修改当前 VPS 的 /etc/hosts，本地指定域名解析到某个 IP。不会影响公网 DNS。${PLAIN}" "${YELLOW}Purpose: Modify the /etc/hosts of the current VPS and resolve the local specified domain to a certain IP. It will not affect the public DNS.${PLAIN}" "${YELLOW}Назначение: изменить /etc/hosts текущего VPS и разрешить указанное локальное доменное имя в определенный IP-адрес. Это не повлияет на публичную сеть DNS.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}修改当前 VPS 的 /etc/hosts，仅影响本机域名解析，不会修改公网 DNS。${PLAIN}" "${YELLOW}Edit /etc/hosts on this VPS. Changes affect only local resolution, not public DNS.${PLAIN}" "${YELLOW}Изменяет /etc/hosts только на этом VPS и не затрагивает публичный DNS.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 查看当前 hosts${PLAIN}" "${GREEN}1. View current hosts${PLAIN}" "${GREEN}1. Просмотр текущих хостов${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 添加 / 更新本机解析${PLAIN}" "${GREEN}2. Add/update local resolution${PLAIN}" "${GREEN}2. Добавить/обновить локальное разрешение.${PLAIN}")"
@@ -3814,7 +3814,7 @@ func_hosts_manage() {
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         local choice
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1)
                 echo -e "${CYAN}--- /etc/hosts ---${PLAIN}"
@@ -3837,14 +3837,14 @@ func_system_tweaks() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}⚙️ 系统开关与清理${PLAIN}" "${BOLD}⚙️ System switch and cleaning${PLAIN}" "${BOLD}⚙️ Системный переключатель и очистка${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}⚙️ 系统设置与清理${PLAIN}" "${BOLD}⚙️ System settings and cleanup${PLAIN}" "${BOLD}⚙️ Системные настройки и очистка${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         # 状态获取
         local ipv6_status
         local str_ipv6
         ipv6_status=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
-        if [[ "$ipv6_status" == "0" ]]; then str_ipv6="$(localized_text "${GREEN}开启中${PLAIN}" "${GREEN}Is opening${PLAIN}" "${GREEN}открывает${PLAIN}")"; else str_ipv6="$(localized_text "${RED}已禁用${PLAIN}" "${RED}Disabled${PLAIN}" "${RED}отключен${PLAIN}")"; fi
+        if [[ "$ipv6_status" == "0" ]]; then str_ipv6="$(localized_text "${GREEN}已启用${PLAIN}" "${GREEN}Enabled${PLAIN}" "${GREEN}включён${PLAIN}")"; else str_ipv6="$(localized_text "${RED}已禁用${PLAIN}" "${RED}Disabled${PLAIN}" "${RED}отключён${PLAIN}")"; fi
 
         local str_ipv4_first
         if grep -q "^precedence ::ffff:0:0/96  100" /etc/gai.conf 2>/dev/null; then
@@ -3856,7 +3856,7 @@ func_system_tweaks() {
         local ping_status
         local str_ping
         ping_status=$(cat /proc/sys/net/ipv4/icmp_echo_ignore_all 2>/dev/null)
-        if [[ "$ping_status" == "0" ]]; then str_ping="$(localized_text "${GREEN}允许被Ping${PLAIN}" "${GREEN}Is allowed to be Ping${PLAIN}" "${GREEN}может быть Ping${PLAIN}")"; else str_ping="$(localized_text "${RED}禁Ping中${PLAIN}" "${RED}Ping banned${PLAIN}" "${RED}Пинг запрещен${PLAIN}")"; fi
+        if [[ "$ping_status" == "0" ]]; then str_ping="$(localized_text "${GREEN}允许响应${PLAIN}" "${GREEN}Allowed${PLAIN}" "${GREEN}разрешён${PLAIN}")"; else str_ping="$(localized_text "${RED}禁止响应${PLAIN}" "${RED}Blocked${PLAIN}" "${RED}заблокирован${PLAIN}")"; fi
 
         local update_status
         local str_update
@@ -3865,7 +3865,7 @@ func_system_tweaks() {
         else
             update_status=$(systemctl is-active dnf-automatic.timer 2>/dev/null)
         fi
-        if [[ "$update_status" == "active" ]]; then str_update="$(localized_text "${GREEN}开启中${PLAIN}" "${GREEN}Is opening${PLAIN}" "${GREEN}открывает${PLAIN}")"; else str_update="$(localized_text "${RED}已关闭${PLAIN}" "${RED}Has closed${PLAIN}" "${RED}закрылся${PLAIN}")"; fi
+        if [[ "$update_status" == "active" ]]; then str_update="$(localized_text "${GREEN}已启用${PLAIN}" "${GREEN}Enabled${PLAIN}" "${GREEN}включено${PLAIN}")"; else str_update="$(localized_text "${RED}已关闭${PLAIN}" "${RED}Disabled${PLAIN}" "${RED}отключено${PLAIN}")"; fi
 
         local current_hostname
         current_hostname=$(hostnamectl --static 2>/dev/null || hostname 2>/dev/null || cat /etc/hostname 2>/dev/null)
@@ -3873,20 +3873,20 @@ func_system_tweaks() {
         current_hostname="$(localized_text "${current_hostname:-未知}" "${current_hostname:-未知}" "${current_hostname:-未知}")"
 
         # 完美修复：一字不落的菜单显示
-        echo -e "$(localized_text "${GREEN}  1. IPv6 开关${PLAIN}              当前: [ $str_ipv6 ]" "${GREEN}1. IPv6 switch${PLAIN} Current: [ $str_ipv6 ]" "${GREEN}1. Переключатель IPv6${PLAIN} Ток: [ $str_ipv6 ]")"
-        echo -e "$(localized_text "${GREEN}  2. IPv4 出站优先${PLAIN}          当前: [ $str_ipv4_first ]" "${GREEN}2. IPv4 Outbound priority${PLAIN} Current: [ $str_ipv4_first ]" "${GREEN}2. IPv4 Приоритет исходящего вызова${PLAIN} Текущий: [ $str_ipv4_first ]")"
-        echo -e "$(localized_text "${GREEN}  3. Ping 响应开关${PLAIN}          当前: [ $str_ping ]" "${GREEN}3. Ping response switch${PLAIN} Current: [ $str_ping ]" "${GREEN}3. Переключатель ответа на запрос Ping${PLAIN} Ток: [ $str_ping ]")"
-        echo -e "$(localized_text "${GREEN}  4. 本机 hosts 解析管理${PLAIN}    (/etc/hosts 本机域名解析)" "${GREEN}4. Local hosts resolution management${PLAIN} (/etc/hosts local domain resolution)" "${GREEN}4. Управление разрешением локальных хостов${PLAIN} (разрешение локального доменного имени /etc/hosts)")"
-        echo -e "$(localized_text "${GREEN}  5. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}5. Modify the host name${PLAIN} Current: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}5. Измените имя хоста${PLAIN} Текущее: [ ${CYAN}${current_hostname}${PLAIN} ]")"
-        echo -e "$(localized_text "${GREEN}  6. 自动安全更新开关${PLAIN}       当前: [ $str_update ]" "${GREEN}6. Automatic security update switch${PLAIN} Current: [ $str_update ]" "${GREEN}6. Переключатель автоматического обновления безопасности${PLAIN} Текущая версия: [ $str_update ]")"
-        echo -e "$(localized_text "${GREEN}  7. 清理系统垃圾${PLAIN}           (日志/缓存/无用包)" "${GREEN}7. Clean up system garbage${PLAIN} (log/cache/useless packages)" "${GREEN}7. Очистка системного мусора${PLAIN} (журнал/кеш/бесполезные пакеты)")"
+        echo -e "$(localized_text "${GREEN}  1. IPv6 开关${PLAIN}              当前: [ $str_ipv6 ]" "${GREEN}  1. IPv6${PLAIN}                  Status: [ $str_ipv6 ]" "${GREEN}  1. IPv6${PLAIN}                  Состояние: [ $str_ipv6 ]")"
+        echo -e "$(localized_text "${GREEN}  2. IPv4 出站优先${PLAIN}          当前: [ $str_ipv4_first ]" "${GREEN}  2. Prefer IPv4 outbound${PLAIN}   Status: [ $str_ipv4_first ]" "${GREEN}  2. Приоритет IPv4${PLAIN}         Состояние: [ $str_ipv4_first ]")"
+        echo -e "$(localized_text "${GREEN}  3. Ping 响应开关${PLAIN}          当前: [ $str_ping ]" "${GREEN}  3. Ping responses${PLAIN}         Status: [ $str_ping ]" "${GREEN}  3. Ответы Ping${PLAIN}            Состояние: [ $str_ping ]")"
+        echo -e "$(localized_text "${GREEN}  4. 本机 hosts 解析${PLAIN}        (/etc/hosts)" "${GREEN}  4. Local hosts entries${PLAIN}   (/etc/hosts)" "${GREEN}  4. Локальные записи hosts${PLAIN} (/etc/hosts)")"
+        echo -e "$(localized_text "${GREEN}  5. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}  5. Change hostname${PLAIN}        Current: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}  5. Изменить имя хоста${PLAIN}     Текущее: [ ${CYAN}${current_hostname}${PLAIN} ]")"
+        echo -e "$(localized_text "${GREEN}  6. 自动安全更新${PLAIN}           当前: [ $str_update ]" "${GREEN}  6. Automatic security updates${PLAIN} Status: [ $str_update ]" "${GREEN}  6. Автоматические обновления безопасности${PLAIN} Состояние: [ $str_update ]")"
+        echo -e "$(localized_text "${GREEN}  7. 清理系统${PLAIN}               (日志 / 缓存 / 无用包)" "${GREEN}  7. Clean up system${PLAIN}       (logs / cache / unused packages)" "${GREEN}  7. Очистить систему${PLAIN}      (журналы / кэш / ненужные пакеты)")"
         echo -e "$(localized_text "${RED}  8. 系统重装${PLAIN}               (重启后清空主硬盘；高风险)" "${RED}8. System reinstallation${PLAIN} (erases the main disk after reboot; high risk)" "${RED}8. Переустановка системы${PLAIN} (очистит основной диск после перезагрузки; высокий риск)")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local tweak_choice
-        read_trimmed tweak_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed tweak_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
         case $tweak_choice in
             1)
@@ -5728,21 +5728,20 @@ func_port_connlimit_menu() {
         print_breadcrumb "$(localized_text "防火墙规则管理 > 端口并发连接限制" "Firewall Rule Management > Port Concurrent Connection Limit" "Управление правилами межсетевого экрана > Ограничение количества одновременных подключений к порту")"
         echo -e "$(localized_text "${BOLD}端口并发连接限制${PLAIN}" "${BOLD}Port concurrent connection limit${PLAIN}" "${BOLD}Ограничение количества одновременных подключений к порту${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：按公网端口限制每来源 IP 的 TCP 并发连接数。${PLAIN}" "${YELLOW}Purpose: Limit the number of TCP concurrent connections per source IP based on the public port.${PLAIN}" "${YELLOW}Назначение: Ограничить количество одновременных подключений TCP на IP-адрес источника в зависимости от порта публичной сети.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}说明：这是额外 connlimit 规则，不等同于 UFW/firewalld 放行规则。${PLAIN}" "${YELLOW}Description: This is an additional connlimit rule, not equivalent to the UFW/firewalld allow access rule.${PLAIN}" "${YELLOW}Описание: Это дополнительное правило connlimit, которое не эквивалентно правилу выпуска UFW/firewalld.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}持久化：添加/删除后自动尝试保存；用 [5] 手动检查/重试。${PLAIN}" "${YELLOW}Persistence: Automatically try to save after adding/deleting; use [5] to manually check/retry.${PLAIN}" "${YELLOW}Постоянство: автоматически пытаться сохранить после добавления/удаления; используйте [5] для проверки/повторения вручную.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}按公网端口限制每个来源 IP 的 TCP 并发连接数；此规则独立于 UFW/firewalld 放行规则。${PLAIN}" "${YELLOW}Limit concurrent TCP connections per source IP on a public port. These rules are separate from UFW/firewalld allow rules.${PLAIN}" "${YELLOW}Ограничивает число одновременных TCP-подключений с одного IP к публичному порту. Эти правила не заменяют разрешающие правила UFW/firewalld.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}添加或删除后会自动保存；使用 [5] 检查或重试持久化。${PLAIN}" "${YELLOW}Changes are saved automatically. Use [5] to check or retry persistence.${PLAIN}" "${YELLOW}Изменения сохраняются автоматически. Пункт [5] проверяет или повторяет сохранение.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 添加端口并发连接限制${PLAIN}" "${GREEN}1. Add port concurrent connection limit${PLAIN}" "${GREEN}1. Добавьте ограничение на количество одновременных подключений к порту.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 删除端口并发连接限制${PLAIN}" "${GREEN}2. Delete the port concurrent connection limit${PLAIN}" "${GREEN}2. Удалите ограничение на количество одновременных подключений к порту.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 查看当前连接数限制规则${PLAIN}" "${GREEN}3. View the current connection limit rule${PLAIN}" "${GREEN}3. Просмотр текущего правила ограничения подключений.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 查看某端口当前连接情况${PLAIN}" "${GREEN}4. Check the current connection status of a port${PLAIN}" "${GREEN}4. Проверьте текущий статус подключения порта.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 保存/检查重启持久化${PLAIN}" "${GREEN}5. Save/check restart persistence${PLAIN}" "${GREEN}5. Сохранить/проверить сохранение перезапуска${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 添加并发连接限制${PLAIN}" "${GREEN}  1. Add a connection limit${PLAIN}" "${GREEN}  1. Добавить ограничение подключений${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 删除并发连接限制${PLAIN}" "${GREEN}  2. Remove a connection limit${PLAIN}" "${GREEN}  2. Удалить ограничение подключений${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 查看当前限制规则${PLAIN}" "${GREEN}  3. View connection-limit rules${PLAIN}" "${GREEN}  3. Показать правила ограничения${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 查看端口当前连接${PLAIN}" "${GREEN}  4. View current connections to a port${PLAIN}" "${GREEN}  4. Показать текущие подключения к порту${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 检查并保存持久化规则${PLAIN}" "${GREEN}  5. Check and save persistent rules${PLAIN}" "${GREEN}  5. Проверить и сохранить постоянные правила${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  0. 返回上一级${PLAIN}" "${BLUE}0. Return to the previous level${PLAIN}" "${BLUE}0. Возврат на предыдущий уровень.${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local connlimit_choice
-        read_trimmed connlimit_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed connlimit_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$connlimit_choice" in
             1) func_add_port_connlimit_rule; pause_return ;;
             2) func_delete_port_connlimit_rule; pause_return ;;
@@ -6076,24 +6075,24 @@ func_firewall_manage() {
         if [[ "$fw_status" == *"active"* ]]; then
             str_fw="$(localized_text "${GREEN}运行中${PLAIN}" "${GREEN}Running${PLAIN}" "${GREEN}работает${PLAIN}")"
         else
-            str_fw="$(localized_text "${RED}已关闭 / 未配置${PLAIN}" "${RED}Is closed /  is not configured${PLAIN}" "${RED}закрыт /  не настроен${PLAIN}")"
+            str_fw="$(localized_text "${RED}已关闭 / 未配置${PLAIN}" "${RED}Disabled / not configured${PLAIN}" "${RED}отключён / не настроен${PLAIN}")"
         fi
 
         echo -e "$(localized_text "当前防火墙状态: [ $str_fw ]" "Current firewall status: [ $str_fw ]" "Текущий статус брандмауэра: [ $str_fw ]")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 查看防火墙放行列表${PLAIN}" "${GREEN}1. View the firewall release list${PLAIN}" "${GREEN}1. Просмотрите список выпусков брандмауэра .${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 启用防火墙 + 最小权限放行规划${PLAIN} ${YELLOW}(可预览/排除，不覆盖原有规则)${PLAIN}" "${GREEN}2. Enable firewall + least privilege release planning   (can be previewed/excluded, does not overwrite the original rules)${PLAIN}" "${GREEN}2. Включить брандмауэр + планирование выпуска с минимальными привилегиями   (можно просмотреть/исключить, не перезаписывает исходные правила)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 手动放行端口${PLAIN} ${YELLOW}(可选 TCP/UDP，支持批量/范围)${PLAIN}" "${GREEN}3. Manually allow access to port   (optional TCP/UDP, supports batch/range)${PLAIN}" "${GREEN}3. Порт ручного выпуска   (дополнительно TCP/UDP, поддерживает пакетный режим/диапазон)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 删除已放行端口${PLAIN} ${YELLOW}(可选 TCP/UDP，支持批量/范围)${PLAIN}" "${GREEN}4. Delete the released port   (optional TCP/UDP, supports batch/range)${PLAIN}" "${GREEN}4. Удалить освобожденный порт   (дополнительно TCP/UDP, поддерживает пакетный режим/диапазон)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 端口并发连接限制${PLAIN} ${YELLOW}(按每来源 IP 限制 TCP 并发)${PLAIN}" "${GREEN}5. Port concurrent connection limit   (TCP concurrency limit per source IP)${PLAIN}" "${GREEN}5. Ограничение одновременного подключения к порту   (ограничение одновременного доступа TCP для каждого IP-адреса источника)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  6. 关闭防火墙${PLAIN}" "${RED}6. Turn off the firewall${PLAIN}" "${RED}6. Отключаем брандмауэр${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 查看已放行端口${PLAIN}" "${GREEN}  1. View allowed ports${PLAIN}" "${GREEN}  1. Показать разрешённые порты${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 启用防火墙并生成最小放行计划${PLAIN} ${YELLOW}(可预览和排除，不覆盖现有规则)${PLAIN}" "${GREEN}  2. Enable firewall with a minimal allow plan${PLAIN} ${YELLOW}(preview and exclude; keep existing rules)${PLAIN}" "${GREEN}  2. Включить межсетевой экран с минимальным планом разрешений${PLAIN} ${YELLOW}(предпросмотр и исключения; текущие правила сохраняются)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 手动放行端口${PLAIN} ${YELLOW}(TCP / UDP，支持批量和范围)${PLAIN}" "${GREEN}  3. Allow ports manually${PLAIN} ${YELLOW}(TCP / UDP, lists and ranges)${PLAIN}" "${GREEN}  3. Разрешить порты вручную${PLAIN} ${YELLOW}(TCP / UDP, списки и диапазоны)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 删除端口放行规则${PLAIN} ${YELLOW}(TCP / UDP，支持批量和范围)${PLAIN}" "${GREEN}  4. Remove port allow rules${PLAIN} ${YELLOW}(TCP / UDP, lists and ranges)${PLAIN}" "${GREEN}  4. Удалить разрешающие правила портов${PLAIN} ${YELLOW}(TCP / UDP, списки и диапазоны)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 限制端口并发连接${PLAIN} ${YELLOW}(按来源 IP 限制 TCP 并发)${PLAIN}" "${GREEN}  5. Limit concurrent connections${PLAIN} ${YELLOW}(TCP per source IP)${PLAIN}" "${GREEN}  5. Ограничить одновременные подключения${PLAIN} ${YELLOW}(TCP для каждого IP-источника)${PLAIN}")"
+        echo -e "$(localized_text "${RED}  6. 关闭防火墙${PLAIN}" "${RED}  6. Disable firewall${PLAIN}" "${RED}  6. Отключить межсетевой экран${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}" "${BLUE}0. Return to the previous menu / q Return to${PLAIN}" "${BLUE}0. Возврат в предыдущее меню / q Возврат в${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}" "${BLUE}0. Back / q Back${PLAIN}" "${BLUE}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local fw_choice
-        read_trimmed fw_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed fw_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
         case $fw_choice in
             1)
@@ -6125,7 +6124,7 @@ func_firewall_manage() {
 
                 selection_cancelled=0
                 while true; do
-                    read_trimmed exclusions "$(localized_text "👉 输入要排除的编号（逗号分隔，直接回车全部保留，q 取消）: " "👉 Enter the numbers to be excluded (separate by commas, press Enter to keep all, q to cancel):" "👉 Введите номера, которые необходимо исключить (разделите запятыми, нажмите Enter, чтобы сохранить все, q для отмены):")"
+                    read_trimmed exclusions "$(localized_text "输入要排除的编号（逗号分隔；直接回车全部保留；q 取消）: " "Numbers to exclude (comma-separated; Enter keeps all; q cancels): " "Номера для исключения (через запятую; Enter — оставить все; q — отмена): ")"
                     if [[ "$exclusions" =~ ^[qQ]$ ]]; then
                         selection_cancelled=1
                         break
@@ -6234,7 +6233,7 @@ func_firewall_manage() {
                         sleep 2
                         continue
                     fi
-                    read_trimmed add_protocol "$(localized_text "👉 请选择协议 tcp/udp/both（默认 tcp）: " "👉 Please select protocol tcp/udp/both (default tcp):" "👉 Пожалуйста, выберите протокол tcp/udp/both (по умолчанию tcp):")"
+                    read_trimmed add_protocol "$(localized_text "协议 tcp/udp/both [tcp]: " "Protocol tcp/udp/both [tcp]: " "Протокол tcp/udp/both [tcp]: ")"
                     add_protocol=$(normalize_firewall_protocol "${add_protocol:-tcp}" 2>/dev/null || true)
                     if [[ -z "$add_protocol" ]]; then
                         echo -e "$(localized_text "${RED}❌ 协议只能是 tcp、udp 或 both。${PLAIN}" "${RED}❌ The protocol can only be tcp, udp or both.${PLAIN}" "${RED}❌ Протокол может быть только tcp, udp или оба.${PLAIN}")"
@@ -6284,7 +6283,7 @@ func_firewall_manage() {
                         sleep 2
                         continue
                     fi
-                    read_trimmed del_protocol "$(localized_text "👉 请选择要删除的协议 tcp/udp/both（默认 both）: " "👉 Please select the protocol to delete tcp/udp/both (default both):" "👉 Пожалуйста, выберите протокол для удаления tcp/udp/both (оба по умолчанию):")"
+                    read_trimmed del_protocol "$(localized_text "删除协议 tcp/udp/both [both]: " "Protocol to remove tcp/udp/both [both]: " "Удалить протокол tcp/udp/both [both]: ")"
                     del_protocol=$(normalize_firewall_protocol "${del_protocol:-both}" 2>/dev/null || true)
                     if [[ -z "$del_protocol" ]]; then
                         echo -e "$(localized_text "${RED}❌ 协议只能是 tcp、udp 或 both。${PLAIN}" "${RED}❌ The protocol can only be tcp, udp or both.${PLAIN}" "${RED}❌ Протокол может быть только tcp, udp или оба.${PLAIN}")"
@@ -7183,7 +7182,7 @@ func_proxy_add_insecure() {
     echo -e "$(localized_text "${GREEN}  2. Nginx 跳过后端证书校验${PLAIN}" "${GREEN}2. Nginx skips back-end certificate verification${PLAIN}" "${GREEN}2. Nginx пропускает внутреннюю проверку сертификата${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
     local choice
-    read_trimmed choice "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+    read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
     case "$choice" in
         1) func_caddy_add_insecure ;;
         2) func_nginx_add_insecure ;;
@@ -7224,7 +7223,7 @@ func_nginx_manage_ip_whitelist() {
     echo -e "$(localized_text "1. 设置/覆盖白名单" "1. Set/override whitelist" "1. Установить/переопределить белый список")"
     echo -e "$(localized_text "2. 清除白名单" "2. Clear the whitelist" "2. Очистите белый список")"
     echo -e "$(localized_text "0/q. 取消" "0/q. Cancel" "0/кв. Отмена")"
-    read_trimmed action "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+    read_trimmed action "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
     backup_file="${conf_file}.bak_$(date +%s)"
     case "$action" in
@@ -7292,7 +7291,7 @@ func_proxy_manage_ip_whitelist() {
     echo -e "$(localized_text "${GREEN}  2. Nginx 域名 IP 白名单${PLAIN}" "${GREEN}2. Nginx domain IP whitelist${PLAIN}" "${GREEN}2. Nginx доменное имя Белый список IP-адресов${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
     local choice
-    read_trimmed choice "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+    read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
     case "$choice" in
         1) func_caddy_manage_ip_whitelist ;;
         2) func_nginx_manage_ip_whitelist ;;
@@ -7357,7 +7356,7 @@ func_proxy_clear_config() {
     echo -e "$(localized_text "${GREEN}  2. 清空 Nginx HTTPS 反代配置${PLAIN}" "${GREEN}2. Clear Nginx HTTPS and reverse proxy configuration${PLAIN}" "${GREEN}2. Очистите конфигурацию обратного прокси-сервера Nginx HTTPS .${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
     local choice
-    read_trimmed choice "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+    read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
     case "$choice" in
         1) func_caddy_clear_config ;;
         2) func_nginx_clear_proxy_config ;;
@@ -7461,7 +7460,7 @@ func_edit_applied_proxy_config() {
     echo -e "${CYAN}================================================${PLAIN}"
 
     local choice idx target_file target_kind backup_file editor confirm rollback_confirm
-    read_trimmed choice "$(localized_text "请选择要查看/编辑的配置文件: " "Please select a profile to view/edit:" "Пожалуйста, выберите профиль для просмотра/редактирования:")"
+    read_trimmed choice "$(localized_text "选择要查看 / 编辑的配置文件: " "Select a configuration file to view or edit: " "Выберите файл конфигурации для просмотра или правки: ")"
     [[ "$choice" == "0" || "$choice" == "q" || "$choice" == "Q" ]] && return 0
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#proxy_config_paths[@]} )); then
         echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"
@@ -7529,25 +7528,25 @@ func_caddy_reverse_proxy_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "反代" "reverse proxyal" "обратный прокси")"
-        echo -e "$(localized_text "${BOLD}🌐 反代（Caddy / Nginx）${PLAIN}" "${BOLD}🌐 reverse proxy (Caddy / Nginx)${PLAIN}" "${BOLD}🌐 обратный прокси (Caddy / Nginx)${PLAIN}")"
+        print_breadcrumb "$(localized_text "反向代理" "Reverse proxy" "Обратный прокси")"
+        echo -e "$(localized_text "${BOLD}🌐 反向代理（Caddy / Nginx）${PLAIN}" "${BOLD}🌐 Reverse proxy (Caddy / Nginx)${PLAIN}" "${BOLD}🌐 Обратный прокси (Caddy / Nginx)${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：管理未接入 443端口复用的域名反代。443端口复用请只走主菜单 [19]。${PLAIN}" "${YELLOW}Purpose: Manage domain reverse proxy that is not connected to the Port 443 Reuse. 443 For Port 443 Reuse, please only go to the main menu [19].${PLAIN}" "${YELLOW}Назначение: Управление обратным прокси-сервером доменного имени, который не подключен к повторному использованию порта 443. 443 Для общего входа зайдите только в главное меню [19].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}仅管理未接入 443端口复用的网站和面板；已接入的域名请使用主菜单 [19]。${PLAIN}" "${YELLOW}For sites and panels not using Port 443 Reuse. Manage shared-port domains from main menu [19].${PLAIN}" "${YELLOW}Для сайтов и панелей без общего порта 443. Домены с общим портом настраиваются в пункте [19] главного меню.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 添加 Caddy 反代${PLAIN}" "${GREEN}1. Add Caddy to replace${PLAIN}" "${GREEN}1. Добавьте Caddy вместо.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 添加 Nginx HTTPS 反代${PLAIN} ${YELLOW}(复用 acme.sh + CF DNS 证书)${PLAIN}" "${GREEN}2. Add Nginx HTTPS to reverse proxy (reuse acme.sh + CF DNS certificate)${PLAIN}" "${GREEN}2. Добавьте Nginx HTTPS в обратный прокси (повторное использование сертификата acme.sh + CF DNS)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  3. 查看 Caddy/共享证书路径${PLAIN}" "${CYAN}3. View Caddy/shared certificate path${PLAIN}" "${CYAN}3. Просмотр Caddy/пути общего сертификата${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  4. 后端 HTTPS 跳过证书校验${PLAIN} ${YELLOW}(Caddy/Nginx，后端自签 HTTPS 时使用)${PLAIN}" "${CYAN}4. Backend HTTPS skips certificate verification (Caddy/Nginx, used when the backend self-signs HTTPS)${PLAIN}" "${CYAN}4. бэкенд HTTPS пропускает проверку сертификата (Caddy/Nginx, используется, когда бэкенд самостоятельно подписывает HTTPS)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  5. 域名 IP 白名单${PLAIN} ${YELLOW}(Caddy/Nginx)${PLAIN}" "${CYAN}5. domain IP whitelist (Caddy/Nginx)${PLAIN}" "${CYAN}5. Белый список IP-адресов доменных имен (Caddy/Nginx)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  6. 查看/编辑已应用配置文件${PLAIN} ${YELLOW}(Caddy/Nginx，校验后 reload)${PLAIN}" "${CYAN}6. View/edit the applied configuration file (Caddy/Nginx, reload after verification)${PLAIN}" "${CYAN}6. Просмотр/редактирование прикладного файла конфигурации (Caddy/Nginx, перезагрузка после проверки)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  7. 清空反代配置${PLAIN} ${YELLOW}(Caddy/Nginx)${PLAIN}" "${RED}7. Clear the reverse proxy configuration (Caddy/Nginx)${PLAIN}" "${RED}7. Очистите конфигурацию обратного прокси-сервера  (Caddy/Nginx)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  8. 删除底层 ACME 证书/域名配置${PLAIN} ${YELLOW}(会同时清理脚本创建的 Nginx 配置)${PLAIN}" "${RED}8. Delete the underlying ACME certificate/domain configuration (the Nginx configuration created by the script will also be cleaned up)${PLAIN}" "${RED}8. Удалите базовую конфигурацию сертификата ACME/доменного имени (конфигурация Nginx, созданная сценарием, также будет очищена)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 添加 Caddy 反向代理${PLAIN}" "${GREEN}  1. Add Caddy reverse proxy${PLAIN}" "${GREEN}  1. Добавить обратный прокси Caddy${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 添加 Nginx HTTPS 反向代理${PLAIN} ${YELLOW}(使用 acme.sh + Cloudflare DNS 证书)${PLAIN}" "${GREEN}  2. Add Nginx HTTPS reverse proxy${PLAIN} ${YELLOW}(acme.sh + Cloudflare DNS certificate)${PLAIN}" "${GREEN}  2. Добавить обратный прокси Nginx HTTPS${PLAIN} ${YELLOW}(сертификат acme.sh + Cloudflare DNS)${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  3. 查看 Caddy 与共享证书路径${PLAIN}" "${CYAN}  3. View Caddy and shared certificate paths${PLAIN}" "${CYAN}  3. Показать пути Caddy и общих сертификатов${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  4. 跳过后端 HTTPS 证书校验${PLAIN} ${YELLOW}(仅用于自签证书后端)${PLAIN}" "${CYAN}  4. Skip backend HTTPS certificate verification${PLAIN} ${YELLOW}(self-signed backends only)${PLAIN}" "${CYAN}  4. Отключить проверку HTTPS-сертификата бэкенда${PLAIN} ${YELLOW}(только для самоподписанного сертификата)${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  5. 管理域名 IP 白名单${PLAIN}" "${CYAN}  5. Manage domain IP allowlists${PLAIN}" "${CYAN}  5. Управление списками разрешённых IP для доменов${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  6. 查看 / 编辑已应用配置${PLAIN} ${YELLOW}(校验后 reload)${PLAIN}" "${CYAN}  6. View or edit applied configuration${PLAIN} ${YELLOW}(validate, then reload)${PLAIN}" "${CYAN}  6. Просмотр или правка применённой конфигурации${PLAIN} ${YELLOW}(проверка и reload)${PLAIN}")"
+        echo -e "$(localized_text "${RED}  7. 清空反向代理配置${PLAIN}" "${RED}  7. Clear reverse proxy configuration${PLAIN}" "${RED}  7. Очистить конфигурацию обратного прокси${PLAIN}")"
+        echo -e "$(localized_text "${RED}  8. 删除 ACME 证书与域名配置${PLAIN} ${YELLOW}(同时清理脚本创建的 Nginx 配置)${PLAIN}" "${RED}  8. Remove ACME certificate and domain configuration${PLAIN} ${YELLOW}(also removes script-managed Nginx configuration)${PLAIN}" "${RED}  8. Удалить сертификат ACME и конфигурацию домена${PLAIN} ${YELLOW}(включая конфигурацию Nginx, созданную скриптом)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local caddy_choice
-        read_trimmed caddy_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed caddy_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$caddy_choice" in
             1) func_caddy_add_reverse_proxy ;;
             2) func_nginx_add_reverse_proxy ;;
@@ -7575,24 +7574,24 @@ func_env_install() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "基础组件与常用服务" "Basic components and common services" "Базовые компоненты и общие услуги")"
+        print_breadcrumb "$(localized_text "基础组件与常用服务" "Components and services" "Компоненты и службы")"
         echo -e "$(localized_text "${BOLD}📦 基础组件与常用服务${PLAIN}" "${BOLD}📦 Basic components and common services${PLAIN}" "${BOLD}📦 Базовые компоненты и общие службы${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：安装基础组件、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]，443端口复用只走主菜单 [19]。${PLAIN}" "${YELLOW}Purpose: Install basic components, forwarding tunnels and common services. Caddy/Nginx reverse proxy goes to the main menu [4], Port 443 Reuse only goes to the main menu [19].${PLAIN}" "${YELLOW}Назначение: Установка основных компонентов, туннелей пересылки и общих служб. Caddy/Nginx наоборот использует главное меню [4], а повторное использование порта 443 использует только главное меню [19].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}安装运行环境、转发工具和常用服务。反向代理使用主菜单 [4]，443端口复用使用 [19]。${PLAIN}" "${YELLOW}Install runtimes, forwarding tools, and common services. Use main menu [4] for reverse proxies and [19] for Port 443 Reuse.${PLAIN}" "${YELLOW}Установка сред выполнения, инструментов перенаправления и служб. Обратный прокси — пункт [4], общий порт 443 — пункт [19].${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 基础运行环境${PLAIN}" "${BOLD}▶ Basic operating environment${PLAIN}" "${BOLD}▶ Базовая операционная среда${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  1. Docker 引擎        ${YELLOW}  2. Python 环境        ${GREEN}  3. iperf3 测速工具${PLAIN}" "${GREEN}1. Docker engine 2. Python environment 3. iperf3 speed measurement tool${PLAIN}" "${GREEN}1. Двигатель Docker 2. Python Окружающая среда 3. iperf3 Инструмент измерения скорости${PLAIN}")"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 转发、隧道与常用服务${PLAIN}" "${BOLD}▶ Forwarding, tunneling and common services${PLAIN}" "${BOLD}▶ Пересылка, туннелирование и общие услуги${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. WARP 解锁/网络     ${YELLOW}  5. Realm 端口转发     ${GREEN}  6. Gost 隧道${PLAIN}" "${GREEN}4. WARP Unlock/Network 5. Realm port forwarding 6. Gost Tunnel${PLAIN}" "${GREEN}4. WARP Разблокировка/Сеть 5. маршрутизация портов области 6. Gost Туннель${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 基础运行环境${PLAIN}" "${BOLD}▶ Runtimes${PLAIN}" "${BOLD}▶ Среды выполнения${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. Docker 引擎        ${YELLOW}  2. Python 环境        ${GREEN}  3. iperf3 测速工具${PLAIN}" "${GREEN}  1. Docker engine       ${YELLOW}  2. Python runtime      ${GREEN}  3. iperf3${PLAIN}" "${GREEN}  1. Docker               ${YELLOW}  2. Среда Python        ${GREEN}  3. iperf3${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 转发、隧道与常用服务${PLAIN}" "${BOLD}▶ Forwarding, tunnels, and services${PLAIN}" "${BOLD}▶ Перенаправление, туннели и службы${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. WARP 解锁/网络     ${YELLOW}  5. Realm 端口转发     ${GREEN}  6. Gost 隧道${PLAIN}" "${GREEN}  4. WARP networking      ${YELLOW}  5. Realm forwarding    ${GREEN}  6. Gost tunnel${PLAIN}" "${GREEN}  4. Сеть WARP            ${YELLOW}  5. Перенаправление Realm ${GREEN}  6. Туннель Gost${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  7. Forwardx 转发面板  ${YELLOW}  8. Argox 节点         ${GREEN}  9. 极光面板${PLAIN}" "${GREEN}7. Forwardx forwarding panel 8. Argox node 9. Aurora panel${PLAIN}" "${GREEN}7. Панель пересылки Forwardx 8. Узел Argox 9. Панель Aurora${PLAIN}")"
         echo -e "$(localized_text "${GREEN} 10. nftables NAT 转发  ${YELLOW} 11. Aria2 下载         ${GREEN} 12. PVE 虚拟化工具${PLAIN}" "${GREEN}10. nftables NAT forwarding 11. Aria2 download 12. PVE virtualization tool${PLAIN}" "${GREEN}10. nftables маршрутизация NAT 11. Загрузка Aria2 12. Инструмент виртуализации PVE${PLAIN}")"
         echo -e "$(localized_text "${GREEN} 13. FLVX 哆啦转发面板  ${YELLOW} 14. EasyTier 组网       ${GREEN} 15. Tailscale 组网${PLAIN}" "${GREEN}13. FLVX Doraemon forwarding panel 14. EasyTier networking 15. Tailscale networking${PLAIN}" "${GREEN}13. Панель пересылки FLVX Doraemon 14. Сеть EasyTier 15. Сеть Tailscale${PLAIN}")"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Return to the main menu / q Return to the previous level${PLAIN}" "${RED}0. Возврат в главное меню / q Возврат на предыдущий уровень${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local env_choice
-        read_trimmed env_choice "$(localized_text "👉 选择: " "👉 Choose:" "👉 Выбирайте:")"
+        read_trimmed env_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         
         case $env_choice in
             1) 
@@ -9021,7 +9020,7 @@ select_xray_fallback_main_route_for_switch() {
         echo -e "${GREEN}$((idx + 1)).${PLAIN} ${XRAY_SNI_ROUTE_SNIS[$idx]} -> ${XRAY_SNI_ROUTE_ADDRS[$idx]}:${XRAY_SNI_ROUTE_PORTS[$idx]}"
     done
     echo -e "$(localized_text "${RED}0. 取消切换${PLAIN}" "${RED}0. Cancel switching${PLAIN}" "${RED}0. Отменить переключение${PLAIN}")"
-    read_trimmed choice "$(localized_text "请选择 xray-fallback 主入站候选: " "Please select xray-fallback primary inbound candidate:" "Пожалуйста, выберите xray-резервный основной входящий кандидат:")"
+    read_trimmed choice "$(localized_text "选择 xray-fallback 主入站: " "Select the xray-fallback main inbound: " "Выберите основное входящее подключение xray-fallback: ")"
     if [[ -z "$choice" || "$choice" == "0" ]]; then
         echo -e "$(localized_text "${BLUE}已取消切换到 xray-fallback。${PLAIN}" "${BLUE}Canceled the switch to xray-fallback.${PLAIN}" "${BLUE}отменил переход на резервный вариант xray.${PLAIN}")"
         return 1
@@ -10355,7 +10354,7 @@ preview_entry_mode_cutover() {
         echo -e "$(localized_text "${GREEN}  1. 查看 diff${PLAIN}" "${GREEN}1. View diff${PLAIN}" "${GREEN}1. Посмотреть разницу${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 继续切换${PLAIN}" "${GREEN}2. Continue to switch to${PLAIN}" "${GREEN}2. Продолжайте переходить на.${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 取消，不修改任何配置${PLAIN}" "${RED}0. Cancel without modifying any configuration${PLAIN}" "${RED}0. Отмена без изменения конфигурации.${PLAIN}")"
-        read_trimmed choice "$(localized_text "请选择操作（默认 0 取消）: " "Please select an action (default 0 cancels):" "Пожалуйста, выберите действие (по умолчанию 0 отменяет):")"
+        read_trimmed choice "$(localized_text "选择操作 [0 取消]: " "Select an option [0 cancels]: " "Выберите действие [0 — отмена]: ")"
         case "$(echo "${choice:-0}" | tr '[:upper:]' '[:lower:]')" in
             1|d|D|diff)
                 show_entry_mode_cutover_diff "$target_mode"
@@ -11097,7 +11096,7 @@ print_xray_route_health_list() {
 
         echo -e "${CYAN}${sni}${PLAIN} -> ${addr}:${port}（${status}）"
         if [[ "${CADDY_LISTEN_PORT:-}" == "$port" ]]; then
-            echo -e "$(localized_text "${RED}  ❌ 与 Web 反代引擎本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}" "${RED}❌ Conflicts with the web inversion engine local port ${CADDY_LISTEN_PORT}.${PLAIN}" "${RED}❌ Конфликты с локальным портом ${CADDY_LISTEN_PORT} механизма веб-инверсии.${PLAIN}")"
+            echo -e "$(localized_text "${RED}  ❌ 与 Web 反向代理的本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}" "${RED}❌ Conflicts with the web reverse proxy local port ${CADDY_LISTEN_PORT}.${PLAIN}" "${RED}❌ Конфликт с локальным портом веб-прокси: ${CADDY_LISTEN_PORT}.${PLAIN}")"
         fi
         line=$(xray_route_listen_line_by_addr_port "$addr" "$port")
         if [[ -n "$line" ]]; then
@@ -11607,11 +11606,10 @@ edit_sni_stack_runtime_profile() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}🧭 修改 443 分流参数${PLAIN}" "${BOLD}🧭 Modify 443 routing parameters${PLAIN}" "${BOLD}🧭 Изменение 443 параметров маршрутизации${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🧭 修改 443 共享参数${PLAIN}" "${BOLD}🧭 Edit shared Port 443 settings${PLAIN}" "${BOLD}🧭 Изменение общих параметров порта 443${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：后续修改面板端口/路径、订阅端口/路径、REALITY SNI、入口端口时使用。${PLAIN}" "${YELLOW}Purpose: Used when subsequently modifying the panel port/path, subscription port/path, REALITY, SNI, and entry port.${PLAIN}" "${YELLOW}Назначение: используется при последующем изменении порта/пути панели, порта/пути подписки, REALITY, SNI и входного порта.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}修改面板、订阅、REALITY、监听端口和路径；新增网站请使用 [19] -> [8]。${PLAIN}" "${YELLOW}Edit panel, subscription, REALITY, listener, port, and path settings. Add sites from [19] -> [8].${PLAIN}" "${YELLOW}Изменение панели, подписки, REALITY, слушателей, портов и путей. Сайты добавляются через [19] -> [8].${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}新增网站请走 [19] -> [8]，不用重跑首次配置。${PLAIN}" "${YELLOW}Please go to [19] -> [8] to add a new website. There is no need to rerun the first configuration.${PLAIN}" "${YELLOW}Пожалуйста, перейдите в [19] -> [8], чтобы добавить новый веб-сайт. Нет необходимости повторно запускать первую конфигурацию.${PLAIN}")"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
             print_sni_stack_current_summary
@@ -11620,18 +11618,18 @@ edit_sni_stack_runtime_profile() {
             return 1
         fi
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 修改面板/订阅端口与路径${PLAIN}" "${GREEN}1. Modify the panel/subscription port and path${PLAIN}" "${GREEN}1. Измените порт панели/подписки и путь.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 修改 REALITY 本地监听 / 伪装 SNI${PLAIN}" "${GREEN}2. Modify REALITY local listeners/disguise SNI${PLAIN}" "${GREEN}2. Изменить REALITY локальный прослушивание/маскировку SNI${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 修改 Nginx 公网入口 / Web 反代本地 TLS${PLAIN}" "${GREEN}3. Modify Nginx public entry/Web to replace local TLS${PLAIN}" "${GREEN}3. Измените Nginx вход в публичную сеть/Интернет для замены локального TLS.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 修改面板与订阅端口 / 路径${PLAIN}" "${GREEN}  1. Edit panel and subscription ports / paths${PLAIN}" "${GREEN}  1. Изменить порты / пути панели и подписки${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 修改 REALITY 本地监听与目标 SNI${PLAIN}" "${GREEN}  2. Edit REALITY local listener and target SNI${PLAIN}" "${GREEN}  2. Изменить локальный слушатель REALITY и целевой SNI${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 修改公网入口与 Web 本地 TLS${PLAIN}" "${GREEN}  3. Edit public entry and local Web TLS${PLAIN}" "${GREEN}  3. Изменить публичный вход и локальный Web TLS${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}  4. 修改面板域名：请走 [8] -> [9]${PLAIN}" "${YELLOW}4. Modify the panel domain: please go [8] -> [9]${PLAIN}" "${YELLOW}4. Измените доменное имя панели: выберите [8] -> [9].${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 重新应用当前保存的配置${PLAIN}" "${GREEN}5. Reapply the currently saved configuration${PLAIN}" "${GREEN}5. Повторно примените текущую сохраненную конфигурацию.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 重新应用已保存配置${PLAIN}" "${GREEN}  5. Reapply saved configuration${PLAIN}" "${GREEN}  5. Повторно применить сохранённую конфигурацию${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请输入菜单编号或 ?: " "👉 Please enter menu number or ?:" "👉 Пожалуйста, введите номер меню или ?:")"
+        read_trimmed choice "$(localized_text "输入菜单编号或 ?: " "Enter a menu number or ?: " "Введите номер пункта или ?: ")"
         case "$choice" in
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;
@@ -13127,7 +13125,7 @@ remove_sni_stack_site() {
 switch_sni_stack_web_proxy_engine() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}切换 443 Web 反代引擎${PLAIN}" "${BOLD}Switch 443 Web reverse proxy engine${PLAIN}" "${BOLD}переключатель 443 Механизм обратного веб-прокси${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}切换 443 Web 反代引擎${PLAIN}" "${BOLD}Switch the Port 443 Web reverse proxy${PLAIN}" "${BOLD}Смена Web-прокси для порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
 
@@ -13147,7 +13145,7 @@ switch_sni_stack_web_proxy_engine() {
     echo -e "$(localized_text "${GREEN}  2. Nginx 本地 HTTPS 反代${PLAIN}" "${GREEN}2. Nginx local HTTPS reverse proxy${PLAIN}" "${GREEN}2. Nginx локальный HTTPS обратный прокси${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    read_trimmed choice "$(localized_text "请选择 Web 反代引擎（默认保持当前）: " "Please select a web inversion engine (default remains current):" "Пожалуйста, выберите механизм веб-инверсии (по умолчанию остается текущим):")"
+    read_trimmed choice "$(localized_text "选择 Web 反代引擎（直接回车保持当前）: " "Select Web reverse proxy (press Enter to keep current): " "Выберите Web-прокси (Enter — оставить текущий): ")"
     case "$choice" in
         ""|0|q|Q)
             echo -e "$(localized_text "${BLUE}已取消切换 Web 反代引擎。${PLAIN}" "${BLUE}Canceled the switching of the web reverse proxy engine.${PLAIN}" "${BLUE}отменил включение механизма обратный прокси сети.${PLAIN}")"
@@ -13645,11 +13643,11 @@ manage_xray_inbound_routes() {
             echo -e "$(localized_text "${YELLOW}  3. 删除入站分流规则（当前模式不可用）${PLAIN}" "${YELLOW}3. Delete inbound routing rules (not available in current mode)${PLAIN}" "${YELLOW}3. Удалить правила маршрутизации входящих подключений (недоступно в текущем режиме)${PLAIN}")"
             echo -e "$(localized_text "${YELLOW}  4. 同步规则到当前入口模式（当前模式不可用）${PLAIN}" "${YELLOW}4. Synchronize rules to the current entry mode (the current mode is unavailable)${PLAIN}" "${YELLOW}4. Синхронизировать правила с текущим режимом входа (текущий режим недоступен)${PLAIN}")"
             echo -e "------------------------------------------------"
-            echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Return / q Return${PLAIN}" "${RED}0. Возврат / q Возврат${PLAIN}")"
+            echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
             echo -e "${CYAN}================================================${PLAIN}"
 
             local fallback_choice
-            read_trimmed fallback_choice "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+            read_trimmed fallback_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
             case "$fallback_choice" in
                 1) list_xray_sni_routes ;;
                 2|3|4)
@@ -13668,22 +13666,22 @@ manage_xray_inbound_routes() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}Xray 入站管理${PLAIN}" "${BOLD}Xray Inbound management${PLAIN}" "${BOLD}Управление входящими подключениями Xray${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}Xray SNI 路由管理${PLAIN}" "${BOLD}Xray SNI route management${PLAIN}" "${BOLD}Управление маршрутами Xray SNI${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}只管理 SNI -> 本地地址:端口 分流记录，用于当前支持的端口复用模式渲染分流规则；不编辑 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}Only manages the SNI -> local address:port routing record, which is used for the currently supported Port 443 Reuse mode rendering routing rules; it does not edit the 3x-ui/Xray inbound connection internal configuration.${PLAIN}" "${YELLOW}управляет только SNI -> локальный адрес: записи маршрутизирования порта, которые используются для поддерживаемых в настоящее время правил маршрутизирования рендеринга в однозаходном режиме; он не редактирует входящую внутреннюю конфигурацию 3x-ui/Xray.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}管理 SNI -> 本地地址:端口 路由记录；不会创建或修改 3x-ui/Xray 入站。${PLAIN}" "${YELLOW}Manage SNI -> local address:port routes without creating or editing 3x-ui/Xray inbounds.${PLAIN}" "${YELLOW}Управление маршрутами SNI -> локальный адрес:порт без создания или изменения входящих подключений 3x-ui/Xray.${PLAIN}")"
         echo -e "$(localized_text "配置文件：$(xray_sni_routes_path)" "Configuration file: $(xray_sni_routes_path)" "Файл конфигурации: $(xray_sni_routes_path).")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 查看入站分流规则${PLAIN}" "${GREEN}1. View the inbound routing rule${PLAIN}" "${GREEN}1. Просмотреть правила маршрутизации входящих подключений${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 添加入站分流规则${PLAIN}" "${GREEN}2. Add inbound routing rule${PLAIN}" "${GREEN}2. Добавить правило маршрутизации входящего подключения${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 删除入站分流规则${PLAIN}" "${GREEN}3. Delete the inbound routing rule${PLAIN}" "${GREEN}3. Удалить правило маршрутизации входящего подключения${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 检查入站端口状态${PLAIN}" "${GREEN}4. Check the inbound port status${PLAIN}" "${GREEN}4. Проверьте состояние входящего порта.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 同步到当前入口模式${PLAIN}" "${GREEN}5. Synchronize to the current entry mode${PLAIN}" "${GREEN}5. Синхронизироваться с текущим режимом входа${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 查看 SNI 路由${PLAIN}" "${GREEN}  1. View SNI routes${PLAIN}" "${GREEN}  1. Показать маршруты SNI${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 添加 SNI 路由${PLAIN}" "${GREEN}  2. Add an SNI route${PLAIN}" "${GREEN}  2. Добавить маршрут SNI${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 删除 SNI 路由${PLAIN}" "${GREEN}  3. Remove an SNI route${PLAIN}" "${GREEN}  3. Удалить маршрут SNI${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 检查本地入站端口${PLAIN}" "${GREEN}  4. Check local inbound ports${PLAIN}" "${GREEN}  4. Проверить локальные входящие порты${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 同步到当前入口模式${PLAIN}" "${GREEN}  5. Sync with the active entry mode${PLAIN}" "${GREEN}  5. Синхронизировать с активным режимом входа${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Return / q Return${PLAIN}" "${RED}0. Возврат / q Возврат${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) list_xray_sni_routes ;;
             2) add_xray_sni_route ;;
@@ -13719,7 +13717,7 @@ manage_sni_stack_tcp_routes() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) list_sni_stack_tcp_routes ;;
             2) add_sni_stack_tcp_route ;;
@@ -13797,7 +13795,7 @@ manage_sni_stack_ip_whitelist() {
         echo -e "$(localized_text "1. 设置/覆盖白名单" "1. Set/override whitelist" "1. Установить/переопределить белый список")"
         echo -e "$(localized_text "2. 清除白名单" "2. Clear the whitelist" "2. Очистите белый список")"
         echo -e "$(localized_text "0/q. 取消" "0/q. Cancel" "0/кв. Отмена")"
-        read_trimmed action "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+        read_trimmed action "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$action" in
             1)
                 if [[ "$whitelist_supported" != "yes" ]]; then
@@ -14145,7 +14143,7 @@ manage_reality_traffic_guard() {
         fi
         echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         local choice
-        read_trimmed choice "$(localized_text "请选择操作: " "Select an action: " "Выберите действие: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) set_strict_sni_gate true ; pause_return ;;
             2) set_strict_sni_gate false ; pause_return ;;
@@ -14207,7 +14205,7 @@ manage_sni_stack_sites() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "$(localized_text "请输入菜单编号或 ?: " "Select a menu number or ?:" "Выберите номер меню или ?:")"
+        read_trimmed choice "$(localized_text "输入菜单编号或 ?: " "Enter a menu number or ?: " "Введите номер пункта или ?: ")"
         case "$choice" in
             1) list_sni_stack_sites ;;
             2) add_sni_stack_site ;;
@@ -14285,7 +14283,7 @@ func_caddy_cf_reality_wizard() {
 func_caddy_cf_health_check() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🩺 CF DNS 一键体检${PLAIN}" "${BOLD}🩺 CF DNS One-click health check${PLAIN}" "${BOLD}🩺 CF DNS проверка состояния в один клик${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🩺 CF DNS 检查${PLAIN}" "${BOLD}🩺 CF DNS check${PLAIN}" "${BOLD}🩺 Проверка CF DNS${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local ok_count=0
@@ -14450,7 +14448,7 @@ func_caddy_cf_health_check() {
 func_caddy_cf_auto_fix() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧰 CF DNS 一键自动修复${PLAIN}" "${BOLD}🧰 CF DNS One-click automatic repair${PLAIN}" "${BOLD}🧰 CF DNS Автоматическое восстановление в один клик${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧰 CF DNS 自动修复${PLAIN}" "${BOLD}🧰 CF DNS automatic repair${PLAIN}" "${BOLD}🧰 Автоматическое исправление CF DNS${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local fixed_count=0
@@ -14615,38 +14613,37 @@ func_caddy_cf_maintenance_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}🛠️ 443 / Caddy / Cloudflare 维护中心${PLAIN}" "${BOLD}🛠️ 443 / Caddy / Cloudflare Maintenance Center${PLAIN}" "${BOLD}🛠️ 443 / Caddy / Cloudflare Центр технического обслуживания${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🛠️ 443 / Caddy / Cloudflare 维护${PLAIN}" "${BOLD}🛠️ Port 443 / Caddy / Cloudflare maintenance${PLAIN}" "${BOLD}🛠️ Обслуживание порта 443 / Caddy / Cloudflare${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：排查 443 链路、重签证书、修复软链接、隔离旧配置和回滚。${PLAIN}" "${YELLOW}Purpose: troubleshooting 443 links, re-signing certificates, repairing symlinks, isolating old configurations and rolling back.${PLAIN}" "${YELLOW}Назначение: устранение неполадок 443 ссылок, переподписка сертификатов, восстановление программных ссылок, изоляция старых конфигураций и откат.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}建议顺序：先 [1] 体检，再按异常选择证书或 Caddy 修复项。${PLAIN}" "${YELLOW}Recommended order: [1] health check first, then select the certificate or Caddy repair item according to the abnormality.${PLAIN}" "${YELLOW}Рекомендуемый порядок: [1] Сначала проверка состояния, затем выберите сертификат или элемент ремонта Caddy в соответствии с неисправностью.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}用于检查 443 链路、维护证书、修复 Caddy 和回滚配置。建议先运行 [1]。${PLAIN}" "${YELLOW}Check the Port 443 path, maintain certificates, repair Caddy, and roll back configuration. Start with [1].${PLAIN}" "${YELLOW}Проверка цепочки порта 443, обслуживание сертификатов, исправление Caddy и откат конфигурации. Начните с [1].${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 443端口复用常用${PLAIN}" "${BOLD}▶ Port 443 Reuse commonly used${PLAIN}" "${BOLD}▶ 443 Обычно используется повторного использования порта 443${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  1. 443 链路与安全体检${PLAIN}       ${YELLOW}(Nginx/Caddy/REALITY/面板/版本隐藏)${PLAIN}" "${GREEN}1. 443 Link and security health check (Nginx/Caddy/REALITY/panel/version hidden)${PLAIN}" "${GREEN}1. 443 проверка состояния канала и безопасности (Nginx/Caddy/REALITY/панель/версия скрыта)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 管理 443 网站/反代域名${PLAIN}    ${YELLOW}(新增/删除/查看，最常用)${PLAIN}" "${GREEN}2. Management 443 website/reverse domain (add/delete/view, most commonly used)${PLAIN}" "${GREEN}2. Веб-сайт Management 443/обратное доменное имя (добавление/удаление/просмотр, наиболее часто используемый)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}" "${GREEN}3. Modify 443 routing parameters   (Panel/Subscription/REALITY/Entry Port and Path)${PLAIN}" "${GREEN}3. Измените 443 параметра маршрутизации   (Панель/Подписка/REALITY/Входной порт и путь)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 重新应用上次 443 配置${PLAIN}     ${YELLOW}(读取 sni-stack.env 重建配置)${PLAIN}" "${GREEN}4. Reapply the last 443 configuration (read sni-stack.env and rebuild the configuration)${PLAIN}" "${GREEN}4. Повторно примените последнюю конфигурацию 443 (прочитайте sni-stack.env и перестройте конфигурацию)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}" "${GREEN}5. Subscription link / External Proxy prompt (check whether the node link outputs public port 443)${PLAIN}" "${GREEN}5. Ссылка на подписку/запрос внешнего прокси (проверьте, выводит ли ссылка узла публичный порт 443)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  6. 回滚 443端口复用配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}" "${RED}6. Rollback Port 443 Reuse configuration   (restore from recent backup)${PLAIN}" "${RED}6. Откат 443 Конфигурация с повторным использованием порта 443 (восстановление из последней резервной копии)${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 常用操作${PLAIN}" "${BOLD}▶ Common tasks${PLAIN}" "${BOLD}▶ Основные действия${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 检查 443 链路与安全状态${PLAIN} ${YELLOW}(Nginx / Caddy / REALITY / 面板)${PLAIN}" "${GREEN}  1. Check Port 443 path and security${PLAIN} ${YELLOW}(Nginx / Caddy / REALITY / panel)${PLAIN}" "${GREEN}  1. Проверить цепочку порта 443 и защиту${PLAIN} ${YELLOW}(Nginx / Caddy / REALITY / панель)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 管理 443 网站与反向代理${PLAIN} ${YELLOW}(新增 / 删除 / 查看)${PLAIN}" "${GREEN}  2. Manage Port 443 sites and reverse proxies${PLAIN} ${YELLOW}(add / remove / view)${PLAIN}" "${GREEN}  2. Управление сайтами и обратным прокси на порту 443${PLAIN} ${YELLOW}(добавить / удалить / показать)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 修改 443 共享参数${PLAIN} ${YELLOW}(面板 / 订阅 / REALITY / 端口 / 路径)${PLAIN}" "${GREEN}  3. Edit shared Port 443 settings${PLAIN} ${YELLOW}(panel / subscription / REALITY / ports / paths)${PLAIN}" "${GREEN}  3. Изменить общие параметры порта 443${PLAIN} ${YELLOW}(панель / подписка / REALITY / порты / пути)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 重新应用已保存的 443 配置${PLAIN}" "${GREEN}  4. Reapply saved Port 443 configuration${PLAIN}" "${GREEN}  4. Повторно применить сохранённую конфигурацию порта 443${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 检查订阅链接与 External Proxy${PLAIN}" "${GREEN}  5. Check subscription links and External Proxy${PLAIN}" "${GREEN}  5. Проверить ссылки подписки и External Proxy${PLAIN}")"
+        echo -e "$(localized_text "${RED}  6. 回滚 443端口复用配置${PLAIN} ${YELLOW}(恢复最近备份)${PLAIN}" "${RED}  6. Roll back Port 443 Reuse${PLAIN} ${YELLOW}(restore the latest backup)${PLAIN}" "${RED}  6. Откатить конфигурацию общего порта 443${PLAIN} ${YELLOW}(восстановить последнюю копию)${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 证书与 Cloudflare${PLAIN}" "${BOLD}▶ Certificate and Cloudflare${PLAIN}" "${BOLD}▶ Сертификат и Cloudflare${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. 查看已管理域名 / 证书路径${PLAIN}" "${GREEN}7. View the managed domain/certificate path${PLAIN}" "${GREEN}7. Просмотрите имя управляемого домена/путь сертификата.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  8. 更新 Cloudflare API Token${PLAIN}" "${GREEN}8. Update Cloudflare API Token${PLAIN}" "${GREEN}8. Обновите Cloudflare API-токен${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  9. 重新签发某个域名证书${PLAIN}" "${GREEN}9. Reissue a domain certificate${PLAIN}" "${GREEN}9. Перевыпустите сертификат доменного имени.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 10. 重建 /root/cert 证书软链接${PLAIN}" "${GREEN}10. Rebuild /root/cert certificate symlink${PLAIN}" "${GREEN}10. Перестройте программную ссылку сертификата /root/cert.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 11. 重建证书清单文件${PLAIN}" "${GREEN}11. Rebuild the certificate list file${PLAIN}" "${GREEN}11. Перестройте файл списка сертификатов.${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 证书与 Cloudflare${PLAIN}" "${BOLD}▶ Certificates and Cloudflare${PLAIN}" "${BOLD}▶ Сертификаты и Cloudflare${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. 查看已管理域名与证书路径${PLAIN}" "${GREEN}  7. View managed domains and certificate paths${PLAIN}" "${GREEN}  7. Показать управляемые домены и пути сертификатов${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  8. 更新 Cloudflare API Token${PLAIN}" "${GREEN}  8. Update Cloudflare API token${PLAIN}" "${GREEN}  8. Обновить токен Cloudflare API${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  9. 重新签发域名证书${PLAIN}" "${GREEN}  9. Reissue a domain certificate${PLAIN}" "${GREEN}  9. Перевыпустить сертификат домена${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 10. 重建 /root/cert 证书软链接${PLAIN}" "${GREEN} 10. Rebuild /root/cert certificate symlinks${PLAIN}" "${GREEN} 10. Пересоздать символические ссылки в /root/cert${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 11. 重建证书清单${PLAIN}" "${GREEN} 11. Rebuild certificate manifest${PLAIN}" "${GREEN} 11. Пересоздать список сертификатов${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ Caddy 修复与清理${PLAIN}" "${BOLD}▶ Caddy Repair and Cleanup${PLAIN}" "${BOLD}▶ Caddy Ремонт и очистка${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 12. 校验并重载 Caddy${PLAIN}" "${GREEN}12. Verify and reload Caddy${PLAIN}" "${GREEN}12. Проверьте и перезагрузите Caddy.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 13. Caddy/证书一键体检${PLAIN}       ${YELLOW}(Token/证书/监听/后端)${PLAIN}" "${GREEN}13. Caddy/certificate one-click health check (Token/certificate/listening/backend)${PLAIN}" "${GREEN}13. Caddy/сертификат, проверка состояния в один клик (токен/сертификат/прослушивание/бэкенд)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 14. 一键自动修复常见问题${PLAIN}" "${GREEN}14. One-click automatic repair of common problems${PLAIN}" "${GREEN}14. Автоматическое устранение распространенных проблем в один клик${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 15. 隔离旧 Caddy 配置${PLAIN}        ${YELLOW}(避免抢占 443)${PLAIN}" "${GREEN}15. Isolate the old Caddy and configure (avoid preemption 443)${PLAIN}" "${GREEN}15. Изолируйте старый Caddy и настройте (избегайте вытеснения 443)${PLAIN}")"
-        echo -e "$(localized_text "${RED} 16. 隔离某个域名的 Caddy 配置与证书${PLAIN}" "${RED}16. Isolate a domain Caddy configuration and certificate${PLAIN}" "${RED}16. Изолируйте конфигурацию доменного имени Caddy и сертификат.${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ Caddy 修复与清理${PLAIN}" "${BOLD}▶ Caddy repair and cleanup${PLAIN}" "${BOLD}▶ Исправление и очистка Caddy${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 12. 校验并重载 Caddy${PLAIN}" "${GREEN} 12. Validate and reload Caddy${PLAIN}" "${GREEN} 12. Проверить и перезагрузить Caddy${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 13. 检查 Caddy 与证书${PLAIN} ${YELLOW}(Token / 证书 / 监听 / 后端)${PLAIN}" "${GREEN} 13. Check Caddy and certificates${PLAIN} ${YELLOW}(token / certificate / listener / backend)${PLAIN}" "${GREEN} 13. Проверить Caddy и сертификаты${PLAIN} ${YELLOW}(токен / сертификат / слушатель / бэкенд)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 14. 自动修复常见问题${PLAIN}" "${GREEN} 14. Repair common issues automatically${PLAIN}" "${GREEN} 14. Автоматически исправить типовые проблемы${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 15. 隔离旧 Caddy 配置${PLAIN} ${YELLOW}(避免占用 443)${PLAIN}" "${GREEN} 15. Quarantine legacy Caddy configuration${PLAIN} ${YELLOW}(prevent port 443 conflicts)${PLAIN}" "${GREEN} 15. Изолировать старую конфигурацию Caddy${PLAIN} ${YELLOW}(предотвратить конфликт порта 443)${PLAIN}")"
+        echo -e "$(localized_text "${RED} 16. 隔离指定域名的 Caddy 配置与证书${PLAIN}" "${RED} 16. Quarantine Caddy configuration and certificates for a domain${PLAIN}" "${RED} 16. Изолировать конфигурацию Caddy и сертификаты домена${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local m_choice
-        read_trimmed m_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed m_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
         case "$m_choice" in
             1) m_choice=11 ;;
@@ -15098,7 +15095,7 @@ func_caddy_manage_ip_whitelist() {
     echo -e "$(localized_text "1. 设置/覆盖白名单" "1. Set/override whitelist" "1. Установить/переопределить белый список")"
     echo -e "$(localized_text "2. 清除白名单" "2. Clear the whitelist" "2. Очистите белый список")"
     echo -e "$(localized_text "0/q. 取消" "0/q. Cancel" "0/кв. Отмена")"
-    read_trimmed action "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+    read_trimmed action "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
     backup_file="${conf_file}.bak_$(date +%s)"
     case "$action" in
@@ -15815,21 +15812,21 @@ func_ssh_login_mode_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "SSH 安全中心 > 用户密钥登录模式" "SSH Security Center > User Key Login Mode" "SSH Центр безопасности > Режим входа в систему с помощью ключа пользователя")"
-        echo -e "$(localized_text "${BOLD}🔐 用户密钥登录模式${PLAIN}" "${BOLD}🔐 User key login mode${PLAIN}" "${BOLD}🔐 Режим входа в систему с помощью ключа пользователя${PLAIN}")"
+        print_breadcrumb "$(localized_text "SSH 安全中心 > 登录方式" "SSH Security Center > Authentication" "Центр безопасности SSH > Аутентификация")"
+        echo -e "$(localized_text "${BOLD}🔐 SSH 登录方式${PLAIN}" "${BOLD}🔐 SSH authentication${PLAIN}" "${BOLD}🔐 Аутентификация SSH${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "PubkeyAuthentication       : ${CYAN}$(ssh_effective_setting PubkeyAuthentication || echo "$unknown_label")${PLAIN}"
         echo -e "PasswordAuthentication     : ${CYAN}$(ssh_effective_setting PasswordAuthentication || echo "$unknown_label")${PLAIN}"
         echo -e "KbdInteractiveAuthentication: ${CYAN}$(ssh_effective_setting KbdInteractiveAuthentication || echo "$unknown_label")${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 添加/更新用户 SSH 公钥（不改登录方式）${PLAIN}" "${GREEN}1. Add/update user SSH public key (do not change login method)${PLAIN}" "${GREEN}1. Добавьте/обновите открытый ключ пользователя SSH (не меняйте метод входа в систему)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 密钥 + 密码登录（保留/恢复密码）${PLAIN}" "${GREEN}2. Key + password login (retain/recover password)${PLAIN}" "${GREEN}2. Ключ + пароль для входа (сохранить/восстановить пароль)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  3. 仅密钥登录，禁用密码登录${PLAIN}" "${RED}3. Only key login, password login is disabled${PLAIN}" "${RED}3. Вход только по ключу, вход по паролю отключен${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 添加 / 更新用户 SSH 公钥${PLAIN} ${YELLOW}(不修改登录方式)${PLAIN}" "${GREEN}  1. Add or update a user's SSH key${PLAIN} ${YELLOW}(authentication mode unchanged)${PLAIN}" "${GREEN}  1. Добавить или обновить SSH-ключ пользователя${PLAIN} ${YELLOW}(режим входа не меняется)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 允许密钥和密码登录${PLAIN}" "${GREEN}  2. Allow key and password login${PLAIN}" "${GREEN}  2. Разрешить вход по ключу и паролю${PLAIN}")"
+        echo -e "$(localized_text "${RED}  3. 仅允许密钥登录${PLAIN} ${YELLOW}(禁用密码登录)${PLAIN}" "${RED}  3. Allow key-only login${PLAIN} ${YELLOW}(disable password login)${PLAIN}" "${RED}  3. Разрешить вход только по ключу${PLAIN} ${YELLOW}(отключить пароль)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         local choice user key_count
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1)
                 user=$(ssh_choose_user) || { pause_return; continue; }
@@ -15869,7 +15866,7 @@ func_ssh_security_menu() {
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         local choice
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) func_security ;;
             2) func_ssh_login_mode_menu ;;
@@ -16065,14 +16062,14 @@ func_fail2ban() {
     fi
     
     echo -e "$(localized_text "当前 Fail2ban 状态: [ $f2b_status ]" "Current Fail2ban status: [ $f2b_status ]" "Текущий статус Fail2ban: [ $f2b_status ]")"
-    echo -e "$(localized_text "  ${GREEN}1.${PLAIN} 一键安装并配置 Fail2ban ${YELLOW}(自动绑定当前 SSH 端口)${PLAIN}" "${GREEN}1.${PLAIN} One-click installation and configuration Fail2ban ${YELLOW}(automatically bind the current SSH port)${PLAIN}" "${GREEN}1.${PLAIN} Установка и настройка в один клик Fail2ban ${YELLOW}(автоматическая привязка текущего порта SSH)${PLAIN}")"
-    echo -e "$(localized_text "  ${BLUE}2.${PLAIN} 更新防护端口 ${YELLOW}(如果您刚改了 SSH 端口，选此项重载)${PLAIN}" "${BLUE}2.${PLAIN} Update protection port ${YELLOW}(If you have just changed the SSH port, select this to overload)${PLAIN}" "${BLUE}2.${PLAIN} Порт защиты обновлений ${YELLOW}(если вы только что изменили порт SSH, выберите его для перегрузки)${PLAIN}")"
+    echo -e "$(localized_text "  ${GREEN}1.${PLAIN} 安装并配置 Fail2ban ${YELLOW}(自动使用当前 SSH 端口)${PLAIN}" "${GREEN}1.${PLAIN} Install and configure Fail2ban ${YELLOW}(use the current SSH port)${PLAIN}" "${GREEN}1.${PLAIN} Установить и настроить Fail2ban ${YELLOW}(использовать текущий порт SSH)${PLAIN}")"
+    echo -e "$(localized_text "  ${BLUE}2.${PLAIN} 更新防护端口 ${YELLOW}(修改 SSH 端口后使用)${PLAIN}" "${BLUE}2.${PLAIN} Update protected port ${YELLOW}(after changing the SSH port)${PLAIN}" "${BLUE}2.${PLAIN} Обновить защищаемый порт ${YELLOW}(после смены порта SSH)${PLAIN}")"
     echo -e "$(localized_text "  ${RED}3.${PLAIN} 彻底卸载 Fail2ban" "${RED}3.${PLAIN} Completely uninstall Fail2ban" "${RED}3.${PLAIN} Полностью удалить Fail2ban")"
     echo -e "$(localized_text "  ${RED}0.${PLAIN} 返回主菜单 / q 返回" "${RED}0.${PLAIN} Return to main menu / q Return" "${RED}0.${PLAIN} Возврат в главное меню / q Возврат")"
     echo -e "------------------------------------------------"
     
     local f_choice
-    read_trimmed f_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+    read_trimmed f_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
     
     case $f_choice in
         1|2)
@@ -16358,7 +16355,7 @@ docker_container_manage() {
         echo -e "${GREEN}  5. $(localized_text "进入容器" "Open shell" "Открыть shell")${PLAIN}"
         echo -e "${RED}  6. $(localized_text "删除容器" "Remove container" "Удалить контейнер")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         [[ "$choice" == "0" ]] && return
         read_trimmed target "$(localized_text "容器名称: " "Container name: " "Имя контейнера: ")"
         docker inspect "$target" >/dev/null 2>&1 || { echo -e "${RED}$(localized_text "容器不存在。" "Container not found." "Контейнер не найден.")${PLAIN}"; sleep 1; continue; }
@@ -16387,7 +16384,7 @@ docker_image_manage() {
         echo -e "${RED}  2. $(localized_text "删除镜像" "Remove image" "Удалить образ")${PLAIN}"
         echo -e "${RED}  3. $(localized_text "清理未使用镜像" "Prune unused images" "Очистить неиспользуемые образы")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             0) return ;;
             1) read_trimmed target "$(localized_text "镜像名称: " "Image name: " "Имя образа: ")"; [[ -n "$target" ]] && docker pull "$target" ;;
@@ -16413,7 +16410,7 @@ docker_network_manage() {
         echo -e "${GREEN}  4. $(localized_text "断开容器" "Disconnect container" "Отключить контейнер")${PLAIN}"
         echo -e "${RED}  5. $(localized_text "删除网络" "Remove network" "Удалить сеть")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         [[ "$choice" == "0" ]] && return
         read_trimmed network "$(localized_text "网络名称: " "Network name: " "Имя сети: ")"
         case "$choice" in
@@ -16441,7 +16438,7 @@ docker_volume_manage() {
         echo -e "${RED}  3. $(localized_text "删除卷" "Remove volume" "Удалить том")${PLAIN}"
         echo -e "${RED}  4. $(localized_text "清理未使用卷" "Prune unused volumes" "Очистить неиспользуемые тома")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             0) return ;;
             1) read_trimmed volume "$(localized_text "卷名称: " "Volume name: " "Имя тома: ")"; docker volume inspect "$volume" ;;
@@ -16561,7 +16558,7 @@ docker_backup_migration_menu() {
         echo -e "${GREEN}  1. $(localized_text "配置备份 / 还原" "Configuration backup / restore" "Резервная копия / восстановление")${PLAIN}"
         echo -e "${GREEN}  2. $(localized_text "Dockge / Compose 管理" "Dockge / Compose management" "Управление Dockge / Compose")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) func_backup_center ;;
             2) docker_compose_management_menu ;;
@@ -16579,7 +16576,7 @@ docker_compose_management_menu() {
         echo -e "${GREEN}  1. $(localized_text "安装 / 管理 Dockge" "Install / manage Dockge" "Установить / управлять Dockge")${PLAIN}"
         echo -e "${GREEN}  2. $(localized_text "迁移已有 Compose 项目" "Migrate existing Compose projects" "Перенести существующие проекты Compose")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) func_dockge_menu ;;
             2) func_migrate_compose_to_dockge ;;
@@ -16652,7 +16649,7 @@ func_docker_manage() {
         echo -e "${RED} 20. $(localized_text "卸载 Docker 环境" "Uninstall Docker" "Удалить Docker")${PLAIN}"
         echo "------------------------------------------------"
         echo -e "${RED}  0. $(localized_text "返回主菜单" "Main menu" "Главное меню") / q $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) docker_install_or_update; docker_manage_pause ;;
             2) docker_global_status; docker_manage_pause ;;
@@ -16771,10 +16768,10 @@ bbr_direct_buffer_mb() {
 prompt_bbr_bandwidth_mbps() {
     local choice output bandwidth
 
-    echo -e "$(localized_text "${CYAN}带宽获取方式：${PLAIN}" "${CYAN}Bandwidth acquisition method:${PLAIN}" "${CYAN}Метод получения полосы пропускания:${PLAIN}")" >&2
-    echo "$(localized_text "  1. 自动测速（使用上传带宽）" "1. Automatic speed measurement (using upload bandwidth)" "1. Автоматическое измерение скорости (с использованием полосы пропускания загрузки)")" >&2
-    echo "$(localized_text "  2. 手动输入套餐带宽" "2. Manually enter the package bandwidth" "2. Введите вручную пропускную способность пакета.")" >&2
-    read_trimmed choice "$(localized_text "请选择 [1]: " "Please select [1]:" "Пожалуйста, выберите [1]:")"
+    echo -e "$(localized_text "${CYAN}带宽来源：${PLAIN}" "${CYAN}Bandwidth source:${PLAIN}" "${CYAN}Источник пропускной способности:${PLAIN}")" >&2
+    echo "$(localized_text "  1. 自动测速（采用上传带宽）" "  1. Run a speed test (use upload bandwidth)" "  1. Выполнить тест скорости (использовать отдачу)")" >&2
+    echo "$(localized_text "  2. 手动填写套餐带宽" "  2. Enter the plan bandwidth manually" "  2. Ввести скорость тарифа вручную")" >&2
+    read_trimmed choice "$(localized_text "选择带宽来源 [1]: " "Select bandwidth source [1]: " "Выберите источник [1]: ")"
     choice="${choice:-1}"
 
     if [[ "$choice" == "1" ]]; then
@@ -16872,7 +16869,7 @@ func_bbr_direct_tune() {
     echo ""
     echo "$(localized_text "  1. 近距离/亚太为主（主要 RTT 通常低于 100ms）" "1. Short range/Asia-Pacific mainly (main RTT is usually less than 100ms)" "1. Малая дальность/в основном Азиатско-Тихоокеанский регион (основное RTT обычно менее 100 мс)")"
     echo "$(localized_text "  2. 跨洲链路为主（主要 RTT 通常为 150-300ms）" "2. Mainly cross-continental links (main RTT is usually 150-300ms)" "2. В основном межконтинентальные каналы (основное RTT обычно составляет 150–300 мс).")"
-    read_trimmed profile_choice "$(localized_text "请选择主要使用场景 [1]: " "Please select the main usage scenario [1]:" "Пожалуйста, выберите основной сценарий использования [1]:")"
+    read_trimmed profile_choice "$(localized_text "选择主要线路场景 [1]: " "Select the primary route profile [1]: " "Выберите основной профиль маршрута [1]: ")"
     case "${profile_choice:-1}" in
         1) profile="near" ;;
         2) profile="long" ;;
@@ -17137,18 +17134,15 @@ func_zram_swap() {
     clear
     local mem
     mem=$(free -m | awk '/^Mem:/{print $2}')
-    echo -e "$(localized_text "${CYAN}💡 硬件自适应调优 (检测到本机 ${mem}MB 物理内存)${PLAIN}" "${CYAN}💡 Hardware adaptive tuning (local ${mem}MB physical memory detected)${PLAIN}" "${CYAN}💡 Адаптивная настройка оборудования (обнаружена локальная физическая память ${mem}MB)${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}ZRAM / Swap 调优（检测到 ${mem} MB 内存）${PLAIN}" "${CYAN}ZRAM / Swap tuning (${mem} MB RAM detected)${PLAIN}" "${CYAN}Настройка ZRAM / Swap (обнаружено ${mem} МБ ОЗУ)${PLAIN}")"
     echo -e "------------------------------------------------"
-    echo -e "$(localized_text " ${GREEN}1. 激进档 (适合 1G 以下小鸡)${PLAIN}" "${GREEN}1. Radical file (suitable for chicks below 1G)${PLAIN}" "${GREEN}1. Радикальный напильник (подходит для цыплят весом до 1 г)${PLAIN}")"
-    echo -e "$(localized_text "    - ZRAM 100% 压缩, Swappiness=100。全力防止宕机。" "- ZRAM 100% compression, Swappiness=100. Do your best to prevent downtime." "- ZRAM 100% сжатие, Swappiness=100. Сделайте все возможное, чтобы предотвратить простои.")"
-    echo -e "$(localized_text " ${GREEN}2. 积极档 (适合 2-4G 主流机型)${PLAIN}" "${GREEN}2. Active mode (suitable for 2-4G mainstream models)${PLAIN}" "${GREEN}2. Активный режим (подходит для основных моделей 2–4G)${PLAIN}")"
-    echo -e "$(localized_text "    - ZRAM 70% 压缩, Swappiness=60。平衡性能与空间。" "- ZRAM 70% compression, Swappiness=60. Balance performance and space." "- ZRAM сжатие 70%, Swappiness=60. Баланс производительности и пространства.")"
-    echo -e "$(localized_text " ${GREEN}3. 保守档 (适合 8G 以上性能怪兽)${PLAIN}" "${GREEN}3. Conservative file (suitable for performance monsters above 8G)${PLAIN}" "${GREEN}3. Консервативный файл (подходит для монстров производительности выше 8G)${PLAIN}")"
-    echo -e "$(localized_text "    - ZRAM 25% 压缩, Swappiness=10。追求极致响应速度。" "- ZRAM 25% compression, Swappiness=10. Pursue the ultimate response speed." "- ZRAM сжатие 25%, Swappiness=10. Добейтесь максимальной скорости отклика.")"
+    echo -e "$(localized_text " ${GREEN}1. 高压缩${PLAIN}  ${YELLOW}(1 GB 以下；ZRAM 100%，Swappiness 100)${PLAIN}" "${GREEN} 1. High compression${PLAIN}  ${YELLOW}(under 1 GB; ZRAM 100%, Swappiness 100)${PLAIN}" "${GREEN} 1. Сильное сжатие${PLAIN}  ${YELLOW}(до 1 ГБ; ZRAM 100%, Swappiness 100)${PLAIN}")"
+    echo -e "$(localized_text " ${GREEN}2. 均衡${PLAIN}    ${YELLOW}(2–4 GB；ZRAM 70%，Swappiness 60)${PLAIN}" "${GREEN} 2. Balanced${PLAIN}          ${YELLOW}(2–4 GB; ZRAM 70%, Swappiness 60)${PLAIN}" "${GREEN} 2. Сбалансированный${PLAIN} ${YELLOW}(2–4 ГБ; ZRAM 70%, Swappiness 60)${PLAIN}")"
+    echo -e "$(localized_text " ${GREEN}3. 低交换${PLAIN}  ${YELLOW}(4 GB 以上；ZRAM 25%，Swappiness 10)${PLAIN}" "${GREEN} 3. Low swapping${PLAIN}       ${YELLOW}(more than 4 GB; ZRAM 25%, Swappiness 10)${PLAIN}" "${GREEN} 3. Минимальный swap${PLAIN}  ${YELLOW}(свыше 4 ГБ; ZRAM 25%, Swappiness 10)${PLAIN}")"
     echo -e "------------------------------------------------"
     
     local choice
-    read_trimmed choice "$(localized_text "👉 请选择您的调优挡位 [1/2/3] (直接回车按内存自动匹配): " "👉 Please select your tuning gear [1/2/3] (press Enter directly and press memory to automatically match):" "👉 Пожалуйста, выберите свое тюнинговое оборудование [1/2/3] (нажмите Enter и нажмите «память», чтобы автоматически подобрать совпадение):")"
+    read_trimmed choice "$(localized_text "选择方案 [1/2/3]（直接回车自动匹配）: " "Select a profile [1/2/3] (press Enter for automatic selection): " "Выберите профиль [1/2/3] (Enter — автовыбор): ")"
     
     if [[ -z "$choice" ]]; then
         if [[ "$mem" -lt 1024 ]]; then choice=1
@@ -17507,16 +17501,16 @@ func_install_kernel() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}☁️  安装/切换优化内核${PLAIN}" "${BOLD}☁️ Install/switch optimized kernel${PLAIN}" "${BOLD}☁️ Установить/переключить оптимизированное ядро${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${GREEN}  1. Cloud/KVM/Virtual 官方云内核${PLAIN} ${YELLOW}(推荐：稳定、轻量、云厂商兼容更好)${PLAIN}" "${GREEN}1. Cloud/KVM/Virtual official cloud kernel (recommended: stable, lightweight, better compatible with cloud vendors)${PLAIN}" "${GREEN}1. Облако/KVM/Официальное виртуальное облачное ядро (рекомендуется: стабильное, легкое, лучше совместимое с поставщиками облачных услуг)${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  1. 官方 Cloud / KVM / Virtual 内核${PLAIN} ${YELLOW}(推荐；稳定、轻量、兼容性优先)${PLAIN}" "${GREEN}  1. Official Cloud / KVM / Virtual kernel${PLAIN} ${YELLOW}(recommended; stable and compatible)${PLAIN}" "${GREEN}  1. Официальное ядро Cloud / KVM / Virtual${PLAIN} ${YELLOW}(рекомендуется; стабильность и совместимость)${PLAIN}")"
     echo -e "$(localized_text "     Debian/Ubuntu 会按架构自动尝试 cloud/kvm/virtual/generic 候选。" "Debian/Ubuntu will automatically try the cloud/kvm/virtual/generic candidate by architecture." "Debian/Ubuntu автоматически попробует кандидата Cloud/kvm/virtual/generic по архитектуре.")"
-    echo -e "$(localized_text "${GREEN}  2. XanMod 性能内核${PLAIN} ${YELLOW}(高级：自动匹配 x64v1-v4 并向下兜底)${PLAIN}" "${GREEN}2. XanMod performance core (Advanced: automatically match x64v1-v4 and dig down)${PLAIN}" "${GREEN}2. Ядро производительности XanMod (Дополнительно: автоматическое сопоставление x64v1-v4 и поиск)${PLAIN}")"
-    echo -e "$(localized_text "     适合：愿意折腾、追求低延迟/新特性；仅 amd64，建议有快照或救援控制台。" "Suitable for: willing to toss, pursuing low latency/new features; amd64 only, snapshot or rescue console recommended." "Подходит для: желающих бросить, стремящихся к низкой задержке/новым функциям; Только amd64, рекомендуется снимок или консоль восстановления.")"
+    echo -e "$(localized_text "${GREEN}  2. XanMod 性能内核${PLAIN} ${YELLOW}(高级；自动匹配 x64v1–v4)${PLAIN}" "${GREEN}  2. XanMod performance kernel${PLAIN} ${YELLOW}(advanced; automatic x64v1–v4 selection)${PLAIN}" "${GREEN}  2. Производительное ядро XanMod${PLAIN} ${YELLOW}(для опытных; автовыбор x64v1–v4)${PLAIN}")"
+    echo -e "$(localized_text "     仅支持 amd64；安装前确认快照或救援控制台可用。" "     amd64 only. Confirm snapshot or rescue-console access first." "     Только amd64. Сначала проверьте доступ к снимку или аварийной консоли.")"
     echo -e "------------------------------------------------"
-    echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Return / q Return${PLAIN}" "${RED}0. Возврат / q Возврат${PLAIN}")"
+    echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local kernel_choice virt
-    read_trimmed kernel_choice "$(localized_text "👉 请选择要安装的内核类型 [推荐 1]: " "👉 Please select the kernel type to install [Recommended 1]:" "👉 Пожалуйста, выберите тип ядра для установки [рекомендуется 1]:")"
+    read_trimmed kernel_choice "$(localized_text "选择内核 [1]: " "Select a kernel [1]: " "Выберите ядро [1]: ")"
     kernel_choice="${kernel_choice:-1}"
     [[ "$kernel_choice" == "0" ]] && return
 
@@ -17990,20 +17984,20 @@ func_test_scripts() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}📊 VPS 综合测速与质量检验合集库${PLAIN}" "${BOLD}📊 VPS comprehensive speed measurement and quality inspection collection library${PLAIN}" "${BOLD}📊 Комплексная библиотека VPS для измерения скорости и контроля качества${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}📊 VPS 测速与质量检测${PLAIN}" "${BOLD}📊 VPS speed and quality tests${PLAIN}" "${BOLD}📊 Тесты скорости и качества VPS${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${GREEN}  1. YABS 硬件性能测试      ${YELLOW}  2. SuperBench 综合测速${PLAIN}" "${GREEN}1. YABS hardware performance test 2. SuperBench comprehensive speed test${PLAIN}" "${GREEN}1. YABS тест производительности оборудования 2. Комплексный тест скорости SuperBench${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. bench.sh 基础测试      ${YELLOW}  4. 融合怪详细测速${PLAIN}" "${GREEN}3. bench.sh basic test 4. Fusion monster detailed speed test${PLAIN}" "${GREEN}3. Базовый тест Bench.sh 4. Подробный тест скорости Fusion Monster${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 三网回程路由测试       ${YELLOW}  6. IP 质量 / 欺诈度检测${PLAIN}" "${GREEN}5. Three network backhaul routing test 6. IP quality/fraud detection${PLAIN}" "${GREEN}5. Тест маршрутизации для трех сетей 6. Качество IP/обнаружение мошенничества${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. NodeSeek 综合测试      ${YELLOW}  8. 流媒体解锁检测${PLAIN}" "${GREEN}7. NodeSeek comprehensive test 8. Streaming media unlocking test${PLAIN}" "${GREEN}7. Комплексный тест NodeSeek 8. Тест разблокировки потокового мультимедиа${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  9. TcpQuality TCP 质量测试${PLAIN}" "${GREEN}9. TcpQuality TCP Quality test${PLAIN}" "${GREEN}9. TcpКачество TCP Проверка качества${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. YABS 硬件性能测试      ${YELLOW}  2. SuperBench 综合测速${PLAIN}" "${GREEN}  1. YABS hardware test      ${YELLOW}  2. SuperBench${PLAIN}" "${GREEN}  1. Тест оборудования YABS  ${YELLOW}  2. SuperBench${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. bench.sh 基础测试      ${YELLOW}  4. 融合怪详细测速${PLAIN}" "${GREEN}  3. bench.sh                 ${YELLOW}  4. ECS comprehensive test${PLAIN}" "${GREEN}  3. bench.sh                 ${YELLOW}  4. Комплексный тест ECS${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 三网回程路由测试       ${YELLOW}  6. IP 质量 / 欺诈度检测${PLAIN}" "${GREEN}  5. China carrier routes     ${YELLOW}  6. IP quality / fraud score${PLAIN}" "${GREEN}  5. Маршруты операторов Китая ${YELLOW}  6. Качество IP / риск мошенничества${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. NodeSeek 综合测试      ${YELLOW}  8. 流媒体解锁检测${PLAIN}" "${GREEN}  7. NodeSeek test            ${YELLOW}  8. Streaming access test${PLAIN}" "${GREEN}  7. Тест NodeSeek            ${YELLOW}  8. Доступ к стриминговым сервисам${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  9. TcpQuality TCP 质量测试${PLAIN}" "${GREEN}  9. TcpQuality TCP test${PLAIN}" "${GREEN}  9. Тест TCP через TcpQuality${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local t
         local ran_test=false
-        read_trimmed t "$(localized_text "👉 请输入对应序号选择: " "👉 Please enter the corresponding serial number to select:" "👉 Пожалуйста, введите соответствующий серийный номер, чтобы выбрать:")"
+        read_trimmed t "$(localized_text "选择测试: " "Select a test: " "Выберите тест: ")"
         case $t in
             1) ran_test=true; run_remote_script "$(localized_text "运行 YABS 硬件性能测试" "Run the YABS hardware performance test" "Запустите тест производительности оборудования YABS.")" "https://yabs.sh" ;;
             2) ran_test=true; run_remote_script "$(localized_text "运行 SuperBench 综合测速" "Run SuperBench comprehensive speed test" "Запустите комплексный тест скорости SuperBench")" "https://about.superbench.pro" ;;
@@ -18078,7 +18072,7 @@ func_iperf3_single_thread_test() {
 
     echo "$(localized_text "  1. 上传（本机 -> 服务端）" "1. Upload (local machine -> server)" "1. Загрузка (локальный компьютер -> сервер)")"
     echo "$(localized_text "  2. 下载（服务端 -> 本机）" "2. Download (server -> local machine)" "2. Скачать (сервер -> локальная машина)")"
-    read_trimmed direction "$(localized_text "请选择方向 [1]: " "Please select direction [1]:" "Пожалуйста, выберите направление [1]:")"
+    read_trimmed direction "$(localized_text "选择方向 [1]: " "Select direction [1]: " "Выберите направление [1]: ")"
     direction="${direction:-1}"
     [[ "$direction" == "1" || "$direction" == "2" ]] || { echo -e "$(localized_text "${RED}无效方向。${PLAIN}" "${RED}Invalid direction.${PLAIN}" "${RED}неверное направление.${PLAIN}")"; pause_return; return 1; }
 
@@ -18149,7 +18143,7 @@ func_xpanel() {
     echo -e "$(localized_text "${GREEN}  2. 安装 v2.9.4${PLAIN}      ${YELLOW}(固定版本，适合需要按 2.9.4 教程复现的机器)${PLAIN}" "${GREEN}2. Install v2.9.4 (fixed version, suitable for machines that need to be reproduced according to the 2.9.4 tutorial)${PLAIN}" "${GREEN}2. Установите v2.9.4 (исправленная версия, подходит для машин, которые необходимо воспроизвести по туториалу 2.9.4)${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
     echo -e "------------------------------------------------"
-    read_trimmed version_choice "$(localized_text "请选择 3x-ui 安装版本（默认 1）: " "Please select 3x-ui installation version (default 1):" "Пожалуйста, выберите версию установки 3x-ui (по умолчанию 1):")"
+    read_trimmed version_choice "$(localized_text "选择 3x-ui 版本 [1]: " "Select a 3x-ui version [1]: " "Выберите версию 3x-ui [1]: ")"
     case "$(echo "${version_choice:-1}" | tr '[:upper:]' '[:lower:]')" in
         1|latest|最新版)
             install_desc="$(localized_text "安装 3x-ui / x-ui 面板（最新版）" "Install 3x-ui / x-ui panel (latest version)" "Установите панель 3x-ui/x-ui (последняя версия)")"
@@ -18185,9 +18179,9 @@ func_xpanel() {
 func_xpanel_manage() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧭 3x-ui / x-ui 管理 / 卸载${PLAIN}" "${BOLD}🧭 3x-ui / x-ui Manage / Uninstall${PLAIN}" "${BOLD}🧭 3x-ui / x-ui Управление / Удаление${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧭 3x-ui / x-ui 管理 / 卸载${PLAIN}" "${BOLD}🧭 Manage or uninstall 3x-ui / x-ui${PLAIN}" "${BOLD}🧭 Управление или удаление 3x-ui / x-ui${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}用途：进入官方管理菜单，执行配置查看、账号管理、更新或卸载等操作。${PLAIN}" "${YELLOW}Purpose: Enter the official management menu to perform configuration viewing, account management, update or uninstall, etc.${PLAIN}" "${YELLOW}Назначение: войти в официальное меню управления для просмотра конфигурации, управления учетной записью, обновления или удаления и т. д.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}打开官方管理菜单，查看配置、管理账号、更新或卸载面板。${PLAIN}" "${YELLOW}Open the official menu to view settings, manage accounts, update, or uninstall the panel.${PLAIN}" "${YELLOW}Открыть официальное меню для просмотра настроек, управления учётными записями, обновления или удаления панели.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local panel_cmd=""
@@ -18198,7 +18192,7 @@ func_xpanel_manage() {
     fi
 
     if [[ -z "$panel_cmd" ]]; then
-        echo -e "$(localized_text "${YELLOW}未检测到 x-ui / 3x-ui 命令，当前机器可能尚未安装 3x-ui 面板。${PLAIN}" "${YELLOW}Does not detect the x-ui / 3x-ui command. The current machine may not have the 3x-ui panel installed.${PLAIN}" "${YELLOW}не обнаруживает команду x-ui/3x-ui. Возможно, на текущем компьютере не установлена ​​панель 3x-ui.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 x-ui 或 3x-ui 管理命令，可能尚未安装面板。${PLAIN}" "${YELLOW}The x-ui and 3x-ui management commands were not found; the panel may not be installed.${PLAIN}" "${YELLOW}Команды управления x-ui и 3x-ui не найдены; возможно, панель не установлена.${PLAIN}")"
         if confirm_danger "$(localized_text "安装 3x-ui 面板" "Install the 3x-ui panel" "Установить панель 3x-ui")" \
             "$(localized_text "下载并执行 3x-ui 官方安装脚本" "download and run the official 3x-ui installer" "скачать и запустить официальный установщик 3x-ui")" \
             "$(localized_text "安装前备份现有面板配置；卸载方式以 3x-ui 官方菜单为准" "back up any existing panel configuration first; use the official 3x-ui menu to uninstall" "сначала сохраните существующую конфигурацию панели; для удаления используйте официальное меню 3x-ui")"; then
@@ -18210,8 +18204,8 @@ func_xpanel_manage() {
         return
     fi
 
-    echo -e "$(localized_text "${GREEN}即将打开 ${panel_cmd} 官方管理菜单。${PLAIN}" "${GREEN}Is about to open the ${panel_cmd} official management menu.${PLAIN}" "${GREEN}собирается открыть официальное меню управления ${panel_cmd}.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}" "${YELLOW}If you need to uninstall , please select the corresponding uninstall item in the official menu.${PLAIN}" "${YELLOW}Если вам необходимо удалить , выберите соответствующий пункт удаления в официальном меню.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}即将打开 ${panel_cmd} 官方管理菜单。${PLAIN}" "${GREEN}Opening the official ${panel_cmd} management menu.${PLAIN}" "${GREEN}Открывается официальное меню управления ${panel_cmd}.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如需卸载，请在该菜单中选择卸载。${PLAIN}" "${YELLOW}To uninstall it, select the uninstall option in that menu.${PLAIN}" "${YELLOW}Для удаления выберите соответствующий пункт в этом меню.${PLAIN}")"
     echo -e "------------------------------------------------"
     "$panel_cmd"
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
@@ -18247,13 +18241,13 @@ func_sui_panel() {
 func_sui_manage() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧭 S-UI 管理 / 卸载${PLAIN}" "${BOLD}🧭 S-UI Manage / Uninstall${PLAIN}" "${BOLD}🧭 S-UI Управление / Удаление${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧭 S-UI 管理 / 卸载${PLAIN}" "${BOLD}🧭 Manage or uninstall S-UI${PLAIN}" "${BOLD}🧭 Управление или удаление S-UI${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}用途：进入 S-UI 官方管理菜单，执行配置查看、账号管理、更新或卸载等操作。${PLAIN}" "${YELLOW}Purpose: Enter the S-UI official management menu to perform operations such as configuration viewing, account management, update or uninstallation.${PLAIN}" "${YELLOW}Назначение : Войдите в официальное меню управления S-UI для выполнения таких операций, как просмотр конфигурации, управление учетной записью, обновление или удаление.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}打开 S-UI 官方管理菜单，查看配置、管理账号、更新或卸载面板。${PLAIN}" "${YELLOW}Open the official S-UI menu to view settings, manage accounts, update, or uninstall the panel.${PLAIN}" "${YELLOW}Открыть официальное меню S-UI для просмотра настроек, управления учётными записями, обновления или удаления панели.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     if ! command -v s-ui >/dev/null 2>&1; then
-        echo -e "$(localized_text "${YELLOW}未检测到 s-ui 命令，当前机器可能尚未安装 S-UI。${PLAIN}" "${YELLOW}Does not detect the s-ui command. S-UI may not be installed on the current machine.${PLAIN}" "${YELLOW}не обнаруживает команду s-ui. S-UI может быть не установлен на текущем компьютере.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 s-ui 管理命令，可能尚未安装 S-UI。${PLAIN}" "${YELLOW}The s-ui management command was not found; S-UI may not be installed.${PLAIN}" "${YELLOW}Команда управления s-ui не найдена; возможно, S-UI не установлен.${PLAIN}")"
         if confirm_danger "$(localized_text "安装 S-UI" "Install S-UI" "Установить S-UI")" \
             "$(localized_text "下载并执行 S-UI 官方安装脚本" "download and run the official S-UI installer" "скачать и запустить официальный установщик S-UI")" \
             "$(localized_text "安装前备份现有配置；卸载方式以 S-UI 官方菜单为准" "back up existing configuration first; use the official S-UI menu to uninstall" "сначала сохраните существующую конфигурацию; для удаления используйте официальное меню S-UI")"; then
@@ -18265,8 +18259,8 @@ func_sui_manage() {
         return
     fi
 
-    echo -e "$(localized_text "${GREEN}即将打开 S-UI 官方管理菜单。${PLAIN}" "${GREEN}Is about to open the S-UI official management menu.${PLAIN}" "${GREEN}собирается открыть официальное меню управления S-UI.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}" "${YELLOW}If you need to uninstall , please select the corresponding uninstall item in the official menu.${PLAIN}" "${YELLOW}Если вам необходимо удалить , выберите соответствующий пункт удаления в официальном меню.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}即将打开 S-UI 官方管理菜单。${PLAIN}" "${GREEN}Opening the official S-UI management menu.${PLAIN}" "${GREEN}Открывается официальное меню управления S-UI.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如需卸载，请在官方菜单中选择卸载。${PLAIN}" "${YELLOW}To uninstall S-UI, select the uninstall option in its official menu.${PLAIN}" "${YELLOW}Для удаления S-UI выберите соответствующий пункт в официальном меню.${PLAIN}")"
     echo -e "------------------------------------------------"
     s-ui
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
@@ -18274,20 +18268,20 @@ func_sui_manage() {
 
 func_singbox_233boy() {
     clear
-    echo -e "$(localized_text "${CYAN}👉 正在拉取 233boy 的 Sing-box 一键脚本...${PLAIN}" "${CYAN}👉 Pulling 233boy’s Sing-box one-click script...${PLAIN}" "${CYAN}👉 Вытаскиваем скрипт 233boy Sing-box в один клик...${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}▶ 正在获取 233boy Sing-box 安装脚本...${PLAIN}" "${CYAN}▶ Fetching the 233boy Sing-box installer...${PLAIN}" "${CYAN}▶ Загрузка установщика 233boy Sing-box...${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}脚本来源：https://github.com/233boy/sing-box${PLAIN}" "${YELLOW}Script source: https://github.com/233boy/sing-box${PLAIN}" "${YELLOW}Источник сценария : https://github.com/233boy/sing-box${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}使用文档：https://233boy.com/sing-box/sing-box-script/${PLAIN}" "${YELLOW}Usage documentation: https://233boy.com/sing-box/sing-box-script/${PLAIN}" "${YELLOW}Документация по использованию : https://233boy.com/sing-box/sing-box-script/${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}安装完成后通常可使用 sing-box 或 sb 命令进入管理面板。${PLAIN}" "${GREEN}After is installed, you can usually use the sing-box or sb command to enter the management panel.${PLAIN}" "${GREEN}После установки обычно можно использовать команду sing-box или sb для входа в панель управления.${PLAIN}")"
-    run_remote_script "$(localized_text "安装 Sing-box 233boy 一键脚本" "Install Sing-box 233boy one-click script" "Установите скрипт Sing-box 233boy в один клик")" "https://github.com/233boy/sing-box/raw/main/install.sh"
+    echo -e "$(localized_text "${GREEN}安装完成后，通常可运行 sing-box 或 sb 打开管理菜单。${PLAIN}" "${GREEN}After installation, run sing-box or sb to open its management menu.${PLAIN}" "${GREEN}После установки запустите sing-box или sb, чтобы открыть меню управления.${PLAIN}")"
+    run_remote_script "$(localized_text "安装 233boy Sing-box" "Install 233boy Sing-box" "Установить 233boy Sing-box")" "https://github.com/233boy/sing-box/raw/main/install.sh"
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
 }
 
 func_singbox_manage() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧭 Sing-box 管理 / 卸载${PLAIN}" "${BOLD}🧭 Sing-box Manage / Uninstall${PLAIN}" "${BOLD}🧭 Sing-box Управление / Удаление${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧭 Sing-box 管理 / 卸载${PLAIN}" "${BOLD}🧭 Manage or uninstall Sing-box${PLAIN}" "${BOLD}🧭 Управление или удаление Sing-box${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}用途：进入已安装 Sing-box 一键脚本的管理菜单。${PLAIN}" "${YELLOW}Purpose: Enter the management menu of the installed Sing-box one-click script.${PLAIN}" "${YELLOW}Назначение: Войти в меню управления установленным скриптом Sing-box в один клик.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}打开已安装的 233boy Sing-box 管理菜单。${PLAIN}" "${YELLOW}Open the management menu for an installed 233boy Sing-box deployment.${PLAIN}" "${YELLOW}Открыть меню управления установленным 233boy Sing-box.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local sb_cmd=""
@@ -18298,14 +18292,14 @@ func_singbox_manage() {
     fi
 
     if [[ -z "$sb_cmd" ]]; then
-        echo -e "$(localized_text "${YELLOW}未检测到 sb / sing-box 管理命令。${PLAIN}" "${YELLOW}Sb/sing-box management command not detected.${PLAIN}" "${YELLOW}Команда управления sb/sing-box не обнаружена.${PLAIN}")"
-        echo -e "$(localized_text "${BLUE}如果是首次部署，请先选择对应的 Sing-box 安装项。${PLAIN}" "${BLUE}If is deployed for the first time, please select the corresponding Sing-box installation item first.${PLAIN}" "${BLUE}Если развертывается впервые, сначала выберите соответствующий элемент установки Sing-box.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 sb 或 sing-box 管理命令。${PLAIN}" "${YELLOW}The sb and sing-box management commands were not found.${PLAIN}" "${YELLOW}Команды управления sb и sing-box не найдены.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}首次部署请先选择 Sing-box 安装项。${PLAIN}" "${BLUE}For a first-time deployment, select the Sing-box installation option first.${PLAIN}" "${BLUE}При первой установке сначала выберите установку Sing-box.${PLAIN}")"
         read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
         return
     fi
 
-    echo -e "$(localized_text "${GREEN}即将打开 ${sb_cmd} 管理菜单。${PLAIN}" "${GREEN}Is about to open the ${sb_cmd} management menu.${PLAIN}" "${GREEN}собирается открыть меню управления ${sb_cmd}.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如需卸载，请在脚本菜单中选择对应卸载项。${PLAIN}" "${YELLOW}If you need to uninstall , please select the corresponding uninstall item in the script menu.${PLAIN}" "${YELLOW}Если вам необходимо удалить , выберите соответствующий пункт удаления в меню сценариев.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}即将打开 ${sb_cmd} 管理菜单。${PLAIN}" "${GREEN}Opening the ${sb_cmd} management menu.${PLAIN}" "${GREEN}Открывается меню управления ${sb_cmd}.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如需卸载，请在该菜单中选择卸载。${PLAIN}" "${YELLOW}To uninstall it, select the uninstall option in that menu.${PLAIN}" "${YELLOW}Для удаления выберите соответствующий пункт в этом меню.${PLAIN}")"
     echo -e "------------------------------------------------"
     "$sb_cmd"
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
@@ -18313,24 +18307,24 @@ func_singbox_manage() {
 
 func_xray_233boy() {
     clear
-    echo -e "$(localized_text "${CYAN}👉 正在拉取 233boy 的 Xray 一键脚本...${PLAIN}" "${CYAN}👉 Pulling 233boy’s Xray one-click script...${PLAIN}" "${CYAN}👉 Вытаскиваем скрипт 233boy Xray в один клик...${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}▶ 正在获取 233boy Xray 安装脚本...${PLAIN}" "${CYAN}▶ Fetching the 233boy Xray installer...${PLAIN}" "${CYAN}▶ Загрузка установщика 233boy Xray...${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}脚本来源：https://github.com/233boy/Xray${PLAIN}" "${YELLOW}Script source: https://github.com/233boy/Xray${PLAIN}" "${YELLOW}Источник сценария : https://github.com/233boy/Xray${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}使用文档：https://233boy.com/xray/xray-script/${PLAIN}" "${YELLOW}Usage documentation: https://233boy.com/xray/xray-script/${PLAIN}" "${YELLOW}Документация по использованию : https://233boy.com/xray/xray-script/${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}安装完成后通常可使用 xray 命令进入管理面板。${PLAIN}" "${GREEN}After is installed, you can usually use the xray command to enter the management panel.${PLAIN}" "${GREEN}После установки обычно можно использовать команду xray для входа в панель управления.${PLAIN}")"
-    run_remote_script "$(localized_text "安装 Xray 233boy 一键脚本" "Install Xray 233boy one-click script" "Установите скрипт Xray 233boy в один клик")" "https://github.com/233boy/Xray/raw/main/install.sh"
+    echo -e "$(localized_text "${GREEN}安装完成后，通常可运行 xray 打开管理菜单。${PLAIN}" "${GREEN}After installation, run xray to open its management menu.${PLAIN}" "${GREEN}После установки запустите xray, чтобы открыть меню управления.${PLAIN}")"
+    run_remote_script "$(localized_text "安装 233boy Xray" "Install 233boy Xray" "Установить 233boy Xray")" "https://github.com/233boy/Xray/raw/main/install.sh"
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
 }
 
 func_xray_manage() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧭 Xray 管理 / 卸载${PLAIN}" "${BOLD}🧭 Xray Manage / Uninstall${PLAIN}" "${BOLD}🧭 Xray Управление / Удаление${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧭 Xray 管理 / 卸载${PLAIN}" "${BOLD}🧭 Manage or uninstall Xray${PLAIN}" "${BOLD}🧭 Управление или удаление Xray${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}用途：进入 233boy Xray 官方管理菜单。${PLAIN}" "${YELLOW}Purpose: Enter the 233boy Xray official management menu.${PLAIN}" "${YELLOW}Назначение: Войти в официальное меню управления 233boy Xray.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}打开已安装的 233boy Xray 管理菜单。${PLAIN}" "${YELLOW}Open the management menu for an installed 233boy Xray deployment.${PLAIN}" "${YELLOW}Открыть меню управления установленным 233boy Xray.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     if ! command -v xray >/dev/null 2>&1; then
-        echo -e "$(localized_text "${YELLOW}未检测到 xray 管理命令，当前机器可能尚未安装 233boy Xray 脚本。${PLAIN}" "${YELLOW}Does not detect the xray management command. The current machine may not have the 233boy Xray script installed.${PLAIN}" "${YELLOW}не обнаруживает команду управления xray. На текущей машине может не быть установлен скрипт 233boy Xray.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 xray 管理命令，可能尚未安装 233boy Xray。${PLAIN}" "${YELLOW}The xray management command was not found; 233boy Xray may not be installed.${PLAIN}" "${YELLOW}Команда управления xray не найдена; возможно, 233boy Xray не установлен.${PLAIN}")"
         if confirm_danger "$(localized_text "安装 233boy Xray" "Install 233boy Xray" "Установить 233boy Xray")" \
             "$(localized_text "下载并执行 233boy Xray 安装脚本" "download and run the 233boy Xray installer" "скачать и запустить установщик 233boy Xray")" \
             "$(localized_text "安装前备份现有 Xray 配置；卸载方式以该项目菜单为准" "back up existing Xray configuration first; use the project menu to uninstall" "сначала сохраните существующую конфигурацию Xray; для удаления используйте меню проекта")"; then
@@ -18342,8 +18336,8 @@ func_xray_manage() {
         return
     fi
 
-    echo -e "$(localized_text "${GREEN}即将打开 xray 管理菜单。${PLAIN}" "${GREEN}Is about to open the xray management menu.${PLAIN}" "${GREEN}собирается открыть меню управления xray.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}" "${YELLOW}If you need to uninstall , please select the corresponding uninstall item in the official menu.${PLAIN}" "${YELLOW}Если вам необходимо удалить , выберите соответствующий пункт удаления в официальном меню.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}即将打开 xray 管理菜单。${PLAIN}" "${GREEN}Opening the xray management menu.${PLAIN}" "${GREEN}Открывается меню управления xray.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如需卸载，请在该菜单中选择卸载。${PLAIN}" "${YELLOW}To uninstall it, select the uninstall option in that menu.${PLAIN}" "${YELLOW}Для удаления выберите соответствующий пункт в этом меню.${PLAIN}")"
     echo -e "------------------------------------------------"
     xray
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
@@ -18527,15 +18521,14 @@ manage_compose_project() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}🧭 ${project_name} 管理 / 卸载${PLAIN}" "${BOLD}🧭 ${project_name} Manage / Uninstall${PLAIN}" "${BOLD}🧭 ${project_name} Управление / Удаление${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🧭 ${project_name} 管理${PLAIN}" "${BOLD}🧭 Manage ${project_name}${PLAIN}" "${BOLD}🧭 Управление ${project_name}${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}部署目录：${CYAN}${project_dir}${PLAIN}" "${YELLOW}Deployment directory: ${project_dir}${PLAIN}" "${YELLOW}Каталог развертывания : ${project_dir}.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}数据提示：${CYAN}${data_hint}${PLAIN}" "${YELLOW}Data prompt: ${data_hint}${PLAIN}" "${YELLOW}Запрос данных : ${data_hint}${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}数据说明：${CYAN}${data_hint}${PLAIN}" "${YELLOW}Data: ${data_hint}${PLAIN}" "${YELLOW}Данные: ${data_hint}${PLAIN}")"
         echo -e "------------------------------------------------"
 
         if [[ ! -d "$project_dir" ]] || ! compose_file=$(find_compose_file "$project_dir"); then
-            echo -e "$(localized_text "${YELLOW}未检测到 ${project_name} 的 Compose 部署。${PLAIN}" "${YELLOW}Did not detect the Compose deployment of ${project_name}.${PLAIN}" "${YELLOW}не обнаружил развертывание Compose для ${project_name}.${PLAIN}")"
-            echo -e "$(localized_text "${BLUE}可以先返回上级菜单选择对应安装项。${PLAIN}" "${BLUE}You can first return to the upper menu to select the corresponding installation item.${PLAIN}" "${BLUE}Можно сначала вернуться в верхнее меню и выбрать соответствующий пункт установки.${PLAIN}")"
+            echo -e "$(localized_text "${YELLOW}未检测到 ${project_name} 的 Compose 部署。请返回上级菜单先安装。${PLAIN}" "${YELLOW}No Compose deployment was found for ${project_name}. Return to the previous menu to install it.${PLAIN}" "${YELLOW}Развёртывание Compose для ${project_name} не найдено. Вернитесь в предыдущее меню и выполните установку.${PLAIN}")"
             read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         fi
@@ -18546,10 +18539,10 @@ manage_compose_project() {
         echo -e "$(localized_text "${GREEN}  4. 更新镜像并重建${PLAIN}" "${GREEN}4. Update the image and rebuild${PLAIN}" "${GREEN}4. Обновите образ и пересоберите.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}  5. 停止并移除容器（保留目录数据）${PLAIN}" "${YELLOW}5. Stop and remove the container (keep directory data)${PLAIN}" "${YELLOW}5. Остановить и удалить контейнер (сохранить данные каталога)${PLAIN}")"
         echo -e "$(localized_text "${RED}  6. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}" "${RED}6. Archive deployment directory (stop container and isolate configuration/data)${PLAIN}" "${RED}6. Архивировать каталог развертывания (остановить контейнер и изолировать конфигурацию/данные)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Return to the previous menu / q Return to${PLAIN}" "${RED}0. Возврат в предыдущее меню / q Возврат в${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1)
                 ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
@@ -19106,20 +19099,20 @@ update_compose_project() {
 func_update_subscription_tools() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}${YELLOW}UPD 更新订阅管理工具 (Docker Compose)${PLAIN}" "${BOLD}UPD Update Subscription Management Tool (Docker Compose)${PLAIN}" "${BOLD}UPD Средство управления подпиской на обновления (Docker Compose)${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}${YELLOW}更新订阅工具（Docker Compose）${PLAIN}" "${BOLD}${YELLOW}Update subscription tools (Docker Compose)${PLAIN}" "${BOLD}${YELLOW}Обновление инструментов подписки (Docker Compose)${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}这个菜单只更新订阅管理工具容器，不会更新 3x-ui / Sing-box / Xray。${PLAIN}" "${YELLOW}This menu only updates the subscription management tool container, and will not update 3x-ui / Sing-box / Xray.${PLAIN}" "${YELLOW}Это меню обновляет только контейнер средства управления подписками и не обновляет 3x-ui / Sing-box / Xray.${PLAIN}")"
     echo -e "------------------------------------------------"
-    echo -e "$(localized_text "${BOLD}${YELLOW}  1. UPD 更新 SublinkPro${PLAIN}       ${CYAN}(/opt/sublinkpro)${PLAIN}" "${BOLD}1. UPD update SublinkPro (/opt/sublinkpro)${PLAIN}" "${BOLD}1. Обновление UPD SublinkPro (/opt/sublinkpro)${PLAIN}")"
-    echo -e "$(localized_text "${BOLD}${YELLOW}  2. UPD 更新 妙妙屋订阅管理${PLAIN}     ${CYAN}(/opt/miaomiaowu)${PLAIN}" "${BOLD}2. UPD update Miaomiaowu Subscription Management (/opt/miaomiaowu)${PLAIN}" "${BOLD}2. Обновление UPD Управление подписками Miaomiaowu (/opt/miaomiaowu)${PLAIN}")"
-    echo -e "$(localized_text "${BOLD}${YELLOW}  3. UPD 更新 Sub-Store${PLAIN}        ${CYAN}(/opt/sub-store)${PLAIN}" "${BOLD}3. UPD update Sub-Store (/opt/sub-store)${PLAIN}" "${BOLD}3. Дополнительный магазин обновления UPD (/opt/sub-store)${PLAIN}")"
-    echo -e "$(localized_text "${BOLD}${YELLOW}  4. UPD 全部更新${PLAIN}" "${BOLD}4. UPD all updated${PLAIN}" "${BOLD}4. UPD все обновлено${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}${YELLOW}  1. 更新 SublinkPro${PLAIN} ${CYAN}(/opt/sublinkpro)${PLAIN}" "${BOLD}${YELLOW}  1. Update SublinkPro${PLAIN} ${CYAN}(/opt/sublinkpro)${PLAIN}" "${BOLD}${YELLOW}  1. Обновить SublinkPro${PLAIN} ${CYAN}(/opt/sublinkpro)${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}${YELLOW}  2. 更新妙妙屋订阅${PLAIN} ${CYAN}(/opt/miaomiaowu)${PLAIN}" "${BOLD}${YELLOW}  2. Update Miaomiaowu${PLAIN} ${CYAN}(/opt/miaomiaowu)${PLAIN}" "${BOLD}${YELLOW}  2. Обновить Miaomiaowu${PLAIN} ${CYAN}(/opt/miaomiaowu)${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}${YELLOW}  3. 更新 Sub-Store${PLAIN} ${CYAN}(/opt/sub-store)${PLAIN}" "${BOLD}${YELLOW}  3. Update Sub-Store${PLAIN} ${CYAN}(/opt/sub-store)${PLAIN}" "${BOLD}${YELLOW}  3. Обновить Sub-Store${PLAIN} ${CYAN}(/opt/sub-store)${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}${YELLOW}  4. 全部更新${PLAIN}" "${BOLD}${YELLOW}  4. Update all${PLAIN}" "${BOLD}${YELLOW}  4. Обновить всё${PLAIN}")"
     echo -e "------------------------------------------------"
-    echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Return / q Return${PLAIN}" "${RED}0. Возврат / q Возврат${PLAIN}")"
+    echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local choice
-    read_trimmed choice "$(localized_text "请选择要更新的项目: " "Please select items to update:" "Пожалуйста, выберите элементы для обновления:")"
+    read_trimmed choice "$(localized_text "选择更新项目: " "Select projects to update: " "Выберите проекты для обновления: ")"
     [[ "$choice" == "0" || "$choice" == "q" || "$choice" == "Q" ]] && return
 
     ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
@@ -19195,9 +19188,9 @@ func_service_action_menu() {
         echo -e "------------------------------------------------"
         echo -e "${GREEN}  1. ${install_label}${PLAIN}"
         echo -e "${GREEN}  2. ${manage_label}${PLAIN}"
-        echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Return to the previous menu / q Return to${PLAIN}" "${RED}0. Возврат в предыдущее меню / q Возврат в${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}  0. Back / q Back${PLAIN}" "${RED}  0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
         case "$choice" in
             1) "$install_func" ;;
@@ -19209,7 +19202,7 @@ func_service_action_menu() {
 }
 
 func_xpanel_menu() {
-    func_service_action_menu "$(localized_text "3x-ui / x-ui 面板" "3x-ui / x-ui panel" "Панель 3x-ui / x-ui")" "$(localized_text "安装或进入官方菜单进行配置、更新、重置、卸载。" "Install or enter the official menu to configure, update, reset, and uninstall." "Установите или войдите в официальное меню для настройки, обновления, сброса и удаления.")" "$(localized_text "安装 3x-ui 面板" "Install 3x-ui panel" "Установите панель 3x-ui.")" func_xpanel "$(localized_text "管理 / 卸载 3x-ui 面板" "Manage/Uninstall 3x-ui Panel" "Управление/удаление панели 3x-ui")" func_xpanel_manage
+    func_service_action_menu "$(localized_text "3x-ui / x-ui 面板" "3x-ui / x-ui panel" "Панель 3x-ui / x-ui")" "$(localized_text "安装面板，或进入官方菜单配置、更新、重置和卸载。" "Install the panel or open its official menu to configure, update, reset, or uninstall it." "Установить панель либо открыть официальное меню для настройки, обновления, сброса или удаления.")" "$(localized_text "安装 3x-ui 面板" "Install 3x-ui panel" "Установить панель 3x-ui")" func_xpanel "$(localized_text "管理 / 卸载 3x-ui 面板" "Manage or uninstall 3x-ui" "Управление или удаление 3x-ui")" func_xpanel_manage
 }
 
 func_sui_menu() {
@@ -19222,15 +19215,15 @@ func_singbox_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}🧭 Sing-box 管理${PLAIN}" "${BOLD}🧭 Sing-box Manage${PLAIN}" "${BOLD}🧭 Sing-box Управление${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🧭 Sing-box 管理${PLAIN}" "${BOLD}🧭 Sing-box management${PLAIN}" "${BOLD}🧭 Управление Sing-box${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}可安装 Sing-box 一键脚本，也可进入已安装脚本的管理菜单。${PLAIN}" "${YELLOW}Can install the Sing-box one-click script, and can also enter the management menu of the installed script.${PLAIN}" "${YELLOW}может установить скрипт Sing-box одним щелчком мыши, а также войти в меню управления установленным скриптом.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}安装 233boy Sing-box 脚本，或进入已安装脚本的管理菜单。${PLAIN}" "${YELLOW}Install the 233boy Sing-box script or open its management menu.${PLAIN}" "${YELLOW}Установить скрипт Sing-box от 233boy либо открыть его меню управления.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 安装 Sing-box（233boy 一键脚本）${PLAIN}" "${GREEN}1. Install Sing-box (233boy one-click script)${PLAIN}" "${GREEN}1. Установите Sing-box (скрипт 233boy в один клик)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 管理 / 卸载 Sing-box${PLAIN}" "${GREEN}2. Manage/Uninstall Sing-box${PLAIN}" "${GREEN}2. Управление/удаление Sing-box${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Return to the previous menu / q Return to${PLAIN}" "${RED}0. Возврат в предыдущее меню / q Возврат в${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 安装 Sing-box（233boy）${PLAIN}" "${GREEN}  1. Install Sing-box (233boy)${PLAIN}" "${GREEN}  1. Установить Sing-box (233boy)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 管理 / 卸载 Sing-box${PLAIN}" "${GREEN}  2. Manage or uninstall Sing-box${PLAIN}" "${GREEN}  2. Управление или удаление Sing-box${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
         case "$choice" in
             1) func_singbox_233boy ;;
@@ -19242,11 +19235,11 @@ func_singbox_menu() {
 }
 
 func_xray_menu() {
-    func_service_action_menu "$(localized_text "Xray 管理" "Xray Management" "Xray Управление")" "$(localized_text "安装或进入 233boy Xray 官方菜单进行配置、更新、卸载。" "Install or enter the 233boy Xray official menu to configure, update, and uninstall." "Установите или войдите в официальное меню 233boy Xray для настройки, обновления и удаления.")" "$(localized_text "安装 Xray（233boy 一键脚本）" "Install Xray (233boy one-click script)" "Установите Xray (скрипт 233boy в один клик)")" func_xray_233boy "$(localized_text "管理 / 卸载 Xray" "Manage/Uninstall Xray" "Управление/удаление Xray")" func_xray_manage
+    func_service_action_menu "$(localized_text "Xray 管理" "Xray management" "Управление Xray")" "$(localized_text "安装 233boy Xray 脚本，或进入其管理菜单配置、更新和卸载。" "Install the 233boy Xray script or open its menu to configure, update, or uninstall it." "Установить скрипт Xray от 233boy либо открыть его меню для настройки, обновления или удаления.")" "$(localized_text "安装 Xray（233boy）" "Install Xray (233boy)" "Установить Xray (233boy)")" func_xray_233boy "$(localized_text "管理 / 卸载 Xray" "Manage or uninstall Xray" "Управление или удаление Xray")" func_xray_manage
 }
 
 func_sublinkpro_menu() {
-    func_service_action_menu "$(localized_text "SublinkPro 管理" "SublinkPro Management" "Управление СублинкПро")" "$(localized_text "安装或管理 Docker Compose 部署的 SublinkPro。" "Install or manage SublinkPro deployed by Docker Compose." "Установите или управляйте SublinkPro, развернутым Docker Compose.")" "$(localized_text "安装 SublinkPro" "Install SublinkPro" "Установить СублинкПро")" func_sublinkpro "$(localized_text "管理 / 卸载 SublinkPro" "Manage / Uninstall SublinkPro" "Управление / удаление SublinkPro")" func_manage_sublinkpro
+    func_service_action_menu "$(localized_text "SublinkPro 管理" "SublinkPro management" "Управление SublinkPro")" "$(localized_text "安装或管理通过 Docker Compose 部署的 SublinkPro。" "Install or manage SublinkPro deployed with Docker Compose." "Установить или управлять SublinkPro, развёрнутым через Docker Compose.")" "$(localized_text "安装 SublinkPro" "Install SublinkPro" "Установить SublinkPro")" func_sublinkpro "$(localized_text "管理 / 卸载 SublinkPro" "Manage or uninstall SublinkPro" "Управление или удаление SublinkPro")" func_manage_sublinkpro
 }
 
 func_miaomiaowu_menu() {
@@ -19254,11 +19247,11 @@ func_miaomiaowu_menu() {
 }
 
 func_substore_menu() {
-    func_service_action_menu "$(localized_text "Sub-Store 管理" "Sub-Store Management" "Управление суб-магазином")" "$(localized_text "安装或管理 Docker Compose 部署的 Sub-Store。" "Install or manage the Sub-Store deployed by Docker Compose." "Установите или управляйте дополнительным магазином, развернутым Docker Compose.")" "$(localized_text "安装 Sub-Store" "Install Sub-Store" "Установить дополнительный магазин")" func_substore "$(localized_text "管理 / 卸载 Sub-Store" "Manage/Uninstall Sub-Store" "Управление/удаление дополнительного магазина")" func_manage_substore
+    func_service_action_menu "$(localized_text "Sub-Store 管理" "Sub-Store management" "Управление Sub-Store")" "$(localized_text "安装或管理通过 Docker Compose 部署的 Sub-Store。" "Install or manage Sub-Store deployed with Docker Compose." "Установить или управлять Sub-Store, развёрнутым через Docker Compose.")" "$(localized_text "安装 Sub-Store" "Install Sub-Store" "Установить Sub-Store")" func_substore "$(localized_text "管理 / 卸载 Sub-Store" "Manage or uninstall Sub-Store" "Управление или удаление Sub-Store")" func_manage_substore
 }
 
 func_dockge_menu() {
-    func_service_action_menu "$(localized_text "Dockge 管理" "Dockge Management" "Dockge Управление")" "$(localized_text "安装或管理 Docker Compose 部署的 Dockge。" "Install or manage Dockge deployed by Dockge." "Установите или управляйте Dockge, развернутым Dockge.")" "$(localized_text "安装 Dockge" "Install Dockge" "Установить Dockge")" func_dockge "$(localized_text "管理 / 卸载 Dockge" "Manage/Uninstall Dockge" "Управление/удаление Dockge")" func_manage_dockge
+    func_service_action_menu "$(localized_text "Dockge 管理" "Dockge management" "Управление Dockge")" "$(localized_text "安装或管理通过 Docker Compose 部署的 Dockge。" "Install or manage Dockge deployed with Docker Compose." "Установить или управлять Dockge, развёрнутым через Docker Compose.")" "$(localized_text "安装 Dockge" "Install Dockge" "Установить Dockge")" func_dockge "$(localized_text "管理 / 卸载 Dockge" "Manage or uninstall Dockge" "Управление или удаление Dockge")" func_manage_dockge
 }
 
 func_komari_menu() {
@@ -19423,7 +19416,7 @@ func_migrate_compose_to_dockge() {
     echo -e "$(localized_text "${RED}  0. 返回${PLAIN}" "${RED}0. Return${PLAIN}" "${RED}0. Возврат${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    read_trimmed choice "$(localized_text "请选择要迁移的项目: " "Please select items to migrate:" "Пожалуйста, выберите элементы для переноса:")"
+    read_trimmed choice "$(localized_text "选择要迁移的项目: " "Select projects to migrate: " "Выберите проекты для переноса: ")"
     case "$choice" in
         0) return ;;
         a|A)
@@ -19515,11 +19508,11 @@ func_port_kill() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}🔍 网络端口占用排查与进程释放${PLAIN}" "${BOLD}🔍 Network port occupancy check and process release${PLAIN}" "${BOLD}🔍 Проверка занятости сетевого порта и освобождение процесса${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🔍 端口占用排查与进程终止${PLAIN}" "${BOLD}🔍 Port usage and process termination${PLAIN}" "${BOLD}🔍 Занятые порты и завершение процессов${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}当前系统中正在监听的活动端口列表：${PLAIN}" "${YELLOW}List of active ports currently being listened to in the system:${PLAIN}" "${YELLOW}Список активных портов, которые в данный момент прослушиваются в системе:${PLAIN}")"
         echo -e "------------------------------------------------"
-        printf "%-10s %-15s %-20s\n" "$(localized_text "协议" "agreement" "соглашение")" "$(localized_text "端口" "port" "порт")" "$(localized_text "关联进程 (PID)" "Associated Process (PID)" "Связанный процесс (PID)")"
+        printf "%-10s %-15s %-20s\n" "$(localized_text "协议" "Protocol" "Протокол")" "$(localized_text "端口" "Port" "Порт")" "$(localized_text "关联进程 (PID)" "Process (PID)" "Процесс (PID)")"
         
         ss -tulnp | grep -E 'LISTEN|UNCONN' | while read -r line; do
             local proto=$(echo "$line" | awk '{print $1}')
@@ -19537,12 +19530,12 @@ func_port_kill() {
         done | sort -n -k2 | uniq
         
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}👉 指南：找到您想释放的冲突端口，输入它即可强杀对应进程。${PLAIN}" "${GREEN}👉 Guide: Find the conflicting port you want to release, enter it to kill the corresponding process.${PLAIN}" "${GREEN}👉 Руководство: Найдите конфликтующий порт, который вы хотите освободить, введите его, чтобы завершить соответствующий процесс.${PLAIN}")"
-        echo -e "$(localized_text "${RED}⚠️ 高危：请勿随意终止 sshd (通常为 22) 的端口，否则会断网失联！${PLAIN}" "${RED}⚠️ High risk: Do not terminate the port of sshd (usually 22) at will, otherwise the network will be disconnected!${PLAIN}" "${RED}⚠️ Высокий риск: не отключайте порт sshd (обычно 22) по своему желанию, иначе сеть будет отключена!${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}输入冲突端口后，脚本会强制终止占用该端口的进程。${PLAIN}" "${GREEN}Enter a conflicting port to forcefully terminate its listening process.${PLAIN}" "${GREEN}Введите конфликтующий порт, чтобы принудительно завершить слушающий его процесс.${PLAIN}")"
+        echo -e "$(localized_text "${RED}⚠️ 不要终止 SSH 端口；脚本会拒绝处理检测到的 SSH 监听。${PLAIN}" "${RED}⚠️ Do not terminate the SSH port. Detected SSH listeners are rejected.${PLAIN}" "${RED}⚠️ Не завершайте процесс на порту SSH. Обнаруженные слушатели SSH будут отклонены.${PLAIN}")"
         echo -e "------------------------------------------------"
         
         local p_choice
-        read_trimmed p_choice "$(localized_text "❓ 请输入要强杀释放的端口号 (输入 0 返回主菜单): " "❓ Please enter the port number to be released (enter 0 to return to the main menu):" "❓ Введите номер порта, который нужно освободить (введите 0, чтобы вернуться в главное меню):")"
+        read_trimmed p_choice "$(localized_text "输入要释放的端口（0 返回）: " "Port to release (0 to return): " "Порт для освобождения (0 — назад): ")"
         
         if [[ "$p_choice" == "0" ]]; then break; fi
         
@@ -19550,16 +19543,16 @@ func_port_kill() {
             local ssh_match
             ssh_match=$(ss -tulnp 2>/dev/null | awk -v port="$p_choice" '$5 ~ ":" port "$" && $0 ~ /(sshd|ssh)/ {print}')
             if [[ -n "$ssh_match" || "$p_choice" == "22" ]]; then
-                echo -e "$(localized_text "${RED}❌ 检测到你选择的是 SSH 相关端口或默认 SSH 端口，为避免失联，已拒绝强杀。${PLAIN}" "${RED}❌ Detected that you have selected the SSH related port or the default SSH port. To avoid losing connection, the forced kill has been refused.${PLAIN}" "${RED}❌ Обнаружено, что вы выбрали порт, связанный с SSH, или порт по умолчанию SSH. Во избежание потери соединения в принудительном удалении было отказано.${PLAIN}")"
+                echo -e "$(localized_text "${RED}❌ 该端口用于 SSH。为避免连接中断，已拒绝终止进程。${PLAIN}" "${RED}❌ This port is used by SSH. Process termination was blocked to prevent disconnection.${PLAIN}" "${RED}❌ Этот порт используется SSH. Завершение процесса заблокировано, чтобы не потерять соединение.${PLAIN}")"
                 sleep 2
                 continue
             fi
-            confirm_danger "$(localized_text "强杀占用端口 ${p_choice} 的进程" "Forcefully kill the process occupying port ${p_choice}" "Принудительно завершить процесс, занимающий порт ${p_choice}.")" "$(localized_text "会对 TCP/UDP ${p_choice} 占用进程发送 SIGKILL，相关服务会立即中断。" "SIGKILL will be sent to the TCP/UDP ${p_choice} occupied process, and the related services will be interrupted immediately." "SIGKILL будет отправлен занятому процессу TCP/UDP ${p_choice}, и соответствующие службы будут немедленно прерваны.")" "$(localized_text "如果杀错服务，需要手动重启对应 systemd 服务或容器。" "If you kill the wrong service, you need to manually restart the corresponding systemd service or container." "Если вы уничтожили не ту службу, вам необходимо вручную перезапустить соответствующую службу или контейнер systemd.")" || {
-                echo -e "$(localized_text "${BLUE}已取消强杀操作。${PLAIN}" "${BLUE}The forced kill operation has been canceled.${PLAIN}" "${BLUE}Операция принудительного уничтожения отменена.${PLAIN}")"
+            confirm_danger "$(localized_text "强制终止占用端口 ${p_choice} 的进程" "Forcefully terminate the process using port ${p_choice}" "Принудительно завершить процесс, использующий порт ${p_choice}")" "$(localized_text "将向占用 TCP/UDP ${p_choice} 的进程发送 SIGKILL，相关服务会立即中断。" "SIGKILL will be sent to processes using TCP/UDP port ${p_choice}; related services will stop immediately." "Процессам, использующим TCP/UDP-порт ${p_choice}, будет отправлен SIGKILL; связанные службы немедленно остановятся.")" "$(localized_text "若终止了错误的进程，需要手动重启对应的 systemd 服务或容器。" "If the wrong process is terminated, restart the corresponding systemd service or container manually." "Если завершён не тот процесс, вручную перезапустите соответствующую службу systemd или контейнер.")" || {
+                echo -e "$(localized_text "${BLUE}已取消终止操作。${PLAIN}" "${BLUE}Process termination canceled.${PLAIN}" "${BLUE}Завершение процесса отменено.${PLAIN}")"
                 sleep 1
                 continue
             }
-            echo -e "$(localized_text "${CYAN}▶ 正在调用底层系统命令强杀端口 $p_choice ...${PLAIN}" "${CYAN}▶ Calling the underlying system command to kill the port $p_choice...${PLAIN}" "${CYAN}▶ Вызов базовой системной команды для закрытия порта $p_choice...${PLAIN}")"
+            echo -e "$(localized_text "${CYAN}▶ 正在终止占用端口 $p_choice 的进程...${PLAIN}" "${CYAN}▶ Terminating processes using port $p_choice...${PLAIN}" "${CYAN}▶ Завершение процессов, использующих порт $p_choice...${PLAIN}")"
             
             # [依赖前置检查]: 确保存在 fuser 工具
             if ! command -v fuser >/dev/null 2>&1; then
@@ -20570,7 +20563,7 @@ health_show_failed_unit_logs() {
             echo -e "${GREEN} $((i + 1)). ${failed_units[$i]}${PLAIN}"
         done
         echo "$(localized_text " 0. 输入其他服务名" "0. Enter another service name" "0. Введите другое имя службы.")"
-        read_trimmed choice "$(localized_text "请选择编号，或直接输入服务名: " "Please select a number, or enter the service name directly:" "Пожалуйста, выберите номер или введите название услуги напрямую:")"
+        read_trimmed choice "$(localized_text "输入编号或服务名: " "Enter a number or service name: " "Введите номер или имя службы: ")"
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#failed_units[@]} )); then
             unit="${failed_units[$((choice - 1))]}"
         elif [[ "$choice" == "0" ]]; then
@@ -20599,28 +20592,28 @@ func_health_service_recovery_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "诊断/健康检查 > 服务恢复" "Diagnostics/Health Checks > Service Restoration" "Диагностика/Проверка работоспособности > Восстановление службы")"
-        echo -e "$(localized_text "${BOLD}🧰 服务重启与自动拉起${PLAIN}" "${BOLD}🧰 Service restart and automatically pull up${PLAIN}" "${BOLD}🧰 Перезапуск службы и автоматическое подтягивание${PLAIN}")"
+        print_breadcrumb "$(localized_text "诊断/健康检查 > 服务恢复" "Diagnostics/Health Checks > Service recovery" "Диагностика/Проверка состояния > Восстановление служб")"
+        echo -e "$(localized_text "${BOLD}🧰 服务恢复与自动重启${PLAIN}" "${BOLD}🧰 Service recovery and automatic restart${PLAIN}" "${BOLD}🧰 Восстановление и автоматический перезапуск служб${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${CYAN}失败单元：${PLAIN}" "${CYAN}Failed unit:${PLAIN}" "${CYAN}неисправный блок:${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}失败的 systemd 单元：${PLAIN}" "${CYAN}Failed systemd units:${PLAIN}" "${CYAN}Сбойные юниты systemd:${PLAIN}")"
         print_failed_systemd_units
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}常用服务${PLAIN}" "${BOLD}Common services${PLAIN}" "${BOLD}Общие услуги${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}常用服务${PLAIN}" "${BOLD}Common services${PLAIN}" "${BOLD}Основные службы${PLAIN}")"
         local item number label unit
         for item in "${HEALTH_RECOVERY_UNITS[@]}"; do
             IFS='|' read -r number label unit <<< "$item"
             echo -e "${GREEN} ${number}. ${label}${PLAIN} [${unit}] $(health_unit_status_label "$unit")"
         done
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN} r. 重启一个常用服务${PLAIN}" "${GREEN}R. Restart a common service${PLAIN}" "${GREEN}р. Перезапустите общую службу.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} f. 重启失败服务${PLAIN}" "${GREEN}F. Restart failed service${PLAIN}" "${GREEN}ф. Не удалось перезапустить службу.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} a. 为常用服务启用失败自动重启${PLAIN}" "${GREEN}A. Enable automatic restart for common services${PLAIN}" "${GREEN}а. Включить автоматический перезапуск для общих служб${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} x. 清除已恢复的失败状态${PLAIN}" "${GREEN}X. Clear the recovered failure status${PLAIN}" "${GREEN}х. Очистите статус восстановленного сбоя.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} l. 查看服务日志${PLAIN}" "${GREEN}L. View service log${PLAIN}" "${GREEN}л. Посмотреть журнал обслуживания${PLAIN}")"
-        echo -e "$(localized_text "${RED} 0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Return to the previous menu / q Return to${PLAIN}" "${RED}0. Возврат в предыдущее меню / q Возврат в${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} r. 重启常用服务${PLAIN}" "${GREEN} r. Restart a common service${PLAIN}" "${GREEN} r. Перезапустить основную службу${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} f. 重启失败服务${PLAIN}" "${GREEN} f. Restart failed services${PLAIN}" "${GREEN} f. Перезапустить сбойные службы${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} a. 启用失败自动重启${PLAIN}" "${GREEN} a. Enable restart on failure${PLAIN}" "${GREEN} a. Включить перезапуск при сбое${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} x. 清除已恢复的失败状态${PLAIN}" "${GREEN} x. Clear recovered failure states${PLAIN}" "${GREEN} x. Очистить восстановленные состояния сбоя${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} l. 查看服务日志${PLAIN}" "${GREEN} l. View service logs${PLAIN}" "${GREEN} l. Показать журналы служб${PLAIN}")"
+        echo -e "$(localized_text "${RED} 0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             r|R)
                 read_trimmed choice "$(localized_text "请输入要重启的服务编号: " "Please enter the service number to be restarted:" "Пожалуйста, введите номер услуги для перезапуска:")"
@@ -20653,8 +20646,8 @@ func_health_service_recovery_menu() {
 func_health_dashboard() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "诊断/健康检查" "Diagnosis/Health Checkup" "Диагностика/осмотр здоровья")"
-    echo -e "$(localized_text "${BOLD}📈 服务健康总览${PLAIN}" "${BOLD}📈 Service Health Overview${PLAIN}" "${BOLD}📈 Обзор состояния службы${PLAIN}")"
+    print_breadcrumb "$(localized_text "诊断 / 健康检查" "Diagnostics / Health checks" "Диагностика / Проверка состояния")"
+    echo -e "$(localized_text "${BOLD}📈 服务健康总览${PLAIN}" "${BOLD}📈 Service health overview${PLAIN}" "${BOLD}📈 Состояние служб${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local ssh_state="$(localized_text "${RED}未运行${PLAIN}" "${RED}Is not running${PLAIN}" "${RED}не работает${PLAIN}")"
@@ -20859,23 +20852,22 @@ func_dns_optimize() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "网络/内核优化 > DNS 更改优化" "Network/Kernel Optimization > DNS Change Optimization" "Оптимизация сети/ядра > Оптимизация изменений DNS")"
-        echo -e "$(localized_text "${BOLD}DNS 更改优化${PLAIN}" "${BOLD}DNS Change and optimize${PLAIN}" "${BOLD}DNS Изменение и оптимизация${PLAIN}")"
+        print_breadcrumb "$(localized_text "网络/内核优化 > DNS 设置" "Network/Kernel Optimization > DNS settings" "Оптимизация сети/ядра > Настройка DNS")"
+        echo -e "$(localized_text "${BOLD}DNS 设置${PLAIN}" "${BOLD}DNS settings${PLAIN}" "${BOLD}Настройка DNS${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}国内默认：IPv4 223.5.5.5 / 119.29.29.29，IPv6 2400:3200::1 / 2402:4e00::${PLAIN}" "${YELLOW}Domestic default: IPv4 223.5.5.5 / 119.29.29.29, IPv6 2400:3200::1 / 2402:4e00::${PLAIN}" "${YELLOW}Внутреннее значение по умолчанию: IPv4 223.5.5.5 / 119.29.29.29, IPv6 2400:3200::1 / 2402:4e00::${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}国外默认：IPv4 1.1.1.1 / 8.8.8.8，IPv6 2606:4700:4700::1111 / 2001:4860:4860::8888${PLAIN}" "${YELLOW}Foreign default: IPv4 1.1.1.1 / 8.8.8.8, IPv6 2606:4700:4700::1111 / 2001:4860:4860::8888${PLAIN}" "${YELLOW}внешнее значение по умолчанию: IPv4 1.1.1.1/8.8.8.8, IPv6 2606:4700:4700::1111 / 2001:4860:4860::8888${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}可选择国内、国际或自定义 IPv4 / IPv6 DNS，并支持恢复最近备份。${PLAIN}" "${YELLOW}Choose China, international, or custom IPv4 / IPv6 DNS, with restore from the latest backup.${PLAIN}" "${YELLOW}Выберите DNS для Китая, международные или свои IPv4 / IPv6; доступно восстановление последней копии.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 使用国内 DNS${PLAIN}       ${YELLOW}(阿里 DNS + DNSPod)${PLAIN}" "${GREEN}1. Use domestic DNS (Alibaba DNS + DNSPod)${PLAIN}" "${GREEN}1. Используйте отечественный DNS (Alibaba DNS + DNSPod)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 使用国外 DNS${PLAIN}       ${YELLOW}(Cloudflare + Google)${PLAIN}" "${GREEN}2. Use foreign DNS (Cloudflare + Google)${PLAIN}" "${GREEN}2. Используйте зарубежный DNS (Cloudflare + Google)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 自定义 DNS${PLAIN}         ${YELLOW}(分别输入 IPv4 / IPv6)${PLAIN}" "${GREEN}3. Customize DNS (input IPv4 / IPv6 respectively)${PLAIN}" "${GREEN}3. Настройте DNS (вход IPv4 / IPv6 соответственно)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 查看当前 DNS${PLAIN}" "${GREEN}4. View current DNS${PLAIN}" "${GREEN}4. Просмотр текущего DNS${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 恢复最近一次 DNS 备份${PLAIN}" "${GREEN}5. Restore the latest DNS backup${PLAIN}" "${GREEN}5. Восстановите последнюю резервную копию DNS.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 使用国内 DNS${PLAIN} ${YELLOW}(阿里 DNS + DNSPod)${PLAIN}" "${GREEN}  1. Use China DNS${PLAIN} ${YELLOW}(Alibaba DNS + DNSPod)${PLAIN}" "${GREEN}  1. Использовать DNS для Китая${PLAIN} ${YELLOW}(Alibaba DNS + DNSPod)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 使用国际 DNS${PLAIN} ${YELLOW}(Cloudflare + Google)${PLAIN}" "${GREEN}  2. Use international DNS${PLAIN} ${YELLOW}(Cloudflare + Google)${PLAIN}" "${GREEN}  2. Использовать международные DNS${PLAIN} ${YELLOW}(Cloudflare + Google)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 自定义 DNS${PLAIN} ${YELLOW}(分别填写 IPv4 / IPv6)${PLAIN}" "${GREEN}  3. Set custom DNS${PLAIN} ${YELLOW}(separate IPv4 / IPv6 values)${PLAIN}" "${GREEN}  3. Настроить свои DNS${PLAIN} ${YELLOW}(отдельно IPv4 / IPv6)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 查看当前 DNS${PLAIN}" "${GREEN}  4. View current DNS${PLAIN}" "${GREEN}  4. Показать текущие DNS${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 恢复最近一次 DNS 备份${PLAIN}" "${GREEN}  5. Restore the latest DNS backup${PLAIN}" "${GREEN}  5. Восстановить последнюю копию DNS${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}" "${BLUE}0. Return to the previous menu / q Return to${PLAIN}" "${BLUE}0. Возврат в предыдущее меню / q Возврат в${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}" "${BLUE}0. Back / q Back${PLAIN}" "${BLUE}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice v4_servers v6_servers raw_v4 raw_v6
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1)
                 dns_apply_profile "$(localized_text "国内 DNS" "Domestic DNS" "Внутренний DNS")" "223.5.5.5 119.29.29.29" "2400:3200::1 2402:4e00::"
@@ -22247,11 +22239,11 @@ print_traffic_guard_diagnostic_summary() {
     [[ -r "$TRAFFIC_GUARD_LOG" ]] && has_log="yes" || has_log="no"
 
     if [[ "$has_config" == "no" && "$has_state" == "no" && "$has_log" == "no" && "$timer_active" != "active" && "$timer_enabled" == "disabled" ]]; then
-        [[ "$show_unconfigured" == "yes" ]] && echo "$(localized_text "流量达量保护摘要: 未配置" "Traffic volume protection summary: Not configured" "Сводная информация о защите объема трафика: не настроено")"
+        [[ "$show_unconfigured" == "yes" ]] && echo "$(localized_text "流量限额保护摘要：未配置" "Traffic quota protection: not configured" "Защита лимита трафика: не настроена")"
         return 0
     fi
 
-    echo "$(localized_text "流量达量保护摘要:" "Traffic volume protection summary:" "Сводная информация о защите объема трафика:")"
+    echo "$(localized_text "流量限额保护摘要：" "Traffic quota protection:" "Защита лимита трафика:")"
     echo "- timer: vps-traffic-guard.timer active=${timer_active}; enabled=${timer_enabled}"
     config_status="$(localized_text "不可读或不存在" "Unreadable or does not exist" "Нечитабельно или не существует")"
     state_status="$(localized_text "不可读或不存在" "Unreadable or does not exist" "Нечитабельно или не существует")"
@@ -22321,13 +22313,13 @@ print_traffic_guard_diagnostic_summary() {
 show_traffic_guard_status() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "网络/内核优化 > 流量达量保护" "Network/Kernel Optimization > Traffic Volume Protection" "Оптимизация сети/ядра > Защита объема трафика")"
-    echo -e "$(localized_text "${BOLD}🧯 流量达量保护状态${PLAIN}" "${BOLD}🧯 Traffic volume protection status${PLAIN}" "${BOLD}🧯 Статус защиты объема трафика${PLAIN}")"
+    print_breadcrumb "$(localized_text "网络/内核优化 > 流量限额保护" "Network/Kernel Optimization > Traffic quota protection" "Оптимизация сети/ядра > Защита лимита трафика")"
+    echo -e "$(localized_text "${BOLD}🧯 流量限额保护状态${PLAIN}" "${BOLD}🧯 Traffic quota protection status${PLAIN}" "${BOLD}🧯 Состояние защиты лимита трафика${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     if ! load_traffic_guard_config; then
-        echo -e "$(localized_text "${YELLOW}当前未配置流量达量保护。${PLAIN}" "${YELLOW}Is currently not configured with traffic volume protection.${PLAIN}" "${YELLOW}в настоящее время не настроен с защитой объема трафика.${PLAIN}")"
-        echo -e "$(localized_text "${BLUE}建议先选择 [1] 配置，避免 VPS 被刷流量产生超额账单。${PLAIN}" "${BLUE}It is recommended to select [1] configuration first to avoid excessive bills caused by VPS traffic being brushed.${PLAIN}" "${BLUE}Рекомендуется сначала выбрать конфигурацию [1], чтобы избежать чрезмерных счетов, вызванных очисткой трафика VPS.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}尚未配置流量限额保护。${PLAIN}" "${YELLOW}Traffic quota protection is not configured.${PLAIN}" "${YELLOW}Защита лимита трафика не настроена.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}选择 [1] 设置流量阈值和达到阈值后的保护动作。${PLAIN}" "${BLUE}Select [1] to set the quota and the action taken when it is reached.${PLAIN}" "${BLUE}Выберите [1], чтобы задать лимит и действие при его достижении.${PLAIN}")"
         return 0
     fi
 
@@ -22394,7 +22386,7 @@ show_traffic_guard_status() {
 
 sync_traffic_guard_now() {
     load_traffic_guard_config || {
-        echo -e "$(localized_text "${YELLOW}尚未配置流量达量保护。${PLAIN}" "${YELLOW}Has not configured traffic volume protection.${PLAIN}" "${YELLOW}не настроил защиту объема трафика.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}尚未配置流量限额保护。${PLAIN}" "${YELLOW}Traffic quota protection is not configured.${PLAIN}" "${YELLOW}Защита лимита трафика не настроена.${PLAIN}")"
         pause_return
         return 1
     }
@@ -22423,8 +22415,8 @@ sync_traffic_guard_now() {
 configure_traffic_guard() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "网络/内核优化 > 配置流量达量保护" "Network/Kernel Optimization > Configure Traffic Volume Protection" "Оптимизация сети/ядра > Настройка защиты объема трафика")"
-    echo -e "$(localized_text "${BOLD}🧯 配置流量达量保护${PLAIN}" "${BOLD}🧯 Configure traffic volume protection${PLAIN}" "${BOLD}🧯 Настройка защиты объема трафика${PLAIN}")"
+    print_breadcrumb "$(localized_text "网络/内核优化 > 配置流量限额保护" "Network/Kernel Optimization > Configure traffic quota protection" "Оптимизация сети/ядра > Настройка защиты лимита трафика")"
+    echo -e "$(localized_text "${BOLD}🧯 配置流量限额保护${PLAIN}" "${BOLD}🧯 Configure traffic quota protection${PLAIN}" "${BOLD}🧯 Настройка защиты лимита трафика${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}用途：定时读取网卡流量，达到阈值后自动关机，避免超额流量产生账单。${PLAIN}" "${YELLOW}Purpose: Read the network card traffic regularly and automatically shut down after reaching the threshold to avoid excessive traffic bills.${PLAIN}" "${YELLOW}Назначение: регулярно считывать трафик сетевой карты и автоматически отключаться после достижения порогового значения, чтобы избежать чрезмерных счетов за трафик.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}注意：脚本只能按本机网卡计数估算，云厂商后台统计可能有延迟或口径差异，请留安全余量。${PLAIN}" "${YELLOW}Note: The script can only be estimated based on the local network card count. The cloud vendor's background statistics may have delays or caliber differences, so please leave a safety margin.${PLAIN}" "${YELLOW}Примечание. Сценарий можно оценить только на основе количества локальных сетевых карт. Справочная статистика поставщика облачных услуг может иметь задержки или различия в калибре, поэтому оставляйте запас прочности.${PLAIN}")"
@@ -22470,7 +22462,7 @@ configure_traffic_guard() {
     echo -e "$(localized_text "  2. 出入总量 RX+TX" "2. Total deposits and withdrawals RX+TX" "2. Общая сумма депозитов и снятий RX+TX")"
     echo -e "$(localized_text "  3. 任一方向达量" "3. Amount in any direction" "3. Сумма в любую сторону")"
     echo -e "$(localized_text "  4. 入站 RX 计费" "4. Inbound RX billing" "4. Биллинг входящего приема")"
-    read_trimmed mode_choice "$(localized_text "请选择计费模式 (默认 1): " "Please select billing mode (default 1):" "Пожалуйста, выберите режим выставления счетов (по умолчанию 1):")"
+    read_trimmed mode_choice "$(localized_text "选择流量统计模式 [1]: " "Select traffic accounting mode [1]: " "Выберите режим учёта трафика [1]: ")"
     case "${mode_choice:-1}" in
         2) mode="total" ;;
         3) mode="max" ;;
@@ -22593,9 +22585,9 @@ configure_traffic_guard() {
     /usr/bin/env bash "$TRAFFIC_GUARD_CHECKER" >/dev/null 2>&1 || checker_rc=$?
     if (( checker_rc == 0 )); then
         reset_traffic_guard_failed_state
-        echo -e "$(localized_text "${GREEN}✅ 流量达量保护已启用，首次检查通过。${PLAIN}" "${GREEN}✅ Traffic Guard is enabled and the first check passed.${PLAIN}" "${GREEN}✅ Traffic Guard включён; первая проверка выполнена успешно.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}✅ 流量限额保护已启用，首次检查通过。${PLAIN}" "${GREEN}✅ Traffic quota protection is enabled; the first check passed.${PLAIN}" "${GREEN}✅ Защита лимита трафика включена; первая проверка пройдена.${PLAIN}")"
     else
-        echo -e "$(localized_text "${YELLOW}⚠️ 流量达量保护已启用，但首次检查失败（rc=${checker_rc}）。请先查看日志和菜单 [2] 状态。${PLAIN}" "${YELLOW}⚠️ Traffic Guard is enabled, but the first check failed (rc=${checker_rc}). Review the log and menu [2] status.${PLAIN}" "${YELLOW}⚠️ Traffic Guard включён, но первая проверка завершилась ошибкой (rc=${checker_rc}). Проверьте журнал и состояние в пункте [2].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ 流量限额保护已启用，但首次检查失败（rc=${checker_rc}）。请查看日志和菜单 [2] 的状态。${PLAIN}" "${YELLOW}⚠️ Traffic quota protection is enabled, but the first check failed (rc=${checker_rc}). Check the logs and menu [2].${PLAIN}" "${YELLOW}⚠️ Защита лимита трафика включена, но первая проверка завершилась ошибкой (rc=${checker_rc}). Проверьте журнал и пункт [2].${PLAIN}")"
     fi
     echo -e "$(localized_text "${YELLOW}状态可在本菜单 [2] 查看；日志：${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}The status can be viewed in this menu [2]; log: ${TRAFFIC_GUARD_LOG}${PLAIN}" "${YELLOW}Статус можно просмотреть в этом меню [2]; журнал: ${TRAFFIC_GUARD_LOG}${PLAIN}")"
     pause_return
@@ -22605,7 +22597,7 @@ reset_traffic_guard_baseline() {
     local iface mode cycle_day initial_used_gb initial_used_bytes
     local detected_used_bytes detected_used_gb
     load_traffic_guard_config || {
-        echo -e "$(localized_text "${YELLOW}尚未配置流量达量保护。${PLAIN}" "${YELLOW}Has not configured traffic volume protection.${PLAIN}" "${YELLOW}не настроил защиту объема трафика.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}尚未配置流量限额保护。${PLAIN}" "${YELLOW}Traffic quota protection is not configured.${PLAIN}" "${YELLOW}Защита лимита трафика не настроена.${PLAIN}")"
         pause_return
         return 1
     }
@@ -22649,7 +22641,7 @@ reset_traffic_guard_baseline() {
 repair_traffic_guard_timer() {
     local interval
     load_traffic_guard_config || {
-        echo -e "$(localized_text "${YELLOW}尚未配置流量达量保护。${PLAIN}" "${YELLOW}Has not configured traffic volume protection.${PLAIN}" "${YELLOW}не настроил защиту объема трафика.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}尚未配置流量限额保护。${PLAIN}" "${YELLOW}Traffic quota protection is not configured.${PLAIN}" "${YELLOW}Защита лимита трафика не настроена.${PLAIN}")"
         pause_return
         return 1
     }
@@ -22702,7 +22694,7 @@ disable_traffic_guard() {
         pause_return
         return 0
     fi
-    confirm_risk_action "$(localized_text "停用流量达量保护" "Disable traffic volume protection" "Отключить защиту объема трафика")" \
+    confirm_risk_action "$(localized_text "停用流量限额保护" "Disable traffic quota protection" "Отключить защиту лимита трафика")" \
         "$(localized_text "vps-traffic-guard.timer 会停止，达到流量阈值后不再执行配置的动作。" "vps-traffic-guard.timer will stop and will no longer perform configured actions after the traffic threshold is reached." "vps-traffic-guard.timer остановится и больше не будет выполнять настроенные действия после достижения порога трафика.")" \
         "$(localized_text "重新进入本菜单选择 [1] 启用保护。" "Re-enter this menu and select [1] to enable protection." "Снова войдите в это меню и выберите [1], чтобы включить защиту.")" \
         "$(localized_text "停用后请自行监控云厂商流量，避免超额账单。" "After deactivation, please monitor the cloud provider's traffic yourself to avoid excessive bills." "После деактивации следите за трафиком облачного провайдера самостоятельно, чтобы избежать чрезмерных счетов.")" || return 1
@@ -22717,7 +22709,7 @@ disable_traffic_guard() {
     if [[ -f "$TRAFFIC_GUARD_CONFIG" ]]; then
         sed -i 's/^ENABLED=.*/ENABLED=0/' "$TRAFFIC_GUARD_CONFIG" 2>/dev/null || true
     fi
-    echo -e "$(localized_text "${GREEN}✅ 已停用流量达量保护，配置文件仍保留：${TRAFFIC_GUARD_CONFIG}${PLAIN}" "${GREEN}✅ Traffic volume protection has been disabled, the configuration file remains: ${TRAFFIC_GUARD_CONFIG}${PLAIN}" "${GREEN}✅ Защита объема трафика отключена, файл конфигурации остался: ${TRAFFIC_GUARD_CONFIG}${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}✅ 已停用流量限额保护；配置文件保留在 ${TRAFFIC_GUARD_CONFIG}${PLAIN}" "${GREEN}✅ Traffic quota protection is disabled; the configuration remains at ${TRAFFIC_GUARD_CONFIG}.${PLAIN}" "${GREEN}✅ Защита лимита трафика отключена; конфигурация сохранена в ${TRAFFIC_GUARD_CONFIG}.${PLAIN}")"
     pause_return
 }
 
@@ -22725,25 +22717,24 @@ func_traffic_guard_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "网络/内核优化 > 流量达量保护" "Network/Kernel Optimization > Traffic Volume Protection" "Оптимизация сети/ядра > Защита объема трафика")"
-        echo -e "$(localized_text "${BOLD}🧯 流量达量保护${PLAIN}" "${BOLD}🧯 Traffic volume protection${PLAIN}" "${BOLD}🧯 Защита объема трафика${PLAIN}")"
+        print_breadcrumb "$(localized_text "网络/内核优化 > 流量限额保护" "Network/Kernel Optimization > Traffic quota protection" "Оптимизация сети/ядра > Защита лимита трафика")"
+        echo -e "$(localized_text "${BOLD}🧯 流量限额保护${PLAIN}" "${BOLD}🧯 Traffic quota protection${PLAIN}" "${BOLD}🧯 Защита лимита трафика${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}达到套餐安全阈值后可自动关机或仅保留 SSH，优先防止刷流量造成天价账单。${PLAIN}" "${YELLOW}After reaches the package security threshold, it can automatically shut down or only keep SSH, giving priority to preventing excessive traffic from causing sky-high bills.${PLAIN}" "${YELLOW}После того, как достигает порога безопасности пакета, он может автоматически отключиться или оставить только SSH, отдавая приоритет предотвращению чрезмерного трафика, вызывающего заоблачные счета.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}推荐阈值低于云厂商套餐上限，并按出站 TX 或总量模式保守配置。${PLAIN}" "${YELLOW}The recommended threshold for is lower than the upper limit of the cloud vendor's package, and is configured conservatively in outbound TX or total mode.${PLAIN}" "${YELLOW}Рекомендуемый порог для ниже верхнего предела пакета поставщика облака и настраивается консервативно в исходящей передаче или общем режиме.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}达到安全阈值后自动关机或仅保留 SSH，避免流量超额。阈值应低于云厂商套餐上限。${PLAIN}" "${YELLOW}Shut down automatically or keep only SSH at the safety threshold to prevent overages. Set the threshold below the provider quota.${PLAIN}" "${YELLOW}При достижении безопасного порога сервер выключается либо оставляет только SSH. Установите порог ниже лимита провайдера.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 配置 / 启用保护${PLAIN}" "${GREEN}1. Configure / enable protection${PLAIN}" "${GREEN}1. Настроить/включить защиту${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 查看状态与已用量${PLAIN}" "${GREEN}2. Check the status and usage${PLAIN}" "${GREEN}2. Проверьте состояние и использование.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 重置本周期统计基线${PLAIN}" "${GREEN}3. Reset the statistical baseline of this period${PLAIN}" "${GREEN}3. Сброс статистической базовой линии за этот период${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 查看状态与本周期用量${PLAIN}" "${GREEN}  2. View status and current-cycle usage${PLAIN}" "${GREEN}  2. Показать состояние и расход за текущий период${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 重置本周期统计起点${PLAIN}" "${GREEN}  3. Reset the current-cycle baseline${PLAIN}" "${GREEN}  3. Сбросить исходное значение текущего периода${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}  4. 停用保护${PLAIN}" "${YELLOW}4. Disable protection${PLAIN}" "${YELLOW}4. Отключить защиту${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 查看最近日志${PLAIN}" "${GREEN}5. View the latest log${PLAIN}" "${GREEN}5. Просмотр последнего журнала${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  6. 修复/重装自动检查 timer${PLAIN}" "${GREEN}6. Repair/reinstall automatic check timer${PLAIN}" "${GREEN}6. Отремонтируйте/переустановите таймер автоматической проверки${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. 立即同步/验证检查器${PLAIN}" "${GREEN}7. Immediate synchronization/verification checker${PLAIN}" "${GREEN}7. Немедленная проверка синхронизации/проверки${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 查看最近日志${PLAIN}" "${GREEN}  5. View recent logs${PLAIN}" "${GREEN}  5. Показать последние журналы${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  6. 修复 / 重装自动检查定时器${PLAIN}" "${GREEN}  6. Repair or reinstall the check timer${PLAIN}" "${GREEN}  6. Исправить или переустановить таймер проверки${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. 立即同步并验证检查器${PLAIN}" "${GREEN}  7. Sync and verify the checker now${PLAIN}" "${GREEN}  7. Синхронизировать и проверить обработчик сейчас${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) configure_traffic_guard ;;
             2) show_traffic_guard_status; pause_return ;;
@@ -22894,22 +22885,22 @@ func_network_interface_manage() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "网络/内核优化 > 网卡管理工具" "Network/Kernel Optimization > Network Card Management Tool" "Оптимизация сети/ядра > Инструмент управления сетевой картой")"
-        echo -e "$(localized_text "${BOLD}🧰 网卡管理工具${PLAIN}" "${BOLD}🧰 Network card management tool${PLAIN}" "${BOLD}🧰 Инструмент управления сетевой картой${PLAIN}")"
+        print_breadcrumb "$(localized_text "网络/内核优化 > 网卡管理" "Network/Kernel Optimization > Network interfaces" "Оптимизация сети/ядра > Сетевые интерфейсы")"
+        echo -e "$(localized_text "${BOLD}🧰 网卡管理${PLAIN}" "${BOLD}🧰 Network interfaces${PLAIN}" "${BOLD}🧰 Сетевые интерфейсы${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：查看网卡、路由、DNS 和链路状态；危险操作会要求确认。${PLAIN}" "${YELLOW}Purpose: View network card, routing, DNS and link status; dangerous operations will require confirmation.${PLAIN}" "${YELLOW}Назначение : просмотр сетевой карты, маршрутизации, DNS и состояния соединения; опасные операции потребуют подтверждения.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}查看网卡、路由、DNS 和链路状态；关闭网卡等高风险操作会再次确认。${PLAIN}" "${YELLOW}Inspect interfaces, routes, DNS, and link status. High-risk actions such as disabling an interface require confirmation.${PLAIN}" "${YELLOW}Просмотр интерфейсов, маршрутов, DNS и состояния соединения. Опасные действия, включая отключение интерфейса, требуют подтверждения.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 查看网卡 / 路由 / DNS 概览${PLAIN}" "${GREEN}1. View network card / routing / DNS Overview${PLAIN}" "${GREEN}1. Просмотр сетевой карты/маршрутизации/DNS Обзор${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 查看指定网卡详情与流量统计${PLAIN}" "${GREEN}2. View the specified network card details and traffic statistics${PLAIN}" "${GREEN}2. Просмотр данных указанной сетевой карты и статистики трафика${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 启用指定网卡${PLAIN}" "${GREEN}3. Enable the specified network card${PLAIN}" "${GREEN}3. Включите указанную сетевую карту.${PLAIN}")"
-        echo -e "$(localized_text "${RED}  4. 关闭指定网卡${PLAIN}" "${RED}4. Close the specified network card${PLAIN}" "${RED}4. Закрываем указанную сетевую карту.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}  5. 临时设置网卡 MTU${PLAIN}" "${YELLOW}5. Temporarily set the network card MTU${PLAIN}" "${YELLOW}5. Временно устанавливаем сетевую карту MTU${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}  6. 刷新 DHCP/网络连接${PLAIN}" "${YELLOW}6. Refresh DHCP/Network Connection${PLAIN}" "${YELLOW}6. Обновите DHCP/сетевое соединение${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 查看网卡 / 路由 / DNS 概览${PLAIN}" "${GREEN}  1. View interfaces, routes, and DNS${PLAIN}" "${GREEN}  1. Показать интерфейсы, маршруты и DNS${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 查看网卡详情与流量统计${PLAIN}" "${GREEN}  2. View interface details and traffic${PLAIN}" "${GREEN}  2. Показать сведения и трафик интерфейса${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 启用指定网卡${PLAIN}" "${GREEN}  3. Enable an interface${PLAIN}" "${GREEN}  3. Включить интерфейс${PLAIN}")"
+        echo -e "$(localized_text "${RED}  4. 关闭指定网卡${PLAIN}" "${RED}  4. Disable an interface${PLAIN}" "${RED}  4. Отключить интерфейс${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}  5. 临时设置网卡 MTU${PLAIN}" "${YELLOW}  5. Set interface MTU temporarily${PLAIN}" "${YELLOW}  5. Временно изменить MTU интерфейса${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}  6. 刷新 DHCP / 网络连接${PLAIN}" "${YELLOW}  6. Renew DHCP / network connection${PLAIN}" "${YELLOW}  6. Обновить DHCP / сетевое соединение${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         local choice
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) network_show_overview; pause_return ;;
             2) network_show_iface_detail; pause_return ;;
@@ -22977,7 +22968,7 @@ show_main_help() {
         echo "16  备份与回滚，高风险操作前建议先跑。"
         echo "19  443端口复用管理中心，面板/订阅/REALITY 共用公网 443。"
         echo "20  选择界面语言。"
-        echo "10 -> 5  流量达量保护，按账单周期防刷流量和超额账单。"
+        echo "10 -> 5  流量限额保护，按账单周期统计，并在达到阈值时执行保护动作。"
         echo "? 查看帮助，0/q 退出。"
     fi
 }
@@ -23029,9 +23020,9 @@ show_net_kernel_help() {
     echo -e "$(localized_text "${CYAN}VPS-Optimize > 网络/内核优化 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Network/Kernel Optimization > Help${PLAIN}" "${CYAN}VPS-Optimize > Оптимизация сети/ядра > Справка${PLAIN}")"
     echo "$(localized_text "1 BBR / 拥塞控制：调用外部调优脚本，执行前建议备份。" "1 BBR / Congestion control: Call an external tuning script, and it is recommended to back it up before execution." "1 BBR / Контроль перегрузки: вызовите внешний сценарий настройки, и перед выполнением рекомендуется создать его резервную копию.")"
     echo "$(localized_text "2 TCP 参数：修改 sysctl，适合有明确参数需求的用户。" "2 TCP parameters: Modify sysctl, suitable for users with clear parameter requirements." "2 параметра TCP: Измените sysctl, подходит для пользователей с четкими требованиями к параметрам.")"
-    echo "$(localized_text "3 DNS 更改优化：国内/国外默认 DNS，也支持自定义 IPv4 和 IPv6。" "3 DNS change optimization: domestic/foreign default DNS, also supports customized IPv4 and IPv6." "3 Оптимизация изменений DNS: внутренний/зарубежный DNS по умолчанию, также поддерживает настроенные IPv4 и IPv6.")"
-    echo "$(localized_text "4 网卡管理工具：查看网卡、路由、DNS，临时调整 MTU 或刷新 DHCP。" "4 Network card management tool: View network card, routing, DNS, temporarily adjust MTU or refresh DHCP." "4 Инструмент управления сетевой картой: просмотр сетевой карты, маршрутизации, DNS, временная настройка MTU или обновление DHCP.")"
-    echo "$(localized_text "5 流量达量保护：按网卡流量和账单周期自动关机或仅保留 SSH，防止超额账单。" "5 Traffic volume protection: Automatically shut down or only retain SSH according to network card traffic and billing cycle to prevent excessive bills." "5 Защита объема трафика: автоматическое отключение или сохранение SSH в зависимости от трафика сетевой карты и цикла выставления счетов, чтобы предотвратить чрезмерные счета.")"
+    echo "$(localized_text "3 DNS 设置：使用预设或自定义的 IPv4/IPv6 DNS。" "3 DNS settings: use preset or custom IPv4/IPv6 resolvers." "3 Настройки DNS: готовые или собственные DNS-серверы IPv4/IPv6.")"
+    echo "$(localized_text "4 网络接口管理：查看网卡、路由和 DNS，临时调整 MTU 或刷新 DHCP。" "4 Network interfaces: view interfaces, routes, and DNS; temporarily change MTU or renew DHCP." "4 Сетевые интерфейсы: просмотр интерфейсов, маршрутов и DNS; временная смена MTU или обновление DHCP.")"
+    echo "$(localized_text "5 流量限额保护：按账单周期统计流量，达到阈值后关机或仅保留 SSH。" "5 Traffic quota protection: track usage by billing cycle, then shut down or keep only SSH at the threshold." "5 Защита лимита трафика: учёт по расчётному периоду с выключением сервера или сохранением только SSH при достижении порога.")"
     echo "$(localized_text "6 ZRAM / Swap：适合小内存 VPS。" "6 ZRAM / Swap: suitable for small memory VPS." "6 ZRAM / Swap: подходит для VPS с небольшой памятью.")"
     echo "$(localized_text "7 安装/切换内核：高风险，必须确认快照和救援控制台可用。" "7 Install/switch kernel: High risk, must confirm snapshot and rescue console are available." "7. Установка/переключение ядра: высокий риск, необходимо подтвердить доступность моментального снимка и консоли восстановления.")"
     echo "$(localized_text "8 清理旧内核：不要删除当前内核和云厂商定制内核。" "8 Clean up old kernels: Do not delete the current kernel and cloud vendor-customized kernels." "8. Очистите старые ядра. Не удаляйте текущее ядро и ядра, настроенные поставщиком облака.")"
@@ -23057,10 +23048,10 @@ show_health_help() {
 NET_KERNEL_MENU_ITEMS=(
     "1|BBR / 拥塞控制管理|调用 ylx2016 多内核调优脚本|func_bbr_manage|net_bbr"
     "2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune"
-    "3|DNS 更改优化|国内/国外/自定义，IPv4+IPv6|func_dns_optimize|"
-    "4|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|"
-    "5|流量达量保护|防刷流量 / 防超额账单|func_traffic_guard_menu|"
-    "6|ZRAM / Swap 内存调优|按内存分档优化小鸡|func_zram_swap|"
+    "3|DNS 设置|国内/国外/自定义，IPv4+IPv6|func_dns_optimize|"
+    "4|网络接口管理|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|"
+    "5|流量限额保护|流量统计 / 超额处置|func_traffic_guard_menu|"
+    "6|ZRAM / Swap 内存调优|根据内存容量选择配置|func_zram_swap|"
     "7|安装/切换优化内核|Cloud/KVM 稳定推荐 / XanMod 高级可选|func_install_kernel|net_kernel_install"
     "8|清理旧内核|释放磁盘空间，谨慎操作|func_clean_kernel|"
     "9|BBR 直连/落地优化|智能带宽检测，按主要 RTT 调整缓冲区|func_bbr_direct_tune|net_bbr_direct"
@@ -23146,16 +23137,16 @@ func_net_kernel_menu() {
         print_breadcrumb "$(localized_text "网络/内核优化" "Network/kernel optimization" "Оптимизация сети/ядра")"
         echo -e "$(localized_text "${BOLD}🚀 网络性能与内核管理${PLAIN}" "${BOLD}🚀 Network performance and kernel management${PLAIN}" "${BOLD}🚀 Производительность сети и управление ядром${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：调整网络栈、内存压缩和内核；涉及内核安装/清理前建议先做快照。${PLAIN}" "${YELLOW}Purpose: Adjust network stack, memory compression and kernel; it is recommended to take a snapshot before kernel installation/cleaning.${PLAIN}" "${YELLOW}Назначение: Настройка сетевого стека, сжатия памяти и ядра; рекомендуется сделать снимок перед установкой/очисткой ядра.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}调整网络栈、内存压缩和内核。安装或清理内核前，建议先创建系统快照。${PLAIN}" "${YELLOW}Tune the network stack, memory compression, and kernel. Create a system snapshot before installing or removing kernels.${PLAIN}" "${YELLOW}Настройка сети, сжатия памяти и ядра. Перед установкой или удалением ядер создайте снимок системы.${PLAIN}")"
         echo -e "------------------------------------------------"
         render_menu "$menu_items_name"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Return to the main menu / q Return to the previous level${PLAIN}" "${RED}0. Возврат в главное меню / q Возврат на предыдущий уровень${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local nk_choice
-        read_trimmed nk_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed nk_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case $nk_choice in
             "?") show_net_kernel_help; pause_return ;;
             0|q|Q) break ;;
@@ -23172,7 +23163,7 @@ func_panel_deploy_menu() {
         clear
         echo -e "${CYAN}================================================${PLAIN}"
         print_breadcrumb "$(localized_text "面板、节点与订阅工具" "Panels, Nodes and Subscription Tools" "Панели, узлы и инструменты подписки")"
-        echo -e "$(localized_text "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}" "${BOLD}🛰️ Panel, node and subscription tool deployment${PLAIN}" "${BOLD}🛰️ Развертывание панели, узла и инструмента подписки${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🛰️ 面板、节点与订阅工具${PLAIN}" "${BOLD}🛰️ Panels, nodes, and subscription tools${PLAIN}" "${BOLD}🛰️ Панели, узлы и инструменты подписки${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 面板 / 核心服务${PLAIN}" "${BOLD}▶ Panels / Core services${PLAIN}" "${BOLD}▶ Панели / основные службы${PLAIN}")"
@@ -23188,11 +23179,11 @@ func_panel_deploy_menu() {
         echo -e "$(localized_text " ${BOLD}${GREEN}15.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Return to the main menu / q Return to the previous level${PLAIN}" "${RED}0. Возврат в главное меню / q Возврат на предыдущий уровень${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local pd_choice
-        read_trimmed pd_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed pd_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case $pd_choice in
             1) func_xpanel_menu ;;
             2) func_xui_custom_manager ;;
@@ -23257,7 +23248,7 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local sni_choice
-        read_trimmed sni_choice "$(localized_text "👉 输入菜单编号，? 查看帮助: " "👉 Menu number or ? for help: " "👉 Номер пункта или ? для справки: ")"
+        read_trimmed sni_choice "$(localized_text "输入菜单编号，? 查看帮助: " "Menu number or ? for help: " "Номер пункта или ? для справки: ")"
         case "$sni_choice" in
             1) show_current_entry_status ;;
             2) manage_entry_mode_install_or_switch ;;
@@ -23418,7 +23409,7 @@ main_menu() {
 
         echo -e " ${BOLD}${BLUE}▶ ④ 诊断、备份与维护${PLAIN}"
         print_menu_item 12 "测速与质量检测" "YABS/流媒体/回程/IP质量"
-        print_menu_item 13 "端口排查与释放" "查看占用并强杀进程"
+        print_menu_item 13 "端口排查与释放" "查看占用并结束进程"
         print_menu_item 14 "系统硬件探针" "CPU/内存/磁盘/网络实时信息"
         print_menu_item 15 "服务健康总览" "服务状态/证书摘要/端口概览"
         print_menu_item 16 "配置备份与回滚" "备份/列表/恢复/清理"
@@ -23434,7 +23425,7 @@ main_menu() {
         fi
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请输入菜单编号、? 或快捷词: " "👉 Enter a menu number, ?, or shortcut: " "👉 Введите номер меню, ? или команду: ")"
+        read_trimmed choice "$(localized_text "输入菜单编号或 ?: " "Enter a menu number or ?: " "Введите номер пункта или ?: ")"
         choice=$(normalize_main_choice "$choice")
 
         case $choice in
@@ -23462,9 +23453,9 @@ main_menu() {
             0) exit 0 ;;
             *)
                 localized_echo \
-                    "${RED}❌ 无效输入，请输入菜单编号、? 或有效快捷词。${PLAIN}" \
-                    "${RED}❌ Invalid input. Enter a menu number, ?, or valid shortcut.${PLAIN}" \
-                    "${RED}❌ Неверный ввод. Введите номер меню, ? или допустимую команду.${PLAIN}"
+                    "${RED}❌ 无效输入，请输入菜单中存在的编号或 ?。${PLAIN}" \
+                    "${RED}❌ Invalid input. Enter a displayed menu number or ?.${PLAIN}" \
+                    "${RED}❌ Неверный ввод. Введите номер из меню или ?.${PLAIN}"
                 sleep 1
                 ;;
         esac

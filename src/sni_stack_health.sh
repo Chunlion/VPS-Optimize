@@ -92,7 +92,7 @@ print_xray_route_health_list() {
 
         echo -e "${CYAN}${sni}${PLAIN} -> ${addr}:${port}（${status}）"
         if [[ "${CADDY_LISTEN_PORT:-}" == "$port" ]]; then
-            echo -e "$(localized_text "${RED}  ❌ 与 Web 反代引擎本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}" "${RED}❌ Conflicts with the web inversion engine local port ${CADDY_LISTEN_PORT}.${PLAIN}" "${RED}❌ Конфликты с локальным портом ${CADDY_LISTEN_PORT} механизма веб-инверсии.${PLAIN}")"
+            echo -e "$(localized_text "${RED}  ❌ 与 Web 反向代理的本地端口 ${CADDY_LISTEN_PORT} 冲突。${PLAIN}" "${RED}❌ Conflicts with the web reverse proxy local port ${CADDY_LISTEN_PORT}.${PLAIN}" "${RED}❌ Конфликт с локальным портом веб-прокси: ${CADDY_LISTEN_PORT}.${PLAIN}")"
         fi
         line=$(xray_route_listen_line_by_addr_port "$addr" "$port")
         if [[ -n "$line" ]]; then

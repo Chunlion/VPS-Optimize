@@ -172,7 +172,7 @@ assert_function_once dist/vps.sh print_vpso_mux_status_json
 assert_file_contains src/menus.sh 'NET_KERNEL_MENU_ITEMS=(' "Network/kernel menu must stay on the declarative pilot table."
 assert_file_contains src/menus.sh '1|BBR / 拥塞控制管理|调用 ylx2016 多内核调优脚本|func_bbr_manage|net_bbr'
 assert_file_contains src/menus.sh '2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune'
-assert_file_contains src/menus.sh '4|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|'
+assert_file_contains src/menus.sh '4|网络接口管理|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|'
 assert_file_contains src/menus.sh '9|BBR 直连/落地优化|智能带宽检测，按主要 RTT 调整缓冲区|func_bbr_direct_tune|net_bbr_direct'
 assert_file_contains src/menus.sh '10|服务器带宽测试|Speedtest 上下行带宽与延迟|func_server_bandwidth_test|'
 assert_file_contains src/menus.sh '11|iperf3 单线程测试|自定义服务端、方向、端口和时长|func_iperf3_single_thread_test|'

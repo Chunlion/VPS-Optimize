@@ -96,15 +96,14 @@ manage_compose_project() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}🧭 ${project_name} 管理 / 卸载${PLAIN}" "${BOLD}🧭 ${project_name} Manage / Uninstall${PLAIN}" "${BOLD}🧭 ${project_name} Управление / Удаление${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🧭 ${project_name} 管理${PLAIN}" "${BOLD}🧭 Manage ${project_name}${PLAIN}" "${BOLD}🧭 Управление ${project_name}${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}部署目录：${CYAN}${project_dir}${PLAIN}" "${YELLOW}Deployment directory: ${project_dir}${PLAIN}" "${YELLOW}Каталог развертывания : ${project_dir}.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}数据提示：${CYAN}${data_hint}${PLAIN}" "${YELLOW}Data prompt: ${data_hint}${PLAIN}" "${YELLOW}Запрос данных : ${data_hint}${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}数据说明：${CYAN}${data_hint}${PLAIN}" "${YELLOW}Data: ${data_hint}${PLAIN}" "${YELLOW}Данные: ${data_hint}${PLAIN}")"
         echo -e "------------------------------------------------"
 
         if [[ ! -d "$project_dir" ]] || ! compose_file=$(find_compose_file "$project_dir"); then
-            echo -e "$(localized_text "${YELLOW}未检测到 ${project_name} 的 Compose 部署。${PLAIN}" "${YELLOW}Did not detect the Compose deployment of ${project_name}.${PLAIN}" "${YELLOW}не обнаружил развертывание Compose для ${project_name}.${PLAIN}")"
-            echo -e "$(localized_text "${BLUE}可以先返回上级菜单选择对应安装项。${PLAIN}" "${BLUE}You can first return to the upper menu to select the corresponding installation item.${PLAIN}" "${BLUE}Можно сначала вернуться в верхнее меню и выбрать соответствующий пункт установки.${PLAIN}")"
+            echo -e "$(localized_text "${YELLOW}未检测到 ${project_name} 的 Compose 部署。请返回上级菜单先安装。${PLAIN}" "${YELLOW}No Compose deployment was found for ${project_name}. Return to the previous menu to install it.${PLAIN}" "${YELLOW}Развёртывание Compose для ${project_name} не найдено. Вернитесь в предыдущее меню и выполните установку.${PLAIN}")"
             read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
             return
         fi
@@ -115,10 +114,10 @@ manage_compose_project() {
         echo -e "$(localized_text "${GREEN}  4. 更新镜像并重建${PLAIN}" "${GREEN}4. Update the image and rebuild${PLAIN}" "${GREEN}4. Обновите образ и пересоберите.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}  5. 停止并移除容器（保留目录数据）${PLAIN}" "${YELLOW}5. Stop and remove the container (keep directory data)${PLAIN}" "${YELLOW}5. Остановить и удалить контейнер (сохранить данные каталога)${PLAIN}")"
         echo -e "$(localized_text "${RED}  6. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}" "${RED}6. Archive deployment directory (stop container and isolate configuration/data)${PLAIN}" "${RED}6. Архивировать каталог развертывания (остановить контейнер и изолировать конфигурацию/данные)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Return to the previous menu / q Return to${PLAIN}" "${RED}0. Возврат в предыдущее меню / q Возврат в${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1)
                 ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }

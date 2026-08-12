@@ -53,7 +53,7 @@ func_caddy_cf_reality_wizard() {
 func_caddy_cf_health_check() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🩺 CF DNS 一键体检${PLAIN}" "${BOLD}🩺 CF DNS One-click health check${PLAIN}" "${BOLD}🩺 CF DNS проверка состояния в один клик${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🩺 CF DNS 检查${PLAIN}" "${BOLD}🩺 CF DNS check${PLAIN}" "${BOLD}🩺 Проверка CF DNS${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local ok_count=0
@@ -218,7 +218,7 @@ func_caddy_cf_health_check() {
 func_caddy_cf_auto_fix() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧰 CF DNS 一键自动修复${PLAIN}" "${BOLD}🧰 CF DNS One-click automatic repair${PLAIN}" "${BOLD}🧰 CF DNS Автоматическое восстановление в один клик${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧰 CF DNS 自动修复${PLAIN}" "${BOLD}🧰 CF DNS automatic repair${PLAIN}" "${BOLD}🧰 Автоматическое исправление CF DNS${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local fixed_count=0
@@ -383,38 +383,37 @@ func_caddy_cf_maintenance_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}🛠️ 443 / Caddy / Cloudflare 维护中心${PLAIN}" "${BOLD}🛠️ 443 / Caddy / Cloudflare Maintenance Center${PLAIN}" "${BOLD}🛠️ 443 / Caddy / Cloudflare Центр технического обслуживания${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🛠️ 443 / Caddy / Cloudflare 维护${PLAIN}" "${BOLD}🛠️ Port 443 / Caddy / Cloudflare maintenance${PLAIN}" "${BOLD}🛠️ Обслуживание порта 443 / Caddy / Cloudflare${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：排查 443 链路、重签证书、修复软链接、隔离旧配置和回滚。${PLAIN}" "${YELLOW}Purpose: troubleshooting 443 links, re-signing certificates, repairing symlinks, isolating old configurations and rolling back.${PLAIN}" "${YELLOW}Назначение: устранение неполадок 443 ссылок, переподписка сертификатов, восстановление программных ссылок, изоляция старых конфигураций и откат.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}建议顺序：先 [1] 体检，再按异常选择证书或 Caddy 修复项。${PLAIN}" "${YELLOW}Recommended order: [1] health check first, then select the certificate or Caddy repair item according to the abnormality.${PLAIN}" "${YELLOW}Рекомендуемый порядок: [1] Сначала проверка состояния, затем выберите сертификат или элемент ремонта Caddy в соответствии с неисправностью.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}用于检查 443 链路、维护证书、修复 Caddy 和回滚配置。建议先运行 [1]。${PLAIN}" "${YELLOW}Check the Port 443 path, maintain certificates, repair Caddy, and roll back configuration. Start with [1].${PLAIN}" "${YELLOW}Проверка цепочки порта 443, обслуживание сертификатов, исправление Caddy и откат конфигурации. Начните с [1].${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 443端口复用常用${PLAIN}" "${BOLD}▶ Port 443 Reuse commonly used${PLAIN}" "${BOLD}▶ 443 Обычно используется повторного использования порта 443${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  1. 443 链路与安全体检${PLAIN}       ${YELLOW}(Nginx/Caddy/REALITY/面板/版本隐藏)${PLAIN}" "${GREEN}1. 443 Link and security health check (Nginx/Caddy/REALITY/panel/version hidden)${PLAIN}" "${GREEN}1. 443 проверка состояния канала и безопасности (Nginx/Caddy/REALITY/панель/версия скрыта)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 管理 443 网站/反代域名${PLAIN}    ${YELLOW}(新增/删除/查看，最常用)${PLAIN}" "${GREEN}2. Management 443 website/reverse domain (add/delete/view, most commonly used)${PLAIN}" "${GREEN}2. Веб-сайт Management 443/обратное доменное имя (добавление/удаление/просмотр, наиболее часто используемый)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 修改 443 分流参数${PLAIN}         ${YELLOW}(面板/订阅/REALITY/入口端口与路径)${PLAIN}" "${GREEN}3. Modify 443 routing parameters   (Panel/Subscription/REALITY/Entry Port and Path)${PLAIN}" "${GREEN}3. Измените 443 параметра маршрутизации   (Панель/Подписка/REALITY/Входной порт и путь)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 重新应用上次 443 配置${PLAIN}     ${YELLOW}(读取 sni-stack.env 重建配置)${PLAIN}" "${GREEN}4. Reapply the last 443 configuration (read sni-stack.env and rebuild the configuration)${PLAIN}" "${GREEN}4. Повторно примените последнюю конфигурацию 443 (прочитайте sni-stack.env и перестройте конфигурацию)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 订阅链接 / External Proxy 提示${PLAIN} ${YELLOW}(检查节点链接是否输出公网 443)${PLAIN}" "${GREEN}5. Subscription link / External Proxy prompt (check whether the node link outputs public port 443)${PLAIN}" "${GREEN}5. Ссылка на подписку/запрос внешнего прокси (проверьте, выводит ли ссылка узла публичный порт 443)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  6. 回滚 443端口复用配置${PLAIN}       ${YELLOW}(从最近备份恢复)${PLAIN}" "${RED}6. Rollback Port 443 Reuse configuration   (restore from recent backup)${PLAIN}" "${RED}6. Откат 443 Конфигурация с повторным использованием порта 443 (восстановление из последней резервной копии)${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 常用操作${PLAIN}" "${BOLD}▶ Common tasks${PLAIN}" "${BOLD}▶ Основные действия${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 检查 443 链路与安全状态${PLAIN} ${YELLOW}(Nginx / Caddy / REALITY / 面板)${PLAIN}" "${GREEN}  1. Check Port 443 path and security${PLAIN} ${YELLOW}(Nginx / Caddy / REALITY / panel)${PLAIN}" "${GREEN}  1. Проверить цепочку порта 443 и защиту${PLAIN} ${YELLOW}(Nginx / Caddy / REALITY / панель)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 管理 443 网站与反向代理${PLAIN} ${YELLOW}(新增 / 删除 / 查看)${PLAIN}" "${GREEN}  2. Manage Port 443 sites and reverse proxies${PLAIN} ${YELLOW}(add / remove / view)${PLAIN}" "${GREEN}  2. Управление сайтами и обратным прокси на порту 443${PLAIN} ${YELLOW}(добавить / удалить / показать)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 修改 443 共享参数${PLAIN} ${YELLOW}(面板 / 订阅 / REALITY / 端口 / 路径)${PLAIN}" "${GREEN}  3. Edit shared Port 443 settings${PLAIN} ${YELLOW}(panel / subscription / REALITY / ports / paths)${PLAIN}" "${GREEN}  3. Изменить общие параметры порта 443${PLAIN} ${YELLOW}(панель / подписка / REALITY / порты / пути)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 重新应用已保存的 443 配置${PLAIN}" "${GREEN}  4. Reapply saved Port 443 configuration${PLAIN}" "${GREEN}  4. Повторно применить сохранённую конфигурацию порта 443${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 检查订阅链接与 External Proxy${PLAIN}" "${GREEN}  5. Check subscription links and External Proxy${PLAIN}" "${GREEN}  5. Проверить ссылки подписки и External Proxy${PLAIN}")"
+        echo -e "$(localized_text "${RED}  6. 回滚 443端口复用配置${PLAIN} ${YELLOW}(恢复最近备份)${PLAIN}" "${RED}  6. Roll back Port 443 Reuse${PLAIN} ${YELLOW}(restore the latest backup)${PLAIN}" "${RED}  6. Откатить конфигурацию общего порта 443${PLAIN} ${YELLOW}(восстановить последнюю копию)${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 证书与 Cloudflare${PLAIN}" "${BOLD}▶ Certificate and Cloudflare${PLAIN}" "${BOLD}▶ Сертификат и Cloudflare${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. 查看已管理域名 / 证书路径${PLAIN}" "${GREEN}7. View the managed domain/certificate path${PLAIN}" "${GREEN}7. Просмотрите имя управляемого домена/путь сертификата.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  8. 更新 Cloudflare API Token${PLAIN}" "${GREEN}8. Update Cloudflare API Token${PLAIN}" "${GREEN}8. Обновите Cloudflare API-токен${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  9. 重新签发某个域名证书${PLAIN}" "${GREEN}9. Reissue a domain certificate${PLAIN}" "${GREEN}9. Перевыпустите сертификат доменного имени.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 10. 重建 /root/cert 证书软链接${PLAIN}" "${GREEN}10. Rebuild /root/cert certificate symlink${PLAIN}" "${GREEN}10. Перестройте программную ссылку сертификата /root/cert.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 11. 重建证书清单文件${PLAIN}" "${GREEN}11. Rebuild the certificate list file${PLAIN}" "${GREEN}11. Перестройте файл списка сертификатов.${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 证书与 Cloudflare${PLAIN}" "${BOLD}▶ Certificates and Cloudflare${PLAIN}" "${BOLD}▶ Сертификаты и Cloudflare${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. 查看已管理域名与证书路径${PLAIN}" "${GREEN}  7. View managed domains and certificate paths${PLAIN}" "${GREEN}  7. Показать управляемые домены и пути сертификатов${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  8. 更新 Cloudflare API Token${PLAIN}" "${GREEN}  8. Update Cloudflare API token${PLAIN}" "${GREEN}  8. Обновить токен Cloudflare API${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  9. 重新签发域名证书${PLAIN}" "${GREEN}  9. Reissue a domain certificate${PLAIN}" "${GREEN}  9. Перевыпустить сертификат домена${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 10. 重建 /root/cert 证书软链接${PLAIN}" "${GREEN} 10. Rebuild /root/cert certificate symlinks${PLAIN}" "${GREEN} 10. Пересоздать символические ссылки в /root/cert${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 11. 重建证书清单${PLAIN}" "${GREEN} 11. Rebuild certificate manifest${PLAIN}" "${GREEN} 11. Пересоздать список сертификатов${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ Caddy 修复与清理${PLAIN}" "${BOLD}▶ Caddy Repair and Cleanup${PLAIN}" "${BOLD}▶ Caddy Ремонт и очистка${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 12. 校验并重载 Caddy${PLAIN}" "${GREEN}12. Verify and reload Caddy${PLAIN}" "${GREEN}12. Проверьте и перезагрузите Caddy.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 13. Caddy/证书一键体检${PLAIN}       ${YELLOW}(Token/证书/监听/后端)${PLAIN}" "${GREEN}13. Caddy/certificate one-click health check (Token/certificate/listening/backend)${PLAIN}" "${GREEN}13. Caddy/сертификат, проверка состояния в один клик (токен/сертификат/прослушивание/бэкенд)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 14. 一键自动修复常见问题${PLAIN}" "${GREEN}14. One-click automatic repair of common problems${PLAIN}" "${GREEN}14. Автоматическое устранение распространенных проблем в один клик${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 15. 隔离旧 Caddy 配置${PLAIN}        ${YELLOW}(避免抢占 443)${PLAIN}" "${GREEN}15. Isolate the old Caddy and configure (avoid preemption 443)${PLAIN}" "${GREEN}15. Изолируйте старый Caddy и настройте (избегайте вытеснения 443)${PLAIN}")"
-        echo -e "$(localized_text "${RED} 16. 隔离某个域名的 Caddy 配置与证书${PLAIN}" "${RED}16. Isolate a domain Caddy configuration and certificate${PLAIN}" "${RED}16. Изолируйте конфигурацию доменного имени Caddy и сертификат.${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ Caddy 修复与清理${PLAIN}" "${BOLD}▶ Caddy repair and cleanup${PLAIN}" "${BOLD}▶ Исправление и очистка Caddy${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 12. 校验并重载 Caddy${PLAIN}" "${GREEN} 12. Validate and reload Caddy${PLAIN}" "${GREEN} 12. Проверить и перезагрузить Caddy${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 13. 检查 Caddy 与证书${PLAIN} ${YELLOW}(Token / 证书 / 监听 / 后端)${PLAIN}" "${GREEN} 13. Check Caddy and certificates${PLAIN} ${YELLOW}(token / certificate / listener / backend)${PLAIN}" "${GREEN} 13. Проверить Caddy и сертификаты${PLAIN} ${YELLOW}(токен / сертификат / слушатель / бэкенд)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 14. 自动修复常见问题${PLAIN}" "${GREEN} 14. Repair common issues automatically${PLAIN}" "${GREEN} 14. Автоматически исправить типовые проблемы${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 15. 隔离旧 Caddy 配置${PLAIN} ${YELLOW}(避免占用 443)${PLAIN}" "${GREEN} 15. Quarantine legacy Caddy configuration${PLAIN} ${YELLOW}(prevent port 443 conflicts)${PLAIN}" "${GREEN} 15. Изолировать старую конфигурацию Caddy${PLAIN} ${YELLOW}(предотвратить конфликт порта 443)${PLAIN}")"
+        echo -e "$(localized_text "${RED} 16. 隔离指定域名的 Caddy 配置与证书${PLAIN}" "${RED} 16. Quarantine Caddy configuration and certificates for a domain${PLAIN}" "${RED} 16. Изолировать конфигурацию Caddy и сертификаты домена${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local m_choice
-        read_trimmed m_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed m_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
         case "$m_choice" in
             1) m_choice=11 ;;
@@ -866,7 +865,7 @@ func_caddy_manage_ip_whitelist() {
     echo -e "$(localized_text "1. 设置/覆盖白名单" "1. Set/override whitelist" "1. Установить/переопределить белый список")"
     echo -e "$(localized_text "2. 清除白名单" "2. Clear the whitelist" "2. Очистите белый список")"
     echo -e "$(localized_text "0/q. 取消" "0/q. Cancel" "0/кв. Отмена")"
-    read_trimmed action "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+    read_trimmed action "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
     backup_file="${conf_file}.bak_$(date +%s)"
     case "$action" in

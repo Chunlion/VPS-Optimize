@@ -16,7 +16,7 @@ func_xpanel() {
     echo -e "$(localized_text "${GREEN}  2. 安装 v2.9.4${PLAIN}      ${YELLOW}(固定版本，适合需要按 2.9.4 教程复现的机器)${PLAIN}" "${GREEN}2. Install v2.9.4 (fixed version, suitable for machines that need to be reproduced according to the 2.9.4 tutorial)${PLAIN}" "${GREEN}2. Установите v2.9.4 (исправленная версия, подходит для машин, которые необходимо воспроизвести по туториалу 2.9.4)${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
     echo -e "------------------------------------------------"
-    read_trimmed version_choice "$(localized_text "请选择 3x-ui 安装版本（默认 1）: " "Please select 3x-ui installation version (default 1):" "Пожалуйста, выберите версию установки 3x-ui (по умолчанию 1):")"
+    read_trimmed version_choice "$(localized_text "选择 3x-ui 版本 [1]: " "Select a 3x-ui version [1]: " "Выберите версию 3x-ui [1]: ")"
     case "$(echo "${version_choice:-1}" | tr '[:upper:]' '[:lower:]')" in
         1|latest|最新版)
             install_desc="$(localized_text "安装 3x-ui / x-ui 面板（最新版）" "Install 3x-ui / x-ui panel (latest version)" "Установите панель 3x-ui/x-ui (последняя версия)")"
@@ -52,9 +52,9 @@ func_xpanel() {
 func_xpanel_manage() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧭 3x-ui / x-ui 管理 / 卸载${PLAIN}" "${BOLD}🧭 3x-ui / x-ui Manage / Uninstall${PLAIN}" "${BOLD}🧭 3x-ui / x-ui Управление / Удаление${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧭 3x-ui / x-ui 管理 / 卸载${PLAIN}" "${BOLD}🧭 Manage or uninstall 3x-ui / x-ui${PLAIN}" "${BOLD}🧭 Управление или удаление 3x-ui / x-ui${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}用途：进入官方管理菜单，执行配置查看、账号管理、更新或卸载等操作。${PLAIN}" "${YELLOW}Purpose: Enter the official management menu to perform configuration viewing, account management, update or uninstall, etc.${PLAIN}" "${YELLOW}Назначение: войти в официальное меню управления для просмотра конфигурации, управления учетной записью, обновления или удаления и т. д.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}打开官方管理菜单，查看配置、管理账号、更新或卸载面板。${PLAIN}" "${YELLOW}Open the official menu to view settings, manage accounts, update, or uninstall the panel.${PLAIN}" "${YELLOW}Открыть официальное меню для просмотра настроек, управления учётными записями, обновления или удаления панели.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local panel_cmd=""
@@ -65,7 +65,7 @@ func_xpanel_manage() {
     fi
 
     if [[ -z "$panel_cmd" ]]; then
-        echo -e "$(localized_text "${YELLOW}未检测到 x-ui / 3x-ui 命令，当前机器可能尚未安装 3x-ui 面板。${PLAIN}" "${YELLOW}Does not detect the x-ui / 3x-ui command. The current machine may not have the 3x-ui panel installed.${PLAIN}" "${YELLOW}не обнаруживает команду x-ui/3x-ui. Возможно, на текущем компьютере не установлена ​​панель 3x-ui.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 x-ui 或 3x-ui 管理命令，可能尚未安装面板。${PLAIN}" "${YELLOW}The x-ui and 3x-ui management commands were not found; the panel may not be installed.${PLAIN}" "${YELLOW}Команды управления x-ui и 3x-ui не найдены; возможно, панель не установлена.${PLAIN}")"
         if confirm_danger "$(localized_text "安装 3x-ui 面板" "Install the 3x-ui panel" "Установить панель 3x-ui")" \
             "$(localized_text "下载并执行 3x-ui 官方安装脚本" "download and run the official 3x-ui installer" "скачать и запустить официальный установщик 3x-ui")" \
             "$(localized_text "安装前备份现有面板配置；卸载方式以 3x-ui 官方菜单为准" "back up any existing panel configuration first; use the official 3x-ui menu to uninstall" "сначала сохраните существующую конфигурацию панели; для удаления используйте официальное меню 3x-ui")"; then
@@ -77,8 +77,8 @@ func_xpanel_manage() {
         return
     fi
 
-    echo -e "$(localized_text "${GREEN}即将打开 ${panel_cmd} 官方管理菜单。${PLAIN}" "${GREEN}Is about to open the ${panel_cmd} official management menu.${PLAIN}" "${GREEN}собирается открыть официальное меню управления ${panel_cmd}.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}" "${YELLOW}If you need to uninstall , please select the corresponding uninstall item in the official menu.${PLAIN}" "${YELLOW}Если вам необходимо удалить , выберите соответствующий пункт удаления в официальном меню.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}即将打开 ${panel_cmd} 官方管理菜单。${PLAIN}" "${GREEN}Opening the official ${panel_cmd} management menu.${PLAIN}" "${GREEN}Открывается официальное меню управления ${panel_cmd}.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如需卸载，请在该菜单中选择卸载。${PLAIN}" "${YELLOW}To uninstall it, select the uninstall option in that menu.${PLAIN}" "${YELLOW}Для удаления выберите соответствующий пункт в этом меню.${PLAIN}")"
     echo -e "------------------------------------------------"
     "$panel_cmd"
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
@@ -114,13 +114,13 @@ func_sui_panel() {
 func_sui_manage() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧭 S-UI 管理 / 卸载${PLAIN}" "${BOLD}🧭 S-UI Manage / Uninstall${PLAIN}" "${BOLD}🧭 S-UI Управление / Удаление${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧭 S-UI 管理 / 卸载${PLAIN}" "${BOLD}🧭 Manage or uninstall S-UI${PLAIN}" "${BOLD}🧭 Управление или удаление S-UI${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}用途：进入 S-UI 官方管理菜单，执行配置查看、账号管理、更新或卸载等操作。${PLAIN}" "${YELLOW}Purpose: Enter the S-UI official management menu to perform operations such as configuration viewing, account management, update or uninstallation.${PLAIN}" "${YELLOW}Назначение : Войдите в официальное меню управления S-UI для выполнения таких операций, как просмотр конфигурации, управление учетной записью, обновление или удаление.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}打开 S-UI 官方管理菜单，查看配置、管理账号、更新或卸载面板。${PLAIN}" "${YELLOW}Open the official S-UI menu to view settings, manage accounts, update, or uninstall the panel.${PLAIN}" "${YELLOW}Открыть официальное меню S-UI для просмотра настроек, управления учётными записями, обновления или удаления панели.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     if ! command -v s-ui >/dev/null 2>&1; then
-        echo -e "$(localized_text "${YELLOW}未检测到 s-ui 命令，当前机器可能尚未安装 S-UI。${PLAIN}" "${YELLOW}Does not detect the s-ui command. S-UI may not be installed on the current machine.${PLAIN}" "${YELLOW}не обнаруживает команду s-ui. S-UI может быть не установлен на текущем компьютере.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 s-ui 管理命令，可能尚未安装 S-UI。${PLAIN}" "${YELLOW}The s-ui management command was not found; S-UI may not be installed.${PLAIN}" "${YELLOW}Команда управления s-ui не найдена; возможно, S-UI не установлен.${PLAIN}")"
         if confirm_danger "$(localized_text "安装 S-UI" "Install S-UI" "Установить S-UI")" \
             "$(localized_text "下载并执行 S-UI 官方安装脚本" "download and run the official S-UI installer" "скачать и запустить официальный установщик S-UI")" \
             "$(localized_text "安装前备份现有配置；卸载方式以 S-UI 官方菜单为准" "back up existing configuration first; use the official S-UI menu to uninstall" "сначала сохраните существующую конфигурацию; для удаления используйте официальное меню S-UI")"; then
@@ -132,8 +132,8 @@ func_sui_manage() {
         return
     fi
 
-    echo -e "$(localized_text "${GREEN}即将打开 S-UI 官方管理菜单。${PLAIN}" "${GREEN}Is about to open the S-UI official management menu.${PLAIN}" "${GREEN}собирается открыть официальное меню управления S-UI.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}" "${YELLOW}If you need to uninstall , please select the corresponding uninstall item in the official menu.${PLAIN}" "${YELLOW}Если вам необходимо удалить , выберите соответствующий пункт удаления в официальном меню.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}即将打开 S-UI 官方管理菜单。${PLAIN}" "${GREEN}Opening the official S-UI management menu.${PLAIN}" "${GREEN}Открывается официальное меню управления S-UI.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如需卸载，请在官方菜单中选择卸载。${PLAIN}" "${YELLOW}To uninstall S-UI, select the uninstall option in its official menu.${PLAIN}" "${YELLOW}Для удаления S-UI выберите соответствующий пункт в официальном меню.${PLAIN}")"
     echo -e "------------------------------------------------"
     s-ui
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
@@ -141,20 +141,20 @@ func_sui_manage() {
 
 func_singbox_233boy() {
     clear
-    echo -e "$(localized_text "${CYAN}👉 正在拉取 233boy 的 Sing-box 一键脚本...${PLAIN}" "${CYAN}👉 Pulling 233boy’s Sing-box one-click script...${PLAIN}" "${CYAN}👉 Вытаскиваем скрипт 233boy Sing-box в один клик...${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}▶ 正在获取 233boy Sing-box 安装脚本...${PLAIN}" "${CYAN}▶ Fetching the 233boy Sing-box installer...${PLAIN}" "${CYAN}▶ Загрузка установщика 233boy Sing-box...${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}脚本来源：https://github.com/233boy/sing-box${PLAIN}" "${YELLOW}Script source: https://github.com/233boy/sing-box${PLAIN}" "${YELLOW}Источник сценария : https://github.com/233boy/sing-box${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}使用文档：https://233boy.com/sing-box/sing-box-script/${PLAIN}" "${YELLOW}Usage documentation: https://233boy.com/sing-box/sing-box-script/${PLAIN}" "${YELLOW}Документация по использованию : https://233boy.com/sing-box/sing-box-script/${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}安装完成后通常可使用 sing-box 或 sb 命令进入管理面板。${PLAIN}" "${GREEN}After is installed, you can usually use the sing-box or sb command to enter the management panel.${PLAIN}" "${GREEN}После установки обычно можно использовать команду sing-box или sb для входа в панель управления.${PLAIN}")"
-    run_remote_script "$(localized_text "安装 Sing-box 233boy 一键脚本" "Install Sing-box 233boy one-click script" "Установите скрипт Sing-box 233boy в один клик")" "https://github.com/233boy/sing-box/raw/main/install.sh"
+    echo -e "$(localized_text "${GREEN}安装完成后，通常可运行 sing-box 或 sb 打开管理菜单。${PLAIN}" "${GREEN}After installation, run sing-box or sb to open its management menu.${PLAIN}" "${GREEN}После установки запустите sing-box или sb, чтобы открыть меню управления.${PLAIN}")"
+    run_remote_script "$(localized_text "安装 233boy Sing-box" "Install 233boy Sing-box" "Установить 233boy Sing-box")" "https://github.com/233boy/sing-box/raw/main/install.sh"
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
 }
 
 func_singbox_manage() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧭 Sing-box 管理 / 卸载${PLAIN}" "${BOLD}🧭 Sing-box Manage / Uninstall${PLAIN}" "${BOLD}🧭 Sing-box Управление / Удаление${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧭 Sing-box 管理 / 卸载${PLAIN}" "${BOLD}🧭 Manage or uninstall Sing-box${PLAIN}" "${BOLD}🧭 Управление или удаление Sing-box${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}用途：进入已安装 Sing-box 一键脚本的管理菜单。${PLAIN}" "${YELLOW}Purpose: Enter the management menu of the installed Sing-box one-click script.${PLAIN}" "${YELLOW}Назначение: Войти в меню управления установленным скриптом Sing-box в один клик.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}打开已安装的 233boy Sing-box 管理菜单。${PLAIN}" "${YELLOW}Open the management menu for an installed 233boy Sing-box deployment.${PLAIN}" "${YELLOW}Открыть меню управления установленным 233boy Sing-box.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local sb_cmd=""
@@ -165,14 +165,14 @@ func_singbox_manage() {
     fi
 
     if [[ -z "$sb_cmd" ]]; then
-        echo -e "$(localized_text "${YELLOW}未检测到 sb / sing-box 管理命令。${PLAIN}" "${YELLOW}Sb/sing-box management command not detected.${PLAIN}" "${YELLOW}Команда управления sb/sing-box не обнаружена.${PLAIN}")"
-        echo -e "$(localized_text "${BLUE}如果是首次部署，请先选择对应的 Sing-box 安装项。${PLAIN}" "${BLUE}If is deployed for the first time, please select the corresponding Sing-box installation item first.${PLAIN}" "${BLUE}Если развертывается впервые, сначала выберите соответствующий элемент установки Sing-box.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 sb 或 sing-box 管理命令。${PLAIN}" "${YELLOW}The sb and sing-box management commands were not found.${PLAIN}" "${YELLOW}Команды управления sb и sing-box не найдены.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}首次部署请先选择 Sing-box 安装项。${PLAIN}" "${BLUE}For a first-time deployment, select the Sing-box installation option first.${PLAIN}" "${BLUE}При первой установке сначала выберите установку Sing-box.${PLAIN}")"
         read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
         return
     fi
 
-    echo -e "$(localized_text "${GREEN}即将打开 ${sb_cmd} 管理菜单。${PLAIN}" "${GREEN}Is about to open the ${sb_cmd} management menu.${PLAIN}" "${GREEN}собирается открыть меню управления ${sb_cmd}.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如需卸载，请在脚本菜单中选择对应卸载项。${PLAIN}" "${YELLOW}If you need to uninstall , please select the corresponding uninstall item in the script menu.${PLAIN}" "${YELLOW}Если вам необходимо удалить , выберите соответствующий пункт удаления в меню сценариев.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}即将打开 ${sb_cmd} 管理菜单。${PLAIN}" "${GREEN}Opening the ${sb_cmd} management menu.${PLAIN}" "${GREEN}Открывается меню управления ${sb_cmd}.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如需卸载，请在该菜单中选择卸载。${PLAIN}" "${YELLOW}To uninstall it, select the uninstall option in that menu.${PLAIN}" "${YELLOW}Для удаления выберите соответствующий пункт в этом меню.${PLAIN}")"
     echo -e "------------------------------------------------"
     "$sb_cmd"
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
@@ -180,24 +180,24 @@ func_singbox_manage() {
 
 func_xray_233boy() {
     clear
-    echo -e "$(localized_text "${CYAN}👉 正在拉取 233boy 的 Xray 一键脚本...${PLAIN}" "${CYAN}👉 Pulling 233boy’s Xray one-click script...${PLAIN}" "${CYAN}👉 Вытаскиваем скрипт 233boy Xray в один клик...${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}▶ 正在获取 233boy Xray 安装脚本...${PLAIN}" "${CYAN}▶ Fetching the 233boy Xray installer...${PLAIN}" "${CYAN}▶ Загрузка установщика 233boy Xray...${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}脚本来源：https://github.com/233boy/Xray${PLAIN}" "${YELLOW}Script source: https://github.com/233boy/Xray${PLAIN}" "${YELLOW}Источник сценария : https://github.com/233boy/Xray${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}使用文档：https://233boy.com/xray/xray-script/${PLAIN}" "${YELLOW}Usage documentation: https://233boy.com/xray/xray-script/${PLAIN}" "${YELLOW}Документация по использованию : https://233boy.com/xray/xray-script/${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}安装完成后通常可使用 xray 命令进入管理面板。${PLAIN}" "${GREEN}After is installed, you can usually use the xray command to enter the management panel.${PLAIN}" "${GREEN}После установки обычно можно использовать команду xray для входа в панель управления.${PLAIN}")"
-    run_remote_script "$(localized_text "安装 Xray 233boy 一键脚本" "Install Xray 233boy one-click script" "Установите скрипт Xray 233boy в один клик")" "https://github.com/233boy/Xray/raw/main/install.sh"
+    echo -e "$(localized_text "${GREEN}安装完成后，通常可运行 xray 打开管理菜单。${PLAIN}" "${GREEN}After installation, run xray to open its management menu.${PLAIN}" "${GREEN}После установки запустите xray, чтобы открыть меню управления.${PLAIN}")"
+    run_remote_script "$(localized_text "安装 233boy Xray" "Install 233boy Xray" "Установить 233boy Xray")" "https://github.com/233boy/Xray/raw/main/install.sh"
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
 }
 
 func_xray_manage() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🧭 Xray 管理 / 卸载${PLAIN}" "${BOLD}🧭 Xray Manage / Uninstall${PLAIN}" "${BOLD}🧭 Xray Управление / Удаление${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🧭 Xray 管理 / 卸载${PLAIN}" "${BOLD}🧭 Manage or uninstall Xray${PLAIN}" "${BOLD}🧭 Управление или удаление Xray${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}用途：进入 233boy Xray 官方管理菜单。${PLAIN}" "${YELLOW}Purpose: Enter the 233boy Xray official management menu.${PLAIN}" "${YELLOW}Назначение: Войти в официальное меню управления 233boy Xray.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}打开已安装的 233boy Xray 管理菜单。${PLAIN}" "${YELLOW}Open the management menu for an installed 233boy Xray deployment.${PLAIN}" "${YELLOW}Открыть меню управления установленным 233boy Xray.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     if ! command -v xray >/dev/null 2>&1; then
-        echo -e "$(localized_text "${YELLOW}未检测到 xray 管理命令，当前机器可能尚未安装 233boy Xray 脚本。${PLAIN}" "${YELLOW}Does not detect the xray management command. The current machine may not have the 233boy Xray script installed.${PLAIN}" "${YELLOW}не обнаруживает команду управления xray. На текущей машине может не быть установлен скрипт 233boy Xray.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}未检测到 xray 管理命令，可能尚未安装 233boy Xray。${PLAIN}" "${YELLOW}The xray management command was not found; 233boy Xray may not be installed.${PLAIN}" "${YELLOW}Команда управления xray не найдена; возможно, 233boy Xray не установлен.${PLAIN}")"
         if confirm_danger "$(localized_text "安装 233boy Xray" "Install 233boy Xray" "Установить 233boy Xray")" \
             "$(localized_text "下载并执行 233boy Xray 安装脚本" "download and run the 233boy Xray installer" "скачать и запустить установщик 233boy Xray")" \
             "$(localized_text "安装前备份现有 Xray 配置；卸载方式以该项目菜单为准" "back up existing Xray configuration first; use the project menu to uninstall" "сначала сохраните существующую конфигурацию Xray; для удаления используйте меню проекта")"; then
@@ -209,8 +209,8 @@ func_xray_manage() {
         return
     fi
 
-    echo -e "$(localized_text "${GREEN}即将打开 xray 管理菜单。${PLAIN}" "${GREEN}Is about to open the xray management menu.${PLAIN}" "${GREEN}собирается открыть меню управления xray.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如需卸载，请在官方菜单中选择对应卸载项。${PLAIN}" "${YELLOW}If you need to uninstall , please select the corresponding uninstall item in the official menu.${PLAIN}" "${YELLOW}Если вам необходимо удалить , выберите соответствующий пункт удаления в официальном меню.${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}即将打开 xray 管理菜单。${PLAIN}" "${GREEN}Opening the xray management menu.${PLAIN}" "${GREEN}Открывается меню управления xray.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如需卸载，请在该菜单中选择卸载。${PLAIN}" "${YELLOW}To uninstall it, select the uninstall option in that menu.${PLAIN}" "${YELLOW}Для удаления выберите соответствующий пункт в этом меню.${PLAIN}")"
     echo -e "------------------------------------------------"
     xray
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"

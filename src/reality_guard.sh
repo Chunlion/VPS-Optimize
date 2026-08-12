@@ -295,7 +295,7 @@ manage_reality_traffic_guard() {
         fi
         echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         local choice
-        read_trimmed choice "$(localized_text "请选择操作: " "Select an action: " "Выберите действие: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) set_strict_sni_gate true ; pause_return ;;
             2) set_strict_sni_gate false ; pause_return ;;

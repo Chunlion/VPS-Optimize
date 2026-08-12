@@ -18,7 +18,7 @@ configure_system_timezone_for_init() {
     echo -e "${GREEN}  3. Asia/Tokyo${PLAIN}"
     echo -e "${GREEN}  4. UTC${PLAIN}"
     echo -e "$(localized_text "${GREEN}  5. 自定义时区${PLAIN}" "${GREEN}5. Custom time zone${PLAIN}" "${GREEN}5. Пользовательский часовой пояс${PLAIN}")"
-    read_trimmed choice "$(localized_text "请选择基础初始化时区处理方式（默认 1）: " "Please select the basic initialization time zone processing method (default 1):" "Пожалуйста, выберите основной метод обработки часового пояса при инициализации (по умолчанию 1):")"
+    read_trimmed choice "$(localized_text "选择时区处理方式 [1]: " "Select timezone handling [1]: " "Выберите настройку часового пояса [1]: ")"
 
     case "${choice:-1}" in
         1)
@@ -392,7 +392,7 @@ func_hosts_manage() {
         print_breadcrumb "$(localized_text "系统开关与清理 > 本机 hosts 解析" "System switch and cleanup > Local hosts resolution" "Переключение и очистка системы > Разрешение локальных хостов")"
         echo -e "$(localized_text "${BOLD}🧭 本机 hosts 解析管理${PLAIN}" "${BOLD}🧭 Local hosts resolution management${PLAIN}" "${BOLD}🧭 Управление разрешением локальных хостов${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：修改当前 VPS 的 /etc/hosts，本地指定域名解析到某个 IP。不会影响公网 DNS。${PLAIN}" "${YELLOW}Purpose: Modify the /etc/hosts of the current VPS and resolve the local specified domain to a certain IP. It will not affect the public DNS.${PLAIN}" "${YELLOW}Назначение: изменить /etc/hosts текущего VPS и разрешить указанное локальное доменное имя в определенный IP-адрес. Это не повлияет на публичную сеть DNS.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}修改当前 VPS 的 /etc/hosts，仅影响本机域名解析，不会修改公网 DNS。${PLAIN}" "${YELLOW}Edit /etc/hosts on this VPS. Changes affect only local resolution, not public DNS.${PLAIN}" "${YELLOW}Изменяет /etc/hosts только на этом VPS и не затрагивает публичный DNS.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 查看当前 hosts${PLAIN}" "${GREEN}1. View current hosts${PLAIN}" "${GREEN}1. Просмотр текущих хостов${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 添加 / 更新本机解析${PLAIN}" "${GREEN}2. Add/update local resolution${PLAIN}" "${GREEN}2. Добавить/обновить локальное разрешение.${PLAIN}")"
@@ -402,7 +402,7 @@ func_hosts_manage() {
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         local choice
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1)
                 echo -e "${CYAN}--- /etc/hosts ---${PLAIN}"
@@ -425,14 +425,14 @@ func_system_tweaks() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}⚙️ 系统开关与清理${PLAIN}" "${BOLD}⚙️ System switch and cleaning${PLAIN}" "${BOLD}⚙️ Системный переключатель и очистка${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}⚙️ 系统设置与清理${PLAIN}" "${BOLD}⚙️ System settings and cleanup${PLAIN}" "${BOLD}⚙️ Системные настройки и очистка${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         # 状态获取
         local ipv6_status
         local str_ipv6
         ipv6_status=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
-        if [[ "$ipv6_status" == "0" ]]; then str_ipv6="$(localized_text "${GREEN}开启中${PLAIN}" "${GREEN}Is opening${PLAIN}" "${GREEN}открывает${PLAIN}")"; else str_ipv6="$(localized_text "${RED}已禁用${PLAIN}" "${RED}Disabled${PLAIN}" "${RED}отключен${PLAIN}")"; fi
+        if [[ "$ipv6_status" == "0" ]]; then str_ipv6="$(localized_text "${GREEN}已启用${PLAIN}" "${GREEN}Enabled${PLAIN}" "${GREEN}включён${PLAIN}")"; else str_ipv6="$(localized_text "${RED}已禁用${PLAIN}" "${RED}Disabled${PLAIN}" "${RED}отключён${PLAIN}")"; fi
 
         local str_ipv4_first
         if grep -q "^precedence ::ffff:0:0/96  100" /etc/gai.conf 2>/dev/null; then
@@ -444,7 +444,7 @@ func_system_tweaks() {
         local ping_status
         local str_ping
         ping_status=$(cat /proc/sys/net/ipv4/icmp_echo_ignore_all 2>/dev/null)
-        if [[ "$ping_status" == "0" ]]; then str_ping="$(localized_text "${GREEN}允许被Ping${PLAIN}" "${GREEN}Is allowed to be Ping${PLAIN}" "${GREEN}может быть Ping${PLAIN}")"; else str_ping="$(localized_text "${RED}禁Ping中${PLAIN}" "${RED}Ping banned${PLAIN}" "${RED}Пинг запрещен${PLAIN}")"; fi
+        if [[ "$ping_status" == "0" ]]; then str_ping="$(localized_text "${GREEN}允许响应${PLAIN}" "${GREEN}Allowed${PLAIN}" "${GREEN}разрешён${PLAIN}")"; else str_ping="$(localized_text "${RED}禁止响应${PLAIN}" "${RED}Blocked${PLAIN}" "${RED}заблокирован${PLAIN}")"; fi
 
         local update_status
         local str_update
@@ -453,7 +453,7 @@ func_system_tweaks() {
         else
             update_status=$(systemctl is-active dnf-automatic.timer 2>/dev/null)
         fi
-        if [[ "$update_status" == "active" ]]; then str_update="$(localized_text "${GREEN}开启中${PLAIN}" "${GREEN}Is opening${PLAIN}" "${GREEN}открывает${PLAIN}")"; else str_update="$(localized_text "${RED}已关闭${PLAIN}" "${RED}Has closed${PLAIN}" "${RED}закрылся${PLAIN}")"; fi
+        if [[ "$update_status" == "active" ]]; then str_update="$(localized_text "${GREEN}已启用${PLAIN}" "${GREEN}Enabled${PLAIN}" "${GREEN}включено${PLAIN}")"; else str_update="$(localized_text "${RED}已关闭${PLAIN}" "${RED}Disabled${PLAIN}" "${RED}отключено${PLAIN}")"; fi
 
         local current_hostname
         current_hostname=$(hostnamectl --static 2>/dev/null || hostname 2>/dev/null || cat /etc/hostname 2>/dev/null)
@@ -461,20 +461,20 @@ func_system_tweaks() {
         current_hostname="$(localized_text "${current_hostname:-未知}" "${current_hostname:-未知}" "${current_hostname:-未知}")"
 
         # 完美修复：一字不落的菜单显示
-        echo -e "$(localized_text "${GREEN}  1. IPv6 开关${PLAIN}              当前: [ $str_ipv6 ]" "${GREEN}1. IPv6 switch${PLAIN} Current: [ $str_ipv6 ]" "${GREEN}1. Переключатель IPv6${PLAIN} Ток: [ $str_ipv6 ]")"
-        echo -e "$(localized_text "${GREEN}  2. IPv4 出站优先${PLAIN}          当前: [ $str_ipv4_first ]" "${GREEN}2. IPv4 Outbound priority${PLAIN} Current: [ $str_ipv4_first ]" "${GREEN}2. IPv4 Приоритет исходящего вызова${PLAIN} Текущий: [ $str_ipv4_first ]")"
-        echo -e "$(localized_text "${GREEN}  3. Ping 响应开关${PLAIN}          当前: [ $str_ping ]" "${GREEN}3. Ping response switch${PLAIN} Current: [ $str_ping ]" "${GREEN}3. Переключатель ответа на запрос Ping${PLAIN} Ток: [ $str_ping ]")"
-        echo -e "$(localized_text "${GREEN}  4. 本机 hosts 解析管理${PLAIN}    (/etc/hosts 本机域名解析)" "${GREEN}4. Local hosts resolution management${PLAIN} (/etc/hosts local domain resolution)" "${GREEN}4. Управление разрешением локальных хостов${PLAIN} (разрешение локального доменного имени /etc/hosts)")"
-        echo -e "$(localized_text "${GREEN}  5. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}5. Modify the host name${PLAIN} Current: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}5. Измените имя хоста${PLAIN} Текущее: [ ${CYAN}${current_hostname}${PLAIN} ]")"
-        echo -e "$(localized_text "${GREEN}  6. 自动安全更新开关${PLAIN}       当前: [ $str_update ]" "${GREEN}6. Automatic security update switch${PLAIN} Current: [ $str_update ]" "${GREEN}6. Переключатель автоматического обновления безопасности${PLAIN} Текущая версия: [ $str_update ]")"
-        echo -e "$(localized_text "${GREEN}  7. 清理系统垃圾${PLAIN}           (日志/缓存/无用包)" "${GREEN}7. Clean up system garbage${PLAIN} (log/cache/useless packages)" "${GREEN}7. Очистка системного мусора${PLAIN} (журнал/кеш/бесполезные пакеты)")"
+        echo -e "$(localized_text "${GREEN}  1. IPv6 开关${PLAIN}              当前: [ $str_ipv6 ]" "${GREEN}  1. IPv6${PLAIN}                  Status: [ $str_ipv6 ]" "${GREEN}  1. IPv6${PLAIN}                  Состояние: [ $str_ipv6 ]")"
+        echo -e "$(localized_text "${GREEN}  2. IPv4 出站优先${PLAIN}          当前: [ $str_ipv4_first ]" "${GREEN}  2. Prefer IPv4 outbound${PLAIN}   Status: [ $str_ipv4_first ]" "${GREEN}  2. Приоритет IPv4${PLAIN}         Состояние: [ $str_ipv4_first ]")"
+        echo -e "$(localized_text "${GREEN}  3. Ping 响应开关${PLAIN}          当前: [ $str_ping ]" "${GREEN}  3. Ping responses${PLAIN}         Status: [ $str_ping ]" "${GREEN}  3. Ответы Ping${PLAIN}            Состояние: [ $str_ping ]")"
+        echo -e "$(localized_text "${GREEN}  4. 本机 hosts 解析${PLAIN}        (/etc/hosts)" "${GREEN}  4. Local hosts entries${PLAIN}   (/etc/hosts)" "${GREEN}  4. Локальные записи hosts${PLAIN} (/etc/hosts)")"
+        echo -e "$(localized_text "${GREEN}  5. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}  5. Change hostname${PLAIN}        Current: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}  5. Изменить имя хоста${PLAIN}     Текущее: [ ${CYAN}${current_hostname}${PLAIN} ]")"
+        echo -e "$(localized_text "${GREEN}  6. 自动安全更新${PLAIN}           当前: [ $str_update ]" "${GREEN}  6. Automatic security updates${PLAIN} Status: [ $str_update ]" "${GREEN}  6. Автоматические обновления безопасности${PLAIN} Состояние: [ $str_update ]")"
+        echo -e "$(localized_text "${GREEN}  7. 清理系统${PLAIN}               (日志 / 缓存 / 无用包)" "${GREEN}  7. Clean up system${PLAIN}       (logs / cache / unused packages)" "${GREEN}  7. Очистить систему${PLAIN}      (журналы / кэш / ненужные пакеты)")"
         echo -e "$(localized_text "${RED}  8. 系统重装${PLAIN}               (重启后清空主硬盘；高风险)" "${RED}8. System reinstallation${PLAIN} (erases the main disk after reboot; high risk)" "${RED}8. Переустановка системы${PLAIN} (очистит основной диск после перезагрузки; высокий риск)")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local tweak_choice
-        read_trimmed tweak_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed tweak_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
         case $tweak_choice in
             1)

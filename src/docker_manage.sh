@@ -198,7 +198,7 @@ docker_container_manage() {
         echo -e "${GREEN}  5. $(localized_text "进入容器" "Open shell" "Открыть shell")${PLAIN}"
         echo -e "${RED}  6. $(localized_text "删除容器" "Remove container" "Удалить контейнер")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         [[ "$choice" == "0" ]] && return
         read_trimmed target "$(localized_text "容器名称: " "Container name: " "Имя контейнера: ")"
         docker inspect "$target" >/dev/null 2>&1 || { echo -e "${RED}$(localized_text "容器不存在。" "Container not found." "Контейнер не найден.")${PLAIN}"; sleep 1; continue; }
@@ -227,7 +227,7 @@ docker_image_manage() {
         echo -e "${RED}  2. $(localized_text "删除镜像" "Remove image" "Удалить образ")${PLAIN}"
         echo -e "${RED}  3. $(localized_text "清理未使用镜像" "Prune unused images" "Очистить неиспользуемые образы")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             0) return ;;
             1) read_trimmed target "$(localized_text "镜像名称: " "Image name: " "Имя образа: ")"; [[ -n "$target" ]] && docker pull "$target" ;;
@@ -253,7 +253,7 @@ docker_network_manage() {
         echo -e "${GREEN}  4. $(localized_text "断开容器" "Disconnect container" "Отключить контейнер")${PLAIN}"
         echo -e "${RED}  5. $(localized_text "删除网络" "Remove network" "Удалить сеть")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         [[ "$choice" == "0" ]] && return
         read_trimmed network "$(localized_text "网络名称: " "Network name: " "Имя сети: ")"
         case "$choice" in
@@ -281,7 +281,7 @@ docker_volume_manage() {
         echo -e "${RED}  3. $(localized_text "删除卷" "Remove volume" "Удалить том")${PLAIN}"
         echo -e "${RED}  4. $(localized_text "清理未使用卷" "Prune unused volumes" "Очистить неиспользуемые тома")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             0) return ;;
             1) read_trimmed volume "$(localized_text "卷名称: " "Volume name: " "Имя тома: ")"; docker volume inspect "$volume" ;;
@@ -401,7 +401,7 @@ docker_backup_migration_menu() {
         echo -e "${GREEN}  1. $(localized_text "配置备份 / 还原" "Configuration backup / restore" "Резервная копия / восстановление")${PLAIN}"
         echo -e "${GREEN}  2. $(localized_text "Dockge / Compose 管理" "Dockge / Compose management" "Управление Dockge / Compose")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) func_backup_center ;;
             2) docker_compose_management_menu ;;
@@ -419,7 +419,7 @@ docker_compose_management_menu() {
         echo -e "${GREEN}  1. $(localized_text "安装 / 管理 Dockge" "Install / manage Dockge" "Установить / управлять Dockge")${PLAIN}"
         echo -e "${GREEN}  2. $(localized_text "迁移已有 Compose 项目" "Migrate existing Compose projects" "Перенести существующие проекты Compose")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) func_dockge_menu ;;
             2) func_migrate_compose_to_dockge ;;
@@ -492,7 +492,7 @@ func_docker_manage() {
         echo -e "${RED} 20. $(localized_text "卸载 Docker 环境" "Uninstall Docker" "Удалить Docker")${PLAIN}"
         echo "------------------------------------------------"
         echo -e "${RED}  0. $(localized_text "返回主菜单" "Main menu" "Главное меню") / q $(localized_text "返回" "Back" "Назад")${PLAIN}"
-        read_trimmed choice "$(localized_text "请选择: " "Select: " "Выберите: ")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) docker_install_or_update; docker_manage_pause ;;
             2) docker_global_status; docker_manage_pause ;;

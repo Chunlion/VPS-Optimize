@@ -507,7 +507,7 @@ func_proxy_add_insecure() {
     echo -e "$(localized_text "${GREEN}  2. Nginx 跳过后端证书校验${PLAIN}" "${GREEN}2. Nginx skips back-end certificate verification${PLAIN}" "${GREEN}2. Nginx пропускает внутреннюю проверку сертификата${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
     local choice
-    read_trimmed choice "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+    read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
     case "$choice" in
         1) func_caddy_add_insecure ;;
         2) func_nginx_add_insecure ;;
@@ -548,7 +548,7 @@ func_nginx_manage_ip_whitelist() {
     echo -e "$(localized_text "1. 设置/覆盖白名单" "1. Set/override whitelist" "1. Установить/переопределить белый список")"
     echo -e "$(localized_text "2. 清除白名单" "2. Clear the whitelist" "2. Очистите белый список")"
     echo -e "$(localized_text "0/q. 取消" "0/q. Cancel" "0/кв. Отмена")"
-    read_trimmed action "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+    read_trimmed action "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
     backup_file="${conf_file}.bak_$(date +%s)"
     case "$action" in
@@ -616,7 +616,7 @@ func_proxy_manage_ip_whitelist() {
     echo -e "$(localized_text "${GREEN}  2. Nginx 域名 IP 白名单${PLAIN}" "${GREEN}2. Nginx domain IP whitelist${PLAIN}" "${GREEN}2. Nginx доменное имя Белый список IP-адресов${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
     local choice
-    read_trimmed choice "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+    read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
     case "$choice" in
         1) func_caddy_manage_ip_whitelist ;;
         2) func_nginx_manage_ip_whitelist ;;
@@ -681,7 +681,7 @@ func_proxy_clear_config() {
     echo -e "$(localized_text "${GREEN}  2. 清空 Nginx HTTPS 反代配置${PLAIN}" "${GREEN}2. Clear Nginx HTTPS and reverse proxy configuration${PLAIN}" "${GREEN}2. Очистите конфигурацию обратного прокси-сервера Nginx HTTPS .${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
     local choice
-    read_trimmed choice "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+    read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
     case "$choice" in
         1) func_caddy_clear_config ;;
         2) func_nginx_clear_proxy_config ;;
@@ -785,7 +785,7 @@ func_edit_applied_proxy_config() {
     echo -e "${CYAN}================================================${PLAIN}"
 
     local choice idx target_file target_kind backup_file editor confirm rollback_confirm
-    read_trimmed choice "$(localized_text "请选择要查看/编辑的配置文件: " "Please select a profile to view/edit:" "Пожалуйста, выберите профиль для просмотра/редактирования:")"
+    read_trimmed choice "$(localized_text "选择要查看 / 编辑的配置文件: " "Select a configuration file to view or edit: " "Выберите файл конфигурации для просмотра или правки: ")"
     [[ "$choice" == "0" || "$choice" == "q" || "$choice" == "Q" ]] && return 0
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#proxy_config_paths[@]} )); then
         echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"
@@ -853,25 +853,25 @@ func_caddy_reverse_proxy_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "反代" "reverse proxyal" "обратный прокси")"
-        echo -e "$(localized_text "${BOLD}🌐 反代（Caddy / Nginx）${PLAIN}" "${BOLD}🌐 reverse proxy (Caddy / Nginx)${PLAIN}" "${BOLD}🌐 обратный прокси (Caddy / Nginx)${PLAIN}")"
+        print_breadcrumb "$(localized_text "反向代理" "Reverse proxy" "Обратный прокси")"
+        echo -e "$(localized_text "${BOLD}🌐 反向代理（Caddy / Nginx）${PLAIN}" "${BOLD}🌐 Reverse proxy (Caddy / Nginx)${PLAIN}" "${BOLD}🌐 Обратный прокси (Caddy / Nginx)${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：管理未接入 443端口复用的域名反代。443端口复用请只走主菜单 [19]。${PLAIN}" "${YELLOW}Purpose: Manage domain reverse proxy that is not connected to the Port 443 Reuse. 443 For Port 443 Reuse, please only go to the main menu [19].${PLAIN}" "${YELLOW}Назначение: Управление обратным прокси-сервером доменного имени, который не подключен к повторному использованию порта 443. 443 Для общего входа зайдите только в главное меню [19].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}仅管理未接入 443端口复用的网站和面板；已接入的域名请使用主菜单 [19]。${PLAIN}" "${YELLOW}For sites and panels not using Port 443 Reuse. Manage shared-port domains from main menu [19].${PLAIN}" "${YELLOW}Для сайтов и панелей без общего порта 443. Домены с общим портом настраиваются в пункте [19] главного меню.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 添加 Caddy 反代${PLAIN}" "${GREEN}1. Add Caddy to replace${PLAIN}" "${GREEN}1. Добавьте Caddy вместо.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 添加 Nginx HTTPS 反代${PLAIN} ${YELLOW}(复用 acme.sh + CF DNS 证书)${PLAIN}" "${GREEN}2. Add Nginx HTTPS to reverse proxy (reuse acme.sh + CF DNS certificate)${PLAIN}" "${GREEN}2. Добавьте Nginx HTTPS в обратный прокси (повторное использование сертификата acme.sh + CF DNS)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  3. 查看 Caddy/共享证书路径${PLAIN}" "${CYAN}3. View Caddy/shared certificate path${PLAIN}" "${CYAN}3. Просмотр Caddy/пути общего сертификата${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  4. 后端 HTTPS 跳过证书校验${PLAIN} ${YELLOW}(Caddy/Nginx，后端自签 HTTPS 时使用)${PLAIN}" "${CYAN}4. Backend HTTPS skips certificate verification (Caddy/Nginx, used when the backend self-signs HTTPS)${PLAIN}" "${CYAN}4. бэкенд HTTPS пропускает проверку сертификата (Caddy/Nginx, используется, когда бэкенд самостоятельно подписывает HTTPS)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  5. 域名 IP 白名单${PLAIN} ${YELLOW}(Caddy/Nginx)${PLAIN}" "${CYAN}5. domain IP whitelist (Caddy/Nginx)${PLAIN}" "${CYAN}5. Белый список IP-адресов доменных имен (Caddy/Nginx)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  6. 查看/编辑已应用配置文件${PLAIN} ${YELLOW}(Caddy/Nginx，校验后 reload)${PLAIN}" "${CYAN}6. View/edit the applied configuration file (Caddy/Nginx, reload after verification)${PLAIN}" "${CYAN}6. Просмотр/редактирование прикладного файла конфигурации (Caddy/Nginx, перезагрузка после проверки)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  7. 清空反代配置${PLAIN} ${YELLOW}(Caddy/Nginx)${PLAIN}" "${RED}7. Clear the reverse proxy configuration (Caddy/Nginx)${PLAIN}" "${RED}7. Очистите конфигурацию обратного прокси-сервера  (Caddy/Nginx)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  8. 删除底层 ACME 证书/域名配置${PLAIN} ${YELLOW}(会同时清理脚本创建的 Nginx 配置)${PLAIN}" "${RED}8. Delete the underlying ACME certificate/domain configuration (the Nginx configuration created by the script will also be cleaned up)${PLAIN}" "${RED}8. Удалите базовую конфигурацию сертификата ACME/доменного имени (конфигурация Nginx, созданная сценарием, также будет очищена)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 添加 Caddy 反向代理${PLAIN}" "${GREEN}  1. Add Caddy reverse proxy${PLAIN}" "${GREEN}  1. Добавить обратный прокси Caddy${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 添加 Nginx HTTPS 反向代理${PLAIN} ${YELLOW}(使用 acme.sh + Cloudflare DNS 证书)${PLAIN}" "${GREEN}  2. Add Nginx HTTPS reverse proxy${PLAIN} ${YELLOW}(acme.sh + Cloudflare DNS certificate)${PLAIN}" "${GREEN}  2. Добавить обратный прокси Nginx HTTPS${PLAIN} ${YELLOW}(сертификат acme.sh + Cloudflare DNS)${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  3. 查看 Caddy 与共享证书路径${PLAIN}" "${CYAN}  3. View Caddy and shared certificate paths${PLAIN}" "${CYAN}  3. Показать пути Caddy и общих сертификатов${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  4. 跳过后端 HTTPS 证书校验${PLAIN} ${YELLOW}(仅用于自签证书后端)${PLAIN}" "${CYAN}  4. Skip backend HTTPS certificate verification${PLAIN} ${YELLOW}(self-signed backends only)${PLAIN}" "${CYAN}  4. Отключить проверку HTTPS-сертификата бэкенда${PLAIN} ${YELLOW}(только для самоподписанного сертификата)${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  5. 管理域名 IP 白名单${PLAIN}" "${CYAN}  5. Manage domain IP allowlists${PLAIN}" "${CYAN}  5. Управление списками разрешённых IP для доменов${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  6. 查看 / 编辑已应用配置${PLAIN} ${YELLOW}(校验后 reload)${PLAIN}" "${CYAN}  6. View or edit applied configuration${PLAIN} ${YELLOW}(validate, then reload)${PLAIN}" "${CYAN}  6. Просмотр или правка применённой конфигурации${PLAIN} ${YELLOW}(проверка и reload)${PLAIN}")"
+        echo -e "$(localized_text "${RED}  7. 清空反向代理配置${PLAIN}" "${RED}  7. Clear reverse proxy configuration${PLAIN}" "${RED}  7. Очистить конфигурацию обратного прокси${PLAIN}")"
+        echo -e "$(localized_text "${RED}  8. 删除 ACME 证书与域名配置${PLAIN} ${YELLOW}(同时清理脚本创建的 Nginx 配置)${PLAIN}" "${RED}  8. Remove ACME certificate and domain configuration${PLAIN} ${YELLOW}(also removes script-managed Nginx configuration)${PLAIN}" "${RED}  8. Удалить сертификат ACME и конфигурацию домена${PLAIN} ${YELLOW}(включая конфигурацию Nginx, созданную скриптом)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local caddy_choice
-        read_trimmed caddy_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed caddy_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$caddy_choice" in
             1) func_caddy_add_reverse_proxy ;;
             2) func_nginx_add_reverse_proxy ;;

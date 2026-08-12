@@ -153,7 +153,7 @@ func_migrate_compose_to_dockge() {
     echo -e "$(localized_text "${RED}  0. 返回${PLAIN}" "${RED}0. Return${PLAIN}" "${RED}0. Возврат${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    read_trimmed choice "$(localized_text "请选择要迁移的项目: " "Please select items to migrate:" "Пожалуйста, выберите элементы для переноса:")"
+    read_trimmed choice "$(localized_text "选择要迁移的项目: " "Select projects to migrate: " "Выберите проекты для переноса: ")"
     case "$choice" in
         0) return ;;
         a|A)

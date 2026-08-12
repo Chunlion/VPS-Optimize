@@ -192,20 +192,20 @@ func_test_scripts() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}📊 VPS 综合测速与质量检验合集库${PLAIN}" "${BOLD}📊 VPS comprehensive speed measurement and quality inspection collection library${PLAIN}" "${BOLD}📊 Комплексная библиотека VPS для измерения скорости и контроля качества${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}📊 VPS 测速与质量检测${PLAIN}" "${BOLD}📊 VPS speed and quality tests${PLAIN}" "${BOLD}📊 Тесты скорости и качества VPS${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${GREEN}  1. YABS 硬件性能测试      ${YELLOW}  2. SuperBench 综合测速${PLAIN}" "${GREEN}1. YABS hardware performance test 2. SuperBench comprehensive speed test${PLAIN}" "${GREEN}1. YABS тест производительности оборудования 2. Комплексный тест скорости SuperBench${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. bench.sh 基础测试      ${YELLOW}  4. 融合怪详细测速${PLAIN}" "${GREEN}3. bench.sh basic test 4. Fusion monster detailed speed test${PLAIN}" "${GREEN}3. Базовый тест Bench.sh 4. Подробный тест скорости Fusion Monster${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 三网回程路由测试       ${YELLOW}  6. IP 质量 / 欺诈度检测${PLAIN}" "${GREEN}5. Three network backhaul routing test 6. IP quality/fraud detection${PLAIN}" "${GREEN}5. Тест маршрутизации для трех сетей 6. Качество IP/обнаружение мошенничества${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. NodeSeek 综合测试      ${YELLOW}  8. 流媒体解锁检测${PLAIN}" "${GREEN}7. NodeSeek comprehensive test 8. Streaming media unlocking test${PLAIN}" "${GREEN}7. Комплексный тест NodeSeek 8. Тест разблокировки потокового мультимедиа${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  9. TcpQuality TCP 质量测试${PLAIN}" "${GREEN}9. TcpQuality TCP Quality test${PLAIN}" "${GREEN}9. TcpКачество TCP Проверка качества${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. YABS 硬件性能测试      ${YELLOW}  2. SuperBench 综合测速${PLAIN}" "${GREEN}  1. YABS hardware test      ${YELLOW}  2. SuperBench${PLAIN}" "${GREEN}  1. Тест оборудования YABS  ${YELLOW}  2. SuperBench${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. bench.sh 基础测试      ${YELLOW}  4. 融合怪详细测速${PLAIN}" "${GREEN}  3. bench.sh                 ${YELLOW}  4. ECS comprehensive test${PLAIN}" "${GREEN}  3. bench.sh                 ${YELLOW}  4. Комплексный тест ECS${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 三网回程路由测试       ${YELLOW}  6. IP 质量 / 欺诈度检测${PLAIN}" "${GREEN}  5. China carrier routes     ${YELLOW}  6. IP quality / fraud score${PLAIN}" "${GREEN}  5. Маршруты операторов Китая ${YELLOW}  6. Качество IP / риск мошенничества${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. NodeSeek 综合测试      ${YELLOW}  8. 流媒体解锁检测${PLAIN}" "${GREEN}  7. NodeSeek test            ${YELLOW}  8. Streaming access test${PLAIN}" "${GREEN}  7. Тест NodeSeek            ${YELLOW}  8. Доступ к стриминговым сервисам${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  9. TcpQuality TCP 质量测试${PLAIN}" "${GREEN}  9. TcpQuality TCP test${PLAIN}" "${GREEN}  9. Тест TCP через TcpQuality${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         
         local t
         local ran_test=false
-        read_trimmed t "$(localized_text "👉 请输入对应序号选择: " "👉 Please enter the corresponding serial number to select:" "👉 Пожалуйста, введите соответствующий серийный номер, чтобы выбрать:")"
+        read_trimmed t "$(localized_text "选择测试: " "Select a test: " "Выберите тест: ")"
         case $t in
             1) ran_test=true; run_remote_script "$(localized_text "运行 YABS 硬件性能测试" "Run the YABS hardware performance test" "Запустите тест производительности оборудования YABS.")" "https://yabs.sh" ;;
             2) ran_test=true; run_remote_script "$(localized_text "运行 SuperBench 综合测速" "Run SuperBench comprehensive speed test" "Запустите комплексный тест скорости SuperBench")" "https://about.superbench.pro" ;;
@@ -280,7 +280,7 @@ func_iperf3_single_thread_test() {
 
     echo "$(localized_text "  1. 上传（本机 -> 服务端）" "1. Upload (local machine -> server)" "1. Загрузка (локальный компьютер -> сервер)")"
     echo "$(localized_text "  2. 下载（服务端 -> 本机）" "2. Download (server -> local machine)" "2. Скачать (сервер -> локальная машина)")"
-    read_trimmed direction "$(localized_text "请选择方向 [1]: " "Please select direction [1]:" "Пожалуйста, выберите направление [1]:")"
+    read_trimmed direction "$(localized_text "选择方向 [1]: " "Select direction [1]: " "Выберите направление [1]: ")"
     direction="${direction:-1}"
     [[ "$direction" == "1" || "$direction" == "2" ]] || { echo -e "$(localized_text "${RED}无效方向。${PLAIN}" "${RED}Invalid direction.${PLAIN}" "${RED}неверное направление.${PLAIN}")"; pause_return; return 1; }
 

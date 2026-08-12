@@ -424,21 +424,21 @@ func_ssh_login_mode_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "SSH 安全中心 > 用户密钥登录模式" "SSH Security Center > User Key Login Mode" "SSH Центр безопасности > Режим входа в систему с помощью ключа пользователя")"
-        echo -e "$(localized_text "${BOLD}🔐 用户密钥登录模式${PLAIN}" "${BOLD}🔐 User key login mode${PLAIN}" "${BOLD}🔐 Режим входа в систему с помощью ключа пользователя${PLAIN}")"
+        print_breadcrumb "$(localized_text "SSH 安全中心 > 登录方式" "SSH Security Center > Authentication" "Центр безопасности SSH > Аутентификация")"
+        echo -e "$(localized_text "${BOLD}🔐 SSH 登录方式${PLAIN}" "${BOLD}🔐 SSH authentication${PLAIN}" "${BOLD}🔐 Аутентификация SSH${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "PubkeyAuthentication       : ${CYAN}$(ssh_effective_setting PubkeyAuthentication || echo "$unknown_label")${PLAIN}"
         echo -e "PasswordAuthentication     : ${CYAN}$(ssh_effective_setting PasswordAuthentication || echo "$unknown_label")${PLAIN}"
         echo -e "KbdInteractiveAuthentication: ${CYAN}$(ssh_effective_setting KbdInteractiveAuthentication || echo "$unknown_label")${PLAIN}"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 添加/更新用户 SSH 公钥（不改登录方式）${PLAIN}" "${GREEN}1. Add/update user SSH public key (do not change login method)${PLAIN}" "${GREEN}1. Добавьте/обновите открытый ключ пользователя SSH (не меняйте метод входа в систему)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 密钥 + 密码登录（保留/恢复密码）${PLAIN}" "${GREEN}2. Key + password login (retain/recover password)${PLAIN}" "${GREEN}2. Ключ + пароль для входа (сохранить/восстановить пароль)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  3. 仅密钥登录，禁用密码登录${PLAIN}" "${RED}3. Only key login, password login is disabled${PLAIN}" "${RED}3. Вход только по ключу, вход по паролю отключен${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 添加 / 更新用户 SSH 公钥${PLAIN} ${YELLOW}(不修改登录方式)${PLAIN}" "${GREEN}  1. Add or update a user's SSH key${PLAIN} ${YELLOW}(authentication mode unchanged)${PLAIN}" "${GREEN}  1. Добавить или обновить SSH-ключ пользователя${PLAIN} ${YELLOW}(режим входа не меняется)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 允许密钥和密码登录${PLAIN}" "${GREEN}  2. Allow key and password login${PLAIN}" "${GREEN}  2. Разрешить вход по ключу и паролю${PLAIN}")"
+        echo -e "$(localized_text "${RED}  3. 仅允许密钥登录${PLAIN} ${YELLOW}(禁用密码登录)${PLAIN}" "${RED}  3. Allow key-only login${PLAIN} ${YELLOW}(disable password login)${PLAIN}" "${RED}  3. Разрешить вход только по ключу${PLAIN} ${YELLOW}(отключить пароль)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         local choice user key_count
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1)
                 user=$(ssh_choose_user) || { pause_return; continue; }
@@ -478,7 +478,7 @@ func_ssh_security_menu() {
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         local choice
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) func_security ;;
             2) func_ssh_login_mode_menu ;;
@@ -674,14 +674,14 @@ func_fail2ban() {
     fi
     
     echo -e "$(localized_text "当前 Fail2ban 状态: [ $f2b_status ]" "Current Fail2ban status: [ $f2b_status ]" "Текущий статус Fail2ban: [ $f2b_status ]")"
-    echo -e "$(localized_text "  ${GREEN}1.${PLAIN} 一键安装并配置 Fail2ban ${YELLOW}(自动绑定当前 SSH 端口)${PLAIN}" "${GREEN}1.${PLAIN} One-click installation and configuration Fail2ban ${YELLOW}(automatically bind the current SSH port)${PLAIN}" "${GREEN}1.${PLAIN} Установка и настройка в один клик Fail2ban ${YELLOW}(автоматическая привязка текущего порта SSH)${PLAIN}")"
-    echo -e "$(localized_text "  ${BLUE}2.${PLAIN} 更新防护端口 ${YELLOW}(如果您刚改了 SSH 端口，选此项重载)${PLAIN}" "${BLUE}2.${PLAIN} Update protection port ${YELLOW}(If you have just changed the SSH port, select this to overload)${PLAIN}" "${BLUE}2.${PLAIN} Порт защиты обновлений ${YELLOW}(если вы только что изменили порт SSH, выберите его для перегрузки)${PLAIN}")"
+    echo -e "$(localized_text "  ${GREEN}1.${PLAIN} 安装并配置 Fail2ban ${YELLOW}(自动使用当前 SSH 端口)${PLAIN}" "${GREEN}1.${PLAIN} Install and configure Fail2ban ${YELLOW}(use the current SSH port)${PLAIN}" "${GREEN}1.${PLAIN} Установить и настроить Fail2ban ${YELLOW}(использовать текущий порт SSH)${PLAIN}")"
+    echo -e "$(localized_text "  ${BLUE}2.${PLAIN} 更新防护端口 ${YELLOW}(修改 SSH 端口后使用)${PLAIN}" "${BLUE}2.${PLAIN} Update protected port ${YELLOW}(after changing the SSH port)${PLAIN}" "${BLUE}2.${PLAIN} Обновить защищаемый порт ${YELLOW}(после смены порта SSH)${PLAIN}")"
     echo -e "$(localized_text "  ${RED}3.${PLAIN} 彻底卸载 Fail2ban" "${RED}3.${PLAIN} Completely uninstall Fail2ban" "${RED}3.${PLAIN} Полностью удалить Fail2ban")"
     echo -e "$(localized_text "  ${RED}0.${PLAIN} 返回主菜单 / q 返回" "${RED}0.${PLAIN} Return to main menu / q Return" "${RED}0.${PLAIN} Возврат в главное меню / q Возврат")"
     echo -e "------------------------------------------------"
     
     local f_choice
-    read_trimmed f_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+    read_trimmed f_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
     
     case $f_choice in
         1|2)

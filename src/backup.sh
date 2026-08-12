@@ -826,7 +826,7 @@ reload_applied_config_kind() {
         dns)
             if confirm_risk_action "$(localized_text "重启 systemd-resolved" "Restart systemd-resolved" "Перезапуск systemd-решено")" \
                 "$(localized_text "系统 DNS 解析服务和 resolved drop-in 配置" "System DNS resolution service and resolved drop-in configuration" "Служба разрешения проблем системы DNS и решенная прямая конфигурация")" \
-                "$(localized_text "恢复 ${target_file}.bak_*，或重新进入 DNS 更改优化菜单切换回原配置" "Restore ${target_file}.bak_*, or re-enter DNS and change the optimization menu to switch back to the original configuration." "Восстановите ${target_file}.bak_* или повторно введите DNS и измените меню оптимизации, чтобы вернуться к исходной конфигурации.")" \
+                "$(localized_text "恢复 ${target_file}.bak_*，或重新进入 DNS 设置菜单切换回原配置" "Restore ${target_file}.bak_*, or reopen DNS settings and select the previous configuration." "Восстановите ${target_file}.bak_* или откройте настройки DNS и выберите прежнюю конфигурацию.")" \
                 "$(localized_text "确认当前 SSH 会话保持连接，必要时可用 IP 直连排障。" "Confirm that the current SSH session remains connected, and use IP direct connection to troubleshoot if necessary." "Убедитесь, что текущий сеанс SSH остается подключенным, и при необходимости используйте прямое IP-соединение для устранения неполадок.")"; then
                 restart_named_service_if_available systemd-resolved
             else
@@ -963,7 +963,7 @@ func_edit_applied_config_center() {
     echo -e "${CYAN}================================================${PLAIN}"
 
     local choice idx
-    read_trimmed choice "$(localized_text "请选择要查看/编辑的配置文件: " "Please select a profile to view/edit:" "Пожалуйста, выберите профиль для просмотра/редактирования:")"
+    read_trimmed choice "$(localized_text "选择要查看 / 编辑的配置文件: " "Select a configuration file to view or edit: " "Выберите файл конфигурации для просмотра или правки: ")"
     [[ "$choice" == "0" || "$choice" == "q" || "$choice" == "Q" ]] && return 0
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#applied_config_paths[@]} )); then
         echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"
@@ -984,24 +984,24 @@ func_backup_center() {
         clear
         echo -e "${CYAN}================================================${PLAIN}"
         print_breadcrumb "$(localized_text "备份与回滚" "Backup and rollback" "Резервное копирование и откат")"
-        echo -e "$(localized_text "${BOLD}🗂️ 配置备份与回滚中心${PLAIN}" "${BOLD}🗂️ Configure backup and rollback center${PLAIN}" "${BOLD}🗂️ Настройка центра резервного копирования и отката${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🗂️ 配置备份与回滚${PLAIN}" "${BOLD}🗂️ Configuration backup and rollback${PLAIN}" "${BOLD}🗂️ Резервное копирование и откат конфигурации${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "当前备份目录: ${YELLOW}${backup_root}${PLAIN}" "Current backup directory: ${YELLOW}${backup_root}${PLAIN}" "Текущий каталог резервной копии: ${YELLOW}${backup_root}${PLAIN}.")"
         [[ -n "$loaded_archive" && ! -r "$loaded_archive" ]] && loaded_archive=""
         [[ -n "$loaded_archive" ]] && echo -e "$(localized_text "已加载备份包: ${YELLOW}$(basename "$loaded_archive")${PLAIN}" "Loaded backup archive: ${YELLOW}$(basename "$loaded_archive")${PLAIN}" "Загруженный архив резервной копии: ${YELLOW}$(basename "$loaded_archive")${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 创建备份${PLAIN}               ${YELLOW}(配置 / 自定义目录 / 两者)${PLAIN}" "${GREEN}1. Create backup${PLAIN} (configuration / custom directories / both)" "${GREEN}1. Создать резервную копию${PLAIN} (конфигурация / пользовательские каталоги / оба)")"
-        echo -e "$(localized_text "${GREEN}  2. 加载备份包${PLAIN}               ${YELLOW}(.tar.gz / 加密 .tar.gz.enc)${PLAIN}" "${GREEN}2. Load backup archive${PLAIN} (.tar.gz / encrypted .tar.gz.enc)" "${GREEN}2. Загрузить архив${PLAIN} (.tar.gz / зашифрованный .tar.gz.enc)")"
-        echo -e "$(localized_text "${GREEN}  3. 从备份恢复${PLAIN}             ${YELLOW}(已加载 / 自动列表 / 指定路径)${PLAIN}" "${GREEN}3. Restore from backup${PLAIN} (loaded / automatic list / specified path)" "${GREEN}3. Восстановить из копии${PLAIN} (загруженный / автоматический список / указанный путь)")"
-        echo -e "$(localized_text "${GREEN}  4. 隔离旧备份${PLAIN}             ${YELLOW}(仅保留最近 5 份，旧文件移入隔离区)${PLAIN}" "${GREEN}4. Isolate old backups (only the latest 5 copies are kept, and old files are moved to the quarantine area)${PLAIN}" "${GREEN}4. Изолировать старые резервные копии (сохраняются только последние 5 копий, а старые файлы перемещаются в зону карантина)${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  5. 查看/编辑脚本已应用配置${PLAIN} ${YELLOW}(备份、校验，可选择 reload/restart)${PLAIN}" "${CYAN}5. View/edit script applied configuration (backup, verification, optional reload/restart)${PLAIN}" "${CYAN}5. Просмотр/редактирование примененной конфигурации сценария (резервное копирование, проверка, дополнительная перезагрузка/перезапуск)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 创建备份${PLAIN} ${YELLOW}(配置 / 自定义目录 / 两者)${PLAIN}" "${GREEN}  1. Create a backup${PLAIN} ${YELLOW}(configuration / custom directories / both)${PLAIN}" "${GREEN}  1. Создать резервную копию${PLAIN} ${YELLOW}(конфигурация / свои каталоги / оба варианта)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 加载备份包${PLAIN} ${YELLOW}(.tar.gz / 加密 .tar.gz.enc)${PLAIN}" "${GREEN}  2. Load a backup archive${PLAIN} ${YELLOW}(.tar.gz / encrypted .tar.gz.enc)${PLAIN}" "${GREEN}  2. Загрузить архив резервной копии${PLAIN} ${YELLOW}(.tar.gz / зашифрованный .tar.gz.enc)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 从备份恢复${PLAIN} ${YELLOW}(已加载 / 自动列表 / 指定路径)${PLAIN}" "${GREEN}  3. Restore from a backup${PLAIN} ${YELLOW}(loaded / detected / specified path)${PLAIN}" "${GREEN}  3. Восстановить из резервной копии${PLAIN} ${YELLOW}(загруженная / найденная / указанный путь)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 隔离旧备份${PLAIN} ${YELLOW}(保留最近 5 份)${PLAIN}" "${GREEN}  4. Quarantine old backups${PLAIN} ${YELLOW}(keep the latest 5)${PLAIN}" "${GREEN}  4. Изолировать старые копии${PLAIN} ${YELLOW}(сохранить последние 5)${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  5. 查看 / 编辑已应用配置${PLAIN} ${YELLOW}(备份、校验、reload / restart)${PLAIN}" "${CYAN}  5. View or edit applied configuration${PLAIN} ${YELLOW}(backup, validate, reload / restart)${PLAIN}" "${CYAN}  5. Просмотр или правка применённой конфигурации${PLAIN} ${YELLOW}(копия, проверка, reload / restart)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Return to the main menu / q Return to the previous level${PLAIN}" "${RED}0. Возврат в главное меню / q Возврат на предыдущий уровень${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local b_choice
-        read_trimmed b_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed b_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
         case $b_choice in
             1)

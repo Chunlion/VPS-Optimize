@@ -45,7 +45,7 @@ show_main_help() {
         echo "16  备份与回滚，高风险操作前建议先跑。"
         echo "19  443端口复用管理中心，面板/订阅/REALITY 共用公网 443。"
         echo "20  选择界面语言。"
-        echo "10 -> 5  流量达量保护，按账单周期防刷流量和超额账单。"
+        echo "10 -> 5  流量限额保护，按账单周期统计，并在达到阈值时执行保护动作。"
         echo "? 查看帮助，0/q 退出。"
     fi
 }
@@ -97,9 +97,9 @@ show_net_kernel_help() {
     echo -e "$(localized_text "${CYAN}VPS-Optimize > 网络/内核优化 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Network/Kernel Optimization > Help${PLAIN}" "${CYAN}VPS-Optimize > Оптимизация сети/ядра > Справка${PLAIN}")"
     echo "$(localized_text "1 BBR / 拥塞控制：调用外部调优脚本，执行前建议备份。" "1 BBR / Congestion control: Call an external tuning script, and it is recommended to back it up before execution." "1 BBR / Контроль перегрузки: вызовите внешний сценарий настройки, и перед выполнением рекомендуется создать его резервную копию.")"
     echo "$(localized_text "2 TCP 参数：修改 sysctl，适合有明确参数需求的用户。" "2 TCP parameters: Modify sysctl, suitable for users with clear parameter requirements." "2 параметра TCP: Измените sysctl, подходит для пользователей с четкими требованиями к параметрам.")"
-    echo "$(localized_text "3 DNS 更改优化：国内/国外默认 DNS，也支持自定义 IPv4 和 IPv6。" "3 DNS change optimization: domestic/foreign default DNS, also supports customized IPv4 and IPv6." "3 Оптимизация изменений DNS: внутренний/зарубежный DNS по умолчанию, также поддерживает настроенные IPv4 и IPv6.")"
-    echo "$(localized_text "4 网卡管理工具：查看网卡、路由、DNS，临时调整 MTU 或刷新 DHCP。" "4 Network card management tool: View network card, routing, DNS, temporarily adjust MTU or refresh DHCP." "4 Инструмент управления сетевой картой: просмотр сетевой карты, маршрутизации, DNS, временная настройка MTU или обновление DHCP.")"
-    echo "$(localized_text "5 流量达量保护：按网卡流量和账单周期自动关机或仅保留 SSH，防止超额账单。" "5 Traffic volume protection: Automatically shut down or only retain SSH according to network card traffic and billing cycle to prevent excessive bills." "5 Защита объема трафика: автоматическое отключение или сохранение SSH в зависимости от трафика сетевой карты и цикла выставления счетов, чтобы предотвратить чрезмерные счета.")"
+    echo "$(localized_text "3 DNS 设置：使用预设或自定义的 IPv4/IPv6 DNS。" "3 DNS settings: use preset or custom IPv4/IPv6 resolvers." "3 Настройки DNS: готовые или собственные DNS-серверы IPv4/IPv6.")"
+    echo "$(localized_text "4 网络接口管理：查看网卡、路由和 DNS，临时调整 MTU 或刷新 DHCP。" "4 Network interfaces: view interfaces, routes, and DNS; temporarily change MTU or renew DHCP." "4 Сетевые интерфейсы: просмотр интерфейсов, маршрутов и DNS; временная смена MTU или обновление DHCP.")"
+    echo "$(localized_text "5 流量限额保护：按账单周期统计流量，达到阈值后关机或仅保留 SSH。" "5 Traffic quota protection: track usage by billing cycle, then shut down or keep only SSH at the threshold." "5 Защита лимита трафика: учёт по расчётному периоду с выключением сервера или сохранением только SSH при достижении порога.")"
     echo "$(localized_text "6 ZRAM / Swap：适合小内存 VPS。" "6 ZRAM / Swap: suitable for small memory VPS." "6 ZRAM / Swap: подходит для VPS с небольшой памятью.")"
     echo "$(localized_text "7 安装/切换内核：高风险，必须确认快照和救援控制台可用。" "7 Install/switch kernel: High risk, must confirm snapshot and rescue console are available." "7. Установка/переключение ядра: высокий риск, необходимо подтвердить доступность моментального снимка и консоли восстановления.")"
     echo "$(localized_text "8 清理旧内核：不要删除当前内核和云厂商定制内核。" "8 Clean up old kernels: Do not delete the current kernel and cloud vendor-customized kernels." "8. Очистите старые ядра. Не удаляйте текущее ядро и ядра, настроенные поставщиком облака.")"
@@ -125,10 +125,10 @@ show_health_help() {
 NET_KERNEL_MENU_ITEMS=(
     "1|BBR / 拥塞控制管理|调用 ylx2016 多内核调优脚本|func_bbr_manage|net_bbr"
     "2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune"
-    "3|DNS 更改优化|国内/国外/自定义，IPv4+IPv6|func_dns_optimize|"
-    "4|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|"
-    "5|流量达量保护|防刷流量 / 防超额账单|func_traffic_guard_menu|"
-    "6|ZRAM / Swap 内存调优|按内存分档优化小鸡|func_zram_swap|"
+    "3|DNS 设置|国内/国外/自定义，IPv4+IPv6|func_dns_optimize|"
+    "4|网络接口管理|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|"
+    "5|流量限额保护|流量统计 / 超额处置|func_traffic_guard_menu|"
+    "6|ZRAM / Swap 内存调优|根据内存容量选择配置|func_zram_swap|"
     "7|安装/切换优化内核|Cloud/KVM 稳定推荐 / XanMod 高级可选|func_install_kernel|net_kernel_install"
     "8|清理旧内核|释放磁盘空间，谨慎操作|func_clean_kernel|"
     "9|BBR 直连/落地优化|智能带宽检测，按主要 RTT 调整缓冲区|func_bbr_direct_tune|net_bbr_direct"
@@ -214,16 +214,16 @@ func_net_kernel_menu() {
         print_breadcrumb "$(localized_text "网络/内核优化" "Network/kernel optimization" "Оптимизация сети/ядра")"
         echo -e "$(localized_text "${BOLD}🚀 网络性能与内核管理${PLAIN}" "${BOLD}🚀 Network performance and kernel management${PLAIN}" "${BOLD}🚀 Производительность сети и управление ядром${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：调整网络栈、内存压缩和内核；涉及内核安装/清理前建议先做快照。${PLAIN}" "${YELLOW}Purpose: Adjust network stack, memory compression and kernel; it is recommended to take a snapshot before kernel installation/cleaning.${PLAIN}" "${YELLOW}Назначение: Настройка сетевого стека, сжатия памяти и ядра; рекомендуется сделать снимок перед установкой/очисткой ядра.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}调整网络栈、内存压缩和内核。安装或清理内核前，建议先创建系统快照。${PLAIN}" "${YELLOW}Tune the network stack, memory compression, and kernel. Create a system snapshot before installing or removing kernels.${PLAIN}" "${YELLOW}Настройка сети, сжатия памяти и ядра. Перед установкой или удалением ядер создайте снимок системы.${PLAIN}")"
         echo -e "------------------------------------------------"
         render_menu "$menu_items_name"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Return to the main menu / q Return to the previous level${PLAIN}" "${RED}0. Возврат в главное меню / q Возврат на предыдущий уровень${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local nk_choice
-        read_trimmed nk_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed nk_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case $nk_choice in
             "?") show_net_kernel_help; pause_return ;;
             0|q|Q) break ;;
@@ -240,7 +240,7 @@ func_panel_deploy_menu() {
         clear
         echo -e "${CYAN}================================================${PLAIN}"
         print_breadcrumb "$(localized_text "面板、节点与订阅工具" "Panels, Nodes and Subscription Tools" "Панели, узлы и инструменты подписки")"
-        echo -e "$(localized_text "${BOLD}🛰️ 面板、节点与订阅工具部署${PLAIN}" "${BOLD}🛰️ Panel, node and subscription tool deployment${PLAIN}" "${BOLD}🛰️ Развертывание панели, узла и инструмента подписки${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🛰️ 面板、节点与订阅工具${PLAIN}" "${BOLD}🛰️ Panels, nodes, and subscription tools${PLAIN}" "${BOLD}🛰️ Панели, узлы и инструменты подписки${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 面板 / 核心服务${PLAIN}" "${BOLD}▶ Panels / Core services${PLAIN}" "${BOLD}▶ Панели / основные службы${PLAIN}")"
@@ -256,11 +256,11 @@ func_panel_deploy_menu() {
         echo -e "$(localized_text " ${BOLD}${GREEN}15.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Return to the main menu / q Return to the previous level${PLAIN}" "${RED}0. Возврат в главное меню / q Возврат на предыдущий уровень${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local pd_choice
-        read_trimmed pd_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed pd_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case $pd_choice in
             1) func_xpanel_menu ;;
             2) func_xui_custom_manager ;;
@@ -325,7 +325,7 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local sni_choice
-        read_trimmed sni_choice "$(localized_text "👉 输入菜单编号，? 查看帮助: " "👉 Menu number or ? for help: " "👉 Номер пункта или ? для справки: ")"
+        read_trimmed sni_choice "$(localized_text "输入菜单编号，? 查看帮助: " "Menu number or ? for help: " "Номер пункта или ? для справки: ")"
         case "$sni_choice" in
             1) show_current_entry_status ;;
             2) manage_entry_mode_install_or_switch ;;
@@ -486,7 +486,7 @@ main_menu() {
 
         echo -e " ${BOLD}${BLUE}▶ ④ 诊断、备份与维护${PLAIN}"
         print_menu_item 12 "测速与质量检测" "YABS/流媒体/回程/IP质量"
-        print_menu_item 13 "端口排查与释放" "查看占用并强杀进程"
+        print_menu_item 13 "端口排查与释放" "查看占用并结束进程"
         print_menu_item 14 "系统硬件探针" "CPU/内存/磁盘/网络实时信息"
         print_menu_item 15 "服务健康总览" "服务状态/证书摘要/端口概览"
         print_menu_item 16 "配置备份与回滚" "备份/列表/恢复/清理"
@@ -502,7 +502,7 @@ main_menu() {
         fi
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请输入菜单编号、? 或快捷词: " "👉 Enter a menu number, ?, or shortcut: " "👉 Введите номер меню, ? или команду: ")"
+        read_trimmed choice "$(localized_text "输入菜单编号或 ?: " "Enter a menu number or ?: " "Введите номер пункта или ?: ")"
         choice=$(normalize_main_choice "$choice")
 
         case $choice in
@@ -530,9 +530,9 @@ main_menu() {
             0) exit 0 ;;
             *)
                 localized_echo \
-                    "${RED}❌ 无效输入，请输入菜单编号、? 或有效快捷词。${PLAIN}" \
-                    "${RED}❌ Invalid input. Enter a menu number, ?, or valid shortcut.${PLAIN}" \
-                    "${RED}❌ Неверный ввод. Введите номер меню, ? или допустимую команду.${PLAIN}"
+                    "${RED}❌ 无效输入，请输入菜单中存在的编号或 ?。${PLAIN}" \
+                    "${RED}❌ Invalid input. Enter a displayed menu number or ?.${PLAIN}" \
+                    "${RED}❌ Неверный ввод. Введите номер из меню или ?.${PLAIN}"
                 sleep 1
                 ;;
         esac

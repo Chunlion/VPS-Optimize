@@ -252,11 +252,11 @@ manage_xray_inbound_routes() {
             echo -e "$(localized_text "${YELLOW}  3. 删除入站分流规则（当前模式不可用）${PLAIN}" "${YELLOW}3. Delete inbound routing rules (not available in current mode)${PLAIN}" "${YELLOW}3. Удалить правила маршрутизации входящих подключений (недоступно в текущем режиме)${PLAIN}")"
             echo -e "$(localized_text "${YELLOW}  4. 同步规则到当前入口模式（当前模式不可用）${PLAIN}" "${YELLOW}4. Synchronize rules to the current entry mode (the current mode is unavailable)${PLAIN}" "${YELLOW}4. Синхронизировать правила с текущим режимом входа (текущий режим недоступен)${PLAIN}")"
             echo -e "------------------------------------------------"
-            echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Return / q Return${PLAIN}" "${RED}0. Возврат / q Возврат${PLAIN}")"
+            echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
             echo -e "${CYAN}================================================${PLAIN}"
 
             local fallback_choice
-            read_trimmed fallback_choice "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+            read_trimmed fallback_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
             case "$fallback_choice" in
                 1) list_xray_sni_routes ;;
                 2|3|4)
@@ -275,22 +275,22 @@ manage_xray_inbound_routes() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}Xray 入站管理${PLAIN}" "${BOLD}Xray Inbound management${PLAIN}" "${BOLD}Управление входящими подключениями Xray${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}Xray SNI 路由管理${PLAIN}" "${BOLD}Xray SNI route management${PLAIN}" "${BOLD}Управление маршрутами Xray SNI${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}只管理 SNI -> 本地地址:端口 分流记录，用于当前支持的端口复用模式渲染分流规则；不编辑 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}Only manages the SNI -> local address:port routing record, which is used for the currently supported Port 443 Reuse mode rendering routing rules; it does not edit the 3x-ui/Xray inbound connection internal configuration.${PLAIN}" "${YELLOW}управляет только SNI -> локальный адрес: записи маршрутизирования порта, которые используются для поддерживаемых в настоящее время правил маршрутизирования рендеринга в однозаходном режиме; он не редактирует входящую внутреннюю конфигурацию 3x-ui/Xray.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}管理 SNI -> 本地地址:端口 路由记录；不会创建或修改 3x-ui/Xray 入站。${PLAIN}" "${YELLOW}Manage SNI -> local address:port routes without creating or editing 3x-ui/Xray inbounds.${PLAIN}" "${YELLOW}Управление маршрутами SNI -> локальный адрес:порт без создания или изменения входящих подключений 3x-ui/Xray.${PLAIN}")"
         echo -e "$(localized_text "配置文件：$(xray_sni_routes_path)" "Configuration file: $(xray_sni_routes_path)" "Файл конфигурации: $(xray_sni_routes_path).")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 查看入站分流规则${PLAIN}" "${GREEN}1. View the inbound routing rule${PLAIN}" "${GREEN}1. Просмотреть правила маршрутизации входящих подключений${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 添加入站分流规则${PLAIN}" "${GREEN}2. Add inbound routing rule${PLAIN}" "${GREEN}2. Добавить правило маршрутизации входящего подключения${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 删除入站分流规则${PLAIN}" "${GREEN}3. Delete the inbound routing rule${PLAIN}" "${GREEN}3. Удалить правило маршрутизации входящего подключения${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 检查入站端口状态${PLAIN}" "${GREEN}4. Check the inbound port status${PLAIN}" "${GREEN}4. Проверьте состояние входящего порта.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 同步到当前入口模式${PLAIN}" "${GREEN}5. Synchronize to the current entry mode${PLAIN}" "${GREEN}5. Синхронизироваться с текущим режимом входа${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 查看 SNI 路由${PLAIN}" "${GREEN}  1. View SNI routes${PLAIN}" "${GREEN}  1. Показать маршруты SNI${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 添加 SNI 路由${PLAIN}" "${GREEN}  2. Add an SNI route${PLAIN}" "${GREEN}  2. Добавить маршрут SNI${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 删除 SNI 路由${PLAIN}" "${GREEN}  3. Remove an SNI route${PLAIN}" "${GREEN}  3. Удалить маршрут SNI${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 检查本地入站端口${PLAIN}" "${GREEN}  4. Check local inbound ports${PLAIN}" "${GREEN}  4. Проверить локальные входящие порты${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 同步到当前入口模式${PLAIN}" "${GREEN}  5. Sync with the active entry mode${PLAIN}" "${GREEN}  5. Синхронизировать с активным режимом входа${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Return / q Return${PLAIN}" "${RED}0. Возврат / q Возврат${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) list_xray_sni_routes ;;
             2) add_xray_sni_route ;;
@@ -326,7 +326,7 @@ manage_sni_stack_tcp_routes() {
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) list_sni_stack_tcp_routes ;;
             2) add_sni_stack_tcp_route ;;
@@ -404,7 +404,7 @@ manage_sni_stack_ip_whitelist() {
         echo -e "$(localized_text "1. 设置/覆盖白名单" "1. Set/override whitelist" "1. Установить/переопределить белый список")"
         echo -e "$(localized_text "2. 清除白名单" "2. Clear the whitelist" "2. Очистите белый список")"
         echo -e "$(localized_text "0/q. 取消" "0/q. Cancel" "0/кв. Отмена")"
-        read_trimmed action "$(localized_text "请选择操作: " "Please select an action:" "Пожалуйста, выберите действие:")"
+        read_trimmed action "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$action" in
             1)
                 if [[ "$whitelist_supported" != "yes" ]]; then

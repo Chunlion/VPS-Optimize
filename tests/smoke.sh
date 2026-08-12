@@ -342,7 +342,7 @@ assert_file_contains docs/recovery-runbook.md "$health_unit_log_path" "Recovery 
 assert_file_contains docs/443-single-entry-troubleshooting.md '端口并发连接限制误伤' "443 troubleshooting doc must include connlimit false-positive guidance."
 assert_file_contains docs/443-single-entry-troubleshooting.md '如果公网 `443` 存在本脚本添加的 connlimit 规则，它只能作用于整个公网 `443`，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "443 troubleshooting doc must explain public 443 connlimit scope."
 assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]' "443 troubleshooting doc must point users to the 443 health check."
-assert_file_contains src/firewall.sh '${GREEN}  5. 端口并发连接限制${PLAIN}' "Firewall menu must keep connlimit on option 5."
+assert_file_contains src/firewall.sh '${GREEN}  5. 限制端口并发连接${PLAIN}' "Firewall menu must keep connlimit on option 5."
 assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]' "443 troubleshooting doc must point users to the connlimit menu."
 assert_file_contains docs/recovery-runbook.md '主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]' "Recovery runbook must point users to the connlimit menu."
 assert_file_not_contains docs/443-single-entry-troubleshooting.md '[6 端口并发连接限制]' "443 troubleshooting doc must not point connlimit users at the firewall shutdown option."
@@ -455,8 +455,8 @@ while IFS= read -r function_name; do
 done <<< "$expected_entry_mode_shadow_functions"
 assert_file_contains src/README.md '443/TCP Peek ownership:' "Source README must document 443/TCP Peek module ownership."
 assert_file_contains src/README.md 'Do not reintroduce split shadow modules' "Source README must warn against stale split 443/TCP Peek modules."
-assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '请输入菜单编号或 ?: ' "443 Web/SNI submenu must prompt for a menu number or help."
-assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '请输入菜单编号或 ?: ' "443 Port 443 Reuse parameter submenu must prompt for a menu number or help."
+assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '输入菜单编号或 ?: ' "443 Web/SNI submenu must prompt for a menu number or help."
+assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '输入菜单编号或 ?: ' "443 Port 443 Reuse parameter submenu must prompt for a menu number or help."
 assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '输入菜单编号，? 查看帮助: ' "Port 443 Reuse menu must prompt for a menu number or help."
 assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '"?") show_sni_help; pause_return; continue ;;' "443 Web/SNI submenu must accept the displayed ? help entry."
 assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '"?") show_sni_help; pause_return; continue ;;' "443 Port 443 Reuse parameter submenu must accept the displayed ? help entry."
@@ -467,7 +467,7 @@ assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '0) break ;
 assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites 'q 返回' "443 Web/SNI submenu must advertise only the supported q shortcut."
 assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile 'q 返回' "443 Port 443 Reuse parameter submenu must advertise only the supported q shortcut."
 assert_function_body_contains src/menus.sh func_sni_stack_quick_menu 'q 返回' "Port 443 Reuse menu must advertise only the supported q shortcut."
-assert_dist_contains '请输入菜单编号或 ?' "Release script must include hardened 443 menu prompts."
+assert_dist_contains '输入菜单编号或 ?' "Release script must include hardened 443 menu prompts."
 assert_dist_contains '❌ 无效选择，请输入菜单编号或 ?。' "Release script must include hardened 443 invalid-choice guidance."
 if command -v go >/dev/null 2>&1; then
     GO_BIN=go
@@ -882,6 +882,8 @@ assert_function_body_contains src/system_core.sh func_base_init 'BBR 状态验�
 assert_file_not_contains src/menus.sh 'func_beginner_menu' "The removed hidden beginner entry must not remain in source."
 assert_function_body_contains src/menus.sh normalize_main_choice '443) echo "19"' "The documented 443 shortcut must open the Port 443 Reuse center."
 assert_function_body_contains src/menus.sh main_menu 'choice=$(normalize_main_choice "$choice")' "The main menu must normalize documented shortcuts before dispatch."
+assert_function_body_contains src/menus.sh main_menu '输入菜单编号或 ?: ' "The main menu must use a concise number-or-help prompt."
+assert_file_not_contains src/menus.sh '或快捷词' "The main menu must not expose hidden shortcuts in its prompt."
 assert_file_not_contains src/menus.sh '443 ·' "Main-menu descriptions must not display shortcut labels."
 assert_file_not_contains src/menus.sh 'proxy ·' "Main-menu descriptions must not display shortcut labels."
 assert_file_contains README.md '| `443` | `[19 443端口复用管理中心]` |' "The Chinese README must document the 443 shortcut."
@@ -891,6 +893,14 @@ assert_function_body_contains src/menus.sh main_menu '"非443端口复用的网�
 assert_function_body_contains src/menus.sh main_menu '"sites and panels not using Port 443 Reuse"' "The English reverse-proxy description must stay natural."
 assert_function_body_contains src/menus.sh main_menu '"сайты и панели без повторного использования порта 443"' "The Russian reverse-proxy description must stay natural."
 assert_file_not_contains src/menus.sh '未接入 443端口复用的网站/面板反代' "The old conversational reverse-proxy description must not return."
+assert_function_body_contains src/caddy_proxy.sh func_caddy_reverse_proxy_menu 'Reverse proxy (Caddy / Nginx)' "The reverse-proxy menu title must remain natural in English."
+assert_function_body_contains src/firewall.sh func_firewall_manage 'Enable firewall with a minimal allow plan' "The firewall menu must describe its safe enable flow clearly."
+assert_function_body_contains src/environment.sh func_env_install 'Components and services' "The component menu title must remain concise in English."
+assert_function_body_contains src/diagnostics_network.sh func_test_scripts 'VPS speed and quality tests' "The diagnostics menu title must describe its contents."
+assert_function_body_contains src/server_maintenance.sh func_port_kill 'Port usage and process termination' "The port tool must use accurate process-termination wording."
+assert_function_body_contains src/kernel_tuning.sh func_zram_swap 'more than 4 GB' "The low-swapping profile label must match the automatic memory threshold."
+assert_file_not_contains src/caddy_proxy.sh 'reverse proxyal' "The reverse-proxy menu must not contain the old machine translation."
+assert_file_not_contains src/sni_stack_health.sh 'web inversion' "443 health output must use reverse-proxy terminology."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'VPSO_FIREWALLD_OFFLINE_MODE=1' "Inactive firewalld must receive allow rules before the service starts."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'systemctl enable --now firewalld' "Firewalld must start only after offline rules succeed."
 assert_function_body_contains src/firewall.sh func_firewall_manage 'firewall_build_minimum_plan' "Firewall enable flow must build a least-privilege plan."
@@ -2265,7 +2275,7 @@ grep -q 'timer active 但状态文件已超过' dist/vps.sh
 grep -q '最近 vps-traffic-guard 日志' dist/vps.sh
 grep -q 'repair_traffic_guard_timer' dist/vps.sh
 grep -q '最近检查超时' dist/vps.sh
-grep -q '立即同步/验证检查器' dist/vps.sh
+grep -q '立即同步并验证检查器' dist/vps.sh
 grep -Fq 'ExecStart=/usr/bin/env bash ${TRAFFIC_GUARD_CHECKER}' dist/vps.sh
 grep -q '本周期已用 .*实时估算' dist/vps.sh
 grep -q '网卡原始计数 .*不等于本周期已用' dist/vps.sh
@@ -2294,7 +2304,7 @@ grep -q 'counter reset detected on ${IFACE}, baseline reset and preserved curren
 assert_file_not_contains dist/vps.sh 'traffic|quota|bill|流量|达量|账单) echo "10"' "Release script must not keep the hidden Traffic Guard main-menu alias."
 traffic_guard_menu_path='主菜单 [10 网络与内核优化] -> [5 流量达量关机保护]'
 assert_file_contains CHANGELOG.md "$traffic_guard_menu_path" "CHANGELOG must document the current traffic guard menu path."
-assert_file_contains src/menus.sh '10 -> 5  流量达量保护' "Menu help must keep traffic guard under network/kernel option 10 -> 5."
+assert_file_contains src/menus.sh '10 -> 5  流量限额保护' "Menu help must keep traffic guard under network/kernel option 10 -> 5."
 assert_file_not_contains CHANGELOG.md '[9 网络与内核优化] -> [7]' "CHANGELOG must not keep the stale traffic guard menu path."
 if grep -q '20\..*流量达量关机保护' dist/vps.sh; then
     echo "Traffic guard must stay in the network submenu, not the main menu." >&2
@@ -2926,14 +2936,14 @@ grep -q 'func_edit_applied_config_center' dist/vps.sh
 grep -q 'edit_applied_config_file' dist/vps.sh
 grep -q 'collect_applied_config_files' dist/vps.sh
 grep -q 'validate_applied_config_kind' dist/vps.sh
-grep -q '5. 查看/编辑脚本已应用配置' dist/vps.sh
+grep -q '5. 查看 / 编辑已应用配置' dist/vps.sh
 grep -q 'func_hosts_manage' dist/vps.sh
 grep -q 'hosts_add_or_update_entry' dist/vps.sh
 grep -q 'func_ssh_security_menu' dist/vps.sh
 grep -q 'func_ssh_login_mode_menu' dist/vps.sh
 grep -q 'ssh_apply_auth_mode' dist/vps.sh
 grep -q '密钥 + 密码登录（保留/恢复密码）' dist/vps.sh
-grep -q '添加/更新用户 SSH 公钥（不改登录方式）' dist/vps.sh
+grep -q '添加 / 更新用户 SSH 公钥' dist/vps.sh
 if grep -Fq '4. 恢复密码登录' dist/vps.sh || grep -Fq '4) ssh_apply_auth_mode password' dist/vps.sh; then
     echo "SSH key login menu must not keep duplicate password-recovery entry." >&2
     exit 1
@@ -3066,7 +3076,7 @@ if grep -q '18) func_sni_stack_quick_menu' dist/vps.sh; then
     exit 1
 fi
 grep -q '4) func_hosts_manage' dist/vps.sh
-grep -q '4|网卡管理工具|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|' dist/vps.sh
+grep -q '4|网络接口管理|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|' dist/vps.sh
 grep -Fq "SCRIPT_VERSION=\"${vps_smoke_script_version}\"" dist/vps.sh
 grep -q 'SCRIPT_UPDATE_CACHE=' dist/vps.sh
 grep -q 'Compatibility marker: VPS 全能控制面板' dist/vps.sh

@@ -127,22 +127,22 @@ func_network_interface_manage() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "网络/内核优化 > 网卡管理工具" "Network/Kernel Optimization > Network Card Management Tool" "Оптимизация сети/ядра > Инструмент управления сетевой картой")"
-        echo -e "$(localized_text "${BOLD}🧰 网卡管理工具${PLAIN}" "${BOLD}🧰 Network card management tool${PLAIN}" "${BOLD}🧰 Инструмент управления сетевой картой${PLAIN}")"
+        print_breadcrumb "$(localized_text "网络/内核优化 > 网卡管理" "Network/Kernel Optimization > Network interfaces" "Оптимизация сети/ядра > Сетевые интерфейсы")"
+        echo -e "$(localized_text "${BOLD}🧰 网卡管理${PLAIN}" "${BOLD}🧰 Network interfaces${PLAIN}" "${BOLD}🧰 Сетевые интерфейсы${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：查看网卡、路由、DNS 和链路状态；危险操作会要求确认。${PLAIN}" "${YELLOW}Purpose: View network card, routing, DNS and link status; dangerous operations will require confirmation.${PLAIN}" "${YELLOW}Назначение : просмотр сетевой карты, маршрутизации, DNS и состояния соединения; опасные операции потребуют подтверждения.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}查看网卡、路由、DNS 和链路状态；关闭网卡等高风险操作会再次确认。${PLAIN}" "${YELLOW}Inspect interfaces, routes, DNS, and link status. High-risk actions such as disabling an interface require confirmation.${PLAIN}" "${YELLOW}Просмотр интерфейсов, маршрутов, DNS и состояния соединения. Опасные действия, включая отключение интерфейса, требуют подтверждения.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 查看网卡 / 路由 / DNS 概览${PLAIN}" "${GREEN}1. View network card / routing / DNS Overview${PLAIN}" "${GREEN}1. Просмотр сетевой карты/маршрутизации/DNS Обзор${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 查看指定网卡详情与流量统计${PLAIN}" "${GREEN}2. View the specified network card details and traffic statistics${PLAIN}" "${GREEN}2. Просмотр данных указанной сетевой карты и статистики трафика${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 启用指定网卡${PLAIN}" "${GREEN}3. Enable the specified network card${PLAIN}" "${GREEN}3. Включите указанную сетевую карту.${PLAIN}")"
-        echo -e "$(localized_text "${RED}  4. 关闭指定网卡${PLAIN}" "${RED}4. Close the specified network card${PLAIN}" "${RED}4. Закрываем указанную сетевую карту.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}  5. 临时设置网卡 MTU${PLAIN}" "${YELLOW}5. Temporarily set the network card MTU${PLAIN}" "${YELLOW}5. Временно устанавливаем сетевую карту MTU${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}  6. 刷新 DHCP/网络连接${PLAIN}" "${YELLOW}6. Refresh DHCP/Network Connection${PLAIN}" "${YELLOW}6. Обновите DHCP/сетевое соединение${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 查看网卡 / 路由 / DNS 概览${PLAIN}" "${GREEN}  1. View interfaces, routes, and DNS${PLAIN}" "${GREEN}  1. Показать интерфейсы, маршруты и DNS${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 查看网卡详情与流量统计${PLAIN}" "${GREEN}  2. View interface details and traffic${PLAIN}" "${GREEN}  2. Показать сведения и трафик интерфейса${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 启用指定网卡${PLAIN}" "${GREEN}  3. Enable an interface${PLAIN}" "${GREEN}  3. Включить интерфейс${PLAIN}")"
+        echo -e "$(localized_text "${RED}  4. 关闭指定网卡${PLAIN}" "${RED}  4. Disable an interface${PLAIN}" "${RED}  4. Отключить интерфейс${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}  5. 临时设置网卡 MTU${PLAIN}" "${YELLOW}  5. Set interface MTU temporarily${PLAIN}" "${YELLOW}  5. Временно изменить MTU интерфейса${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}  6. 刷新 DHCP / 网络连接${PLAIN}" "${YELLOW}  6. Renew DHCP / network connection${PLAIN}" "${YELLOW}  6. Обновить DHCP / сетевое соединение${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         local choice
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1) network_show_overview; pause_return ;;
             2) network_show_iface_detail; pause_return ;;

@@ -76,23 +76,22 @@ func_dns_optimize() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "网络/内核优化 > DNS 更改优化" "Network/Kernel Optimization > DNS Change Optimization" "Оптимизация сети/ядра > Оптимизация изменений DNS")"
-        echo -e "$(localized_text "${BOLD}DNS 更改优化${PLAIN}" "${BOLD}DNS Change and optimize${PLAIN}" "${BOLD}DNS Изменение и оптимизация${PLAIN}")"
+        print_breadcrumb "$(localized_text "网络/内核优化 > DNS 设置" "Network/Kernel Optimization > DNS settings" "Оптимизация сети/ядра > Настройка DNS")"
+        echo -e "$(localized_text "${BOLD}DNS 设置${PLAIN}" "${BOLD}DNS settings${PLAIN}" "${BOLD}Настройка DNS${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}国内默认：IPv4 223.5.5.5 / 119.29.29.29，IPv6 2400:3200::1 / 2402:4e00::${PLAIN}" "${YELLOW}Domestic default: IPv4 223.5.5.5 / 119.29.29.29, IPv6 2400:3200::1 / 2402:4e00::${PLAIN}" "${YELLOW}Внутреннее значение по умолчанию: IPv4 223.5.5.5 / 119.29.29.29, IPv6 2400:3200::1 / 2402:4e00::${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}国外默认：IPv4 1.1.1.1 / 8.8.8.8，IPv6 2606:4700:4700::1111 / 2001:4860:4860::8888${PLAIN}" "${YELLOW}Foreign default: IPv4 1.1.1.1 / 8.8.8.8, IPv6 2606:4700:4700::1111 / 2001:4860:4860::8888${PLAIN}" "${YELLOW}внешнее значение по умолчанию: IPv4 1.1.1.1/8.8.8.8, IPv6 2606:4700:4700::1111 / 2001:4860:4860::8888${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}可选择国内、国际或自定义 IPv4 / IPv6 DNS，并支持恢复最近备份。${PLAIN}" "${YELLOW}Choose China, international, or custom IPv4 / IPv6 DNS, with restore from the latest backup.${PLAIN}" "${YELLOW}Выберите DNS для Китая, международные или свои IPv4 / IPv6; доступно восстановление последней копии.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 使用国内 DNS${PLAIN}       ${YELLOW}(阿里 DNS + DNSPod)${PLAIN}" "${GREEN}1. Use domestic DNS (Alibaba DNS + DNSPod)${PLAIN}" "${GREEN}1. Используйте отечественный DNS (Alibaba DNS + DNSPod)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 使用国外 DNS${PLAIN}       ${YELLOW}(Cloudflare + Google)${PLAIN}" "${GREEN}2. Use foreign DNS (Cloudflare + Google)${PLAIN}" "${GREEN}2. Используйте зарубежный DNS (Cloudflare + Google)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 自定义 DNS${PLAIN}         ${YELLOW}(分别输入 IPv4 / IPv6)${PLAIN}" "${GREEN}3. Customize DNS (input IPv4 / IPv6 respectively)${PLAIN}" "${GREEN}3. Настройте DNS (вход IPv4 / IPv6 соответственно)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 查看当前 DNS${PLAIN}" "${GREEN}4. View current DNS${PLAIN}" "${GREEN}4. Просмотр текущего DNS${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 恢复最近一次 DNS 备份${PLAIN}" "${GREEN}5. Restore the latest DNS backup${PLAIN}" "${GREEN}5. Восстановите последнюю резервную копию DNS.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 使用国内 DNS${PLAIN} ${YELLOW}(阿里 DNS + DNSPod)${PLAIN}" "${GREEN}  1. Use China DNS${PLAIN} ${YELLOW}(Alibaba DNS + DNSPod)${PLAIN}" "${GREEN}  1. Использовать DNS для Китая${PLAIN} ${YELLOW}(Alibaba DNS + DNSPod)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 使用国际 DNS${PLAIN} ${YELLOW}(Cloudflare + Google)${PLAIN}" "${GREEN}  2. Use international DNS${PLAIN} ${YELLOW}(Cloudflare + Google)${PLAIN}" "${GREEN}  2. Использовать международные DNS${PLAIN} ${YELLOW}(Cloudflare + Google)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 自定义 DNS${PLAIN} ${YELLOW}(分别填写 IPv4 / IPv6)${PLAIN}" "${GREEN}  3. Set custom DNS${PLAIN} ${YELLOW}(separate IPv4 / IPv6 values)${PLAIN}" "${GREEN}  3. Настроить свои DNS${PLAIN} ${YELLOW}(отдельно IPv4 / IPv6)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 查看当前 DNS${PLAIN}" "${GREEN}  4. View current DNS${PLAIN}" "${GREEN}  4. Показать текущие DNS${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 恢复最近一次 DNS 备份${PLAIN}" "${GREEN}  5. Restore the latest DNS backup${PLAIN}" "${GREEN}  5. Восстановить последнюю копию DNS${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}" "${BLUE}0. Return to the previous menu / q Return to${PLAIN}" "${BLUE}0. Возврат в предыдущее меню / q Возврат в${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}" "${BLUE}0. Back / q Back${PLAIN}" "${BLUE}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice v4_servers v6_servers raw_v4 raw_v6
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             1)
                 dns_apply_profile "$(localized_text "国内 DNS" "Domestic DNS" "Внутренний DNS")" "223.5.5.5 119.29.29.29" "2400:3200::1 2402:4e00::"

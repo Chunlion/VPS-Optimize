@@ -21,20 +21,20 @@ update_compose_project() {
 func_update_subscription_tools() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}${YELLOW}UPD 更新订阅管理工具 (Docker Compose)${PLAIN}" "${BOLD}UPD Update Subscription Management Tool (Docker Compose)${PLAIN}" "${BOLD}UPD Средство управления подпиской на обновления (Docker Compose)${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}${YELLOW}更新订阅工具（Docker Compose）${PLAIN}" "${BOLD}${YELLOW}Update subscription tools (Docker Compose)${PLAIN}" "${BOLD}${YELLOW}Обновление инструментов подписки (Docker Compose)${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}这个菜单只更新订阅管理工具容器，不会更新 3x-ui / Sing-box / Xray。${PLAIN}" "${YELLOW}This menu only updates the subscription management tool container, and will not update 3x-ui / Sing-box / Xray.${PLAIN}" "${YELLOW}Это меню обновляет только контейнер средства управления подписками и не обновляет 3x-ui / Sing-box / Xray.${PLAIN}")"
     echo -e "------------------------------------------------"
-    echo -e "$(localized_text "${BOLD}${YELLOW}  1. UPD 更新 SublinkPro${PLAIN}       ${CYAN}(/opt/sublinkpro)${PLAIN}" "${BOLD}1. UPD update SublinkPro (/opt/sublinkpro)${PLAIN}" "${BOLD}1. Обновление UPD SublinkPro (/opt/sublinkpro)${PLAIN}")"
-    echo -e "$(localized_text "${BOLD}${YELLOW}  2. UPD 更新 妙妙屋订阅管理${PLAIN}     ${CYAN}(/opt/miaomiaowu)${PLAIN}" "${BOLD}2. UPD update Miaomiaowu Subscription Management (/opt/miaomiaowu)${PLAIN}" "${BOLD}2. Обновление UPD Управление подписками Miaomiaowu (/opt/miaomiaowu)${PLAIN}")"
-    echo -e "$(localized_text "${BOLD}${YELLOW}  3. UPD 更新 Sub-Store${PLAIN}        ${CYAN}(/opt/sub-store)${PLAIN}" "${BOLD}3. UPD update Sub-Store (/opt/sub-store)${PLAIN}" "${BOLD}3. Дополнительный магазин обновления UPD (/opt/sub-store)${PLAIN}")"
-    echo -e "$(localized_text "${BOLD}${YELLOW}  4. UPD 全部更新${PLAIN}" "${BOLD}4. UPD all updated${PLAIN}" "${BOLD}4. UPD все обновлено${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}${YELLOW}  1. 更新 SublinkPro${PLAIN} ${CYAN}(/opt/sublinkpro)${PLAIN}" "${BOLD}${YELLOW}  1. Update SublinkPro${PLAIN} ${CYAN}(/opt/sublinkpro)${PLAIN}" "${BOLD}${YELLOW}  1. Обновить SublinkPro${PLAIN} ${CYAN}(/opt/sublinkpro)${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}${YELLOW}  2. 更新妙妙屋订阅${PLAIN} ${CYAN}(/opt/miaomiaowu)${PLAIN}" "${BOLD}${YELLOW}  2. Update Miaomiaowu${PLAIN} ${CYAN}(/opt/miaomiaowu)${PLAIN}" "${BOLD}${YELLOW}  2. Обновить Miaomiaowu${PLAIN} ${CYAN}(/opt/miaomiaowu)${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}${YELLOW}  3. 更新 Sub-Store${PLAIN} ${CYAN}(/opt/sub-store)${PLAIN}" "${BOLD}${YELLOW}  3. Update Sub-Store${PLAIN} ${CYAN}(/opt/sub-store)${PLAIN}" "${BOLD}${YELLOW}  3. Обновить Sub-Store${PLAIN} ${CYAN}(/opt/sub-store)${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}${YELLOW}  4. 全部更新${PLAIN}" "${BOLD}${YELLOW}  4. Update all${PLAIN}" "${BOLD}${YELLOW}  4. Обновить всё${PLAIN}")"
     echo -e "------------------------------------------------"
-    echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Return / q Return${PLAIN}" "${RED}0. Возврат / q Возврат${PLAIN}")"
+    echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local choice
-    read_trimmed choice "$(localized_text "请选择要更新的项目: " "Please select items to update:" "Пожалуйста, выберите элементы для обновления:")"
+    read_trimmed choice "$(localized_text "选择更新项目: " "Select projects to update: " "Выберите проекты для обновления: ")"
     [[ "$choice" == "0" || "$choice" == "q" || "$choice" == "Q" ]] && return
 
     ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }

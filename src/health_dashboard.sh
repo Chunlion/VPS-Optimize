@@ -332,7 +332,7 @@ health_show_failed_unit_logs() {
             echo -e "${GREEN} $((i + 1)). ${failed_units[$i]}${PLAIN}"
         done
         echo "$(localized_text " 0. 输入其他服务名" "0. Enter another service name" "0. Введите другое имя службы.")"
-        read_trimmed choice "$(localized_text "请选择编号，或直接输入服务名: " "Please select a number, or enter the service name directly:" "Пожалуйста, выберите номер или введите название услуги напрямую:")"
+        read_trimmed choice "$(localized_text "输入编号或服务名: " "Enter a number or service name: " "Введите номер или имя службы: ")"
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#failed_units[@]} )); then
             unit="${failed_units[$((choice - 1))]}"
         elif [[ "$choice" == "0" ]]; then
@@ -361,28 +361,28 @@ func_health_service_recovery_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "诊断/健康检查 > 服务恢复" "Diagnostics/Health Checks > Service Restoration" "Диагностика/Проверка работоспособности > Восстановление службы")"
-        echo -e "$(localized_text "${BOLD}🧰 服务重启与自动拉起${PLAIN}" "${BOLD}🧰 Service restart and automatically pull up${PLAIN}" "${BOLD}🧰 Перезапуск службы и автоматическое подтягивание${PLAIN}")"
+        print_breadcrumb "$(localized_text "诊断/健康检查 > 服务恢复" "Diagnostics/Health Checks > Service recovery" "Диагностика/Проверка состояния > Восстановление служб")"
+        echo -e "$(localized_text "${BOLD}🧰 服务恢复与自动重启${PLAIN}" "${BOLD}🧰 Service recovery and automatic restart${PLAIN}" "${BOLD}🧰 Восстановление и автоматический перезапуск служб${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${CYAN}失败单元：${PLAIN}" "${CYAN}Failed unit:${PLAIN}" "${CYAN}неисправный блок:${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}失败的 systemd 单元：${PLAIN}" "${CYAN}Failed systemd units:${PLAIN}" "${CYAN}Сбойные юниты systemd:${PLAIN}")"
         print_failed_systemd_units
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}常用服务${PLAIN}" "${BOLD}Common services${PLAIN}" "${BOLD}Общие услуги${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}常用服务${PLAIN}" "${BOLD}Common services${PLAIN}" "${BOLD}Основные службы${PLAIN}")"
         local item number label unit
         for item in "${HEALTH_RECOVERY_UNITS[@]}"; do
             IFS='|' read -r number label unit <<< "$item"
             echo -e "${GREEN} ${number}. ${label}${PLAIN} [${unit}] $(health_unit_status_label "$unit")"
         done
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN} r. 重启一个常用服务${PLAIN}" "${GREEN}R. Restart a common service${PLAIN}" "${GREEN}р. Перезапустите общую службу.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} f. 重启失败服务${PLAIN}" "${GREEN}F. Restart failed service${PLAIN}" "${GREEN}ф. Не удалось перезапустить службу.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} a. 为常用服务启用失败自动重启${PLAIN}" "${GREEN}A. Enable automatic restart for common services${PLAIN}" "${GREEN}а. Включить автоматический перезапуск для общих служб${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} x. 清除已恢复的失败状态${PLAIN}" "${GREEN}X. Clear the recovered failure status${PLAIN}" "${GREEN}х. Очистите статус восстановленного сбоя.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} l. 查看服务日志${PLAIN}" "${GREEN}L. View service log${PLAIN}" "${GREEN}л. Посмотреть журнал обслуживания${PLAIN}")"
-        echo -e "$(localized_text "${RED} 0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Return to the previous menu / q Return to${PLAIN}" "${RED}0. Возврат в предыдущее меню / q Возврат в${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} r. 重启常用服务${PLAIN}" "${GREEN} r. Restart a common service${PLAIN}" "${GREEN} r. Перезапустить основную службу${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} f. 重启失败服务${PLAIN}" "${GREEN} f. Restart failed services${PLAIN}" "${GREEN} f. Перезапустить сбойные службы${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} a. 启用失败自动重启${PLAIN}" "${GREEN} a. Enable restart on failure${PLAIN}" "${GREEN} a. Включить перезапуск при сбое${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} x. 清除已恢复的失败状态${PLAIN}" "${GREEN} x. Clear recovered failure states${PLAIN}" "${GREEN} x. Очистить восстановленные состояния сбоя${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} l. 查看服务日志${PLAIN}" "${GREEN} l. View service logs${PLAIN}" "${GREEN} l. Показать журналы служб${PLAIN}")"
+        echo -e "$(localized_text "${RED} 0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
-        read_trimmed choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$choice" in
             r|R)
                 read_trimmed choice "$(localized_text "请输入要重启的服务编号: " "Please enter the service number to be restarted:" "Пожалуйста, введите номер услуги для перезапуска:")"
@@ -415,8 +415,8 @@ func_health_service_recovery_menu() {
 func_health_dashboard() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "诊断/健康检查" "Diagnosis/Health Checkup" "Диагностика/осмотр здоровья")"
-    echo -e "$(localized_text "${BOLD}📈 服务健康总览${PLAIN}" "${BOLD}📈 Service Health Overview${PLAIN}" "${BOLD}📈 Обзор состояния службы${PLAIN}")"
+    print_breadcrumb "$(localized_text "诊断 / 健康检查" "Diagnostics / Health checks" "Диагностика / Проверка состояния")"
+    echo -e "$(localized_text "${BOLD}📈 服务健康总览${PLAIN}" "${BOLD}📈 Service health overview${PLAIN}" "${BOLD}📈 Состояние служб${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local ssh_state="$(localized_text "${RED}未运行${PLAIN}" "${RED}Is not running${PLAIN}" "${RED}не работает${PLAIN}")"

@@ -269,7 +269,7 @@ remove_sni_stack_site() {
 switch_sni_stack_web_proxy_engine() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}切换 443 Web 反代引擎${PLAIN}" "${BOLD}Switch 443 Web reverse proxy engine${PLAIN}" "${BOLD}переключатель 443 Механизм обратного веб-прокси${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}切换 443 Web 反代引擎${PLAIN}" "${BOLD}Switch the Port 443 Web reverse proxy${PLAIN}" "${BOLD}Смена Web-прокси для порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
 
@@ -289,7 +289,7 @@ switch_sni_stack_web_proxy_engine() {
     echo -e "$(localized_text "${GREEN}  2. Nginx 本地 HTTPS 反代${PLAIN}" "${GREEN}2. Nginx local HTTPS reverse proxy${PLAIN}" "${GREEN}2. Nginx локальный HTTPS обратный прокси${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    read_trimmed choice "$(localized_text "请选择 Web 反代引擎（默认保持当前）: " "Please select a web inversion engine (default remains current):" "Пожалуйста, выберите механизм веб-инверсии (по умолчанию остается текущим):")"
+    read_trimmed choice "$(localized_text "选择 Web 反代引擎（直接回车保持当前）: " "Select Web reverse proxy (press Enter to keep current): " "Выберите Web-прокси (Enter — оставить текущий): ")"
     case "$choice" in
         ""|0|q|Q)
             echo -e "$(localized_text "${BLUE}已取消切换 Web 反代引擎。${PLAIN}" "${BLUE}Canceled the switching of the web reverse proxy engine.${PLAIN}" "${BLUE}отменил включение механизма обратный прокси сети.${PLAIN}")"

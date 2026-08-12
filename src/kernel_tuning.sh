@@ -89,10 +89,10 @@ bbr_direct_buffer_mb() {
 prompt_bbr_bandwidth_mbps() {
     local choice output bandwidth
 
-    echo -e "$(localized_text "${CYAN}带宽获取方式：${PLAIN}" "${CYAN}Bandwidth acquisition method:${PLAIN}" "${CYAN}Метод получения полосы пропускания:${PLAIN}")" >&2
-    echo "$(localized_text "  1. 自动测速（使用上传带宽）" "1. Automatic speed measurement (using upload bandwidth)" "1. Автоматическое измерение скорости (с использованием полосы пропускания загрузки)")" >&2
-    echo "$(localized_text "  2. 手动输入套餐带宽" "2. Manually enter the package bandwidth" "2. Введите вручную пропускную способность пакета.")" >&2
-    read_trimmed choice "$(localized_text "请选择 [1]: " "Please select [1]:" "Пожалуйста, выберите [1]:")"
+    echo -e "$(localized_text "${CYAN}带宽来源：${PLAIN}" "${CYAN}Bandwidth source:${PLAIN}" "${CYAN}Источник пропускной способности:${PLAIN}")" >&2
+    echo "$(localized_text "  1. 自动测速（采用上传带宽）" "  1. Run a speed test (use upload bandwidth)" "  1. Выполнить тест скорости (использовать отдачу)")" >&2
+    echo "$(localized_text "  2. 手动填写套餐带宽" "  2. Enter the plan bandwidth manually" "  2. Ввести скорость тарифа вручную")" >&2
+    read_trimmed choice "$(localized_text "选择带宽来源 [1]: " "Select bandwidth source [1]: " "Выберите источник [1]: ")"
     choice="${choice:-1}"
 
     if [[ "$choice" == "1" ]]; then
@@ -190,7 +190,7 @@ func_bbr_direct_tune() {
     echo ""
     echo "$(localized_text "  1. 近距离/亚太为主（主要 RTT 通常低于 100ms）" "1. Short range/Asia-Pacific mainly (main RTT is usually less than 100ms)" "1. Малая дальность/в основном Азиатско-Тихоокеанский регион (основное RTT обычно менее 100 мс)")"
     echo "$(localized_text "  2. 跨洲链路为主（主要 RTT 通常为 150-300ms）" "2. Mainly cross-continental links (main RTT is usually 150-300ms)" "2. В основном межконтинентальные каналы (основное RTT обычно составляет 150–300 мс).")"
-    read_trimmed profile_choice "$(localized_text "请选择主要使用场景 [1]: " "Please select the main usage scenario [1]:" "Пожалуйста, выберите основной сценарий использования [1]:")"
+    read_trimmed profile_choice "$(localized_text "选择主要线路场景 [1]: " "Select the primary route profile [1]: " "Выберите основной профиль маршрута [1]: ")"
     case "${profile_choice:-1}" in
         1) profile="near" ;;
         2) profile="long" ;;
@@ -455,18 +455,15 @@ func_zram_swap() {
     clear
     local mem
     mem=$(free -m | awk '/^Mem:/{print $2}')
-    echo -e "$(localized_text "${CYAN}💡 硬件自适应调优 (检测到本机 ${mem}MB 物理内存)${PLAIN}" "${CYAN}💡 Hardware adaptive tuning (local ${mem}MB physical memory detected)${PLAIN}" "${CYAN}💡 Адаптивная настройка оборудования (обнаружена локальная физическая память ${mem}MB)${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}ZRAM / Swap 调优（检测到 ${mem} MB 内存）${PLAIN}" "${CYAN}ZRAM / Swap tuning (${mem} MB RAM detected)${PLAIN}" "${CYAN}Настройка ZRAM / Swap (обнаружено ${mem} МБ ОЗУ)${PLAIN}")"
     echo -e "------------------------------------------------"
-    echo -e "$(localized_text " ${GREEN}1. 激进档 (适合 1G 以下小鸡)${PLAIN}" "${GREEN}1. Radical file (suitable for chicks below 1G)${PLAIN}" "${GREEN}1. Радикальный напильник (подходит для цыплят весом до 1 г)${PLAIN}")"
-    echo -e "$(localized_text "    - ZRAM 100% 压缩, Swappiness=100。全力防止宕机。" "- ZRAM 100% compression, Swappiness=100. Do your best to prevent downtime." "- ZRAM 100% сжатие, Swappiness=100. Сделайте все возможное, чтобы предотвратить простои.")"
-    echo -e "$(localized_text " ${GREEN}2. 积极档 (适合 2-4G 主流机型)${PLAIN}" "${GREEN}2. Active mode (suitable for 2-4G mainstream models)${PLAIN}" "${GREEN}2. Активный режим (подходит для основных моделей 2–4G)${PLAIN}")"
-    echo -e "$(localized_text "    - ZRAM 70% 压缩, Swappiness=60。平衡性能与空间。" "- ZRAM 70% compression, Swappiness=60. Balance performance and space." "- ZRAM сжатие 70%, Swappiness=60. Баланс производительности и пространства.")"
-    echo -e "$(localized_text " ${GREEN}3. 保守档 (适合 8G 以上性能怪兽)${PLAIN}" "${GREEN}3. Conservative file (suitable for performance monsters above 8G)${PLAIN}" "${GREEN}3. Консервативный файл (подходит для монстров производительности выше 8G)${PLAIN}")"
-    echo -e "$(localized_text "    - ZRAM 25% 压缩, Swappiness=10。追求极致响应速度。" "- ZRAM 25% compression, Swappiness=10. Pursue the ultimate response speed." "- ZRAM сжатие 25%, Swappiness=10. Добейтесь максимальной скорости отклика.")"
+    echo -e "$(localized_text " ${GREEN}1. 高压缩${PLAIN}  ${YELLOW}(1 GB 以下；ZRAM 100%，Swappiness 100)${PLAIN}" "${GREEN} 1. High compression${PLAIN}  ${YELLOW}(under 1 GB; ZRAM 100%, Swappiness 100)${PLAIN}" "${GREEN} 1. Сильное сжатие${PLAIN}  ${YELLOW}(до 1 ГБ; ZRAM 100%, Swappiness 100)${PLAIN}")"
+    echo -e "$(localized_text " ${GREEN}2. 均衡${PLAIN}    ${YELLOW}(2–4 GB；ZRAM 70%，Swappiness 60)${PLAIN}" "${GREEN} 2. Balanced${PLAIN}          ${YELLOW}(2–4 GB; ZRAM 70%, Swappiness 60)${PLAIN}" "${GREEN} 2. Сбалансированный${PLAIN} ${YELLOW}(2–4 ГБ; ZRAM 70%, Swappiness 60)${PLAIN}")"
+    echo -e "$(localized_text " ${GREEN}3. 低交换${PLAIN}  ${YELLOW}(4 GB 以上；ZRAM 25%，Swappiness 10)${PLAIN}" "${GREEN} 3. Low swapping${PLAIN}       ${YELLOW}(more than 4 GB; ZRAM 25%, Swappiness 10)${PLAIN}" "${GREEN} 3. Минимальный swap${PLAIN}  ${YELLOW}(свыше 4 ГБ; ZRAM 25%, Swappiness 10)${PLAIN}")"
     echo -e "------------------------------------------------"
     
     local choice
-    read_trimmed choice "$(localized_text "👉 请选择您的调优挡位 [1/2/3] (直接回车按内存自动匹配): " "👉 Please select your tuning gear [1/2/3] (press Enter directly and press memory to automatically match):" "👉 Пожалуйста, выберите свое тюнинговое оборудование [1/2/3] (нажмите Enter и нажмите «память», чтобы автоматически подобрать совпадение):")"
+    read_trimmed choice "$(localized_text "选择方案 [1/2/3]（直接回车自动匹配）: " "Select a profile [1/2/3] (press Enter for automatic selection): " "Выберите профиль [1/2/3] (Enter — автовыбор): ")"
     
     if [[ -z "$choice" ]]; then
         if [[ "$mem" -lt 1024 ]]; then choice=1
@@ -825,16 +822,16 @@ func_install_kernel() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}☁️  安装/切换优化内核${PLAIN}" "${BOLD}☁️ Install/switch optimized kernel${PLAIN}" "${BOLD}☁️ Установить/переключить оптимизированное ядро${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${GREEN}  1. Cloud/KVM/Virtual 官方云内核${PLAIN} ${YELLOW}(推荐：稳定、轻量、云厂商兼容更好)${PLAIN}" "${GREEN}1. Cloud/KVM/Virtual official cloud kernel (recommended: stable, lightweight, better compatible with cloud vendors)${PLAIN}" "${GREEN}1. Облако/KVM/Официальное виртуальное облачное ядро (рекомендуется: стабильное, легкое, лучше совместимое с поставщиками облачных услуг)${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  1. 官方 Cloud / KVM / Virtual 内核${PLAIN} ${YELLOW}(推荐；稳定、轻量、兼容性优先)${PLAIN}" "${GREEN}  1. Official Cloud / KVM / Virtual kernel${PLAIN} ${YELLOW}(recommended; stable and compatible)${PLAIN}" "${GREEN}  1. Официальное ядро Cloud / KVM / Virtual${PLAIN} ${YELLOW}(рекомендуется; стабильность и совместимость)${PLAIN}")"
     echo -e "$(localized_text "     Debian/Ubuntu 会按架构自动尝试 cloud/kvm/virtual/generic 候选。" "Debian/Ubuntu will automatically try the cloud/kvm/virtual/generic candidate by architecture." "Debian/Ubuntu автоматически попробует кандидата Cloud/kvm/virtual/generic по архитектуре.")"
-    echo -e "$(localized_text "${GREEN}  2. XanMod 性能内核${PLAIN} ${YELLOW}(高级：自动匹配 x64v1-v4 并向下兜底)${PLAIN}" "${GREEN}2. XanMod performance core (Advanced: automatically match x64v1-v4 and dig down)${PLAIN}" "${GREEN}2. Ядро производительности XanMod (Дополнительно: автоматическое сопоставление x64v1-v4 и поиск)${PLAIN}")"
-    echo -e "$(localized_text "     适合：愿意折腾、追求低延迟/新特性；仅 amd64，建议有快照或救援控制台。" "Suitable for: willing to toss, pursuing low latency/new features; amd64 only, snapshot or rescue console recommended." "Подходит для: желающих бросить, стремящихся к низкой задержке/новым функциям; Только amd64, рекомендуется снимок или консоль восстановления.")"
+    echo -e "$(localized_text "${GREEN}  2. XanMod 性能内核${PLAIN} ${YELLOW}(高级；自动匹配 x64v1–v4)${PLAIN}" "${GREEN}  2. XanMod performance kernel${PLAIN} ${YELLOW}(advanced; automatic x64v1–v4 selection)${PLAIN}" "${GREEN}  2. Производительное ядро XanMod${PLAIN} ${YELLOW}(для опытных; автовыбор x64v1–v4)${PLAIN}")"
+    echo -e "$(localized_text "     仅支持 amd64；安装前确认快照或救援控制台可用。" "     amd64 only. Confirm snapshot or rescue-console access first." "     Только amd64. Сначала проверьте доступ к снимку или аварийной консоли.")"
     echo -e "------------------------------------------------"
-    echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Return / q Return${PLAIN}" "${RED}0. Возврат / q Возврат${PLAIN}")"
+    echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
     local kernel_choice virt
-    read_trimmed kernel_choice "$(localized_text "👉 请选择要安装的内核类型 [推荐 1]: " "👉 Please select the kernel type to install [Recommended 1]:" "👉 Пожалуйста, выберите тип ядра для установки [рекомендуется 1]:")"
+    read_trimmed kernel_choice "$(localized_text "选择内核 [1]: " "Select a kernel [1]: " "Выберите ядро [1]: ")"
     kernel_choice="${kernel_choice:-1}"
     [[ "$kernel_choice" == "0" ]] && return
 

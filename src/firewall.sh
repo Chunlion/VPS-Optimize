@@ -1395,21 +1395,20 @@ func_port_connlimit_menu() {
         print_breadcrumb "$(localized_text "防火墙规则管理 > 端口并发连接限制" "Firewall Rule Management > Port Concurrent Connection Limit" "Управление правилами межсетевого экрана > Ограничение количества одновременных подключений к порту")"
         echo -e "$(localized_text "${BOLD}端口并发连接限制${PLAIN}" "${BOLD}Port concurrent connection limit${PLAIN}" "${BOLD}Ограничение количества одновременных подключений к порту${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：按公网端口限制每来源 IP 的 TCP 并发连接数。${PLAIN}" "${YELLOW}Purpose: Limit the number of TCP concurrent connections per source IP based on the public port.${PLAIN}" "${YELLOW}Назначение: Ограничить количество одновременных подключений TCP на IP-адрес источника в зависимости от порта публичной сети.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}说明：这是额外 connlimit 规则，不等同于 UFW/firewalld 放行规则。${PLAIN}" "${YELLOW}Description: This is an additional connlimit rule, not equivalent to the UFW/firewalld allow access rule.${PLAIN}" "${YELLOW}Описание: Это дополнительное правило connlimit, которое не эквивалентно правилу выпуска UFW/firewalld.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}持久化：添加/删除后自动尝试保存；用 [5] 手动检查/重试。${PLAIN}" "${YELLOW}Persistence: Automatically try to save after adding/deleting; use [5] to manually check/retry.${PLAIN}" "${YELLOW}Постоянство: автоматически пытаться сохранить после добавления/удаления; используйте [5] для проверки/повторения вручную.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}按公网端口限制每个来源 IP 的 TCP 并发连接数；此规则独立于 UFW/firewalld 放行规则。${PLAIN}" "${YELLOW}Limit concurrent TCP connections per source IP on a public port. These rules are separate from UFW/firewalld allow rules.${PLAIN}" "${YELLOW}Ограничивает число одновременных TCP-подключений с одного IP к публичному порту. Эти правила не заменяют разрешающие правила UFW/firewalld.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}添加或删除后会自动保存；使用 [5] 检查或重试持久化。${PLAIN}" "${YELLOW}Changes are saved automatically. Use [5] to check or retry persistence.${PLAIN}" "${YELLOW}Изменения сохраняются автоматически. Пункт [5] проверяет или повторяет сохранение.${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 添加端口并发连接限制${PLAIN}" "${GREEN}1. Add port concurrent connection limit${PLAIN}" "${GREEN}1. Добавьте ограничение на количество одновременных подключений к порту.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 删除端口并发连接限制${PLAIN}" "${GREEN}2. Delete the port concurrent connection limit${PLAIN}" "${GREEN}2. Удалите ограничение на количество одновременных подключений к порту.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 查看当前连接数限制规则${PLAIN}" "${GREEN}3. View the current connection limit rule${PLAIN}" "${GREEN}3. Просмотр текущего правила ограничения подключений.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 查看某端口当前连接情况${PLAIN}" "${GREEN}4. Check the current connection status of a port${PLAIN}" "${GREEN}4. Проверьте текущий статус подключения порта.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 保存/检查重启持久化${PLAIN}" "${GREEN}5. Save/check restart persistence${PLAIN}" "${GREEN}5. Сохранить/проверить сохранение перезапуска${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 添加并发连接限制${PLAIN}" "${GREEN}  1. Add a connection limit${PLAIN}" "${GREEN}  1. Добавить ограничение подключений${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 删除并发连接限制${PLAIN}" "${GREEN}  2. Remove a connection limit${PLAIN}" "${GREEN}  2. Удалить ограничение подключений${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 查看当前限制规则${PLAIN}" "${GREEN}  3. View connection-limit rules${PLAIN}" "${GREEN}  3. Показать правила ограничения${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 查看端口当前连接${PLAIN}" "${GREEN}  4. View current connections to a port${PLAIN}" "${GREEN}  4. Показать текущие подключения к порту${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 检查并保存持久化规则${PLAIN}" "${GREEN}  5. Check and save persistent rules${PLAIN}" "${GREEN}  5. Проверить и сохранить постоянные правила${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  0. 返回上一级${PLAIN}" "${BLUE}0. Return to the previous level${PLAIN}" "${BLUE}0. Возврат на предыдущий уровень.${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local connlimit_choice
-        read_trimmed connlimit_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed connlimit_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         case "$connlimit_choice" in
             1) func_add_port_connlimit_rule; pause_return ;;
             2) func_delete_port_connlimit_rule; pause_return ;;
@@ -1743,24 +1742,24 @@ func_firewall_manage() {
         if [[ "$fw_status" == *"active"* ]]; then
             str_fw="$(localized_text "${GREEN}运行中${PLAIN}" "${GREEN}Running${PLAIN}" "${GREEN}работает${PLAIN}")"
         else
-            str_fw="$(localized_text "${RED}已关闭 / 未配置${PLAIN}" "${RED}Is closed /  is not configured${PLAIN}" "${RED}закрыт /  не настроен${PLAIN}")"
+            str_fw="$(localized_text "${RED}已关闭 / 未配置${PLAIN}" "${RED}Disabled / not configured${PLAIN}" "${RED}отключён / не настроен${PLAIN}")"
         fi
 
         echo -e "$(localized_text "当前防火墙状态: [ $str_fw ]" "Current firewall status: [ $str_fw ]" "Текущий статус брандмауэра: [ $str_fw ]")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 查看防火墙放行列表${PLAIN}" "${GREEN}1. View the firewall release list${PLAIN}" "${GREEN}1. Просмотрите список выпусков брандмауэра .${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 启用防火墙 + 最小权限放行规划${PLAIN} ${YELLOW}(可预览/排除，不覆盖原有规则)${PLAIN}" "${GREEN}2. Enable firewall + least privilege release planning   (can be previewed/excluded, does not overwrite the original rules)${PLAIN}" "${GREEN}2. Включить брандмауэр + планирование выпуска с минимальными привилегиями   (можно просмотреть/исключить, не перезаписывает исходные правила)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 手动放行端口${PLAIN} ${YELLOW}(可选 TCP/UDP，支持批量/范围)${PLAIN}" "${GREEN}3. Manually allow access to port   (optional TCP/UDP, supports batch/range)${PLAIN}" "${GREEN}3. Порт ручного выпуска   (дополнительно TCP/UDP, поддерживает пакетный режим/диапазон)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 删除已放行端口${PLAIN} ${YELLOW}(可选 TCP/UDP，支持批量/范围)${PLAIN}" "${GREEN}4. Delete the released port   (optional TCP/UDP, supports batch/range)${PLAIN}" "${GREEN}4. Удалить освобожденный порт   (дополнительно TCP/UDP, поддерживает пакетный режим/диапазон)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 端口并发连接限制${PLAIN} ${YELLOW}(按每来源 IP 限制 TCP 并发)${PLAIN}" "${GREEN}5. Port concurrent connection limit   (TCP concurrency limit per source IP)${PLAIN}" "${GREEN}5. Ограничение одновременного подключения к порту   (ограничение одновременного доступа TCP для каждого IP-адреса источника)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  6. 关闭防火墙${PLAIN}" "${RED}6. Turn off the firewall${PLAIN}" "${RED}6. Отключаем брандмауэр${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 查看已放行端口${PLAIN}" "${GREEN}  1. View allowed ports${PLAIN}" "${GREEN}  1. Показать разрешённые порты${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 启用防火墙并生成最小放行计划${PLAIN} ${YELLOW}(可预览和排除，不覆盖现有规则)${PLAIN}" "${GREEN}  2. Enable firewall with a minimal allow plan${PLAIN} ${YELLOW}(preview and exclude; keep existing rules)${PLAIN}" "${GREEN}  2. Включить межсетевой экран с минимальным планом разрешений${PLAIN} ${YELLOW}(предпросмотр и исключения; текущие правила сохраняются)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 手动放行端口${PLAIN} ${YELLOW}(TCP / UDP，支持批量和范围)${PLAIN}" "${GREEN}  3. Allow ports manually${PLAIN} ${YELLOW}(TCP / UDP, lists and ranges)${PLAIN}" "${GREEN}  3. Разрешить порты вручную${PLAIN} ${YELLOW}(TCP / UDP, списки и диапазоны)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 删除端口放行规则${PLAIN} ${YELLOW}(TCP / UDP，支持批量和范围)${PLAIN}" "${GREEN}  4. Remove port allow rules${PLAIN} ${YELLOW}(TCP / UDP, lists and ranges)${PLAIN}" "${GREEN}  4. Удалить разрешающие правила портов${PLAIN} ${YELLOW}(TCP / UDP, списки и диапазоны)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 限制端口并发连接${PLAIN} ${YELLOW}(按来源 IP 限制 TCP 并发)${PLAIN}" "${GREEN}  5. Limit concurrent connections${PLAIN} ${YELLOW}(TCP per source IP)${PLAIN}" "${GREEN}  5. Ограничить одновременные подключения${PLAIN} ${YELLOW}(TCP для каждого IP-источника)${PLAIN}")"
+        echo -e "$(localized_text "${RED}  6. 关闭防火墙${PLAIN}" "${RED}  6. Disable firewall${PLAIN}" "${RED}  6. Отключить межсетевой экран${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}" "${BLUE}0. Return to the previous menu / q Return to${PLAIN}" "${BLUE}0. Возврат в предыдущее меню / q Возврат в${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}  0. 返回上一级菜单 / q 返回${PLAIN}" "${BLUE}0. Back / q Back${PLAIN}" "${BLUE}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local fw_choice
-        read_trimmed fw_choice "$(localized_text "👉 请选择操作: " "👉 Please select an operation:" "👉 Пожалуйста, выберите операцию:")"
+        read_trimmed fw_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
 
         case $fw_choice in
             1)
@@ -1792,7 +1791,7 @@ func_firewall_manage() {
 
                 selection_cancelled=0
                 while true; do
-                    read_trimmed exclusions "$(localized_text "👉 输入要排除的编号（逗号分隔，直接回车全部保留，q 取消）: " "👉 Enter the numbers to be excluded (separate by commas, press Enter to keep all, q to cancel):" "👉 Введите номера, которые необходимо исключить (разделите запятыми, нажмите Enter, чтобы сохранить все, q для отмены):")"
+                    read_trimmed exclusions "$(localized_text "输入要排除的编号（逗号分隔；直接回车全部保留；q 取消）: " "Numbers to exclude (comma-separated; Enter keeps all; q cancels): " "Номера для исключения (через запятую; Enter — оставить все; q — отмена): ")"
                     if [[ "$exclusions" =~ ^[qQ]$ ]]; then
                         selection_cancelled=1
                         break
@@ -1901,7 +1900,7 @@ func_firewall_manage() {
                         sleep 2
                         continue
                     fi
-                    read_trimmed add_protocol "$(localized_text "👉 请选择协议 tcp/udp/both（默认 tcp）: " "👉 Please select protocol tcp/udp/both (default tcp):" "👉 Пожалуйста, выберите протокол tcp/udp/both (по умолчанию tcp):")"
+                    read_trimmed add_protocol "$(localized_text "协议 tcp/udp/both [tcp]: " "Protocol tcp/udp/both [tcp]: " "Протокол tcp/udp/both [tcp]: ")"
                     add_protocol=$(normalize_firewall_protocol "${add_protocol:-tcp}" 2>/dev/null || true)
                     if [[ -z "$add_protocol" ]]; then
                         echo -e "$(localized_text "${RED}❌ 协议只能是 tcp、udp 或 both。${PLAIN}" "${RED}❌ The protocol can only be tcp, udp or both.${PLAIN}" "${RED}❌ Протокол может быть только tcp, udp или оба.${PLAIN}")"
@@ -1951,7 +1950,7 @@ func_firewall_manage() {
                         sleep 2
                         continue
                     fi
-                    read_trimmed del_protocol "$(localized_text "👉 请选择要删除的协议 tcp/udp/both（默认 both）: " "👉 Please select the protocol to delete tcp/udp/both (default both):" "👉 Пожалуйста, выберите протокол для удаления tcp/udp/both (оба по умолчанию):")"
+                    read_trimmed del_protocol "$(localized_text "删除协议 tcp/udp/both [both]: " "Protocol to remove tcp/udp/both [both]: " "Удалить протокол tcp/udp/both [both]: ")"
                     del_protocol=$(normalize_firewall_protocol "${del_protocol:-both}" 2>/dev/null || true)
                     if [[ -z "$del_protocol" ]]; then
                         echo -e "$(localized_text "${RED}❌ 协议只能是 tcp、udp 或 both。${PLAIN}" "${RED}❌ The protocol can only be tcp, udp or both.${PLAIN}" "${RED}❌ Протокол может быть только tcp, udp или оба.${PLAIN}")"

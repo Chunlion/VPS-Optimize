@@ -268,11 +268,10 @@ edit_sni_stack_runtime_profile() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}🧭 修改 443 分流参数${PLAIN}" "${BOLD}🧭 Modify 443 routing parameters${PLAIN}" "${BOLD}🧭 Изменение 443 параметров маршрутизации${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🧭 修改 443 共享参数${PLAIN}" "${BOLD}🧭 Edit shared Port 443 settings${PLAIN}" "${BOLD}🧭 Изменение общих параметров порта 443${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：后续修改面板端口/路径、订阅端口/路径、REALITY SNI、入口端口时使用。${PLAIN}" "${YELLOW}Purpose: Used when subsequently modifying the panel port/path, subscription port/path, REALITY, SNI, and entry port.${PLAIN}" "${YELLOW}Назначение: используется при последующем изменении порта/пути панели, порта/пути подписки, REALITY, SNI и входного порта.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}修改面板、订阅、REALITY、监听端口和路径；新增网站请使用 [19] -> [8]。${PLAIN}" "${YELLOW}Edit panel, subscription, REALITY, listener, port, and path settings. Add sites from [19] -> [8].${PLAIN}" "${YELLOW}Изменение панели, подписки, REALITY, слушателей, портов и путей. Сайты добавляются через [19] -> [8].${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [8 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [8 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}新增网站请走 [19] -> [8]，不用重跑首次配置。${PLAIN}" "${YELLOW}Please go to [19] -> [8] to add a new website. There is no need to rerun the first configuration.${PLAIN}" "${YELLOW}Пожалуйста, перейдите в [19] -> [8], чтобы добавить новый веб-сайт. Нет необходимости повторно запускать первую конфигурацию.${PLAIN}")"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
             print_sni_stack_current_summary
@@ -281,18 +280,18 @@ edit_sni_stack_runtime_profile() {
             return 1
         fi
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 修改面板/订阅端口与路径${PLAIN}" "${GREEN}1. Modify the panel/subscription port and path${PLAIN}" "${GREEN}1. Измените порт панели/подписки и путь.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 修改 REALITY 本地监听 / 伪装 SNI${PLAIN}" "${GREEN}2. Modify REALITY local listeners/disguise SNI${PLAIN}" "${GREEN}2. Изменить REALITY локальный прослушивание/маскировку SNI${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 修改 Nginx 公网入口 / Web 反代本地 TLS${PLAIN}" "${GREEN}3. Modify Nginx public entry/Web to replace local TLS${PLAIN}" "${GREEN}3. Измените Nginx вход в публичную сеть/Интернет для замены локального TLS.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 修改面板与订阅端口 / 路径${PLAIN}" "${GREEN}  1. Edit panel and subscription ports / paths${PLAIN}" "${GREEN}  1. Изменить порты / пути панели и подписки${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 修改 REALITY 本地监听与目标 SNI${PLAIN}" "${GREEN}  2. Edit REALITY local listener and target SNI${PLAIN}" "${GREEN}  2. Изменить локальный слушатель REALITY и целевой SNI${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 修改公网入口与 Web 本地 TLS${PLAIN}" "${GREEN}  3. Edit public entry and local Web TLS${PLAIN}" "${GREEN}  3. Изменить публичный вход и локальный Web TLS${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}  4. 修改面板域名：请走 [8] -> [9]${PLAIN}" "${YELLOW}4. Modify the panel domain: please go [8] -> [9]${PLAIN}" "${YELLOW}4. Измените доменное имя панели: выберите [8] -> [9].${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  5. 重新应用当前保存的配置${PLAIN}" "${GREEN}5. Reapply the currently saved configuration${PLAIN}" "${GREEN}5. Повторно примените текущую сохраненную конфигурацию.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 重新应用已保存配置${PLAIN}" "${GREEN}  5. Reapply saved configuration${PLAIN}" "${GREEN}  5. Повторно применить сохранённую конфигурацию${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local choice
-        read_trimmed choice "$(localized_text "👉 请输入菜单编号或 ?: " "👉 Please enter menu number or ?:" "👉 Пожалуйста, введите номер меню или ?:")"
+        read_trimmed choice "$(localized_text "输入菜单编号或 ?: " "Enter a menu number or ?: " "Введите номер пункта или ?: ")"
         case "$choice" in
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;

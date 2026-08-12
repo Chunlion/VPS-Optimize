@@ -5,24 +5,24 @@ func_env_install() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "基础组件与常用服务" "Basic components and common services" "Базовые компоненты и общие услуги")"
+        print_breadcrumb "$(localized_text "基础组件与常用服务" "Components and services" "Компоненты и службы")"
         echo -e "$(localized_text "${BOLD}📦 基础组件与常用服务${PLAIN}" "${BOLD}📦 Basic components and common services${PLAIN}" "${BOLD}📦 Базовые компоненты и общие службы${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：安装基础组件、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]，443端口复用只走主菜单 [19]。${PLAIN}" "${YELLOW}Purpose: Install basic components, forwarding tunnels and common services. Caddy/Nginx reverse proxy goes to the main menu [4], Port 443 Reuse only goes to the main menu [19].${PLAIN}" "${YELLOW}Назначение: Установка основных компонентов, туннелей пересылки и общих служб. Caddy/Nginx наоборот использует главное меню [4], а повторное использование порта 443 использует только главное меню [19].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}安装运行环境、转发工具和常用服务。反向代理使用主菜单 [4]，443端口复用使用 [19]。${PLAIN}" "${YELLOW}Install runtimes, forwarding tools, and common services. Use main menu [4] for reverse proxies and [19] for Port 443 Reuse.${PLAIN}" "${YELLOW}Установка сред выполнения, инструментов перенаправления и служб. Обратный прокси — пункт [4], общий порт 443 — пункт [19].${PLAIN}")"
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 基础运行环境${PLAIN}" "${BOLD}▶ Basic operating environment${PLAIN}" "${BOLD}▶ Базовая операционная среда${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  1. Docker 引擎        ${YELLOW}  2. Python 环境        ${GREEN}  3. iperf3 测速工具${PLAIN}" "${GREEN}1. Docker engine 2. Python environment 3. iperf3 speed measurement tool${PLAIN}" "${GREEN}1. Двигатель Docker 2. Python Окружающая среда 3. iperf3 Инструмент измерения скорости${PLAIN}")"
-        echo -e "$(localized_text "${BOLD}${BLUE}▶ 转发、隧道与常用服务${PLAIN}" "${BOLD}▶ Forwarding, tunneling and common services${PLAIN}" "${BOLD}▶ Пересылка, туннелирование и общие услуги${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. WARP 解锁/网络     ${YELLOW}  5. Realm 端口转发     ${GREEN}  6. Gost 隧道${PLAIN}" "${GREEN}4. WARP Unlock/Network 5. Realm port forwarding 6. Gost Tunnel${PLAIN}" "${GREEN}4. WARP Разблокировка/Сеть 5. маршрутизация портов области 6. Gost Туннель${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 基础运行环境${PLAIN}" "${BOLD}▶ Runtimes${PLAIN}" "${BOLD}▶ Среды выполнения${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. Docker 引擎        ${YELLOW}  2. Python 环境        ${GREEN}  3. iperf3 测速工具${PLAIN}" "${GREEN}  1. Docker engine       ${YELLOW}  2. Python runtime      ${GREEN}  3. iperf3${PLAIN}" "${GREEN}  1. Docker               ${YELLOW}  2. Среда Python        ${GREEN}  3. iperf3${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}${BLUE}▶ 转发、隧道与常用服务${PLAIN}" "${BOLD}▶ Forwarding, tunnels, and services${PLAIN}" "${BOLD}▶ Перенаправление, туннели и службы${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. WARP 解锁/网络     ${YELLOW}  5. Realm 端口转发     ${GREEN}  6. Gost 隧道${PLAIN}" "${GREEN}  4. WARP networking      ${YELLOW}  5. Realm forwarding    ${GREEN}  6. Gost tunnel${PLAIN}" "${GREEN}  4. Сеть WARP            ${YELLOW}  5. Перенаправление Realm ${GREEN}  6. Туннель Gost${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  7. Forwardx 转发面板  ${YELLOW}  8. Argox 节点         ${GREEN}  9. 极光面板${PLAIN}" "${GREEN}7. Forwardx forwarding panel 8. Argox node 9. Aurora panel${PLAIN}" "${GREEN}7. Панель пересылки Forwardx 8. Узел Argox 9. Панель Aurora${PLAIN}")"
         echo -e "$(localized_text "${GREEN} 10. nftables NAT 转发  ${YELLOW} 11. Aria2 下载         ${GREEN} 12. PVE 虚拟化工具${PLAIN}" "${GREEN}10. nftables NAT forwarding 11. Aria2 download 12. PVE virtualization tool${PLAIN}" "${GREEN}10. nftables маршрутизация NAT 11. Загрузка Aria2 12. Инструмент виртуализации PVE${PLAIN}")"
         echo -e "$(localized_text "${GREEN} 13. FLVX 哆啦转发面板  ${YELLOW} 14. EasyTier 组网       ${GREEN} 15. Tailscale 组网${PLAIN}" "${GREEN}13. FLVX Doraemon forwarding panel 14. EasyTier networking 15. Tailscale networking${PLAIN}" "${GREEN}13. Панель пересылки FLVX Doraemon 14. Сеть EasyTier 15. Сеть Tailscale${PLAIN}")"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Return to the main menu / q Return to the previous level${PLAIN}" "${RED}0. Возврат в главное меню / q Возврат на предыдущий уровень${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local env_choice
-        read_trimmed env_choice "$(localized_text "👉 选择: " "👉 Choose:" "👉 Выбирайте:")"
+        read_trimmed env_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
         
         case $env_choice in
             1) 

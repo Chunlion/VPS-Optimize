@@ -5,11 +5,11 @@ func_port_kill() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}🔍 网络端口占用排查与进程释放${PLAIN}" "${BOLD}🔍 Network port occupancy check and process release${PLAIN}" "${BOLD}🔍 Проверка занятости сетевого порта и освобождение процесса${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🔍 端口占用排查与进程终止${PLAIN}" "${BOLD}🔍 Port usage and process termination${PLAIN}" "${BOLD}🔍 Занятые порты и завершение процессов${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}当前系统中正在监听的活动端口列表：${PLAIN}" "${YELLOW}List of active ports currently being listened to in the system:${PLAIN}" "${YELLOW}Список активных портов, которые в данный момент прослушиваются в системе:${PLAIN}")"
         echo -e "------------------------------------------------"
-        printf "%-10s %-15s %-20s\n" "$(localized_text "协议" "agreement" "соглашение")" "$(localized_text "端口" "port" "порт")" "$(localized_text "关联进程 (PID)" "Associated Process (PID)" "Связанный процесс (PID)")"
+        printf "%-10s %-15s %-20s\n" "$(localized_text "协议" "Protocol" "Протокол")" "$(localized_text "端口" "Port" "Порт")" "$(localized_text "关联进程 (PID)" "Process (PID)" "Процесс (PID)")"
         
         ss -tulnp | grep -E 'LISTEN|UNCONN' | while read -r line; do
             local proto=$(echo "$line" | awk '{print $1}')
@@ -27,12 +27,12 @@ func_port_kill() {
         done | sort -n -k2 | uniq
         
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}👉 指南：找到您想释放的冲突端口，输入它即可强杀对应进程。${PLAIN}" "${GREEN}👉 Guide: Find the conflicting port you want to release, enter it to kill the corresponding process.${PLAIN}" "${GREEN}👉 Руководство: Найдите конфликтующий порт, который вы хотите освободить, введите его, чтобы завершить соответствующий процесс.${PLAIN}")"
-        echo -e "$(localized_text "${RED}⚠️ 高危：请勿随意终止 sshd (通常为 22) 的端口，否则会断网失联！${PLAIN}" "${RED}⚠️ High risk: Do not terminate the port of sshd (usually 22) at will, otherwise the network will be disconnected!${PLAIN}" "${RED}⚠️ Высокий риск: не отключайте порт sshd (обычно 22) по своему желанию, иначе сеть будет отключена!${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}输入冲突端口后，脚本会强制终止占用该端口的进程。${PLAIN}" "${GREEN}Enter a conflicting port to forcefully terminate its listening process.${PLAIN}" "${GREEN}Введите конфликтующий порт, чтобы принудительно завершить слушающий его процесс.${PLAIN}")"
+        echo -e "$(localized_text "${RED}⚠️ 不要终止 SSH 端口；脚本会拒绝处理检测到的 SSH 监听。${PLAIN}" "${RED}⚠️ Do not terminate the SSH port. Detected SSH listeners are rejected.${PLAIN}" "${RED}⚠️ Не завершайте процесс на порту SSH. Обнаруженные слушатели SSH будут отклонены.${PLAIN}")"
         echo -e "------------------------------------------------"
         
         local p_choice
-        read_trimmed p_choice "$(localized_text "❓ 请输入要强杀释放的端口号 (输入 0 返回主菜单): " "❓ Please enter the port number to be released (enter 0 to return to the main menu):" "❓ Введите номер порта, который нужно освободить (введите 0, чтобы вернуться в главное меню):")"
+        read_trimmed p_choice "$(localized_text "输入要释放的端口（0 返回）: " "Port to release (0 to return): " "Порт для освобождения (0 — назад): ")"
         
         if [[ "$p_choice" == "0" ]]; then break; fi
         
@@ -40,16 +40,16 @@ func_port_kill() {
             local ssh_match
             ssh_match=$(ss -tulnp 2>/dev/null | awk -v port="$p_choice" '$5 ~ ":" port "$" && $0 ~ /(sshd|ssh)/ {print}')
             if [[ -n "$ssh_match" || "$p_choice" == "22" ]]; then
-                echo -e "$(localized_text "${RED}❌ 检测到你选择的是 SSH 相关端口或默认 SSH 端口，为避免失联，已拒绝强杀。${PLAIN}" "${RED}❌ Detected that you have selected the SSH related port or the default SSH port. To avoid losing connection, the forced kill has been refused.${PLAIN}" "${RED}❌ Обнаружено, что вы выбрали порт, связанный с SSH, или порт по умолчанию SSH. Во избежание потери соединения в принудительном удалении было отказано.${PLAIN}")"
+                echo -e "$(localized_text "${RED}❌ 该端口用于 SSH。为避免连接中断，已拒绝终止进程。${PLAIN}" "${RED}❌ This port is used by SSH. Process termination was blocked to prevent disconnection.${PLAIN}" "${RED}❌ Этот порт используется SSH. Завершение процесса заблокировано, чтобы не потерять соединение.${PLAIN}")"
                 sleep 2
                 continue
             fi
-            confirm_danger "$(localized_text "强杀占用端口 ${p_choice} 的进程" "Forcefully kill the process occupying port ${p_choice}" "Принудительно завершить процесс, занимающий порт ${p_choice}.")" "$(localized_text "会对 TCP/UDP ${p_choice} 占用进程发送 SIGKILL，相关服务会立即中断。" "SIGKILL will be sent to the TCP/UDP ${p_choice} occupied process, and the related services will be interrupted immediately." "SIGKILL будет отправлен занятому процессу TCP/UDP ${p_choice}, и соответствующие службы будут немедленно прерваны.")" "$(localized_text "如果杀错服务，需要手动重启对应 systemd 服务或容器。" "If you kill the wrong service, you need to manually restart the corresponding systemd service or container." "Если вы уничтожили не ту службу, вам необходимо вручную перезапустить соответствующую службу или контейнер systemd.")" || {
-                echo -e "$(localized_text "${BLUE}已取消强杀操作。${PLAIN}" "${BLUE}The forced kill operation has been canceled.${PLAIN}" "${BLUE}Операция принудительного уничтожения отменена.${PLAIN}")"
+            confirm_danger "$(localized_text "强制终止占用端口 ${p_choice} 的进程" "Forcefully terminate the process using port ${p_choice}" "Принудительно завершить процесс, использующий порт ${p_choice}")" "$(localized_text "将向占用 TCP/UDP ${p_choice} 的进程发送 SIGKILL，相关服务会立即中断。" "SIGKILL will be sent to processes using TCP/UDP port ${p_choice}; related services will stop immediately." "Процессам, использующим TCP/UDP-порт ${p_choice}, будет отправлен SIGKILL; связанные службы немедленно остановятся.")" "$(localized_text "若终止了错误的进程，需要手动重启对应的 systemd 服务或容器。" "If the wrong process is terminated, restart the corresponding systemd service or container manually." "Если завершён не тот процесс, вручную перезапустите соответствующую службу systemd или контейнер.")" || {
+                echo -e "$(localized_text "${BLUE}已取消终止操作。${PLAIN}" "${BLUE}Process termination canceled.${PLAIN}" "${BLUE}Завершение процесса отменено.${PLAIN}")"
                 sleep 1
                 continue
             }
-            echo -e "$(localized_text "${CYAN}▶ 正在调用底层系统命令强杀端口 $p_choice ...${PLAIN}" "${CYAN}▶ Calling the underlying system command to kill the port $p_choice...${PLAIN}" "${CYAN}▶ Вызов базовой системной команды для закрытия порта $p_choice...${PLAIN}")"
+            echo -e "$(localized_text "${CYAN}▶ 正在终止占用端口 $p_choice 的进程...${PLAIN}" "${CYAN}▶ Terminating processes using port $p_choice...${PLAIN}" "${CYAN}▶ Завершение процессов, использующих порт $p_choice...${PLAIN}")"
             
             # [依赖前置检查]: 确保存在 fuser 工具
             if ! command -v fuser >/dev/null 2>&1; then
