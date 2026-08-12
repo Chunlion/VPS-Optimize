@@ -796,12 +796,12 @@ select_initial_entry_mode() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}选择 443 入口模式${PLAIN}" "${BOLD}Select the 443 entry mode${PLAIN}" "${BOLD}Выберите режим входа 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${GREEN}  1. Nginx Stream 模式${PLAIN}       ${YELLOW}(默认稳定模式，适合大多数用户)${PLAIN}" "${GREEN}1. Nginx Stream mode (default stable mode, suitable for most users)${PLAIN}" "${GREEN}1. Режим Nginx Stream (стабильный режим по умолчанию, подходит для большинства пользователей)${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}  2. Xray Fallback 模式${PLAIN}      ${YELLOW}(需你已在 Xray/3x-ui 准备好公网 443 主入站)${PLAIN}" "${GREEN}2. Xray Fallback mode (you need to prepare the public port 443 main inbound in Xray/3x-ui)${PLAIN}" "${GREEN}2. Xray Резервный режим (необходимо подготовить основное входящее подключение публичного порта 443 в Xray/3x-ui)${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}  3. TCP Peek + Splice 模式${PLAIN}  ${YELLOW}(自动安装依赖、8444 预检并切换)${PLAIN}" "${GREEN}3. TCP Peek + Splice mode (installs dependencies, runs the 8444 preflight, then switches)${PLAIN}" "${GREEN}3. TCP Peek + Splice (установка зависимостей, проверка 8444 и переключение)${PLAIN}")"
-    echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(默认；兼容现有配置)${PLAIN}" "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(default; compatible with existing setups)${PLAIN}" "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(по умолчанию; совместим с текущей конфигурацией)${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  2. Xray Fallback${PLAIN}      ${YELLOW}(需已有公网 443 主入站)${PLAIN}" "${GREEN}  2. Xray Fallback${PLAIN}      ${YELLOW}(requires an existing public 443 main inbound)${PLAIN}" "${GREEN}  2. Xray Fallback${PLAIN}      ${YELLOW}(требуется готовый основной входящий порт 443)${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(自动安装依赖并完成切换预检)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(installs dependencies and runs switch preflight)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(установит зависимости и выполнит проверку перед переключением)${PLAIN}")"
+    echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}  0. Cancel${PLAIN}" "${RED}  0. Отмена${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    read_trimmed choice "$(localized_text "请选择入口模式（默认 1）: " "Please select entry mode (default 1):" "Пожалуйста, выберите режим входа (по умолчанию 1):")"
+    read_trimmed choice "$(localized_text "选择入口模式 [1]: " "Select entry mode [1]: " "Выберите режим входа [1]: ")"
     case "${choice:-1}" in
         1) ENTRY_MODE="nginx-stream" ;;
         2) ENTRY_MODE="xray-fallback" ;;

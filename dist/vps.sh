@@ -8133,15 +8133,15 @@ detect_xui_single_443_defaults() {
 
 print_xui_single_443_detected_defaults() {
     if [[ -z "${XUI_DETECTED_BIN:-}" && -z "${XUI_DETECTED_DB:-}" ]]; then
-        echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 3x-ui 命令或数据库，将使用 443 向导默认值。${PLAIN}" "${YELLOW}⚠️ No 3x-ui command or database detected, 443 wizard default will be used.${PLAIN}" "${YELLOW}⚠️ Команда или база данных 3x-ui не обнаружены, будет использоваться мастер 443 по умолчанию.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 3x-ui，将使用向导默认值；请按实际设置核对面板和订阅端口。${PLAIN}" "${YELLOW}⚠️ 3x-ui was not detected. Wizard defaults will be used; verify the panel and subscription ports against your actual settings.${PLAIN}" "${YELLOW}⚠️ 3x-ui не обнаружен. Будут использованы значения мастера; сверьте порты панели и подписки со своими настройками.${PLAIN}")"
         return 0
     fi
-    echo -e "$(localized_text "${CYAN}▶ 已检测到 3x-ui 当前设置，下面会作为默认值，可按回车沿用：${PLAIN}" "${CYAN}▶ The current setting of 3x-ui has been detected. The following will be used as the default value. You can press Enter to use it:${PLAIN}" "${CYAN}▶ Обнаружена текущая настройка 3x-ui. Следующее значение будет использоваться в качестве значения по умолчанию. Вы можете нажать Enter, чтобы использовать его:.${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}▶ 已读取 3x-ui 设置；下面直接回车即可沿用：${PLAIN}" "${CYAN}▶ Existing 3x-ui settings were detected. Press Enter to keep them:${PLAIN}" "${CYAN}▶ Обнаружены настройки 3x-ui. Нажмите Enter, чтобы сохранить их:${PLAIN}")"
     [[ -n "${XUI_DETECTED_BIN:-}" ]] && echo -e "$(localized_text "  命令：${XUI_DETECTED_BIN}" "Command: ${XUI_DETECTED_BIN}" "Команда: ${XUI_DETECTED_BIN}")"
     [[ -n "${XUI_DETECTED_DB:-}" ]] && echo -e "$(localized_text "  数据库：${XUI_DETECTED_DB}" "Database: ${XUI_DETECTED_DB}" "База данных: ${XUI_DETECTED_DB}")"
     echo -e "$(localized_text "  面板后端：${XUI_DETECTED_PANEL_ADDR}:${XUI_DETECTED_WEB_PORT}${XUI_DETECTED_WEB_BASE_PATH}" "Panel backend: ${XUI_DETECTED_PANEL_ADDR}:${XUI_DETECTED_WEB_PORT}${XUI_DETECTED_WEB_BASE_PATH}" "бэкенд панели: ${XUI_DETECTED_PANEL_ADDR}:${XUI_DETECTED_WEB_PORT}${XUI_DETECTED_WEB_BASE_PATH}")"
     echo -e "$(localized_text "  订阅后端：${XUI_DETECTED_SUB_ADDR}:${XUI_DETECTED_SUB_PORT}${XUI_DETECTED_SUB_PATH}" "Subscription backend: ${XUI_DETECTED_SUB_ADDR}:${XUI_DETECTED_SUB_PORT}${XUI_DETECTED_SUB_PATH}" "бэкенд подписки: ${XUI_DETECTED_SUB_ADDR}:${XUI_DETECTED_SUB_PORT}${XUI_DETECTED_SUB_PATH}")"
-    echo -e "$(localized_text "  Clash/Mihomo 路径：${XUI_DETECTED_SUB_CLASH_PATH}" "Clash/Mihomo Path: ${XUI_DETECTED_SUB_CLASH_PATH}" "Clash/Mihomo Путь: ${XUI_DETECTED_SUB_CLASH_PATH}")"
+    echo -e "$(localized_text "  Clash/Mihomo 路径：${XUI_DETECTED_SUB_CLASH_PATH}" "Clash/Mihomo path: ${XUI_DETECTED_SUB_CLASH_PATH}" "Путь Clash/Mihomo: ${XUI_DETECTED_SUB_CLASH_PATH}")"
 }
 
 clear_xui_cert_settings_for_single_443() {
@@ -10804,12 +10804,12 @@ select_initial_entry_mode() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}选择 443 入口模式${PLAIN}" "${BOLD}Select the 443 entry mode${PLAIN}" "${BOLD}Выберите режим входа 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${GREEN}  1. Nginx Stream 模式${PLAIN}       ${YELLOW}(默认稳定模式，适合大多数用户)${PLAIN}" "${GREEN}1. Nginx Stream mode (default stable mode, suitable for most users)${PLAIN}" "${GREEN}1. Режим Nginx Stream (стабильный режим по умолчанию, подходит для большинства пользователей)${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}  2. Xray Fallback 模式${PLAIN}      ${YELLOW}(需你已在 Xray/3x-ui 准备好公网 443 主入站)${PLAIN}" "${GREEN}2. Xray Fallback mode (you need to prepare the public port 443 main inbound in Xray/3x-ui)${PLAIN}" "${GREEN}2. Xray Резервный режим (необходимо подготовить основное входящее подключение публичного порта 443 в Xray/3x-ui)${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}  3. TCP Peek + Splice 模式${PLAIN}  ${YELLOW}(自动安装依赖、8444 预检并切换)${PLAIN}" "${GREEN}3. TCP Peek + Splice mode (installs dependencies, runs the 8444 preflight, then switches)${PLAIN}" "${GREEN}3. TCP Peek + Splice (установка зависимостей, проверка 8444 и переключение)${PLAIN}")"
-    echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}0. Cancel${PLAIN}" "${RED}0. Отмена${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(默认；兼容现有配置)${PLAIN}" "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(default; compatible with existing setups)${PLAIN}" "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(по умолчанию; совместим с текущей конфигурацией)${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  2. Xray Fallback${PLAIN}      ${YELLOW}(需已有公网 443 主入站)${PLAIN}" "${GREEN}  2. Xray Fallback${PLAIN}      ${YELLOW}(requires an existing public 443 main inbound)${PLAIN}" "${GREEN}  2. Xray Fallback${PLAIN}      ${YELLOW}(требуется готовый основной входящий порт 443)${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(自动安装依赖并完成切换预检)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(installs dependencies and runs switch preflight)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(установит зависимости и выполнит проверку перед переключением)${PLAIN}")"
+    echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}  0. Cancel${PLAIN}" "${RED}  0. Отмена${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    read_trimmed choice "$(localized_text "请选择入口模式（默认 1）: " "Please select entry mode (default 1):" "Пожалуйста, выберите режим входа (по умолчанию 1):")"
+    read_trimmed choice "$(localized_text "选择入口模式 [1]: " "Select entry mode [1]: " "Выберите режим входа [1]: ")"
     case "${choice:-1}" in
         1) ENTRY_MODE="nginx-stream" ;;
         2) ENTRY_MODE="xray-fallback" ;;
@@ -11664,10 +11664,10 @@ reapply_sni_stack_from_env() {
 collect_sni_stack_config() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}443端口复用配置${PLAIN}" "${BOLD}Port 443 Reuse configuration${PLAIN}" "${BOLD}Конфигурация повторного использования порта 443${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}443端口复用部署向导${PLAIN}" "${BOLD}Port 443 Reuse setup${PLAIN}" "${BOLD}Настройка общего порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}公网 443 将由你选择的入口模式监听；Web 域名、反代引擎、证书和白名单为三种模式共享。${PLAIN}" "${YELLOW}Public port 443 will be monitored by the entry mode you choose; the web domain, reverse proxy engine, certificate and whitelist are shared by the three modes.${PLAIN}" "${YELLOW}Публичный порт  443 будет контролироваться выбранным вами режимом входа; имя веб-домена, механизм обратного прокси-сервера, сертификат и белый список являются общими для всех трех режимов.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}Web 反代引擎、Xray/3x-ui 本地后端默认绑定 127.0.0.1。${PLAIN}" "${YELLOW}Web reverse proxy engine and Xray/3x-ui local backend are bound to 127.0.0.1 by default.${PLAIN}" "${YELLOW}Механизм обратный прокси Web и локальный бэкэнд Xray/3x-ui по умолчанию привязаны к 127.0.0.1.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}所选入口模式将独占公网 443；Web 域名、反代引擎、证书和白名单由三种模式共用。${PLAIN}" "${YELLOW}The selected entry mode owns public port 443. Web domains, the reverse proxy, certificates, and allowlists are shared across all modes.${PLAIN}" "${YELLOW}Выбранный режим займёт публичный порт 443. Web-домены, обратный прокси, сертификаты и списки доступа общие для всех режимов.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}本地后端默认只监听 127.0.0.1；每项直接回车即可沿用括号中的默认值。${PLAIN}" "${YELLOW}Local backends listen on 127.0.0.1 by default. Press Enter to keep the value shown in parentheses.${PLAIN}" "${YELLOW}По умолчанию локальные бэкенды слушают 127.0.0.1. Нажмите Enter, чтобы принять значение в скобках.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local default_panel_addr="127.0.0.1"
@@ -11691,14 +11691,15 @@ collect_sni_stack_config() {
     echo -e "------------------------------------------------"
 
     local panel_domain_input reality_sni_input
-    read_trimmed panel_domain_input "$(localized_text "面板域名（必填，例如 panel.example.com）: " "Panel domain (required, for example panel.example.com):" "Доменное имя Panel (обязательно, например Panel.example.com):")"
+    echo -e "$(localized_text "${BOLD}${BLUE}▶ [1/5] 域名与 Web 反代引擎${PLAIN}" "${BOLD}${BLUE}▶ [1/5] Domains and Web reverse proxy${PLAIN}" "${BOLD}${BLUE}▶ [1/5] Домены и Web-прокси${PLAIN}")"
+    read_trimmed panel_domain_input "$(localized_text "面板域名（仅域名；示例值 panel.example.com）: " "Panel domain (hostname only; example: panel.example.com): " "Домен панели (только имя; пример: panel.example.com): ")"
     PANEL_DOMAIN="$panel_domain_input"
     local web_engine_choice
     WEB_PROXY_ENGINE="caddy"
-    echo -e "$(localized_text "${CYAN}请选择 443端口复用 Web 反代引擎：${PLAIN}" "${CYAN}Please select Port 443 Reuse Web reverse proxy engine:${PLAIN}" "${CYAN}Выберите механизм веб-прокси с повторным использованием порта 443:${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}  1. Caddy 本地 HTTPS 反代${PLAIN} ${YELLOW}(默认，兼容现有 443端口复用配置)${PLAIN}" "${GREEN}1. Caddy local HTTPS reverse proxy   (default, compatible with existing Port 443 Reuse configuration)${PLAIN}" "${GREEN}1. Caddy локальный HTTPS обратный прокси (по умолчанию, совместимо с существующей конфигурацией повторного использования порта 443)${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}  2. Nginx 本地 HTTPS 反代${PLAIN} ${YELLOW}(只监听本地端口，不抢公网 443)${PLAIN}" "${GREEN}2. Nginx local HTTPS reverse proxy (only listens to the local port, does not grab the public port 443)${PLAIN}" "${GREEN}2. Nginx локальный HTTPS обратный прокси-сервер   (прослушивает только локальный порт и не захватывает публичный порт 443)${PLAIN}")"
-    read_trimmed web_engine_choice "$(localized_text "请选择 Web 反代引擎（默认 1）: " "Please select a web reverse proxy engine (default 1):" "Пожалуйста, выберите механизм веб-прокси (по умолчанию 1):")"
+    echo -e "$(localized_text "${CYAN}Web 反代引擎：${PLAIN}" "${CYAN}Web reverse proxy:${PLAIN}" "${CYAN}Web-прокси:${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  1. Caddy${PLAIN} ${YELLOW}(默认；兼容现有配置)${PLAIN}" "${GREEN}  1. Caddy${PLAIN} ${YELLOW}(default; compatible with existing setups)${PLAIN}" "${GREEN}  1. Caddy${PLAIN} ${YELLOW}(по умолчанию; совместим с текущей конфигурацией)${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  2. Nginx${PLAIN} ${YELLOW}(仅监听本地 HTTPS 端口)${PLAIN}" "${GREEN}  2. Nginx${PLAIN} ${YELLOW}(listens only on a local HTTPS port)${PLAIN}" "${GREEN}  2. Nginx${PLAIN} ${YELLOW}(слушает только локальный HTTPS-порт)${PLAIN}")"
+    read_trimmed web_engine_choice "$(localized_text "选择 Web 反代引擎 [1]: " "Select Web reverse proxy [1]: " "Выберите Web-прокси [1]: ")"
     case "${web_engine_choice:-1}" in
         1) WEB_PROXY_ENGINE="caddy" ;;
         2) WEB_PROXY_ENGINE="nginx" ;;
@@ -11714,25 +11715,30 @@ collect_sni_stack_config() {
     SNI_IP_WHITELIST_RANGES=()
     local site_domains_input
     local -a site_domain_raw_inputs=()
-    site_domains_input=$(ask_with_default "$(localized_text "网站/反代域名（可选，多个用英文逗号分隔，例如 site1.example.com,site2.example.com）" "Website/reverse domain (optional, separate multiple with commas, such as site1.example.com,site2.example.com)" "Веб-сайт/обратное доменное имя (необязательно, разделяйте запятыми, например site1.example.com,site2.example.com)")" "")
+    echo -e "$(localized_text "${YELLOW}格式示例：app.example.com,status.example.com。只填域名，不要带 https://、端口或路径。${PLAIN}" "${YELLOW}Example format: app.example.com,status.example.com. Enter hostnames only—no https://, port, or path.${PLAIN}" "${YELLOW}Пример: app.example.com,status.example.com. Указывайте только домены, без https://, порта и пути.${PLAIN}")"
+    read_trimmed site_domains_input "$(localized_text "其他 Web 域名（可留空；多个用英文逗号分隔）: " "Additional Web domains (optional; separate with commas): " "Дополнительные Web-домены (необязательно; через запятую): ")"
     split_csv_to_array "$site_domains_input" SITE_DOMAINS
     site_domain_raw_inputs=("${SITE_DOMAINS[@]}")
-    echo -e "$(localized_text "${YELLOW}REALITY 伪装 SNI 请填写外部真实 HTTPS 站点域名，不要填写面板域名或节点域名。${PLAIN}" "${YELLOW}REALITY Disguise SNI Please fill in the external real HTTPS site domain, do not fill in the panel domain or node domain.${PLAIN}" "${YELLOW}REALITY Маскировка SNI Пожалуйста, укажите внешнее реальное доменное имя сайта HTTPS, не заполняйте имя домена панели или имя домена узла.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}模板示例：your-reality-sni.example.com（请替换成你自己选择的真实站点）${PLAIN}" "${YELLOW}Template example: your-reality-sni.example.com (please replace it with the real site of your choice)${PLAIN}" "${YELLOW}Пример шаблона : your-reality-sni.example.com (замените его реальным сайтом по вашему выбору)${PLAIN}")"
-    read_trimmed reality_sni_input "$(localized_text "REALITY 伪装 SNI（必填）: " "REALITY Disguise SNI (required):" "REALITY Маскировка SNI (обязательно):")"
+    echo -e "$(localized_text "${YELLOW}REALITY SNI 必须是你实际选择的外部 HTTPS 站点，优先使用不经过 CDN 的域名；不要填写面板域名或节点域名。${PLAIN}" "${YELLOW}REALITY SNI must be an external HTTPS site you actually selected. Prefer a non-CDN hostname; do not use the panel or node domain.${PLAIN}" "${YELLOW}REALITY SNI должен указывать на выбранный вами внешний HTTPS-сайт. Предпочтителен домен без CDN; не используйте домен панели или узла.${PLAIN}")"
+    read_trimmed reality_sni_input "$(localized_text "REALITY 目标 SNI（仅域名）: " "REALITY target SNI (hostname only): " "Целевой SNI REALITY (только домен): ")"
     REALITY_SNI="$reality_sni_input"
     STRICT_SNI_GATE="false"
     if strict_sni_gate_mode_supported "${ENTRY_MODE:-nginx-stream}"; then
-        echo -e "$(localized_text "${YELLOW}若 REALITY target 使用 CDN，验证失败的连接可能把服务器变成转发节点。严格 SNI 门禁会自动放行面板、网站、TCP/Xray 路由和 REALITY SNI，其他 SNI 直接丢弃。${PLAIN}" "${YELLOW}If the REALITY target uses a CDN, failed-authentication connections can turn the server into a relay. The strict SNI gate automatically allows panel, site, TCP/Xray route, and REALITY SNIs, and drops all other SNIs.${PLAIN}" "${YELLOW}Если REALITY target использует CDN, подключения с ошибкой проверки могут превратить сервер в ретранслятор. Строгий контроль автоматически разрешает SNI панели, сайтов, маршрутов TCP/Xray и REALITY, а остальные отклоняет.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}若 REALITY SNI 使用 CDN，应启用严格 SNI 门禁：已登记的面板、网站、Xray 路由和 REALITY SNI 自动放行，其他 SNI 直接丢弃。${PLAIN}" "${YELLOW}If the REALITY SNI uses a CDN, enable the strict SNI gate. It allows registered panel, site, Xray-route, and REALITY SNIs and drops all others.${PLAIN}" "${YELLOW}Если REALITY SNI использует CDN, включите строгий контроль SNI. Зарегистрированные SNI панели, сайтов, маршрутов Xray и REALITY будут разрешены, остальные — отклонены.${PLAIN}")"
         if confirm_default_no "$(localized_text "是否启用严格 SNI 门禁？(y/N): " "Enable the strict SNI gate? (y/N): " "Включить строгий контроль SNI? (y/N): ")"; then
             STRICT_SNI_GATE="true"
         fi
     fi
-    NGINX_LISTEN_ADDR=$(ask_with_default "$(localized_text "Nginx 公网监听地址" "Nginx public listening address" "Nginx адрес прослушивания публичной сети")" "0.0.0.0")
-    NGINX_LISTEN_PORT=$(ask_with_default "$(localized_text "Nginx 公网监听端口" "Nginx public listening port" "Порт прослушивания публичной сети Nginx")" "443")
+    echo -e "------------------------------------------------"
+    echo -e "$(localized_text "${BOLD}${BLUE}▶ [2/5] 公网入口${PLAIN}" "${BOLD}${BLUE}▶ [2/5] Public entry${PLAIN}" "${BOLD}${BLUE}▶ [2/5] Публичная точка входа${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}一般保持 0.0.0.0:443；只有明确使用其他公网地址或端口时才修改。${PLAIN}" "${YELLOW}Keep 0.0.0.0:443 unless you intentionally use another public address or port.${PLAIN}" "${YELLOW}Обычно оставляйте 0.0.0.0:443. Меняйте только при использовании другого публичного адреса или порта.${PLAIN}")"
+    NGINX_LISTEN_ADDR=$(ask_with_default "$(localized_text "公网入口监听地址" "Public entry listen address" "Адрес публичной точки входа")" "0.0.0.0")
+    NGINX_LISTEN_PORT=$(ask_with_default "$(localized_text "公网入口端口" "Public entry port" "Порт публичной точки входа")" "443")
 
     local advanced_mode
-    read_trimmed advanced_mode "$(localized_text "是否进入高级模式并允许修改本地服务监听地址？(Y/n，默认 y): " "Do you want to enter advanced mode and allow modification of the local service listening address? (Y/n, default y):" "Хотите войти в расширенный режим и разрешить изменение адреса прослушивания локальной службы? (Да/нет, по умолчанию y):")"
+    echo -e "------------------------------------------------"
+    echo -e "$(localized_text "${BOLD}${BLUE}▶ [3/5] 本地后端${PLAIN}" "${BOLD}${BLUE}▶ [3/5] Local backends${PLAIN}" "${BOLD}${BLUE}▶ [3/5] Локальные бэкенды${PLAIN}")"
+    read_trimmed advanced_mode "$(localized_text "修改本地监听地址？(y/N，默认 N；一般直接回车): " "Change local listen addresses? (y/N, default N; usually press Enter): " "Изменить локальные адреса прослушивания? (y/N, по умолчанию N; обычно нажмите Enter): ")"
     if is_yes "$advanced_mode"; then
         CADDY_LISTEN_ADDR=$(ask_with_default "$(localized_text "$(web_proxy_engine_label "$WEB_PROXY_ENGINE")监听地址" "$(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") listening address" "Адрес прослушивания $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\")")" "127.0.0.1")
         XRAY_LISTEN_ADDR=$(ask_with_default "$(localized_text "Xray REALITY 本地监听地址" "Xray REALITY local listening address" "Xray REALITY локальный адрес прослушивания")" "127.0.0.1")
@@ -11743,28 +11749,33 @@ collect_sni_stack_config() {
         XRAY_LISTEN_ADDR="127.0.0.1"
         PANEL_LISTEN_ADDR="$default_panel_addr"
         SUB_LISTEN_ADDR="$default_sub_addr"
-        echo -e "$(localized_text "${GREEN}普通模式：Web 反代引擎/Xray/3x-ui/订阅/网站后端均使用 127.0.0.1。${PLAIN}" "${GREEN}Normal mode: Web reverse proxy engine/Xray/3x-ui/subscription/website backend all use 127.0.0.1.${PLAIN}" "${GREEN}Обычный режим : механизм веб-прокси/Xray/3x-ui/подписка/бэкэнд веб-сайта используют 127.0.0.1.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}本地监听地址采用检测值或安全默认值；Web 反代和 Xray 使用 127.0.0.1。${PLAIN}" "${GREEN}Using detected or safe local addresses; the Web proxy and Xray use 127.0.0.1.${PLAIN}" "${GREEN}Используются обнаруженные или безопасные локальные адреса; Web-прокси и Xray работают на 127.0.0.1.${PLAIN}")"
     fi
 
-    CADDY_LISTEN_PORT=$(ask_with_default "$(localized_text "$(web_proxy_engine_label "$WEB_PROXY_ENGINE")监听端口" "$(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") listening port" "Порт прослушивания $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\")")" "8443")
-    XRAY_LISTEN_PORT=$(ask_with_default "$(localized_text "Xray REALITY 本地监听端口" "Xray REALITY local listening port" "Xray REALITY локальный порт прослушивания")" "1443")
-    PANEL_LISTEN_PORT=$(ask_with_default "$(localized_text "3x-ui 面板端口" "3x-ui panel port" "Порт панели 3x-ui")" "$default_panel_port")
-    PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "3x-ui 面板公网路径 / webBasePath（必须和面板 url 根路径一致）" "3x-ui public panel path / webBasePath (must match the panel URL root path)" "Публичный путь панели 3x-ui / webBasePath (должен совпадать с корневым URL панели)")" "$default_panel_path")")
-    SUB_LISTEN_PORT=$(ask_with_default "$(localized_text "3x-ui 订阅服务端口（可自定义）" "3x-ui Subscription service port (customizable)" "3x-ui Порт службы подписки (настраиваемый)")" "$default_sub_port")
-    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "3x-ui 普通订阅路径前缀（不带端口和客户端 Subscription，建议写 /sub/）" "3x-ui standard subscription path prefix (without port or client identifier; recommended: /sub/)" "Префикс обычной подписки 3x-ui (без порта и идентификатора клиента; рекомендуется /sub/)")" "$default_sub_path")")
-    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "3x-ui Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "3x-ui Clash/Mihomo subscription path prefix (without client identifier; recommended: /clash/)" "Префикс подписки Clash/Mihomo в 3x-ui (без идентификатора клиента; рекомендуется /clash/)")" "$default_clash_path")")
+    echo -e "$(localized_text "${YELLOW}下面均为本机内部端口，不要填写公网 443；3x-ui 面板和订阅端口须与面板当前设置一致。${PLAIN}" "${YELLOW}The following are internal ports. Do not enter public port 443; the 3x-ui panel and subscription ports must match the current panel settings.${PLAIN}" "${YELLOW}Ниже указываются внутренние порты. Не вводите публичный порт 443; порты панели и подписки должны совпадать с настройками 3x-ui.${PLAIN}")"
+    CADDY_LISTEN_PORT=$(ask_with_default "$(localized_text "$(web_proxy_engine_label "$WEB_PROXY_ENGINE") 本地 HTTPS 端口" "$(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") local HTTPS port" "Локальный HTTPS-порт $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\")")" "8443")
+    XRAY_LISTEN_PORT=$(ask_with_default "$(localized_text "Xray REALITY 本地入站端口" "Xray REALITY local inbound port" "Локальный входной порт Xray REALITY")" "1443")
+    PANEL_LISTEN_PORT=$(ask_with_default "$(localized_text "3x-ui 面板后端端口" "3x-ui panel backend port" "Порт бэкенда панели 3x-ui")" "$default_panel_port")
+    echo -e "$(localized_text "${YELLOW}路径只填以 / 开头和结尾的前缀，不要填域名、端口或客户端 ID。${PLAIN}" "${YELLOW}Paths must start and end with /. Do not include a domain, port, or client ID.${PLAIN}" "${YELLOW}Пути должны начинаться и заканчиваться символом /. Не указывайте домен, порт или ID клиента.${PLAIN}")"
+    PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "3x-ui 面板路径（须与 webBasePath 一致）" "3x-ui panel path (must match webBasePath)" "Путь панели 3x-ui (должен совпадать с webBasePath)")" "$default_panel_path")")
+    SUB_LISTEN_PORT=$(ask_with_default "$(localized_text "3x-ui 订阅后端端口" "3x-ui subscription backend port" "Порт бэкенда подписки 3x-ui")" "$default_sub_port")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "普通订阅路径（仅路径前缀）" "Standard subscription path (path prefix only)" "Путь обычной подписки (только префикс)")" "$default_sub_path")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "Clash/Mihomo 订阅路径（仅路径前缀）" "Clash/Mihomo subscription path (path prefix only)" "Путь подписки Clash/Mihomo (только префикс)")" "$default_clash_path")")
     local panel_whitelist_enabled panel_whitelist_input panel_whitelist_ranges current_client_ip
     local -a panel_whitelist_array=()
-    read_trimmed panel_whitelist_enabled "$(localized_text "是否为面板域名启用 IP 白名单？(y/N，默认 N): " "Enable an IP allowlist for the panel domain? (y/N, default N): " "Включить список разрешённых IP-адресов для домена панели? (y/N, по умолчанию N): ")"
+    echo -e "------------------------------------------------"
+    echo -e "$(localized_text "${BOLD}${BLUE}▶ [4/5] 访问控制与网站后端${PLAIN}" "${BOLD}${BLUE}▶ [4/5] Access control and site backends${PLAIN}" "${BOLD}${BLUE}▶ [4/5] Контроль доступа и бэкенды сайтов${PLAIN}")"
+    read_trimmed panel_whitelist_enabled "$(localized_text "限制面板访问 IP？(y/N，默认 N): " "Restrict panel access by IP? (y/N, default N): " "Ограничить доступ к панели по IP? (y/N, по умолчанию N): ")"
     if is_yes "$panel_whitelist_enabled"; then
         if ! web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-nginx-stream}" "$WEB_PROXY_ENGINE"; then
             echo -e "$(localized_text "${RED}❌ xray-fallback 模式不支持 Web 白名单。${PLAIN}" "${RED}❌ xray-fallback mode does not support web whitelisting.${PLAIN}" "${RED}❌ Резервный режим xray не поддерживает белый список веб-сайтов.${PLAIN}")"
-            echo -e "$(localized_text "${YELLOW}请改用 Nginx Stream/TCP Peek 入口模式。${PLAIN}" "${YELLOW}For , please use Nginx Stream/TCP Peek entry mode instead.${PLAIN}" "${YELLOW}Для вместо этого используйте режим ввода Nginx Stream/TCP Peek.${PLAIN}")"
+            echo -e "$(localized_text "${YELLOW}如需 Web 白名单，请改用 Nginx Stream 或 TCP Peek。${PLAIN}" "${YELLOW}Use Nginx Stream or TCP Peek if you need a Web allowlist.${PLAIN}" "${YELLOW}Для Web-списка доступа используйте Nginx Stream или TCP Peek.${PLAIN}")"
             return 1
         fi
         current_client_ip=$(detect_ssh_client_ip)
-        [[ -n "$current_client_ip" ]] && echo -e "$(localized_text "${YELLOW}当前 SSH 来源 IP 可能是：${current_client_ip}，请确认已加入白名单。${PLAIN}" "${YELLOW}The current source IP of SSH may be: ${current_client_ip}. Please confirm that it has been added to the whitelist.${PLAIN}" "${YELLOW}Текущий исходный IP-адрес SSH может быть: ${current_client_ip}. Пожалуйста, подтвердите, что он был добавлен в белый список.${PLAIN}")"
-        read_trimmed panel_whitelist_input "$(localized_text "请输入允许访问面板域名的 IP/CIDR（多个用空格或英文逗号分隔）: " "Please enter the IP/CIDR of the domain that is allowed to access the panel (separate multiple by spaces or commas):" "Пожалуйста, введите IP/CIDR доменного имени, которому разрешен доступ к панели (разделяйте кратные пробелами или запятыми):")"
+        [[ -n "$current_client_ip" ]] && echo -e "$(localized_text "${YELLOW}当前 SSH 来源 IP：${current_client_ip}。请将它加入允许列表，避免面板被锁定。${PLAIN}" "${YELLOW}Current SSH source IP: ${current_client_ip}. Add it to the allowlist to avoid locking yourself out of the panel.${PLAIN}" "${YELLOW}Текущий IP-адрес SSH: ${current_client_ip}. Добавьте его в список, чтобы не потерять доступ к панели.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}示例值：203.0.113.10,203.0.113.0/24；多个值可用空格或英文逗号分隔。${PLAIN}" "${YELLOW}Example: 203.0.113.10,203.0.113.0/24. Separate multiple values with spaces or commas.${PLAIN}" "${YELLOW}Пример: 203.0.113.10,203.0.113.0/24. Разделяйте значения пробелами или запятыми.${PLAIN}")"
+        read_trimmed panel_whitelist_input "$(localized_text "允许访问面板的 IP/CIDR: " "Allowed panel IPs/CIDRs: " "Разрешённые IP/CIDR для панели: ")"
         normalize_ip_whitelist_input "$panel_whitelist_input" panel_whitelist_array || return 1
         append_vps_public_ips_to_whitelist panel_whitelist_array
         panel_whitelist_ranges=$(join_array_by_space "${panel_whitelist_array[@]}")
@@ -11777,20 +11788,22 @@ collect_sni_stack_config() {
                 continue
             fi
             if is_yes "$advanced_mode"; then
-                SITE_BACKEND_ADDRS[$i]=$(ask_with_default "$(localized_text "网站 ${SITE_DOMAINS[$i]} 的后端地址" "The backend address of the website ${SITE_DOMAINS[$i]}" "Внутренний адрес сайта ${SITE_DOMAINS[$i]}")" "127.0.0.1")
+                SITE_BACKEND_ADDRS[$i]=$(ask_with_default "$(localized_text "${SITE_DOMAINS[$i]} 后端监听地址" "${SITE_DOMAINS[$i]} backend listen address" "Адрес бэкенда ${SITE_DOMAINS[$i]}")" "127.0.0.1")
             else
                 SITE_BACKEND_ADDRS[$i]="127.0.0.1"
             fi
-            SITE_BACKEND_PORTS[$i]=$(ask_with_default "$(localized_text "网站 ${SITE_DOMAINS[$i]} 的后端端口" "Backend port of website ${SITE_DOMAINS[$i]}" "Внутренний порт веб-сайта ${SITE_DOMAINS[$i]}")" "$default_site_port")
+            SITE_BACKEND_PORTS[$i]=$(ask_with_default "$(localized_text "${SITE_DOMAINS[$i]} 后端端口" "${SITE_DOMAINS[$i]} backend port" "Порт бэкенда ${SITE_DOMAINS[$i]}")" "$default_site_port")
             default_site_port=$((default_site_port + 1))
         done
     fi
 
-    echo -e "$(localized_text "${YELLOW}443端口复用需要 3x-ui 面板/订阅后端使用 HTTP，由 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 统一托管公网证书。${PLAIN}" "${YELLOW}Port 443 Reuse requires the 3x-ui panel/subscription backend to use HTTP, which will centrally manage the public certificate.${PLAIN}" "${YELLOW}Для повторного использования порта 443 требуется, чтобы бэкенд панели/подписки 3x-ui использовала HTTP, который будет централизованно управлять сертификатом публичной сети.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}本向导会让 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 通过 HTTP 连接 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} 和 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}" "${YELLOW}This wizard will allow $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") to connect ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} and ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} through HTTP.${PLAIN}" "${YELLOW}Этот мастер позволит $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") соединить ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT} и ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT} через HTTP.${PLAIN}")"
-    echo -e "$(localized_text "${CYAN}证书处理分两种情况：${PLAIN}" "${CYAN}Certificate processing is divided into two situations:${PLAIN}" "${CYAN}Обработка сертификата делится на две ситуации:.${PLAIN}")"
-    echo -e "$(localized_text "  3x-ui 3.x 新安装：在官方安装器选第 4 项 Skip SSL，再选 y 仅绑定 127.0.0.1；本步骤只做兜底检查。" "  New 3x-ui 3.x installation: choose option 4, Skip SSL, then enter y to bind only to 127.0.0.1. This step is only a fallback check." "  Новая установка 3x-ui 3.x: выберите пункт 4 Skip SSL, затем введите y для привязки только к 127.0.0.1. Этот шаг выполняет только проверку.")"
-    echo -e "$(localized_text "  3x-ui 2.x、升级旧配置、或曾经启用过 3x-ui SSL：继续按旧流程清空面板/订阅证书路径。" "3x-ui 2.x, upgrading old configuration, or 3x-ui SSL has been enabled: Continue to clear the panel/subscription certificate path according to the old process." "3x-ui 2.x, обновление старой конфигурации или 3x-ui SSL включен: продолжайте очищать путь сертификата панели/подписки в соответствии со старым процессом.")"
+    echo -e "------------------------------------------------"
+    echo -e "$(localized_text "${BOLD}${BLUE}▶ [5/5] 3x-ui 证书与 Cloudflare Token${PLAIN}" "${BOLD}${BLUE}▶ [5/5] 3x-ui certificates and Cloudflare token${PLAIN}" "${BOLD}${BLUE}▶ [5/5] Сертификаты 3x-ui и токен Cloudflare${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}公网证书由 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 统一托管；3x-ui 面板和订阅后端通过 HTTP 提供服务。${PLAIN}" "${YELLOW}$(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") manages the public certificate. The 3x-ui panel and subscription backends serve HTTP locally.${PLAIN}" "${YELLOW}Публичным сертификатом управляет $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\"); бэкенды панели и подписки 3x-ui локально используют HTTP.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}本地连接：面板 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}；订阅 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}" "${YELLOW}Local targets: panel ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}; subscription ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}.${PLAIN}" "${YELLOW}Локальные адреса: панель ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}; подписка ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}.${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}按当前 3x-ui 情况处理：${PLAIN}" "${CYAN}Choose the instruction that matches your 3x-ui setup:${PLAIN}" "${CYAN}Действуйте в зависимости от установки 3x-ui:${PLAIN}")"
+    echo -e "$(localized_text "  3x-ui 3.x 新安装：官方安装器选择 4. Skip SSL，再选择 y，仅绑定 127.0.0.1。" "  New 3x-ui 3.x: select 4. Skip SSL in the official installer, then y to bind only to 127.0.0.1." "  Новая установка 3x-ui 3.x: в официальном установщике выберите 4. Skip SSL, затем y для привязки только к 127.0.0.1.")"
+    echo -e "$(localized_text "  3x-ui 2.x、旧配置升级或曾启用 SSL：清空面板和订阅证书路径。" "  3x-ui 2.x, upgraded legacy setup, or SSL used before: clear the panel and subscription certificate paths." "  3x-ui 2.x, обновлённая старая конфигурация или ранее включённый SSL: очистите пути сертификатов панели и подписки.")"
     if confirm_danger \
         "$(localized_text "清空 3x-ui 旧证书路径" "Clear legacy 3x-ui certificate paths" "Очистить старые пути сертификатов 3x-ui")" \
         "$(localized_text "清空 3x-ui 2.x 或旧配置中的面板和订阅证书路径，使本地反代改用 HTTP。" "Clear panel and subscription certificate paths in 3x-ui 2.x or legacy configuration so the local proxy can use HTTP." "Очистить пути сертификатов панели и подписки в 3x-ui 2.x или старой конфигурации, чтобы локальный прокси использовал HTTP.")" \
@@ -11802,8 +11815,8 @@ collect_sni_stack_config() {
         confirm_default_no "$(localized_text "是否已经手动清空面板和订阅证书路径？(y/N): " "Have you already cleared the panel and subscription certificate paths manually? (y/N): " "Вы уже вручную очистили пути сертификатов панели и подписки? (y/N): ")" || { echo -e "$(localized_text "${YELLOW}请先在 3x-ui 中清空证书路径，保存并重启面板。${PLAIN}" "${YELLOW}Clear the certificate paths in 3x-ui, save, and restart the panel first.${PLAIN}" "${YELLOW}Сначала очистите пути сертификатов в 3x-ui, сохраните изменения и перезапустите панель.${PLAIN}")"; return 1; }
     fi
 
-    echo -e "$(localized_text "${CYAN}请输入 Cloudflare API Token（需 Zone.DNS.Edit + Zone.Zone.Read）${PLAIN}" "${CYAN}Please enter Cloudflare API Token (requires Zone.DNS.Edit + Zone.Zone.Read)${PLAIN}" "${CYAN}Введите токен API Cloudflare (требуется Zone.DNS.Edit + Zone.Zone.Read)${PLAIN}")"
-    read_secret_trimmed CF_TOKEN "CF Token: "
+    echo -e "$(localized_text "${CYAN}Cloudflare API Token 权限：Zone - DNS - Edit、Zone - Zone - Read；仅授权实际使用的 Zone。${PLAIN}" "${CYAN}Cloudflare API token permissions: Zone - DNS - Edit and Zone - Zone - Read. Limit it to the zones you use.${PLAIN}" "${CYAN}Права токена Cloudflare API: Zone - DNS - Edit и Zone - Zone - Read. Ограничьте токен используемыми зонами.${PLAIN}")"
+    read_secret_trimmed CF_TOKEN "$(localized_text "粘贴 Cloudflare API Token: " "Paste Cloudflare API token: " "Вставьте токен Cloudflare API: ")"
 
     PANEL_DOMAIN=$(normalize_domain_input "$panel_domain_input")
     REALITY_SNI=$(normalize_domain_input "$reality_sni_input")
@@ -11831,19 +11844,46 @@ collect_sni_stack_config() {
         seen_domains+=" ${site_domain} "
     done
 
-    local p a
-    for p in "$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT" "${SITE_BACKEND_PORTS[@]}"; do
-        is_valid_port "$p" || { echo -e "$(localized_text "${RED}❌ 端口无效：${p}${PLAIN}" "${RED}❌ Invalid port: ${p}${PLAIN}" "${RED}❌ Неверный порт: ${p}.${PLAIN}")"; return 1; }
+    local a validation_idx
+    local -a port_labels=(
+        "$(localized_text "公网入口端口" "Public entry port" "Порт публичной точки входа")"
+        "$(localized_text "Web 反代本地 HTTPS 端口" "Web proxy local HTTPS port" "Локальный HTTPS-порт Web-прокси")"
+        "$(localized_text "Xray REALITY 本地入站端口" "Xray REALITY local inbound port" "Локальный входной порт Xray REALITY")"
+        "$(localized_text "3x-ui 面板后端端口" "3x-ui panel backend port" "Порт бэкенда панели 3x-ui")"
+        "$(localized_text "3x-ui 订阅后端端口" "3x-ui subscription backend port" "Порт бэкенда подписки 3x-ui")"
+    )
+    local -a port_values=("$NGINX_LISTEN_PORT" "$CADDY_LISTEN_PORT" "$XRAY_LISTEN_PORT" "$PANEL_LISTEN_PORT" "$SUB_LISTEN_PORT")
+    for site_idx in "${!SITE_BACKEND_PORTS[@]}"; do
+        port_labels+=("$(localized_text "${SITE_DOMAINS[$site_idx]} 后端端口" "${SITE_DOMAINS[$site_idx]} backend port" "Порт бэкенда ${SITE_DOMAINS[$site_idx]}")")
+        port_values+=("${SITE_BACKEND_PORTS[$site_idx]}")
     done
-    for a in "$NGINX_LISTEN_ADDR" "$CADDY_LISTEN_ADDR" "$XRAY_LISTEN_ADDR" "$PANEL_LISTEN_ADDR" "$SUB_LISTEN_ADDR"; do
-        is_valid_listen_addr "$a" || { echo -e "$(localized_text "${RED}❌ 监听地址无效：${a}${PLAIN}" "${RED}❌ The listening address is invalid: ${a}${PLAIN}" "${RED}❌ Неверный адрес прослушивания: ${a}.${PLAIN}")"; return 1; }
+    for validation_idx in "${!port_values[@]}"; do
+        is_valid_port "${port_values[$validation_idx]}" || {
+            echo -e "$(localized_text "${RED}❌ ${port_labels[$validation_idx]}无效：${port_values[$validation_idx]}。请输入 1–65535。${PLAIN}" "${RED}❌ Invalid ${port_labels[$validation_idx]}: ${port_values[$validation_idx]}. Enter a value from 1 to 65535.${PLAIN}" "${RED}❌ Неверное значение «${port_labels[$validation_idx]}»: ${port_values[$validation_idx]}. Введите число от 1 до 65535.${PLAIN}")"
+            return 1
+        }
     done
-    for a in "${SITE_BACKEND_ADDRS[@]}"; do
-        is_valid_backend_addr "$a" || { echo -e "$(localized_text "${RED}❌ 后端地址无效：${a}${PLAIN}" "${RED}❌ Invalid backend address: ${a}${PLAIN}" "${RED}❌ Неверный внутренний адрес: ${a}.${PLAIN}")"; return 1; }
+    local -a listen_labels=(
+        "$(localized_text "公网入口监听地址" "Public entry listen address" "Адрес публичной точки входа")"
+        "$(localized_text "Web 反代监听地址" "Web proxy listen address" "Адрес Web-прокси")"
+        "$(localized_text "Xray REALITY 监听地址" "Xray REALITY listen address" "Адрес Xray REALITY")"
+        "$(localized_text "3x-ui 面板监听地址" "3x-ui panel listen address" "Адрес панели 3x-ui")"
+        "$(localized_text "3x-ui 订阅监听地址" "3x-ui subscription listen address" "Адрес подписки 3x-ui")"
+    )
+    local -a listen_values=("$NGINX_LISTEN_ADDR" "$CADDY_LISTEN_ADDR" "$XRAY_LISTEN_ADDR" "$PANEL_LISTEN_ADDR" "$SUB_LISTEN_ADDR")
+    for validation_idx in "${!listen_values[@]}"; do
+        is_valid_listen_addr "${listen_values[$validation_idx]}" || {
+            echo -e "$(localized_text "${RED}❌ ${listen_labels[$validation_idx]}无效：${listen_values[$validation_idx]}。${PLAIN}" "${RED}❌ Invalid ${listen_labels[$validation_idx]}: ${listen_values[$validation_idx]}.${PLAIN}" "${RED}❌ Неверное значение «${listen_labels[$validation_idx]}»: ${listen_values[$validation_idx]}.${PLAIN}")"
+            return 1
+        }
     done
-    is_valid_path_prefix "$PANEL_WEB_PATH" || { echo -e "$(localized_text "${RED}❌ 面板公网路径无效：${PANEL_WEB_PATH}${PLAIN}" "${RED}❌ The public path of the panel is invalid: ${PANEL_WEB_PATH}${PLAIN}" "${RED}❌ Неверный путь панели в публичной сети: ${PANEL_WEB_PATH}.${PLAIN}")"; return 1; }
-    is_valid_path_prefix "$SUB_URI_PATH" || { echo -e "$(localized_text "${RED}❌ 普通订阅路径前缀无效：${SUB_URI_PATH}${PLAIN}" "${RED}❌ The common subscription path prefix is invalid: ${SUB_URI_PATH}${PLAIN}" "${RED}❌ Неверный префикс общего пути подписки: ${SUB_URI_PATH}.${PLAIN}")"; return 1; }
-    is_valid_path_prefix "$CLASH_URI_PATH" || { echo -e "$(localized_text "${RED}❌ Clash/Mihomo 订阅路径前缀无效：${CLASH_URI_PATH}${PLAIN}" "${RED}❌ Clash/Mihomo Invalid subscription path prefix: ${CLASH_URI_PATH}${PLAIN}" "${RED}❌ Clash/Mihomo Неверный префикс пути подписки: ${CLASH_URI_PATH}${PLAIN}")"; return 1; }
+    for site_idx in "${!SITE_BACKEND_ADDRS[@]}"; do
+        a="${SITE_BACKEND_ADDRS[$site_idx]}"
+        is_valid_backend_addr "$a" || { echo -e "$(localized_text "${RED}❌ ${SITE_DOMAINS[$site_idx]} 后端地址无效：${a}${PLAIN}" "${RED}❌ Invalid backend address for ${SITE_DOMAINS[$site_idx]}: ${a}${PLAIN}" "${RED}❌ Неверный адрес бэкенда ${SITE_DOMAINS[$site_idx]}: ${a}.${PLAIN}")"; return 1; }
+    done
+    is_valid_path_prefix "$PANEL_WEB_PATH" || { echo -e "$(localized_text "${RED}❌ 面板路径无效：${PANEL_WEB_PATH}。路径须以 / 开头和结尾。${PLAIN}" "${RED}❌ Invalid panel path: ${PANEL_WEB_PATH}. It must start and end with /.${PLAIN}" "${RED}❌ Неверный путь панели: ${PANEL_WEB_PATH}. Путь должен начинаться и заканчиваться символом /.${PLAIN}")"; return 1; }
+    is_valid_path_prefix "$SUB_URI_PATH" || { echo -e "$(localized_text "${RED}❌ 普通订阅路径无效：${SUB_URI_PATH}。路径须以 / 开头和结尾。${PLAIN}" "${RED}❌ Invalid standard subscription path: ${SUB_URI_PATH}. It must start and end with /.${PLAIN}" "${RED}❌ Неверный путь обычной подписки: ${SUB_URI_PATH}. Путь должен начинаться и заканчиваться символом /.${PLAIN}")"; return 1; }
+    is_valid_path_prefix "$CLASH_URI_PATH" || { echo -e "$(localized_text "${RED}❌ Clash/Mihomo 订阅路径无效：${CLASH_URI_PATH}。路径须以 / 开头和结尾。${PLAIN}" "${RED}❌ Invalid Clash/Mihomo subscription path: ${CLASH_URI_PATH}. It must start and end with /.${PLAIN}" "${RED}❌ Неверный путь подписки Clash/Mihomo: ${CLASH_URI_PATH}. Путь должен начинаться и заканчиваться символом /.${PLAIN}")"; return 1; }
     if [[ "$PANEL_WEB_PATH" == "$SUB_URI_PATH" || "$PANEL_WEB_PATH" == "$CLASH_URI_PATH" || "$SUB_URI_PATH" == "$CLASH_URI_PATH" ]]; then
         echo -e "$(localized_text "${RED}❌ 面板路径、普通订阅路径、Clash/Mihomo 路径不能相同。${PLAIN}" "${RED}❌ The panel path, normal subscription path, and Clash/Mihomo path cannot be the same.${PLAIN}" "${RED}❌ Путь к панели, обычный путь подписки и путь Clash/Mihomo не могут совпадать.${PLAIN}")"
         return 1
@@ -11854,7 +11894,7 @@ collect_sni_stack_config() {
     if [[ -n "${panel_whitelist_ranges:-}" ]]; then
         set_sni_ip_whitelist_for_domain "$PANEL_DOMAIN" "$panel_whitelist_ranges"
     fi
-    [[ "$NGINX_LISTEN_PORT" != "443" ]] && echo -e "$(localized_text "${YELLOW}⚠️  Nginx 公网端口不是 443，不推荐。${PLAIN}" "${YELLOW}⚠️ The public port of Nginx is not 443 and is not recommended.${PLAIN}" "${YELLOW}⚠️ Порт публичной сети Nginx не 443 и не рекомендуется.${PLAIN}")"
+    [[ "$NGINX_LISTEN_PORT" != "443" ]] && echo -e "$(localized_text "${YELLOW}⚠️ 公网入口端口不是 443，客户端和订阅链接必须显式填写端口。${PLAIN}" "${YELLOW}⚠️ The public entry is not port 443. Clients and subscription links must include the port explicitly.${PLAIN}" "${YELLOW}⚠️ Публичная точка входа использует не порт 443. Укажите порт в клиентах и ссылках подписки.${PLAIN}")"
 
     warn_if_public_bind "$(web_proxy_engine_label "$WEB_PROXY_ENGINE")" "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT" || return 1
     warn_if_public_bind "Xray REALITY" "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT" || return 1
@@ -11865,16 +11905,16 @@ collect_sni_stack_config() {
         confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${SITE_DOMAINS[$site_idx]}" "Website/reverse proxy backend ${SITE_DOMAINS[$site_idx]}" "Сайт/бэкенд обратного прокси ${SITE_DOMAINS[$site_idx]}")" "${SITE_BACKEND_ADDRS[$site_idx]}" "${SITE_BACKEND_PORTS[$site_idx]}" || return 1
     done
 
-    if [[ -z "$CF_TOKEN" || ${#CF_TOKEN} -lt 20 ]]; then echo -e "$(localized_text "${RED}❌ Cloudflare Token 长度异常。${PLAIN}" "${RED}❌ Cloudflare Token length is abnormal.${PLAIN}" "${RED}❌ Cloudflare Неверная длина токена.${PLAIN}")"; return 1; fi
+    if [[ -z "$CF_TOKEN" || ${#CF_TOKEN} -lt 20 ]]; then echo -e "$(localized_text "${RED}❌ Cloudflare API Token 为空或不完整。请粘贴 API Token，不要填写 Global API Key、邮箱或 Zone ID。${PLAIN}" "${RED}❌ The Cloudflare API token is empty or incomplete. Paste the API token, not a Global API Key, email address, or Zone ID.${PLAIN}" "${RED}❌ Токен Cloudflare API пуст или неполный. Вставьте API Token, а не Global API Key, email или Zone ID.${PLAIN}")"; return 1; fi
     echo -e "$(localized_text "${CYAN}▶ 正在在线校验 Cloudflare Token...${PLAIN}" "${CYAN}▶ Verifying online Cloudflare Token...${PLAIN}" "${CYAN}▶ Проверка токена Cloudflare онлайн...${PLAIN}")"
     verify_cf_token_online "$CF_TOKEN"
     local verify_rc=$?
     if [[ "$verify_rc" -eq 0 ]]; then
         echo -e "$(localized_text "${GREEN}✅ Cloudflare Token 校验通过。${PLAIN}" "${GREEN}✅ Cloudflare Token verification passed.${PLAIN}" "${GREEN}✅ Cloudflare Проверка токена пройдена.${PLAIN}")"
     elif [[ "$verify_rc" -eq 2 ]]; then
-        echo -e "$(localized_text "${YELLOW}⚠️ 未安装 curl，跳过在线校验。${PLAIN}" "${YELLOW}⚠️ curl is not installed, skip online verification.${PLAIN}" "${YELLOW}⚠️ curl не установлен, пропустите онлайн-проверку.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ 未安装 curl，已跳过在线校验。${PLAIN}" "${YELLOW}⚠️ curl is not installed; online verification was skipped.${PLAIN}" "${YELLOW}⚠️ curl не установлен; онлайн-проверка пропущена.${PLAIN}")"
     else
-        echo -e "$(localized_text "${RED}❌ Cloudflare Token 校验失败。${PLAIN}" "${RED}❌ Cloudflare Token verification failed.${PLAIN}" "${RED}❌ Cloudflare Проверка токена не удалась.${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ Cloudflare API Token 校验失败。请检查 Token 权限、授权 Zone 和 IP 限制。${PLAIN}" "${RED}❌ Cloudflare API token verification failed. Check its permissions, authorized zones, and IP restrictions.${PLAIN}" "${RED}❌ Проверка токена Cloudflare API не пройдена. Проверьте права, разрешённые зоны и ограничения по IP.${PLAIN}")"
         return 1
     fi
 }

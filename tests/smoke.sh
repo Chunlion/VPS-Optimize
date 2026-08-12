@@ -1572,6 +1572,16 @@ assert_function_body_contains src/sni_stack_sites.sh edit_sni_stack_site_backend
 assert_function_body_contains src/sni_stack_sites.sh edit_sni_stack_site_backend '"$new_addr" "$new_port"' "Editing a Web backend must pass the configured address and port to the probe."
 assert_file_contains src/sni_stack_install.sh 'confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${SITE_DOMAINS[$site_idx]}"' "Initial 443 setup must probe configured Web backends before saving."
 assert_file_contains src/sni_stack_install.sh '"${SITE_BACKEND_ADDRS[$site_idx]}" "${SITE_BACKEND_PORTS[$site_idx]}"' "Initial 443 setup must pass the configured backend address and port to the probe."
+assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '▶ [1/5] 域名与 Web 反代引擎' "Initial 443 setup must group domain inputs clearly."
+assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '面板域名（仅域名；示例值 panel.example.com）' "Initial 443 setup must show a hostname-only panel-domain example."
+assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '公网入口端口' "Initial 443 setup must distinguish the public entry port."
+assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '下面均为本机内部端口，不要填写公网 443' "Initial 443 setup must distinguish internal ports from public port 443."
+assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '修改本地监听地址？(y/N，默认 N；一般直接回车)' "Initial 443 setup must accurately display the safe default for local listen addresses."
+assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '路径只填以 / 开头和结尾的前缀' "Initial 443 setup must explain path formatting before validation."
+assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config 'Cloudflare API Token 权限：Zone - DNS - Edit、Zone - Zone - Read' "Initial 443 setup must state the required Cloudflare token permissions."
+assert_function_body_contains src/tcp_peek_engine.sh select_initial_entry_mode '选择入口模式 [1]' "Initial 443 setup must show the default entry-mode choice concisely."
+assert_function_body_contains src/sni_stack_config.sh print_xui_single_443_detected_defaults '下面直接回车即可沿用' "Detected 3x-ui defaults must explain how to keep them."
+assert_file_not_contains src/sni_stack_install.sh '是否进入高级模式并允许修改本地服务监听地址？(Y/n，默认 y)' "Initial 443 setup must not advertise a default that differs from runtime behavior."
 assert_function_body_contains src/caddy_maintenance.sh func_caddy_cf_health_check 'probe_backend_target "$(localized_text "    后端状态"' "Caddy health must probe the configured backend address and port."
 assert_function_body_contains src/caddy_maintenance.sh func_caddy_cf_health_check '"$backend_addr" "$backend_port"' "Caddy health must pass the configured backend address and port to the probe."
 assert_function_body_contains src/caddy_cf_checks.sh func_caddy_cf_health_check 'probe_backend_target "$(localized_text "    后端状态"' "Compatibility Caddy health must probe the configured backend address and port."
@@ -1676,7 +1686,7 @@ assert_file_not_contains src/caddy_cert_tools.sh '永久删除该域名的证书
     initial_entry_output="$entry_mode_tmp_dir/initial-entry.out"
     select_initial_entry_mode >"$initial_entry_output" 2>&1 <<< $'3\n'
     [[ "$ENTRY_MODE" == "tcp-peek" ]]
-    grep -Fq '自动安装依赖、8444 预检并切换' "$initial_entry_output"
+    grep -Fq '自动安装依赖并完成切换预检' "$initial_entry_output"
     grep -Fq '已选择 443 入口模式：tcp-peek' "$initial_entry_output"
 
     rm -f "$(single_443_engine_state_path)"

@@ -289,15 +289,15 @@ detect_xui_single_443_defaults() {
 
 print_xui_single_443_detected_defaults() {
     if [[ -z "${XUI_DETECTED_BIN:-}" && -z "${XUI_DETECTED_DB:-}" ]]; then
-        echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 3x-ui 命令或数据库，将使用 443 向导默认值。${PLAIN}" "${YELLOW}⚠️ No 3x-ui command or database detected, 443 wizard default will be used.${PLAIN}" "${YELLOW}⚠️ Команда или база данных 3x-ui не обнаружены, будет использоваться мастер 443 по умолчанию.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 3x-ui，将使用向导默认值；请按实际设置核对面板和订阅端口。${PLAIN}" "${YELLOW}⚠️ 3x-ui was not detected. Wizard defaults will be used; verify the panel and subscription ports against your actual settings.${PLAIN}" "${YELLOW}⚠️ 3x-ui не обнаружен. Будут использованы значения мастера; сверьте порты панели и подписки со своими настройками.${PLAIN}")"
         return 0
     fi
-    echo -e "$(localized_text "${CYAN}▶ 已检测到 3x-ui 当前设置，下面会作为默认值，可按回车沿用：${PLAIN}" "${CYAN}▶ The current setting of 3x-ui has been detected. The following will be used as the default value. You can press Enter to use it:${PLAIN}" "${CYAN}▶ Обнаружена текущая настройка 3x-ui. Следующее значение будет использоваться в качестве значения по умолчанию. Вы можете нажать Enter, чтобы использовать его:.${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}▶ 已读取 3x-ui 设置；下面直接回车即可沿用：${PLAIN}" "${CYAN}▶ Existing 3x-ui settings were detected. Press Enter to keep them:${PLAIN}" "${CYAN}▶ Обнаружены настройки 3x-ui. Нажмите Enter, чтобы сохранить их:${PLAIN}")"
     [[ -n "${XUI_DETECTED_BIN:-}" ]] && echo -e "$(localized_text "  命令：${XUI_DETECTED_BIN}" "Command: ${XUI_DETECTED_BIN}" "Команда: ${XUI_DETECTED_BIN}")"
     [[ -n "${XUI_DETECTED_DB:-}" ]] && echo -e "$(localized_text "  数据库：${XUI_DETECTED_DB}" "Database: ${XUI_DETECTED_DB}" "База данных: ${XUI_DETECTED_DB}")"
     echo -e "$(localized_text "  面板后端：${XUI_DETECTED_PANEL_ADDR}:${XUI_DETECTED_WEB_PORT}${XUI_DETECTED_WEB_BASE_PATH}" "Panel backend: ${XUI_DETECTED_PANEL_ADDR}:${XUI_DETECTED_WEB_PORT}${XUI_DETECTED_WEB_BASE_PATH}" "бэкенд панели: ${XUI_DETECTED_PANEL_ADDR}:${XUI_DETECTED_WEB_PORT}${XUI_DETECTED_WEB_BASE_PATH}")"
     echo -e "$(localized_text "  订阅后端：${XUI_DETECTED_SUB_ADDR}:${XUI_DETECTED_SUB_PORT}${XUI_DETECTED_SUB_PATH}" "Subscription backend: ${XUI_DETECTED_SUB_ADDR}:${XUI_DETECTED_SUB_PORT}${XUI_DETECTED_SUB_PATH}" "бэкенд подписки: ${XUI_DETECTED_SUB_ADDR}:${XUI_DETECTED_SUB_PORT}${XUI_DETECTED_SUB_PATH}")"
-    echo -e "$(localized_text "  Clash/Mihomo 路径：${XUI_DETECTED_SUB_CLASH_PATH}" "Clash/Mihomo Path: ${XUI_DETECTED_SUB_CLASH_PATH}" "Clash/Mihomo Путь: ${XUI_DETECTED_SUB_CLASH_PATH}")"
+    echo -e "$(localized_text "  Clash/Mihomo 路径：${XUI_DETECTED_SUB_CLASH_PATH}" "Clash/Mihomo path: ${XUI_DETECTED_SUB_CLASH_PATH}" "Путь Clash/Mihomo: ${XUI_DETECTED_SUB_CLASH_PATH}")"
 }
 
 clear_xui_cert_settings_for_single_443() {
