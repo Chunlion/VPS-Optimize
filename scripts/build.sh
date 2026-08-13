@@ -7,36 +7,39 @@ out_file="$out_dir/vps.sh"
 modules_list="$repo_root/scripts/modules.list"
 traffic_guard_checker_validator="$repo_root/scripts/validate-traffic-guard-checker.sh"
 modules=()
-known_non_release_modules=$(cat <<'EOF'
-caddy_cert_tools
-caddy_cf_checks
-caddy_cf_menu
-caddy_cf_wizard
-caddy_stack_render
-caddy_whitelist
-entry_mode_state
-fail2ban
-kernel_cleanup
-kernel_install
-network_performance
-nginx_stream_render
-sni_stack_apply
-sni_stack_collect
-sni_stack_deps
-sni_stack_env_state
-sni_stack_network_helpers
-sni_stack_tcp_routes
-sni_stack_whitelist_state
-ssh_auth_keys
-ssh_menus
-ssh_runtime
-subscription_tools
-system_hosts
-system_init
-system_tweaks
-xray_route_state
+compat_loader_owners=$(cat <<'EOF'
+caddy_cert_tools|caddy_maintenance
+caddy_cf_checks|caddy_maintenance
+caddy_cf_menu|caddy_maintenance
+caddy_cf_wizard|caddy_maintenance
+caddy_stack_render|sni_stack_install
+caddy_whitelist|caddy_maintenance
+entry_mode_state|sni_stack_config
+fail2ban|ssh_security
+kernel_cleanup|kernel_tuning
+kernel_install|kernel_tuning
+network_performance|kernel_tuning
+nginx_stream_render|sni_stack_install
+sni_stack_apply|sni_stack_install
+sni_stack_collect|sni_stack_install
+sni_stack_deps|sni_stack_install
+sni_stack_env_state|sni_stack_config
+sni_stack_network_helpers|sni_stack_config
+sni_stack_tcp_routes|sni_stack_sites
+sni_stack_whitelist_state|sni_stack_config
+ssh_auth_keys|ssh_security
+ssh_menus|ssh_security
+ssh_runtime|ssh_security
+system_hosts|system_core
+system_init|system_core
+system_tweaks|system_core
+xray_route_state|sni_stack_config
 EOF
 )
+known_non_release_modules="$({
+    printf '%s\n' "$compat_loader_owners" | cut -d'|' -f1
+    printf '%s\n' subscription_tools
+} | sort -u)"
 
 load_modules() {
     local raw module
@@ -115,9 +118,41 @@ validate_module_list_sync() {
     assert_module_order menus main
 }
 
+validate_compat_loaders() {
+    local loader owner loader_file source_count
+
+    while IFS='|' read -r loader owner; do
+        [[ -n "$loader" && -n "$owner" ]] || continue
+        loader_file="$repo_root/src/${loader}.sh"
+        [[ -f "$loader_file" ]] || {
+            printf 'Missing compatibility loader: src/%s.sh\n' "$loader" >&2
+            exit 1
+        }
+        if ! module_list_names | grep -Fxq "$owner"; then
+            printf 'Compatibility loader owner is not a release module: %s -> %s\n' "$loader" "$owner" >&2
+            exit 1
+        fi
+        if grep -Eq '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$loader_file"; then
+            printf 'Compatibility loader must not define business functions: src/%s.sh\n' "$loader" >&2
+            exit 1
+        fi
+        source_count=$(grep -Ec '^[[:space:]]*(source|\.)[[:space:]]+' "$loader_file" || true)
+        if [[ "$source_count" != "1" ]] || ! grep -Fq "/${owner}.sh\"" "$loader_file"; then
+            printf 'Compatibility loader must source only src/%s.sh: src/%s.sh\n' "$owner" "$loader" >&2
+            exit 1
+        fi
+    done <<< "$compat_loader_owners"
+
+    if grep -Eq '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$repo_root/src/subscription_tools.sh"; then
+        printf 'Compatibility loader must not define business functions: src/subscription_tools.sh\n' >&2
+        exit 1
+    fi
+}
+
 mkdir -p "$out_dir"
 load_modules
 validate_module_list_sync
+validate_compat_loaders
 
 {
     printf '%s\n' '#!/usr/bin/env bash'

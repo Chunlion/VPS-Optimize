@@ -40,6 +40,8 @@ Compose/subscription build ownership:
 - `dockge_migration.sh` owns Dockge migration discovery and migration workflows for existing Compose projects.
 - `subscription_tools.sh` is a compatibility loader only. It exists for manual `source src/subscription_tools.sh` and source-checkout compatibility, must not define duplicate business functions, and must not be used by the release build. `scripts/build.sh` includes the split modules above directly.
 
+Compatibility-only modules listed in `scripts/build.sh` are thin loaders. Each loader sources its release owner and must not define business functions; edit the release owner instead.
+
 Rules for new code:
 
 - Put reusable shell primitives in `common.sh`, `ui.sh`, `input.sh`, `validate.sh`, `rollback.sh`, or `backup.sh`.
@@ -54,7 +56,7 @@ Rules for new code:
 - `vpso_mux_state.sh` owns vpso-mux paths, 443 engine state, and runtime status display.
 - `vpso_mux_config.sh` owns vpso-mux YAML rendering.
 - `vpso_mux_install.sh` owns vpso-mux build, install, systemd, and failure-context helpers.
-- `sni_stack_config.sh` owns entry-mode state compatibility helpers; `entry_mode_state.sh` is not part of the release build.
+- `sni_stack_config.sh` owns entry-mode state helpers; `entry_mode_state.sh` is a compatibility loader and is not part of the release build.
 - `tcp_peek_engine.sh` owns TCP Peek preflight plus entry-mode preview, cutover, rollback, and reapply workflows.
 - Do not reintroduce split shadow modules such as `entry_mode_cutover.sh` or `tcp_peek_preflight.sh`; they are not part of `scripts/build.sh` and would create stale implementations.
 

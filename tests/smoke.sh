@@ -120,33 +120,6 @@ assert_function_body_contains() {
     fi
 }
 
-function_body_from_file() {
-    local file="$1"
-    local function_name="$2"
-    awk -v fn="$function_name" '
-        $0 ~ "^" fn "\\(\\) \\{" { in_fn = 1 }
-        in_fn { print }
-        in_fn && $0 == "}" { exit }
-    ' "$file"
-}
-
-assert_shadow_function_matches_release_owner() {
-    local shadow_file="$1"
-    local owner_file="$2"
-    local function_name="$3"
-    local shadow_body owner_body
-    shadow_body=$(function_body_from_file "$shadow_file" "$function_name")
-    owner_body=$(function_body_from_file "$owner_file" "$function_name")
-    if [[ -z "$shadow_body" || -z "$owner_body" ]]; then
-        echo "${function_name} must exist in both ${shadow_file} and release owner ${owner_file}." >&2
-        exit 1
-    fi
-    if [[ "$shadow_body" != "$owner_body" ]]; then
-        echo "${function_name} in ${shadow_file} must match release owner ${owner_file}; edit the built module first." >&2
-        exit 1
-    fi
-}
-
 module_list_entries() {
     awk '
         {
@@ -417,7 +390,7 @@ assert_file_not_contains dist/vps.sh '# Module: sni_stack_web_sites.sh' "Release
 assert_path_absent "src/entry_mode_cutover.sh" "entry_mode_cutover.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
 assert_path_absent "src/tcp_peek_preflight.sh" "tcp_peek_preflight.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
 if module_list_entries | grep -Fxq 'entry_mode_state'; then
-    echo "entry_mode_state.sh is a non-release shadow; entry-mode fixes must land in src/sni_stack_config.sh." >&2
+    echo "entry_mode_state.sh is a compatibility loader; entry-mode fixes must land in src/sni_stack_config.sh." >&2
     exit 1
 fi
 if module_list_entries | grep -Fxq 'entry_mode_cutover'; then
@@ -429,30 +402,12 @@ if module_list_entries | grep -Fxq 'tcp_peek_preflight'; then
     exit 1
 fi
 assert_file_not_contains dist/vps.sh '# Module: entry_mode_state.sh' "Release script must not include non-release entry_mode_state.sh."
-expected_entry_mode_shadow_functions=$(cat <<'ENTRY_MODE_SHADOW_FUNCTIONS'
-canonical_legacy_entry_mode_name
-entry_mode_expected_listener
-get_entry_mode
-print_entry_mode_compat_notice
-rewrite_legacy_entry_mode_assignment
-set_entry_mode
-sni_stack_env_path
-ENTRY_MODE_SHADOW_FUNCTIONS
-)
-actual_entry_mode_shadow_functions=$(grep -E '^[A-Za-z_][A-Za-z0-9_]*\(\) \{' src/entry_mode_state.sh \
-    | sed 's/().*//' \
-    | grep -E '(^get_entry_mode$|entry_mode|legacy|sni_stack_env_path|compat|rewrite|canonical)' \
-    | sort)
-if ! diff -u <(printf '%s\n' "$expected_entry_mode_shadow_functions" | sort) <(printf '%s\n' "$actual_entry_mode_shadow_functions") >/dev/null; then
-    echo "src/entry_mode_state.sh contains unexpected release-owned entry-mode helpers; edit src/sni_stack_config.sh instead." >&2
-    diff -u <(printf '%s\n' "$expected_entry_mode_shadow_functions" | sort) <(printf '%s\n' "$actual_entry_mode_shadow_functions") >&2 || true
-    exit 1
-fi
-while IFS= read -r function_name; do
-    [[ -n "$function_name" ]] || continue
-    assert_shadow_function_matches_release_owner "src/entry_mode_state.sh" "src/sni_stack_config.sh" "$function_name"
+assert_file_not_matches src/entry_mode_state.sh '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "entry_mode_state.sh must remain a thin compatibility loader."
+assert_file_contains src/entry_mode_state.sh '/sni_stack_config.sh"' "entry_mode_state.sh must load its release owner."
+assert_file_contains scripts/build.sh 'validate_compat_loaders' "The build must validate all compatibility loaders."
+for function_name in canonical_legacy_entry_mode_name entry_mode_expected_listener get_entry_mode print_entry_mode_compat_notice rewrite_legacy_entry_mode_assignment set_entry_mode sni_stack_env_path; do
     assert_dist_contains "${function_name}()" "Release script must include entry-mode helper ${function_name} from built modules."
-done <<< "$expected_entry_mode_shadow_functions"
+done
 assert_file_contains src/README.md '443/TCP Peek ownership:' "Source README must document 443/TCP Peek module ownership."
 assert_file_contains src/README.md 'Do not reintroduce split shadow modules' "Source README must warn against stale split 443/TCP Peek modules."
 assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '输入菜单编号或 ?: ' "443 Web/SNI submenu must prompt for a menu number or help."
@@ -809,9 +764,25 @@ declare -f collect_applied_config_files >/dev/null
     declare -f func_komari_menu >/dev/null
     declare -f func_update_subscription_tools >/dev/null
     declare -f func_migrate_compose_to_dockge >/dev/null
+    random_secret=$(generate_random_secret)
+    [[ "$random_secret" =~ ^[0-9a-f]{64}$ ]]
+    [[ "$(compose_yaml_quote 'pa$sw"ord\# value')" == '"pa$$sw\"ord\\# value"' ]]
+    compose_secure_tmp=$(mktemp /tmp/vps-compose-secure.XXXXXX)
+    chmod 644 "$compose_secure_tmp"
+    compose_write_secure_file "$compose_secure_tmp" <<'EOF'
+services: {}
+EOF
+    [[ "$(stat -c '%a' "$compose_secure_tmp")" == "600" ]]
+    rm -f "$compose_secure_tmp"
     ensure_docker_compose_ready() { DOCKER_COMPOSE_CMD=true; }
     validate_applied_config_kind compose /tmp/vps-compose-smoke.yml >/dev/null
 )
+assert_file_not_contains src/subscription_apps.sh '$RANDOM' "Secret generation must not fall back to Bash RANDOM."
+assert_file_not_contains src/subscription_apps.sh 'date +%s' "Secret generation must not fall back to timestamps."
+if grep -Eq 'cat <<[^>]*> (docker-compose\.yml|compose\.yaml)' src/subscription_apps.sh; then
+    echo "Generated Compose files must use compose_write_secure_file." >&2
+    exit 1
+fi
 (
     compose_apply_tmp=$(mktemp -d /tmp/vps-compose-apply-smoke.XXXXXX)
     mkdir -p "$compose_apply_tmp/src" "$compose_apply_tmp/project"
@@ -1594,8 +1565,6 @@ assert_function_body_contains src/sni_stack_config.sh print_xui_single_443_detec
 assert_file_not_contains src/sni_stack_install.sh '是否进入高级模式并允许修改本地服务监听地址？(Y/n，默认 y)' "Initial 443 setup must not advertise a default that differs from runtime behavior."
 assert_function_body_contains src/caddy_maintenance.sh func_caddy_cf_health_check 'probe_backend_target "$(localized_text "    后端状态"' "Caddy health must probe the configured backend address and port."
 assert_function_body_contains src/caddy_maintenance.sh func_caddy_cf_health_check '"$backend_addr" "$backend_port"' "Caddy health must pass the configured backend address and port to the probe."
-assert_function_body_contains src/caddy_cf_checks.sh func_caddy_cf_health_check 'probe_backend_target "$(localized_text "    后端状态"' "Compatibility Caddy health must probe the configured backend address and port."
-assert_function_body_contains src/caddy_cf_checks.sh func_caddy_cf_health_check '"$backend_addr" "$backend_port"' "Compatibility Caddy health must pass the configured backend address and port to the probe."
 assert_file_contains src/sni_stack_config.sh 'check_backend "$(localized_text "网站后端 ${SITE_DOMAINS[$i]}"' "Nginx-stream health must probe configured Web backends instead of local ports."
 assert_file_contains src/sni_stack_config.sh '"${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}"' "Nginx-stream health must pass configured Web backend targets to the probe."
 assert_function_body_contains src/sni_stack_health.sh sni_stack_health_check_enhanced 'probe_backend_target "$(localized_text "网站后端 ${domain}"' "Enhanced 443 health must probe configured Web backends."
@@ -1603,19 +1572,15 @@ assert_function_body_contains src/sni_stack_health.sh sni_stack_health_check_enh
 assert_function_body_contains src/diagnostics_network.sh tcp_probe_once 'tcp_target_reachable "$host" "$port"' "Network diagnostics must reuse the shared exact-target TCP probe."
 
 assert_file_not_contains src/caddy_maintenance.sh 'reverse_proxy[[:space:]]+127.0.0.1' "Caddy health check must read the configured backend target, not only 127.0.0.1."
-assert_file_not_contains src/caddy_cf_checks.sh 'reverse_proxy[[:space:]]+127.0.0.1' "Compatibility Caddy health check must read the configured backend target, not only 127.0.0.1."
 assert_file_not_contains src/caddy_certificates.sh 'Caddy监听: 127.0.0.1:' "Caddy manifest must summarize the configured listen target."
 assert_file_contains src/caddy_proxy.sh '当前 Caddy 配置校验失败，未写入新增反代。' "Caddy reverse proxy must not blame new config when the existing Caddy config is already invalid."
 assert_file_contains src/caddy_proxy.sh 'Caddy 校验错误' "Caddy reverse proxy failures must print the real caddy validate output."
 cert_delete_paths='"/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key" "/root/cert/${domain}.crt" "/root/cert/${domain}.key"'
 assert_file_contains src/caddy_maintenance.sh "$cert_delete_paths" "Caddy certificate deletion must quarantine installed cert files and /root/cert links."
-assert_file_contains src/caddy_cert_tools.sh "$cert_delete_paths" "Compatibility Caddy certificate deletion must quarantine installed cert files and /root/cert links."
 assert_dist_contains "$cert_delete_paths" "Release Caddy certificate deletion must quarantine installed cert files and /root/cert links."
 assert_file_contains src/caddy_maintenance.sh 'generate_caddy_cf_manifest 2>/dev/null || true' "Caddy certificate deletion must refresh the managed certificate manifest."
-assert_file_contains src/caddy_cert_tools.sh 'generate_caddy_cf_manifest 2>/dev/null || true' "Compatibility Caddy certificate deletion must refresh the managed certificate manifest."
 assert_dist_contains 'generate_caddy_cf_manifest 2>/dev/null || true' "Release Caddy certificate deletion must refresh the managed certificate manifest."
 assert_file_not_contains src/caddy_maintenance.sh '永久删除该域名的证书与配置，无法恢复' "Caddy cleanup copy must match the quarantine-based recovery behavior."
-assert_file_not_contains src/caddy_cert_tools.sh '永久删除该域名的证书与配置，无法恢复' "Compatibility Caddy cleanup copy must match the quarantine-based recovery behavior."
 
 (
     source src/input.sh
@@ -1848,8 +1813,8 @@ assert_function_body_contains "src/xray_sni_routes.sh" confirm_non_xray_route_li
 assert_file_not_contains "src/xray_sni_routes.sh" '443 TCP/SNI 本地入站管理' "Xray inbound menu must not use the old TCP/SNI title."
 assert_file_contains "src/xray_sni_routes.sh" '用于当前支持的端口复用模式渲染分流规则' "Xray inbound menu must describe route records as entry-mode render input."
 assert_file_not_contains "src/xray_sni_routes.sh" '只写 Nginx stream SNI -> 本地端口规则' "Xray inbound menu must not describe route records as nginx-stream-only."
-assert_file_contains "src/xray_route_state.sh" 'fallback 普通 HTTPS 到所选 Web 反代引擎' "xray-fallback explanation must mention the selected Web reverse proxy engine."
-assert_file_not_contains "src/xray_route_state.sh" 'fallback 普通 HTTPS 到 Caddy' "xray-fallback explanation must not hard-code Caddy."
+assert_file_contains "src/sni_stack_config.sh" 'fallback 普通 HTTPS 到所选 Web 反代引擎' "xray-fallback explanation must mention the selected Web reverse proxy engine."
+assert_file_not_contains "src/sni_stack_config.sh" 'fallback 普通 HTTPS 到 Caddy' "xray-fallback explanation must not hard-code Caddy."
 assert_dist_contains 'Xray 入站管理' 'Release script must include the current Xray inbound menu name.'
 assert_file_not_contains "dist/vps.sh" '443 TCP/SNI 本地入站管理' "Release script must not use the old TCP/SNI title."
 assert_dist_contains '用于当前支持的端口复用模式渲染分流规则' 'Release script must describe Xray inbound records as entry-mode render input.'
@@ -3004,10 +2969,10 @@ assert_file_contains "docs/443-single-entry.md" '[4] -> [5 域名 IP 白名单]'
 assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "443 doc must describe the current 443 Web whitelist menu path."
 assert_file_contains "src/caddy_proxy.sh" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Nginx standalone whitelist guidance must point users to the current 443 Web whitelist submenu path."
 assert_file_contains "src/caddy_maintenance.sh" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Caddy standalone whitelist guidance must point users to the current 443 Web whitelist submenu path."
-assert_file_contains "src/caddy_whitelist.sh" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Compatibility Caddy whitelist guidance must point users to the current 443 Web whitelist submenu path."
+assert_file_contains "src/caddy_maintenance.sh" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Caddy whitelist guidance must point users to the current 443 Web whitelist submenu path."
 assert_file_not_contains "src/caddy_proxy.sh" '[19] -> [9]' "Nginx standalone whitelist guidance must not point users to the stale direct [19] -> [9] path."
 assert_file_not_contains "src/caddy_maintenance.sh" '[19] -> [9]' "Caddy standalone whitelist guidance must not point users to the stale direct [19] -> [9] path."
-assert_file_not_contains "src/caddy_whitelist.sh" '[19] -> [9]' "Compatibility Caddy whitelist guidance must not point users to the stale direct [19] -> [9] path."
+assert_file_not_contains "src/caddy_maintenance.sh" '[19] -> [9]' "Caddy whitelist guidance must not point users to the stale direct [19] -> [9] path."
 assert_file_contains "docs/443-single-entry.md" '[8 切换 Web 反代引擎]' "443 doc must document switching the Web reverse proxy engine."
 assert_file_contains "docs/443-single-entry.md" '`xray-fallback`，无论使用 Caddy 还是 Nginx 本地 Web 反代' "443 doc must prohibit Web whitelist usage for every xray-fallback Web engine."
 assert_file_contains "docs/443-tcp-peek-engine.md" '`xray-fallback` 无论选择 Caddy 还是 Nginx 本地 Web 反代' "TCP Peek doc must describe the xray-fallback Web whitelist boundary."

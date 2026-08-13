@@ -2,11 +2,24 @@
 # Subscription and management app installers.
 
 generate_random_secret() {
+    local secret
+
     if command -v openssl >/dev/null 2>&1; then
-        openssl rand -hex 32
-    else
-        echo "secret_$(date +%s)_$RANDOM$RANDOM"
+        secret=$(openssl rand -hex 32 2>/dev/null) || secret=""
     fi
+    if [[ ! "$secret" =~ ^[0-9a-f]{64}$ ]] && [[ -r /dev/urandom ]] && command -v od >/dev/null 2>&1; then
+        secret=$(LC_ALL=C od -An -N32 -tx1 /dev/urandom 2>/dev/null | tr -d '[:space:]') || secret=""
+    fi
+    if [[ ! "$secret" =~ ^[0-9a-f]{64}$ ]] && command -v python3 >/dev/null 2>&1; then
+        secret=$(python3 -c 'import secrets; print(secrets.token_hex(32))' 2>/dev/null) || secret=""
+    fi
+
+    if [[ "$secret" =~ ^[0-9a-f]{64}$ ]]; then
+        printf '%s\n' "$secret"
+        return 0
+    fi
+    echo -e "$(localized_text "${RED}❌ 无法生成安全随机密钥。${PLAIN}" "${RED}❌ Failed to generate a secure random secret.${PLAIN}" "${RED}❌ Не удалось создать безопасный случайный секрет.${PLAIN}")" >&2
+    return 1
 }
 
 print_public_https_reverse_proxy_hint() {
@@ -52,7 +65,7 @@ func_sublinkpro() {
         cd "$install_dir" || return
 
         # 生成 docker-compose.yml 文件
-        cat <<EOF > docker-compose.yml
+        compose_write_secure_file docker-compose.yml <<EOF
 services:
   sublinkpro:
     image: zerodeng/sublink-pro
@@ -119,7 +132,7 @@ func_miaomiaowu() {
 
     jwt_secret=$(ask_with_default "$(localized_text "JWT_SECRET（回车自动生成随机密钥）" "JWT_SECRET (Press enter to automatically generate a random key)" "JWT_SECRET (нажмите Enter, чтобы автоматически сгенерировать случайный ключ)")" "")
     if [[ -z "$jwt_secret" ]]; then
-        jwt_secret=$(generate_random_secret)
+        jwt_secret=$(generate_random_secret) || return 1
     fi
 
     echo -e "$(localized_text "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}" "${YELLOW}Deployment directory: ${install_dir}${PLAIN}" "${YELLOW}Каталог развертывания : ${install_dir}.${PLAIN}")"
@@ -137,7 +150,7 @@ func_miaomiaowu() {
         mkdir -p "$install_dir"/{data,subscribes,rule_templates}
         cd "$install_dir" || return
 
-        cat <<EOF > docker-compose.yml
+        compose_write_secure_file docker-compose.yml <<EOF
 version: '3.8'
 
 services:
@@ -150,7 +163,7 @@ services:
       PORT: "${mmw_port}"
       DATABASE_PATH: /app/data/traffic.db
       LOG_LEVEL: info
-      JWT_SECRET: "${jwt_secret}"
+      JWT_SECRET: $(compose_yaml_quote "$jwt_secret")
     ports:
       - "${mmw_bind_addr}:${mmw_port}:${mmw_port}"
     volumes:
@@ -196,7 +209,9 @@ func_substore() {
     local install_dir="/opt/sub-store"
     local backend_port="3001"
     local meta_port="9876"
-    local backend_path="/$(generate_random_secret | cut -c1-48)"
+    local backend_secret
+    backend_secret=$(generate_random_secret) || return 1
+    local backend_path="/${backend_secret:0:48}"
 
     while true; do
         backend_port=$(ask_with_default "$(localized_text "Sub-Store 后端 API 端口" "Sub-Store backend API port" "Порт внутреннего API дочернего магазина")" "$backend_port")
@@ -231,7 +246,7 @@ func_substore() {
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 
-        cat <<EOF > docker-compose.yml
+        compose_write_secure_file docker-compose.yml <<EOF
 version: '3.8'
 
 services:
@@ -244,7 +259,7 @@ services:
       SUB_STORE_BACKEND_API_HOST: "127.0.0.1"
       SUB_STORE_BACKEND_API_PORT: "${backend_port}"
       SUB_STORE_BACKEND_MERGE: "true"
-      SUB_STORE_FRONTEND_BACKEND_PATH: "${backend_path}"
+      SUB_STORE_FRONTEND_BACKEND_PATH: $(compose_yaml_quote "$backend_path")
       PORT: "${meta_port}"
       HOST: "127.0.0.1"
     volumes:
@@ -309,7 +324,7 @@ func_dockge() {
         mkdir -p "$install_dir" "$stacks_dir"
         cd "$install_dir" || return
 
-        cat <<EOF > compose.yaml
+        compose_write_secure_file compose.yaml <<EOF
 services:
   dockge:
     image: louislam/dockge:1
@@ -320,9 +335,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/app/data
-      - ${stacks_dir}:${stacks_dir}
+      - $(compose_yaml_quote "${stacks_dir}:${stacks_dir}")
     environment:
-      DOCKGE_STACKS_DIR: "${stacks_dir}"
+      DOCKGE_STACKS_DIR: $(compose_yaml_quote "$stacks_dir")
 EOF
 
         echo -e "$(localized_text "${CYAN}▶ 正在拉取镜像并启动 Dockge...${PLAIN}" "${CYAN}▶ Pulling the image and starting Dockge...${PLAIN}" "${CYAN}▶ Вытаскиваем образ и запускаем Dockge...${PLAIN}")"
@@ -384,7 +399,8 @@ func_komari() {
         while true; do
             read_secret_trimmed admin_password "$(localized_text "管理员密码（至少 8 位，留空自动生成）: " "Administrator password (at least 8 characters, leave blank to automatically generate):" "Пароль администратора (не менее 8 символов, оставьте пустым для автоматической генерации):")"
             if [[ -z "$admin_password" ]]; then
-                admin_password=$(generate_random_secret | cut -c1-24)
+                admin_password=$(generate_random_secret) || return 1
+                admin_password=${admin_password:0:24}
                 echo -e "$(localized_text "${YELLOW}已生成管理员密码；部署完成后仅显示一次，请及时保存。${PLAIN}" "${YELLOW}An administrator password was generated. It is shown once after deployment; save it immediately.${PLAIN}" "${YELLOW}Пароль администратора создан. После развёртывания он будет показан один раз; сразу сохраните его.${PLAIN}")"
                 break
             fi
@@ -411,7 +427,7 @@ func_komari() {
         mkdir -p "$install_dir/data"
         cd "$install_dir" || return
 
-        cat <<EOF > docker-compose.yml
+        compose_write_secure_file docker-compose.yml <<EOF
 version: '3.8'
 services:
   komari:
@@ -426,8 +442,8 @@ EOF
 
         if [[ -n "$admin_username" ]]; then
             cat <<EOF >> docker-compose.yml
-      ADMIN_USERNAME: "${admin_username}"
-      ADMIN_PASSWORD: "${admin_password}"
+      ADMIN_USERNAME: $(compose_yaml_quote "$admin_username")
+      ADMIN_PASSWORD: $(compose_yaml_quote "$admin_password")
 EOF
         else
             cat <<'EOF' >> docker-compose.yml

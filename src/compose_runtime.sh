@@ -1,6 +1,26 @@
 # shellcheck shell=bash
 # Docker Compose runtime helpers and generic compose project management.
 
+compose_yaml_quote() {
+    local value="$1"
+    value=${value//\\/\\\\}
+    value=${value//\"/\\\"}
+    value=${value//\$/\$\$}
+    printf '"%s"' "$value"
+}
+
+compose_write_secure_file() (
+    local output_file="$1" output_dir output_name tmp_file
+    output_dir=$(dirname "$output_file")
+    output_name=$(basename "$output_file")
+    umask 077
+    tmp_file=$(mktemp "${output_dir}/.${output_name}.XXXXXX") || return 1
+    if ! cat > "$tmp_file" || ! chmod 600 "$tmp_file" || ! mv -f -- "$tmp_file" "$output_file"; then
+        rm -f -- "$tmp_file"
+        return 1
+    fi
+)
+
 install_docker_compose_standalone() {
     local compose_url tmp_file
     compose_url="https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)"

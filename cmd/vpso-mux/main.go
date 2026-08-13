@@ -196,17 +196,31 @@ func run(cfg *mux.Config) error {
 	for _, ln := range listeners {
 		_ = ln.Close()
 	}
+	if !waitForShutdown(&wg, durations.Shutdown) {
+		return fmt.Errorf("shutdown timeout after %s", durations.Shutdown)
+	}
+	return nil
+}
+
+func waitForShutdown(wg *sync.WaitGroup, timeout time.Duration) bool {
+	if wg == nil {
+		return true
+	}
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(done)
 	}()
+	if timeout <= 0 {
+		<-done
+		return true
+	}
 	select {
 	case <-done:
-	case <-time.After(durations.Shutdown):
-		return fmt.Errorf("shutdown timeout after %s", durations.Shutdown)
+		return true
+	case <-time.After(timeout):
+		return false
 	}
-	return nil
 }
 
 func newStatusTracker(listen []string, maxConnections int) *statusTracker {
