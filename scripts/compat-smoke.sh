@@ -173,7 +173,7 @@ assert_file_contains src/menus.sh 'NET_KERNEL_MENU_ITEMS=(' "Network/kernel menu
 assert_file_contains src/menus.sh '1|BBR / 拥塞控制管理|调用 ylx2016 多内核调优脚本|func_bbr_manage|net_bbr'
 assert_file_contains src/menus.sh '2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune'
 assert_file_contains src/menus.sh '4|网络接口管理|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|'
-assert_file_contains src/menus.sh '9|BBR 直连/落地优化|智能带宽检测，按主要 RTT 调整缓冲区|func_bbr_direct_tune|net_bbr_direct'
+assert_file_contains src/menus.sh '9|BBR 直连/落地优化|检测带宽与 RTT，动态生成 BBR/TCP 参数|func_bbr_direct_tune|net_bbr_direct'
 assert_file_contains src/menus.sh '10|服务器带宽测试|Speedtest 上下行带宽与延迟|func_server_bandwidth_test|'
 assert_file_contains src/menus.sh '11|iperf3 单线程测试|自定义服务端、方向、端口和时长|func_iperf3_single_thread_test|'
 assert_file_contains src/menus.sh '12|国际互联速度测试|多地区网络互联质量测试|func_international_speed_test|'
@@ -372,5 +372,45 @@ rotate_log_file "$compat_tmp_dir/large.log" 4 3
 [[ "$(bbr_direct_buffer_mb 1000 near)" == "16" ]]
 [[ "$(bbr_direct_buffer_mb 1000 long)" == "64" ]]
 [[ "$(extract_speedtest_upload_mbps 'Upload: 123.45 Mbit/s')" == "123" ]]
+[[ "$(extract_speedtest_upload_mbps 'Upload: 1.25 Gbit/s')" == "1250" ]]
+[[ "$(extract_speedtest_download_mbps 'Download: 850.6 Mbps')" == "851" ]]
+[[ "$(extract_speedtest_latency_ms 'Latency: 12.6 ms (0.8 ms jitter)')" == "13" ]]
+[[ "$(bbr_direct_buffer_mb_for_rtt 100 80)" == "8" ]]
+[[ "$(bbr_direct_buffer_mb_for_rtt 1000 80)" == "20" ]]
+[[ "$(bbr_direct_buffer_mb_for_rtt 1000 250)" == "60" ]]
+[[ "$(bbr_direct_buffer_mb_for_rtt 10000 300)" == "64" ]]
+[[ "$(bbr_direct_queue_values 100 80)" == "131072|2048|4096|5000|16384" ]]
+[[ "$(bbr_direct_queue_values 2000 200)" == "524288|8192|16384|20000|65536" ]]
+bbr_candidate="$compat_tmp_dir/bbr-direct.conf"
+write_bbr_direct_candidate "$bbr_candidate" 2000 200 64
+assert_file_contains "$bbr_candidate" 'net.core.rmem_default = 524288'
+assert_file_contains "$bbr_candidate" 'net.ipv4.tcp_moderate_rcvbuf = 1'
+assert_file_contains "$bbr_candidate" 'net.core.somaxconn = 8192'
+assert_file_contains "$bbr_candidate" 'net.core.netdev_max_backlog = 20000'
+assert_file_contains "$bbr_candidate" 'net.ipv4.tcp_notsent_lowat = 65536'
+if bbr_direct_buffer_mb_for_rtt 100001 80 >/dev/null 2>&1; then
+    echo "BBR buffer sizing must reject unreasonable bandwidth values." >&2
+    exit 1
+fi
+bbr_verify="$compat_tmp_dir/bbr-verify.conf"
+printf 'net.test.values = 1 2 3\n' > "$bbr_verify"
+sysctl() {
+    [[ "$1" == "-n" && "$2" == "net.test.values" ]] || return 1
+    printf '1\t2  3\n'
+}
+sysctl_tune_verify_file "$bbr_verify"
+unset -f sysctl
+read_trimmed() {
+    printf -v "$1" '%s' "${MOCK_TRIMMED_VALUE:-}"
+}
+ensure_speedtest_client() { return 0; }
+run_speedtest_client() {
+    printf '%s\n' 'Latency: 20.4 ms' 'Download: 900.2 Mbps' 'Upload: 1.25 Gbit/s'
+}
+MOCK_TRIMMED_VALUE=1
+[[ "$(prompt_bbr_measurement 2>/dev/null)" == "1250|20|900" ]]
+MOCK_TRIMMED_VALUE=4
+[[ "$(prompt_bbr_rtt_ms 20 2>/dev/null)" == "20" ]]
+unset MOCK_TRIMMED_VALUE
 
 echo "Compatibility smoke passed."

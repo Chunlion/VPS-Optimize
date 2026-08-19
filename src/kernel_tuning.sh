@@ -11,10 +11,10 @@ func_bbr_manage() {
 VPSO_BBR_DIRECT_CONF="/etc/sysctl.d/99-vps-optimize-bbr-direct.conf"
 
 speedtest_client_kind() {
-    if command -v speedtest-cli >/dev/null 2>&1; then
-        echo "speedtest-cli"
-    elif command -v speedtest >/dev/null 2>&1; then
+    if command -v speedtest >/dev/null 2>&1; then
         echo "ookla"
+    elif command -v speedtest-cli >/dev/null 2>&1; then
+        echo "speedtest-cli"
     else
         return 1
     fi
@@ -38,19 +38,52 @@ run_speedtest_client() {
     esac
 }
 
-extract_speedtest_upload_mbps() {
+extract_speedtest_metric_mbps() {
     local output="$1"
+    local metric="$2"
     printf '%s\n' "$output" | awk '
-        BEGIN { IGNORECASE = 1 }
-        /Upload:/ {
+        BEGIN { wanted = tolower(ARGV[1]); ARGV[1] = "" }
+        {
+            line = tolower($0)
+            if (index(line, wanted ":") == 0) next
             for (i = 1; i <= NF; i++) {
                 value = $i
                 gsub(/[^0-9.]/, "", value)
                 if (value ~ /^[0-9]+([.][0-9]+)?$/) {
-                    seen_upload = 1
                     candidate = value
                 }
-                if (seen_upload && $i ~ /Mbit\/s|Mbps/) {
+                unit = tolower($i)
+                if (candidate != "" && unit ~ /^(kbit\/s|kbps|mbit\/s|mbps|gbit\/s|gbps)$/) {
+                    factor = 1
+                    if (unit ~ /^(kbit\/s|kbps)$/) factor = 0.001
+                    if (unit ~ /^(gbit\/s|gbps)$/) factor = 1000
+                    printf "%d\n", (candidate * factor) + 0.5
+                    exit
+                }
+            }
+        }
+    ' "$metric"
+}
+
+extract_speedtest_upload_mbps() {
+    extract_speedtest_metric_mbps "$1" upload
+}
+
+extract_speedtest_download_mbps() {
+    extract_speedtest_metric_mbps "$1" download
+}
+
+extract_speedtest_latency_ms() {
+    local output="$1"
+    printf '%s\n' "$output" | awk '
+        {
+            line = tolower($0)
+            if (index(line, "ping:") == 0 && index(line, "latency:") == 0) next
+            for (i = 1; i <= NF; i++) {
+                value = $i
+                gsub(/[^0-9.]/, "", value)
+                if (value ~ /^[0-9]+([.][0-9]+)?$/) candidate = value
+                if (candidate != "" && tolower($i) ~ /^ms$/) {
                     printf "%d\n", candidate + 0.5
                     exit
                 }
@@ -86,8 +119,24 @@ bbr_direct_buffer_mb() {
     echo "$buffer_mb"
 }
 
-prompt_bbr_bandwidth_mbps() {
-    local choice output bandwidth
+bbr_direct_buffer_mb_for_rtt() {
+    local bandwidth="$1"
+    local rtt_ms="$2"
+    local buffer_mb
+
+    [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 && bandwidth <= 100000 )) || return 1
+    [[ "$rtt_ms" =~ ^[0-9]+$ ]] && (( rtt_ms > 0 && rtt_ms <= 2000 )) || return 1
+
+    # Two bandwidth-delay products, rounded up to 4 MiB, with conservative limits.
+    buffer_mb=$(( (bandwidth * rtt_ms * 250 + 1048575) / 1048576 ))
+    buffer_mb=$(( (buffer_mb + 3) / 4 * 4 ))
+    (( buffer_mb < 8 )) && buffer_mb=8
+    (( buffer_mb > 64 )) && buffer_mb=64
+    echo "$buffer_mb"
+}
+
+prompt_bbr_measurement() {
+    local choice output bandwidth download latency speedtest_status
 
     echo -e "$(localized_text "${CYAN}带宽来源：${PLAIN}" "${CYAN}Bandwidth source:${PLAIN}" "${CYAN}Источник пропускной способности:${PLAIN}")" >&2
     echo "$(localized_text "  1. 自动测速（采用上传带宽）" "  1. Run a speed test (use upload bandwidth)" "  1. Выполнить тест скорости (использовать отдачу)")" >&2
@@ -98,15 +147,21 @@ prompt_bbr_bandwidth_mbps() {
     if [[ "$choice" == "1" ]]; then
         if ensure_speedtest_client >&2; then
             echo -e "$(localized_text "${CYAN}正在执行带宽测试...${PLAIN}" "${CYAN}Performing bandwidth test...${PLAIN}" "${CYAN}Выполнение теста пропускной способности...${PLAIN}")" >&2
-            output=$(run_speedtest_client 2>&1)
+            if output=$(run_speedtest_client 2>&1); then
+                speedtest_status=0
+            else
+                speedtest_status=$?
+            fi
             printf '%s\n' "$output" >&2
             bandwidth=$(extract_speedtest_upload_mbps "$output")
-            if [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 )); then
-                echo -e "$(localized_text "${GREEN}检测到上传带宽：${bandwidth} Mbps${PLAIN}" "${GREEN}Detected upload bandwidth: ${bandwidth} Mbps${PLAIN}" "${GREEN}Обнаруженная пропускная способность загрузки: ${bandwidth} Мбит/с${PLAIN}")" >&2
-                echo "$bandwidth"
+            download=$(extract_speedtest_download_mbps "$output")
+            latency=$(extract_speedtest_latency_ms "$output")
+            if (( speedtest_status == 0 )) && [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 && bandwidth <= 100000 )); then
+                echo -e "$(localized_text "${GREEN}测速结果：上传 ${bandwidth} Mbps，下载 ${download:-未知} Mbps，延迟 ${latency:-未知} ms。${PLAIN}" "${GREEN}Speed test: upload ${bandwidth} Mbps, download ${download:-unknown} Mbps, latency ${latency:-unknown} ms.${PLAIN}" "${GREEN}Тест скорости: отдача ${bandwidth} Мбит/с, загрузка ${download:-неизвестно} Мбит/с, задержка ${latency:-неизвестно} мс.${PLAIN}")" >&2
+                printf '%s|%s|%s\n' "$bandwidth" "$latency" "$download"
                 return 0
             fi
-            echo -e "$(localized_text "${YELLOW}未能解析测速结果，请手动输入套餐带宽。${PLAIN}" "${YELLOW}Failed to parse the speed measurement results. Please enter the package bandwidth manually.${PLAIN}" "${YELLOW}не удалось проанализировать результаты измерения скорости. Пожалуйста, введите пропускную способность пакета вручную.${PLAIN}")" >&2
+            echo -e "$(localized_text "${YELLOW}测速失败或结果不完整，请手动输入套餐带宽。${PLAIN}" "${YELLOW}The speed test failed or returned incomplete data. Enter the plan bandwidth manually.${PLAIN}" "${YELLOW}Тест скорости завершился ошибкой или вернул неполные данные. Введите скорость тарифа вручную.${PLAIN}")" >&2
         else
             echo -e "$(localized_text "${YELLOW}测速客户端不可用，请手动输入套餐带宽。${PLAIN}" "${YELLOW}Speed test client is not available, please enter the package bandwidth manually.${PLAIN}" "${YELLOW}Клиент теста скорости недоступен. Введите пропускную способность пакета вручную.${PLAIN}")" >&2
         fi
@@ -118,12 +173,54 @@ prompt_bbr_bandwidth_mbps() {
     while true; do
         read_trimmed bandwidth "$(localized_text "请输入带宽（Mbps，输入 0 取消）: " "Please enter bandwidth (Mbps, enter 0 to cancel):" "Пожалуйста, введите пропускную способность (Мбит/с, для отмены введите 0):")"
         [[ "$bandwidth" == "0" ]] && return 1
-        if [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 )); then
-            echo "$bandwidth"
+        if [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 && bandwidth <= 100000 )); then
+            printf '%s||\n' "$bandwidth"
             return 0
         fi
-        echo -e "$(localized_text "${RED}请输入正整数。${PLAIN}" "${RED}Please enter a positive integer.${PLAIN}" "${RED}Введите положительное целое число.${PLAIN}")" >&2
+        echo -e "$(localized_text "${RED}请输入 1-100000 的整数。${PLAIN}" "${RED}Enter an integer from 1 to 100000.${PLAIN}" "${RED}Введите целое число от 1 до 100000.${PLAIN}")" >&2
     done
+}
+
+prompt_bbr_bandwidth_mbps() {
+    local measurement
+    measurement=$(prompt_bbr_measurement) || return 1
+    printf '%s\n' "${measurement%%|*}"
+}
+
+prompt_bbr_rtt_ms() {
+    local detected_latency="${1:-}"
+    local choice rtt_ms
+
+    echo "$(localized_text "  1. 近距离/亚太线路（80 ms）" "  1. Short-haul/Asia-Pacific routes (80 ms)" "  1. Ближние маршруты/Азиатско-Тихоокеанский регион (80 мс)")" >&2
+    echo "$(localized_text "  2. 跨洲线路（250 ms）" "  2. Intercontinental routes (250 ms)" "  2. Межконтинентальные маршруты (250 мс)")" >&2
+    echo "$(localized_text "  3. 输入主要客户端的实际 RTT" "  3. Enter the actual RTT to primary clients" "  3. Ввести фактический RTT до основных клиентов")" >&2
+    if [[ "$detected_latency" =~ ^[0-9]+$ ]] && (( detected_latency > 0 )); then
+        echo "$(localized_text "  4. 采用测速服务器延迟（${detected_latency} ms，仅供参考）" "  4. Use speed-test server latency (${detected_latency} ms, reference only)" "  4. Использовать задержку до сервера теста (${detected_latency} мс, только для справки)")" >&2
+    fi
+    read_trimmed choice "$(localized_text "选择 RTT 来源 [1]: " "Select RTT source [1]: " "Выберите источник RTT [1]: ")"
+    case "${choice:-1}" in
+        1) echo 80; return 0 ;;
+        2) echo 250; return 0 ;;
+        4)
+            if [[ "$detected_latency" =~ ^[0-9]+$ ]] && (( detected_latency > 0 )); then
+                echo "$detected_latency"
+                return 0
+            fi
+            ;;
+        3)
+            while true; do
+                read_trimmed rtt_ms "$(localized_text "主要客户端 RTT（ms，输入 0 取消）: " "Primary-client RTT (ms, enter 0 to cancel): " "RTT до основных клиентов (мс, 0 — отмена): ")"
+                [[ "$rtt_ms" == "0" ]] && return 1
+                if [[ "$rtt_ms" =~ ^[0-9]+$ ]] && (( rtt_ms > 0 && rtt_ms <= 2000 )); then
+                    echo "$rtt_ms"
+                    return 0
+                fi
+                echo -e "$(localized_text "${RED}请输入 1-2000 的整数。${PLAIN}" "${RED}Enter an integer from 1 to 2000.${PLAIN}" "${RED}Введите целое число от 1 до 2000.${PLAIN}")" >&2
+            done
+            ;;
+    esac
+    echo -e "$(localized_text "${RED}无效选择。${PLAIN}" "${RED}Invalid selection.${PLAIN}" "${RED}Неверный выбор.${PLAIN}")" >&2
+    return 1
 }
 
 sysctl_tune_capture_runtime() {
@@ -142,31 +239,81 @@ sysctl_tune_capture_runtime() {
     done < "$source_file"
 }
 
+bbr_direct_queue_values() {
+    local bandwidth="$1"
+    local rtt_ms="$2"
+    local default_buffer somaxconn syn_backlog netdev_backlog notsent_lowat
+
+    [[ "$bandwidth" =~ ^[0-9]+$ ]] && (( bandwidth > 0 && bandwidth <= 100000 )) || return 1
+    [[ "$rtt_ms" =~ ^[0-9]+$ ]] && (( rtt_ms > 0 && rtt_ms <= 2000 )) || return 1
+
+    if (( bandwidth <= 200 )); then
+        default_buffer=131072
+        somaxconn=2048
+        syn_backlog=4096
+        netdev_backlog=5000
+    elif (( bandwidth <= 1000 )); then
+        default_buffer=262144
+        somaxconn=4096
+        syn_backlog=8192
+        netdev_backlog=10000
+    elif (( bandwidth <= 5000 )); then
+        default_buffer=524288
+        somaxconn=8192
+        syn_backlog=16384
+        netdev_backlog=20000
+    else
+        default_buffer=524288
+        somaxconn=16384
+        syn_backlog=32768
+        netdev_backlog=50000
+    fi
+
+    if (( rtt_ms <= 100 )); then
+        notsent_lowat=16384
+    elif (( rtt_ms <= 250 )); then
+        notsent_lowat=65536
+    else
+        notsent_lowat=131072
+    fi
+    printf '%s|%s|%s|%s|%s\n' "$default_buffer" "$somaxconn" "$syn_backlog" "$netdev_backlog" "$notsent_lowat"
+}
+
 write_bbr_direct_candidate() {
     local output_file="$1"
     local bandwidth="$2"
-    local profile="$3"
+    local rtt_ms="$3"
     local buffer_mb="$4"
-    local buffer_bytes
+    local buffer_bytes queue_values default_buffer somaxconn syn_backlog netdev_backlog notsent_lowat
     buffer_bytes=$((buffer_mb * 1024 * 1024))
+    queue_values=$(bbr_direct_queue_values "$bandwidth" "$rtt_ms") || return 1
+    IFS='|' read -r default_buffer somaxconn syn_backlog netdev_backlog notsent_lowat <<< "$queue_values"
 
     cat > "$output_file" <<EOF
 # VPS-Optimize BBR direct/endpoint profile
-# Bandwidth: ${bandwidth} Mbps; RTT profile: ${profile}; buffer: ${buffer_mb} MiB
+# Bandwidth: ${bandwidth} Mbps; RTT: ${rtt_ms} ms; buffer: ${buffer_mb} MiB
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
+net.core.rmem_default = ${default_buffer}
+net.core.wmem_default = ${default_buffer}
 net.core.rmem_max = ${buffer_bytes}
 net.core.wmem_max = ${buffer_bytes}
-net.ipv4.tcp_rmem = 4096 87380 ${buffer_bytes}
-net.ipv4.tcp_wmem = 4096 65536 ${buffer_bytes}
+net.ipv4.tcp_rmem = 4096 ${default_buffer} ${buffer_bytes}
+net.ipv4.tcp_wmem = 4096 ${default_buffer} ${buffer_bytes}
+net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_moderate_rcvbuf = 1
+net.ipv4.tcp_no_metrics_save = 1
+net.ipv4.tcp_sack = 1
+net.ipv4.tcp_dsack = 1
+net.ipv4.tcp_timestamps = 1
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.ip_local_port_range = 1024 65535
-net.core.somaxconn = 4096
-net.ipv4.tcp_max_syn_backlog = 8192
-net.core.netdev_max_backlog = 5000
+net.core.somaxconn = ${somaxconn}
+net.ipv4.tcp_max_syn_backlog = ${syn_backlog}
+net.core.netdev_max_backlog = ${netdev_backlog}
 net.ipv4.tcp_slow_start_after_idle = 0
 net.ipv4.tcp_mtu_probing = 1
-net.ipv4.tcp_notsent_lowat = 16384
+net.ipv4.tcp_notsent_lowat = ${notsent_lowat}
 net.ipv4.tcp_fin_timeout = 15
 net.ipv4.tcp_fastopen = 3
 net.ipv4.tcp_keepalive_time = 300
@@ -176,6 +323,22 @@ net.ipv4.tcp_syncookies = 1
 EOF
 }
 
+sysctl_tune_verify_file() {
+    local conf_file="$1"
+    local line key expected actual
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="$(trim_input "$line")"
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
+        key="$(trim_input "${line%%=*}")"
+        expected="$(trim_input "${line#*=}")"
+        actual=$(sysctl -n "$key" 2>/dev/null) || return 1
+        expected=$(printf '%s\n' "$expected" | awk '{$1=$1; print}')
+        actual=$(printf '%s\n' "$actual" | awk '{$1=$1; print}')
+        [[ "$actual" == "$expected" ]] || return 1
+    done < "$conf_file"
+}
+
 func_bbr_direct_tune() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -183,23 +346,19 @@ func_bbr_direct_tune() {
     echo -e "$(localized_text "${BOLD}🚀 BBR 直连/落地优化（智能带宽检测）${PLAIN}" "${BOLD}🚀 BBR Direct connection/relay-server tuning (intelligent bandwidth detection)${PLAIN}" "${BOLD}🚀 BBR Оптимизация прямого подключения/посадки (интеллектуальное определение пропускной способности)${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
-    local bandwidth profile_choice profile buffer_mb buffer_bytes
+    local measurement bandwidth detected_latency _download rtt_ms buffer_mb buffer_bytes queue_values
+    local default_buffer somaxconn syn_backlog netdev_backlog notsent_lowat
     local candidate runtime_backup config_backup=""
-    bandwidth=$(prompt_bbr_bandwidth_mbps) || { pause_return "$(localized_text "操作已取消，按任意键返回..." "The operation has been canceled. Press any key to return..." "Операция отменена. Нажмите любую клавишу, чтобы вернуться...")"; return 0; }
+    measurement=$(prompt_bbr_measurement) || { pause_return "$(localized_text "操作已取消，按任意键返回..." "The operation has been canceled. Press any key to return..." "Операция отменена. Нажмите любую клавишу, чтобы вернуться...")"; return 0; }
+    IFS='|' read -r bandwidth detected_latency _download <<< "$measurement"
 
     echo ""
-    echo "$(localized_text "  1. 近距离/亚太为主（主要 RTT 通常低于 100ms）" "1. Short range/Asia-Pacific mainly (main RTT is usually less than 100ms)" "1. Малая дальность/в основном Азиатско-Тихоокеанский регион (основное RTT обычно менее 100 мс)")"
-    echo "$(localized_text "  2. 跨洲链路为主（主要 RTT 通常为 150-300ms）" "2. Mainly cross-continental links (main RTT is usually 150-300ms)" "2. В основном межконтинентальные каналы (основное RTT обычно составляет 150–300 мс).")"
-    read_trimmed profile_choice "$(localized_text "选择主要线路场景 [1]: " "Select the primary route profile [1]: " "Выберите основной профиль маршрута [1]: ")"
-    case "${profile_choice:-1}" in
-        1) profile="near" ;;
-        2) profile="long" ;;
-        *) echo -e "$(localized_text "${RED}无效选择。${PLAIN}" "${RED}Invalid selection.${PLAIN}" "${RED}Неверный выбор.${PLAIN}")"; pause_return; return 1 ;;
-    esac
-
-    buffer_mb=$(bbr_direct_buffer_mb "$bandwidth" "$profile") || return 1
+    rtt_ms=$(prompt_bbr_rtt_ms "$detected_latency") || { pause_return "$(localized_text "操作已取消，按任意键返回..." "The operation has been canceled. Press any key to return..." "Операция отменена. Нажмите любую клавишу, чтобы вернуться...")"; return 0; }
+    buffer_mb=$(bbr_direct_buffer_mb_for_rtt "$bandwidth" "$rtt_ms") || return 1
     buffer_bytes=$((buffer_mb * 1024 * 1024))
-    echo -e "$(localized_text "${CYAN}计算结果：${bandwidth} Mbps，TCP 最大缓冲区 ${buffer_mb} MiB。${PLAIN}" "${CYAN}Calculation result: ${bandwidth} Mbps, TCP maximum buffer ${buffer_mb} MiB.${PLAIN}" "${CYAN}Результат расчета : ${bandwidth} Мбит/с, TCP максимальный буфер ${buffer_mb} MiB.${PLAIN}")"
+    queue_values=$(bbr_direct_queue_values "$bandwidth" "$rtt_ms") || return 1
+    IFS='|' read -r default_buffer somaxconn syn_backlog netdev_backlog notsent_lowat <<< "$queue_values"
+    echo -e "$(localized_text "${CYAN}计算结果：${bandwidth} Mbps / ${rtt_ms} ms，缓冲区 ${buffer_mb} MiB，连接队列 ${somaxconn}，SYN 队列 ${syn_backlog}，网卡积压 ${netdev_backlog}。${PLAIN}" "${CYAN}Calculated for ${bandwidth} Mbps / ${rtt_ms} ms: ${buffer_mb} MiB buffer, ${somaxconn} listen queue, ${syn_backlog} SYN queue, ${netdev_backlog} device backlog.${PLAIN}" "${CYAN}Расчёт для ${bandwidth} Мбит/с / ${rtt_ms} мс: буфер ${buffer_mb} MiB, очередь прослушивания ${somaxconn}, SYN-очередь ${syn_backlog}, очередь устройства ${netdev_backlog}.${PLAIN}")"
 
     if ! modprobe tcp_bbr >/dev/null 2>&1; then
         echo -e "$(localized_text "${RED}当前内核无法加载 tcp_bbr 模块，未修改配置。${PLAIN}" "${RED}The current kernel cannot load the tcp_bbr module and the configuration has not been modified.${PLAIN}" "${RED}Текущее ядро не может загрузить модуль tcp_bbr, и конфигурация не была изменена.${PLAIN}")"
@@ -214,7 +373,7 @@ func_bbr_direct_tune() {
 
     candidate=$(mktemp /tmp/vpso-bbr-direct.XXXXXX.conf) || return 1
     runtime_backup=$(mktemp /tmp/vpso-bbr-runtime.XXXXXX.conf) || { rm -f "$candidate"; return 1; }
-    write_bbr_direct_candidate "$candidate" "$bandwidth" "$profile" "$buffer_mb"
+    write_bbr_direct_candidate "$candidate" "$bandwidth" "$rtt_ms" "$buffer_mb"
 
     if ! sysctl_tune_check_supported_file "$candidate" || ! sysctl_tune_capture_runtime "$candidate" "$runtime_backup"; then
         rm -f "$candidate" "$runtime_backup"
@@ -234,7 +393,7 @@ func_bbr_direct_tune() {
         fi
     fi
 
-    if ! sysctl_tune_apply_file "$candidate" || ! install -m 0644 "$candidate" "$VPSO_BBR_DIRECT_CONF"; then
+    if ! sysctl_tune_apply_file "$candidate" || ! install -m 0644 "$candidate" "$VPSO_BBR_DIRECT_CONF" || ! sysctl_tune_verify_file "$candidate"; then
         sysctl_tune_apply_file "$runtime_backup" >/dev/null 2>&1 || true
         if [[ -n "$config_backup" && -f "$config_backup" ]]; then
             cp -p "$config_backup" "$VPSO_BBR_DIRECT_CONF" >/dev/null 2>&1 || true
@@ -253,6 +412,7 @@ func_bbr_direct_tune() {
     [[ -n "$config_backup" ]] && echo "$(localized_text "原配置备份：$config_backup" "Original configuration backup: $config_backup" "Резервная копия исходной конфигурации: $config_backup.")"
     echo "$(localized_text "当前拥塞控制：$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)" "Current congestion control: $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)" "Текущий контроль перегрузок: $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)")"
     echo "$(localized_text "当前最大缓冲区：${buffer_bytes} bytes (${buffer_mb} MiB)" "Current maximum buffer: ${buffer_bytes} bytes (${buffer_mb} MiB)" "Текущий максимальный буфер: ${buffer_bytes} байт (${buffer_mb} MiB)")"
+    echo "$(localized_text "动态参数：默认 socket 缓冲 ${default_buffer} bytes；listen ${somaxconn} / SYN ${syn_backlog} / netdev ${netdev_backlog}；notsent_lowat ${notsent_lowat} bytes" "Dynamic parameters: ${default_buffer}-byte default socket buffer; listen ${somaxconn} / SYN ${syn_backlog} / netdev ${netdev_backlog}; notsent_lowat ${notsent_lowat} bytes" "Динамические параметры: буфер сокета по умолчанию ${default_buffer} байт; listen ${somaxconn} / SYN ${syn_backlog} / netdev ${netdev_backlog}; notsent_lowat ${notsent_lowat} байт")"
     echo -e "$(localized_text "${YELLOW}该功能不修改内核、Swap、防火墙、路由或 systemd 服务。${PLAIN}" "${YELLOW}This function does not modify the kernel, Swap, firewall, routing or systemd services.${PLAIN}" "${YELLOW}Эта функция не изменяет ядро, Swap, брандмауэр, маршрутизацию или службы systemd.${PLAIN}")"
     pause_return
 }
