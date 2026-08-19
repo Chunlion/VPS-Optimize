@@ -3073,7 +3073,7 @@ stream = {
     "security": "reality",
     "realitySettings": {
         "target": "cdn.example.com:443",
-        "serverNames": ["cdn.example.com"],
+        "serverNames": ["cdn.example.com", "cdn-alt.example.com"],
         "privateKey": "keep-private-key",
         "shortIds": ["aabbccdd"],
     },
@@ -3081,7 +3081,7 @@ stream = {
 conn.execute("insert into inbounds values (1, 1443, 'reality-test', ?)", (json.dumps(stream),))
 conn.commit()
 PY
-grep -Fq $'1\t1443\treality-test\tcdn.example.com\tdisabled' < <(reality_guard_python list "$reality_guard_smoke_db")
+grep -Fq $'1\t1443\treality-test\tcdn.example.com,cdn-alt.example.com\tdisabled' < <(reality_guard_python list "$reality_guard_smoke_db")
 reality_guard_python apply "$reality_guard_smoke_db" 1 100 10 20 200 30 40
 python3 - "$reality_guard_smoke_db" <<'PY'
 import json
@@ -3107,6 +3107,48 @@ assert "limitFallbackUpload" not in reality
 assert "limitFallbackDownload" not in reality
 assert reality["privateKey"] == "keep-private-key"
 PY
+
+(
+    XRAY_LISTEN_PORT=1443
+    REALITY_SNI=cdn.example.com
+    PANEL_DOMAIN=panel.example.com
+    SITE_DOMAINS=()
+    TCP_ROUTE_SNIS=()
+    XRAY_SNI_ROUTE_SNIS=()
+    XRAY_SNI_ROUTE_PORTS=()
+    [[ "$(unregistered_reality_server_names "$reality_guard_smoke_db")" == "cdn-alt.example.com" ]]
+    find_xui_database_candidates() { printf '%s\n' "$reality_guard_smoke_db"; }
+    if validate_strict_sni_gate_reality_server_names >/dev/null; then
+        echo "Strict SNI gate validation must reject an unregistered REALITY serverName." >&2
+        exit 1
+    fi
+    XRAY_SNI_ROUTE_SNIS=(cdn-alt.example.com)
+    XRAY_SNI_ROUTE_PORTS=(1443)
+    [[ -z "$(unregistered_reality_server_names "$reality_guard_smoke_db")" ]]
+    validate_strict_sni_gate_reality_server_names >/dev/null
+)
+
+(
+    STRICT_SNI_GATE=false
+    sync_calls=0
+    saved_states=""
+    load_sni_stack_env() { ENTRY_MODE="nginx-stream"; return 0; }
+    get_entry_mode() { printf '%s' 'nginx-stream'; }
+    confirm_danger() { return 0; }
+    validate_strict_sni_gate_reality_server_names() { return 0; }
+    save_sni_stack_env() { saved_states+="${STRICT_SNI_GATE} "; }
+    sync_strict_sni_gate_to_current_entry() {
+        sync_calls=$((sync_calls + 1))
+        [[ "$sync_calls" -gt 1 ]]
+    }
+    if set_strict_sni_gate true >/dev/null; then
+        echo "Strict SNI gate transition must fail when the new state cannot be synchronized." >&2
+        exit 1
+    fi
+    [[ "$STRICT_SNI_GATE" == "false" ]]
+    [[ "$saved_states" == "true false " ]]
+    [[ "$sync_calls" == "2" ]]
+)
 
 (
     clear() { :; }

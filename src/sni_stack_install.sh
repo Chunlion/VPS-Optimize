@@ -558,7 +558,7 @@ EOF
     if [[ "$reject_backend_required" == "true" ]]; then
         cat <<'EOF' >> "$conf_file"
 upstream vps_ip_reject_backend {
-    server 127.0.0.1:9;
+    server unix:/dev/null;
 }
 
 EOF

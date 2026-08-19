@@ -17,6 +17,59 @@ registered_443_snis() {
         awk 'NF && !seen[tolower($0)]++'
 }
 
+is_registered_reality_backend_port() {
+    local candidate="$1" port
+    [[ "$candidate" == "${XRAY_LISTEN_PORT:-}" ]] && return 0
+    for port in "${XRAY_SNI_ROUTE_PORTS[@]:-}"; do
+        [[ "$candidate" == "$port" ]] && return 0
+    done
+    return 1
+}
+
+is_registered_reality_sni_for_port() {
+    local candidate port i
+    candidate=$(normalize_domain_input "$1")
+    port="$2"
+    if [[ "$port" == "${XRAY_LISTEN_PORT:-}" && "$candidate" == "$(normalize_domain_input "${REALITY_SNI:-}")" ]]; then
+        return 0
+    fi
+    for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
+        if [[ "$port" == "${XRAY_SNI_ROUTE_PORTS[$i]:-}" && "$candidate" == "$(normalize_domain_input "${XRAY_SNI_ROUTE_SNIS[$i]}")" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+unregistered_reality_server_names() {
+    local db_path="$1" id port remark server_names state server_name normalized
+    local -a names=()
+    while IFS=$'\t' read -r id port remark server_names state; do
+        is_registered_reality_backend_port "$port" || continue
+        [[ -n "$server_names" && "$server_names" != "-" ]] || continue
+        IFS=',' read -r -a names <<< "$server_names"
+        for server_name in "${names[@]}"; do
+            normalized=$(normalize_domain_input "$server_name")
+            [[ -n "$normalized" ]] || continue
+            if ! is_valid_domain "$normalized" || ! is_registered_reality_sni_for_port "$normalized" "$port"; then
+                printf '%s\n' "$normalized"
+            fi
+        done
+    done < <(reality_guard_python list "$db_path" 2>/dev/null)
+}
+
+validate_strict_sni_gate_reality_server_names() {
+    local db_path missing
+    command -v python3 >/dev/null 2>&1 || return 0
+    db_path=$(find_reality_guard_database 2>/dev/null) || return 0
+    missing=$(unregistered_reality_server_names "$db_path" | awk 'NF && !seen[tolower($0)]++')
+    [[ -z "$missing" ]] && return 0
+    echo -e "$(localized_text "${RED}❌ 检测到当前共享入口后端还有未登记的 REALITY serverNames，拒绝启用严格 SNI 门禁：${PLAIN}" "${RED}❌ Unregistered REALITY serverNames were found on a backend used by the shared entry. The strict SNI gate was not enabled:${PLAIN}" "${RED}❌ На бэкенде общего входа обнаружены незарегистрированные REALITY serverNames. Строгий контроль SNI не включён:${PLAIN}")"
+    sed 's/^/  - /' <<< "$missing"
+    echo -e "$(localized_text "${YELLOW}请先把每个名称登记到对应的 Xray SNI 路由，再重新启用。${PLAIN}" "${YELLOW}Register every name in the matching Xray SNI route, then enable the gate again.${PLAIN}" "${YELLOW}Сначала зарегистрируйте каждое имя в соответствующем маршруте Xray SNI, затем снова включите контроль.${PLAIN}")"
+    return 1
+}
+
 strict_sni_gate_mode_supported() {
     local mode="${1:-$(get_entry_mode)}"
     [[ "$mode" == "nginx-stream" || "$mode" == "tcp-peek" ]]
@@ -53,12 +106,15 @@ sync_strict_sni_gate_to_current_entry() {
 }
 
 set_strict_sni_gate() {
-    local target="$1" mode
+    local target="$1" mode previous
     load_sni_stack_env || return 1
     mode=$(get_entry_mode)
     if [[ "$target" == "true" ]] && ! strict_sni_gate_mode_supported "$mode"; then
         echo -e "$(localized_text "${RED}当前模式不支持前置严格 SNI 门禁。${PLAIN}" "${RED}The current mode does not support a front strict SNI gate.${PLAIN}" "${RED}Текущий режим не поддерживает строгий входной контроль SNI.${PLAIN}")"
         return 1
+    fi
+    if [[ "$target" == "true" ]]; then
+        validate_strict_sni_gate_reality_server_names || return 1
     fi
     if [[ "$target" == "true" ]]; then
         confirm_danger "$(localized_text "启用严格 SNI 门禁" "Enable the strict SNI gate" "Включить строгий контроль SNI")" \
@@ -69,12 +125,21 @@ set_strict_sni_gate() {
             "$(localized_text "未知 SNI 将恢复转发到默认 Xray 后端，并重新应用当前入口" "resume forwarding unknown SNI to the default Xray backend and reapply the current entry" "возобновить пересылку неизвестных SNI на стандартный бэкенд Xray и повторно применить текущую точку входа")" \
             "$(localized_text "可重新进入本菜单启用门禁" "enable the gate again from this menu" "контроль можно снова включить в этом меню")" || return 0
     fi
+    previous=$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")
     STRICT_SNI_GATE="$target"
-    save_sni_stack_env
+    if ! save_sni_stack_env; then
+        STRICT_SNI_GATE="$previous"
+        return 1
+    fi
     if sync_strict_sni_gate_to_current_entry; then
         echo -e "$(localized_text "${GREEN}✅ 严格 SNI 门禁已保存并同步到当前入口。${PLAIN}" "${GREEN}✅ The strict SNI gate was saved and synchronized to the current entry.${PLAIN}" "${GREEN}✅ Строгий контроль SNI сохранён и применён к текущему входу.${PLAIN}")"
     else
-        echo -e "$(localized_text "${YELLOW}设置已保存，但未能同步到当前入口；请修复入口后重新应用。${PLAIN}" "${YELLOW}The setting was saved but could not be synchronized to the current entry. Fix the entry and reapply it.${PLAIN}" "${YELLOW}Настройка сохранена, но не применена к текущему входу. Исправьте вход и повторите применение.${PLAIN}")"
+        STRICT_SNI_GATE="$previous"
+        if save_sni_stack_env && sync_strict_sni_gate_to_current_entry; then
+            echo -e "$(localized_text "${YELLOW}新设置未能同步，已恢复原门禁状态。${PLAIN}" "${YELLOW}The new setting could not be synchronized, so the previous gate state was restored.${PLAIN}" "${YELLOW}Новую настройку не удалось применить; предыдущее состояние контроля восстановлено.${PLAIN}")"
+        else
+            echo -e "$(localized_text "${RED}❌ 新设置同步失败，原门禁状态也未能完整恢复；请立即检查当前 443 入口。${PLAIN}" "${RED}❌ The new setting failed and the previous gate state could not be fully restored. Inspect the active port 443 entry immediately.${PLAIN}" "${RED}❌ Не удалось применить новую настройку и полностью восстановить прежнее состояние. Немедленно проверьте активный вход 443.${PLAIN}")"
+        fi
         return 1
     fi
 }

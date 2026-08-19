@@ -199,5 +199,7 @@ assert_contains "$tmp_dir/nginx-strict-sni.conf" "    panel.example.com web_prox
 assert_contains "$tmp_dir/nginx-strict-sni.conf" "    node.example.com vps_xray_route_0_backend;"
 assert_contains "$tmp_dir/nginx-strict-sni.conf" "    reality.example.com xray_backend;"
 assert_contains "$tmp_dir/nginx-strict-sni.conf" "upstream vps_ip_reject_backend {"
+assert_contains "$tmp_dir/nginx-strict-sni.conf" "    server unix:/dev/null;"
+assert_not_contains "$tmp_dir/nginx-strict-sni.conf" "127.0.0.1:9"
 
 echo "Golden render tests passed."
