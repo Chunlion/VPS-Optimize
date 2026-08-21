@@ -9,7 +9,6 @@ _subscription_tools_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for _subscription_tools_module in \
     compose_runtime.sh \
     subscription_apps.sh \
-    subscription_compose_manage.sh \
     subscription_service_menus.sh \
     dockge_migration.sh
 do

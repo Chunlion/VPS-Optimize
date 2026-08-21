@@ -22,7 +22,7 @@ Build order is intentional. Foundational helpers are loaded first, then focused 
    `tcp_peek_engine.sh`, `xray_sni_routes.sh`, `caddy_maintenance.sh`,
    `ssh_security.sh`, `docker_manage.sh`, `kernel_tuning.sh`, `diagnostics_*.sh`,
    `panel_installers.sh`, `compose_runtime.sh`, `subscription_apps.sh`,
-   `subscription_compose_manage.sh`, `subscription_service_menus.sh`, `dockge_migration.sh`,
+   `subscription_service_menus.sh`, `dockge_migration.sh`,
    `panel_rescue.sh`, `server_maintenance.sh`,
    `updater.sh`, `preflight.sh`, `health_dashboard.sh`, `dns_optimize.sh`,
    `traffic_guard.sh`, and `network_interface.sh`.
@@ -35,7 +35,6 @@ Compose/subscription build ownership:
 
 - `compose_runtime.sh` owns Docker Compose detection/installation, compose file discovery, managed compose directory checks, and generic compose project management actions.
 - `subscription_apps.sh` owns installer flows and generated Compose files for SublinkPro, Miaomiaowu, Sub-Store, Dockge, and Komari.
-- `subscription_compose_manage.sh` owns the managed subscription-tool update workflow.
 - `subscription_service_menus.sh` owns panel/node/subscription/compose service submenu wiring and the shared install/manage action menu.
 - `dockge_migration.sh` owns Dockge migration discovery and migration workflows for existing Compose projects.
 - `subscription_tools.sh` is a compatibility loader only. It exists for manual `source src/subscription_tools.sh` and source-checkout compatibility, must not define duplicate business functions, and must not be used by the release build. `scripts/build.sh` includes the split modules above directly.

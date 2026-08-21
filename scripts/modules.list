@@ -35,7 +35,6 @@ diagnostics_network
 panel_installers
 compose_runtime
 subscription_apps
-subscription_compose_manage
 subscription_service_menus
 dockge_migration
 panel_rescue

@@ -152,7 +152,7 @@ bash -n xui-custom-manager.sh
 for module in \
     common runtime firewall sni_stack_config vpso_mux_state vpso_mux_config \
     vpso_mux_install tcp_peek_engine sni_stack_health compose_runtime \
-    subscription_apps subscription_compose_manage subscription_service_menus \
+    subscription_apps subscription_service_menus \
     dockge_migration menus main; do
     assert_module_list_contains "$module"
     assert_dist_contains "# Module: ${module}.sh" "Release script is missing key module: ${module}.sh"
@@ -246,7 +246,7 @@ assert_dist_contains 'https://raw.githubusercontent.com/EasyTier/EasyTier/main/s
 assert_dist_contains 'https://tailscale.com/install.sh' "Release script must include the Tailscale installer."
 assert_dist_contains 'https://raw.githubusercontent.com/MEILOI/VPS_BOT_X/main/vps_bot-x/install.sh' "Release script must include the VPS_BOT_X installer."
 assert_function_body_contains src/panel_installers.sh func_vps_bot_x 'confirm_danger' "VPS_BOT_X installation must require dangerous-action confirmation."
-assert_file_contains src/menus.sh '15) func_vps_bot_x ;;' "Panel tools menu must route item 15 to VPS_BOT_X."
+assert_file_contains src/menus.sh '14) func_vps_bot_x ;;' "Panel tools menu must route item 14 to VPS_BOT_X."
 assert_function_body_contains src/environment.sh func_env_install '13) run_remote_script "$(localized_text "安装 FLVX 哆啦转发面板"' "FLVX menu entry must localize the selected project installer label."
 assert_function_body_contains src/environment.sh func_env_install 'https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh' "FLVX menu entry must use the selected project installer."
 assert_function_body_contains src/environment.sh func_env_install '14) run_remote_script "$(localized_text "安装 EasyTier 组网"' "EasyTier menu entry must localize the official installer label."
@@ -341,7 +341,7 @@ case "$module_order" in
         ;;
 esac
 case "$module_order" in
-    *"panel_installers compose_runtime subscription_apps subscription_compose_manage subscription_service_menus dockge_migration panel_rescue"*) ;;
+    *"panel_installers compose_runtime subscription_apps subscription_service_menus dockge_migration panel_rescue"*) ;;
     *)
         echo "Compose management modules are not in the expected build order." >&2
         exit 1
@@ -355,7 +355,7 @@ assert_file_not_contains dist/vps.sh '# Module: subscription_tools.sh' "Release 
 assert_file_not_matches src/subscription_tools.sh '^[A-Za-z_][A-Za-z0-9_]*\(\) \{' "subscription_tools.sh must stay a compatibility loader, not reintroduce duplicate implementations."
 assert_file_contains src/README.md 'compose_runtime.sh`, `subscription_apps.sh`,' "Source README must document the split compose/subscription build order."
 assert_file_contains src/README.md 'subscription_tools.sh` is a compatibility loader only' "Source README must document subscription_tools.sh as compatibility-only."
-for module in compose_runtime.sh subscription_apps.sh subscription_compose_manage.sh subscription_service_menus.sh dockge_migration.sh; do
+for module in compose_runtime.sh subscription_apps.sh subscription_service_menus.sh dockge_migration.sh; do
     assert_dist_contains "# Module: ${module}" "Release script is missing split compose/subscription module: ${module}"
 done
 assert_file_contains ".gitattributes" 'dist/vps.sh.sha256 text eol=lf' "dist checksum must be pinned to LF in Windows workspaces."
@@ -374,7 +374,6 @@ for function_name in \
     func_dockge_menu \
     docker_compose_management_menu \
     func_komari_menu \
-    func_update_subscription_tools \
     func_migrate_compose_to_dockge
 do
     assert_function_defined_once dist/vps.sh "$function_name"
@@ -756,13 +755,11 @@ declare -f collect_applied_config_files >/dev/null
 (
     source src/compose_runtime.sh
     source src/subscription_apps.sh
-    source src/subscription_compose_manage.sh
     source src/subscription_service_menus.sh
     source src/dockge_migration.sh
     declare -f func_sublinkpro_menu >/dev/null
     declare -f func_dockge_menu >/dev/null
     declare -f func_komari_menu >/dev/null
-    declare -f func_update_subscription_tools >/dev/null
     declare -f func_migrate_compose_to_dockge >/dev/null
     random_secret=$(generate_random_secret)
     [[ "$random_secret" =~ ^[0-9a-f]{64}$ ]]
@@ -2149,10 +2146,12 @@ grep -q '独立 Xray 服务' dist/vps.sh
 grep -q 'Dockge / Compose 管理' dist/vps.sh
 grep -q 'docker_compose_management_menu' dist/vps.sh
 grep -q '端口流量监控（dog）' dist/vps.sh
-assert_function_body_contains src/menus.sh func_panel_deploy_menu '11) func_komari_menu ;;' "Panel/tools option 11 must open Komari management."
-assert_function_body_contains src/menus.sh func_panel_deploy_menu '12) func_dns_unlock ;;' "Panel/tools option 12 must open DNS Unlock."
-assert_function_body_contains src/menus.sh func_panel_deploy_menu '13) func_ip_sentinel ;;' "Panel/tools option 13 must open IP-Sentinel."
-assert_function_body_contains src/menus.sh func_panel_deploy_menu '14) func_port_dog ;;' "Panel/tools option 14 must open the per-port traffic monitor."
+assert_function_body_contains src/menus.sh func_panel_deploy_menu '10) func_komari_menu ;;' "Panel/tools option 10 must open Komari management."
+assert_function_body_contains src/menus.sh func_panel_deploy_menu '11) func_dns_unlock ;;' "Panel/tools option 11 must open DNS Unlock."
+assert_function_body_contains src/menus.sh func_panel_deploy_menu '12) func_ip_sentinel ;;' "Panel/tools option 12 must open IP-Sentinel."
+assert_function_body_contains src/menus.sh func_panel_deploy_menu '13) func_port_dog ;;' "Panel/tools option 13 must open the per-port traffic monitor."
+assert_file_not_contains src/menus.sh 'func_update_subscription_tools' "Panel/tools menu must not retain the duplicate subscription update entry."
+assert_path_absent src/subscription_compose_manage.sh "The duplicate subscription update module must be removed."
 assert_file_not_contains src/menus.sh '11|12) docker_backup_migration_menu ;;' "Panel/tools menu must not retain hidden Docker/Compose routes."
 assert_function_body_contains src/compose_runtime.sh manage_compose_project '1. 安装 / 更新 ${project_name}' "Compose project menus must expose install/update directly."
 assert_function_body_contains src/compose_runtime.sh manage_compose_project '7. 归档部署目录' "Compose project menus must expose archive/uninstall directly."
@@ -2988,7 +2987,7 @@ assert_dist_contains "$subscription_public_hint" "Release script must include th
 panel_menu_compact_label='Sing-box 管理'
 assert_file_contains "src/menus.sh" "$panel_menu_compact_label" "Panel/tools menu must use the compact script-style label."
 assert_dist_contains "$panel_menu_compact_label" "Release script must include the compact panel/tools menu label."
-panel_help_public_hint='7/8/9 订阅工具，10 更新订阅工具，11 Komari；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
+panel_help_public_hint='7/8/9 订阅工具，10 Komari；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both without Port 443 Reuse and Port 443 Reuse reverse proxy paths."
 assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
 panel_domain_menu_path='主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]'

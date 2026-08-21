@@ -214,7 +214,7 @@ assert_file_contains src/common.sh 'https://raw.githubusercontent.com/MEILOI/VPS
 assert_file_contains src/panel_installers.sh 'func_vps_bot_x()' "VPS_BOT_X installation function must be defined."
 assert_file_contains src/panel_installers.sh 'confirm_danger' "VPS_BOT_X installation must require dangerous-action confirmation."
 assert_file_contains src/panel_installers.sh 'https://raw.githubusercontent.com/MEILOI/VPS_BOT_X/main/vps_bot-x/install.sh' "VPS_BOT_X installation must use the requested upstream installer."
-assert_file_contains src/menus.sh '15) func_vps_bot_x ;;' "Panel tools menu must expose VPS_BOT_X without changing existing entries."
+assert_file_contains src/menus.sh '14) func_vps_bot_x ;;' "Panel tools menu must expose VPS_BOT_X on option 14."
 
 [[ -f scripts/modules.list ]]
 assert_file_contains scripts/build.sh 'scripts/modules.list' "Release build must read the shared module list."
@@ -222,7 +222,7 @@ assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint m
 for module in \
     common language runtime firewall sni_stack_config vpso_mux_state vpso_mux_config \
     vpso_mux_install tcp_peek_engine sni_stack_health compose_runtime \
-    subscription_apps subscription_compose_manage subscription_service_menus \
+    subscription_apps subscription_service_menus \
     dockge_migration menus main; do
     assert_module_list_contains "$module"
     assert_file_contains dist/vps.sh "# Module: ${module}.sh" "Release script is missing key module: ${module}.sh"
