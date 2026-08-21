@@ -2,23 +2,23 @@
 # Panel, node, subscription-tool, and compose service action menus.
 
 func_manage_sublinkpro() {
-    manage_compose_project "SublinkPro" "/opt/sublinkpro" "$(localized_text "db / template / logs 会保存在部署目录中" "db/template/logs will be saved in the deployment directory" "db/template/logs будет сохранен в каталоге развертывания.")"
+    manage_compose_project "SublinkPro" "/opt/sublinkpro" "$(localized_text "db / template / logs 会保存在部署目录中" "db/template/logs will be saved in the deployment directory" "db/template/logs будет сохранен в каталоге развертывания.")" func_sublinkpro
 }
 
 func_manage_miaomiaowu() {
-    manage_compose_project "$(localized_text "妙妙屋订阅管理" "Miaomiaowu Subscription Management" "Управление подпиской Miaomiaowu")" "/opt/miaomiaowu" "$(localized_text "data / subscribes / rule_templates 会保存在部署目录中" "data/subscribes/rule_templates will be saved in the deployment directory" "data/subscribes/rule_templates будут сохранены в каталоге развертывания.")"
+    manage_compose_project "$(localized_text "妙妙屋订阅管理" "Miaomiaowu Subscription Management" "Управление подпиской Miaomiaowu")" "/opt/miaomiaowu" "$(localized_text "data / subscribes / rule_templates 会保存在部署目录中" "data/subscribes/rule_templates will be saved in the deployment directory" "data/subscribes/rule_templates будут сохранены в каталоге развертывания.")" func_miaomiaowu
 }
 
 func_manage_substore() {
-    manage_compose_project "Sub-Store" "/opt/sub-store" "$(localized_text "data 会保存在部署目录中" "data will be saved in the deployment directory" "данные будут сохранены в каталоге развертывания")"
+    manage_compose_project "Sub-Store" "/opt/sub-store" "$(localized_text "data 会保存在部署目录中" "data will be saved in the deployment directory" "данные будут сохранены в каталоге развертывания")" func_substore
 }
 
 func_manage_dockge() {
-    manage_compose_project "Dockge" "/opt/dockge" "$(localized_text "Dockge 数据在 /opt/dockge/data；Stacks 默认在 /opt/stacks，不会随 Dockge 目录删除" "Dockge data is in /opt/dockge/data; Stacks is in /opt/stacks by default and will not be deleted with the Dockge directory." "Данные Dockge находятся в /opt/dockge/data; По умолчанию стеки находятся в /opt/stacks и не будут удалены вместе с каталогом Dockge.")"
+    manage_compose_project "Dockge" "/opt/dockge" "$(localized_text "Dockge 数据在 /opt/dockge/data；Stacks 默认在 /opt/stacks，不会随 Dockge 目录删除" "Dockge data is in /opt/dockge/data; Stacks is in /opt/stacks by default and will not be deleted with the Dockge directory." "Данные Dockge находятся в /opt/dockge/data; По умолчанию стеки находятся в /opt/stacks и не будут удалены вместе с каталогом Dockge.")" func_dockge
 }
 
 func_manage_komari() {
-    manage_compose_project "Komari" "/opt/komari" "$(localized_text "Komari 数据会保存在 /opt/komari/data" "Komari data will be saved in /opt/komari/data" "Данные Комари будут сохранены в /opt/komari/data.")"
+    manage_compose_project "Komari" "/opt/komari" "$(localized_text "Komari 数据会保存在 /opt/komari/data" "Komari data will be saved in /opt/komari/data" "Данные Комари будут сохранены в /opt/komari/data.")" func_komari
 }
 
 func_service_action_menu() {
@@ -91,21 +91,21 @@ func_xray_menu() {
 }
 
 func_sublinkpro_menu() {
-    func_service_action_menu "$(localized_text "SublinkPro 管理" "SublinkPro management" "Управление SublinkPro")" "$(localized_text "安装或管理通过 Docker Compose 部署的 SublinkPro。" "Install or manage SublinkPro deployed with Docker Compose." "Установить или управлять SublinkPro, развёрнутым через Docker Compose.")" "$(localized_text "安装 SublinkPro" "Install SublinkPro" "Установить SublinkPro")" func_sublinkpro "$(localized_text "管理 / 卸载 SublinkPro" "Manage or uninstall SublinkPro" "Управление или удаление SublinkPro")" func_manage_sublinkpro
+    func_manage_sublinkpro
 }
 
 func_miaomiaowu_menu() {
-    func_service_action_menu "$(localized_text "妙妙屋订阅管理" "Miaomiaowu Subscription Management" "Управление подпиской Miaomiaowu")" "$(localized_text "安装或管理 Docker Compose 部署的妙妙屋订阅管理。" "Install or manage Docker Compose deployment of Miaomiaowu Subscription Management." "Установите или управляйте развертыванием Docker Compose для управления подписками Miaomiaowu.")" "$(localized_text "安装 妙妙屋订阅管理" "Install Miaomiaowu Subscription Management" "Установите управление подпиской Miaomiaowu")" func_miaomiaowu "$(localized_text "管理 / 卸载 妙妙屋" "Manage / Uninstall Miaomiaowu" "Управление / Удаление")" func_manage_miaomiaowu
+    func_manage_miaomiaowu
 }
 
 func_substore_menu() {
-    func_service_action_menu "$(localized_text "Sub-Store 管理" "Sub-Store management" "Управление Sub-Store")" "$(localized_text "安装或管理通过 Docker Compose 部署的 Sub-Store。" "Install or manage Sub-Store deployed with Docker Compose." "Установить или управлять Sub-Store, развёрнутым через Docker Compose.")" "$(localized_text "安装 Sub-Store" "Install Sub-Store" "Установить Sub-Store")" func_substore "$(localized_text "管理 / 卸载 Sub-Store" "Manage or uninstall Sub-Store" "Управление или удаление Sub-Store")" func_manage_substore
+    func_manage_substore
 }
 
 func_dockge_menu() {
-    func_service_action_menu "$(localized_text "Dockge 管理" "Dockge management" "Управление Dockge")" "$(localized_text "安装或管理通过 Docker Compose 部署的 Dockge。" "Install or manage Dockge deployed with Docker Compose." "Установить или управлять Dockge, развёрнутым через Docker Compose.")" "$(localized_text "安装 Dockge" "Install Dockge" "Установить Dockge")" func_dockge "$(localized_text "管理 / 卸载 Dockge" "Manage or uninstall Dockge" "Управление или удаление Dockge")" func_manage_dockge
+    func_manage_dockge
 }
 
 func_komari_menu() {
-    func_service_action_menu "$(localized_text "Komari 探针监控" "Komari monitoring" "Мониторинг Komari")" "$(localized_text "安装或管理 Docker Compose 部署的 Komari 探针监控面板。" "Install or manage the Komari monitoring panel deployed with Docker Compose." "Установить или настроить панель мониторинга Komari, развёрнутую через Docker Compose.")" "$(localized_text "安装 Komari" "Install Komari" "Установить Komari")" func_komari "$(localized_text "管理 / 卸载 Komari" "Manage / Uninstall Komari" "Управление / удаление Komari")" func_manage_komari
+    func_manage_komari
 }

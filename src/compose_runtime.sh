@@ -111,54 +111,61 @@ manage_compose_project() {
     local project_name="$1"
     local project_dir="${2%/}"
     local data_hint="$3"
+    local install_func="$4"
     local compose_file choice yn
 
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "$(localized_text "面板、节点与订阅工具 > ${project_name}" "Panels, Nodes and Subscription Tools > ${project_name}" "Панели, узлы и инструменты подписки > ${project_name}")"
         echo -e "$(localized_text "${BOLD}🧭 ${project_name} 管理${PLAIN}" "${BOLD}🧭 Manage ${project_name}${PLAIN}" "${BOLD}🧭 Управление ${project_name}${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}部署目录：${CYAN}${project_dir}${PLAIN}" "${YELLOW}Deployment directory: ${project_dir}${PLAIN}" "${YELLOW}Каталог развертывания : ${project_dir}.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}数据说明：${CYAN}${data_hint}${PLAIN}" "${YELLOW}Data: ${data_hint}${PLAIN}" "${YELLOW}Данные: ${data_hint}${PLAIN}")"
         echo -e "------------------------------------------------"
 
-        if [[ ! -d "$project_dir" ]] || ! compose_file=$(find_compose_file "$project_dir"); then
-            echo -e "$(localized_text "${YELLOW}未检测到 ${project_name} 的 Compose 部署。请返回上级菜单先安装。${PLAIN}" "${YELLOW}No Compose deployment was found for ${project_name}. Return to the previous menu to install it.${PLAIN}" "${YELLOW}Развёртывание Compose для ${project_name} не найдено. Вернитесь в предыдущее меню и выполните установку.${PLAIN}")"
-            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
-            return
-        fi
-
-        echo -e "$(localized_text "${GREEN}  1. 查看运行状态${PLAIN}" "${GREEN}1. Check the running status${PLAIN}" "${GREEN}1. Проверьте рабочее состояние.${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  2. 查看/编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}" "${CYAN}2. View/edit Compose configuration (backup, verification, optional up -d)${PLAIN}" "${CYAN}2. Просмотр/редактирование конфигурации Compose (резервное копирование, проверка, опциональный up -d)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 重启服务${PLAIN}" "${GREEN}3. Restart the service${PLAIN}" "${GREEN}3. Перезапустите службу.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 更新镜像并重建${PLAIN}" "${GREEN}4. Update the image and rebuild${PLAIN}" "${GREEN}4. Обновите образ и пересоберите.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}  5. 停止并移除容器（保留目录数据）${PLAIN}" "${YELLOW}5. Stop and remove the container (keep directory data)${PLAIN}" "${YELLOW}5. Остановить и удалить контейнер (сохранить данные каталога)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  6. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}" "${RED}6. Archive deployment directory (stop container and isolate configuration/data)${PLAIN}" "${RED}6. Архивировать каталог развертывания (остановить контейнер и изолировать конфигурацию/данные)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 安装 / 更新 ${project_name}${PLAIN}" "${GREEN}  1. Install / update ${project_name}${PLAIN}" "${GREEN}  1. Установить / обновить ${project_name}${PLAIN}")"
+        echo -e "------------------------------------------------"
+        echo -e "$(localized_text "${GREEN}  2. 查看运行状态${PLAIN}" "${GREEN}  2. View status${PLAIN}" "${GREEN}  2. Просмотреть состояние${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  3. 查看 / 编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}" "${CYAN}  3. View / edit Compose configuration${PLAIN} ${YELLOW}(backup, validation, optional up -d)${PLAIN}" "${CYAN}  3. Просмотреть / изменить конфигурацию Compose${PLAIN} ${YELLOW}(резервная копия, проверка, опциональный up -d)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 重启服务${PLAIN}" "${GREEN}  4. Restart service${PLAIN}" "${GREEN}  4. Перезапустить сервис${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 更新镜像并重建${PLAIN}" "${GREEN}  5. Update image and rebuild${PLAIN}" "${GREEN}  5. Обновить образ и пересобрать${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}  6. 停止并移除容器（保留目录数据）${PLAIN}" "${YELLOW}  6. Stop and remove container (keep directory data)${PLAIN}" "${YELLOW}  6. Остановить и удалить контейнер (сохранить данные каталога)${PLAIN}")"
+        echo -e "$(localized_text "${RED}  7. 归档部署目录（停止容器并隔离配置 / 数据）${PLAIN}" "${RED}  7. Archive deployment directory (stop container and isolate configuration / data)${PLAIN}" "${RED}  7. Архивировать каталог развертывания (остановить контейнер и изолировать конфигурацию / данные)${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
+        if [[ "$choice" =~ ^[2-7]$ ]] && { [[ ! -d "$project_dir" ]] || ! compose_file=$(find_compose_file "$project_dir"); }; then
+            echo -e "$(localized_text "${YELLOW}未检测到 ${project_name} 的 Compose 部署，请先安装。${PLAIN}" "${YELLOW}No Compose deployment was found for ${project_name}. Install it first.${PLAIN}" "${YELLOW}Развёртывание Compose для ${project_name} не найдено. Сначала установите его.${PLAIN}")"
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
+            continue
+        fi
+
         case "$choice" in
             1)
+                "$install_func"
+                ;;
+            2)
                 ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
                 (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" ps)
                 read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 ;;
-            2)
-                edit_applied_config_file "$compose_file" "compose" "$(localized_text "${project_name} Compose 配置" "${project_name} Compose configuration" "Конфигурация ${project_name} Compose")"
-                read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
-                ;;
             3)
-                ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" restart)
+                edit_applied_config_file "$compose_file" "compose" "$(localized_text "${project_name} Compose 配置" "${project_name} Compose configuration" "Конфигурация ${project_name} Compose")"
                 read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 ;;
             4)
                 ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" restart)
                 read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 ;;
             5)
+                ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
+                read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
+                ;;
+            6)
                 if confirm_risk_action "$(localized_text "停止并移除 ${project_name} 容器" "Stop and remove the ${project_name} container" "Остановите и удалите контейнер ${project_name}.")" \
                     "$(localized_text "Docker Compose 容器运行状态" "Docker Compose container running status" "Статус работы контейнера Docker Compose")" \
                     "$(localized_text "在 ${project_dir} 中重新执行 compose up -d，或回到管理菜单重建" "Re-execute compose up -d in ${project_dir}, or return to the management menu to rebuild" "Перезапустите compose up -d в ${project_dir} или вернитесь в меню управления для пересборки.")" \
@@ -171,7 +178,7 @@ manage_compose_project() {
                 fi
                 read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 ;;
-            6)
+            7)
                 echo -e "$(localized_text "${RED}⚠️  高风险：这会停止容器并把 ${project_dir} 移入隔离目录，配置、数据库或本地数据不再原地可用。${PLAIN}" "${RED}⚠️ High Risk: This will stop the container and move ${project_dir} into the quarantine directory, and the configuration, database, or local data will no longer be available in place.${PLAIN}" "${RED}⚠️ Высокий риск: это остановит контейнер и переместит ${project_dir} в каталог карантина, при этом конфигурация, база данных или локальные данные больше не будут доступны.${PLAIN}")"
                 echo -e "$(localized_text "${YELLOW}隔离后如需彻底清理，请确认无误后手动处理隔离目录。${PLAIN}" "${YELLOW}If needs to be thoroughly cleaned after isolation, please confirm that it is correct and then manually process the isolation directory.${PLAIN}" "${YELLOW}Если необходимо тщательно очистить после изоляции, убедитесь, что это правильно, а затем вручную обработайте каталог изоляции.${PLAIN}")"
                 if confirm_risk_action "$(localized_text "归档 ${project_name} 部署目录" "Archive ${project_name} deployment directory" "Архив каталога развертывания ${project_name}")" \

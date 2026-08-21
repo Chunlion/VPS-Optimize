@@ -18761,54 +18761,61 @@ manage_compose_project() {
     local project_name="$1"
     local project_dir="${2%/}"
     local data_hint="$3"
+    local install_func="$4"
     local compose_file choice yn
 
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "$(localized_text "面板、节点与订阅工具 > ${project_name}" "Panels, Nodes and Subscription Tools > ${project_name}" "Панели, узлы и инструменты подписки > ${project_name}")"
         echo -e "$(localized_text "${BOLD}🧭 ${project_name} 管理${PLAIN}" "${BOLD}🧭 Manage ${project_name}${PLAIN}" "${BOLD}🧭 Управление ${project_name}${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}部署目录：${CYAN}${project_dir}${PLAIN}" "${YELLOW}Deployment directory: ${project_dir}${PLAIN}" "${YELLOW}Каталог развертывания : ${project_dir}.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}数据说明：${CYAN}${data_hint}${PLAIN}" "${YELLOW}Data: ${data_hint}${PLAIN}" "${YELLOW}Данные: ${data_hint}${PLAIN}")"
         echo -e "------------------------------------------------"
 
-        if [[ ! -d "$project_dir" ]] || ! compose_file=$(find_compose_file "$project_dir"); then
-            echo -e "$(localized_text "${YELLOW}未检测到 ${project_name} 的 Compose 部署。请返回上级菜单先安装。${PLAIN}" "${YELLOW}No Compose deployment was found for ${project_name}. Return to the previous menu to install it.${PLAIN}" "${YELLOW}Развёртывание Compose для ${project_name} не найдено. Вернитесь в предыдущее меню и выполните установку.${PLAIN}")"
-            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
-            return
-        fi
-
-        echo -e "$(localized_text "${GREEN}  1. 查看运行状态${PLAIN}" "${GREEN}1. Check the running status${PLAIN}" "${GREEN}1. Проверьте рабочее состояние.${PLAIN}")"
-        echo -e "$(localized_text "${CYAN}  2. 查看/编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}" "${CYAN}2. View/edit Compose configuration (backup, verification, optional up -d)${PLAIN}" "${CYAN}2. Просмотр/редактирование конфигурации Compose (резервное копирование, проверка, опциональный up -d)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 重启服务${PLAIN}" "${GREEN}3. Restart the service${PLAIN}" "${GREEN}3. Перезапустите службу.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 更新镜像并重建${PLAIN}" "${GREEN}4. Update the image and rebuild${PLAIN}" "${GREEN}4. Обновите образ и пересоберите.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}  5. 停止并移除容器（保留目录数据）${PLAIN}" "${YELLOW}5. Stop and remove the container (keep directory data)${PLAIN}" "${YELLOW}5. Остановить и удалить контейнер (сохранить данные каталога)${PLAIN}")"
-        echo -e "$(localized_text "${RED}  6. 归档部署目录（停止容器并隔离配置/数据）${PLAIN}" "${RED}6. Archive deployment directory (stop container and isolate configuration/data)${PLAIN}" "${RED}6. Архивировать каталог развертывания (остановить контейнер и изолировать конфигурацию/данные)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 安装 / 更新 ${project_name}${PLAIN}" "${GREEN}  1. Install / update ${project_name}${PLAIN}" "${GREEN}  1. Установить / обновить ${project_name}${PLAIN}")"
+        echo -e "------------------------------------------------"
+        echo -e "$(localized_text "${GREEN}  2. 查看运行状态${PLAIN}" "${GREEN}  2. View status${PLAIN}" "${GREEN}  2. Просмотреть состояние${PLAIN}")"
+        echo -e "$(localized_text "${CYAN}  3. 查看 / 编辑 Compose 配置${PLAIN} ${YELLOW}(备份、校验，可选择 up -d)${PLAIN}" "${CYAN}  3. View / edit Compose configuration${PLAIN} ${YELLOW}(backup, validation, optional up -d)${PLAIN}" "${CYAN}  3. Просмотреть / изменить конфигурацию Compose${PLAIN} ${YELLOW}(резервная копия, проверка, опциональный up -d)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 重启服务${PLAIN}" "${GREEN}  4. Restart service${PLAIN}" "${GREEN}  4. Перезапустить сервис${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  5. 更新镜像并重建${PLAIN}" "${GREEN}  5. Update image and rebuild${PLAIN}" "${GREEN}  5. Обновить образ и пересобрать${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}  6. 停止并移除容器（保留目录数据）${PLAIN}" "${YELLOW}  6. Stop and remove container (keep directory data)${PLAIN}" "${YELLOW}  6. Остановить и удалить контейнер (сохранить данные каталога)${PLAIN}")"
+        echo -e "$(localized_text "${RED}  7. 归档部署目录（停止容器并隔离配置 / 数据）${PLAIN}" "${RED}  7. Archive deployment directory (stop container and isolate configuration / data)${PLAIN}" "${RED}  7. Архивировать каталог развертывания (остановить контейнер и изолировать конфигурацию / данные)${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回上级菜单 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
+        if [[ "$choice" =~ ^[2-7]$ ]] && { [[ ! -d "$project_dir" ]] || ! compose_file=$(find_compose_file "$project_dir"); }; then
+            echo -e "$(localized_text "${YELLOW}未检测到 ${project_name} 的 Compose 部署，请先安装。${PLAIN}" "${YELLOW}No Compose deployment was found for ${project_name}. Install it first.${PLAIN}" "${YELLOW}Развёртывание Compose для ${project_name} не найдено. Сначала установите его.${PLAIN}")"
+            read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
+            continue
+        fi
+
         case "$choice" in
             1)
+                "$install_func"
+                ;;
+            2)
                 ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
                 (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" ps)
                 read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 ;;
-            2)
-                edit_applied_config_file "$compose_file" "compose" "$(localized_text "${project_name} Compose 配置" "${project_name} Compose configuration" "Конфигурация ${project_name} Compose")"
-                read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
-                ;;
             3)
-                ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" restart)
+                edit_applied_config_file "$compose_file" "compose" "$(localized_text "${project_name} Compose 配置" "${project_name} Compose configuration" "Конфигурация ${project_name} Compose")"
                 read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 ;;
             4)
                 ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" restart)
                 read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 ;;
             5)
+                ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
+                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
+                read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
+                ;;
+            6)
                 if confirm_risk_action "$(localized_text "停止并移除 ${project_name} 容器" "Stop and remove the ${project_name} container" "Остановите и удалите контейнер ${project_name}.")" \
                     "$(localized_text "Docker Compose 容器运行状态" "Docker Compose container running status" "Статус работы контейнера Docker Compose")" \
                     "$(localized_text "在 ${project_dir} 中重新执行 compose up -d，或回到管理菜单重建" "Re-execute compose up -d in ${project_dir}, or return to the management menu to rebuild" "Перезапустите compose up -d в ${project_dir} или вернитесь в меню управления для пересборки.")" \
@@ -18821,7 +18828,7 @@ manage_compose_project() {
                 fi
                 read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 ;;
-            6)
+            7)
                 echo -e "$(localized_text "${RED}⚠️  高风险：这会停止容器并把 ${project_dir} 移入隔离目录，配置、数据库或本地数据不再原地可用。${PLAIN}" "${RED}⚠️ High Risk: This will stop the container and move ${project_dir} into the quarantine directory, and the configuration, database, or local data will no longer be available in place.${PLAIN}" "${RED}⚠️ Высокий риск: это остановит контейнер и переместит ${project_dir} в каталог карантина, при этом конфигурация, база данных или локальные данные больше не будут доступны.${PLAIN}")"
                 echo -e "$(localized_text "${YELLOW}隔离后如需彻底清理，请确认无误后手动处理隔离目录。${PLAIN}" "${YELLOW}If needs to be thoroughly cleaned after isolation, please confirm that it is correct and then manually process the isolation directory.${PLAIN}" "${YELLOW}Если необходимо тщательно очистить после изоляции, убедитесь, что это правильно, а затем вручную обработайте каталог изоляции.${PLAIN}")"
                 if confirm_risk_action "$(localized_text "归档 ${project_name} 部署目录" "Archive ${project_name} deployment directory" "Архив каталога развертывания ${project_name}")" \
@@ -19411,23 +19418,23 @@ func_update_subscription_tools() {
 # Panel, node, subscription-tool, and compose service action menus.
 
 func_manage_sublinkpro() {
-    manage_compose_project "SublinkPro" "/opt/sublinkpro" "$(localized_text "db / template / logs 会保存在部署目录中" "db/template/logs will be saved in the deployment directory" "db/template/logs будет сохранен в каталоге развертывания.")"
+    manage_compose_project "SublinkPro" "/opt/sublinkpro" "$(localized_text "db / template / logs 会保存在部署目录中" "db/template/logs will be saved in the deployment directory" "db/template/logs будет сохранен в каталоге развертывания.")" func_sublinkpro
 }
 
 func_manage_miaomiaowu() {
-    manage_compose_project "$(localized_text "妙妙屋订阅管理" "Miaomiaowu Subscription Management" "Управление подпиской Miaomiaowu")" "/opt/miaomiaowu" "$(localized_text "data / subscribes / rule_templates 会保存在部署目录中" "data/subscribes/rule_templates will be saved in the deployment directory" "data/subscribes/rule_templates будут сохранены в каталоге развертывания.")"
+    manage_compose_project "$(localized_text "妙妙屋订阅管理" "Miaomiaowu Subscription Management" "Управление подпиской Miaomiaowu")" "/opt/miaomiaowu" "$(localized_text "data / subscribes / rule_templates 会保存在部署目录中" "data/subscribes/rule_templates will be saved in the deployment directory" "data/subscribes/rule_templates будут сохранены в каталоге развертывания.")" func_miaomiaowu
 }
 
 func_manage_substore() {
-    manage_compose_project "Sub-Store" "/opt/sub-store" "$(localized_text "data 会保存在部署目录中" "data will be saved in the deployment directory" "данные будут сохранены в каталоге развертывания")"
+    manage_compose_project "Sub-Store" "/opt/sub-store" "$(localized_text "data 会保存在部署目录中" "data will be saved in the deployment directory" "данные будут сохранены в каталоге развертывания")" func_substore
 }
 
 func_manage_dockge() {
-    manage_compose_project "Dockge" "/opt/dockge" "$(localized_text "Dockge 数据在 /opt/dockge/data；Stacks 默认在 /opt/stacks，不会随 Dockge 目录删除" "Dockge data is in /opt/dockge/data; Stacks is in /opt/stacks by default and will not be deleted with the Dockge directory." "Данные Dockge находятся в /opt/dockge/data; По умолчанию стеки находятся в /opt/stacks и не будут удалены вместе с каталогом Dockge.")"
+    manage_compose_project "Dockge" "/opt/dockge" "$(localized_text "Dockge 数据在 /opt/dockge/data；Stacks 默认在 /opt/stacks，不会随 Dockge 目录删除" "Dockge data is in /opt/dockge/data; Stacks is in /opt/stacks by default and will not be deleted with the Dockge directory." "Данные Dockge находятся в /opt/dockge/data; По умолчанию стеки находятся в /opt/stacks и не будут удалены вместе с каталогом Dockge.")" func_dockge
 }
 
 func_manage_komari() {
-    manage_compose_project "Komari" "/opt/komari" "$(localized_text "Komari 数据会保存在 /opt/komari/data" "Komari data will be saved in /opt/komari/data" "Данные Комари будут сохранены в /opt/komari/data.")"
+    manage_compose_project "Komari" "/opt/komari" "$(localized_text "Komari 数据会保存在 /opt/komari/data" "Komari data will be saved in /opt/komari/data" "Данные Комари будут сохранены в /opt/komari/data.")" func_komari
 }
 
 func_service_action_menu() {
@@ -19500,23 +19507,23 @@ func_xray_menu() {
 }
 
 func_sublinkpro_menu() {
-    func_service_action_menu "$(localized_text "SublinkPro 管理" "SublinkPro management" "Управление SublinkPro")" "$(localized_text "安装或管理通过 Docker Compose 部署的 SublinkPro。" "Install or manage SublinkPro deployed with Docker Compose." "Установить или управлять SublinkPro, развёрнутым через Docker Compose.")" "$(localized_text "安装 SublinkPro" "Install SublinkPro" "Установить SublinkPro")" func_sublinkpro "$(localized_text "管理 / 卸载 SublinkPro" "Manage or uninstall SublinkPro" "Управление или удаление SublinkPro")" func_manage_sublinkpro
+    func_manage_sublinkpro
 }
 
 func_miaomiaowu_menu() {
-    func_service_action_menu "$(localized_text "妙妙屋订阅管理" "Miaomiaowu Subscription Management" "Управление подпиской Miaomiaowu")" "$(localized_text "安装或管理 Docker Compose 部署的妙妙屋订阅管理。" "Install or manage Docker Compose deployment of Miaomiaowu Subscription Management." "Установите или управляйте развертыванием Docker Compose для управления подписками Miaomiaowu.")" "$(localized_text "安装 妙妙屋订阅管理" "Install Miaomiaowu Subscription Management" "Установите управление подпиской Miaomiaowu")" func_miaomiaowu "$(localized_text "管理 / 卸载 妙妙屋" "Manage / Uninstall Miaomiaowu" "Управление / Удаление")" func_manage_miaomiaowu
+    func_manage_miaomiaowu
 }
 
 func_substore_menu() {
-    func_service_action_menu "$(localized_text "Sub-Store 管理" "Sub-Store management" "Управление Sub-Store")" "$(localized_text "安装或管理通过 Docker Compose 部署的 Sub-Store。" "Install or manage Sub-Store deployed with Docker Compose." "Установить или управлять Sub-Store, развёрнутым через Docker Compose.")" "$(localized_text "安装 Sub-Store" "Install Sub-Store" "Установить Sub-Store")" func_substore "$(localized_text "管理 / 卸载 Sub-Store" "Manage or uninstall Sub-Store" "Управление или удаление Sub-Store")" func_manage_substore
+    func_manage_substore
 }
 
 func_dockge_menu() {
-    func_service_action_menu "$(localized_text "Dockge 管理" "Dockge management" "Управление Dockge")" "$(localized_text "安装或管理通过 Docker Compose 部署的 Dockge。" "Install or manage Dockge deployed with Docker Compose." "Установить или управлять Dockge, развёрнутым через Docker Compose.")" "$(localized_text "安装 Dockge" "Install Dockge" "Установить Dockge")" func_dockge "$(localized_text "管理 / 卸载 Dockge" "Manage or uninstall Dockge" "Управление или удаление Dockge")" func_manage_dockge
+    func_manage_dockge
 }
 
 func_komari_menu() {
-    func_service_action_menu "$(localized_text "Komari 探针监控" "Komari monitoring" "Мониторинг Komari")" "$(localized_text "安装或管理 Docker Compose 部署的 Komari 探针监控面板。" "Install or manage the Komari monitoring panel deployed with Docker Compose." "Установить или настроить панель мониторинга Komari, развёрнутую через Docker Compose.")" "$(localized_text "安装 Komari" "Install Komari" "Установить Komari")" func_komari "$(localized_text "管理 / 卸载 Komari" "Manage / Uninstall Komari" "Управление / удаление Komari")" func_manage_komari
+    func_manage_komari
 }
 
 # ---------------------------------------------------------

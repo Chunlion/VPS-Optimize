@@ -2154,6 +2154,11 @@ assert_function_body_contains src/menus.sh func_panel_deploy_menu '12) func_dns_
 assert_function_body_contains src/menus.sh func_panel_deploy_menu '13) func_ip_sentinel ;;' "Panel/tools option 13 must open IP-Sentinel."
 assert_function_body_contains src/menus.sh func_panel_deploy_menu '14) func_port_dog ;;' "Panel/tools option 14 must open the per-port traffic monitor."
 assert_file_not_contains src/menus.sh '11|12) docker_backup_migration_menu ;;' "Panel/tools menu must not retain hidden Docker/Compose routes."
+assert_function_body_contains src/compose_runtime.sh manage_compose_project '1. 安装 / 更新 ${project_name}' "Compose project menus must expose install/update directly."
+assert_function_body_contains src/compose_runtime.sh manage_compose_project '7. 归档部署目录' "Compose project menus must expose archive/uninstall directly."
+for compose_menu in func_sublinkpro_menu func_miaomiaowu_menu func_substore_menu func_dockge_menu func_komari_menu; do
+    assert_function_body_contains src/subscription_service_menus.sh "$compose_menu" 'func_manage_' "Compose service menus must open the flat project menu directly: ${compose_menu}."
+done
 grep -Fq '安装 3x-ui / x-ui 面板（最新版）' dist/vps.sh
 grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh' dist/vps.sh
 grep -Fq '最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。' dist/vps.sh
