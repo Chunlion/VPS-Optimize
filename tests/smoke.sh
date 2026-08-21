@@ -2966,7 +2966,7 @@ grep -q 'apply_web_proxy_configs_for_single_443' dist/vps.sh
 grep -q 'switch_sni_stack_web_proxy_engine' dist/vps.sh
 grep -q 'vps_sni_web_${CADDY_LISTEN_PORT}.conf' dist/vps.sh
 grep -q 'xray-fallback 模式不支持 Web 白名单' dist/vps.sh
-grep -q '2. 查看/编辑 Compose 配置' dist/vps.sh
+grep -q '3. 查看 / 编辑 Compose 配置' dist/vps.sh
 grep -q 'edit_applied_config_file "$compose_file" "compose"' dist/vps.sh
 assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "Config paths doc must list the global applied-config editor."
 assert_file_contains "docs/443-single-entry.md" '[4] -> [5 域名 IP 白名单]' "443 doc must describe the combined Caddy/Nginx whitelist menu."
