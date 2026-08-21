@@ -57,7 +57,7 @@ cy
 
 | 系统 | 状态 |
 |---|---|
-| Debian 11/12 | 推荐 |
+| Debian 11/12/13 | 推荐 |
 | Ubuntu 20.04/22.04/24.04 | 推荐 |
 | Rocky / Alma / CentOS Stream | 可用 |
 | Alpine | 不支持 |

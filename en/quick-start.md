@@ -51,7 +51,7 @@ Press Enter to select English by default. You can change the language later from
 
 | System | Status | Notes |
 |---|---|---|
-| Debian 11/12 | Recommended | Well supported |
+| Debian 11/12/13 | Recommended | Well supported |
 | Ubuntu 20.04/22.04/24.04 | Recommended | Well supported |
 | Rocky/Alma/CentOS Stream | Supported | Some components depend on configured repositories |
 | Alpine | Unsupported | Do not run the script |

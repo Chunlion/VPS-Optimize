@@ -2,7 +2,7 @@
 
 | system | Support status | Remarks |
 |---|---|---|
-| Debian 11/12 | Recommended | Better stability |
+| Debian 11/12/13 | Recommended | Better stability |
 | Ubuntu 20.04/22.04/24.04 | Recommended | Better stability |
 | Rocky/Alma/CentOS Stream | Available | Some components depend on software sources |
 | Alpine | Not supported | Not recommended to run |

@@ -57,7 +57,7 @@ Shortcuts are case-insensitive and behave like selecting the corresponding main-
 
 | System | Status |
 |---|---|
-| Debian 11/12 | Recommended |
+| Debian 11/12/13 | Recommended |
 | Ubuntu 20.04/22.04/24.04 | Recommended |
 | Rocky / Alma / CentOS Stream | Supported |
 | Alpine | Unsupported |
