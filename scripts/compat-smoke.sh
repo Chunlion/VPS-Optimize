@@ -180,6 +180,8 @@ assert_file_contains src/menus.sh '4|网络接口管理|网卡/路由/DNS/MTU/DH
 assert_file_contains src/menus.sh '8|BBR 直连/落地优化|检测带宽与 RTT，动态生成 BBR/TCP 参数|func_bbr_direct_tune|net_bbr_direct'
 assert_file_contains src/menus.sh '7|内核管理|安装、切换或清理内核|func_kernel_manage|'
 assert_file_not_contains src/menus.sh '10|服务器带宽测试|'
+assert_file_contains src/environment.sh 'tailscale set --accept-dns=false'
+assert_file_contains src/environment.sh 'tailscale up --accept-dns=false'
 assert_file_contains src/diagnostics_network.sh '10. 服务器带宽测试'
 assert_file_contains src/diagnostics_network.sh '11. iperf3 单线程测试'
 assert_file_contains src/diagnostics_network.sh '12. 国际互联速度测试'
