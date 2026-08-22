@@ -182,6 +182,9 @@ assert_file_contains src/menus.sh '7|内核管理|安装、切换或清理内核
 assert_file_not_contains src/menus.sh '10|服务器带宽测试|'
 assert_file_contains src/environment.sh 'tailscale set --accept-dns=false'
 assert_file_contains src/environment.sh 'tailscale up --accept-dns=false'
+assert_file_contains src/dns_optimize.sh 'dns_disable_tailscale_dns'
+assert_file_contains src/dns_optimize.sh 'dns_restore_latest_backup; pause_return'
+assert_file_contains src/dns_optimize.sh 'tailscale status --json'
 assert_file_contains src/diagnostics_network.sh '10. 服务器带宽测试'
 assert_file_contains src/diagnostics_network.sh '11. iperf3 单线程测试'
 assert_file_contains src/diagnostics_network.sh '12. 国际互联速度测试'
@@ -329,6 +332,7 @@ source src/input.sh
 source src/validate.sh
 source src/kernel_tuning.sh
 source src/system_core.sh
+source src/dns_optimize.sh
 
 for function_name in terminal_text_width print_menu_item render_menu dispatch_menu_choice rotate_log_file format_bytes load_ui_language save_ui_language localized_text select_ui_language prompt_initial_ui_language toggle_ui_language; do
     assert_function_loaded "$function_name"
@@ -346,6 +350,13 @@ select_ui_language initial <<<"3" >/dev/null
 [[ "$VPSO_LANGUAGE" == "ru" ]]
 [[ "$(localized_text "中文" "English" "Русский")" == "Русский" ]]
 [[ "$(cat "$VPSO_LANGUAGE_CONFIG")" == "LANGUAGE=ru" ]]
+
+tailscale() {
+    return 1
+}
+printf '%s\n' 'nameserver 100.100.100.100' > "$compat_tmp_dir/tailscale-resolv.conf"
+dns_disable_tailscale_dns "$compat_tmp_dir/tailscale-resolv.conf" >/dev/null
+unset -f tailscale
 
 compat_menu_handler_called=0
 compat_menu_handler() {

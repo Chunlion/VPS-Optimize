@@ -7685,8 +7685,11 @@ func_env_install() {
             14) run_remote_script "$(localized_text "安装 EasyTier 组网" "Install EasyTier networking" "Установите сеть EasyTier")" "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh" install ;;
             15)
                 if run_remote_script "$(localized_text "安装 Tailscale 组网" "Install Tailscale networking" "Установите сеть Tailscale")" "https://tailscale.com/install.sh"; then
-                    tailscale set --accept-dns=false >/dev/null 2>&1 || true
-                    echo -e "$(localized_text "${GREEN}✅ 已关闭 Tailscale DNS 接管；运行 tailscale up --accept-dns=false，按提示登录并加入网络。${PLAIN}" "${GREEN}✅ Tailscale DNS management is disabled. Run tailscale up --accept-dns=false, then follow the prompts to log in and join the network.${PLAIN}" "${GREEN}✅ Управление DNS через Tailscale отключено. Выполните tailscale up --accept-dns=false, затем войдите в систему и подключитесь к сети.${PLAIN}")"
+                    if tailscale set --accept-dns=false >/dev/null 2>&1; then
+                        echo -e "$(localized_text "${GREEN}✅ 已关闭 Tailscale DNS 接管；运行 tailscale up --accept-dns=false，按提示登录并加入网络。${PLAIN}" "${GREEN}✅ Tailscale DNS management is disabled. Run tailscale up --accept-dns=false, then follow the prompts to log in and join the network.${PLAIN}" "${GREEN}✅ Управление DNS через Tailscale отключено. Выполните tailscale up --accept-dns=false, затем войдите в систему и подключитесь к сети.${PLAIN}")"
+                    else
+                        echo -e "$(localized_text "${YELLOW}安装完成。加入网络时请运行 tailscale up --accept-dns=false，避免 Tailscale 接管系统 DNS。${PLAIN}" "${YELLOW}Installation complete. Run tailscale up --accept-dns=false when joining to prevent Tailscale from managing system DNS.${PLAIN}" "${YELLOW}Установка завершена. При подключении выполните tailscale up --accept-dns=false, чтобы Tailscale не управлял системным DNS.${PLAIN}")"
+                    fi
                 fi
                 ;;
             "?") echo "$(localized_text "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443端口复用走主菜单 [19]。" "The basic components menu installs only Docker, Python, WARP, forwarding tunnels, and common services. Use main menu [4] for Caddy/Nginx reverse proxy and [19] for Port 443 Reuse." "Меню базовых компонентов устанавливает только Docker, Python, WARP, туннели перенаправления и распространённые службы. Для обратного прокси Caddy/Nginx используйте пункт [4] главного меню, для повторного использования порта 443 — пункт [19].")"; pause_return ;;
@@ -21136,6 +21139,24 @@ dns_write_static_resolv_conf() {
     } > /etc/resolv.conf
 }
 
+dns_disable_tailscale_dns() {
+    local resolv_conf="${1:-/etc/resolv.conf}"
+
+    command -v tailscale >/dev/null 2>&1 || return 0
+
+    if tailscale set --accept-dns=false >/dev/null 2>&1; then
+        echo -e "$(localized_text "${CYAN}已关闭 Tailscale DNS 接管，继续应用系统 DNS。${PLAIN}" "${CYAN}Tailscale DNS management is disabled. Continuing with system DNS changes.${PLAIN}" "${CYAN}Управление DNS через Tailscale отключено. Продолжается применение системного DNS.${PLAIN}")"
+        return 0
+    fi
+
+    if grep -Eq '^[[:space:]]*nameserver[[:space:]]+(100\.100\.100\.100|fd7a:115c:a1e0::53)' "$resolv_conf" 2>/dev/null || \
+       tailscale status --json 2>/dev/null | grep -Eq '"BackendState"[[:space:]]*:[[:space:]]*"Running"'; then
+        echo -e "$(localized_text "${YELLOW}⚠️ Tailscale DNS 接管未关闭，仍会继续写入系统 DNS；如被再次覆盖，请恢复网络后执行 tailscale set --accept-dns=false。${PLAIN}" "${YELLOW}⚠️ Tailscale DNS management could not be disabled. System DNS will still be written; if it is overwritten again, run tailscale set --accept-dns=false after network recovery.${PLAIN}" "${YELLOW}⚠️ Не удалось отключить управление DNS через Tailscale. Системный DNS всё равно будет записан; если он снова будет перезаписан, после восстановления сети выполните tailscale set --accept-dns=false.${PLAIN}")"
+    fi
+
+    return 0
+}
+
 dns_apply_profile() {
     local profile_name="$1"
     local v4_servers="$2"
@@ -21147,6 +21168,7 @@ dns_apply_profile() {
         "$(localized_text "进入本菜单选择 [5] 恢复最近一次 DNS 备份，或手动恢复 ${DNS_OPTIMIZE_BACKUP_DIR}" "Enter this menu and select [5] to restore the latest DNS backup, or manually restore ${DNS_OPTIMIZE_BACKUP_DIR}" "Войдите в это меню и выберите [5], чтобы восстановить последнюю резервную копию DNS или вручную восстановить ${DNS_OPTIMIZE_BACKUP_DIR}.")" \
         "$(localized_text "DNS 写错会导致域名解析失败；当前 SSH 连接通常不会立即断开。" "Wrong writing of DNS will cause domain resolution to fail; the current SSH connection is usually not disconnected immediately." "Неправильная запись DNS приведет к сбою разрешения доменного имени; текущее соединение SSH обычно не разрывается сразу.")" || return 1
 
+    dns_disable_tailscale_dns
     backup_dir=$(dns_backup_current_config)
     all_servers="${v4_servers} ${v6_servers}"
 
@@ -21180,7 +21202,7 @@ dns_apply_profile() {
     if getent hosts raw.githubusercontent.com >/dev/null 2>&1; then
         echo -e "$(localized_text "${GREEN}✅ DNS 解析测试通过。${PLAIN}" "${GREEN}✅ DNS analysis test passed.${PLAIN}" "${GREEN}✅ Анализ DNS пройден.${PLAIN}")"
     else
-        echo -e "$(localized_text "${YELLOW}⚠️ DNS 解析测试未通过，请检查网络、IPv6 可用性或 DNS 服务器连通性。${PLAIN}" "${YELLOW}⚠️ DNS parsing test failed, please check network, IPv6 availability or DNS server connectivity.${PLAIN}" "${YELLOW}⚠️ Тест анализа DNS не пройден, проверьте сеть, доступность IPv6 или подключение к серверу DNS.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}⚠️ DNS 已写入，但解析测试暂未通过；请检查网络、IPv6 可用性或 DNS 服务器连通性。${PLAIN}" "${YELLOW}⚠️ DNS was written, but the resolution test did not pass; check the network, IPv6 availability, or DNS server connectivity.${PLAIN}" "${YELLOW}⚠️ DNS записан, но проверка разрешения пока не пройдена; проверьте сеть, доступность IPv6 или подключение к DNS-серверу.${PLAIN}")"
     fi
 }
 
@@ -21192,7 +21214,7 @@ func_dns_optimize() {
         print_breadcrumb "$(localized_text "网络/内核优化 > DNS 设置" "Network/Kernel Optimization > DNS settings" "Оптимизация сети/ядра > Настройка DNS")"
         echo -e "$(localized_text "${BOLD}DNS 设置${PLAIN}" "${BOLD}DNS settings${PLAIN}" "${BOLD}Настройка DNS${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}可选择国内、国际或自定义 IPv4 / IPv6 DNS，并支持恢复最近备份。${PLAIN}" "${YELLOW}Choose China, international, or custom IPv4 / IPv6 DNS, with restore from the latest backup.${PLAIN}" "${YELLOW}Выберите DNS для Китая, международные или свои IPv4 / IPv6; доступно восстановление последней копии.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}可选择国内、国际或自定义 IPv4 / IPv6 DNS；检测到 Tailscale 时会先关闭其 DNS 接管。${PLAIN}" "${YELLOW}Choose China, international, or custom IPv4 / IPv6 DNS. Tailscale DNS management is disabled first when detected.${PLAIN}" "${YELLOW}Выберите DNS для Китая, международные или свои IPv4 / IPv6. При обнаружении Tailscale его управление DNS сначала отключается.${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 使用国内 DNS${PLAIN} ${YELLOW}(阿里 DNS + DNSPod)${PLAIN}" "${GREEN}  1. Use China DNS${PLAIN} ${YELLOW}(Alibaba DNS + DNSPod)${PLAIN}" "${GREEN}  1. Использовать DNS для Китая${PLAIN} ${YELLOW}(Alibaba DNS + DNSPod)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 使用国际 DNS${PLAIN} ${YELLOW}(Cloudflare + Google)${PLAIN}" "${GREEN}  2. Use international DNS${PLAIN} ${YELLOW}(Cloudflare + Google)${PLAIN}" "${GREEN}  2. Использовать международные DNS${PLAIN} ${YELLOW}(Cloudflare + Google)${PLAIN}")"
@@ -21239,7 +21261,7 @@ func_dns_optimize() {
                 fi
                 pause_return
                 ;;
-            5) dns_restore_latest_backup; pause_return ;;
+            5) dns_disable_tailscale_dns; dns_restore_latest_backup; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac

@@ -44,8 +44,11 @@ func_env_install() {
             14) run_remote_script "$(localized_text "安装 EasyTier 组网" "Install EasyTier networking" "Установите сеть EasyTier")" "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh" install ;;
             15)
                 if run_remote_script "$(localized_text "安装 Tailscale 组网" "Install Tailscale networking" "Установите сеть Tailscale")" "https://tailscale.com/install.sh"; then
-                    tailscale set --accept-dns=false >/dev/null 2>&1 || true
-                    echo -e "$(localized_text "${GREEN}✅ 已关闭 Tailscale DNS 接管；运行 tailscale up --accept-dns=false，按提示登录并加入网络。${PLAIN}" "${GREEN}✅ Tailscale DNS management is disabled. Run tailscale up --accept-dns=false, then follow the prompts to log in and join the network.${PLAIN}" "${GREEN}✅ Управление DNS через Tailscale отключено. Выполните tailscale up --accept-dns=false, затем войдите в систему и подключитесь к сети.${PLAIN}")"
+                    if tailscale set --accept-dns=false >/dev/null 2>&1; then
+                        echo -e "$(localized_text "${GREEN}✅ 已关闭 Tailscale DNS 接管；运行 tailscale up --accept-dns=false，按提示登录并加入网络。${PLAIN}" "${GREEN}✅ Tailscale DNS management is disabled. Run tailscale up --accept-dns=false, then follow the prompts to log in and join the network.${PLAIN}" "${GREEN}✅ Управление DNS через Tailscale отключено. Выполните tailscale up --accept-dns=false, затем войдите в систему и подключитесь к сети.${PLAIN}")"
+                    else
+                        echo -e "$(localized_text "${YELLOW}安装完成。加入网络时请运行 tailscale up --accept-dns=false，避免 Tailscale 接管系统 DNS。${PLAIN}" "${YELLOW}Installation complete. Run tailscale up --accept-dns=false when joining to prevent Tailscale from managing system DNS.${PLAIN}" "${YELLOW}Установка завершена. При подключении выполните tailscale up --accept-dns=false, чтобы Tailscale не управлял системным DNS.${PLAIN}")"
+                    fi
                 fi
                 ;;
             "?") echo "$(localized_text "基础组件菜单只安装 Docker、Python、WARP、转发隧道和常用服务。Caddy/Nginx 反代走主菜单 [4]；443端口复用走主菜单 [19]。" "The basic components menu installs only Docker, Python, WARP, forwarding tunnels, and common services. Use main menu [4] for Caddy/Nginx reverse proxy and [19] for Port 443 Reuse." "Меню базовых компонентов устанавливает только Docker, Python, WARP, туннели перенаправления и распространённые службы. Для обратного прокси Caddy/Nginx используйте пункт [4] главного меню, для повторного использования порта 443 — пункт [19].")"; pause_return ;;
