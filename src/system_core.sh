@@ -51,12 +51,81 @@ configure_system_timezone_for_init() {
     fi
 }
 
+ipv4_preference_is_enabled() {
+    local gai_conf="${1:-/etc/gai.conf}"
+
+    [[ -f "$gai_conf" ]] || return 1
+    awk '
+        $1 == "precedence" && $2 == "::ffff:0:0/96" {
+            count++
+            if ($3 == "100") correct++
+        }
+        END { exit !(count == 1 && correct == 1) }
+    ' "$gai_conf"
+}
+
+backup_gai_conf() {
+    local gai_conf="$1"
+    local backup_file
+
+    backup_file=$(mktemp "${gai_conf}.bak_$(date +%s).XXXXXX") || return 1
+    if ! cp -p "$gai_conf" "$backup_file"; then
+        rm -f "$backup_file"
+        return 1
+    fi
+}
+
+configure_ipv4_preference() {
+    local gai_conf="${1:-/etc/gai.conf}"
+    local tmp_file
+
+    if ipv4_preference_is_enabled "$gai_conf"; then
+        return 0
+    fi
+
+    [[ -f "$gai_conf" ]] || : > "$gai_conf" || return 1
+    backup_gai_conf "$gai_conf" || return 1
+    tmp_file=$(mktemp "${gai_conf}.tmp.XXXXXX") || return 1
+
+    awk '
+        /^[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+[0-9]+/ {
+            if (!written) {
+                print "precedence ::ffff:0:0/96  100"
+                written = 1
+            }
+            next
+        }
+        { print }
+        END {
+            if (!written) print "precedence ::ffff:0:0/96  100"
+        }
+    ' "$gai_conf" > "$tmp_file" || { rm -f "$tmp_file"; return 1; }
+
+    cp "$tmp_file" "$gai_conf" || { rm -f "$tmp_file"; return 1; }
+    rm -f "$tmp_file"
+}
+
+restore_default_ip_preference() {
+    local gai_conf="${1:-/etc/gai.conf}"
+    local tmp_file
+
+    [[ -f "$gai_conf" ]] || return 0
+    grep -Eq '^[[:space:]]*precedence[[:space:]]+::ffff:0:0/96[[:space:]]+100([[:space:]]*(#.*)?)?$' "$gai_conf" || return 0
+
+    backup_gai_conf "$gai_conf" || return 1
+    tmp_file=$(mktemp "${gai_conf}.tmp.XXXXXX") || return 1
+    awk '!/^[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+100([[:space:]]*(#.*)?)?$/' "$gai_conf" > "$tmp_file" \
+        || { rm -f "$tmp_file"; return 1; }
+    cp "$tmp_file" "$gai_conf" || { rm -f "$tmp_file"; return 1; }
+    rm -f "$tmp_file"
+}
+
 func_base_init() {
     local failed_steps=()
     local current_cc current_qdisc
 
     clear
-    echo -e "$(localized_text "${CYAN}👉 正在更新系统软件包、安装基础工具、限制日志并开启基础 BBR...${PLAIN}" "${CYAN}👉 Updating system software packages, installing basic tools, limiting logs and enabling basics BBR...${PLAIN}" "${CYAN}👉 Обновление пакетов системного ПО, установка базовых инструментов, ограничение журналов и включение базовых функций BBR...${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}👉 正在更新系统、安装基础工具、设置 IPv4 优先并开启基础 BBR...${PLAIN}" "${CYAN}👉 Updating the system, installing base tools, preferring IPv4, and enabling basic BBR...${PLAIN}" "${CYAN}👉 Обновление системы, установка базовых инструментов, включение приоритета IPv4 и базового BBR...${PLAIN}")"
 
     if is_debian; then
         export DEBIAN_FRONTEND=noninteractive
@@ -94,6 +163,7 @@ EOF
     fi
 
     configure_system_timezone_for_init || failed_steps+=("$(localized_text "时区设置" "Timezone configuration" "Настройка часового пояса")")
+    configure_ipv4_preference || failed_steps+=("$(localized_text "IPv4 出站优先配置" "IPv4 outbound preference" "Настройка приоритета исходящего IPv4")")
 
     modprobe tcp_bbr >/dev/null 2>&1 || true
     if ! {
@@ -114,7 +184,7 @@ EOF
     fi
 
     if [[ ${#failed_steps[@]} -eq 0 ]]; then
-        echo -e "$(localized_text "${GREEN}✅ 基础初始化完成，已验证 BBR 与 fq 生效。${PLAIN}" "${GREEN}✅ Basic initialization is completed, and BBR and fq have been verified to be effective.${PLAIN}" "${GREEN}✅ Базовая инициализация завершена, эффективность BBR и fq подтверждена.${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}✅ 基础初始化完成，IPv4 已优先，并已验证 BBR 与 fq 生效。${PLAIN}" "${GREEN}✅ Base initialization complete. IPv4 is preferred, and BBR with fq is active.${PLAIN}" "${GREEN}✅ Базовая настройка завершена. IPv4 имеет приоритет, BBR и fq активны.${PLAIN}")"
         if [[ "${VPSO_BEGINNER_FLOW:-0}" != "1" ]]; then
             read -n 1 -s -r -p "$(localized_text "按任意键返回主菜单..." "Press any key to return to the main menu..." "Нажмите любую клавишу, чтобы вернуться в главное меню...")"
         fi
@@ -435,7 +505,7 @@ func_system_tweaks() {
         if [[ "$ipv6_status" == "0" ]]; then str_ipv6="$(localized_text "${GREEN}已启用${PLAIN}" "${GREEN}Enabled${PLAIN}" "${GREEN}включён${PLAIN}")"; else str_ipv6="$(localized_text "${RED}已禁用${PLAIN}" "${RED}Disabled${PLAIN}" "${RED}отключён${PLAIN}")"; fi
 
         local str_ipv4_first
-        if grep -q "^precedence ::ffff:0:0/96  100" /etc/gai.conf 2>/dev/null; then
+        if ipv4_preference_is_enabled; then
             str_ipv4_first="$(localized_text "${GREEN}已优先${PLAIN}" "${GREEN}Has given priority to${PLAIN}" "${GREEN}отдал приоритет${PLAIN}")"
         else
             str_ipv4_first="$(localized_text "${RED}默认(IPv6优先)${PLAIN}" "${RED}Default (IPv6 takes priority)${PLAIN}" "${RED}по умолчанию (IPv6 имеет приоритет)${PLAIN}")"
@@ -492,15 +562,17 @@ func_system_tweaks() {
             2)
                 read_trimmed yn "$(localized_text "❓ 设置 IPv4 为最高出站优先级？(y 开启 / n 恢复默认): " "❓ Set IPv4 as the highest outbound priority? (y turns on / n returns to default):" "❓ Установить IPv4 как наивысший исходящий приоритет? (y включается/n возвращается к настройкам по умолчанию):")"
                 if is_yes "$yn"; then
-                    [[ -f /etc/gai.conf ]] || touch /etc/gai.conf
-                    cp -p /etc/gai.conf "/etc/gai.conf.bak_$(date +%s)" 2>/dev/null || true
-                    sed -Ei '/^[[:space:]]*#?[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+100\b.*?$/ {s/.+100\b([[:space:]]*#.*)?$/precedence ::ffff:0:0\/96  100\1/; :a;n;b a}; /^[[:space:]]*precedence[[:space:]]+::ffff:0:0\/96[[:space:]]+[0-9]+.*$/ {s/^.*precedence.+::ffff:0:0\/96[^0-9]+([0-9]+).*$/precedence ::ffff:0:0\/96  100\t#原值为 \1/; :a;n;ba;}; $aprecedence ::ffff:0:0\/96  100' /etc/gai.conf
-                    echo -e "$(localized_text "${GREEN}✅ 已设为 IPv4 优先${PLAIN}" "${GREEN}✅ has been set to IPv4, giving priority to${PLAIN}" "${GREEN}Для вещества установлено значение IPv4, что дает приоритет.${PLAIN}")"
+                    if configure_ipv4_preference; then
+                        echo -e "$(localized_text "${GREEN}✅ 已设为 IPv4 出站优先${PLAIN}" "${GREEN}✅ IPv4 is now preferred for outbound connections.${PLAIN}" "${GREEN}✅ IPv4 теперь имеет приоритет для исходящих подключений.${PLAIN}")"
+                    else
+                        echo -e "$(localized_text "${RED}❌ IPv4 优先配置失败，请检查 /etc/gai.conf 权限。${PLAIN}" "${RED}❌ Failed to prefer IPv4. Check permissions on /etc/gai.conf.${PLAIN}" "${RED}❌ Не удалось включить приоритет IPv4. Проверьте права на /etc/gai.conf.${PLAIN}")"
+                    fi
                 elif is_no "$yn"; then
-                    [[ -f /etc/gai.conf ]] || touch /etc/gai.conf
-                    cp -p /etc/gai.conf "/etc/gai.conf.bak_$(date +%s)" 2>/dev/null || true
-                    sed -i '/precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
-                    echo -e "$(localized_text "${BLUE}已恢复系统默认${PLAIN}" "${BLUE}Has restored the system default${PLAIN}" "${BLUE}восстановил системные настройки по умолчанию${PLAIN}")"
+                    if restore_default_ip_preference; then
+                        echo -e "$(localized_text "${BLUE}已恢复系统默认地址优先级${PLAIN}" "${BLUE}Default address precedence restored.${PLAIN}" "${BLUE}Восстановлен системный порядок адресов по умолчанию.${PLAIN}")"
+                    else
+                        echo -e "$(localized_text "${RED}❌ 默认地址优先级恢复失败，请检查 /etc/gai.conf 权限。${PLAIN}" "${RED}❌ Failed to restore default address precedence. Check permissions on /etc/gai.conf.${PLAIN}" "${RED}❌ Не удалось восстановить порядок адресов по умолчанию. Проверьте права на /etc/gai.conf.${PLAIN}")"
+                    fi
                 fi; sleep 1 ;;
             3)
                 read_trimmed yn "$(localized_text "❓ 允许被 Ping？(y 允许 / n 禁止): " "❓ Allow to be pinged? (y allowed / n forbidden):" "❓ Разрешить пинговать? (y разрешено/n запрещено):")"

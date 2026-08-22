@@ -67,7 +67,7 @@ Shortcuts are case-insensitive and behave like selecting the corresponding main-
 
 | Area | Capabilities |
 |---|---|
-| System setup | Preflight checks, common tools, timezone, and basic BBR |
+| System setup | Preflight checks, common tools, timezone, IPv4 outbound preference, and basic BBR |
 | Security hardening | SSH, public-key authentication, Fail2ban, firewall, and port concurrency limits |
 | Panels and subscriptions | 3x-ui, S-UI, Sing-box, Xray, SublinkPro, Sub-Store, Dockge, and Komari |
 | Forwarding and networking | Realm, Gost, FLVX, EasyTier, and Tailscale |

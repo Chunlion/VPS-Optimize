@@ -368,7 +368,7 @@ main_menu() {
 
             echo -e " ${BOLD}${BLUE}▶ ① Рекомендуемый порядок для нового сервера${PLAIN}"
             print_menu_item 1 "Предварительная проверка" "порты, система, службы и возможные риски"
-            print_menu_item 2 "Базовая настройка системы" "инструменты, часовой пояс, обновления и базовый BBR"
+            print_menu_item 2 "Базовая настройка системы" "инструменты, часовой пояс, обновления, приоритет IPv4 и базовый BBR"
             print_menu_item 3 "Компоненты и службы" "Docker, Python, WARP и распространённые инструменты"
             print_menu_item 4 "Обратный прокси" "сайты и панели без повторного использования порта 443"
             print_menu_item 5 "Панели, узлы и подписки" "3x-ui, Sing-box, подписки и Komari"
@@ -408,7 +408,7 @@ main_menu() {
 
             echo -e " ${BOLD}${BLUE}▶ ① Recommended setup for a new server${PLAIN}"
             print_menu_item 1 "Preflight and risk scan" "check ports, OS, and services before deployment"
-            print_menu_item 2 "Base system initialization" "tools, timezone, updates, and basic BBR"
+            print_menu_item 2 "Base system initialization" "tools, timezone, updates, IPv4 preference, and basic BBR"
             print_menu_item 3 "Components and services" "Docker, Python, WARP, and common tools"
             print_menu_item 4 "Reverse proxy" "sites and panels not using Port 443 Reuse"
             print_menu_item 5 "Panels, nodes, subscriptions" "3x-ui, Sing-box, subscriptions, and Komari"
@@ -448,7 +448,7 @@ main_menu() {
 
         echo -e " ${BOLD}${BLUE}▶ ① 推荐流程：新机器先跑这里${PLAIN}"
         print_menu_item 1 "运维预检与风险扫描" "部署前先看端口/系统/服务状态"
-        print_menu_item 2 "基础环境初始化" "工具/时区/系统更新/基础 BBR"
+        print_menu_item 2 "基础环境初始化" "工具/时区/系统更新/IPv4优先/基础 BBR"
         print_menu_item 3 "基础组件与常用服务" "Docker/Python/WARP/常用工具"
         print_menu_item 4 "反代（Caddy/Nginx）" "非443端口复用的网站与面板反代"
         print_menu_item 5 "面板、节点与订阅工具" "3x-ui/Sing-box/订阅管理/Komari"

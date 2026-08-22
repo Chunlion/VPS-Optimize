@@ -158,6 +158,9 @@ assert_function_once dist/vps.sh prompt_initial_ui_language
 assert_function_once dist/vps.sh toggle_ui_language
 assert_function_once dist/vps.sh func_net_kernel_menu
 assert_function_once dist/vps.sh func_kernel_manage
+assert_function_once dist/vps.sh configure_ipv4_preference
+assert_function_once dist/vps.sh restore_default_ip_preference
+assert_function_once dist/vps.sh ipv4_preference_is_enabled
 assert_function_once dist/vps.sh func_health_dashboard
 assert_function_once dist/vps.sh render_menu
 assert_function_once dist/vps.sh dispatch_menu_choice
@@ -323,6 +326,7 @@ source src/ui.sh
 source src/input.sh
 source src/validate.sh
 source src/kernel_tuning.sh
+source src/system_core.sh
 
 for function_name in terminal_text_width print_menu_item render_menu dispatch_menu_choice rotate_log_file format_bytes load_ui_language save_ui_language localized_text select_ui_language prompt_initial_ui_language toggle_ui_language; do
     assert_function_loaded "$function_name"
@@ -375,6 +379,18 @@ rotate_log_file "$compat_tmp_dir/large.log" 4 3
 [[ -n "$(format_bytes 0)" ]]
 [[ -n "$(format_bytes 1024)" ]]
 [[ -n "$(format_bytes 1048576)" ]]
+gai_test_file="$compat_tmp_dir/gai.conf"
+printf '%s\n' '#precedence ::ffff:0:0/96  10' 'precedence ::ffff:0:0/96  50' 'precedence ::ffff:0:0/96  100' > "$gai_test_file"
+configure_ipv4_preference "$gai_test_file"
+ipv4_preference_is_enabled "$gai_test_file"
+[[ "$(grep -Ec '^[[:space:]]*precedence[[:space:]]+::ffff:0:0/96[[:space:]]+100$' "$gai_test_file")" == "1" ]]
+assert_file_contains "$gai_test_file" '#precedence ::ffff:0:0/96  10'
+assert_file_not_contains "$gai_test_file" 'precedence ::ffff:0:0/96  50'
+configure_ipv4_preference "$gai_test_file"
+[[ "$(grep -Ec '^[[:space:]]*precedence[[:space:]]+::ffff:0:0/96[[:space:]]+100$' "$gai_test_file")" == "1" ]]
+restore_default_ip_preference "$gai_test_file"
+assert_file_not_contains "$gai_test_file" 'precedence ::ffff:0:0/96  100'
+[[ "$(find "$compat_tmp_dir" -maxdepth 1 -type f -name 'gai.conf.bak_*' | wc -l)" == "2" ]]
 [[ "$(bbr_direct_buffer_mb 100 near)" == "8" ]]
 [[ "$(bbr_direct_buffer_mb 1000 near)" == "16" ]]
 [[ "$(bbr_direct_buffer_mb 1000 long)" == "64" ]]
