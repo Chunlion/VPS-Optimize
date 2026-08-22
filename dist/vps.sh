@@ -23361,7 +23361,7 @@ show_net_kernel_help() {
     echo "$(localized_text "5 流量限额保护：按账单周期统计流量，达到阈值后关机或仅保留 SSH。" "5 Traffic quota protection: track usage by billing cycle, then shut down or keep only SSH at the threshold." "5 Защита лимита трафика: учёт по расчётному периоду с выключением сервера или сохранением только SSH при достижении порога.")"
     echo "$(localized_text "6 ZRAM / Swap：适合小内存 VPS。" "6 ZRAM / Swap: suitable for small memory VPS." "6 ZRAM / Swap: подходит для VPS с небольшой памятью.")"
     echo "$(localized_text "7 内核管理：安装、切换或清理内核；操作前确认快照和救援控制台可用。" "7 Kernel management: install, switch, or remove kernels. Confirm snapshot and rescue-console access first." "7 Управление ядрами: установка, смена и удаление ядер. Сначала проверьте доступ к снимку и аварийной консоли.")"
-    echo "$(localized_text "9 BBR 直连/落地优化：按上传带宽和主要 RTT 计算缓冲区、连接队列与网卡积压参数。" "9 BBR direct/relay tuning: Size buffers, connection queues, and device backlog from upload bandwidth and primary RTT." "9 Настройка BBR для прямого/промежуточного сервера: рассчитать буферы, очереди соединений и сетевого устройства по отдаче и основному RTT.")"
+    echo "$(localized_text "8 BBR 直连/落地优化：按上传带宽和主要 RTT 计算缓冲区、连接队列与网卡积压参数。" "8 BBR direct/relay tuning: Size buffers, connection queues, and device backlog from upload bandwidth and primary RTT." "8 Настройка BBR для прямого/промежуточного сервера: рассчитать буферы, очереди соединений и сетевого устройства по отдаче и основному RTT.")"
     echo "$(localized_text "带宽、iperf3、国际互联和网络质量测试已移至主菜单 [12 测速与质量检测]。" "Bandwidth, iperf3, international connectivity, and network-quality tests are under main menu [12 Speed and quality tests]." "Тесты пропускной способности, iperf3, международной связи и качества сети находятся в пункте [12 Тесты скорости и качества] главного меню.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
@@ -23384,7 +23384,7 @@ NET_KERNEL_MENU_ITEMS=(
     "5|流量限额保护|流量统计 / 超额处置|func_traffic_guard_menu|"
     "6|ZRAM / Swap 内存调优|根据内存容量选择配置|func_zram_swap|"
     "7|内核管理|安装、切换或清理内核|func_kernel_manage|"
-    "9|BBR 直连/落地优化|检测带宽与 RTT，动态生成 BBR/TCP 参数|func_bbr_direct_tune|net_bbr_direct"
+    "8|BBR 直连/落地优化|检测带宽与 RTT，动态生成 BBR/TCP 参数|func_bbr_direct_tune|net_bbr_direct"
 )
 
 NET_KERNEL_MENU_ITEMS_EN=(
@@ -23395,7 +23395,7 @@ NET_KERNEL_MENU_ITEMS_EN=(
     "5|Traffic quota protection|Prevent abuse and overage charges|func_traffic_guard_menu|"
     "6|ZRAM / Swap tuning|Tune memory compression by available RAM|func_zram_swap|"
     "7|Kernel management|Install, switch, or remove kernels|func_kernel_manage|"
-    "9|BBR direct/relay tuning|Detect bandwidth and RTT; generate BBR/TCP parameters|func_bbr_direct_tune|net_bbr_direct"
+    "8|BBR direct/relay tuning|Detect bandwidth and RTT; generate BBR/TCP parameters|func_bbr_direct_tune|net_bbr_direct"
 )
 
 NET_KERNEL_MENU_ITEMS_RU=(
@@ -23406,7 +23406,7 @@ NET_KERNEL_MENU_ITEMS_RU=(
     "5|Защита лимита трафика|Предотвращение злоупотреблений и перерасхода|func_traffic_guard_menu|"
     "6|Настройка ZRAM / Swap|Сжатие памяти с учётом объёма ОЗУ|func_zram_swap|"
     "7|Управление ядрами|Установка, смена и удаление ядер|func_kernel_manage|"
-    "9|Настройка BBR для прямого/промежуточного сервера|Определить скорость и RTT; создать параметры BBR/TCP|func_bbr_direct_tune|net_bbr_direct"
+    "8|Настройка BBR для прямого/промежуточного сервера|Определить скорость и RTT; создать параметры BBR/TCP|func_bbr_direct_tune|net_bbr_direct"
 )
 
 confirm_menu_risk() {

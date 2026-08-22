@@ -177,7 +177,7 @@ assert_file_contains src/menus.sh 'NET_KERNEL_MENU_ITEMS=(' "Network/kernel menu
 assert_file_contains src/menus.sh '1|BBR / 拥塞控制管理|调用 ylx2016 多内核调优脚本|func_bbr_manage|net_bbr'
 assert_file_contains src/menus.sh '2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune'
 assert_file_contains src/menus.sh '4|网络接口管理|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|'
-assert_file_contains src/menus.sh '9|BBR 直连/落地优化|检测带宽与 RTT，动态生成 BBR/TCP 参数|func_bbr_direct_tune|net_bbr_direct'
+assert_file_contains src/menus.sh '8|BBR 直连/落地优化|检测带宽与 RTT，动态生成 BBR/TCP 参数|func_bbr_direct_tune|net_bbr_direct'
 assert_file_contains src/menus.sh '7|内核管理|安装、切换或清理内核|func_kernel_manage|'
 assert_file_not_contains src/menus.sh '10|服务器带宽测试|'
 assert_file_contains src/diagnostics_network.sh '10. 服务器带宽测试'
