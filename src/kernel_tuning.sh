@@ -749,7 +749,7 @@ set_grub_default_kernel_by_keyword() {
 
     if ! command -v dpkg >/dev/null 2>&1 || [[ ! -f /etc/default/grub ]]; then
         echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 dpkg/GRUB 配置，已跳过自动接管引导。${PLAIN}" "${YELLOW}⚠️ No dpkg/GRUB configuration detected, automatic takeover boot skipped.${PLAIN}" "${YELLOW}⚠️ Конфигурация dpkg/GRUB не обнаружена, автоматическая загрузка с дублированием пропущена.${PLAIN}")"
-        return 0
+        return 2
     fi
 
     target_v=$(dpkg -l | awk '/^ii[[:space:]]+linux-image-[0-9]/ && /'"$kernel_keyword"'/ {print $2}' | sed 's/linux-image-//' | sort -V | tail -n 1)
@@ -766,33 +766,46 @@ set_grub_default_kernel_by_keyword() {
     fi
     grep -q "^GRUB_SAVEDEFAULT=true" /etc/default/grub || echo "GRUB_SAVEDEFAULT=true" >> /etc/default/grub
     if command -v update-grub >/dev/null 2>&1; then
-        update-grub >/dev/null 2>&1
+        if ! update-grub >/dev/null 2>&1; then
+            echo -e "$(localized_text "${YELLOW}⚠️ update-grub 执行失败，无法确认默认启动项。${PLAIN}" "${YELLOW}⚠️ update-grub failed; the default boot entry could not be confirmed.${PLAIN}" "${YELLOW}⚠️ Сбой update-grub; не удалось подтвердить запись загрузки по умолчанию.${PLAIN}")"
+            return 2
+        fi
     elif command -v grub2-mkconfig >/dev/null 2>&1; then
-        grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1 || true
+        if ! grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1; then
+            echo -e "$(localized_text "${YELLOW}⚠️ grub2-mkconfig 执行失败，无法确认默认启动项。${PLAIN}" "${YELLOW}⚠️ grub2-mkconfig failed; the default boot entry could not be confirmed.${PLAIN}" "${YELLOW}⚠️ Сбой grub2-mkconfig; не удалось подтвердить запись загрузки по умолчанию.${PLAIN}")"
+            return 2
+        fi
+    else
+        echo -e "$(localized_text "${YELLOW}⚠️ 未找到 GRUB 配置生成命令，无法确认默认启动项。${PLAIN}" "${YELLOW}⚠️ No GRUB configuration generator was found; the default boot entry could not be confirmed.${PLAIN}" "${YELLOW}⚠️ Команда создания конфигурации GRUB не найдена; не удалось подтвердить запись загрузки по умолчанию.${PLAIN}")"
+        return 2
     fi
 
     local grub_cfg="/boot/grub/grub.cfg"
     [[ -f "$grub_cfg" ]] || grub_cfg="/boot/grub2/grub.cfg"
     if [[ ! -f "$grub_cfg" ]]; then
-        echo -e "$(localized_text "${YELLOW}⚠️ 未找到 grub.cfg，新内核已安装，但请重启后手动确认默认启动项。${PLAIN}" "${YELLOW}⚠️ grub.cfg not found, the new kernel has been installed, but please manually confirm the default startup items after restarting.${PLAIN}" "${YELLOW}⚠️ grub.cfg не найден, новое ядро установлено, но после перезапуска вручную подтвердите элементы запуска по умолчанию.${PLAIN}")"
-        return 0
+        echo -e "$(localized_text "${YELLOW}⚠️ 未找到 grub.cfg，无法确认默认启动项；重启前请手动检查。${PLAIN}" "${YELLOW}⚠️ grub.cfg was not found, so the default boot entry could not be confirmed. Check it manually before restarting.${PLAIN}" "${YELLOW}⚠️ Файл grub.cfg не найден, поэтому запись загрузки по умолчанию не подтверждена. Проверьте её вручную перед перезапуском.${PLAIN}")"
+        return 2
     fi
 
     menu_1=$(grep -i "submenu 'Advanced options for" "$grub_cfg" | cut -d"'" -f2 | head -n 1)
     menu_2=$(grep -i "menuentry '.*$target_v.*'" "$grub_cfg" | grep -iv "recovery" | cut -d"'" -f2 | head -n 1)
 
     if [[ -n "$menu_1" && -n "$menu_2" ]]; then
-        grub-set-default "$menu_1>$menu_2" 2>/dev/null || grub2-set-default "$menu_1>$menu_2" 2>/dev/null || true
-        echo -e "$(localized_text "${GREEN}✅ GRUB 引导接管成功！重启后将优先进入：$target_v${PLAIN}" "${GREEN}✅ GRUB boot takeover successful! After restarting, you will enter first: $target_v${PLAIN}" "${GREEN}✅ Перехват загрузки GRUB выполнен успешно! После перезагрузки сначала введите: $target_v.${PLAIN}")"
-        return 0
+        if { command -v grub-set-default >/dev/null 2>&1 && grub-set-default "$menu_1>$menu_2" 2>/dev/null; } || \
+           { command -v grub2-set-default >/dev/null 2>&1 && grub2-set-default "$menu_1>$menu_2" 2>/dev/null; }; then
+            echo -e "$(localized_text "${GREEN}✅ 已将 GRUB 默认启动项设为：$target_v${PLAIN}" "${GREEN}✅ GRUB default boot entry set to: $target_v${PLAIN}" "${GREEN}✅ Запись GRUB по умолчанию: $target_v${PLAIN}")"
+            return 0
+        fi
+        echo -e "$(localized_text "${YELLOW}⚠️ GRUB 默认启动项设置失败，请在重启前手动确认。${PLAIN}" "${YELLOW}⚠️ Failed to set the GRUB default boot entry. Confirm it manually before restarting.${PLAIN}" "${YELLOW}⚠️ Не удалось задать запись GRUB по умолчанию. Проверьте её вручную перед перезапуском.${PLAIN}")"
+        return 2
     fi
 
     echo -e "$(localized_text "${YELLOW}⚠️ 警告：GRUB 菜单寻址失败。系统可能仍以最高版本号内核启动。${PLAIN}" "${YELLOW}⚠️ WARNING: GRUB menu addressing failed. The system may still boot with the highest version kernel.${PLAIN}" "${YELLOW}⚠️ ВНИМАНИЕ: не удалось выполнить адресацию меню GRUB. Система по-прежнему может загружаться с ядром самой последней версии.${PLAIN}")"
-    return 1
+    return 2
 }
 
 install_cloud_kvm_kernel() {
-    local arch kernel_keyword="" pkg
+    local arch kernel_keyword="" pkg grub_rc
     local candidates=()
 
     if uname -r | grep -qE "kvm|cloud|virtual"; then
@@ -842,8 +855,15 @@ install_cloud_kvm_kernel() {
         echo -e "$(localized_text "${CYAN}▶ 尝试安装内核包: ${pkg}${PLAIN}" "${CYAN}▶ Try to install the kernel package: ${pkg}${PLAIN}" "${CYAN}▶ Попробуйте установить пакет ядра: ${pkg}.${PLAIN}")"
         if install_pkg "$pkg"; then
             echo -e "$(localized_text "${GREEN}✅ 已安装内核包: ${pkg}${PLAIN}" "${GREEN}✅ Kernel package installed: ${pkg}${PLAIN}" "${GREEN}✅ Установлен пакет ядра: ${pkg}${PLAIN}")"
-            set_grub_default_kernel_by_keyword "$kernel_keyword"
-            return $?
+            KERNEL_REBOOT_REQUIRED=1
+            if set_grub_default_kernel_by_keyword "$kernel_keyword"; then
+                KERNEL_BOOT_CONFIGURED=1
+                return 0
+            else
+                grub_rc=$?
+            fi
+            [[ "$grub_rc" -eq 2 ]] && return 0
+            return 1
         fi
         echo -e "$(localized_text "${YELLOW}  - ${pkg} 安装失败，尝试下一个候选...${PLAIN}" "${YELLOW}- ${pkg} Installation failed, try next candidate...${PLAIN}" "${YELLOW}- ${pkg} Не удалось установить, попробуйте следующий вариант...${PLAIN}")"
     done
@@ -922,7 +942,7 @@ install_xanmod_kernel_package() {
 }
 
 install_xanmod_kernel() {
-    local codename confirm arch cpu_level
+    local codename confirm arch cpu_level grub_rc
 
     if uname -r | grep -qi "xanmod"; then
         echo -e "$(localized_text "${GREEN}✅ 系统当前已运行 XanMod 内核 ($(uname -r))，无需重复安装！${PLAIN}" "${GREEN}✅ The system is currently running the XanMod kernel ($(uname -r)), no need to reinstall!${PLAIN}" "${GREEN}✅ В настоящее время в системе установлено ядро XanMod ($(uname -r)), переустанавливать не нужно!${PLAIN}")"
@@ -974,10 +994,20 @@ install_xanmod_kernel() {
         return 1
     fi
 
-    set_grub_default_kernel_by_keyword "xanmod"
+    KERNEL_REBOOT_REQUIRED=1
+    if set_grub_default_kernel_by_keyword "xanmod"; then
+        KERNEL_BOOT_CONFIGURED=1
+        return 0
+    else
+        grub_rc=$?
+    fi
+    [[ "$grub_rc" -eq 2 ]] && return 0
+    return 1
 }
 
 func_install_kernel() {
+    local KERNEL_REBOOT_REQUIRED=0
+    local KERNEL_BOOT_CONFIGURED=0
     clear
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}☁️  安装/切换优化内核${PLAIN}" "${BOLD}☁️ Install/switch optimized kernel${PLAIN}" "${BOLD}☁️ Установить/переключить оптимизированное ядро${PLAIN}")"
@@ -1031,13 +1061,43 @@ func_install_kernel() {
         return
     fi
 
-    echo -e "------------------------------------------------"
-    echo -e "$(localized_text "${YELLOW}⚠️ 核心生效指引：${PLAIN}" "${YELLOW}⚠️ Core Validation Guide:${PLAIN}" "${YELLOW}⚠️ Руководство по проверке ядра:${PLAIN}")"
-    echo -e "$(localized_text "1. 新内核引导已配置完毕，请先选择主菜单的 ${RED}[17] 重启服务器${PLAIN}。" "1. The new kernel boot configuration has been completed. Please select ${RED}[17] in the main menu to restart the server${PLAIN}." "1. Новая конфигурация загрузки ядра завершена. Пожалуйста, выберите ${RED}[17] в главном меню, чтобы перезапустить сервер${PLAIN}.")"
-    echo -e "$(localized_text "2. 重启后请运行 ${GREEN}uname -r${PLAIN} 确认实际进入的新内核。" "2. After restarting, please run ${GREEN}Uname -r${PLAIN} to confirm the new kernel actually entered." "2. После перезапуска запустите ${GREEN}uname -r${PLAIN}, чтобы подтвердить, что новое ядро действительно введено.")"
-    echo -e "$(localized_text "3. 确认稳定后，再进入本菜单选择 ${GREEN}[5] 清理旧内核${PLAIN}。" "3. After confirming that it is stable, enter this menu and select ${GREEN}[5] to clean up the old kernel${PLAIN}." "3. Убедившись, что оно стабильно, войдите в это меню и выберите ${GREEN}[5], чтобы очистить старое ядро${PLAIN}.")"
+    if [[ "$KERNEL_REBOOT_REQUIRED" == "1" ]]; then
+        echo -e "------------------------------------------------"
+        if [[ "$KERNEL_BOOT_CONFIGURED" == "1" ]]; then
+            echo -e "$(localized_text "${GREEN}✅ 新内核已安装并设为默认启动项，重启后生效。${PLAIN}" "${GREEN}✅ The new kernel is installed and set as the default boot entry. It will take effect after restart.${PLAIN}" "${GREEN}✅ Новое ядро установлено и выбрано для загрузки по умолчанию. Оно запустится после перезагрузки.${PLAIN}")"
+            echo -e "$(localized_text "1. 从主菜单选择 ${RED}[18] 重启服务器${PLAIN}。" "1. Select ${RED}[18] from the main menu to restart the server${PLAIN}." "1. Выберите ${RED}[18] в главном меню, чтобы перезапустить сервер${PLAIN}.")"
+        else
+            echo -e "$(localized_text "${YELLOW}⚠️ 新内核已安装，但无法确认默认启动项；请先在 GRUB 或云厂商控制台中确认，再重启。${PLAIN}" "${YELLOW}⚠️ The new kernel is installed, but the default boot entry could not be confirmed. Verify it in GRUB or the provider console before restarting.${PLAIN}" "${YELLOW}⚠️ Новое ядро установлено, но запись загрузки по умолчанию не подтверждена. Проверьте её в GRUB или консоли провайдера перед перезапуском.${PLAIN}")"
+        fi
+        echo -e "$(localized_text "2. 重启后运行 ${GREEN}uname -r${PLAIN}，确认当前内核版本。" "2. After restart, run ${GREEN}uname -r${PLAIN} to confirm the active kernel version." "2. После перезапуска выполните ${GREEN}uname -r${PLAIN}, чтобы проверить версию активного ядра.")"
+        echo -e "$(localized_text "3. 确认新内核稳定后，再进入内核管理选择 ${GREEN}[2] 清理旧内核${PLAIN}。" "3. After confirming stability, open Kernel management and select ${GREEN}[2] to remove old kernels${PLAIN}." "3. Убедившись в стабильности, откройте управление ядрами и выберите ${GREEN}[2] для удаления старых ядер${PLAIN}.")"
+    fi
 
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
+}
+
+func_kernel_manage() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${PLAIN}"
+        print_breadcrumb "$(localized_text "网络/内核优化 > 内核管理" "Network/kernel optimization > Kernel management" "Оптимизация сети/ядра > Управление ядрами")"
+        echo -e "$(localized_text "${BOLD}⚙️ 内核管理${PLAIN}" "${BOLD}⚙️ Kernel management${PLAIN}" "${BOLD}⚙️ Управление ядрами${PLAIN}")"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "$(localized_text "${GREEN}  1. 安装/切换优化内核${PLAIN}" "${GREEN}  1. Install or switch kernel${PLAIN}" "${GREEN}  1. Установить или сменить ядро${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 清理旧内核${PLAIN}" "${GREEN}  2. Remove old kernels${PLAIN}" "${GREEN}  2. Удалить старые ядра${PLAIN}")"
+        echo -e "------------------------------------------------"
+        echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}  0. Back / q Back${PLAIN}" "${RED}  0. Назад / q Назад${PLAIN}")"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local kernel_manage_choice
+        read_trimmed kernel_manage_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
+        case "$kernel_manage_choice" in
+            1) confirm_menu_risk net_kernel_install && func_install_kernel ;;
+            2) func_clean_kernel ;;
+            0|q|Q) break ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
+        esac
+    done
 }
 
 # ---------------------------------------------------------

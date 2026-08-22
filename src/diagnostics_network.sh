@@ -199,6 +199,8 @@ func_test_scripts() {
         echo -e "$(localized_text "${GREEN}  5. 三网回程路由测试       ${YELLOW}  6. IP 质量 / 欺诈度检测${PLAIN}" "${GREEN}  5. China carrier routes     ${YELLOW}  6. IP quality / fraud score${PLAIN}" "${GREEN}  5. Маршруты операторов Китая ${YELLOW}  6. Качество IP / риск мошенничества${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  7. NodeSeek 综合测试      ${YELLOW}  8. 流媒体解锁检测${PLAIN}" "${GREEN}  7. NodeSeek test            ${YELLOW}  8. Streaming access test${PLAIN}" "${GREEN}  7. Тест NodeSeek            ${YELLOW}  8. Доступ к стриминговым сервисам${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  9. TcpQuality TCP 质量测试${PLAIN}" "${GREEN}  9. TcpQuality TCP test${PLAIN}" "${GREEN}  9. Тест TCP через TcpQuality${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 10. 服务器带宽测试         ${YELLOW} 11. iperf3 单线程测试${PLAIN}" "${GREEN} 10. Server bandwidth test    ${YELLOW} 11. iperf3 single-stream test${PLAIN}" "${GREEN} 10. Тест пропускной способности ${YELLOW} 11. Однопоточный тест iperf3${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 12. 国际互联速度测试       ${YELLOW} 13. 网络延迟质量检测${PLAIN}" "${GREEN} 12. International speed test ${YELLOW} 13. Network latency and quality${PLAIN}" "${GREEN} 12. Международный тест скорости ${YELLOW} 13. Задержка и качество сети${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -216,6 +218,10 @@ func_test_scripts() {
             7) ran_test=true; run_remote_script "$(localized_text "运行 NodeSeek 综合测试" "Run NodeSeek synthetic tests" "Запуск синтетических тестов NodeSeek")" "https://run.NodeQuality.com" ;;
             8) ran_test=true; run_remote_script "$(localized_text "运行流媒体解锁检测" "Run streaming unblock detection" "Запустить обнаружение разблокировки потоковой передачи")" "https://check.unlock.media" ;;
             9) ran_test=true; run_remote_script "$(localized_text "运行 TcpQuality TCP 质量测试" "Run the TcpQuality TCP quality test" "Запустите тест качества TcpQuality TCP.")" "https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh" ;;
+            10) func_server_bandwidth_test; continue ;;
+            11) func_iperf3_single_thread_test; continue ;;
+            12) func_international_speed_test; continue ;;
+            13) func_network_latency_quality_test; continue ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效的选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1; continue ;;
         esac
@@ -229,7 +235,7 @@ func_test_scripts() {
 func_server_bandwidth_test() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "网络/内核优化 > 服务器带宽测试" "Network/Kernel Optimization > Server Bandwidth Test" "Оптимизация сети/ядра > Тест пропускной способности сервера")"
+    print_breadcrumb "$(localized_text "测速与质量检测 > 服务器带宽测试" "Speed and quality tests > Server bandwidth test" "Тесты скорости и качества > Тест пропускной способности")"
     echo -e "$(localized_text "${BOLD}📶 服务器带宽测试${PLAIN}" "${BOLD}📶 Server bandwidth test${PLAIN}" "${BOLD}📶 Тест пропускной способности сервера${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
@@ -252,7 +258,7 @@ func_server_bandwidth_test() {
 func_iperf3_single_thread_test() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "网络/内核优化 > iperf3 单线程测试" "Network/kernel optimization > iperf3 single-thread test" "Оптимизация сети/ядра > Однопоточный тест iperf3")"
+    print_breadcrumb "$(localized_text "测速与质量检测 > iperf3 单线程测试" "Speed and quality tests > iperf3 single-stream test" "Тесты скорости и качества > Однопоточный тест iperf3")"
     echo -e "$(localized_text "${BOLD}📡 iperf3 单线程测试${PLAIN}" "${BOLD}📡 iperf3 Single thread test${PLAIN}" "${BOLD}📡 iperf3 Тест одной резьбы${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
 
@@ -309,7 +315,7 @@ func_international_speed_test() {
     run_remote_script "$(localized_text "运行国际互联速度测试" "Run an international internet speed test" "Запустите международный тест скорости интернета")" \
         "https://raw.githubusercontent.com/Cd1s/network-latency-tester/main/latency.sh"
     local rc=$?
-    pause_after_external_script "$(localized_text "操作结束，按回车键返回网络优化菜单..." "When the operation is completed, press Enter to return to the network optimization menu..." "Когда операция будет завершена, нажмите Enter, чтобы вернуться в меню оптимизации сети...")"
+    pause_after_external_script "$(localized_text "操作结束，按回车键返回测试菜单..." "When the operation is complete, press Enter to return to the test menu..." "После завершения нажмите Enter, чтобы вернуться в меню тестов...")"
     return "$rc"
 }
 
@@ -317,7 +323,7 @@ func_network_latency_quality_test() {
     clear
     run_remote_script "$(localized_text "运行网络延迟质量检测" "Run network latency quality check" "Запустите проверку качества задержки сети")" "https://Check.Place" -N
     local rc=$?
-    pause_after_external_script "$(localized_text "操作结束，按回车键返回网络优化菜单..." "When the operation is completed, press Enter to return to the network optimization menu..." "Когда операция будет завершена, нажмите Enter, чтобы вернуться в меню оптимизации сети...")"
+    pause_after_external_script "$(localized_text "操作结束，按回车键返回测试菜单..." "When the operation is complete, press Enter to return to the test menu..." "После завершения нажмите Enter, чтобы вернуться в меню тестов...")"
     return "$rc"
 }
 # ---------------------------------------------------------

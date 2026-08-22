@@ -101,14 +101,9 @@ show_net_kernel_help() {
     echo "$(localized_text "4 网络接口管理：查看网卡、路由和 DNS，临时调整 MTU 或刷新 DHCP。" "4 Network interfaces: view interfaces, routes, and DNS; temporarily change MTU or renew DHCP." "4 Сетевые интерфейсы: просмотр интерфейсов, маршрутов и DNS; временная смена MTU или обновление DHCP.")"
     echo "$(localized_text "5 流量限额保护：按账单周期统计流量，达到阈值后关机或仅保留 SSH。" "5 Traffic quota protection: track usage by billing cycle, then shut down or keep only SSH at the threshold." "5 Защита лимита трафика: учёт по расчётному периоду с выключением сервера или сохранением только SSH при достижении порога.")"
     echo "$(localized_text "6 ZRAM / Swap：适合小内存 VPS。" "6 ZRAM / Swap: suitable for small memory VPS." "6 ZRAM / Swap: подходит для VPS с небольшой памятью.")"
-    echo "$(localized_text "7 安装/切换内核：高风险，必须确认快照和救援控制台可用。" "7 Install/switch kernel: High risk, must confirm snapshot and rescue console are available." "7. Установка/переключение ядра: высокий риск, необходимо подтвердить доступность моментального снимка и консоли восстановления.")"
-    echo "$(localized_text "8 清理旧内核：不要删除当前内核和云厂商定制内核。" "8 Clean up old kernels: Do not delete the current kernel and cloud vendor-customized kernels." "8. Очистите старые ядра. Не удаляйте текущее ядро и ядра, настроенные поставщиком облака.")"
+    echo "$(localized_text "7 内核管理：安装、切换或清理内核；操作前确认快照和救援控制台可用。" "7 Kernel management: install, switch, or remove kernels. Confirm snapshot and rescue-console access first." "7 Управление ядрами: установка, смена и удаление ядер. Сначала проверьте доступ к снимку и аварийной консоли.")"
     echo "$(localized_text "9 BBR 直连/落地优化：按上传带宽和主要 RTT 计算缓冲区、连接队列与网卡积压参数。" "9 BBR direct/relay tuning: Size buffers, connection queues, and device backlog from upload bandwidth and primary RTT." "9 Настройка BBR для прямого/промежуточного сервера: рассчитать буферы, очереди соединений и сетевого устройства по отдаче и основному RTT.")"
-    echo "$(localized_text "10 服务器带宽测试：调用已安装的 Ookla speedtest，或安装发行版提供的 speedtest-cli。" "10 Server bandwidth test: Call the installed Ookla speedtest, or install the speedtest-cli provided by the distribution." "10 Тест пропускной способности сервера: вызовите установленный Speedtest Ookla или установите Speedtest-cli, входящий в дистрибутив.")"
-    echo "$(localized_text "11 iperf3 单线程测试：连接你自己的 iperf3 服务端，固定使用 1 条并行流。" "11 iperf3 single-thread test: connect your own iperf3 server and use 1 parallel stream." "11 Однопоточный тест iperf3: подключите собственный сервер iperf3 и используйте 1 параллельный поток.")"
-    echo "$(localized_text "12 国际互联速度测试：调用 network-latency-tester；执行前会显示来源并确认。" "12 International Internet speed test: call network-latency-tester; the source will be displayed and confirmed before execution." "12. Международный тест скорости Интернета: позвоните в тестер задержки сети; источник будет отображен и подтвержден перед выполнением.")"
-    echo "$(localized_text "13 网络延迟质量检测：调用 Check.Place 网络质量检测；执行前会显示来源并确认。" "13 Network delay quality detection: Call Check.Place network quality detection; the source will be displayed and confirmed before execution." "13 Обнаружение качества задержки сети: Проверка вызова. Обнаружение качества сети; источник будет отображен и подтвержден перед выполнением.")"
-    echo "$(localized_text "三网回程路由测试已在主菜单 [12 测速与质量检测] 中提供，不重复添加。" "The three-network backhaul routing test has been provided in the main menu [12 Speed Test and Quality Test] and will not be added repeatedly." "Тест маршрутизации транзитной сети с тремя сетями представлен в главном меню [12 Тест скорости и тест качества] и не будет добавляться повторно.")"
+    echo "$(localized_text "带宽、iperf3、国际互联和网络质量测试已移至主菜单 [12 测速与质量检测]。" "Bandwidth, iperf3, international connectivity, and network-quality tests are under main menu [12 Speed and quality tests]." "Тесты пропускной способности, iperf3, международной связи и качества сети находятся в пункте [12 Тесты скорости и качества] главного меню.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
 
@@ -129,13 +124,8 @@ NET_KERNEL_MENU_ITEMS=(
     "4|网络接口管理|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|"
     "5|流量限额保护|流量统计 / 超额处置|func_traffic_guard_menu|"
     "6|ZRAM / Swap 内存调优|根据内存容量选择配置|func_zram_swap|"
-    "7|安装/切换优化内核|Cloud/KVM 稳定推荐 / XanMod 高级可选|func_install_kernel|net_kernel_install"
-    "8|清理旧内核|释放磁盘空间，谨慎操作|func_clean_kernel|"
+    "7|内核管理|安装、切换或清理内核|func_kernel_manage|"
     "9|BBR 直连/落地优化|检测带宽与 RTT，动态生成 BBR/TCP 参数|func_bbr_direct_tune|net_bbr_direct"
-    "10|服务器带宽测试|Speedtest 上下行带宽与延迟|func_server_bandwidth_test|"
-    "11|iperf3 单线程测试|自定义服务端、方向、端口和时长|func_iperf3_single_thread_test|"
-    "12|国际互联速度测试|多地区网络互联质量测试|func_international_speed_test|"
-    "13|网络延迟质量检测|三网延迟、连通性与网络质量|func_network_latency_quality_test|"
 )
 
 NET_KERNEL_MENU_ITEMS_EN=(
@@ -145,13 +135,8 @@ NET_KERNEL_MENU_ITEMS_EN=(
     "4|Network interface manager|Interfaces, routes, DNS, MTU, and DHCP|func_network_interface_manage|"
     "5|Traffic quota protection|Prevent abuse and overage charges|func_traffic_guard_menu|"
     "6|ZRAM / Swap tuning|Tune memory compression by available RAM|func_zram_swap|"
-    "7|Install or switch kernel|Stable Cloud/KVM option or advanced XanMod option|func_install_kernel|net_kernel_install"
-    "8|Remove old kernels|Free disk space with safety checks|func_clean_kernel|"
+    "7|Kernel management|Install, switch, or remove kernels|func_kernel_manage|"
     "9|BBR direct/relay tuning|Detect bandwidth and RTT; generate BBR/TCP parameters|func_bbr_direct_tune|net_bbr_direct"
-    "10|Server bandwidth test|Speedtest upload, download, and latency|func_server_bandwidth_test|"
-    "11|iperf3 single-stream test|Custom server, direction, port, and duration|func_iperf3_single_thread_test|"
-    "12|International speed test|Test connectivity across multiple regions|func_international_speed_test|"
-    "13|Network latency and quality|Carrier latency, reachability, and network quality|func_network_latency_quality_test|"
 )
 
 NET_KERNEL_MENU_ITEMS_RU=(
@@ -161,13 +146,8 @@ NET_KERNEL_MENU_ITEMS_RU=(
     "4|Управление сетевыми интерфейсами|Интерфейсы, маршруты, DNS, MTU и DHCP|func_network_interface_manage|"
     "5|Защита лимита трафика|Предотвращение злоупотреблений и перерасхода|func_traffic_guard_menu|"
     "6|Настройка ZRAM / Swap|Сжатие памяти с учётом объёма ОЗУ|func_zram_swap|"
-    "7|Установка или смена ядра|Стабильное ядро Cloud/KVM или расширенный вариант XanMod|func_install_kernel|net_kernel_install"
-    "8|Удаление старых ядер|Безопасное освобождение места на диске|func_clean_kernel|"
+    "7|Управление ядрами|Установка, смена и удаление ядер|func_kernel_manage|"
     "9|Настройка BBR для прямого/промежуточного сервера|Определить скорость и RTT; создать параметры BBR/TCP|func_bbr_direct_tune|net_bbr_direct"
-    "10|Тест пропускной способности|Скорость загрузки, отдачи и задержка Speedtest|func_server_bandwidth_test|"
-    "11|Однопоточный тест iperf3|Свой сервер, направление, порт и длительность|func_iperf3_single_thread_test|"
-    "12|Международный тест скорости|Проверка связи с несколькими регионами|func_international_speed_test|"
-    "13|Задержка и качество сети|Задержка операторов, доступность и качество сети|func_network_latency_quality_test|"
 )
 
 confirm_menu_risk() {

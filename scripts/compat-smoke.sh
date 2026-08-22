@@ -157,6 +157,7 @@ assert_function_once dist/vps.sh select_ui_language
 assert_function_once dist/vps.sh prompt_initial_ui_language
 assert_function_once dist/vps.sh toggle_ui_language
 assert_function_once dist/vps.sh func_net_kernel_menu
+assert_function_once dist/vps.sh func_kernel_manage
 assert_function_once dist/vps.sh func_health_dashboard
 assert_function_once dist/vps.sh render_menu
 assert_function_once dist/vps.sh dispatch_menu_choice
@@ -174,11 +175,17 @@ assert_file_contains src/menus.sh '1|BBR / 拥塞控制管理|调用 ylx2016 多
 assert_file_contains src/menus.sh '2|动态 TCP 参数调优|粘贴 Omnitt 参数并自动校验|func_tcp_tune|net_tcp_tune'
 assert_file_contains src/menus.sh '4|网络接口管理|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|'
 assert_file_contains src/menus.sh '9|BBR 直连/落地优化|检测带宽与 RTT，动态生成 BBR/TCP 参数|func_bbr_direct_tune|net_bbr_direct'
-assert_file_contains src/menus.sh '10|服务器带宽测试|Speedtest 上下行带宽与延迟|func_server_bandwidth_test|'
-assert_file_contains src/menus.sh '11|iperf3 单线程测试|自定义服务端、方向、端口和时长|func_iperf3_single_thread_test|'
-assert_file_contains src/menus.sh '12|国际互联速度测试|多地区网络互联质量测试|func_international_speed_test|'
-assert_file_contains src/menus.sh '13|网络延迟质量检测|三网延迟、连通性与网络质量|func_network_latency_quality_test|'
-assert_file_contains src/menus.sh '三网回程路由测试已在主菜单 [12 测速与质量检测] 中提供，不重复添加。'
+assert_file_contains src/menus.sh '7|内核管理|安装、切换或清理内核|func_kernel_manage|'
+assert_file_not_contains src/menus.sh '10|服务器带宽测试|'
+assert_file_contains src/diagnostics_network.sh '10. 服务器带宽测试'
+assert_file_contains src/diagnostics_network.sh '11. iperf3 单线程测试'
+assert_file_contains src/diagnostics_network.sh '12. 国际互联速度测试'
+assert_file_contains src/diagnostics_network.sh '13. 网络延迟质量检测'
+assert_file_contains src/kernel_tuning.sh '新内核已安装并设为默认启动项，重启后生效。'
+assert_file_contains src/kernel_tuning.sh '新内核已安装，但无法确认默认启动项'
+assert_file_contains src/kernel_tuning.sh '从主菜单选择 ${RED}[18] 重启服务器'
+assert_file_not_contains src/kernel_tuning.sh '选择主菜单的 ${RED}[17] 重启服务器'
+assert_file_not_contains src/kernel_tuning.sh '选择 ${GREEN}[5] 清理旧内核'
 assert_file_contains src/diagnostics_network.sh '9. TcpQuality TCP 质量测试' "TcpQuality must be exposed in the benchmark menu."
 assert_file_contains src/diagnostics_network.sh 'https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh' "TcpQuality must use the requested upstream entry script."
 assert_file_contains src/common.sh 'https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh' "TcpQuality must be recognized as a built-in remote script source."
