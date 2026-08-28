@@ -8,7 +8,7 @@
 
 ## 包含内容
 
-该入口用于管理 3x-ui、S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari、端口流量狗和 x-ui 增强套件等相关工具。
+该入口用于管理 3x-ui、S-UI、2S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari、端口流量狗和 x-ui 增强套件等相关工具。
 
 ## 部署建议
 

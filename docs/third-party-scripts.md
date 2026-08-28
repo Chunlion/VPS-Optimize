@@ -28,6 +28,7 @@
 | IP-Sentinel | IP-Sentinel | <https://github.com/hotyue/IP-Sentinel> |
 | 3x-ui 管理 | 3x-ui | <https://github.com/mhsanaei/3x-ui> |
 | S-UI 管理 | S-UI | <https://github.com/alireza0/s-ui> |
+| 2S-UI 安装 | 2S-UI | <https://github.com/shenaba/2s-ui> |
 | EasyTier 组网 | EasyTier | <https://github.com/EasyTier/EasyTier> |
 | Tailscale 组网 | Tailscale | <https://github.com/tailscale/tailscale> |
 | Sing-box 管理 | 233boy/sing-box | <https://github.com/233boy/sing-box> |

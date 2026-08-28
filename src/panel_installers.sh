@@ -111,6 +111,18 @@ func_sui_panel() {
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
 }
 
+func_2sui_panel() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}安装 2S-UI 面板${PLAIN}" "${BOLD}Install 2S-UI panel${PLAIN}" "${BOLD}Установить панель 2S-UI${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}本入口会运行 2S-UI 官方安装器。${PLAIN}" "${YELLOW}This entry runs the official 2S-UI installer.${PLAIN}" "${YELLOW}Этот пункт запускает официальный установщик 2S-UI.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}安装器可能注册 s-ui 管理命令；请勿与 S-UI 共存安装。${PLAIN}" "${YELLOW}The installer may register the s-ui management command; do not install it alongside S-UI.${PLAIN}" "${YELLOW}Установщик может зарегистрировать команду управления s-ui; не устанавливайте его вместе с S-UI.${PLAIN}")"
+    echo -e "------------------------------------------------"
+    run_remote_script "$(localized_text "安装 2S-UI 面板" "Install 2S-UI panel" "Установить панель 2S-UI")" "https://raw.githubusercontent.com/shenaba/2s-ui/main/install.sh"
+    pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
+}
+
 func_sui_manage() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"

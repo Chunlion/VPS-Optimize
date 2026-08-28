@@ -468,6 +468,10 @@ is_trusted_remote_script_url() {
             echo "$(localized_text "S-UI 官方安装脚本" "S-UI official installation script" "Официальный скрипт установки S-UI")"
             return 0
             ;;
+        "https://raw.githubusercontent.com/shenaba/2s-ui/main/install.sh")
+            echo "$(localized_text "2S-UI 官方安装脚本" "2S-UI official installation script" "Официальный скрипт установки 2S-UI")"
+            return 0
+            ;;
         "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh")
             echo "$(localized_text "EasyTier 官方安装脚本" "EasyTier official installation script" "Официальный скрипт установки EasyTier")"
             return 0

@@ -69,7 +69,7 @@ cy
 |---|---|
 | 系统初始化 | 预检、常用工具、时区、IPv4 出站优先和基础 BBR |
 | 安全加固 | SSH、公钥登录、Fail2ban、防火墙、端口并发限制 |
-| 面板与订阅 | 3x-ui、S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari |
+| 面板与订阅 | 3x-ui、S-UI、2S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari |
 | 转发与组网 | Realm、Gost、FLVX 哆啦转发面板、EasyTier、Tailscale |
 | 443端口复用 | Web、面板、订阅和节点共享公网 `443`，按 SNI 路由；同一时间仅由当前入口服务监听 |
 | 诊断与回滚 | 服务健康、443 链路体检、空间预检、可选加密备份、恢复和隔离归档 |
