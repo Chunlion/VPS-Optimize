@@ -283,9 +283,9 @@ assert_file_contains aliyun-cdt-watchdog.sh 'answer=${answer:-yes}' "Aliyun watc
 
 assert_file_contains docs/443-single-entry.md 'Skip SSL (advanced — behind reverse proxy / SSH tunnel only)' "Port 443 Reuse doc must explain the current 3x-ui Skip SSL flow."
 assert_file_contains docs/443-single-entry.md '监听 IP：127.0.0.1' "Port 443 Reuse doc must keep 3x-ui listeners on loopback."
-assert_file_contains docs/443-single-entry.md 'REALITY 回落流量防护' "Port 443 Reuse doc must explain REALITY fallback traffic protection."
-assert_file_contains en/docs/443-single-entry.md 'REALITY fallback traffic protection' "English Port 443 Reuse doc must explain REALITY fallback traffic protection."
-assert_file_contains ru/docs/443-single-entry.md 'Защита трафика REALITY fallback' "Russian Port 443 Reuse doc must explain REALITY fallback traffic protection."
+assert_file_contains docs/443-single-entry.md 'SNI 清洗与 REALITY 回落防护' "Port 443 Reuse doc must explain SNI filtering and REALITY fallback protection."
+assert_file_contains en/docs/443-single-entry.md 'SNI filtering and REALITY fallback protection' "English Port 443 Reuse doc must explain SNI filtering and REALITY fallback protection."
+assert_file_contains ru/docs/443-single-entry.md 'Фильтрация SNI и защита REALITY fallback' "Russian Port 443 Reuse doc must explain SNI filtering and REALITY fallback protection."
 assert_file_contains src/sni_stack_config.sh 'xui_database_backend()' "443 helpers must detect the configured 3x-ui database backend."
 assert_file_contains src/sni_stack_config.sh 'xui_uses_postgresql && return 1' "443 helpers must not query PostgreSQL through sqlite3."
 assert_file_contains src/sni_stack_profiles.sh 'xui_uses_postgresql' "443 profile updates must skip PostgreSQL database synchronization."

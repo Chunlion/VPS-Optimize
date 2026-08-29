@@ -75,20 +75,45 @@ strict_sni_gate_mode_supported() {
     [[ "$mode" == "nginx-stream" || "$mode" == "tcp-peek" ]]
 }
 
+strict_sni_gate_runtime_active() {
+    local mode="${1:-$(get_entry_mode)}"
+    local config_file="${2:-}"
+    case "$mode" in
+        nginx-stream)
+            config_file="${config_file:-/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf}"
+            [[ -f "$config_file" ]] &&
+                grep -Eq '^[[:space:]]*default[[:space:]]+vps_ip_reject_backend;[[:space:]]*$' "$config_file" &&
+                systemctl is-active --quiet nginx 2>/dev/null
+            ;;
+        tcp-peek)
+            config_file="${config_file:-$(vpso_mux_config_path)}"
+            [[ -f "$config_file" ]] &&
+                grep -Eq '^reject_unknown_sni:[[:space:]]*true[[:space:]]*$' "$config_file" &&
+                systemctl is-active --quiet vpso-mux 2>/dev/null
+            ;;
+        *) return 1 ;;
+    esac
+}
+
 print_strict_sni_gate_summary() {
     local state mode
     mode=$(get_entry_mode)
-    if strict_sni_gate_enabled && strict_sni_gate_mode_supported "$mode"; then
-        state="$(localized_text "${GREEN}已启用${PLAIN}" "${GREEN}Enabled${PLAIN}" "${GREEN}Включён${PLAIN}")"
-    elif strict_sni_gate_enabled; then
+    if strict_sni_gate_enabled && ! strict_sni_gate_mode_supported "$mode"; then
         state="$(localized_text "${YELLOW}已保存，当前模式不生效${PLAIN}" "${YELLOW}Saved, inactive in the current mode${PLAIN}" "${YELLOW}Сохранён, не действует в текущем режиме${PLAIN}")"
+    elif strict_sni_gate_enabled && strict_sni_gate_runtime_active "$mode"; then
+        state="$(localized_text "${GREEN}已在当前入口生效${PLAIN}" "${GREEN}Active on the current entry${PLAIN}" "${GREEN}Действует на текущем входе${PLAIN}")"
+    elif strict_sni_gate_enabled; then
+        state="$(localized_text "${RED}已保存，但未检测到入口生效${PLAIN}" "${RED}Saved, but not active on the entry${PLAIN}" "${RED}Сохранён, но не действует на входе${PLAIN}")"
+    elif strict_sni_gate_runtime_active "$mode"; then
+        state="$(localized_text "${RED}保存值为关闭，但入口仍在拦截${PLAIN}" "${RED}Saved as disabled, but the entry is still blocking${PLAIN}" "${RED}В настройках отключён, но вход продолжает блокировку${PLAIN}")"
     else
         state="$(localized_text "${YELLOW}未启用${PLAIN}" "${YELLOW}Disabled${PLAIN}" "${YELLOW}Выключен${PLAIN}")"
     fi
-    echo -e "$(localized_text "严格 SNI 门禁：${state}" "Strict SNI gate: ${state}" "Строгий контроль SNI: ${state}")"
+    echo -e "$(localized_text "SNI 清洗（严格门禁）：${state}" "SNI filtering (strict gate): ${state}" "Фильтрация SNI (строгий контроль): ${state}")"
     echo -e "$(localized_text "当前入口模式：${mode}" "Current entry mode: ${mode}" "Текущий режим входа: ${mode}")"
     echo -e "$(localized_text "自动放行的已登记 SNI：" "Automatically allowed registered SNIs:" "Автоматически разрешённые зарегистрированные SNI:")"
     registered_443_snis | sed 's/^/  - /'
+    echo -e "$(localized_text "${YELLOW}边界：已登记 SNI 仍会进入后端；节点认证和 REALITY 回落限速必须继续保留。${PLAIN}" "${YELLOW}Boundary: registered SNIs still reach their backends. Keep node authentication and REALITY fallback rate limits in place.${PLAIN}" "${YELLOW}Граница защиты: зарегистрированные SNI по-прежнему доходят до бэкенда. Сохраняйте аутентификацию узлов и ограничения скорости REALITY fallback.${PLAIN}")"
 }
 
 sync_strict_sni_gate_to_current_entry() {
@@ -343,13 +368,13 @@ manage_reality_traffic_guard() {
         load_sni_stack_env || return 1
         xui_uses_postgresql && postgresql_mode=1
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}REALITY 回落流量防护${PLAIN}" "${BOLD}REALITY fallback traffic protection${PLAIN}" "${BOLD}Защита трафика REALITY fallback${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}SNI 清洗与 REALITY 回落防护${PLAIN}" "${BOLD}SNI filtering and REALITY fallback protection${PLAIN}" "${BOLD}Фильтрация SNI и защита REALITY fallback${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "REALITY 验证失败的连接会转发到 target；使用 CDN 目标时可能被扫描后当作转发节点滥用。" "REALITY forwards failed-authentication connections to the target; a CDN target can make the server abusable as a relay after scanning." "REALITY пересылает подключения с ошибкой проверки на target; при CDN-цели сервер после сканирования может использоваться как ретранслятор.")"
         print_strict_sni_gate_summary
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 启用严格 SNI 门禁${PLAIN}      ${YELLOW}(仅放行自动登记的 SNI)${PLAIN}" "${GREEN}1. Enable strict SNI gate${PLAIN} (allow only automatically registered SNIs)" "${GREEN}1. Включить строгий контроль SNI${PLAIN} (только автоматически зарегистрированные SNI)")"
-        echo -e "$(localized_text "${CYAN}  2. 关闭严格 SNI 门禁${PLAIN}      ${YELLOW}(恢复未知 SNI 默认转发)${PLAIN}" "${CYAN}2. Disable strict SNI gate${PLAIN} (restore default forwarding for unknown SNI)" "${CYAN}2. Отключить строгий контроль SNI${PLAIN} (вернуть стандартную пересылку неизвестных SNI)")"
+        echo -e "$(localized_text "${GREEN}  1. 启用 SNI 清洗${PLAIN}           ${YELLOW}(未知或无 SNI 直接丢弃)${PLAIN}" "${GREEN}1. Enable SNI filtering${PLAIN} (drop unknown or missing SNI)" "${GREEN}1. Включить фильтрацию SNI${PLAIN} (отклонять неизвестный или отсутствующий SNI)")"
+        echo -e "$(localized_text "${CYAN}  2. 关闭 SNI 清洗${PLAIN}           ${YELLOW}(恢复未知 SNI 默认转发)${PLAIN}" "${CYAN}2. Disable SNI filtering${PLAIN} (restore default forwarding for unknown SNI)" "${CYAN}2. Отключить фильтрацию SNI${PLAIN} (вернуть стандартную пересылку неизвестного SNI)")"
         echo -e "$(localized_text "${CYAN}  3. 重新同步当前 SNI 清单${PLAIN}    ${YELLOW}(按已保存的域名和路由生成)${PLAIN}" "${CYAN}3. Resynchronize the current SNI list${PLAIN} (generated from saved domains and routes)" "${CYAN}3. Повторно синхронизировать список SNI${PLAIN} (из сохранённых доменов и маршрутов)")"
         if [[ "$postgresql_mode" -eq 1 ]]; then
             echo -e "$(localized_text "${YELLOW}  4. 设置 REALITY 回落限速${PLAIN}  ${RED}(不可用：仅支持本机 SQLite)${PLAIN}" "${YELLOW}4. Set REALITY fallback rate limits${PLAIN} ${RED}(unavailable: local SQLite only)${PLAIN}" "${YELLOW}4. Настроить ограничение REALITY fallback${PLAIN} ${RED}(недоступно: только локальный SQLite)${PLAIN}")"

@@ -56,7 +56,7 @@ Keep these three kinds of values separate:
 
 - Prepare a panel domain and a node domain, such as `panel.example.com` and `node.example.com`.
 - Point them to the VPS in your DNS provider.
-- For REALITY `serverName` / `target`, prefer a stable, directly reachable HTTPS site without CDN protection. If a CDN domain is unavoidable, enable [REALITY fallback traffic protection](#reality-fallback-traffic-protection) after setup; otherwise failed REALITY connections may turn the server into a CDN relay and consume bandwidth.
+- For REALITY `serverName` / `target`, prefer a stable, directly reachable HTTPS site without CDN protection. If a CDN domain is unavoidable, enable [SNI filtering and REALITY fallback protection](#sni-filtering-and-reality-fallback-protection) after setup; otherwise failed REALITY connections may turn the server into a CDN relay and consume bandwidth.
 - Keep the current SSH session open. Allow SSH and TCP `443` in the cloud security group and the system firewall.
 
 Use the example domains like this:
@@ -311,7 +311,7 @@ Main menu [19 Port 443 Reuse Management] -> [8 Manage Web domains / reverse prox
 
 For `xray-fallback`, regardless of whether Caddy or Nginx is the local Web reverse proxy, the allowlist only protects Web domains. It is not REALITY authentication.
 
-## REALITY fallback traffic protection
+## SNI filtering and REALITY fallback protection
 
 When a CDN domain is used as the REALITY SNI, enable both controls where available:
 
@@ -323,7 +323,7 @@ Nginx Stream and TCP Peek support both controls. Xray Fallback has no front SNI 
 Open the controls here:
 
 ```text
-Main menu [19 Port 443 Reuse Management] -> [17 REALITY fallback traffic protection]
+Main menu [19 Port 443 Reuse Management] -> [17 SNI filtering / REALITY protection]
 ```
 
 The useful actions are:
@@ -355,7 +355,7 @@ Use this order:
 1. Create both REALITY inbounds in 3x-ui, each with a different local port and distinguishable SNI. The script records routes; it does not create or edit 3x-ui inbounds.
 2. Keep Nginx Stream or TCP Peek as the entry mode.
 3. Open `Main menu [19 Port 443 Reuse Management] -> [15 Xray inbound management]` and add one `SNI -> local address -> local port` route for each inbound. After each save, the script offers to apply the routes to the current entry. When entering several routes, you can defer this and synchronize once after all routes are saved.
-4. Open `Main menu [19 Port 443 Reuse Management] -> [17 REALITY fallback traffic protection] -> [4 Set REALITY fallback rate limits]`. The menu lists every REALITY inbound. Each run modifies only the selected inbound, so repeat it for every inbound that needs protection.
+4. Open `Main menu [19 Port 443 Reuse Management] -> [17 SNI filtering / REALITY protection] -> [4 Set REALITY fallback rate limits]`. The menu lists every REALITY inbound. Each run modifies only the selected inbound, so repeat it for every inbound that needs protection.
 5. Synchronizing the routes also regenerates the strict SNI list from the saved domains and routes.
 
 Fallback limits are stored per inbound, not as one global switch and not per user. Each inbound must use a distinct local port and SNI; enabling the limit for inbound A does not protect inbound B. There is currently no batch action to set limits for every inbound, so select and configure each inbound separately. The strict SNI gate is shared by the entry and covers all registered SNIs. When 3x-ui uses PostgreSQL, the script does not support fallback limits because it avoids modifying a remote database; this feature supports only local SQLite 3x-ui.

@@ -28,6 +28,9 @@ write_vpso_mux_config_from_sni_stack() {
     local web_backend xray_backend listen_addr route_name ranges i domain backend
     web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
+    if strict_sni_gate_enabled; then
+        validate_strict_sni_gate_reality_server_names || return 1
+    fi
     mkdir -p "$(dirname "$output_file")"
 
     {

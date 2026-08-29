@@ -9817,6 +9817,9 @@ write_vpso_mux_config_from_sni_stack() {
     local web_backend xray_backend listen_addr route_name ranges i domain backend
     web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
+    if strict_sni_gate_enabled; then
+        validate_strict_sni_gate_reality_server_names || return 1
+    fi
     mkdir -p "$(dirname "$output_file")"
 
     {
@@ -11802,8 +11805,8 @@ collect_sni_stack_config() {
     REALITY_SNI="$reality_sni_input"
     STRICT_SNI_GATE="false"
     if strict_sni_gate_mode_supported "${ENTRY_MODE:-nginx-stream}"; then
-        echo -e "$(localized_text "${YELLOW}若 REALITY SNI 使用 CDN，应启用严格 SNI 门禁：已登记的面板、网站、Xray 路由和 REALITY SNI 自动放行，其他 SNI 直接丢弃。${PLAIN}" "${YELLOW}If the REALITY SNI uses a CDN, enable the strict SNI gate. It allows registered panel, site, Xray-route, and REALITY SNIs and drops all others.${PLAIN}" "${YELLOW}Если REALITY SNI использует CDN, включите строгий контроль SNI. Зарегистрированные SNI панели, сайтов, маршрутов Xray и REALITY будут разрешены, остальные — отклонены.${PLAIN}")"
-        if confirm_default_no "$(localized_text "是否启用严格 SNI 门禁？(y/N): " "Enable the strict SNI gate? (y/N): " "Включить строгий контроль SNI? (y/N): ")"; then
+        echo -e "$(localized_text "${YELLOW}建议启用 SNI 清洗：只放行已登记的面板、网站、Xray 路由和 REALITY SNI，未知或无 SNI 的连接直接丢弃。${PLAIN}" "${YELLOW}SNI filtering is recommended. It allows only registered panel, site, Xray-route, and REALITY SNIs, and drops connections with an unknown or missing SNI.${PLAIN}" "${YELLOW}Рекомендуется включить фильтрацию SNI. Разрешаются только зарегистрированные SNI панели, сайтов, маршрутов Xray и REALITY; подключения с неизвестным или отсутствующим SNI отклоняются.${PLAIN}")"
+        if confirm_default_yes "$(localized_text "启用 SNI 清洗（严格门禁）？(Y/n): " "Enable SNI filtering (strict gate)? (Y/n): " "Включить фильтрацию SNI (строгий контроль)? (Y/n): ")"; then
             STRICT_SNI_GATE="true"
         fi
     fi
@@ -12170,6 +12173,7 @@ write_nginx_sni_stream_config() {
     web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
     if strict_sni_gate_enabled; then
+        validate_strict_sni_gate_reality_server_names || return 1
         default_backend_name="vps_ip_reject_backend"
         reject_backend_required="true"
     fi
@@ -14003,20 +14007,45 @@ strict_sni_gate_mode_supported() {
     [[ "$mode" == "nginx-stream" || "$mode" == "tcp-peek" ]]
 }
 
+strict_sni_gate_runtime_active() {
+    local mode="${1:-$(get_entry_mode)}"
+    local config_file="${2:-}"
+    case "$mode" in
+        nginx-stream)
+            config_file="${config_file:-/etc/nginx/stream.d/vps_sni_${NGINX_LISTEN_PORT}.conf}"
+            [[ -f "$config_file" ]] &&
+                grep -Eq '^[[:space:]]*default[[:space:]]+vps_ip_reject_backend;[[:space:]]*$' "$config_file" &&
+                systemctl is-active --quiet nginx 2>/dev/null
+            ;;
+        tcp-peek)
+            config_file="${config_file:-$(vpso_mux_config_path)}"
+            [[ -f "$config_file" ]] &&
+                grep -Eq '^reject_unknown_sni:[[:space:]]*true[[:space:]]*$' "$config_file" &&
+                systemctl is-active --quiet vpso-mux 2>/dev/null
+            ;;
+        *) return 1 ;;
+    esac
+}
+
 print_strict_sni_gate_summary() {
     local state mode
     mode=$(get_entry_mode)
-    if strict_sni_gate_enabled && strict_sni_gate_mode_supported "$mode"; then
-        state="$(localized_text "${GREEN}已启用${PLAIN}" "${GREEN}Enabled${PLAIN}" "${GREEN}Включён${PLAIN}")"
-    elif strict_sni_gate_enabled; then
+    if strict_sni_gate_enabled && ! strict_sni_gate_mode_supported "$mode"; then
         state="$(localized_text "${YELLOW}已保存，当前模式不生效${PLAIN}" "${YELLOW}Saved, inactive in the current mode${PLAIN}" "${YELLOW}Сохранён, не действует в текущем режиме${PLAIN}")"
+    elif strict_sni_gate_enabled && strict_sni_gate_runtime_active "$mode"; then
+        state="$(localized_text "${GREEN}已在当前入口生效${PLAIN}" "${GREEN}Active on the current entry${PLAIN}" "${GREEN}Действует на текущем входе${PLAIN}")"
+    elif strict_sni_gate_enabled; then
+        state="$(localized_text "${RED}已保存，但未检测到入口生效${PLAIN}" "${RED}Saved, but not active on the entry${PLAIN}" "${RED}Сохранён, но не действует на входе${PLAIN}")"
+    elif strict_sni_gate_runtime_active "$mode"; then
+        state="$(localized_text "${RED}保存值为关闭，但入口仍在拦截${PLAIN}" "${RED}Saved as disabled, but the entry is still blocking${PLAIN}" "${RED}В настройках отключён, но вход продолжает блокировку${PLAIN}")"
     else
         state="$(localized_text "${YELLOW}未启用${PLAIN}" "${YELLOW}Disabled${PLAIN}" "${YELLOW}Выключен${PLAIN}")"
     fi
-    echo -e "$(localized_text "严格 SNI 门禁：${state}" "Strict SNI gate: ${state}" "Строгий контроль SNI: ${state}")"
+    echo -e "$(localized_text "SNI 清洗（严格门禁）：${state}" "SNI filtering (strict gate): ${state}" "Фильтрация SNI (строгий контроль): ${state}")"
     echo -e "$(localized_text "当前入口模式：${mode}" "Current entry mode: ${mode}" "Текущий режим входа: ${mode}")"
     echo -e "$(localized_text "自动放行的已登记 SNI：" "Automatically allowed registered SNIs:" "Автоматически разрешённые зарегистрированные SNI:")"
     registered_443_snis | sed 's/^/  - /'
+    echo -e "$(localized_text "${YELLOW}边界：已登记 SNI 仍会进入后端；节点认证和 REALITY 回落限速必须继续保留。${PLAIN}" "${YELLOW}Boundary: registered SNIs still reach their backends. Keep node authentication and REALITY fallback rate limits in place.${PLAIN}" "${YELLOW}Граница защиты: зарегистрированные SNI по-прежнему доходят до бэкенда. Сохраняйте аутентификацию узлов и ограничения скорости REALITY fallback.${PLAIN}")"
 }
 
 sync_strict_sni_gate_to_current_entry() {
@@ -14271,13 +14300,13 @@ manage_reality_traffic_guard() {
         load_sni_stack_env || return 1
         xui_uses_postgresql && postgresql_mode=1
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}REALITY 回落流量防护${PLAIN}" "${BOLD}REALITY fallback traffic protection${PLAIN}" "${BOLD}Защита трафика REALITY fallback${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}SNI 清洗与 REALITY 回落防护${PLAIN}" "${BOLD}SNI filtering and REALITY fallback protection${PLAIN}" "${BOLD}Фильтрация SNI и защита REALITY fallback${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "REALITY 验证失败的连接会转发到 target；使用 CDN 目标时可能被扫描后当作转发节点滥用。" "REALITY forwards failed-authentication connections to the target; a CDN target can make the server abusable as a relay after scanning." "REALITY пересылает подключения с ошибкой проверки на target; при CDN-цели сервер после сканирования может использоваться как ретранслятор.")"
         print_strict_sni_gate_summary
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 启用严格 SNI 门禁${PLAIN}      ${YELLOW}(仅放行自动登记的 SNI)${PLAIN}" "${GREEN}1. Enable strict SNI gate${PLAIN} (allow only automatically registered SNIs)" "${GREEN}1. Включить строгий контроль SNI${PLAIN} (только автоматически зарегистрированные SNI)")"
-        echo -e "$(localized_text "${CYAN}  2. 关闭严格 SNI 门禁${PLAIN}      ${YELLOW}(恢复未知 SNI 默认转发)${PLAIN}" "${CYAN}2. Disable strict SNI gate${PLAIN} (restore default forwarding for unknown SNI)" "${CYAN}2. Отключить строгий контроль SNI${PLAIN} (вернуть стандартную пересылку неизвестных SNI)")"
+        echo -e "$(localized_text "${GREEN}  1. 启用 SNI 清洗${PLAIN}           ${YELLOW}(未知或无 SNI 直接丢弃)${PLAIN}" "${GREEN}1. Enable SNI filtering${PLAIN} (drop unknown or missing SNI)" "${GREEN}1. Включить фильтрацию SNI${PLAIN} (отклонять неизвестный или отсутствующий SNI)")"
+        echo -e "$(localized_text "${CYAN}  2. 关闭 SNI 清洗${PLAIN}           ${YELLOW}(恢复未知 SNI 默认转发)${PLAIN}" "${CYAN}2. Disable SNI filtering${PLAIN} (restore default forwarding for unknown SNI)" "${CYAN}2. Отключить фильтрацию SNI${PLAIN} (вернуть стандартную пересылку неизвестного SNI)")"
         echo -e "$(localized_text "${CYAN}  3. 重新同步当前 SNI 清单${PLAIN}    ${YELLOW}(按已保存的域名和路由生成)${PLAIN}" "${CYAN}3. Resynchronize the current SNI list${PLAIN} (generated from saved domains and routes)" "${CYAN}3. Повторно синхронизировать список SNI${PLAIN} (из сохранённых доменов и маршрутов)")"
         if [[ "$postgresql_mode" -eq 1 ]]; then
             echo -e "$(localized_text "${YELLOW}  4. 设置 REALITY 回落限速${PLAIN}  ${RED}(不可用：仅支持本机 SQLite)${PLAIN}" "${YELLOW}4. Set REALITY fallback rate limits${PLAIN} ${RED}(unavailable: local SQLite only)${PLAIN}" "${YELLOW}4. Настроить ограничение REALITY fallback${PLAIN} ${RED}(недоступно: только локальный SQLite)${PLAIN}")"
@@ -23376,7 +23405,7 @@ show_sni_help() {
     echo "$(localized_text "14 外网访问测试：检查 DNS、TCP、TLS、面板和订阅。" "14 External access test: check DNS, TCP, TLS, panel, and subscription access." "14 Проверка внешнего доступа: DNS, TCP, TLS, панель и подписка.")"
     echo "$(localized_text "15 Xray SNI 路由：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。" "15 Xray SNI routes: map SNI -> local address:port without editing 3x-ui/Xray inbounds." "15 Маршруты Xray SNI: SNI -> локальный адрес:порт без изменения входов 3x-ui/Xray.")"
     echo "$(localized_text "16 入口日志：按当前模式查看 Nginx、Xray/3x-ui 或 vpso-mux 日志。" "16 Entry logs: show Nginx, Xray/3x-ui, or vpso-mux logs for the active mode." "16 Журналы входа: Nginx, Xray/3x-ui или vpso-mux для активного режима.")"
-    echo "$(localized_text "17 REALITY 流量防护：管理严格 SNI 门禁和回落限速。" "17 REALITY traffic protection: manage the strict SNI gate and fallback rate limits." "17 Защита трафика REALITY: строгий контроль SNI и ограничение скорости fallback.")"
+    echo "$(localized_text "17 SNI 清洗与回落防护：拦截未知 SNI，限制 REALITY 验证失败后的回落流量。" "17 SNI filtering and fallback protection: block unknown SNI and limit fallback traffic after failed REALITY authentication." "17 Фильтрация SNI и защита fallback: блокировка неизвестного SNI и ограничение трафика после ошибки проверки REALITY.")"
     echo "$(localized_text "修改面板域名：[8 Web 域名与反向代理] -> [9 修改面板域名]。" "Change the panel domain: [8 Web domains and reverse proxies] -> [9 Change panel domain]." "Изменить домен панели: [8 Web-домены и обратный прокси] -> [9 Изменить домен панели].")"
     echo "$(localized_text "未启用 443端口复用时，Web 白名单在主菜单 [4 反代] -> [5] 中管理。" "Before enabling Port 443 Reuse, manage the Web allowlist under main menu [4 Reverse proxy] -> [5]." "До включения общего порта 443 управляйте списком разрешённых IP в главном меню [4 Обратный прокси] -> [5].")"
     echo "$(localized_text "? 查看帮助；0/q 返回。" "? Help; 0/q back." "? Справка; 0/q назад.")"
@@ -23598,7 +23627,7 @@ func_sni_stack_quick_menu() {
         print_menu_item 14 "$(localized_text "外网访问测试" "External access test" "Проверка внешнего доступа")" "DNS / TCP / TLS / $(localized_text "面板 / 订阅" "panel / subscription" "панель / подписка")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
         print_menu_item 15 "$(localized_text "Xray SNI 路由" "Xray SNI routes" "Маршруты Xray SNI")" "SNI -> $(localized_text "本地地址:端口" "local address:port" "локальный адрес:порт")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
         print_menu_item 16 "$(localized_text "入口日志" "Entry logs" "Журналы входа")" "Nginx / Xray / vpso-mux" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
-        print_menu_item 17 "REALITY $(localized_text "流量防护" "traffic protection" "защита трафика")" "$(localized_text "SNI 门禁 / 回落限速" "SNI gate / fallback rate limits" "контроль SNI / ограничение fallback")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
+        print_menu_item 17 "$(localized_text "SNI 清洗 / REALITY 防护" "SNI filtering / REALITY protection" "Фильтрация SNI / защита REALITY")" "$(localized_text "未知 SNI 丢弃 / 回落限速" "unknown SNI drop / fallback limits" "блокировка SNI / лимиты fallback")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"

@@ -1557,6 +1557,9 @@ assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config 
 assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '修改本地监听地址？(y/N，默认 N；一般直接回车)' "Initial 443 setup must accurately display the safe default for local listen addresses."
 assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '路径只填以 / 开头和结尾的前缀' "Initial 443 setup must explain path formatting before validation."
 assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config 'Cloudflare API Token 权限：Zone - DNS - Edit、Zone - Zone - Read' "Initial 443 setup must state the required Cloudflare token permissions."
+assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config 'confirm_default_yes "$(localized_text "启用 SNI 清洗（严格门禁）？(Y/n): "' "Initial 443 setup must enable SNI filtering by default in supported entry modes."
+assert_function_body_contains src/sni_stack_install.sh write_nginx_sni_stream_config 'validate_strict_sni_gate_reality_server_names || return 1' "Nginx strict SNI rendering must validate registered REALITY serverNames."
+assert_function_body_contains src/vpso_mux_config.sh write_vpso_mux_config_from_sni_stack 'validate_strict_sni_gate_reality_server_names || return 1' "TCP Peek strict SNI rendering must validate registered REALITY serverNames."
 assert_function_body_contains src/tcp_peek_engine.sh select_initial_entry_mode '选择入口模式 [1]' "Initial 443 setup must show the default entry-mode choice concisely."
 assert_function_body_contains src/sni_stack_config.sh print_xui_single_443_detected_defaults '下面直接回车即可沿用' "Detected 3x-ui defaults must explain how to keep them."
 assert_file_not_contains src/sni_stack_install.sh '是否进入高级模式并允许修改本地服务监听地址？(Y/n，默认 y)' "Initial 443 setup must not advertise a default that differs from runtime behavior."
@@ -3130,6 +3133,23 @@ PY
     XRAY_SNI_ROUTE_PORTS=(1443)
     [[ -z "$(unregistered_reality_server_names "$reality_guard_smoke_db")" ]]
     validate_strict_sni_gate_reality_server_names >/dev/null
+)
+
+(
+    strict_gate_tmp=$(mktemp)
+    trap 'rm -f "$strict_gate_tmp"' EXIT
+    NGINX_LISTEN_PORT=443
+    systemctl() { [[ "$1" == "is-active" && "$3" == "nginx" ]]; }
+    printf '%s\n' '    default vps_ip_reject_backend;' > "$strict_gate_tmp"
+    strict_sni_gate_runtime_active nginx-stream "$strict_gate_tmp"
+    printf '%s\n' '    default xray_backend;' > "$strict_gate_tmp"
+    if strict_sni_gate_runtime_active nginx-stream "$strict_gate_tmp"; then
+        echo "Strict SNI runtime detection must reject a non-blocking Nginx default route." >&2
+        exit 1
+    fi
+    systemctl() { [[ "$1" == "is-active" && "$3" == "vpso-mux" ]]; }
+    printf '%s\n' 'reject_unknown_sni: true' > "$strict_gate_tmp"
+    strict_sni_gate_runtime_active tcp-peek "$strict_gate_tmp"
 )
 
 (

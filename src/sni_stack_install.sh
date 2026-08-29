@@ -64,8 +64,8 @@ collect_sni_stack_config() {
     REALITY_SNI="$reality_sni_input"
     STRICT_SNI_GATE="false"
     if strict_sni_gate_mode_supported "${ENTRY_MODE:-nginx-stream}"; then
-        echo -e "$(localized_text "${YELLOW}若 REALITY SNI 使用 CDN，应启用严格 SNI 门禁：已登记的面板、网站、Xray 路由和 REALITY SNI 自动放行，其他 SNI 直接丢弃。${PLAIN}" "${YELLOW}If the REALITY SNI uses a CDN, enable the strict SNI gate. It allows registered panel, site, Xray-route, and REALITY SNIs and drops all others.${PLAIN}" "${YELLOW}Если REALITY SNI использует CDN, включите строгий контроль SNI. Зарегистрированные SNI панели, сайтов, маршрутов Xray и REALITY будут разрешены, остальные — отклонены.${PLAIN}")"
-        if confirm_default_no "$(localized_text "是否启用严格 SNI 门禁？(y/N): " "Enable the strict SNI gate? (y/N): " "Включить строгий контроль SNI? (y/N): ")"; then
+        echo -e "$(localized_text "${YELLOW}建议启用 SNI 清洗：只放行已登记的面板、网站、Xray 路由和 REALITY SNI，未知或无 SNI 的连接直接丢弃。${PLAIN}" "${YELLOW}SNI filtering is recommended. It allows only registered panel, site, Xray-route, and REALITY SNIs, and drops connections with an unknown or missing SNI.${PLAIN}" "${YELLOW}Рекомендуется включить фильтрацию SNI. Разрешаются только зарегистрированные SNI панели, сайтов, маршрутов Xray и REALITY; подключения с неизвестным или отсутствующим SNI отклоняются.${PLAIN}")"
+        if confirm_default_yes "$(localized_text "启用 SNI 清洗（严格门禁）？(Y/n): " "Enable SNI filtering (strict gate)? (Y/n): " "Включить фильтрацию SNI (строгий контроль)? (Y/n): ")"; then
             STRICT_SNI_GATE="true"
         fi
     fi
@@ -432,6 +432,7 @@ write_nginx_sni_stream_config() {
     web_backend=$(web_proxy_backend)
     xray_backend=$(format_hostport "$XRAY_LISTEN_ADDR" "$XRAY_LISTEN_PORT")
     if strict_sni_gate_enabled; then
+        validate_strict_sni_gate_reality_server_names || return 1
         default_backend_name="vps_ip_reject_backend"
         reject_backend_required="true"
     fi
