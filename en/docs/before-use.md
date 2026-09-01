@@ -4,7 +4,7 @@ VPS-Optimize will modify system services, firewalls, kernel parameters, reverse 
 
 ## basic principles
 
-1. It is recommended to run with `root`.
+1. Run the script as `root`.
 2. Before modifying the SSH port, first release the new port in the cloud provider security group.
 3. Preserve the current SSH session before high-risk operations.
 4. Confirm the current listener of the public port `443` before enabling Port 443 Reuse.
