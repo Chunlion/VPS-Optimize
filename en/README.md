@@ -69,7 +69,7 @@ Shortcuts are case-insensitive and behave like selecting the corresponding main-
 |---|---|
 | System setup | Preflight checks, common tools, timezone, IPv4 outbound preference, and basic BBR |
 | Security hardening | SSH, public-key authentication, Fail2ban, firewall, and port concurrency limits |
-| Panels and subscriptions | 3x-ui, S-UI, 2S-UI, Sing-box, Xray, SublinkPro, Sub-Store, Dockge, and Komari |
+| Panels and subscriptions | 3x-ui, S-UI, 2S-UI, Sing-box, Xray, SublinkPro, Sub-Store, Dockge, Komari, and CDT Monitor |
 | Forwarding and networking | Realm, Gost, FLVX, EasyTier, and Tailscale |
 | Port 443 Reuse | Route Web services, panels, subscriptions, and nodes through public port `443` by SNI; only the active entry service listens on that port |
 | Diagnostics and rollback | Service health, port 443 diagnostics, space checks, optional encrypted backups, restore, and quarantine archives |
@@ -80,6 +80,7 @@ Shortcuts are case-insensitive and behave like selecting the corresponding main-
 - [Port 443 Reuse: Setup and Configuration](https://chunlion.github.io/VPS-Optimize/en/docs/443-single-entry)
 - [Port 443 Reuse Troubleshooting and Recovery](https://chunlion.github.io/VPS-Optimize/en/docs/443-single-entry-troubleshooting)
 - [Recovery and Rollback](https://chunlion.github.io/VPS-Optimize/en/docs/recovery-runbook)
+- [CDT Monitor: Alibaba Cloud CDT Traffic and ECS Management](https://chunlion.github.io/VPS-Optimize/en/docs/cdt-monitor)
 - [Open an Issue](https://github.com/Chunlion/VPS-Optimize/issues) · [Telegram](https://t.me/cutyy_github) · [GitHub](https://github.com/Chunlion)
 
 ## 📄 License

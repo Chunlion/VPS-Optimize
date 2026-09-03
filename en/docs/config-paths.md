@@ -245,6 +245,7 @@ Common paths:
 | `/opt/dockge` | Dockge deployment directory |
 | `/opt/komari` | Komari deployment directory |
 | `/opt/komari/data` | Komari data directory |
+| `/opt/cdt-monitor` | CDT Monitor Compose configuration directory |
 
 The actual path is based on the script output and `docker ps`.
 

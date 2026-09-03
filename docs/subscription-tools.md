@@ -8,7 +8,9 @@
 
 ## 包含内容
 
-该入口用于管理 3x-ui、S-UI、2S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari、端口流量狗和 x-ui 增强套件等相关工具。
+该入口用于管理 3x-ui、S-UI、2S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari、CDT Monitor、端口流量狗和 x-ui 增强套件等相关工具。
+
+CDT Monitor 位于 `[5 面板、节点与订阅工具] -> [16 CDT Monitor]`，用于监控阿里云 CDT 流量、管理 ECS 自动化操作和查看费用。详见 [CDT Monitor](cdt-monitor.md)。
 
 ## 部署建议
 

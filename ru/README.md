@@ -69,7 +69,7 @@ cy
 |---|---|
 | Настройка системы | Предварительная проверка, базовые инструменты, часовой пояс, приоритет исходящего IPv4 и базовый BBR |
 | Усиление безопасности | SSH, аутентификация по открытому ключу, Fail2ban, межсетевой экран и ограничения соединений по портам |
-| Панели и подписки | 3x-ui, S-UI, 2S-UI, Sing-box, Xray, SublinkPro, Sub-Store, Dockge и Komari |
+| Панели и подписки | 3x-ui, S-UI, 2S-UI, Sing-box, Xray, SublinkPro, Sub-Store, Dockge, Komari и CDT Monitor |
 | Перенаправление и сети | Realm, Gost, FLVX, EasyTier и Tailscale |
 | Повторное использование порта 443 | Маршрутизация Web-сервисов, панелей, подписок и узлов через публичный порт `443` по SNI; одновременно этот порт слушает только активная служба входа |
 | Диагностика и откат | Состояние служб, диагностика порта 443, проверка свободного места, дополнительное шифрование копий, восстановление и карантин архивов |
@@ -80,6 +80,7 @@ cy
 - [Порт 443: развёртывание и настройка](https://chunlion.github.io/VPS-Optimize/ru/docs/443-single-entry)
 - [Диагностика и восстановление повторного использования порта 443](https://chunlion.github.io/VPS-Optimize/ru/docs/443-single-entry-troubleshooting)
 - [Восстановление и откат](https://chunlion.github.io/VPS-Optimize/ru/docs/recovery-runbook)
+- [CDT Monitor: трафик Alibaba Cloud CDT и управление ECS](https://chunlion.github.io/VPS-Optimize/ru/docs/cdt-monitor)
 - [Создать Issue](https://github.com/Chunlion/VPS-Optimize/issues) · [Telegram](https://t.me/cutyy_github) · [GitHub](https://github.com/Chunlion)
 
 ## 📄 Лицензия

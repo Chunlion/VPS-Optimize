@@ -21,6 +21,10 @@ func_manage_komari() {
     manage_compose_project "Komari" "/opt/komari" "$(localized_text "Komari 数据会保存在 /opt/komari/data" "Komari data will be saved in /opt/komari/data" "Данные Комари будут сохранены в /opt/komari/data.")" func_komari
 }
 
+func_manage_cdt_monitor() {
+    manage_compose_project "CDT Monitor" "/opt/cdt-monitor" "$(localized_text "数据保存在 Docker Compose 数据卷 cdt-data；归档会删除该数据卷" "data is stored in the Docker Compose cdt-data volume; archiving deletes the volume" "данные хранятся в томе Docker Compose cdt-data; архивация удаляет этот том")" func_cdt_monitor
+}
+
 func_service_action_menu() {
     local title="$1"
     local usage="$2"
@@ -108,4 +112,8 @@ func_dockge_menu() {
 
 func_komari_menu() {
     func_manage_komari
+}
+
+func_cdt_monitor_menu() {
+    func_manage_cdt_monitor
 }

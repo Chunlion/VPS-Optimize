@@ -245,6 +245,7 @@ tail -n 100 /var/log/xui-custom-manager.log 2>/dev/null
 | `/opt/dockge` | Каталог развертывания Dockge |
 | `/opt/komari` | Каталог развертывания Комари |
 | `/opt/komari/data` | Каталог данных Комари |
+| `/opt/cdt-monitor` | Каталог конфигурации Compose CDT Monitor |
 
 Фактический путь основан на выводе сценария и `docker ps`.
 

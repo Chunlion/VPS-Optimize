@@ -374,6 +374,7 @@ for function_name in \
     func_dockge_menu \
     docker_compose_management_menu \
     func_komari_menu \
+    func_cdt_monitor_menu \
     func_migrate_compose_to_dockge
 do
     assert_function_defined_once dist/vps.sh "$function_name"
@@ -760,6 +761,7 @@ declare -f collect_applied_config_files >/dev/null
     declare -f func_sublinkpro_menu >/dev/null
     declare -f func_dockge_menu >/dev/null
     declare -f func_komari_menu >/dev/null
+    declare -f func_cdt_monitor_menu >/dev/null
     declare -f func_migrate_compose_to_dockge >/dev/null
     random_secret=$(generate_random_secret)
     [[ "$random_secret" =~ ^[0-9a-f]{64}$ ]]
@@ -2150,6 +2152,7 @@ grep -q 'Dockge / Compose 管理' dist/vps.sh
 grep -q 'docker_compose_management_menu' dist/vps.sh
 grep -q '端口流量监控（dog）' dist/vps.sh
 assert_function_body_contains src/menus.sh func_panel_deploy_menu '10) func_komari_menu ;;' "Panel/tools option 10 must open Komari management."
+assert_function_body_contains src/menus.sh func_panel_deploy_menu '16) func_cdt_monitor_menu ;;' "Panel/tools option 16 must open CDT Monitor management."
 assert_function_body_contains src/menus.sh func_panel_deploy_menu '11) func_dns_unlock ;;' "Panel/tools option 11 must open DNS Unlock."
 assert_function_body_contains src/menus.sh func_panel_deploy_menu '12) func_ip_sentinel ;;' "Panel/tools option 12 must open IP-Sentinel."
 assert_function_body_contains src/menus.sh func_panel_deploy_menu '13) func_port_dog ;;' "Panel/tools option 13 must open the per-port traffic monitor."
@@ -2158,7 +2161,7 @@ assert_path_absent src/subscription_compose_manage.sh "The duplicate subscriptio
 assert_file_not_contains src/menus.sh '11|12) docker_backup_migration_menu ;;' "Panel/tools menu must not retain hidden Docker/Compose routes."
 assert_function_body_contains src/compose_runtime.sh manage_compose_project '1. 安装 / 更新 ${project_name}' "Compose project menus must expose install/update directly."
 assert_function_body_contains src/compose_runtime.sh manage_compose_project '7. 归档部署目录' "Compose project menus must expose archive/uninstall directly."
-for compose_menu in func_sublinkpro_menu func_miaomiaowu_menu func_substore_menu func_dockge_menu func_komari_menu; do
+for compose_menu in func_sublinkpro_menu func_miaomiaowu_menu func_substore_menu func_dockge_menu func_komari_menu func_cdt_monitor_menu; do
     assert_function_body_contains src/subscription_service_menus.sh "$compose_menu" 'func_manage_' "Compose service menus must open the flat project menu directly: ${compose_menu}."
 done
 grep -Fq '安装 3x-ui / x-ui 面板（最新版）' dist/vps.sh
@@ -2990,7 +2993,7 @@ assert_dist_contains "$subscription_public_hint" "Release script must include th
 panel_menu_compact_label='Sing-box 管理'
 assert_file_contains "src/menus.sh" "$panel_menu_compact_label" "Panel/tools menu must use the compact script-style label."
 assert_dist_contains "$panel_menu_compact_label" "Release script must include the compact panel/tools menu label."
-panel_help_public_hint='7/8/9 订阅工具，10 Komari；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
+panel_help_public_hint='7/8/9 订阅工具，10 Komari，16 CDT Monitor；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
 assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both without Port 443 Reuse and Port 443 Reuse reverse proxy paths."
 assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
 panel_domain_menu_path='主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]'

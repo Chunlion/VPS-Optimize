@@ -98,7 +98,7 @@ find_compose_file() {
 is_managed_compose_dir() {
     local dir="${1%/}"
     case "$dir" in
-        /opt/sublinkpro|/opt/miaomiaowu|/opt/sub-store|/opt/dockge|/opt/komari)
+        /opt/sublinkpro|/opt/miaomiaowu|/opt/sub-store|/opt/dockge|/opt/komari|/opt/cdt-monitor)
             return 0
             ;;
         *)

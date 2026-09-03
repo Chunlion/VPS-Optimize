@@ -58,7 +58,7 @@ show_panel_help() {
     echo "$(localized_text "4 S-UI：安装、官方菜单、卸载。" "4 S-UI: install, open the official menu, or uninstall." "4 S-UI: установка, официальное меню и удаление.")"
     echo "$(localized_text "15 2S-UI：运行官方安装器；不能与 S-UI 共存。" "15 2S-UI: run the official installer; do not install it alongside S-UI." "15 2S-UI: запустить официальный установщик; не устанавливайте его вместе с S-UI.")"
     echo "$(localized_text "5/6 Sing-box 与 Xray 脚本。" "5/6 Sing-box and Xray scripts." "5/6 Скрипты Sing-box и Xray.")"
-    echo "$(localized_text "7/8/9 订阅工具，10 Komari；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription tools; 10: Komari. Dockge / Compose management is in main menu [11 Docker Management] -> [19]. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [8 Manage Web domains/reverse proxy]." "7/8/9: инструменты подписки; 10: Komari. Управление Dockge / Compose находится в главном меню [11 Управление Docker] -> [19]. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [8 Управление Web-доменами и обратным прокси].")"
+    echo "$(localized_text "7/8/9 订阅工具，10 Komari，16 CDT Monitor；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription tools; 10: Komari; 16: CDT Monitor. Dockge / Compose management is in main menu [11 Docker Management] -> [19]. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [8 Manage Web domains/reverse proxy]." "7/8/9: инструменты подписки; 10: Komari; 16: CDT Monitor. Управление Dockge / Compose находится в главном меню [11 Управление Docker] -> [19]. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [8 Управление Web-доменами и обратным прокси].")"
     echo "$(localized_text "13 端口流量监控（dog）：仅统计已监控端口的实际流量。" "13 Per-port traffic monitor (dog): shows traffic only for monitored ports." "13 Монитор трафика по портам (dog): показывает трафик только отслеживаемых портов.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
@@ -231,7 +231,7 @@ func_panel_deploy_menu() {
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 订阅 / 监控${PLAIN}" "${BOLD}▶ Subscription / Monitoring${PLAIN}" "${BOLD}▶ Подписки / Мониторинг${PLAIN}")"
         echo -e "$(localized_text "  ${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN}            ${BOLD}${GREEN}8.${PLAIN} ${BOLD}妙妙屋订阅${PLAIN}          ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Miaomiaowu${PLAIN} ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Miaomiaowu${PLAIN} ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}")"
-        echo -e "$(localized_text " ${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari 监控${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari monitoring${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN}")"
+        echo -e "$(localized_text " ${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari 监控${PLAIN}          ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari monitoring${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 网络 / 监控${PLAIN}" "${BOLD}▶ Network / Monitoring${PLAIN}" "${BOLD}▶ Сеть / Мониторинг${PLAIN}")"
         echo -e "$(localized_text " ${BOLD}${GREEN}11.${PLAIN} ${BOLD}DNS 解锁${PLAIN}            ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN}         ${BOLD}${GREEN}13.${PLAIN} ${BOLD}端口流量监控（dog）${PLAIN}" "${BOLD}${GREEN}11.${PLAIN} ${BOLD}DNS Unlock${PLAIN} ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Per-port traffic (dog)${PLAIN}" "${BOLD}${GREEN}11.${PLAIN} ${BOLD}Разблокировка DNS${PLAIN} ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Трафик по портам (dog)${PLAIN}")"
@@ -259,6 +259,7 @@ func_panel_deploy_menu() {
             13) func_port_dog ;;
             14) func_vps_bot_x ;;
             15) func_2sui_panel ;;
+            16) func_cdt_monitor_menu ;;
             "?") show_panel_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;

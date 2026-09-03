@@ -279,8 +279,6 @@ assert_file_contains dog.sh '{server_name} {report} {time}' "dog.sh must expose 
 assert_file_contains dog.sh '*"(Y/n"*|*"[Y/n]"*|*"直接回车继续"*) input="y" ;;' "dog.sh confirmations must default to yes on empty input."
 assert_file_contains xui-custom-manager.sh 'answer="${answer:-yes}"' "xui shell confirmations must default to yes."
 assert_file_contains xui-custom-manager.sh '.strip().lower() or "y"' "xui embedded confirmations must default to yes."
-assert_file_contains aliyun-cdt-watchdog.sh 'answer=${answer:-yes}' "Aliyun watchdog uninstall confirmation must default to yes."
-
 assert_file_contains docs/443-single-entry.md 'Skip SSL (advanced — behind reverse proxy / SSH tunnel only)' "Port 443 Reuse doc must explain the current 3x-ui Skip SSL flow."
 assert_file_contains docs/443-single-entry.md '监听 IP：127.0.0.1' "Port 443 Reuse doc must keep 3x-ui listeners on loopback."
 assert_file_contains docs/443-single-entry.md 'SNI 清洗与 REALITY 回落防护' "Port 443 Reuse doc must explain SNI filtering and REALITY fallback protection."

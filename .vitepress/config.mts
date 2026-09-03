@@ -52,6 +52,7 @@ const zhTheme = {
         text: '工具',
         items: [
           { text: '订阅管理与节点工具', link: '/docs/subscription-tools' },
+          { text: 'CDT Monitor', link: '/docs/cdt-monitor' },
           { text: '配置路径', link: '/docs/config-paths' },
           { text: '端口流量狗', link: '/docs/dog' },
           { text: 'x-ui 增强套件', link: '/docs/xui-custom-manager' },
@@ -142,6 +143,7 @@ const enTheme = {
         text: 'Tools',
         items: [
           { text: 'Subscriptions and Nodes', link: '/en/docs/subscription-tools' },
+          { text: 'CDT Monitor', link: '/en/docs/cdt-monitor' },
           { text: 'Configuration Paths', link: '/en/docs/config-paths' },
           { text: 'dog.sh Traffic Monitor', link: '/en/docs/dog' },
           { text: 'x-ui Extension', link: '/en/docs/xui-custom-manager' },
@@ -214,6 +216,7 @@ const ruTheme = {
         text: 'Инструменты',
         items: [
           { text: 'Подписки и узлы', link: '/ru/docs/subscription-tools' },
+          { text: 'CDT Monitor', link: '/ru/docs/cdt-monitor' },
           { text: 'Пути конфигурации', link: '/ru/docs/config-paths' },
           { text: 'Мониторинг трафика dog.sh', link: '/ru/docs/dog' },
           { text: 'Расширение x-ui', link: '/ru/docs/xui-custom-manager' },

@@ -16380,6 +16380,7 @@ print_subscription_compose_status() {
     print_managed_container_status "Sub-Store" "sub-store" "/opt/sub-store"
     print_managed_container_status "Dockge" "dockge" "/opt/dockge"
     print_managed_container_status "Komari" "komari" "/opt/komari"
+    print_managed_container_status "CDT Monitor" "cdt-monitor" "/opt/cdt-monitor"
 }
 
 func_docker_project_status() {
@@ -16388,7 +16389,7 @@ func_docker_project_status() {
     print_breadcrumb "$(localized_text "Docker 管理 > 项目容器状态" "Docker Management > Project Container Status" "Docker > Статус контейнеров проекта")"
     echo -e "$(localized_text "${BOLD}🐳 443 / 订阅工具相关容器状态${PLAIN}" "${BOLD}🐳 443 / Subscription tool related container status${PLAIN}" "${BOLD}🐳 443 / Статус контейнера, связанного с инструментом подписки${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}这里只看本项目场景相关容器：SublinkPro、妙妙屋、Sub-Store、Dockge、Komari。${PLAIN}" "${YELLOW}Here we only look at the containers related to this project scenario: SublinkPro, Miaomiaowu, Sub-Store, Dockge, Komari.${PLAIN}" "${YELLOW}Здесь мы рассматриваем только контейнеры, относящиеся к этому сценарию проекта: SublinkPro, Miaomiaowu, Sub-Store, Dockge, Komari.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}这里只看本项目场景相关容器：SublinkPro、妙妙屋、Sub-Store、Dockge、Komari、CDT Monitor。${PLAIN}" "${YELLOW}Here we only look at the containers related to this project scenario: SublinkPro, Miaomiaowu, Sub-Store, Dockge, Komari, and CDT Monitor.${PLAIN}" "${YELLOW}Здесь мы рассматриваем только контейнеры, относящиеся к этому сценарию проекта: SublinkPro, Miaomiaowu, Sub-Store, Dockge, Komari и CDT Monitor.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}3x-ui、Caddy、Nginx 通常是 systemd 服务，状态请看 [15] 或 [19] 体检。${PLAIN}" "${YELLOW}3x-ui, Caddy, Nginx are usually systemd services, please see [15] or [19] for health check status.${PLAIN}" "${YELLOW}3x-ui, Caddy, Nginx обычно представляют собой услуги systemd, информацию о статусе медицинского осмотра см. в [15] или [19].${PLAIN}")"
     echo -e "------------------------------------------------"
     print_subscription_compose_status
@@ -16422,7 +16423,7 @@ func_docker_443_exposure_audit() {
 
     if $found_public; then
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${YELLOW}建议：订阅工具、Dockge、Komari 用 127.0.0.1 绑定，公网访问走 [19] -> [8] 添加 443 反代域名。${PLAIN}" "${YELLOW}Recommends: Use 127.0.0.1 to bind subscription tools, Dockge, and Komari, and use [19] -> [8] to access the public by adding a 443 reverse proxy domain.${PLAIN}" "${YELLOW}рекомендует: используйте 127.0.0.1 для привязки инструментов подписки, Dockge и Komari, и используйте [19] -> [8] для доступа к публичной сети, добавив доменное имя обратного прокси 443.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}建议：订阅工具、Dockge、Komari、CDT Monitor 用 127.0.0.1 绑定，公网访问走 [19] -> [8] 添加 443 反代域名。${PLAIN}" "${YELLOW}Recommends: Use 127.0.0.1 to bind subscription tools, Dockge, Komari, and CDT Monitor, then use [19] -> [8] to add a public Port 443 reverse-proxy domain.${PLAIN}" "${YELLOW}Рекомендуется привязать инструменты подписки, Dockge, Komari и CDT Monitor к 127.0.0.1, а для публичного доступа добавить домен обратного прокси на порту 443 через [19] -> [8].${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}如确实需要公网直连，请确认云安全组、系统防火墙和访问密码都已收紧。${PLAIN}" "${YELLOW}If you really need to connect directly to the public, please confirm that the cloud security group, system firewall and access password have been tightened.${PLAIN}" "${YELLOW}Если вам действительно необходимо подключиться напрямую к публичной сети, убедитесь, что группа безопасности облака, системный брандмауэр и пароль доступа ужесточены.${PLAIN}")"
     else
         echo -e "$(localized_text "${GREEN}✅ 未发现 Docker 容器通过 0.0.0.0 / :: 直接暴露端口。${PLAIN}" "${GREEN}✅ No direct exposed ports found for the Docker container via 0.0.0.0/::.${PLAIN}" "${GREEN}для контейнера Docker через 0.0.0.0/:: не обнаружено прямых открытых портов.${PLAIN}")"
@@ -18935,7 +18936,7 @@ find_compose_file() {
 is_managed_compose_dir() {
     local dir="${1%/}"
     case "$dir" in
-        /opt/sublinkpro|/opt/miaomiaowu|/opt/sub-store|/opt/dockge|/opt/komari)
+        /opt/sublinkpro|/opt/miaomiaowu|/opt/sub-store|/opt/dockge|/opt/komari|/opt/cdt-monitor)
             return 0
             ;;
         *)
@@ -19528,6 +19529,77 @@ EOF
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
 }
 
+func_cdt_monitor() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}📊 部署 CDT Monitor（阿里云 CDT 流量与 ECS 控制台）${PLAIN}" "${BOLD}📊 Deploy CDT Monitor (Alibaba Cloud CDT traffic and ECS console)${PLAIN}" "${BOLD}📊 Развернуть CDT Monitor (трафик Alibaba Cloud CDT и консоль ECS)${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
+
+    local install_dir="/opt/cdt-monitor"
+    local cdt_bind_addr="127.0.0.1"
+    local cdt_port="43210"
+
+    cdt_bind_addr=$(ask_with_default "$(localized_text "CDT Monitor 监听地址" "CDT Monitor listening address" "Адрес прослушивания CDT Monitor")" "$cdt_bind_addr")
+    is_valid_listen_addr "$cdt_bind_addr" || { echo -e "$(localized_text "${RED}❌ 监听地址无效。${PLAIN}" "${RED}❌ The listening address is invalid.${PLAIN}" "${RED}❌ Неверный адрес прослушивания.${PLAIN}")"; read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
+
+    while true; do
+        cdt_port=$(ask_with_default "$(localized_text "CDT Monitor 访问端口" "CDT Monitor access port" "Порт доступа CDT Monitor")" "$cdt_port")
+        if is_valid_port "$cdt_port"; then break; fi
+        echo -e "$(localized_text "${RED}❌ 端口无效，请输入 1-65535 之间的数字。${PLAIN}" "${RED}❌ The port is invalid, please enter a number between 1-65535.${PLAIN}" "${RED}❌ Порт недействителен. Введите число от 1 до 65535.${PLAIN}")"
+    done
+    warn_if_public_bind "CDT Monitor" "$cdt_bind_addr" "$cdt_port" || return 1
+
+    echo -e "$(localized_text "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}" "${YELLOW}Deployment directory: ${install_dir}${PLAIN}" "${YELLOW}Каталог развертывания: ${install_dir}${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}数据位置：${CYAN}Docker Compose 数据卷 cdt-data${PLAIN}" "${YELLOW}Data location: ${CYAN}Docker Compose volume cdt-data${PLAIN}" "${YELLOW}Расположение данных: ${CYAN}том Docker Compose cdt-data${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}监听地址：${CYAN}${cdt_bind_addr}:${cdt_port}${PLAIN}" "${YELLOW}Listening address: ${cdt_bind_addr}:${cdt_port}${PLAIN}" "${YELLOW}Адрес прослушивания: ${cdt_bind_addr}:${cdt_port}${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}首次访问控制台会进入管理员初始化向导；阿里云 RAM 凭据在控制台内配置。${PLAIN}" "${YELLOW}The first console visit opens the administrator setup wizard; configure Alibaba Cloud RAM credentials in the console.${PLAIN}" "${YELLOW}При первом открытии консоли появится мастер настройки администратора; учетные данные Alibaba Cloud RAM настраиваются в консоли.${PLAIN}")"
+    print_public_https_reverse_proxy_hint
+    echo -e "------------------------------------------------"
+
+    if confirm_danger "$(localized_text "部署 CDT Monitor" "Deploy CDT Monitor" "Развернуть CDT Monitor")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目可回退；归档前请备份 cdt-data 数据卷" "stop the Compose project to roll back; back up the cdt-data volume before archiving" "для отката остановите проект Compose; перед архивацией сохраните резервную копию тома cdt-data")"; then
+        mkdir -p "$install_dir"
+        cd "$install_dir" || return
+
+        compose_write_secure_file docker-compose.yml <<EOF
+services:
+  cdt-monitor:
+    image: ghcr.io/wang4386/cdt-monitor:latest
+    container_name: cdt-monitor
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${cdt_bind_addr}:${cdt_port}:8080"
+    environment:
+      CDT_DATA_DIR: /data
+      CDT_LISTEN: :8080
+      CDT_WORKERS: 4
+      TZ: Asia/Shanghai
+    volumes:
+      - cdt-data:/data
+
+volumes:
+  cdt-data:
+EOF
+
+        echo -e "$(localized_text "${CYAN}▶ 正在拉取镜像并启动 CDT Monitor...${PLAIN}" "${CYAN}▶ Pulling the image and starting CDT Monitor...${PLAIN}" "${CYAN}▶ Загружаем образ и запускаем CDT Monitor...${PLAIN}")"
+        $DOCKER_COMPOSE_CMD up -d
+
+        echo -e "------------------------------------------------"
+        echo -e "$(localized_text "${GREEN}✅ CDT Monitor 部署完成！${PLAIN}" "${GREEN}✅ CDT Monitor deployment completed!${PLAIN}" "${GREEN}✅ CDT Monitor развернут!${PLAIN}")"
+        echo -e "$(localized_text "访问地址：${BOLD}http://${cdt_bind_addr}:${cdt_port}${PLAIN}" "Access address: ${BOLD}http://${cdt_bind_addr}:${cdt_port}${PLAIN}" "Адрес доступа: ${BOLD}http://${cdt_bind_addr}:${cdt_port}${PLAIN}")"
+        echo -e "$(localized_text "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}" "Configuration file: ${CYAN}${install_dir}/docker-compose.yml${PLAIN}" "Файл конфигурации: ${CYAN}${install_dir}/docker-compose.yml${PLAIN}")"
+        print_public_https_reverse_proxy_hint
+    else
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
+    fi
+
+    read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
+}
+
 # ---------------------------------------------------------
 # Module: subscription_service_menus.sh
 # ---------------------------------------------------------
@@ -19552,6 +19624,10 @@ func_manage_dockge() {
 
 func_manage_komari() {
     manage_compose_project "Komari" "/opt/komari" "$(localized_text "Komari 数据会保存在 /opt/komari/data" "Komari data will be saved in /opt/komari/data" "Данные Комари будут сохранены в /opt/komari/data.")" func_komari
+}
+
+func_manage_cdt_monitor() {
+    manage_compose_project "CDT Monitor" "/opt/cdt-monitor" "$(localized_text "数据保存在 Docker Compose 数据卷 cdt-data；归档会删除该数据卷" "data is stored in the Docker Compose cdt-data volume; archiving deletes the volume" "данные хранятся в томе Docker Compose cdt-data; архивация удаляет этот том")" func_cdt_monitor
 }
 
 func_service_action_menu() {
@@ -19641,6 +19717,10 @@ func_dockge_menu() {
 
 func_komari_menu() {
     func_manage_komari
+}
+
+func_cdt_monitor_menu() {
+    func_manage_cdt_monitor
 }
 
 # ---------------------------------------------------------
@@ -23385,7 +23465,7 @@ show_panel_help() {
     echo "$(localized_text "4 S-UI：安装、官方菜单、卸载。" "4 S-UI: install, open the official menu, or uninstall." "4 S-UI: установка, официальное меню и удаление.")"
     echo "$(localized_text "15 2S-UI：运行官方安装器；不能与 S-UI 共存。" "15 2S-UI: run the official installer; do not install it alongside S-UI." "15 2S-UI: запустить официальный установщик; не устанавливайте его вместе с S-UI.")"
     echo "$(localized_text "5/6 Sing-box 与 Xray 脚本。" "5/6 Sing-box and Xray scripts." "5/6 Скрипты Sing-box и Xray.")"
-    echo "$(localized_text "7/8/9 订阅工具，10 Komari；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription tools; 10: Komari. Dockge / Compose management is in main menu [11 Docker Management] -> [19]. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [8 Manage Web domains/reverse proxy]." "7/8/9: инструменты подписки; 10: Komari. Управление Dockge / Compose находится в главном меню [11 Управление Docker] -> [19]. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [8 Управление Web-доменами и обратным прокси].")"
+    echo "$(localized_text "7/8/9 订阅工具，10 Komari，16 CDT Monitor；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。" "7/8/9: subscription tools; 10: Komari; 16: CDT Monitor. Dockge / Compose management is in main menu [11 Docker Management] -> [19]. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [8 Manage Web domains/reverse proxy]." "7/8/9: инструменты подписки; 10: Komari; 16: CDT Monitor. Управление Dockge / Compose находится в главном меню [11 Управление Docker] -> [19]. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [8 Управление Web-доменами и обратным прокси].")"
     echo "$(localized_text "13 端口流量监控（dog）：仅统计已监控端口的实际流量。" "13 Per-port traffic monitor (dog): shows traffic only for monitored ports." "13 Монитор трафика по портам (dog): показывает трафик только отслеживаемых портов.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
@@ -23558,7 +23638,7 @@ func_panel_deploy_menu() {
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 订阅 / 监控${PLAIN}" "${BOLD}▶ Subscription / Monitoring${PLAIN}" "${BOLD}▶ Подписки / Мониторинг${PLAIN}")"
         echo -e "$(localized_text "  ${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN}            ${BOLD}${GREEN}8.${PLAIN} ${BOLD}妙妙屋订阅${PLAIN}          ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Miaomiaowu${PLAIN} ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Miaomiaowu${PLAIN} ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}")"
-        echo -e "$(localized_text " ${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari 监控${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari monitoring${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN}")"
+        echo -e "$(localized_text " ${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari 监控${PLAIN}          ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari monitoring${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 网络 / 监控${PLAIN}" "${BOLD}▶ Network / Monitoring${PLAIN}" "${BOLD}▶ Сеть / Мониторинг${PLAIN}")"
         echo -e "$(localized_text " ${BOLD}${GREEN}11.${PLAIN} ${BOLD}DNS 解锁${PLAIN}            ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN}         ${BOLD}${GREEN}13.${PLAIN} ${BOLD}端口流量监控（dog）${PLAIN}" "${BOLD}${GREEN}11.${PLAIN} ${BOLD}DNS Unlock${PLAIN} ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Per-port traffic (dog)${PLAIN}" "${BOLD}${GREEN}11.${PLAIN} ${BOLD}Разблокировка DNS${PLAIN} ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Трафик по портам (dog)${PLAIN}")"
@@ -23586,6 +23666,7 @@ func_panel_deploy_menu() {
             13) func_port_dog ;;
             14) func_vps_bot_x ;;
             15) func_2sui_panel ;;
+            16) func_cdt_monitor_menu ;;
             "?") show_panel_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;

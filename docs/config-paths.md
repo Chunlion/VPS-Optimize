@@ -245,6 +245,7 @@ tail -n 100 /var/log/xui-custom-manager.log 2>/dev/null
 | `/opt/dockge` | Dockge 部署目录 |
 | `/opt/komari` | Komari 部署目录 |
 | `/opt/komari/data` | Komari 数据目录 |
+| `/opt/cdt-monitor` | CDT Monitor Compose 配置目录 |
 
 实际路径以脚本输出和 `docker ps` 为准。
 

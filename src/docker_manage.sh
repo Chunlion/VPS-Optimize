@@ -49,6 +49,7 @@ print_subscription_compose_status() {
     print_managed_container_status "Sub-Store" "sub-store" "/opt/sub-store"
     print_managed_container_status "Dockge" "dockge" "/opt/dockge"
     print_managed_container_status "Komari" "komari" "/opt/komari"
+    print_managed_container_status "CDT Monitor" "cdt-monitor" "/opt/cdt-monitor"
 }
 
 func_docker_project_status() {
@@ -57,7 +58,7 @@ func_docker_project_status() {
     print_breadcrumb "$(localized_text "Docker 管理 > 项目容器状态" "Docker Management > Project Container Status" "Docker > Статус контейнеров проекта")"
     echo -e "$(localized_text "${BOLD}🐳 443 / 订阅工具相关容器状态${PLAIN}" "${BOLD}🐳 443 / Subscription tool related container status${PLAIN}" "${BOLD}🐳 443 / Статус контейнера, связанного с инструментом подписки${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}这里只看本项目场景相关容器：SublinkPro、妙妙屋、Sub-Store、Dockge、Komari。${PLAIN}" "${YELLOW}Here we only look at the containers related to this project scenario: SublinkPro, Miaomiaowu, Sub-Store, Dockge, Komari.${PLAIN}" "${YELLOW}Здесь мы рассматриваем только контейнеры, относящиеся к этому сценарию проекта: SublinkPro, Miaomiaowu, Sub-Store, Dockge, Komari.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}这里只看本项目场景相关容器：SublinkPro、妙妙屋、Sub-Store、Dockge、Komari、CDT Monitor。${PLAIN}" "${YELLOW}Here we only look at the containers related to this project scenario: SublinkPro, Miaomiaowu, Sub-Store, Dockge, Komari, and CDT Monitor.${PLAIN}" "${YELLOW}Здесь мы рассматриваем только контейнеры, относящиеся к этому сценарию проекта: SublinkPro, Miaomiaowu, Sub-Store, Dockge, Komari и CDT Monitor.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}3x-ui、Caddy、Nginx 通常是 systemd 服务，状态请看 [15] 或 [19] 体检。${PLAIN}" "${YELLOW}3x-ui, Caddy, Nginx are usually systemd services, please see [15] or [19] for health check status.${PLAIN}" "${YELLOW}3x-ui, Caddy, Nginx обычно представляют собой услуги systemd, информацию о статусе медицинского осмотра см. в [15] или [19].${PLAIN}")"
     echo -e "------------------------------------------------"
     print_subscription_compose_status
@@ -91,7 +92,7 @@ func_docker_443_exposure_audit() {
 
     if $found_public; then
         echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${YELLOW}建议：订阅工具、Dockge、Komari 用 127.0.0.1 绑定，公网访问走 [19] -> [8] 添加 443 反代域名。${PLAIN}" "${YELLOW}Recommends: Use 127.0.0.1 to bind subscription tools, Dockge, and Komari, and use [19] -> [8] to access the public by adding a 443 reverse proxy domain.${PLAIN}" "${YELLOW}рекомендует: используйте 127.0.0.1 для привязки инструментов подписки, Dockge и Komari, и используйте [19] -> [8] для доступа к публичной сети, добавив доменное имя обратного прокси 443.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}建议：订阅工具、Dockge、Komari、CDT Monitor 用 127.0.0.1 绑定，公网访问走 [19] -> [8] 添加 443 反代域名。${PLAIN}" "${YELLOW}Recommends: Use 127.0.0.1 to bind subscription tools, Dockge, Komari, and CDT Monitor, then use [19] -> [8] to add a public Port 443 reverse-proxy domain.${PLAIN}" "${YELLOW}Рекомендуется привязать инструменты подписки, Dockge, Komari и CDT Monitor к 127.0.0.1, а для публичного доступа добавить домен обратного прокси на порту 443 через [19] -> [8].${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}如确实需要公网直连，请确认云安全组、系统防火墙和访问密码都已收紧。${PLAIN}" "${YELLOW}If you really need to connect directly to the public, please confirm that the cloud security group, system firewall and access password have been tightened.${PLAIN}" "${YELLOW}Если вам действительно необходимо подключиться напрямую к публичной сети, убедитесь, что группа безопасности облака, системный брандмауэр и пароль доступа ужесточены.${PLAIN}")"
     else
         echo -e "$(localized_text "${GREEN}✅ 未发现 Docker 容器通过 0.0.0.0 / :: 直接暴露端口。${PLAIN}" "${GREEN}✅ No direct exposed ports found for the Docker container via 0.0.0.0/::.${PLAIN}" "${GREEN}для контейнера Docker через 0.0.0.0/:: не обнаружено прямых открытых портов.${PLAIN}")"

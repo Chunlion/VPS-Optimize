@@ -69,7 +69,7 @@ cy
 |---|---|
 | 系统初始化 | 预检、常用工具、时区、IPv4 出站优先和基础 BBR |
 | 安全加固 | SSH、公钥登录、Fail2ban、防火墙、端口并发限制 |
-| 面板与订阅 | 3x-ui、S-UI、2S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari |
+| 面板与订阅 | 3x-ui、S-UI、2S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari、CDT Monitor |
 | 转发与组网 | Realm、Gost、FLVX 哆啦转发面板、EasyTier、Tailscale |
 | 443端口复用 | Web、面板、订阅和节点共享公网 `443`，按 SNI 路由；同一时间仅由当前入口服务监听 |
 | 诊断与回滚 | 服务健康、443 链路体检、空间预检、可选加密备份、恢复和隔离归档 |
@@ -80,6 +80,7 @@ cy
 - [443端口复用：部署与配置](https://chunlion.github.io/VPS-Optimize/docs/443-single-entry)
 - [443端口复用排错与恢复](https://chunlion.github.io/VPS-Optimize/docs/443-single-entry-troubleshooting)
 - [失联与回滚急救](https://chunlion.github.io/VPS-Optimize/docs/recovery-runbook)
+- [CDT Monitor：阿里云 CDT 流量与 ECS 管理](https://chunlion.github.io/VPS-Optimize/docs/cdt-monitor)
 - [提交 Issue](https://github.com/Chunlion/VPS-Optimize/issues) · [Telegram](https://t.me/cutyy_github) · [GitHub](https://github.com/Chunlion)
 
 ## 📄 许可证

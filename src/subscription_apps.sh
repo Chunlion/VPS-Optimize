@@ -478,3 +478,74 @@ EOF
 
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
 }
+
+func_cdt_monitor() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}📊 部署 CDT Monitor（阿里云 CDT 流量与 ECS 控制台）${PLAIN}" "${BOLD}📊 Deploy CDT Monitor (Alibaba Cloud CDT traffic and ECS console)${PLAIN}" "${BOLD}📊 Развернуть CDT Monitor (трафик Alibaba Cloud CDT и консоль ECS)${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+
+    ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
+
+    local install_dir="/opt/cdt-monitor"
+    local cdt_bind_addr="127.0.0.1"
+    local cdt_port="43210"
+
+    cdt_bind_addr=$(ask_with_default "$(localized_text "CDT Monitor 监听地址" "CDT Monitor listening address" "Адрес прослушивания CDT Monitor")" "$cdt_bind_addr")
+    is_valid_listen_addr "$cdt_bind_addr" || { echo -e "$(localized_text "${RED}❌ 监听地址无效。${PLAIN}" "${RED}❌ The listening address is invalid.${PLAIN}" "${RED}❌ Неверный адрес прослушивания.${PLAIN}")"; read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
+
+    while true; do
+        cdt_port=$(ask_with_default "$(localized_text "CDT Monitor 访问端口" "CDT Monitor access port" "Порт доступа CDT Monitor")" "$cdt_port")
+        if is_valid_port "$cdt_port"; then break; fi
+        echo -e "$(localized_text "${RED}❌ 端口无效，请输入 1-65535 之间的数字。${PLAIN}" "${RED}❌ The port is invalid, please enter a number between 1-65535.${PLAIN}" "${RED}❌ Порт недействителен. Введите число от 1 до 65535.${PLAIN}")"
+    done
+    warn_if_public_bind "CDT Monitor" "$cdt_bind_addr" "$cdt_port" || return 1
+
+    echo -e "$(localized_text "${YELLOW}部署目录：${CYAN}${install_dir}${PLAIN}" "${YELLOW}Deployment directory: ${install_dir}${PLAIN}" "${YELLOW}Каталог развертывания: ${install_dir}${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}数据位置：${CYAN}Docker Compose 数据卷 cdt-data${PLAIN}" "${YELLOW}Data location: ${CYAN}Docker Compose volume cdt-data${PLAIN}" "${YELLOW}Расположение данных: ${CYAN}том Docker Compose cdt-data${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}监听地址：${CYAN}${cdt_bind_addr}:${cdt_port}${PLAIN}" "${YELLOW}Listening address: ${cdt_bind_addr}:${cdt_port}${PLAIN}" "${YELLOW}Адрес прослушивания: ${cdt_bind_addr}:${cdt_port}${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}首次访问控制台会进入管理员初始化向导；阿里云 RAM 凭据在控制台内配置。${PLAIN}" "${YELLOW}The first console visit opens the administrator setup wizard; configure Alibaba Cloud RAM credentials in the console.${PLAIN}" "${YELLOW}При первом открытии консоли появится мастер настройки администратора; учетные данные Alibaba Cloud RAM настраиваются в консоли.${PLAIN}")"
+    print_public_https_reverse_proxy_hint
+    echo -e "------------------------------------------------"
+
+    if confirm_danger "$(localized_text "部署 CDT Monitor" "Deploy CDT Monitor" "Развернуть CDT Monitor")" \
+        "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
+        "$(localized_text "停止 Compose 项目可回退；归档前请备份 cdt-data 数据卷" "stop the Compose project to roll back; back up the cdt-data volume before archiving" "для отката остановите проект Compose; перед архивацией сохраните резервную копию тома cdt-data")"; then
+        mkdir -p "$install_dir"
+        cd "$install_dir" || return
+
+        compose_write_secure_file docker-compose.yml <<EOF
+services:
+  cdt-monitor:
+    image: ghcr.io/wang4386/cdt-monitor:latest
+    container_name: cdt-monitor
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${cdt_bind_addr}:${cdt_port}:8080"
+    environment:
+      CDT_DATA_DIR: /data
+      CDT_LISTEN: :8080
+      CDT_WORKERS: 4
+      TZ: Asia/Shanghai
+    volumes:
+      - cdt-data:/data
+
+volumes:
+  cdt-data:
+EOF
+
+        echo -e "$(localized_text "${CYAN}▶ 正在拉取镜像并启动 CDT Monitor...${PLAIN}" "${CYAN}▶ Pulling the image and starting CDT Monitor...${PLAIN}" "${CYAN}▶ Загружаем образ и запускаем CDT Monitor...${PLAIN}")"
+        $DOCKER_COMPOSE_CMD up -d
+
+        echo -e "------------------------------------------------"
+        echo -e "$(localized_text "${GREEN}✅ CDT Monitor 部署完成！${PLAIN}" "${GREEN}✅ CDT Monitor deployment completed!${PLAIN}" "${GREEN}✅ CDT Monitor развернут!${PLAIN}")"
+        echo -e "$(localized_text "访问地址：${BOLD}http://${cdt_bind_addr}:${cdt_port}${PLAIN}" "Access address: ${BOLD}http://${cdt_bind_addr}:${cdt_port}${PLAIN}" "Адрес доступа: ${BOLD}http://${cdt_bind_addr}:${cdt_port}${PLAIN}")"
+        echo -e "$(localized_text "配置文件：${CYAN}${install_dir}/docker-compose.yml${PLAIN}" "Configuration file: ${CYAN}${install_dir}/docker-compose.yml${PLAIN}" "Файл конфигурации: ${CYAN}${install_dir}/docker-compose.yml${PLAIN}")"
+        print_public_https_reverse_proxy_hint
+    else
+        echo -e "$(localized_text "${BLUE}已取消部署，未写入配置。${PLAIN}" "${BLUE}Deployment canceled; no configuration was written.${PLAIN}" "${BLUE}Развёртывание отменено; конфигурация не записана.${PLAIN}")"
+    fi
+
+    read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
+}
