@@ -18886,8 +18886,8 @@ install_docker_compose_standalone() {
 
 ensure_docker_engine_ready() {
     if command -v docker >/dev/null 2>&1; then
-        systemctl enable --now docker >/dev/null 2>&1 || true
-        return 0
+        start_docker_engine
+        return $?
     fi
 
     echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 Docker，正在自动安装 Docker 引擎...${PLAIN}" "${YELLOW}⚠️ Docker not detected, automatically installing Docker engine...${PLAIN}" "${YELLOW}⚠️ Docker не обнаружен, автоматическая установка двигателя Docker...${PLAIN}")"
@@ -18901,24 +18901,65 @@ ensure_docker_engine_ready() {
         return 1
     fi
 
-    systemctl enable --now docker >/dev/null 2>&1 || true
+    start_docker_engine || return 1
     echo -e "$(localized_text "${GREEN}✅ Docker 引擎已安装。${PLAIN}" "${GREEN}✅ Docker engine has been installed.${PLAIN}" "${GREEN}Установлен двигатель ✅ Docker.${PLAIN}")"
 }
 
-ensure_docker_compose_ready() {
-    DOCKER_COMPOSE_CMD=""
-    ensure_docker_engine_ready || return 1
+start_docker_engine() {
+    if ! systemctl enable --now docker || ! docker info >/dev/null; then
+        localized_echo "Docker 启动失败或引擎不可用。" "Docker failed to start or the engine is unavailable." "Не удалось запустить Docker или движок недоступен."
+        return 1
+    fi
+}
 
+detect_docker_compose() {
+    DOCKER_COMPOSE_CMD=""
     if docker compose version >/dev/null 2>&1; then
         DOCKER_COMPOSE_CMD="docker compose"
-    elif command -v docker-compose >/dev/null 2>&1; then
+    elif docker-compose version >/dev/null 2>&1; then
         DOCKER_COMPOSE_CMD="docker-compose"
     else
+        return 1
+    fi
+}
+
+ensure_docker_compose_ready() {
+    ensure_docker_engine_ready || return 1
+    if ! detect_docker_compose; then
         echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 Docker Compose 插件，正在为您安装...${PLAIN}" "${YELLOW}⚠️ Docker Compose plug-in not detected, installing for you...${PLAIN}" "${YELLOW}⚠️ Плагин Docker Compose не обнаружен, установка для вас...${PLAIN}")"
         install_docker_compose_standalone || return 1
         DOCKER_COMPOSE_CMD="docker-compose"
         echo -e "$(localized_text "${GREEN}✅ Docker Compose 安装完成。${PLAIN}" "${GREEN}✅ Docker Compose installation completed.${PLAIN}" "${GREEN}✅ Установка Docker Compose завершена.${PLAIN}")"
     fi
+}
+
+wait_compose_project_ready() {
+    local compose_file="$1" deadline=$((SECONDS + 60)) remaining ids states state ready
+    local -a containers=()
+    while (( SECONDS < deadline )); do
+        remaining=$((deadline - SECONDS))
+        ids=$(timeout "$remaining" $DOCKER_COMPOSE_CMD -f "$compose_file" ps -a -q) || break
+        [[ -n "$ids" ]] || break
+        mapfile -t containers <<< "$ids"
+        remaining=$((deadline - SECONDS))
+        (( remaining > 0 )) || break
+        states=$(timeout "$remaining" docker inspect --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${containers[@]}") || break
+        ready=1
+        while IFS= read -r state; do
+            case "$state" in
+                running\|healthy|running\|none) ;;
+                *) ready=0 ;;
+            esac
+        done <<< "$states"
+        if (( ready )); then
+            localized_echo "容器已运行，已有健康检查均通过；无健康检查的容器仅确认运行状态。" "Containers are running and configured health checks passed; containers without health checks were checked for running state only." "Контейнеры запущены, настроенные проверки здоровья пройдены; без таких проверок подтверждено только состояние запуска."
+            return 0
+        fi
+        sleep 2
+    done
+    localized_echo "容器未在 60 秒内就绪或状态查询失败，最近日志：" "Containers were not ready within 60 seconds or status lookup failed. Recent logs:" "Контейнеры не готовы за 60 секунд или запрос состояния завершился ошибкой. Последние логи:"
+    timeout 10 $DOCKER_COMPOSE_CMD -f "$compose_file" logs --tail 50
+    return 1
 }
 
 find_compose_file() {
@@ -18985,8 +19026,11 @@ manage_compose_project() {
                 "$install_func"
                 ;;
             2)
-                ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" ps)
+                if detect_docker_compose; then
+                    (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" ps)
+                else
+                    localized_echo "未检测到可用的 Docker Compose。" "No working Docker Compose was found." "Рабочая версия Docker Compose не найдена."
+                fi
                 read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 ;;
             3)
@@ -19000,7 +19044,12 @@ manage_compose_project() {
                 ;;
             5)
                 ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
-                (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d)
+                if (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" pull && $DOCKER_COMPOSE_CMD -f "$compose_file" up -d); then
+                    (cd "$project_dir" && wait_compose_project_ready "$compose_file")
+                else
+                    localized_echo "镜像拉取或容器重建失败，最近日志：" "Image pull or container recreation failed. Recent logs:" "Не удалось загрузить образы или пересоздать контейнеры. Последние логи:"
+                    (cd "$project_dir" && timeout 10 $DOCKER_COMPOSE_CMD -f "$compose_file" logs --tail 50)
+                fi
                 read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
                 ;;
             6)
@@ -19009,8 +19058,11 @@ manage_compose_project() {
                     "$(localized_text "在 ${project_dir} 中重新执行 compose up -d，或回到管理菜单重建" "Re-execute compose up -d in ${project_dir}, or return to the management menu to rebuild" "Перезапустите compose up -d в ${project_dir} или вернитесь в меню управления для пересборки.")" \
                     "$(localized_text "目录数据会保留，但服务会立即中断。" "Directory data is preserved, but service is immediately interrupted." "Данные каталога сохраняются, но обслуживание немедленно прерывается.")"; then
                     ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
-                    (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down)
-                    echo -e "$(localized_text "${GREEN}✅ 已停止并移除容器，部署目录仍保留：${project_dir}${PLAIN}" "${GREEN}✅ The container has been stopped and removed, but the deployment directory remains: ${project_dir}${PLAIN}" "${GREEN}. Контейнер остановлен и удален, но каталог развертывания остался: ${project_dir}.${PLAIN}")"
+                    if (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down); then
+                        echo -e "$(localized_text "${GREEN}✅ 已停止并移除容器，部署目录仍保留：${project_dir}${PLAIN}" "${GREEN}✅ The container has been stopped and removed, but the deployment directory remains: ${project_dir}${PLAIN}" "${GREEN}. Контейнер остановлен и удален, но каталог развертывания остался: ${project_dir}.${PLAIN}")"
+                    else
+                        localized_echo "停止或移除容器失败。" "Failed to stop or remove containers." "Не удалось остановить или удалить контейнеры."
+                    fi
                 else
                     echo -e "$(localized_text "${BLUE}已取消操作。${PLAIN}" "${BLUE}The operation has been canceled.${PLAIN}" "${BLUE}Операция отменена.${PLAIN}")"
                 fi
@@ -19027,7 +19079,11 @@ manage_compose_project() {
                         echo -e "$(localized_text "${RED}❌ 安全检查未通过，拒绝归档非脚本托管目录：${project_dir}${PLAIN}" "${RED}❌ The security check failed and the archive of the non-script hosting directory was refused: ${project_dir}${PLAIN}" "${RED}❌ Проверка безопасности не удалась, и в архиве каталога хостинга без скриптов было отказано: ${project_dir}${PLAIN}")"
                     else
                         ensure_docker_compose_ready || { read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"; return; }
-                        (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down -v)
+                        if ! (cd "$project_dir" && $DOCKER_COMPOSE_CMD -f "$compose_file" down -v); then
+                            localized_echo "停止或移除容器失败，未归档目录。" "Failed to stop or remove containers; directory was not archived." "Не удалось остановить или удалить контейнеры; каталог не архивирован."
+                            pause_return
+                            continue
+                        fi
                         if quarantine_path "$project_dir" "/opt/.vps-optimize-quarantine"; then
                             echo -e "$(localized_text "${GREEN}✅ 已归档 ${project_name} 部署目录。${PLAIN}" "${GREEN}✅ Archived ${project_name} deployment directory.${PLAIN}" "${GREEN}✅ Архивированный каталог развертывания ${project_name}.${PLAIN}")"
                         else
@@ -20119,12 +20175,12 @@ version_is_newer() {
 }
 
 script_update_cache_is_fresh() {
-    local now mtime
+    local now mtime max_age="${1:-43200}"
     [[ -f "$SCRIPT_UPDATE_CACHE" ]] || return 1
     now=$(date +%s 2>/dev/null || echo 0)
     mtime=$(stat -c %Y "$SCRIPT_UPDATE_CACHE" 2>/dev/null || echo 0)
     [[ "$now" =~ ^[0-9]+$ && "$mtime" =~ ^[0-9]+$ ]] || return 1
-    (( now > mtime && now - mtime < 43200 ))
+    (( now >= mtime && now - mtime < max_age ))
 }
 
 read_script_update_cache_field() {
@@ -20155,6 +20211,10 @@ check_script_update_status() {
     current_sha256=$(current_script_sha256 2>/dev/null || true)
     if [[ "$mode" != "force" ]] && script_update_cache_is_fresh; then
         status=$(read_script_update_cache_field status)
+        if [[ "$status" == "error" ]] && script_update_cache_is_fresh 300; then
+            printf 'error|unknown\n'
+            return 0
+        fi
         latest=$(read_script_update_cache_field latest)
         latest_sha256=$(read_script_update_cache_field latest_sha256)
         if [[ "$latest_sha256" =~ ^[0-9a-f]{64}$ && -n "$latest" && "$latest" != "unknown" ]]; then
@@ -21194,24 +21254,34 @@ func_health_dashboard() {
     ss -tuln 2>/dev/null | grep -E 'LISTEN|UNCONN' | awk '{print $5}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | sort -nu | head -n 12 | tr '\n' ' '
     echo ""
 
-    local cert_root="/var/lib/caddy/.local/share/caddy/certificates"
-    [[ ! -d "$cert_root" ]] && cert_root="/root/.local/share/caddy/certificates"
+    local cert_root
+    local -a cert_roots=()
+    local -A seen_certs=()
+    for cert_root in /var/lib/caddy/.local/share/caddy/certificates /root/.local/share/caddy/certificates /etc/caddy/certs /root/cert; do
+        [[ ! -d "$cert_root" ]] || cert_roots+=("$cert_root")
+    done
 
-    if [[ -d "$cert_root" ]]; then
+    if (( ${#cert_roots[@]} > 0 )); then
         local cert_total=0
         local cert_warn=0
-        while IFS= read -r crt; do
-            local end_date ts_left days_left
-            end_date=$(openssl x509 -enddate -noout -in "$crt" 2>/dev/null | cut -d= -f2-)
+        while IFS= read -r -d '' crt; do
+            local end_date ts_left days_left cert_info fingerprint expiry
+            cert_info=$(openssl x509 -enddate -fingerprint -sha256 -noout -in "$crt" 2>/dev/null) || continue
+            fingerprint="${cert_info##*=}"
+            [[ -n "$fingerprint" && -z "${seen_certs[$fingerprint]:-}" ]] || continue
+            seen_certs[$fingerprint]=1
+            end_date="${cert_info%%$'\n'*}"
+            end_date="${end_date#notAfter=}"
             if [[ -n "$end_date" ]]; then
-                ts_left=$(( $(date -d "$end_date" +%s 2>/dev/null) - $(date +%s) ))
+                expiry=$(date -d "$end_date" +%s 2>/dev/null) || continue
+                ts_left=$(( expiry - $(date +%s) ))
                 days_left=$(( ts_left / 86400 ))
                 cert_total=$((cert_total+1))
                 if [[ "$days_left" -le 15 ]]; then
                     cert_warn=$((cert_warn+1))
                 fi
             fi
-        done < <(find "$cert_root" -type f -name "*.crt" 2>/dev/null)
+        done < <(find -L "${cert_roots[@]}" -type f -name "*.crt" -print0 2>/dev/null)
 
         echo -e "$(localized_text "${CYAN}🔐 证书健康摘要${PLAIN}" "${CYAN}🔐 Certificate Health Summary${PLAIN}" "${CYAN}🔐 Сводная информация о состоянии сертификата${PLAIN}")"
         if [[ "$cert_total" -eq 0 ]]; then

@@ -498,24 +498,34 @@ func_health_dashboard() {
     ss -tuln 2>/dev/null | grep -E 'LISTEN|UNCONN' | awk '{print $5}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | sort -nu | head -n 12 | tr '\n' ' '
     echo ""
 
-    local cert_root="/var/lib/caddy/.local/share/caddy/certificates"
-    [[ ! -d "$cert_root" ]] && cert_root="/root/.local/share/caddy/certificates"
+    local cert_root
+    local -a cert_roots=()
+    local -A seen_certs=()
+    for cert_root in /var/lib/caddy/.local/share/caddy/certificates /root/.local/share/caddy/certificates /etc/caddy/certs /root/cert; do
+        [[ ! -d "$cert_root" ]] || cert_roots+=("$cert_root")
+    done
 
-    if [[ -d "$cert_root" ]]; then
+    if (( ${#cert_roots[@]} > 0 )); then
         local cert_total=0
         local cert_warn=0
-        while IFS= read -r crt; do
-            local end_date ts_left days_left
-            end_date=$(openssl x509 -enddate -noout -in "$crt" 2>/dev/null | cut -d= -f2-)
+        while IFS= read -r -d '' crt; do
+            local end_date ts_left days_left cert_info fingerprint expiry
+            cert_info=$(openssl x509 -enddate -fingerprint -sha256 -noout -in "$crt" 2>/dev/null) || continue
+            fingerprint="${cert_info##*=}"
+            [[ -n "$fingerprint" && -z "${seen_certs[$fingerprint]:-}" ]] || continue
+            seen_certs[$fingerprint]=1
+            end_date="${cert_info%%$'\n'*}"
+            end_date="${end_date#notAfter=}"
             if [[ -n "$end_date" ]]; then
-                ts_left=$(( $(date -d "$end_date" +%s 2>/dev/null) - $(date +%s) ))
+                expiry=$(date -d "$end_date" +%s 2>/dev/null) || continue
+                ts_left=$(( expiry - $(date +%s) ))
                 days_left=$(( ts_left / 86400 ))
                 cert_total=$((cert_total+1))
                 if [[ "$days_left" -le 15 ]]; then
                     cert_warn=$((cert_warn+1))
                 fi
             fi
-        done < <(find "$cert_root" -type f -name "*.crt" 2>/dev/null)
+        done < <(find -L "${cert_roots[@]}" -type f -name "*.crt" -print0 2>/dev/null)
 
         echo -e "$(localized_text "${CYAN}🔐 证书健康摘要${PLAIN}" "${CYAN}🔐 Certificate Health Summary${PLAIN}" "${CYAN}🔐 Сводная информация о состоянии сертификата${PLAIN}")"
         if [[ "$cert_total" -eq 0 ]]; then

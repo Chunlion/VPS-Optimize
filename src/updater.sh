@@ -60,12 +60,12 @@ version_is_newer() {
 }
 
 script_update_cache_is_fresh() {
-    local now mtime
+    local now mtime max_age="${1:-43200}"
     [[ -f "$SCRIPT_UPDATE_CACHE" ]] || return 1
     now=$(date +%s 2>/dev/null || echo 0)
     mtime=$(stat -c %Y "$SCRIPT_UPDATE_CACHE" 2>/dev/null || echo 0)
     [[ "$now" =~ ^[0-9]+$ && "$mtime" =~ ^[0-9]+$ ]] || return 1
-    (( now > mtime && now - mtime < 43200 ))
+    (( now >= mtime && now - mtime < max_age ))
 }
 
 read_script_update_cache_field() {
@@ -96,6 +96,10 @@ check_script_update_status() {
     current_sha256=$(current_script_sha256 2>/dev/null || true)
     if [[ "$mode" != "force" ]] && script_update_cache_is_fresh; then
         status=$(read_script_update_cache_field status)
+        if [[ "$status" == "error" ]] && script_update_cache_is_fresh 300; then
+            printf 'error|unknown\n'
+            return 0
+        fi
         latest=$(read_script_update_cache_field latest)
         latest_sha256=$(read_script_update_cache_field latest_sha256)
         if [[ "$latest_sha256" =~ ^[0-9a-f]{64}$ && -n "$latest" && "$latest" != "unknown" ]]; then
