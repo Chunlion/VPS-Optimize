@@ -73,6 +73,8 @@ func ExtractSNI(data []byte) (string, error) {
 		return "", ErrInvalidClientHello
 	}
 	extensionsEnd := pos + extensionsLen
+	sni := ""
+	seenSNI := false
 
 	for pos < extensionsEnd {
 		if pos+4 > extensionsEnd {
@@ -85,12 +87,22 @@ func ExtractSNI(data []byte) (string, error) {
 			return "", ErrInvalidClientHello
 		}
 		if extType == extensionServerName {
-			return parseServerNameExtension(hello[pos : pos+extLen])
+			if seenSNI {
+				return "", ErrInvalidClientHello
+			}
+			seenSNI = true
+			sni, err = parseServerNameExtension(hello[pos : pos+extLen])
+			if err != nil {
+				return "", err
+			}
 		}
 		pos += extLen
 	}
 
-	return "", ErrNoSNI
+	if sni == "" {
+		return "", ErrNoSNI
+	}
+	return sni, nil
 }
 
 func collectClientHello(data []byte) ([]byte, error) {
@@ -146,6 +158,7 @@ func parseServerNameExtension(data []byte) (string, error) {
 
 	pos := 2
 	end := 2 + listLen
+	sni := ""
 	for pos < end {
 		if pos+3 > end {
 			return "", ErrInvalidClientHello
@@ -158,13 +171,16 @@ func parseServerNameExtension(data []byte) (string, error) {
 		}
 		if nameType == nameTypeHostName {
 			name := strings.TrimSuffix(strings.ToLower(string(data[pos:pos+nameLen])), ".")
-			if !ValidSNIName(name) {
+			if sni != "" || len(name) > 253 || !validDomain(name) {
 				return "", ErrInvalidClientHello
 			}
-			return name, nil
+			sni = name
 		}
 		pos += nameLen
 	}
 
-	return "", ErrNoSNI
+	if sni == "" {
+		return "", ErrNoSNI
+	}
+	return sni, nil
 }

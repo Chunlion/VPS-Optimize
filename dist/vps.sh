@@ -8441,7 +8441,11 @@ print_sni_stack_preview() {
         echo -e "$(localized_text "提示：脚本不会创建或修改 3x-ui/Xray 入站内部配置。" "Tip: The script does not create or modify the 3x-ui/Xray inbound internal configuration." "Совет: Скрипт не создает и не изменяет входящую внутреннюю конфигурацию 3x-ui/Xray.")"
     else
         echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
-        echo -e "$(localized_text "默认/未知 SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "Default/Unknown SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "По умолчанию/Неизвестно SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}")"
+        if strict_sni_gate_enabled; then
+            echo -e "$(localized_text "未知或无 SNI：丢弃" "Unknown or missing SNI: drop" "Неизвестный или отсутствующий SNI: отклонить")"
+        else
+            echo -e "$(localized_text "默认/未知 SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "Default/Unknown SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "По умолчанию/Неизвестно SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}")"
+        fi
     fi
     echo -e ""
     echo -e "$(localized_text "${YELLOW}确认后会备份现有配置，并按所选 ENTRY_MODE 生成入口配置。${PLAIN}" "${YELLOW}After confirms, it will back up the existing configuration and generate the entry configuration according to the selected ENTRY_MODE.${PLAIN}" "${YELLOW}После подтверждения он создаст резервную копию существующей конфигурации и сгенерирует конфигурацию записи в соответствии с выбранным ENTRY_MODE.${PLAIN}")"
@@ -8816,8 +8820,9 @@ load_sni_stack_env() {
         echo -e "$(localized_text "${RED}❌ 未找到 ${env_file}，请运行主菜单 [19] -> [2] 安装 443 入口。${PLAIN}" "${RED}❌ ${env_file} was not found. Run main menu [19] -> [2] to install the 443 entry.${PLAIN}" "${RED}❌ Файл ${env_file} не найден. Запустите главное меню [19] -> [2], чтобы установить вход 443.${PLAIN}")"
         return 1
     fi
+    STRICT_SNI_GATE=false
     # shellcheck disable=SC1090
-    source "$env_file"
+    source "$env_file" || return 1
     ENTRY_MODE=$(get_entry_mode)
     STRICT_SNI_GATE=$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")
     WEB_PROXY_ENGINE=$(normalize_web_proxy_engine "${WEB_PROXY_ENGINE:-caddy}" 2>/dev/null || echo "caddy")
@@ -10285,6 +10290,9 @@ preflight_tcppeek_before_cutover() {
 preflight_entry_mode_before_cutover() {
     local target_mode="$1"
     target_mode=$(normalize_entry_mode_name "$target_mode") || return 1
+    if strict_sni_gate_mode_supported "$target_mode" && strict_sni_gate_enabled; then
+        validate_strict_sni_gate_reality_server_names || return 1
+    fi
     case "$target_mode" in
         "tcp-peek") preflight_tcppeek_before_cutover ;;
         *) return 0 ;;
@@ -11004,7 +11012,11 @@ switch_entry_mode() {
     fi
 
     ENTRY_MODE="$target_mode"
-    save_sni_stack_env
+    if ! save_sni_stack_env; then
+        echo -e "$(localized_text "${RED}❌ 保存入口配置失败，正在回滚。${PLAIN}" "${RED}❌ Failed to save entry configuration; rolling back.${PLAIN}" "${RED}❌ Не удалось сохранить конфигурацию входа; выполняется откат.${PLAIN}")"
+        rollback_last_entry_mode "$backup_dir"
+        return 1
+    fi
     write_single_443_engine_state "$(entry_mode_engine_name "$target_mode")" "$backup_dir"
     echo -e "$(localized_text "${GREEN}✅ 443 入口模式已切换为：${target_mode}${PLAIN}" "${GREEN}✅ 443 The entry mode has been switched to: ${target_mode}${PLAIN}" "${GREEN}✅ 443 Режим входа переключен на: ${target_mode}${PLAIN}")"
     show_current_entry_status
@@ -11043,7 +11055,11 @@ reapply_current_entry_mode() {
         return 1
     fi
     ENTRY_MODE="$current_mode"
-    save_sni_stack_env
+    if ! save_sni_stack_env; then
+        echo -e "$(localized_text "${RED}❌ 保存入口配置失败，正在回滚。${PLAIN}" "${RED}❌ Failed to save entry configuration; rolling back.${PLAIN}" "${RED}❌ Не удалось сохранить конфигурацию входа; выполняется откат.${PLAIN}")"
+        rollback_last_entry_mode "$backup_dir"
+        return 1
+    fi
     write_single_443_engine_state "$(entry_mode_engine_name "$current_mode")" "$backup_dir"
     echo -e "$(localized_text "${GREEN}✅ 当前入口模式已重新应用：${current_mode}${PLAIN}" "${GREEN}✅ The current entry mode has been reapplied: ${current_mode}${PLAIN}" "${GREEN}. Текущий режим входа был применен повторно: ${current_mode}.${PLAIN}")"
     show_current_entry_status
@@ -12673,7 +12689,7 @@ issue_and_install_cert_for_domain() {
 }
 
 save_sni_stack_env() {
-    mkdir -p /etc/vps-optimize
+    mkdir -p /etc/vps-optimize || return 1
     local entry_mode web_proxy_engine strict_sni_gate site_domains_csv site_backend_addrs_csv site_backend_ports_csv
     local tcp_route_snis_csv tcp_route_addrs_csv tcp_route_ports_csv
     local sni_ip_whitelist_domains_csv sni_ip_whitelist_ranges_pipe
@@ -12697,7 +12713,7 @@ save_sni_stack_env() {
     tcp_route_ports_csv=$(IFS=','; echo "${TCP_ROUTE_PORTS[*]}")
     sni_ip_whitelist_domains_csv=$(IFS=','; echo "${SNI_IP_WHITELIST_DOMAINS[*]}")
     sni_ip_whitelist_ranges_pipe=$(IFS='|'; echo "${SNI_IP_WHITELIST_RANGES[*]}")
-    cat <<EOF > /etc/vps-optimize/sni-stack.env
+    cat <<EOF > /etc/vps-optimize/sni-stack.env || return 1
 ENTRY_MODE='${entry_mode}'
 STRICT_SNI_GATE='${strict_sni_gate}'
 WEB_PROXY_ENGINE='${web_proxy_engine}'
@@ -12930,7 +12946,7 @@ apply_sni_stack_runtime_config() {
     stop_public_443_entry_services_for_target "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "停止旧公网 443 入口服务失败" "Stop the old public port 443 entry service failed" "Остановить старую публичную сеть 443, служба входа не удалась")"; return 1; }
     apply_entry_mode_by_name "$current_mode" "$backup_dir" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式 ${current_mode} 应用失败" "Entry mode ${current_mode} application failed" "Режим входа в приложение ${current_mode} не выполнен.")"; return 1; }
     ENTRY_MODE="$current_mode"
-    save_sni_stack_env
+    save_sni_stack_env || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "保存入口配置失败" "Failed to save entry configuration" "Не удалось сохранить конфигурацию входа")"; return 1; }
     write_single_443_engine_state "$(entry_mode_engine_name "$current_mode")" "$backup_dir"
     generate_caddy_cf_manifest
 }
@@ -13584,12 +13600,6 @@ add_xray_sni_route() {
         echo -e "$(localized_text "${RED}❌ 入站端口不能复用公网入口、面板或订阅服务端口。${PLAIN}" "${RED}❌ The inbound port cannot reuse the public entry, panel or subscription service port.${PLAIN}" "${RED}❌ Входящий порт не может повторно использовать порт входа в публичную сеть, панель или порт службы подписки.${PLAIN}")"
         return 1
     fi
-    existing=$(xray_sni_route_port_conflict "$route_addr" "$route_port" || true)
-    if [[ -n "$existing" ]]; then
-        echo -e "$(localized_text "${RED}❌ ${route_addr}:${route_port} 已被规则 ${existing} 使用。${PLAIN}" "${RED}❌ ${route_addr}:${route_port} is already used by rule ${existing}.${PLAIN}" "${RED}❌ ${route_addr}:${route_port} уже используется правилом ${existing}.${PLAIN}")"
-        return 1
-    fi
-
     local listen_line
     print_xray_route_port_status "$route_sni" "$route_addr" "$route_port"
     listen_line=$(xray_route_listen_line_by_addr_port "$route_addr" "$route_port")
@@ -13683,22 +13693,7 @@ sync_xray_sni_routes_to_entry_mode() {
             reapply_sni_stack_from_env --yes
             ;;
         "tcp-peek")
-            local tmp_config target_config
-            echo -e "$(localized_text "${CYAN}正在同步 Xray 入站分流规则到 TCP Peek + Splice 配置...${PLAIN}" "${CYAN}Is synchronizing Xray Inbound connection routing rules to TCP Peek + Splice configuration...${PLAIN}" "${CYAN}синхронизирует правила входящей рассылки Xray с конфигурацией TCP Peek + Splice...${PLAIN}")"
-            target_config=$(vpso_mux_config_path)
-            tmp_config="${target_config}.tmp.$$"
-            write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_config" || return 1
-            if ! run_vpso_mux_config_check "$tmp_config"; then
-                quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true
-                return 1
-            fi
-            mv "$tmp_config" "$target_config" || { echo -e "$(localized_text "${RED}❌ TCP Peek + Splice 配置替换失败：${target_config}${PLAIN}" "${RED}❌ TCP Peek + Splice Configuration replacement failed: ${target_config}${PLAIN}" "${RED}❌ TCP Peek + Splice Не удалось заменить конфигурацию: ${target_config}${PLAIN}")"; return 1; }
-            if systemctl is-active --quiet vpso-mux 2>/dev/null; then
-                systemctl restart vpso-mux || { print_vpso_mux_failure_context "$NGINX_LISTEN_PORT"; echo -e "$(localized_text "${RED}❌ vpso-mux 重启失败，请查看上面的日志。${PLAIN}" "${RED}❌ vpso-mux Restart failed, please check the log above.${PLAIN}" "${RED}❌ vpso-mux Не удалось перезапустить, проверьте журнал выше.${PLAIN}")"; return 1; }
-            else
-                echo -e "$(localized_text "${YELLOW}vpso-mux 分流器当前未运行，已仅生成并校验配置文件。${PLAIN}" "${YELLOW}The vpso-mux routing is not currently running, only the configuration file has been generated and verified.${PLAIN}" "${YELLOW}маршрутизация vpso-mux в настоящее время не работает, только файл конфигурации создан и проверен.${PLAIN}")"
-            fi
-            echo -e "$(localized_text "${GREEN}✅ 已同步到 TCP Peek + Splice 配置：${target_config}${PLAIN}" "${GREEN}✅ Synced to TCP Peek + Splice Configuration: ${target_config}${PLAIN}" "${GREEN}✅ Синхронизирован с конфигурацией TCP Peek + Splice: ${target_config}${PLAIN}")"
+            reapply_sni_stack_from_env --yes
             ;;
         "xray-fallback")
             xray_sni_routes_fallback_notice
@@ -14033,19 +14028,19 @@ print_strict_sni_gate_summary() {
     if strict_sni_gate_enabled && ! strict_sni_gate_mode_supported "$mode"; then
         state="$(localized_text "${YELLOW}已保存，当前模式不生效${PLAIN}" "${YELLOW}Saved, inactive in the current mode${PLAIN}" "${YELLOW}Сохранён, не действует в текущем режиме${PLAIN}")"
     elif strict_sni_gate_enabled && strict_sni_gate_runtime_active "$mode"; then
-        state="$(localized_text "${GREEN}已在当前入口生效${PLAIN}" "${GREEN}Active on the current entry${PLAIN}" "${GREEN}Действует на текущем входе${PLAIN}")"
+        state="$(localized_text "${GREEN}已配置，入口服务运行中${PLAIN}" "${GREEN}Configured; entry service running${PLAIN}" "${GREEN}Настроен; служба входа работает${PLAIN}")"
     elif strict_sni_gate_enabled; then
-        state="$(localized_text "${RED}已保存，但未检测到入口生效${PLAIN}" "${RED}Saved, but not active on the entry${PLAIN}" "${RED}Сохранён, но не действует на входе${PLAIN}")"
+        state="$(localized_text "${RED}已保存，入口配置或服务待检查${PLAIN}" "${RED}Saved; check entry configuration and service${PLAIN}" "${RED}Сохранён; проверьте конфигурацию и службу входа${PLAIN}")"
     elif strict_sni_gate_runtime_active "$mode"; then
-        state="$(localized_text "${RED}保存值为关闭，但入口仍在拦截${PLAIN}" "${RED}Saved as disabled, but the entry is still blocking${PLAIN}" "${RED}В настройках отключён, но вход продолжает блокировку${PLAIN}")"
+        state="$(localized_text "${RED}保存值为关闭，入口配置仍为开启${PLAIN}" "${RED}Saved as disabled; entry configuration still enables filtering${PLAIN}" "${RED}В настройках отключён; конфигурация входа включает фильтрацию${PLAIN}")"
     else
         state="$(localized_text "${YELLOW}未启用${PLAIN}" "${YELLOW}Disabled${PLAIN}" "${YELLOW}Выключен${PLAIN}")"
     fi
     echo -e "$(localized_text "SNI 清洗（严格门禁）：${state}" "SNI filtering (strict gate): ${state}" "Фильтрация SNI (строгий контроль): ${state}")"
     echo -e "$(localized_text "当前入口模式：${mode}" "Current entry mode: ${mode}" "Текущий режим входа: ${mode}")"
-    echo -e "$(localized_text "自动放行的已登记 SNI：" "Automatically allowed registered SNIs:" "Автоматически разрешённые зарегистрированные SNI:")"
+    echo -e "$(localized_text "已登记 SNI（按保存配置）：" "Registered SNIs (saved configuration):" "Зарегистрированные SNI (сохранённая конфигурация):")"
     registered_443_snis | sed 's/^/  - /'
-    echo -e "$(localized_text "${YELLOW}边界：已登记 SNI 仍会进入后端；节点认证和 REALITY 回落限速必须继续保留。${PLAIN}" "${YELLOW}Boundary: registered SNIs still reach their backends. Keep node authentication and REALITY fallback rate limits in place.${PLAIN}" "${YELLOW}Граница защиты: зарегистрированные SNI по-прежнему доходят до бэкенда. Сохраняйте аутентификацию узлов и ограничения скорости REALITY fallback.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}SNI 可被仿冒；清洗不代替节点认证，REALITY 回落流量需单独限速。${PLAIN}" "${YELLOW}SNI can be spoofed. Filtering does not replace node authentication; REALITY fallback traffic needs separate rate limits.${PLAIN}" "${YELLOW}SNI можно подделать. Фильтрация не заменяет аутентификацию узлов; для REALITY fallback нужны отдельные лимиты.${PLAIN}")"
 }
 
 sync_strict_sni_gate_to_current_entry() {
@@ -14087,6 +14082,10 @@ set_strict_sni_gate() {
     if ! save_sni_stack_env; then
         STRICT_SNI_GATE="$previous"
         return 1
+    fi
+    if [[ "$mode" == "xray-fallback" && "$target" == "false" ]]; then
+        echo -e "$(localized_text "已清除保存的门禁开关；当前 Xray Fallback 入口无需重启。" "Saved gate setting disabled; no Xray Fallback restart needed." "Сохранённая настройка фильтра отключена; перезапуск Xray Fallback не требуется.")"
+        return 0
     fi
     if sync_strict_sni_gate_to_current_entry; then
         echo -e "$(localized_text "${GREEN}✅ 严格 SNI 门禁已保存并同步到当前入口。${PLAIN}" "${GREEN}✅ The strict SNI gate was saved and synchronized to the current entry.${PLAIN}" "${GREEN}✅ Строгий контроль SNI сохранён и применён к текущему входу.${PLAIN}")"
@@ -14257,12 +14256,12 @@ patch_reality_fallback_limits() {
     [[ "$inbound_id" =~ ^[0-9]+$ ]] || { echo -e "$(localized_text "${RED}入站 ID 无效。${PLAIN}" "${RED}Invalid inbound ID.${PLAIN}" "${RED}Недопустимый ID входящего подключения.${PLAIN}")"; return 1; }
 
     if [[ "$operation" == "apply" ]]; then
-        upload_after=$((10485760 + (RANDOM % 4194305) - 2097152))
-        upload_rate=$((1048576 + (RANDOM % 419431) - 209715))
-        upload_burst=$((5242880 + (RANDOM % 2097153) - 1048576))
-        download_after=$((10485760 + (RANDOM % 4194305) - 2097152))
-        download_rate=$((1048576 + (RANDOM % 419431) - 209715))
-        download_burst=$((5242880 + (RANDOM % 2097153) - 1048576))
+        upload_after=$((10485760 + ((RANDOM * 32768 + RANDOM) % 4194305) - 2097152))
+        upload_rate=$((1048576 + ((RANDOM * 32768 + RANDOM) % 419431) - 209715))
+        upload_burst=$((5242880 + ((RANDOM * 32768 + RANDOM) % 2097153) - 1048576))
+        download_after=$((10485760 + ((RANDOM * 32768 + RANDOM) % 4194305) - 2097152))
+        download_rate=$((1048576 + ((RANDOM * 32768 + RANDOM) % 419431) - 209715))
+        download_burst=$((5242880 + ((RANDOM * 32768 + RANDOM) % 2097153) - 1048576))
         echo -e "$(localized_text "将使用本次随机生成的回落限速参数（字节）：" "Randomized fallback limits for this operation (bytes):" "Случайные параметры ограничения fallback для этой операции (байты):")"
         echo "  upload:   afterBytes=${upload_after}, bytesPerSec=${upload_rate}, burstBytesPerSec=${upload_burst}"
         echo "  download: afterBytes=${download_after}, bytesPerSec=${download_rate}, burstBytesPerSec=${download_burst}"
@@ -14369,7 +14368,7 @@ manage_sni_stack_sites() {
         echo -e "$(localized_text "${GREEN}  3. 修改网站/反代后端${PLAIN}" "${GREEN}3. Edit a Web/reverse-proxy backend${PLAIN}" "${GREEN}3. Изменить бэкенд Web-сайта или обратного прокси${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  4. 删除网站/反代域名${PLAIN}" "${GREEN}4. Remove a Web domain/reverse proxy${PLAIN}" "${GREEN}4. Удалить Web-домен и обратный прокси${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  5. 管理域名 IP 白名单${PLAIN}       ${YELLOW}(只限制被选择的域名)${PLAIN}" "${GREEN}5. Manage domain IP allowlists (selected domains only)${PLAIN}" "${GREEN}5. Управление IP-белым списком доменов (только выбранные домены)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}" "${GREEN}6. Reapply configuration and restart Nginx/Caddy${PLAIN}" "${GREEN}6. Повторно применить конфигурацию и перезапустить Nginx/Caddy${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  6. 重新应用当前入口配置${PLAIN}" "${GREEN}6. Reapply current entry configuration${PLAIN}" "${GREEN}6. Повторно применить конфигурацию текущего входа${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  7. 443端口复用链路体检${PLAIN}" "${GREEN}7. Port 443 Reuse diagnostics${PLAIN}" "${GREEN}7. Диагностика повторного использования порта 443${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  8. 切换 Web 反代引擎${PLAIN}       ${YELLOW}(Caddy / Nginx 本地反代)${PLAIN}" "${GREEN}8. Switch the Web reverse-proxy engine (local Caddy/Nginx)${PLAIN}" "${GREEN}8. Сменить Web-движок обратного прокси (локальный Caddy/Nginx)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  9. 修改面板域名${PLAIN}" "${GREEN}9. Change the panel domain${PLAIN}" "${GREEN}9. Изменить домен панели${PLAIN}")"

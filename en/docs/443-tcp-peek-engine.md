@@ -46,7 +46,7 @@ public port `443`
   -> Nginx stream ssl_preread
   -> panel/site/sub SNI  -> Caddy/Nginx local Web reverse proxy TLS
   -> Xray/REALITY SNI   -> Xray/3x-ui local inbound
-  -> unknown SNI        -> Default Xray/REALITY backend
+  -> unknown SNI        -> Drop or forward according to SNI filtering
 ```
 
 This is the recommended long-term default. It supports the complete Web, REALITY, panel, subscription, allowlist, and rollback workflow.
@@ -93,7 +93,7 @@ TLS record
   -> hostname SNI
 ```
 
-The implementation will first peek about 4 KiB of data. If the ClientHello is not received completely, the peek buffer will continue to be expanded, up to 16 KiB, and controlled by `timeouts.peek`. The script writes `3s` by default. The parsed SNI will be uniformly converted to lowercase, and the dot at the end will be removed. For example, `Panel.Example.COM.` will become `panel.example.com`. If the data is not TLS ClientHello, the ClientHello is incomplete, there is no SNI, or the protocol itself does not contain SNI, the specific domain rule will not be hit, and subsequent processing will be based on the default backend.
+The initial peek buffer is about 4 KiB, capped at 16 KiB; `timeouts.peek` defaults to `3s`. SNI is lowercased and its trailing dot removed. Duplicate SNI, invalid names, and malformed extensions are not used for routing. With SNI filtering enabled, unknown or missing SNI and non-TLS connections are dropped; only when filtering is disabled do they reach the default Xray/REALITY backend. TCP Peek always closes connections that exceed `timeouts.peek` while waiting for ClientHello.
 
 This is why this solution is suitable for HTTPS/TLS/SNI traffic, but not suitable for diverting traffic based on HTTP path or plain text protocol content. After the TLS handshake, the application layer content has been encrypted, and `vpso-mux` cannot and cannot rely on it to determine the path.
 
@@ -108,7 +108,7 @@ The script generates `/etc/vps-optimize/vpso-mux.yaml` based on the Port 443 Reu
 | Old TCP/SNI local inbound records | Corresponds to local address and port | No |
 | Xray Inbound management record | Corresponds to the local Xray inbound address and port | No |
 | REALITY disguise SNI | Default Xray/REALITY local backend | No |
-| Miss SNI / None SNI / Not TLS | Default Xray/REALITY local backend | No |
+| Unknown SNI / No SNI / Non-TLS | Drop or forward to the default backend according to SNI filtering | No |
 
 When matching, first do the exact SNI match, and then do the wildcard domain match. Wildcards only match one level of subdomains. For example, `*.example.com` can match `a.example.com`, but will not match `a.b.example.com`. If a web route is configured with a whitelist, `vpso-mux` will check the client source IP before routing; if it is not in the whitelist, the connection will be intercepted directly. Xray inbound connections, REALITY SNI and the default backend do not use the web whitelist to avoid accidentally damaging node traffic.
 
@@ -181,7 +181,7 @@ Core differences from Nginx Stream:
 | SNI inspection | `ssl_preread` | Parse ClientHello with `MSG_PEEK` |
 | TLS processing | Do not terminate TLS | Do not terminate TLS |
 | Certificate | Current web reverse proxy engine handles web/panel certificates | Current web reverse proxy engine handles web/panel certificates |
-| Unknown SNI | Default Xray/REALITY backend | Default Xray/REALITY backend |
+| Unknown SNI | Drop or forward according to SNI filtering | Drop or forward according to SNI filtering |
 | Forwarding | Nginx stream proxy | splice with copy fallback |
 
 View status and logs:
@@ -271,13 +271,13 @@ ss -lntup | grep ':1443'
 systemctl status xray --no-pager
 ```
 
-The default backend will be used when there is no TLS, no SNI, incomplete ClientHello or the client protocol does not include SNI. This is not a TLS termination failure because neither Nginx Stream nor `vpso-mux` decrypts and does not terminate TLS.
+With SNI filtering enabled, unknown or missing SNI and non-TLS connections are dropped; only when filtering is disabled do they reach the default Xray/REALITY backend. TCP Peek always closes connections that exceed `timeouts.peek` while waiting for ClientHello.
 
 TCP Peek Common boundaries:
 
 | phenomenon | Reason | processing direction |
 | --- | --- | --- |
-| `no_sni` times increased | The client does not have SNI, or the connection is not standard TLS ClientHello | Confirm the client node domain/SNI settings; non-TLS traffic will go through the default backend |
+| `no_sni` times increased | The client does not have SNI, or the connection is not standard TLS ClientHello | Check the client SNI and filtering setting; timed-out connections are always closed |
 | Default backend hit | SNI does not match any route, or SNI fails to parse | Check the routes in `/etc/vps-optimize/vpso-mux.yaml` and the actual client SNI |
 | Web domain blocked | This Web route is configured with a whitelist, and the source IP is not within the range. | Check the Web whitelist of the corresponding domain, do not regard it as the Xray node limit |
 | `copy_fallback` increase | splice is not used or is rolled back during operation copy | Generally, it does not affect availability; if you need to observe performance stably, you can keep the default fallback first. |

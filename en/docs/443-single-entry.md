@@ -303,13 +303,13 @@ The DNS record, Web domain, backend, external URL, and verification steps for a 
 
 ### Manage the Web IP allowlist
 
-The Web allowlist applies to websites and the panel, not REALITY node traffic. In `nginx-stream` or `tcp-peek`, use `[4] -> [5 Domain IP allowlist]`. From Web domain management, use:
+The Web allowlist applies to websites and the panel, not REALITY node traffic. In `nginx-stream` or `tcp-peek`, use:
 
 ```text
 Main menu [19 Port 443 Reuse Management] -> [8 Manage Web domains / reverse proxy] -> [5 Manage domain IP allowlist]
 ```
 
-For `xray-fallback`, regardless of whether Caddy or Nginx is the local Web reverse proxy, the allowlist only protects Web domains. It is not REALITY authentication.
+`xray-fallback` does not support Web allowlists: the local Caddy/Nginx proxy cannot reliably retain the client source IP after Xray fallback. Use Nginx Stream or TCP Peek for Web allowlists.
 
 ## SNI filtering and REALITY fallback protection
 
@@ -318,7 +318,7 @@ When a CDN domain is used as the REALITY SNI, enable both controls where availab
 1. **SNI filtering**: only registered Web domains, SNI routes, and the REALITY SNI are accepted; unknown SNI is dropped.
 2. **Fallback rate limiting**: only connections that fail REALITY verification and are sent to fallback are limited.
 
-Nginx Stream and TCP Peek support both controls. Xray Fallback has no front SNI filter, but it can still use fallback rate limiting. SNI filtering does not replace REALITY keys or normal client verification, and it does not interrupt a correctly configured node.
+Nginx Stream and TCP Peek support both controls. Xray Fallback has no front SNI filter, but it can still use fallback rate limiting. Registered SNIs can be spoofed. Filtering does not replace REALITY keys or UUID authentication, nor does it eliminate fallback traffic for allowed SNIs.
 
 Open the controls here:
 
@@ -328,7 +328,7 @@ Main menu [19 Port 443 Reuse Management] -> [17 SNI filtering / REALITY protecti
 
 The useful actions are:
 
-1. `[1] Enable strict SNI gate`: allow only registered SNIs in Nginx Stream / TCP Peek.
+1. `[1] Enable SNI filtering`: allow only registered SNIs in Nginx Stream / TCP Peek. Initial setup defaults to enabled; existing configurations retain their setting.
 2. `[3] Resynchronize the current SNI list`: run this after adding a domain or route.
 3. `[4] Set REALITY fallback rate limits`: limit only failed-authentication fallback connections; the script generates randomized values and asks for confirmation.
 4. `[5] Clear REALITY fallback rate limits`: restore Xray's default behavior; confirmation is required.
@@ -337,7 +337,7 @@ Fallback limits support only 3x-ui with a local SQLite database. When PostgreSQL
 
 Changing fallback limits restarts the panel or Xray service. Do it outside important transfers and keep the generated backup. For a non-CDN REALITY target, fallback limiting is usually unnecessary.
 
-The strict SNI list is generated from registered Web domains, SNI routes, and the REALITY SNI. After adding a domain or changing a node SNI, save the configuration and run `[3] Resynchronize the current SNI list`; otherwise the new name may be rejected as unknown. This filter does not verify UUIDs, keys, or other REALITY credentials.
+The strict SNI list is generated from registered Web domains, SNI routes, and the REALITY SNI. After changing an SNI, save and run `[3] Resynchronize the current SNI list`. Synchronization backs up, checks, and reapplies the entry, attempting rollback on failure. For an inbound with several `serverNames`, add a route for each name pointing to the same local address and port. “Configured; entry service running” reports configuration and service checks, not verified public filtering.
 
 ### Configure multiple REALITY inbounds
 

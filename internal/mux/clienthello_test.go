@@ -40,6 +40,44 @@ func TestExtractSNI(t *testing.T) {
 	}
 }
 
+func TestServerNameExtensionRejectsAmbiguousNames(t *testing.T) {
+	for _, name := range []string{"*.example.com", " panel.example.com", "panel.example.com "} {
+		entry := append([]byte{0, 0, byte(len(name))}, name...)
+		data := append([]byte{0, byte(len(entry))}, entry...)
+		if _, err := parseServerNameExtension(data); !errors.Is(err, ErrInvalidClientHello) {
+			t.Fatalf("name %q: got %v, want invalid ClientHello", name, err)
+		}
+	}
+	name := "panel.example.com"
+	entry := append([]byte{0, 0, byte(len(name))}, name...)
+	for _, suffix := range [][]byte{entry, {0}} {
+		data := append([]byte{0, byte(len(entry) + len(suffix))}, entry...)
+		data = append(data, suffix...)
+		if _, err := parseServerNameExtension(data); !errors.Is(err, ErrInvalidClientHello) {
+			t.Fatalf("duplicate or truncated name: got %v", err)
+		}
+	}
+}
+
+func TestExtractSNIValidatesExtensionsAfterServerName(t *testing.T) {
+	hello := makeClientHello(t, "panel.example.com")
+	pos := 9 + 34
+	pos += 1 + int(hello[pos])
+	pos += 2 + int(hello[pos])<<8 + int(hello[pos+1])
+	pos += 1 + int(hello[pos])
+	for _, suffix := range [][]byte{{0}, {0, 0, 0, 0}} {
+		data := append(append([]byte(nil), hello...), suffix...)
+		for _, offset := range []int{3, 7, pos} {
+			length := int(hello[offset])<<8 | int(hello[offset+1])
+			length += len(suffix)
+			data[offset], data[offset+1] = byte(length>>8), byte(length)
+		}
+		if _, err := ExtractSNI(data); !errors.Is(err, ErrInvalidClientHello) {
+			t.Fatalf("trailing malformed or duplicate SNI extension: got %v", err)
+		}
+	}
+}
+
 func TestExtractSNIWithoutSNI(t *testing.T) {
 	hello := makeClientHello(t, "")
 	_, err := ExtractSNI(hello)

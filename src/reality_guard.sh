@@ -101,19 +101,19 @@ print_strict_sni_gate_summary() {
     if strict_sni_gate_enabled && ! strict_sni_gate_mode_supported "$mode"; then
         state="$(localized_text "${YELLOW}已保存，当前模式不生效${PLAIN}" "${YELLOW}Saved, inactive in the current mode${PLAIN}" "${YELLOW}Сохранён, не действует в текущем режиме${PLAIN}")"
     elif strict_sni_gate_enabled && strict_sni_gate_runtime_active "$mode"; then
-        state="$(localized_text "${GREEN}已在当前入口生效${PLAIN}" "${GREEN}Active on the current entry${PLAIN}" "${GREEN}Действует на текущем входе${PLAIN}")"
+        state="$(localized_text "${GREEN}已配置，入口服务运行中${PLAIN}" "${GREEN}Configured; entry service running${PLAIN}" "${GREEN}Настроен; служба входа работает${PLAIN}")"
     elif strict_sni_gate_enabled; then
-        state="$(localized_text "${RED}已保存，但未检测到入口生效${PLAIN}" "${RED}Saved, but not active on the entry${PLAIN}" "${RED}Сохранён, но не действует на входе${PLAIN}")"
+        state="$(localized_text "${RED}已保存，入口配置或服务待检查${PLAIN}" "${RED}Saved; check entry configuration and service${PLAIN}" "${RED}Сохранён; проверьте конфигурацию и службу входа${PLAIN}")"
     elif strict_sni_gate_runtime_active "$mode"; then
-        state="$(localized_text "${RED}保存值为关闭，但入口仍在拦截${PLAIN}" "${RED}Saved as disabled, but the entry is still blocking${PLAIN}" "${RED}В настройках отключён, но вход продолжает блокировку${PLAIN}")"
+        state="$(localized_text "${RED}保存值为关闭，入口配置仍为开启${PLAIN}" "${RED}Saved as disabled; entry configuration still enables filtering${PLAIN}" "${RED}В настройках отключён; конфигурация входа включает фильтрацию${PLAIN}")"
     else
         state="$(localized_text "${YELLOW}未启用${PLAIN}" "${YELLOW}Disabled${PLAIN}" "${YELLOW}Выключен${PLAIN}")"
     fi
     echo -e "$(localized_text "SNI 清洗（严格门禁）：${state}" "SNI filtering (strict gate): ${state}" "Фильтрация SNI (строгий контроль): ${state}")"
     echo -e "$(localized_text "当前入口模式：${mode}" "Current entry mode: ${mode}" "Текущий режим входа: ${mode}")"
-    echo -e "$(localized_text "自动放行的已登记 SNI：" "Automatically allowed registered SNIs:" "Автоматически разрешённые зарегистрированные SNI:")"
+    echo -e "$(localized_text "已登记 SNI（按保存配置）：" "Registered SNIs (saved configuration):" "Зарегистрированные SNI (сохранённая конфигурация):")"
     registered_443_snis | sed 's/^/  - /'
-    echo -e "$(localized_text "${YELLOW}边界：已登记 SNI 仍会进入后端；节点认证和 REALITY 回落限速必须继续保留。${PLAIN}" "${YELLOW}Boundary: registered SNIs still reach their backends. Keep node authentication and REALITY fallback rate limits in place.${PLAIN}" "${YELLOW}Граница защиты: зарегистрированные SNI по-прежнему доходят до бэкенда. Сохраняйте аутентификацию узлов и ограничения скорости REALITY fallback.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}SNI 可被仿冒；清洗不代替节点认证，REALITY 回落流量需单独限速。${PLAIN}" "${YELLOW}SNI can be spoofed. Filtering does not replace node authentication; REALITY fallback traffic needs separate rate limits.${PLAIN}" "${YELLOW}SNI можно подделать. Фильтрация не заменяет аутентификацию узлов; для REALITY fallback нужны отдельные лимиты.${PLAIN}")"
 }
 
 sync_strict_sni_gate_to_current_entry() {
@@ -155,6 +155,10 @@ set_strict_sni_gate() {
     if ! save_sni_stack_env; then
         STRICT_SNI_GATE="$previous"
         return 1
+    fi
+    if [[ "$mode" == "xray-fallback" && "$target" == "false" ]]; then
+        echo -e "$(localized_text "已清除保存的门禁开关；当前 Xray Fallback 入口无需重启。" "Saved gate setting disabled; no Xray Fallback restart needed." "Сохранённая настройка фильтра отключена; перезапуск Xray Fallback не требуется.")"
+        return 0
     fi
     if sync_strict_sni_gate_to_current_entry; then
         echo -e "$(localized_text "${GREEN}✅ 严格 SNI 门禁已保存并同步到当前入口。${PLAIN}" "${GREEN}✅ The strict SNI gate was saved and synchronized to the current entry.${PLAIN}" "${GREEN}✅ Строгий контроль SNI сохранён и применён к текущему входу.${PLAIN}")"
@@ -325,12 +329,12 @@ patch_reality_fallback_limits() {
     [[ "$inbound_id" =~ ^[0-9]+$ ]] || { echo -e "$(localized_text "${RED}入站 ID 无效。${PLAIN}" "${RED}Invalid inbound ID.${PLAIN}" "${RED}Недопустимый ID входящего подключения.${PLAIN}")"; return 1; }
 
     if [[ "$operation" == "apply" ]]; then
-        upload_after=$((10485760 + (RANDOM % 4194305) - 2097152))
-        upload_rate=$((1048576 + (RANDOM % 419431) - 209715))
-        upload_burst=$((5242880 + (RANDOM % 2097153) - 1048576))
-        download_after=$((10485760 + (RANDOM % 4194305) - 2097152))
-        download_rate=$((1048576 + (RANDOM % 419431) - 209715))
-        download_burst=$((5242880 + (RANDOM % 2097153) - 1048576))
+        upload_after=$((10485760 + ((RANDOM * 32768 + RANDOM) % 4194305) - 2097152))
+        upload_rate=$((1048576 + ((RANDOM * 32768 + RANDOM) % 419431) - 209715))
+        upload_burst=$((5242880 + ((RANDOM * 32768 + RANDOM) % 2097153) - 1048576))
+        download_after=$((10485760 + ((RANDOM * 32768 + RANDOM) % 4194305) - 2097152))
+        download_rate=$((1048576 + ((RANDOM * 32768 + RANDOM) % 419431) - 209715))
+        download_burst=$((5242880 + ((RANDOM * 32768 + RANDOM) % 2097153) - 1048576))
         echo -e "$(localized_text "将使用本次随机生成的回落限速参数（字节）：" "Randomized fallback limits for this operation (bytes):" "Случайные параметры ограничения fallback для этой операции (байты):")"
         echo "  upload:   afterBytes=${upload_after}, bytesPerSec=${upload_rate}, burstBytesPerSec=${upload_burst}"
         echo "  download: afterBytes=${download_after}, bytesPerSec=${download_rate}, burstBytesPerSec=${download_burst}"

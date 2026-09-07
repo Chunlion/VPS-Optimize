@@ -179,12 +179,7 @@ func matchRouteAllowed(route *Route, clientIP netip.Addr) Match {
 	if len(route.Whitelist) == 0 {
 		return match
 	}
-	if !clientIP.IsValid() {
-		match.Allowed = false
-		match.Blocked = true
-		return match
-	}
-	if IPAllowed(clientIP, route.Whitelist) {
+	if clientIP.IsValid() && IPAllowed(clientIP, route.Whitelist) {
 		return match
 	}
 	match.Allowed = false

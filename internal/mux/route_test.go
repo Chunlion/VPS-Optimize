@@ -108,6 +108,16 @@ func TestRouteWhitelistBlocksClient(t *testing.T) {
 	}
 }
 
+func TestRouteWhitelistRejectsInvalidClientAddress(t *testing.T) {
+	for _, blackhole := range []string{"", "127.0.0.1:9"} {
+		route := Route{Name: "panel", Backend: "127.0.0.1:8443", Whitelist: []string{"203.0.113.1"}, Blackhole: blackhole}
+		match := matchRouteAllowed(&route, netip.Addr{})
+		if match.Allowed || !match.Blocked || match.Backend != blackhole {
+			t.Fatalf("invalid client address reached protected backend: %+v", match)
+		}
+	}
+}
+
 func TestDuplicateSNIConflict(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Listen.TCP = []string{"127.0.0.1:443"}

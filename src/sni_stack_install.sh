@@ -932,7 +932,7 @@ issue_and_install_cert_for_domain() {
 }
 
 save_sni_stack_env() {
-    mkdir -p /etc/vps-optimize
+    mkdir -p /etc/vps-optimize || return 1
     local entry_mode web_proxy_engine strict_sni_gate site_domains_csv site_backend_addrs_csv site_backend_ports_csv
     local tcp_route_snis_csv tcp_route_addrs_csv tcp_route_ports_csv
     local sni_ip_whitelist_domains_csv sni_ip_whitelist_ranges_pipe
@@ -956,7 +956,7 @@ save_sni_stack_env() {
     tcp_route_ports_csv=$(IFS=','; echo "${TCP_ROUTE_PORTS[*]}")
     sni_ip_whitelist_domains_csv=$(IFS=','; echo "${SNI_IP_WHITELIST_DOMAINS[*]}")
     sni_ip_whitelist_ranges_pipe=$(IFS='|'; echo "${SNI_IP_WHITELIST_RANGES[*]}")
-    cat <<EOF > /etc/vps-optimize/sni-stack.env
+    cat <<EOF > /etc/vps-optimize/sni-stack.env || return 1
 ENTRY_MODE='${entry_mode}'
 STRICT_SNI_GATE='${strict_sni_gate}'
 WEB_PROXY_ENGINE='${web_proxy_engine}'
@@ -1189,7 +1189,7 @@ apply_sni_stack_runtime_config() {
     stop_public_443_entry_services_for_target "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "停止旧公网 443 入口服务失败" "Stop the old public port 443 entry service failed" "Остановить старую публичную сеть 443, служба входа не удалась")"; return 1; }
     apply_entry_mode_by_name "$current_mode" "$backup_dir" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式 ${current_mode} 应用失败" "Entry mode ${current_mode} application failed" "Режим входа в приложение ${current_mode} не выполнен.")"; return 1; }
     ENTRY_MODE="$current_mode"
-    save_sni_stack_env
+    save_sni_stack_env || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "保存入口配置失败" "Failed to save entry configuration" "Не удалось сохранить конфигурацию входа")"; return 1; }
     write_single_443_engine_state "$(entry_mode_engine_name "$current_mode")" "$backup_dir"
     generate_caddy_cf_manifest
 }

@@ -43,7 +43,7 @@ Nginx Stream 是默认稳定模式。公网 `443` 由 Nginx stream 监听，使�
   -> Nginx stream ssl_preread
   -> panel/site/sub SNI  -> Caddy/Nginx 本地 Web 反代 TLS
   -> Xray/REALITY SNI   -> Xray/3x-ui 本地入站
-  -> unknown SNI        -> 默认 Xray/REALITY 后端
+  -> unknown SNI        -> 按 SNI 清洗开关丢弃或转发
 ```
 
 这个实现覆盖面最完整，适合作为长期默认入口。它负责稳定接入 Web 反代引擎、REALITY、面板、订阅、网站、Web 白名单和回滚流程。
@@ -90,7 +90,7 @@ TLS record
   -> hostname SNI
 ```
 
-实现上会先 peek 约 4 KiB 数据。如果 ClientHello 没收完整，会继续扩大 peek 缓冲，最多到 16 KiB，并受 `timeouts.peek` 控制，脚本默认写入 `3s`。解析出的 SNI 会统一转成小写，并去掉末尾的点，例如 `Panel.Example.COM.` 会变成 `panel.example.com`。如果数据不是 TLS ClientHello、ClientHello 不完整、没有 SNI，或者协议本身不带 SNI，就不会命中特定域名规则，后续按默认后端处理。
+实现上先 peek 约 4 KiB，缓冲最多 16 KiB，`timeouts.peek` 默认为 `3s`。SNI 转为小写并去掉末尾的点；重复 SNI、非法名称或畸形扩展不会用于路由。 SNI 清洗开启时，未知、无 SNI 和非 TLS 连接直接丢弃；关闭时才转发到默认 Xray/REALITY 后端。TCP Peek 等待 ClientHello 超过 `timeouts.peek` 时始终关闭连接。
 
 这也是为什么本方案适合 HTTPS/TLS/SNI 流量，不适合按 HTTP path 或明文协议内容分流。到了 TLS 握手之后，应用层内容已经加密，`vpso-mux` 不会也不能靠它判断路径。
 
@@ -105,7 +105,7 @@ TLS record
 | 旧 TCP/SNI 本地入站记录 | 对应本地地址和端口 | 否 |
 | Xray 入站管理记录 | 对应本地 Xray 入站地址和端口 | 否 |
 | REALITY 伪装 SNI | 默认 Xray/REALITY 本地后端 | 否 |
-| 未命中 SNI / 无 SNI / 非 TLS | 默认 Xray/REALITY 本地后端 | 否 |
+| 未命中 SNI / 无 SNI / 非 TLS | 按 SNI 清洗开关丢弃或转发到默认后端 | 否 |
 
 匹配时先做精确 SNI 匹配，再做通配域名匹配。通配只匹配一层子域名，例如 `*.example.com` 可以匹配 `a.example.com`，不会匹配 `a.b.example.com`。如果某个 Web 路由配置了白名单，`vpso-mux` 会在分流前检查客户端源 IP；不在白名单内时直接拦截该连接。Xray 入站、REALITY SNI 和默认后端不应用 Web 白名单，避免把节点流量误伤。
 
@@ -178,7 +178,7 @@ TCP Peek 生成的 `vpso-mux.yaml` 会按脚本保存的公网监听地址只写
 | SNI 获取 | `ssl_preread` | `MSG_PEEK` 解析 ClientHello |
 | TLS 处理 | 不终止 TLS | 不终止 TLS |
 | 证书 | 当前 Web 反代引擎处理 Web/面板证书 | 当前 Web 反代引擎处理 Web/面板证书 |
-| 未知 SNI | 默认 Xray/REALITY 后端 | 默认 Xray/REALITY 后端 |
+| 未知 SNI | 按 SNI 清洗开关丢弃或转发 | 按 SNI 清洗开关丢弃或转发 |
 | 转发 | Nginx stream proxy | splice，失败回退 copy |
 
 查看状态和日志：
@@ -268,13 +268,13 @@ ss -lntup | grep ':1443'
 systemctl status xray --no-pager
 ```
 
-非 TLS、无 SNI、ClientHello 不完整或客户端协议不带 SNI 时会走默认后端。这不是 TLS 终止失败，因为 Nginx Stream 和 `vpso-mux` 都不解密、不终止 TLS。
+SNI 清洗开启时，未知、无 SNI 和非 TLS 连接直接丢弃；关闭时才转发到默认 Xray/REALITY 后端。TCP Peek 等待 ClientHello 超过 `timeouts.peek` 时始终关闭连接。
 
 TCP Peek 常见边界：
 
 | 现象 | 原因 | 处理方向 |
 | --- | --- | --- |
-| `no_sni` 次数增加 | 客户端没有带 SNI，或连接不是标准 TLS ClientHello | 确认客户端节点域名/SNI 设置；非 TLS 流量会走默认后端 |
+| `no_sni` 次数增加 | 客户端没有带 SNI，或连接不是标准 TLS ClientHello | 确认客户端 SNI 和清洗开关；超时连接始终关闭 |
 | 命中了默认后端 | SNI 没有匹配任何 route，或 SNI 解析失败 | 检查 `/etc/vps-optimize/vpso-mux.yaml` 里的 routes 和实际客户端 SNI |
 | Web 域名被拦截 | 该 Web route 配了白名单，源 IP 不在范围内 | 检查对应域名的 Web 白名单，不要把它当成 Xray 节点限制 |
 | `copy_fallback` 增加 | splice 未使用或运行中回退 copy | 一般不影响可用性；如需稳定观察性能，可先保持默认回退 |

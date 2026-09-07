@@ -2975,7 +2975,7 @@ grep -q 'xray-fallback 模式不支持 Web 白名单' dist/vps.sh
 grep -q '3. 查看 / 编辑 Compose 配置' dist/vps.sh
 grep -q 'edit_applied_config_file "$compose_file" "compose"' dist/vps.sh
 assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "Config paths doc must list the global applied-config editor."
-assert_file_contains "docs/443-single-entry.md" '[4] -> [5 域名 IP 白名单]' "443 doc must describe the combined Caddy/Nginx whitelist menu."
+assert_file_not_contains "docs/443-single-entry.md" '[19] -> [9' "443 doc must not point to the stale direct whitelist menu."
 assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "443 doc must describe the current 443 Web whitelist menu path."
 assert_file_contains "src/caddy_proxy.sh" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Nginx standalone whitelist guidance must point users to the current 443 Web whitelist submenu path."
 assert_file_contains "src/caddy_maintenance.sh" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Caddy standalone whitelist guidance must point users to the current 443 Web whitelist submenu path."
@@ -2984,7 +2984,7 @@ assert_file_not_contains "src/caddy_proxy.sh" '[19] -> [9]' "Nginx standalone wh
 assert_file_not_contains "src/caddy_maintenance.sh" '[19] -> [9]' "Caddy standalone whitelist guidance must not point users to the stale direct [19] -> [9] path."
 assert_file_not_contains "src/caddy_maintenance.sh" '[19] -> [9]' "Caddy whitelist guidance must not point users to the stale direct [19] -> [9] path."
 assert_file_contains "docs/443-single-entry.md" '[8 切换 Web 反代引擎]' "443 doc must document switching the Web reverse proxy engine."
-assert_file_contains "docs/443-single-entry.md" '`xray-fallback`，无论使用 Caddy 还是 Nginx 本地 Web 反代' "443 doc must prohibit Web whitelist usage for every xray-fallback Web engine."
+assert_file_contains "docs/443-single-entry.md" '`xray-fallback` 不支持 Web 白名单' "443 doc must prohibit Web whitelist usage for every xray-fallback Web engine."
 assert_file_contains "docs/443-tcp-peek-engine.md" '`xray-fallback` 无论选择 Caddy 还是 Nginx 本地 Web 反代' "TCP Peek doc must describe the xray-fallback Web whitelist boundary."
 assert_file_contains "docs/443-tcp-peek-engine.md" 'Web 反代引擎可选择 Caddy 或 Nginx' "TCP Peek doc must describe the shared Caddy/Nginx Web proxy engine."
 subscription_public_hint='公网 HTTPS 访问建议：未启用 443端口复用时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443端口复用时，请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
@@ -3196,5 +3196,40 @@ source src/xray_sni_routes.sh
 )
 rm -f "$reality_guard_smoke_db"
 rmdir "$reality_guard_smoke_tmp"
+
+(
+    source src/tcp_peek_engine.sh
+    STRICT_SNI_GATE=true
+    validate_strict_sni_gate_reality_server_names() { return 1; }
+    preflight_tcppeek_before_cutover() { echo 'UNEXPECTED_PREFLIGHT'; }
+    for mode in nginx-stream tcp-peek; do
+        if preflight_entry_mode_before_cutover "$mode" >/dev/null; then
+            echo "Unregistered REALITY SNI must stop entry preflight." >&2
+            exit 1
+        fi
+    done
+    preflight_entry_mode_before_cutover xray-fallback
+)
+
+(
+    STRICT_SNI_GATE=true
+    saved_state=''
+    load_sni_stack_env() { return 0; }
+    get_entry_mode() { echo xray-fallback; }
+    confirm_danger() { return 0; }
+    save_sni_stack_env() { saved_state="$STRICT_SNI_GATE"; }
+    sync_strict_sni_gate_to_current_entry() { return 1; }
+    set_strict_sni_gate false >/dev/null
+    [[ "$saved_state" == false ]]
+)
+
+(
+    load_sni_stack_env() { return 0; }
+    get_entry_mode() { echo tcp-peek; }
+    reapply_sni_stack_from_env() { [[ "$1" == --yes ]] && return 17; }
+    result=0
+    sync_xray_sni_routes_to_entry_mode >/dev/null || result=$?
+    [[ "$result" == 17 ]]
+)
 
 echo "Smoke tests passed."

@@ -518,7 +518,11 @@ print_sni_stack_preview() {
         echo -e "$(localized_text "提示：脚本不会创建或修改 3x-ui/Xray 入站内部配置。" "Tip: The script does not create or modify the 3x-ui/Xray inbound internal configuration." "Совет: Скрипт не создает и не изменяет входящую внутреннюю конфигурацию 3x-ui/Xray.")"
     else
         echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
-        echo -e "$(localized_text "默认/未知 SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "Default/Unknown SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "По умолчанию/Неизвестно SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}")"
+        if strict_sni_gate_enabled; then
+            echo -e "$(localized_text "未知或无 SNI：丢弃" "Unknown or missing SNI: drop" "Неизвестный или отсутствующий SNI: отклонить")"
+        else
+            echo -e "$(localized_text "默认/未知 SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "Default/Unknown SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "По умолчанию/Неизвестно SNI -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}")"
+        fi
     fi
     echo -e ""
     echo -e "$(localized_text "${YELLOW}确认后会备份现有配置，并按所选 ENTRY_MODE 生成入口配置。${PLAIN}" "${YELLOW}After confirms, it will back up the existing configuration and generate the entry configuration according to the selected ENTRY_MODE.${PLAIN}" "${YELLOW}После подтверждения он создаст резервную копию существующей конфигурации и сгенерирует конфигурацию записи в соответствии с выбранным ENTRY_MODE.${PLAIN}")"
@@ -893,8 +897,9 @@ load_sni_stack_env() {
         echo -e "$(localized_text "${RED}❌ 未找到 ${env_file}，请运行主菜单 [19] -> [2] 安装 443 入口。${PLAIN}" "${RED}❌ ${env_file} was not found. Run main menu [19] -> [2] to install the 443 entry.${PLAIN}" "${RED}❌ Файл ${env_file} не найден. Запустите главное меню [19] -> [2], чтобы установить вход 443.${PLAIN}")"
         return 1
     fi
+    STRICT_SNI_GATE=false
     # shellcheck disable=SC1090
-    source "$env_file"
+    source "$env_file" || return 1
     ENTRY_MODE=$(get_entry_mode)
     STRICT_SNI_GATE=$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")
     WEB_PROXY_ENGINE=$(normalize_web_proxy_engine "${WEB_PROXY_ENGINE:-caddy}" 2>/dev/null || echo "caddy")

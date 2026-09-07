@@ -109,12 +109,6 @@ add_xray_sni_route() {
         echo -e "$(localized_text "${RED}❌ 入站端口不能复用公网入口、面板或订阅服务端口。${PLAIN}" "${RED}❌ The inbound port cannot reuse the public entry, panel or subscription service port.${PLAIN}" "${RED}❌ Входящий порт не может повторно использовать порт входа в публичную сеть, панель или порт службы подписки.${PLAIN}")"
         return 1
     fi
-    existing=$(xray_sni_route_port_conflict "$route_addr" "$route_port" || true)
-    if [[ -n "$existing" ]]; then
-        echo -e "$(localized_text "${RED}❌ ${route_addr}:${route_port} 已被规则 ${existing} 使用。${PLAIN}" "${RED}❌ ${route_addr}:${route_port} is already used by rule ${existing}.${PLAIN}" "${RED}❌ ${route_addr}:${route_port} уже используется правилом ${existing}.${PLAIN}")"
-        return 1
-    fi
-
     local listen_line
     print_xray_route_port_status "$route_sni" "$route_addr" "$route_port"
     listen_line=$(xray_route_listen_line_by_addr_port "$route_addr" "$route_port")
@@ -208,22 +202,7 @@ sync_xray_sni_routes_to_entry_mode() {
             reapply_sni_stack_from_env --yes
             ;;
         "tcp-peek")
-            local tmp_config target_config
-            echo -e "$(localized_text "${CYAN}正在同步 Xray 入站分流规则到 TCP Peek + Splice 配置...${PLAIN}" "${CYAN}Is synchronizing Xray Inbound connection routing rules to TCP Peek + Splice configuration...${PLAIN}" "${CYAN}синхронизирует правила входящей рассылки Xray с конфигурацией TCP Peek + Splice...${PLAIN}")"
-            target_config=$(vpso_mux_config_path)
-            tmp_config="${target_config}.tmp.$$"
-            write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_config" || return 1
-            if ! run_vpso_mux_config_check "$tmp_config"; then
-                quarantine_path "$tmp_config" "/etc/vps-optimize/quarantine/vpso-mux" >/dev/null 2>&1 || true
-                return 1
-            fi
-            mv "$tmp_config" "$target_config" || { echo -e "$(localized_text "${RED}❌ TCP Peek + Splice 配置替换失败：${target_config}${PLAIN}" "${RED}❌ TCP Peek + Splice Configuration replacement failed: ${target_config}${PLAIN}" "${RED}❌ TCP Peek + Splice Не удалось заменить конфигурацию: ${target_config}${PLAIN}")"; return 1; }
-            if systemctl is-active --quiet vpso-mux 2>/dev/null; then
-                systemctl restart vpso-mux || { print_vpso_mux_failure_context "$NGINX_LISTEN_PORT"; echo -e "$(localized_text "${RED}❌ vpso-mux 重启失败，请查看上面的日志。${PLAIN}" "${RED}❌ vpso-mux Restart failed, please check the log above.${PLAIN}" "${RED}❌ vpso-mux Не удалось перезапустить, проверьте журнал выше.${PLAIN}")"; return 1; }
-            else
-                echo -e "$(localized_text "${YELLOW}vpso-mux 分流器当前未运行，已仅生成并校验配置文件。${PLAIN}" "${YELLOW}The vpso-mux routing is not currently running, only the configuration file has been generated and verified.${PLAIN}" "${YELLOW}маршрутизация vpso-mux в настоящее время не работает, только файл конфигурации создан и проверен.${PLAIN}")"
-            fi
-            echo -e "$(localized_text "${GREEN}✅ 已同步到 TCP Peek + Splice 配置：${target_config}${PLAIN}" "${GREEN}✅ Synced to TCP Peek + Splice Configuration: ${target_config}${PLAIN}" "${GREEN}✅ Синхронизирован с конфигурацией TCP Peek + Splice: ${target_config}${PLAIN}")"
+            reapply_sni_stack_from_env --yes
             ;;
         "xray-fallback")
             xray_sni_routes_fallback_notice

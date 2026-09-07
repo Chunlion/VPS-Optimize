@@ -303,13 +303,13 @@ TCP Peek 的优点是分流组件更轻量，并且能在连接早期按 SNI 处
 
 ### 管理域名 IP 白名单
 
-Web 白名单只限制网站和面板域名，不限制 REALITY 节点流量。入口模式为 `nginx-stream` 或 `tcp-peek` 时，可在入口菜单选择 `[4] -> [5 域名 IP 白名单]`；管理 Web 域名时也可使用：
+Web 白名单只限制网站和面板域名，不限制 REALITY 节点流量。入口模式为 `nginx-stream` 或 `tcp-peek` 时，使用以下入口：
 
 ```text
 主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]
 ```
 
-`xray-fallback`，无论使用 Caddy 还是 Nginx 本地 Web 反代，都只把白名单用于 Web 域名，不能把它当作 REALITY 用户鉴权。
+`xray-fallback` 不支持 Web 白名单：Xray 回落到本地 Caddy/Nginx 后，无法可靠保留客户端源 IP。需要白名单时使用 Nginx Stream 或 TCP Peek。
 
 ## SNI 清洗与 REALITY 回落防护
 
@@ -318,7 +318,7 @@ Web 白名单只限制网站和面板域名，不限制 REALITY 节点流量。�
 1. **SNI 清洗**：只允许已经登记的 Web 域名、SNI 路由和 REALITY SNI 进入入口；未知 SNI 直接丢弃。
 2. **回落限速**：只限制没有通过 REALITY 验证、又被回落处理的连接。
 
-Nginx Stream 和 TCP Peek 支持这两项保护；Xray Fallback 没有前置的 SNI 清洗，但仍可使用回落限速。SNI 清洗不会代替 REALITY 密钥、UUID 等正常验证，也不会影响已经正确配置的节点。
+Nginx Stream 和 TCP Peek 支持这两项保护；Xray Fallback 没有前置的 SNI 清洗，但仍可使用回落限速。已登记 SNI 可被仿冒，SNI 清洗不代替 REALITY 密钥、UUID 等认证，也不能消除已放行 SNI 的回落流量。
 
 在脚本中打开：
 
@@ -328,7 +328,7 @@ Nginx Stream 和 TCP Peek 支持这两项保护；Xray Fallback 没有前置的 
 
 常用操作：
 
-1. `[1] 启用严格 SNI 门禁`：Nginx Stream / TCP Peek 只放行已登记的 SNI。
+1. `[1] 启用 SNI 清洗`：Nginx Stream / TCP Peek 只放行已登记的 SNI；首次配置默认开启，旧配置保持原设置。
 2. `[3] 重新同步当前 SNI 清单`：新增域名或路由后使用，避免新域名被误拦截。
 3. `[4] 设置 REALITY 回落限速`：只限制验证失败后进入回落的连接；脚本会生成一组随机参数，并在修改前要求确认。
 4. `[5] 清除 REALITY 回落限速`：恢复 Xray 默认行为，同样需要确认。
@@ -337,7 +337,7 @@ Nginx Stream 和 TCP Peek 支持这两项保护；Xray Fallback 没有前置的 
 
 修改回落限速会重启面板或 Xray 服务。先确认节点没有正在进行的重要传输，并保留脚本生成的备份；如果只是普通非 CDN 目标，通常不需要额外开启回落限速。
 
-严格 SNI 门禁的清单会根据已经登记的 Web 域名、SNI 路由和 REALITY SNI 自动生成。新增域名、修改节点 SNI 后，先保存配置，再执行 `[3] 重新同步当前 SNI 清单`；否则新域名可能被当成未知 SNI 拒绝。它只负责过滤未知 SNI，不负责验证 UUID、密钥或其他 REALITY 身份信息。
+严格 SNI 门禁的清单根据已登记的 Web 域名、SNI 路由和 REALITY SNI 生成。新增或修改 SNI 后先保存，再执行 `[3] 重新同步当前 SNI 清单`；同步会备份、预检并重新应用当前入口，失败时尝试回滚。一个入站有多个 `serverNames` 时，可为每个名称添加指向同一本地地址和端口的路由。状态页的“已配置，入口服务运行中”只说明配置和服务检查结果，不等于已验证公网拦截效果。
 
 ### 多个 REALITY 入站怎么配置
 

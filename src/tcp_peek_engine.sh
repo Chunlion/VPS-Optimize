@@ -195,6 +195,9 @@ preflight_tcppeek_before_cutover() {
 preflight_entry_mode_before_cutover() {
     local target_mode="$1"
     target_mode=$(normalize_entry_mode_name "$target_mode") || return 1
+    if strict_sni_gate_mode_supported "$target_mode" && strict_sni_gate_enabled; then
+        validate_strict_sni_gate_reality_server_names || return 1
+    fi
     case "$target_mode" in
         "tcp-peek") preflight_tcppeek_before_cutover ;;
         *) return 0 ;;
@@ -914,7 +917,11 @@ switch_entry_mode() {
     fi
 
     ENTRY_MODE="$target_mode"
-    save_sni_stack_env
+    if ! save_sni_stack_env; then
+        echo -e "$(localized_text "${RED}❌ 保存入口配置失败，正在回滚。${PLAIN}" "${RED}❌ Failed to save entry configuration; rolling back.${PLAIN}" "${RED}❌ Не удалось сохранить конфигурацию входа; выполняется откат.${PLAIN}")"
+        rollback_last_entry_mode "$backup_dir"
+        return 1
+    fi
     write_single_443_engine_state "$(entry_mode_engine_name "$target_mode")" "$backup_dir"
     echo -e "$(localized_text "${GREEN}✅ 443 入口模式已切换为：${target_mode}${PLAIN}" "${GREEN}✅ 443 The entry mode has been switched to: ${target_mode}${PLAIN}" "${GREEN}✅ 443 Режим входа переключен на: ${target_mode}${PLAIN}")"
     show_current_entry_status
@@ -953,7 +960,11 @@ reapply_current_entry_mode() {
         return 1
     fi
     ENTRY_MODE="$current_mode"
-    save_sni_stack_env
+    if ! save_sni_stack_env; then
+        echo -e "$(localized_text "${RED}❌ 保存入口配置失败，正在回滚。${PLAIN}" "${RED}❌ Failed to save entry configuration; rolling back.${PLAIN}" "${RED}❌ Не удалось сохранить конфигурацию входа; выполняется откат.${PLAIN}")"
+        rollback_last_entry_mode "$backup_dir"
+        return 1
+    fi
     write_single_443_engine_state "$(entry_mode_engine_name "$current_mode")" "$backup_dir"
     echo -e "$(localized_text "${GREEN}✅ 当前入口模式已重新应用：${current_mode}${PLAIN}" "${GREEN}✅ The current entry mode has been reapplied: ${current_mode}${PLAIN}" "${GREEN}. Текущий режим входа был применен повторно: ${current_mode}.${PLAIN}")"
     show_current_entry_status
