@@ -2,57 +2,69 @@
 layout: home
 
 hero:
-  eyebrow: Для регулярного обслуживания
+  eyebrow: Настройка и обслуживание VPS
   name: VPS-Optimize
-  text: От первой настройки до регулярного обслуживания VPS
-  tagline: Проверка, резервное копирование, оптимизация, контроль и откат в одном понятном процессе.
-  image:
-    light: /assets/entry-routing-ru.webp
-    dark: /assets/entry-routing-ru-dark.webp
-    alt: Маршрутизация порта 443 через VPS-Optimize к Web, Xray и TCP Peek
-    caption: Один внешний вход · Общая конфигурация · Видимое состояние
+  text: Порядок в настройках. Ясность в обслуживании.
+  tagline: Настройка системы и сети, развёртывание служб и диагностика из одного меню Bash. Выбирайте нужные действия и сохраняйте копию перед изменениями.
+  guide:
+    title: Один внешний порт. Три режима входа.
+    note: Одновременно работает только один режим. Выберите подходящий для вашей схемы.
+    modes:
+      - name: nginx-stream
+        description: Nginx слушает порт 443 и направляет соединения по SNI.
+      - name: xray-fallback
+        description: Основной вход Xray слушает порт 443 и обрабатывает fallback.
+      - name: tcp-peek
+        description: TCP Peek слушает порт 443, анализирует и направляет соединения.
+    link: /ru/docs/443-tcp-peek-engine
+    action: Режимы входа и настройка
   actions:
     - theme: brand
-      text: Посмотреть порядок работы
+      text: Быстрый старт
       link: /ru/quick-start
     - theme: alt
       text: Исходный код
       link: https://github.com/Chunlion/VPS-Optimize
 
 workflow:
-  label: Процесс обслуживания VPS-Optimize
+  label: Рекомендуемые шаги обслуживания со ссылками на инструкции
   steps:
     - icon: fa-solid fa-magnifying-glass
       title: Проверка
       details: Проверка системы, сети и служб для поиска возможных проблем.
+      link: /ru/docs/before-use
     - icon: fa-solid fa-database
       title: Резервная копия
-      details: Сохранение важных настроек и пути восстановления.
+      details: Сохраните настройки. Данные приложений копируйте отдельно.
+      link: /ru/docs/security-rollback
     - icon: fa-solid fa-bolt
       title: Оптимизация
       details: Изменение только необходимых параметров системы и сети.
+      link: /ru/quick-start
     - icon: fa-solid fa-shield-halved
       title: Контроль
-      details: Проверка доступности служб и результата изменений.
+      details: Проверьте состояние служб и фактическую доступность.
+      link: /ru/docs/faq
     - icon: fa-solid fa-rotate-left
       title: Откат
-      details: Восстановление сохранённых настроек при сбое.
+      details: Восстановите сохранённые настройки и проверьте службы.
+      link: /ru/docs/recovery-runbook
 
 story:
-  kicker: Подход проекта
-  title: Обслуживание — не разовая задача
-  description: VPS-Optimize объединяет проверку, резервное копирование, изменения, контроль и откат в одном процессе, сохраняя важные состояния и журналы для регулярного обслуживания.
+  kicker: Изменения и восстановление
+  title: Подготовьте путь назад до изменений.
+  description: Проверяйте службы, сохраняйте настройки и читайте журналы из меню. Восстанавливается только содержимое копии; она не заменяет снимок VPS или копию данных приложений.
   principles:
     - icon: fa-solid fa-list-check
-      title: Единый процесс
-      text: Последовательные действия и вывод
+      title: Выбор действий
+      text: Нужные функции в меню
     - icon: fa-solid fa-shield-halved
-      title: Контроль изменений
-      text: Резервная копия до важных операций
+      title: Копия настроек
+      text: Проверьте её состав
     - icon: fa-solid fa-chart-column
-      title: Видимое состояние
-      text: Статус и журналы в одном месте
-  terminalLabel: Пример состояния VPS-Optimize
+      title: Диагностика
+      text: Состояние и журналы
+  terminalLabel: Пример состояния · Не текущие данные
   terminalHeader: Компонент / Состояние
   terminalRows:
     - label: Системное окружение
@@ -67,7 +79,7 @@ story:
       value: Включён
   primaryIcon: fa-solid fa-shield-halved
   primaryTitle: Надёжнее
-  primaryText: Перед изменением важных настроек сохраняется путь восстановления.
+  primaryText: Сохраните сеанс SSH, подготовьте снимок VPS и доступ к восстановлению.
   secondaryIcon: fa-regular fa-clock
   secondaryTitle: Понятнее
   secondaryText: Результаты проверок и состояние служб собраны в одном месте.

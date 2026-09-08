@@ -2,17 +2,16 @@
 
 VPS-Optimize 是一个面向 VPS 日常维护的 Bash 脚本入口，适合用于新服务器初始化、系统优化、网络参数调整、基础安全配置、节点部署辅助和常见故障排查。
 
-脚本会修改 SSH、防火墙、内核参数、Nginx/Caddy 配置、Docker 配置、证书文件和 443端口复用相关服务。运行前先创建 VPS 快照，保留当前 SSH 会话，并确认云厂商安全组已放行 SSH 端口。
+所选功能可能修改 SSH、防火墙、内核参数、Nginx/Caddy 配置、Docker 配置、证书文件和 443 端口复用相关服务。运行前先创建 VPS 快照，保留当前 SSH 会话，并确认云厂商安全组已放行 SSH 端口。
 
 ## 运行前检查
 
 - 已创建 VPS 快照。
 - 当前 SSH 会话保持不断开。
 - 云厂商安全组已放行 SSH 端口。
-- 域名 DNS 已解析到当前 VPS。
-- 如使用 Cloudflare，相关域名保持 DNS only。
-- 已准备 Cloudflare API Token。
 - 已确认服务器系统版本在支持范围内。
+
+部署域名访问或申请证书时，还需按对应教程配置 DNS；申请 Cloudflare DNS API 证书时准备 API Token。仅做系统检查或调优无需域名和 Token。
 
 ## 国内安装
 

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useData } from 'vitepress'
+import { useData, withBase } from 'vitepress'
 
 interface WorkflowStep {
   icon: string
   title: string
   details: string
+  link: string
 }
 
 interface WorkflowData {
@@ -20,8 +21,7 @@ const workflow = computed(() => frontmatter.value.workflow as WorkflowData)
 <template>
   <section class="home-workflow" :aria-label="workflow.label">
     <div class="home-workflow__inner">
-      <template v-for="(step, index) in workflow.steps" :key="step.title">
-        <article class="home-workflow__step">
+        <a v-for="step in workflow.steps" :key="step.title" class="home-workflow__step" :href="withBase(step.link)">
           <span class="home-workflow__icon" aria-hidden="true">
             <i :class="step.icon" />
           </span>
@@ -29,13 +29,7 @@ const workflow = computed(() => frontmatter.value.workflow as WorkflowData)
             <h2>{{ step.title }}</h2>
             <p>{{ step.details }}</p>
           </div>
-        </article>
-        <i
-          v-if="index < workflow.steps.length - 1"
-          class="home-workflow__arrow fa-solid fa-arrow-right"
-          aria-hidden="true"
-        />
-      </template>
+        </a>
     </div>
   </section>
 </template>

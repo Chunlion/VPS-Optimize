@@ -20,7 +20,7 @@ export default {
         'home-hero-info-before': () => frontmatter.value.hero?.eyebrow
           ? h('p', { class: 'home-eyebrow' }, frontmatter.value.hero.eyebrow)
           : null,
-        'home-hero-image': () => frontmatter.value.hero?.image
+        'home-hero-image': () => frontmatter.value.hero?.guide
           ? h(HomeHeroVisual)
           : null,
         'home-features-before': () => frontmatter.value.workflow

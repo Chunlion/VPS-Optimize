@@ -73,6 +73,12 @@ const zhTheme = {
   docFooter: { prev: '上一页', next: '下一页' },
   lastUpdated: { text: '最后更新' },
   langMenuLabel: '切换语言',
+  sidebarMenuLabel: '文档导航',
+  returnToTopLabel: '返回顶部',
+  skipToContentLabel: '跳转到正文',
+  darkModeSwitchLabel: '外观',
+  lightModeSwitchTitle: '切换浅色模式',
+  darkModeSwitchTitle: '切换深色模式',
   search: {
     provider: 'local' as const,
     options: {
@@ -237,7 +243,31 @@ const ruTheme = {
   docFooter: { prev: 'Назад', next: 'Далее' },
   lastUpdated: { text: 'Последнее обновление' },
   langMenuLabel: 'Сменить язык',
-  search: { provider: 'local' as const },
+  sidebarMenuLabel: 'Навигация',
+  returnToTopLabel: 'Наверх',
+  skipToContentLabel: 'К содержимому',
+  darkModeSwitchLabel: 'Оформление',
+  lightModeSwitchTitle: 'Светлая тема',
+  darkModeSwitchTitle: 'Тёмная тема',
+  search: {
+    provider: 'local' as const,
+    options: {
+      translations: {
+        button: { buttonText: 'Поиск', buttonAriaLabel: 'Поиск по документации' },
+        modal: {
+          displayDetails: 'Показать подробности',
+          resetButtonTitle: 'Очистить поиск',
+          backButtonTitle: 'Закрыть поиск',
+          noResultsText: 'Ничего не найдено',
+          footer: {
+            selectText: 'Выбрать', selectKeyAriaLabel: 'Ввод', navigateText: 'Перейти',
+            navigateUpKeyAriaLabel: 'Стрелка вверх', navigateDownKeyAriaLabel: 'Стрелка вниз',
+            closeText: 'Закрыть', closeKeyAriaLabel: 'Escape'
+          }
+        }
+      }
+    }
+  },
   socialLinks
 }
 
@@ -247,6 +277,9 @@ export default defineConfig({
   base: '/VPS-Optimize/',
   cleanUrls: true,
   lastUpdated: true,
+  themeConfig: {
+    search: { provider: 'local' }
+  },
   locales: {
     root: {
       label: '简体中文',
@@ -276,6 +309,9 @@ export default defineConfig({
     'AGENTS.md',
     'CHANGELOG.md',
     'README.md',
+    'design-qa.md',
+    '.agents/**',
+    '.codex/**',
     'src/**',
     '.github/**'
   ],

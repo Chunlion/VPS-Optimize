@@ -42,8 +42,8 @@ const story = computed(() => frontmatter.value.story as HomeStoryData)
 
       <div class="home-story__terminal" :aria-label="story.terminalLabel">
         <div class="home-story__terminal-bar">
-          <span>vps-optimize status</span>
-          <span>●</span>
+          <span>{{ story.terminalLabel }}</span>
+          <i class="fa-solid fa-terminal" aria-hidden="true" />
         </div>
         <div class="home-story__terminal-body">
           <div class="home-story__terminal-header">

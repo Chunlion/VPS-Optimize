@@ -9,10 +9,9 @@ The script can change SSH and firewall settings, kernel parameters, Nginx/Caddy 
 - Create a VPS snapshot.
 - Keep the current SSH session open.
 - Allow the SSH port in the cloud provider's security group.
-- Point the required DNS records to this VPS.
-- If you use Cloudflare, keep the relevant records in DNS-only mode.
-- Prepare a Cloudflare API token when certificate automation is required.
 - Confirm that the server runs a supported operating system.
+
+For domain-based services or certificates, configure DNS as described in the relevant guide. Prepare a Cloudflare API token for certificate issuance via the DNS API. System checks and tuning alone require neither a domain nor a token.
 
 ## Installation in Mainland China
 
