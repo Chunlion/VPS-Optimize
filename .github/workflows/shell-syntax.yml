@@ -78,6 +78,9 @@ jobs:
       - name: Install container test dependencies
         run: |
           if command -v apt-get >/dev/null 2>&1; then
+            if [ "${{ matrix.image }}" = "debian:11" ]; then
+              printf '%s\n' 'deb http://deb.debian.org/debian bullseye main' > /etc/apt/sources.list
+            fi
             if [ -r /etc/os-release ] && grep -q '^ID=ubuntu$' /etc/os-release; then
               for source_file in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; do
                 [ -f "$source_file" ] || continue
