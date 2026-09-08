@@ -1,3 +1,7 @@
+---
+outline: 2
+---
+
 # Port 443 Reuse Troubleshooting
 
 Before troubleshooting, run:
@@ -12,7 +16,19 @@ If you want to submit an issue, run:
 Main menu [15 Service health overview] -> [Generate feedback diagnostic information]
 ```
 
-Please desensitize the Token, private key, and subscription key other than the domain before pasting them publicly.
+::: warning Redact diagnostics before sharing
+Remove tokens, passwords, private keys, and subscription keys before posting. Full subscription URLs may also contain keys.
+:::
+
+## Find your symptom
+
+| Symptom | Check first |
+|---|---|
+| [Redirect loop](#err-too-many-redirects) | HTTPS and redirect settings |
+| [Empty response](#err-empty-response) | URL and SNI routes |
+| [Connection closed or TLS error](#err-connection-closed-err-ssl-protocol-error) | Public listener and forwarding target |
+| [Page not found](#_404) | Panel or subscription path |
+| [Bad gateway](#_502) | Local backend and reverse proxy |
 
 ## Website selection suggestions
 
@@ -22,7 +38,7 @@ When troubleshooting for the first time, you can first set the relevant domain t
 
 ## Basic check command
 
-First check whether the listening position is as expected:
+Check the active entry service and Web engine. Errors from an uninstalled or unused Nginx/Caddy instance do not by themselves indicate a fault in the active chain.
 
 `8443`, `1443`, `40000`, and `2096` in the following commands and sample output are sample ports; the actual configuration is subject to the current binding of the service and the configuration saved by the script.
 
@@ -53,17 +69,17 @@ If `/etc/vps-optimize/sni-stack.env` does not have `ENTRY_MODE`, the script read
 
 ## ERR_TOO_MANY_REDIRECTS
 
-### phenomenon
+### Symptoms
 
 The browser prompts that there are too many redirects and the panel page keeps jumping.
 
 ### Common causes
 
-- The 3x-ui panel is still enabled and comes with HTTPS.
-- Caddy is reversed to the HTTPS backend, but the backend is forced to jump back to HTTPS.
-- Cloudflare Enable proxy or SSL pattern mismatch.
+- The panel and reverse proxy have conflicting HTTP/HTTPS or path redirects.
+- The proxy sends HTTP to the backend, which redirects to the same public HTTPS URL.
+- Cloudflare uses Flexible mode while the origin redirects HTTP to HTTPS.
 
-### check command
+### Commands
 
 ```bash
 curl -I https://panel.example.com/panel/
@@ -72,9 +88,9 @@ curl -I http://127.0.0.1:40000/panel/
 
 ### Solution
 
-- Clear the 3x-ui panel certificate path and restart the panel.
-- Let the web generation engine backend to the local HTTP backend.
-- Port 443 Reuse point related domains are recommended to use DNS only / Gray Cloud.
+- For this guide’s local HTTP backend setup, prepare the reverse proxy and recovery access before clearing the panel certificate paths and restarting 3x-ui.
+- Configure the Web reverse proxy to use the local HTTP backend.
+- For Web domains proxied by Cloudflare, verify the origin certificate and use Full (strict). DNS-only mode can help isolate a routing issue; proxying itself is not an error. See [Cloudflare redirect troubleshooting](https://developers.cloudflare.com/ssl/troubleshooting/too-many-redirects/).
 - If you just cleared the certificate and the browser still jumps in a loop, try again with an incognito window.
 
 ### Related menu entry
@@ -87,7 +103,7 @@ Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 
 ## ERR_EMPTY_RESPONSE
 
-### phenomenon
+### Symptoms
 
 The browser prompts `ERR_EMPTY_RESPONSE`, and the page does not return content normally.
 
@@ -97,7 +113,7 @@ The browser prompts `ERR_EMPTY_RESPONSE`, and the page does not return content n
 - SNI misses Caddy, and the traffic falls to REALITY.
 - The current entry mode SNI/Web domain route does not include the panel or website domain; for `nginx-stream`, see the Nginx stream configuration, and for `tcp-peek`, see the `vpso-mux` configuration.
 
-### check command
+### Commands
 
 ```bash
 grep -n "panel.example.com" /etc/nginx/stream.d/*.conf
@@ -134,7 +150,7 @@ Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 
 ## ERR_CONNECTION_CLOSED / ERR_SSL_PROTOCOL_ERROR
 
-### phenomenon
+### Symptoms
 
 The browser prompts that the connection is closed, or prompts a SSL protocol error.
 
@@ -144,7 +160,7 @@ The browser prompts that the connection is closed, or prompts a SSL protocol err
 - The Caddy, 3x-ui, REALITY or old Nginx server outside the current entry mode has preempted the public port `443`.
 - TLS traffic is forwarded to a backend that is not supposed to receive browser HTTPS.
 
-### check command
+### Commands
 
 ```bash
 ss -lntp | grep ':443'
@@ -169,7 +185,7 @@ Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
 
 ## Port concurrent connection limit accidental damage
 
-### phenomenon
+### Symptoms
 
 A certain node, subscription or website occasionally fails to connect, the handshake is disconnected, or only some source IPs access the public internet. `443` exception.
 
@@ -203,7 +219,7 @@ Main menu [8 Firewall rules] -> [5 Port concurrent connection limit]
 
 ## Nginx is running but 443 is not listening.
 
-### phenomenon
+### Symptoms
 
 `Current Port 443 Entry Status` shows `Configuration mode: nginx-stream` and `nginx: running`, but public port `443` is not listening.
 
@@ -227,7 +243,7 @@ Reapplying will force the generation of the Nginx Stream configuration and check
 
 ## 404
 
-### phenomenon
+### Symptoms
 
 Panel, subscription, or Clash/Mihomo link returns 404.
 
@@ -237,7 +253,7 @@ Panel, subscription, or Clash/Mihomo link returns 404.
 - The subscription path prefix is written incorrectly, for example, `sub` instead of `/sub/`.
 - Caddy configuration does not contain the corresponding path.
 
-### check command
+### Commands
 
 ```bash
 curl -I https://panel.example.com/panel/
@@ -296,7 +312,7 @@ Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 
 ## 502
 
-### phenomenon
+### Symptoms
 
 The browser can connect to HTTPS, but the page displays 502.
 
@@ -307,7 +323,7 @@ The browser can connect to HTTPS, but the page displays 502.
 - The custom website/reverse proxy Docker or intranet backend address cannot be accessed from the host where Caddy/Nginx is located.
 - The backend only listens to the public internet address or only IPv6.
 
-### check command
+### Commands
 
 For intranet backend, please replace the example address with the actual address.
 
@@ -338,7 +354,7 @@ Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 
 ## The subscription link still has:2096
 
-### phenomenon
+### Symptoms
 
 The copied subscription link still contains `:2096`, for example:
 
@@ -376,7 +392,7 @@ Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
 
 ## Node link still has:1443
 
-### phenomenon
+### Symptoms
 
 The client node link still contains `:1443`, and the public port `443` is not used.
 
@@ -406,7 +422,7 @@ Address: node.example.com or the server's public IP
 Port: 443
 ```
 
-If the node domain is Cloudflare, it must be Huiyun/DNS only.
+If the node domain is Cloudflare, it must be DNS-only mode.
 
 ### Related menu entry
 
@@ -417,7 +433,7 @@ Main menu [19 Port 443 Reuse manager] -> [10 Modify Port 443 Reuse settings]
 
 ## Certificate application failed
 
-### phenomenon
+### Symptoms
 
 Caddy or acme.sh failed to apply for a certificate, and HTTPS could not be opened normally.
 
@@ -428,7 +444,7 @@ Caddy or acme.sh failed to apply for a certificate, and HTTPS could not be opene
 - `_acme-challenge` TXT record has not been propagated or the residual record is abnormal.
 - The server time is incorrect.
 
-### check command
+### Commands
 
 ```bash
 date -Is
@@ -463,7 +479,7 @@ Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 
 ## Cloudflare Token permission issue
 
-### phenomenon
+### Symptoms
 
 The certificate issuance prompts that the authentication failed, there is no permission to access the zone, or the DNS record cannot be written.
 
@@ -473,7 +489,7 @@ The certificate issuance prompts that the authentication failed, there is no per
 - Token does not have `Zone.DNS.Edit`.
 - The token is only authorized for the wrong zone.
 
-### check command
+### Commands
 
 ```bash
 grep -n "CF_" /root/.config/vps-panel/cloudflare.env 2>/dev/null
@@ -495,7 +511,7 @@ Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintena
 
 ## DNS is not a gray cloud / DNS only
 
-### phenomenon
+### Symptoms
 
 REALITY The connection fails, the subscription link is abnormal, the real source IP cannot be obtained from the Web whitelist, or the browser access result is different from the directly connected VPS.
 
@@ -504,7 +520,7 @@ REALITY The connection fails, the subscription link is abnormal, the real source
 - Cloudflare opens the Orange Cloud agent.
 - REALITY The node domain cannot be directly connected to the VPS after being proxied.
 
-### check command
+### Commands
 
 ```bash
 dig +short A panel.example.com @1.1.1.1
@@ -513,7 +529,7 @@ dig +short A node.example.com @1.1.1.1
 
 ### Solution
 
-- Change the REALITY/node domain to DNS only/Huiyun to ensure that the client is directly connected to the VPS.
+- Change the REALITY/node domain to DNS-only mode to ensure that the client is directly connected to the VPS.
 - Web panels, subscriptions and website domains can use Orange Cloud according to actual needs; when a real source IP whitelist is required, change to Gray Cloud first, or redesign access control based on the Cloudflare source address.
 - Wait for DNS to take effect and then re-examine.
 
@@ -525,7 +541,7 @@ Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 
 ## Port 443 is occupied
 
-### phenomenon
+### Symptoms
 
 Nginx cannot start, prompting `bind() to 0.0.0.0:443 failed`.
 
@@ -534,7 +550,7 @@ Nginx cannot start, prompting `bind() to 0.0.0.0:443 failed`.
 - Caddy, Apache, old Nginx server, 3x-ui or Xray outside the current entry mode still listen to the public port `443`.
 - In `nginx-stream` / `tcp-peek` mode, REALITY is directly bound to `0.0.0.0:443` without changing to local binding.
 
-### check command
+### Commands
 
 ```bash
 ss -lntp | grep ':443'
@@ -558,7 +574,7 @@ Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
 
 ## Caddy/Nginx/REALITY wrong listening address
 
-### phenomenon
+### Symptoms
 
 The health check indicates that the service is listening on the public internet, or the link is open but the internal port is exposed.
 
@@ -568,7 +584,7 @@ The health check indicates that the service is listening on the public internet,
 - The panel backend is bound to `0.0.0.0:40000`.
 - REALITY listens on the public port `443` and conflicts with Nginx stream.
 
-### check command
+### Commands
 
 ```bash
 ss -lntp
@@ -592,7 +608,7 @@ Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 
 ## Panel can be opened but subscription is not available
 
-### phenomenon
+### Symptoms
 
 `/panel/` is OK, but `/sub/`, `/clash/` or the CLIENT_SUBSCRIPTION link is not available.
 
@@ -603,7 +619,7 @@ Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 - Listen Domain is not empty, or Reverse Proxy URI does not match the public panel domain and subscription path.
 - 3x-ui v3.4.0+ of `Hosts / Host` or older `External Proxy` still output internal ports.
 
-### check command
+### Commands
 
 ```bash
 curl -I http://127.0.0.1:2096/sub/
@@ -626,7 +642,7 @@ Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
 
 ## REALITY connection failed
 
-### phenomenon
+### Symptoms
 
 The panel and subscriptions are fine, but the client REALITY node cannot connect.
 
@@ -637,7 +653,7 @@ The panel and subscriptions are fine, but the client REALITY node cannot connect
 - `serverNames` / `SNI` is not the external real HTTPS site.
 - The node domain is proxied by Cloudflare.
 
-### check command
+### Commands
 
 ```bash
 ss -lntp | grep -E ':1443|:443'

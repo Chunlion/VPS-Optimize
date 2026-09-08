@@ -411,7 +411,8 @@ Key points to confirm:
 
 | Project | Check the key points |
 |---|---|
-| REALITY local binding | `127.0.0.1:1443` |
+| REALITY backend (nginx-stream / tcp-peek) | Use the actual local address, for example `127.0.0.1:1443` |
+| Xray main inbound (xray-fallback) | Listen on public port `443` |
 | client port | `443` |
 | `dest` / `Target` | External real HTTPS site |
 | `serverNames` / `SNI` | Consistent with external real HTTPS site |

@@ -412,7 +412,8 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 
 | 项目 | 检查重点 |
 |---|---|
-| REALITY 本地监听 | `127.0.0.1:1443` |
+| REALITY 后端（nginx-stream / tcp-peek） | 使用实际本地监听地址，例如 `127.0.0.1:1443` |
+| Xray 主入站（xray-fallback） | 监听公网 `443` |
 | 客户端端口 | `443` |
 | `dest` / `Target` | 外部真实 HTTPS 站点 |
 | `serverNames` / `SNI` | 与外部真实 HTTPS 站点一致 |

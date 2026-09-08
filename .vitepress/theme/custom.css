@@ -257,7 +257,7 @@ body {
 .vp-doc :not(pre) > code { overflow-wrap: anywhere; border: 1px solid var(--vp-home-border); border-radius: 5px; font-size: .875em; }
 .vp-doc li + li { margin-top: 8px; }
 .vp-doc li::marker { color: var(--vp-c-brand-1); font-weight: 600; }
-.vp-doc table { width: 100%; margin: 24px 0; border: 1px solid var(--vp-home-border); border-radius: 10px; border-spacing: 0; }
+.vp-doc table { width: fit-content; max-width: 100%; margin: 24px 0; border: 1px solid var(--vp-home-border); border-radius: 10px; border-spacing: 0; }
 .vp-doc th { color: var(--vp-c-text-1); font-size: 13px; font-weight: 650; white-space: nowrap; background: var(--vp-c-bg-soft); }
 .vp-doc th, .vp-doc td { padding: 12px 16px; border-color: var(--vp-home-border); line-height: 1.75; text-align: left; }
 .vp-doc td { font-size: 14px; vertical-align: top; }

@@ -411,7 +411,8 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 
 | Проект | Проверьте ключевые моменты |
 |---|---|
-| Локальная привязка REALITY | `127.0.0.1:1443` |
+| Бэкенд REALITY (nginx-stream / tcp-peek) | Фактический локальный адрес, например `127.0.0.1:1443` |
+| Основной вход Xray (xray-fallback) | Публичный порт `443` |
 | клиентский порт | `443` |
 | `dest` / `Target` | Внешний реальный сайт HTTPS |
 | `serverNames` / `SNI` | Соответствует внешнему реальному сайту HTTPS. |

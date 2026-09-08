@@ -97,8 +97,8 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 
 | Current status | Recommended route |
 |---|---|
-| Only 3x-ui, no other website | Directly press 3x-ui + 443 tutorial to deploy |
-| Already have 3x-ui and comes with HTTPS | First clear the 3x-ui certificate path, and then access 443 |
+| Only 3x-ui, no other website | Follow the 3x-ui + port 443 deployment guide |
+| Existing 3x-ui with HTTPS | Record certificates, ports, and paths; prepare the reverse proxy before switching to local HTTP |
 | Already have Caddy reverse proxy | Record the old domain and backend, enable 443 and add them one by one; you can continue to select Caddy, or switch to Nginx local web reverse proxy |
 | There is already a Nginx/Apache website | First change the website backend to the local port, and then use the Port 443 Reuse point Web domain/reverse proxy; you can choose Caddy or Nginx local web reverse proxy |
 | There is already a subscription tool Docker container, but the Port 443 Reuse is not enabled yet. | Keep the container, use `Main menu [4 reverse proxy]` to select Caddy or Nginx HTTPS to reverse proxy |
@@ -134,18 +134,23 @@ Things to note:
 
 ## Migrate existing 3x-ui
 
-### target state
+### Target state
+
+::: warning Prepare access and recovery before switching
+Switching the panel to local HTTP stops its old HTTPS endpoint. Record the existing certificate paths, listening port, and access path, and keep SSH or rescue-console access. Prepare the domain, certificate, and reverse proxy configuration before the cutover.
+:::
 
 The following `40000`, `2096`, and `1443` are sample ports; the actual configuration is subject to 3x-ui, Xray and the configuration saved in the script.
 
-| Project | target |
+| Setting | Target |
 |---|---|
 | Panel binding | `127.0.0.1:40000` |
 | Panel HTTPS | Close, the certificate path is cleared |
 | Panel path | For example `/panel/` |
-| Subscribe to listen | `127.0.0.1:2096` |
+| Subscription listener | `127.0.0.1:2096` |
 | Subscription path | For example `/sub/`, `/clash/` |
-| REALITY binding | `127.0.0.1:1443` |
+| REALITY backend (nginx-stream / tcp-peek) | `127.0.0.1:1443`, example value |
+| Xray main inbound (xray-fallback) | Public port `443`; do not use the local backend address |
 | Client node port | `443` |
 
 ### Operation entrance

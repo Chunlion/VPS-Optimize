@@ -98,7 +98,7 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 | 当前状态 | 推荐路线 |
 |---|---|
 | 只有 3x-ui，没有其他网站 | 直接按 3x-ui + 443 教程部署 |
-| 已有 3x-ui 且自带 HTTPS | 先清空 3x-ui 证书路径，再接入 443 |
+| 已有 3x-ui 且自带 HTTPS | 记录证书、端口和路径，准备好反代后再切换为本地 HTTP |
 | 已有 Caddy 反代 | 记录旧域名和后端，启用 443 后逐个补录；可继续选择 Caddy，也可切到 Nginx 本地 Web 反代 |
 | 已有 Nginx/Apache 网站 | 先把网站后端改为本地端口，再用 443端口复用的 Web 域名/反代补录；可选择 Caddy 或 Nginx 本地 Web 反代 |
 | 已有订阅工具 Docker 容器，暂不启用 443端口复用 | 保留容器，用 `主菜单 [4 反代]` 选择 Caddy 或 Nginx HTTPS 反代 |
@@ -136,6 +136,10 @@ Nginx HTTPS 反代会复用现有 `acme.sh + Cloudflare DNS API` 证书流程，
 
 ### 目标状态
 
+::: warning 先准备访问与恢复方式
+切换为本地 HTTP 后，原面板 HTTPS 地址将停止服务。先记录旧证书路径、监听端口和访问路径，并准备 SSH 或救援控制台；确认 443 反代所需的域名、证书与配置已准备好，再安排切换。
+:::
+
 下面的 `40000`、`2096`、`1443` 是示例端口；实际以 3x-ui、Xray 和脚本保存的配置为准。
 
 | 项目 | 目标 |
@@ -145,7 +149,8 @@ Nginx HTTPS 反代会复用现有 `acme.sh + Cloudflare DNS API` 证书流程，
 | 面板路径 | 例如 `/panel/` |
 | 订阅监听 | `127.0.0.1:2096` |
 | 订阅路径 | 例如 `/sub/`、`/clash/` |
-| REALITY 监听 | `127.0.0.1:1443` |
+| REALITY 后端（nginx-stream / tcp-peek） | `127.0.0.1:1443`，示例值 |
+| Xray 主入站（xray-fallback） | 监听公网 `443`，不能套用本地后端地址 |
 | 客户端节点端口 | `443` |
 
 ### 操作入口
