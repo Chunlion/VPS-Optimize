@@ -14,13 +14,17 @@
 
 ## 手动更新
 
+以 `root` 身份执行。下面的命令仅检查下载是否成功、文件是否非空及 Bash 语法；需要完整校验时使用菜单更新。任一步失败都不会继续安装。
+
 ```bash
-tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh)
-wget -qO "$tmp_file" https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh
-bash -n "$tmp_file"
-install -m 755 "$tmp_file" /usr/local/bin/cy
-rm -f "$tmp_file"
-cy
+(
+  tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh) || exit 1
+  trap 'rm -f "$tmp_file"' EXIT
+  wget -qO "$tmp_file" https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh &&
+    test -s "$tmp_file" &&
+    bash -n "$tmp_file" &&
+    install -m 755 "$tmp_file" /usr/local/bin/cy
+) && cy
 ```
 
 ## 卸载快捷命令

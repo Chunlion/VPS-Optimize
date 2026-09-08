@@ -14,13 +14,17 @@
 
 ## Обновление вручную
 
+Выполняйте от `root`. Команды проверяют загрузку, отклоняют пустой файл и проверяют синтаксис Bash. Для полной проверки используйте обновление через меню. При ошибке установка не продолжается.
+
 ```bash
-tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh)
-wget -qO "$tmp_file" https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh
-bash -n "$tmp_file"
-install -m 755 "$tmp_file" /usr/local/bin/cy
-rm -f "$tmp_file"
-cy
+(
+  tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh) || exit 1
+  trap 'rm -f "$tmp_file"' EXIT
+  wget -qO "$tmp_file" https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh &&
+    test -s "$tmp_file" &&
+    bash -n "$tmp_file" &&
+    install -m 755 "$tmp_file" /usr/local/bin/cy
+) && cy
 ```
 
 ## Удалить команду ярлыка

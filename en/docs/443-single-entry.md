@@ -16,7 +16,7 @@ If you are unsure, choose **Nginx Stream**. It is the recommended first deployme
 | **TCP Peek + Splice** | Nginx Stream already works and you want the TCP Peek path | Switch to it later |
 | **Xray Fallback** | You already have a complete Xray main inbound that can own public `443` | Advanced; not the first choice |
 
-Only one service can listen on public `443` at a time:
+Only one service can listen on public `443` at a time. The following chain describes the Nginx Stream setup in this guide; TCP Peek also forwards to local backends. Xray Fallback instead uses a public Xray main inbound, so the local inbound settings below do not apply to that entry.
 
 ```text
 Public 443 -> the single service selected by the current ENTRY_MODE
@@ -67,9 +67,11 @@ Use the example domains like this:
 | `node.example.com` | VPS public IP | Node address and Hosts address |
 | `www.example.org` | The target site's own address | REALITY `serverName` / `target`, not the VPS |
 
-Panel and node domains may use a CDN if that fits your access needs. Prefer a non-CDN site for the REALITY target. Do not use the node domain as the REALITY camouflage target.
+::: tip Node address and REALITY target are different
+Panel and website domains may use a CDN. The REALITY node address in this guide must connect directly to the VPS using DNS-only records. Standard Cloudflare proxying does not forward arbitrary TCP protocols; see [proxying limitations](https://developers.cloudflare.com/dns/proxy-status/limitations/). The REALITY `serverName` / `target` is a separate setting; do not use this example’s node domain there.
+:::
 
-### Cloudflare DNS API (when using Cloudflare)
+### Cloudflare DNS API
 
 VPS-Optimize uses `acme.sh + Cloudflare DNS API` for DNS-01 validation and certificate issuance. Add the domain to Cloudflare first and confirm that its zone is `Active`. Use a restricted API Token, not the Global API Key.
 
@@ -131,9 +133,9 @@ The 3x-ui subscription page configures only the local backend. Its public URL is
 
 - Listen address: `127.0.0.1`.
 - Listen domain: leave blank.
-- Listen port: an unused local port, for example `53541` in the screenshot.
-- URI path: use your actual path, for example `/sublinkqq/`; `/sub/` and `/clash/` are example defaults.
-- Reverse Proxy URI: `https://panel.example.com/sublinkqq/`, which is `https://panel domain + URI path`.
+- Listen port: an unused local port, for example `2096`.
+- URI path: use your actual path, for example `/sub/`. Do not assume the example is the panel’s default.
+- Reverse Proxy URI: `https://panel.example.com/sub/`, which is `https://panel domain + URI path`.
 - Do not enter `node.example.com` and do not give the subscription service a separate public certificate.
 
 Using the example values:
@@ -141,12 +143,12 @@ Using the example values:
 ```text
 Listen address: 127.0.0.1
 Listen domain: leave blank
-Listen port: 53541
-URI path: /sublinkqq/
-Reverse Proxy URI: https://panel.example.com/sublinkqq/
+Listen port: 2096
+URI path: /sub/
+Reverse Proxy URI: https://panel.example.com/sub/
 ```
 
-With this example, users open `https://panel.example.com/sublinkqq/`; `53541` is an internal VPS port and must not appear in the public link. If the URI path is `/sub/`, the subscription URL is `https://panel.example.com/sub/`.
+With this example, users open `https://panel.example.com/sub/`; `2096` is an internal VPS port and must not appear in the public link. If you change the URI path, update the public subscription URL and reverse proxy path to match.
 
 If the subscription settings show subscription certificate and key fields, clear both as well. Otherwise 3x-ui may try to provide a second HTTPS service on the local port.
 

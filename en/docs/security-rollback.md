@@ -10,7 +10,11 @@ Enter one absolute custom directory per line and leave a blank line to finish. F
 
 When restoring top-level directories such as `/etc`, `/usr`, or `/home`, matching backed-up content is overwritten; existing files absent from the backup are not removed.
 
-The archive can be saved to a chosen absolute directory; the default is `/etc/vps-optimize/backups/manual/`. Its full path is shown and it is loaded after creation; the selected directory is recorded, and menu `[16] -> [2]` automatically reads `.tar.gz` archives there as well as in `/backups` and `/root/backups`. For example, `/backups/etc_usr_home_20260809165222.tar.gz` appears directly in the list. It does not include Docker volumes, container business data, images, or complete firewall runtime state, and cannot replace VPS snapshots.
+The archive can be saved to a chosen absolute directory; the default is `/etc/vps-optimize/backups/manual/`. Its full path is shown and it is loaded after creation; the selected directory is recorded, and menu `[16] -> [2]` automatically reads `.tar.gz` archives there as well as in `/backups` and `/root/backups`. For example, `/backups/etc_usr_home_20260809165222.tar.gz` appears directly in the list.
+
+::: warning Configuration backups are not full server backups
+Default configuration backups exclude Docker volumes, application data, images, and complete firewall runtime state. Custom-directory backups contain only the directories you select; ensure database and application consistency before copying. Neither replaces a VPS snapshot.
+:::
 
 On a new system, use `[16] -> [2]` to load an archive, then restore it with `[3] -> [1]`; menu `[3]` can also restore from the automatic list or a specified `.tar.gz` path. The script checks for Nginx, Caddy, Docker, and 3x-ui first. Missing services are not installed automatically; install and start them after restoring the files.
 

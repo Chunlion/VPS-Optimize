@@ -16,7 +16,7 @@ outline: 2
 | **TCP Peek + Splice** | 已经跑通 Nginx Stream，想改用轻量的 TCP 分流 | 可在部署完成后切换 |
 | **Xray Fallback** | 已经有一个能接管公网 `443` 的 Xray 主入站 | 进阶用法，不建议作为第一次方案 |
 
-三种模式都只允许一个服务监听公网 `443`。当前实际链路是：
+三种模式都只允许一个服务监听公网 `443`。下面按本文的 Nginx Stream 部署路线说明链路；TCP Peek 也向本地后端转发。Xray Fallback 则由 Xray 主入站接管公网 `443`，不能直接套用下面的本地入站配置。
 
 ```text
 公网 443 -> 当前 ENTRY_MODE 对应的单个入口服务
@@ -55,7 +55,7 @@ REALITY 节点 -> Xray / 3x-ui 的本地入站
 ### 1. 准备域名和 DNS
 
 - 准备一个面板域名、一个节点域名（例如 `panel.example.com`、`node.example.com`）。
-- 在 DNS 服务商处把它们解析到 VPS。面板和节点域名可以使用 CDN，但 REALITY 的 `serverName` / `target` 最好选一个稳定、能直接访问且没有 CDN 防护的真实 HTTPS 网站。
+- 在 DNS 服务商处把它们解析到 VPS。面板域名可按需使用 CDN；本例 REALITY 节点域名使用 DNS only / 灰云。REALITY 的 `serverName` / `target` 最好选一个稳定、能直接访问且没有 CDN 防护的真实 HTTPS 网站。
 - 如果坚持把 CDN 域名作为 REALITY SNI，请在完成部署后打开 [SNI 清洗与 REALITY 回落防护](#sni-清洗与-reality-回落防护)。否则，未通过 REALITY 验证的请求可能把服务器当作 CDN 转发器，持续消耗带宽。
 - 保留当前 SSH 连接，并确认云平台安全组和系统防火墙允许 SSH 与 TCP `443`。
 
@@ -67,9 +67,11 @@ REALITY 节点 -> Xray / 3x-ui 的本地入站
 | `node.example.com` | VPS 公网 IP | 节点地址、Hosts 地址 |
 | `www.example.org` | 目标网站自己的地址 | REALITY `serverName` / `target`，不要改成 VPS IP |
 
-面板域名和节点域名是否经过 CDN，取决于你的访问需求；REALITY 目标则优先选择不经过 CDN 的真实 HTTPS 网站。不要把三者混成一个域名，也不要把 `node.example.com` 填到 REALITY 的伪装目标栏。
+::: tip 区分节点地址与 REALITY 目标
+面板和普通网站可使用 CDN。本例的 REALITY 节点地址应直连 VPS，使用 DNS only / 灰云；普通 Cloudflare 橙云不能转发任意 TCP 协议，参见[代理限制](https://developers.cloudflare.com/dns/proxy-status/limitations/)。REALITY 的 `serverName` / `target` 是另一项设置，不要填成本例的节点域名。
+:::
 
-### 2. 准备 Cloudflare DNS API（使用 Cloudflare 时）
+### 2. 准备 Cloudflare DNS API
 
 脚本使用 `acme.sh + Cloudflare DNS API` 完成 DNS-01 验证和证书签发。先把域名添加到 Cloudflare，并确认对应 Zone 处于 `Active` 状态。这里需要的是受限 API Token，不是 Global API Key。
 
@@ -129,9 +131,9 @@ ss -lntp | grep ':443'
 
 - 监听地址填 `127.0.0.1`；
 - 监听域名留空；
-- 订阅端口使用一个未占用的本地端口，例如截图中的 `53541`；
-- URI 路径按你实际设置填写，例如 `/sublinkqq/`；使用默认示例时可填 `/sub/`、`/clash/`；
-- 反向代理 URI 填 `https://panel.example.com/sublinkqq/`，即 `https://面板域名 + URI 路径`；
+- 订阅端口使用一个未占用的本地端口，例如 `2096`；
+- URI 路径按你实际设置填写，例如 `/sub/`，不要把示例路径当成面板的默认值；
+- 反向代理 URI 填 `https://panel.example.com/sub/`，即 `https://面板域名 + URI 路径`；
 - 不要填 `node.example.com`，也不要给订阅服务单独配置公网证书。
 
 按示例填写时，订阅服务的本地部分是：
@@ -139,12 +141,12 @@ ss -lntp | grep ':443'
 ```text
 监听地址：127.0.0.1
 监听域名：留空
-监听端口：53541
-URI 路径：/sublinkqq/
-反向代理 URI：https://panel.example.com/sublinkqq/
+监听端口：2096
+URI 路径：/sub/
+反向代理 URI：https://panel.example.com/sub/
 ```
 
-按上例，客户端最终使用 `https://panel.example.com/sublinkqq/`；`53541` 只是 VPS 内部端口，不能写进分享链接。若 URI 路径是 `/sub/`，订阅地址就是 `https://panel.example.com/sub/`。
+按上例，客户端最终使用 `https://panel.example.com/sub/`；`2096` 只是 VPS 内部端口，不能写进分享链接。修改 URI 路径后，公网订阅地址和反代路径也要同步修改。
 
 如果订阅设置页有“订阅证书文件”和“订阅密钥文件”，同样清空；否则 3x-ui 可能继续尝试在本机端口上提供另一套 HTTPS，造成端口或重定向混乱。
 

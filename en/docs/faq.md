@@ -1,6 +1,6 @@
 # FAQ
 
-## When running the script, the prompt is not root
+## The script requires root access
 
 First switch to root:
 
@@ -21,7 +21,7 @@ systemctl status ssh --no-pager || systemctl status sshd --no-pager
 
 The SSH service name may be `ssh` or `sshd` in different releases.
 
-## 443 The rear panel cannot be opened after Port 443 Reuse configuration.
+## The panel is unreachable after configuring port 443 sharing
 
 Priority checks:
 
@@ -36,7 +36,7 @@ For detailed troubleshooting, see [Port 443 Reuse Troubleshooting](443-single-en
 
 ## Browser reports error when accessing internal port
 
-443 In Port 443 Reuse mode, the browser only accesses the standard HTTPS address:
+In port 443 sharing mode, the browser only accesses the standard HTTPS address:
 
 ```text
 https://panel.example.com/panel/

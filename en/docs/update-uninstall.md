@@ -14,13 +14,17 @@ The built-in update will first perform a syntax check and then download the veri
 
 ## Manual update
 
+Run as `root`. These commands check the download, reject an empty file, and check Bash syntax. Use the menu update for full verification. Installation stops if any check fails.
+
 ```bash
-tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh)
-wget -qO "$tmp_file" https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh
-bash -n "$tmp_file"
-install -m 755 "$tmp_file" /usr/local/bin/cy
-rm -f "$tmp_file"
-cy
+(
+  tmp_file=$(mktemp /tmp/cy_update.XXXXXX.sh) || exit 1
+  trap 'rm -f "$tmp_file"' EXIT
+  wget -qO "$tmp_file" https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh &&
+    test -s "$tmp_file" &&
+    bash -n "$tmp_file" &&
+    install -m 755 "$tmp_file" /usr/local/bin/cy
+) && cy
 ```
 
 ## Uninstall shortcut command

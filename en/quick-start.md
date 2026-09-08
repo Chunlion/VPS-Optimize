@@ -6,6 +6,7 @@ The script can change SSH and firewall settings, kernel parameters, Nginx/Caddy 
 
 ## Before You Begin
 
+- Use a `root` session; if you have sudo access, run `sudo -i` first.
 - Create a VPS snapshot.
 - Keep the current SSH session open.
 - Allow the SSH port in the cloud provider's security group.

@@ -6,6 +6,7 @@ VPS-Optimize 是一个面向 VPS 日常维护的 Bash 脚本入口，适合用�
 
 ## 运行前检查
 
+- 使用 `root` 会话；有 sudo 权限时可先执行 `sudo -i`。
 - 已创建 VPS 快照。
 - 当前 SSH 会话保持不断开。
 - 云厂商安全组已放行 SSH 端口。
