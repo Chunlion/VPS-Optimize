@@ -670,9 +670,9 @@ func peek(conn *net.TCPConn, timeout time.Duration) ([]byte, error) {
 	}
 
 	size := initialPeekSize
+	buf := make([]byte, size)
 	lastN := -1
 	for {
-		buf := make([]byte, size)
 		n, err := recvPeek(conn, buf)
 		if err != nil {
 			if isTimeoutError(err) {
@@ -680,13 +680,24 @@ func peek(conn *net.TCPConn, timeout time.Duration) ([]byte, error) {
 			}
 			return nil, err
 		}
+		if n == lastN {
+			if timeout <= 0 {
+				return buf[:n], nil
+			}
+			if !time.Now().Before(deadline) {
+				return buf[:n], errPeekTimeout
+			}
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
 		if _, parseErr := mux.ExtractSNI(buf[:n]); errors.Is(parseErr, mux.ErrNeedMore) {
-			if size < maxPeekSize {
+			if n == size && size < maxPeekSize {
 				size *= 2
 				if size > maxPeekSize {
 					size = maxPeekSize
 				}
-				lastN = n
+				buf = make([]byte, size)
+				lastN = -1
 				continue
 			}
 			if timeout <= 0 {
@@ -694,9 +705,6 @@ func peek(conn *net.TCPConn, timeout time.Duration) ([]byte, error) {
 			}
 			if !time.Now().Before(deadline) {
 				return buf[:n], errPeekTimeout
-			}
-			if n == lastN {
-				time.Sleep(10 * time.Millisecond)
 			}
 			lastN = n
 			continue

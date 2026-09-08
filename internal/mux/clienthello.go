@@ -124,6 +124,19 @@ func collectClientHello(data []byte) ([]byte, error) {
 		if recordEnd > len(data) {
 			return nil, ErrNeedMore
 		}
+		if pos == 0 && recordLen >= 4 {
+			header := data[5:9]
+			if header[0] != tlsHandshakeClient {
+				return nil, ErrInvalidClientHello
+			}
+			helloLen = int(header[1])<<16 | int(header[2])<<8 | int(header[3])
+			if helloLen <= 0 {
+				return nil, ErrInvalidClientHello
+			}
+			if helloLen <= recordLen-4 {
+				return data[9 : 9+helloLen], nil
+			}
+		}
 		handshake = append(handshake, data[pos+5:recordEnd]...)
 		if len(handshake) > 0 && handshake[0] != tlsHandshakeClient {
 			return nil, ErrInvalidClientHello

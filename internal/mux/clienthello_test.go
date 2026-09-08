@@ -133,6 +133,30 @@ func TestExtractSNIFromIncompleteFragmentedTLSRecords(t *testing.T) {
 	}
 }
 
+func TestCollectClientHelloSingleRecordDoesNotAllocate(t *testing.T) {
+	hello := makeClientHello(t, "panel.example.com")
+	allocs := testing.AllocsPerRun(100, func() {
+		if _, err := collectClientHello(hello); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if allocs != 0 {
+		t.Fatalf("allocations = %v, want 0", allocs)
+	}
+}
+
+func TestExtractSNIWithFragmentedHandshakeHeader(t *testing.T) {
+	hello := makeClientHello(t, "panel.example.com")
+	for split := 1; split <= 4; split++ {
+		fragmented := appendTLSRecord(nil, hello[1:3], hello[5:5+split])
+		fragmented = appendTLSRecord(fragmented, hello[1:3], hello[5+split:])
+		sni, err := ExtractSNI(fragmented)
+		if err != nil || sni != "panel.example.com" {
+			t.Fatalf("split %d: %q, %v", split, sni, err)
+		}
+	}
+}
+
 func appendTLSRecord(dst []byte, version []byte, payload []byte) []byte {
 	dst = append(dst, tlsRecordHandshake, version[0], version[1], byte(len(payload)>>8), byte(len(payload)))
 	return append(dst, payload...)

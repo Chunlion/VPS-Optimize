@@ -333,6 +333,66 @@ func TestHandleConnRoutesClientHelloOverLoopback(t *testing.T) {
 	t.Run("splice", func(t *testing.T) { testHandleConnRoutesClientHello(t, true) })
 }
 
+func TestPeekPartialClientHello(t *testing.T) {
+	small := makeTestClientHello(t, "panel.example.com")
+	protocols := make([]string, 24)
+	for i := range protocols {
+		protocols[i] = strings.Repeat("a", 255)
+	}
+	large := makeTestClientHello(t, "panel.example.com", protocols...)
+	if len(large) <= initialPeekSize {
+		t.Fatal("large ClientHello does not exercise buffer growth")
+	}
+	for _, tc := range []struct {
+		hello   []byte
+		stalled bool
+	}{{small, false}, {large, false}, {small, true}} {
+		hello, stalled := tc.hello, tc.stalled
+		ln, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		client, err := net.DialTCP("tcp", nil, ln.Addr().(*net.TCPAddr))
+		if err != nil {
+			ln.Close()
+			t.Fatal(err)
+		}
+		server, err := ln.AcceptTCP()
+		ln.Close()
+		if err != nil {
+			client.Close()
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { client.Close(); server.Close() })
+		if _, err := client.Write(hello[:1]); err != nil {
+			t.Fatal(err)
+		}
+		if !stalled {
+			go func() { time.Sleep(30 * time.Millisecond); _, _ = client.Write(hello[1:]) }()
+		}
+		got, err := peek(server, 150*time.Millisecond)
+		if stalled {
+			if !errors.Is(err, errPeekTimeout) {
+				t.Fatalf("stalled peek error = %v", err)
+			}
+			continue
+		}
+		if err != nil || !bytes.Equal(got, hello) {
+			t.Fatalf("peek length = %d, error = %v", len(got), err)
+		}
+		if err := server.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		read := make([]byte, len(hello))
+		if _, err := io.ReadFull(server, read); err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(read, hello) {
+			t.Fatal("peek consumed or changed the ClientHello")
+		}
+	}
+}
+
 func testHandleConnRoutesClientHello(t *testing.T, splice bool) {
 	t.Helper()
 	backendLn, err := net.Listen("tcp", "127.0.0.1:0")
@@ -449,7 +509,7 @@ func testHandleConnRoutesClientHello(t *testing.T, splice bool) {
 	}
 }
 
-func makeTestClientHello(t *testing.T, serverName string) []byte {
+func makeTestClientHello(t *testing.T, serverName string, nextProtos ...string) []byte {
 	t.Helper()
 	client, server := net.Pipe()
 	defer client.Close()
@@ -457,7 +517,7 @@ func makeTestClientHello(t *testing.T, serverName string) []byte {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- tls.Client(client, &tls.Config{ServerName: serverName, InsecureSkipVerify: true}).Handshake()
+		errCh <- tls.Client(client, &tls.Config{ServerName: serverName, InsecureSkipVerify: true, NextProtos: nextProtos}).Handshake()
 	}()
 	buf := make([]byte, maxPeekSize)
 	n, err := server.Read(buf)
