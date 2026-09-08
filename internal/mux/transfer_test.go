@@ -187,3 +187,81 @@ func tcpPair(t *testing.T) (*net.TCPConn, *net.TCPConn) {
 	server := <-accepted
 	return server.(*net.TCPConn), client.(*net.TCPConn)
 }
+
+func TestSpliceFailureDoesNotResumeConsumedStream(t *testing.T) {
+	for _, count := range []int64{0, 7} {
+		src, peer := tcpPair(t)
+		dst, receiver := tcpPair(t)
+		spliceErr := errors.New("pipe still contains consumed data")
+		mode, bytes, err := copyDirection(dst, src, TransferOptions{
+			SpliceEnabled: true, FallbackToCopy: true, IdleTimeout: time.Millisecond,
+			SpliceCopy: func(*net.TCPConn, *net.TCPConn, int, time.Duration) (int64, error) {
+				return count, spliceErr
+			},
+		})
+		src.Close()
+		peer.Close()
+		dst.Close()
+		receiver.Close()
+		if mode != "splice" || bytes != count || !errors.Is(err, spliceErr) {
+			t.Fatalf("result = %s, %d, %v", mode, bytes, err)
+		}
+	}
+}
+
+func TestProxyFailureStopsOtherDirection(t *testing.T) {
+	client, peer := tcpPair(t)
+	defer peer.Close()
+	backend, receiver := tcpPair(t)
+	defer receiver.Close()
+	defer client.Close()
+	defer backend.Close()
+	spliceErr := errors.New("transfer failed")
+	done := make(chan error, 1)
+	go func() {
+		_, _, _, err := ProxyBidirectional(client, backend, TransferOptions{
+			SpliceEnabled: true,
+			SpliceCopy: func(dst, src *net.TCPConn, _ int, _ time.Duration) (int64, error) {
+				if src == client {
+					return 0, spliceErr
+				}
+				return io.Copy(dst, src)
+			},
+		})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, spliceErr) {
+			t.Fatalf("error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("other direction remained blocked")
+	}
+}
+
+type partialWriteConn struct {
+	net.Conn
+	err error
+}
+
+func (c partialWriteConn) Write(p []byte) (int, error) { return 2, c.err }
+
+func TestCopyCountsPartialWrites(t *testing.T) {
+	for _, writeErr := range []error{nil, io.ErrClosedPipe} {
+		src, peer := net.Pipe()
+		go func() {
+			defer peer.Close()
+			peer.Write([]byte("hello"))
+		}()
+		n, err := copyWithIdleDeadline(partialWriteConn{err: writeErr}, src, 0)
+		src.Close()
+		wantErr := writeErr
+		if wantErr == nil {
+			wantErr = io.ErrShortWrite
+		}
+		if n != 2 || !errors.Is(err, wantErr) {
+			t.Fatalf("result = %d, %v; want 2, %v", n, err, wantErr)
+		}
+	}
+}

@@ -736,23 +736,35 @@ func recvPeek(conn *net.TCPConn, buf []byte) (int, error) {
 	return n, nil
 }
 
-func spliceCopy(dst, src *net.TCPConn, pipeSize int, idleTimeout time.Duration) (int64, error) {
-	srcFile, err := src.File()
+func duplicateSocket(conn *net.TCPConn) (int, error) {
+	raw, err := conn.SyscallConn()
 	if err != nil {
-		return 0, err
+		return -1, err
 	}
-	defer srcFile.Close()
-	dstFile, err := dst.File()
-	if err != nil {
-		return 0, err
+	fd := -1
+	var dupErr error
+	if err := raw.Control(func(socket uintptr) {
+		fd, dupErr = unix.FcntlInt(socket, unix.F_DUPFD_CLOEXEC, 0)
+	}); err != nil {
+		return -1, err
 	}
-	defer dstFile.Close()
+	return fd, dupErr
+}
 
-	srcFD := int(srcFile.Fd())
-	dstFD := int(dstFile.Fd())
+func spliceCopy(dst, src *net.TCPConn, pipeSize int, idleTimeout time.Duration) (int64, error) {
+	srcFD, err := duplicateSocket(src)
+	if err != nil {
+		return 0, errors.Join(mux.ErrSpliceUnavailable, err)
+	}
+	defer unix.Close(srcFD)
+	dstFD, err := duplicateSocket(dst)
+	if err != nil {
+		return 0, errors.Join(mux.ErrSpliceUnavailable, err)
+	}
+	defer unix.Close(dstFD)
 	var pipeFD [2]int
-	if err := unix.Pipe2(pipeFD[:], unix.O_CLOEXEC); err != nil {
-		return 0, err
+	if err := unix.Pipe2(pipeFD[:], unix.O_CLOEXEC|unix.O_NONBLOCK); err != nil {
+		return 0, errors.Join(mux.ErrSpliceUnavailable, err)
 	}
 	defer unix.Close(pipeFD[0])
 	defer unix.Close(pipeFD[1])
@@ -774,6 +786,9 @@ func spliceCopy(dst, src *net.TCPConn, pipeSize int, idleTimeout time.Duration) 
 			}
 			if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EWOULDBLOCK) {
 				continue
+			}
+			if total == 0 && (errors.Is(err, unix.EINVAL) || errors.Is(err, unix.ENOSYS) || errors.Is(err, unix.EOPNOTSUPP)) {
+				return 0, errors.Join(mux.ErrSpliceUnavailable, err)
 			}
 			return total, err
 		}
@@ -805,15 +820,15 @@ func spliceCopy(dst, src *net.TCPConn, pipeSize int, idleTimeout time.Duration) 
 }
 
 func waitFD(fd int, events int16, idleTimeout time.Duration) error {
-	if idleTimeout <= 0 {
-		return nil
-	}
 	timeoutMs := int(idleTimeout / time.Millisecond)
 	if idleTimeout%time.Millisecond != 0 {
 		timeoutMs++
 	}
 	if timeoutMs < 1 {
 		timeoutMs = 1
+	}
+	if idleTimeout <= 0 {
+		timeoutMs = -1
 	}
 	pollFds := []unix.PollFd{{Fd: int32(fd), Events: events}}
 	for {

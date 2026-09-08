@@ -39,14 +39,22 @@ func ProxyBidirectional(client, backend net.Conn, opts TransferOptions) (string,
 	go func() {
 		defer wg.Done()
 		mode, bytes, err := copyDirection(backend, client, opts)
-		closeWrite(backend)
 		results <- TransferResult{Direction: "client_to_backend", Mode: mode, Bytes: bytes, Err: err}
+		if err != nil && !errors.Is(err, io.EOF) {
+			stopTransfer(client)
+			stopTransfer(backend)
+		}
+		closeWrite(backend)
 	}()
 	go func() {
 		defer wg.Done()
 		mode, bytes, err := copyDirection(client, backend, opts)
-		closeWrite(client)
 		results <- TransferResult{Direction: "backend_to_client", Mode: mode, Bytes: bytes, Err: err}
+		if err != nil && !errors.Is(err, io.EOF) {
+			stopTransfer(client)
+			stopTransfer(backend)
+		}
+		closeWrite(client)
 	}()
 	wg.Wait()
 	close(results)
@@ -64,7 +72,7 @@ func ProxyBidirectional(client, backend net.Conn, opts TransferOptions) (string,
 		} else {
 			backendToClient = result.Bytes
 		}
-		if result.Err != nil && !errors.Is(result.Err, io.EOF) && !errors.Is(result.Err, ErrIdleTimeout) {
+		if finalErr == nil && result.Err != nil && !errors.Is(result.Err, io.EOF) && !errors.Is(result.Err, ErrIdleTimeout) && !errors.Is(result.Err, net.ErrClosed) {
 			finalErr = result.Err
 		}
 	}
@@ -78,7 +86,7 @@ func copyDirection(dst, src net.Conn, opts TransferOptions) (string, int64, erro
 		if dstOK && srcOK {
 			if bytes, err := opts.SpliceCopy(dstTCP, srcTCP, opts.PipeSize, opts.IdleTimeout); err == nil {
 				return "splice", bytes, nil
-			} else if !opts.FallbackToCopy {
+			} else if !opts.FallbackToCopy || bytes != 0 || !errors.Is(err, ErrSpliceUnavailable) {
 				return "splice", bytes, err
 			}
 		}
@@ -103,13 +111,13 @@ func copyWithIdleDeadline(dst, src net.Conn, idle time.Duration) (int64, error) 
 				_ = dst.SetWriteDeadline(time.Now().Add(idle))
 			}
 			nw, ew := dst.Write(buf[:nr])
+			total += int64(nw)
 			if ew != nil {
 				return total, ew
 			}
 			if nw != nr {
 				return total, io.ErrShortWrite
 			}
-			total += int64(nw)
 		}
 		if er != nil {
 			if errors.Is(er, io.EOF) {
@@ -132,6 +140,14 @@ func closeWrite(conn net.Conn) {
 	if tcp, ok := conn.(*net.TCPConn); ok {
 		_ = tcp.CloseWrite()
 		return
+	}
+	_ = conn.Close()
+}
+
+func stopTransfer(conn net.Conn) {
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		_ = tcp.CloseRead()
+		_ = tcp.CloseWrite()
 	}
 	_ = conn.Close()
 }

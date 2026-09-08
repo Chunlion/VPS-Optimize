@@ -18,8 +18,77 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/Chunlion/VPS-Optimize/internal/mux"
 )
+
+func TestSpliceCopyBackpressureTimeout(t *testing.T) {
+	pair := func() (*net.TCPConn, *net.TCPConn) {
+		ln, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ln.Close()
+		peer, err := net.DialTCP("tcp", nil, ln.Addr().(*net.TCPAddr))
+		if err != nil {
+			t.Fatal(err)
+		}
+		conn, err := ln.AcceptTCP()
+		if err != nil {
+			peer.Close()
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { conn.Close(); peer.Close() })
+		return conn, peer
+	}
+	src, sender := pair()
+	dst, receiver := pair()
+	if err := dst.SetWriteBuffer(4096); err != nil {
+		t.Fatal(err)
+	}
+	if err := receiver.SetReadBuffer(4096); err != nil {
+		t.Fatal(err)
+	}
+	go func() { _, _ = sender.Write(make([]byte, 8*1024*1024)) }()
+	done := make(chan error, 1)
+	go func() { _, err := spliceCopy(dst, src, 4096, 50*time.Millisecond); done <- err }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, mux.ErrIdleTimeout) {
+			t.Fatalf("error = %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("splice remained blocked on a slow receiver")
+	}
+}
+
+func TestWaitFDWithoutTimeoutWaitsForData(t *testing.T) {
+	var fds [2]int
+	if err := unix.Pipe2(fds[:], unix.O_NONBLOCK|unix.O_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(fds[0])
+	defer unix.Close(fds[1])
+	done := make(chan error, 1)
+	go func() { done <- waitFD(fds[0], unix.POLLIN, 0) }()
+	select {
+	case err := <-done:
+		t.Fatalf("returned before data: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	if _, err := unix.Write(fds[1], []byte{1}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("did not wake for data")
+	}
+}
 
 func TestDialBackendWithRetryDefaultDoesNotRetry(t *testing.T) {
 	calls := 0
@@ -260,6 +329,12 @@ func TestAcceptLoopStopsAfterContextCancellation(t *testing.T) {
 }
 
 func TestHandleConnRoutesClientHelloOverLoopback(t *testing.T) {
+	t.Run("copy", func(t *testing.T) { testHandleConnRoutesClientHello(t, false) })
+	t.Run("splice", func(t *testing.T) { testHandleConnRoutesClientHello(t, true) })
+}
+
+func testHandleConnRoutesClientHello(t *testing.T, splice bool) {
+	t.Helper()
 	backendLn, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("backend Listen: %v", err)
@@ -298,7 +373,7 @@ func TestHandleConnRoutesClientHelloOverLoopback(t *testing.T) {
 	cfg := mux.DefaultConfig()
 	cfg.Listen.TCP = []string{frontendLn.Addr().String()}
 	cfg.DefaultBackend = backendLn.Addr().String()
-	cfg.Splice.Enabled = false
+	cfg.Splice.Enabled = splice
 	cfg.Routes = []mux.Route{{
 		Name:    "panel",
 		SNI:     []string{"panel.example.com"},
@@ -368,6 +443,9 @@ func TestHandleConnRoutesClientHelloOverLoopback(t *testing.T) {
 	}
 	if status.data.BytesClientToBackend != uint64(len(hello)) || status.data.BytesBackendToClient != uint64(len(backendReply)) {
 		t.Fatalf("unexpected byte counters: %+v", status.data)
+	}
+	if splice && status.data.SpliceSuccess != 1 {
+		t.Fatalf("splice was not used: %+v", status.data)
 	}
 }
 
