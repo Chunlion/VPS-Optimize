@@ -88,8 +88,15 @@ jobs:
               done
             fi
             for attempt in 1 2 3; do
-              if apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::http::No-Cache=true -o Acquire::https::No-Cache=true update && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::http::No-Cache=true -o Acquire::https::No-Cache=true install -y --no-install-recommends bash ca-certificates git grep sed gawk coreutils diffutils findutils procps python3; then
-                break
+              if apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::http::No-Cache=true -o Acquire::https::No-Cache=true update; then
+                set --
+                if [ "${{ matrix.image }}" = "debian:11" ]; then
+                  perl_version=$(apt-cache show perl | awk '/^Version:/ {print $2; exit}')
+                  set -- --allow-downgrades "perl-base=$perl_version"
+                fi
+                if apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::http::No-Cache=true -o Acquire::https::No-Cache=true install -y --no-install-recommends "$@" bash ca-certificates git grep sed gawk coreutils diffutils findutils procps python3; then
+                  break
+                fi
               fi
               if [ "$attempt" -eq 3 ]; then
                 exit 1
