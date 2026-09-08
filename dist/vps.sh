@@ -451,7 +451,7 @@ verify_file_sha256() {
     printf '%s  %s\n' "$expected" "$file" > "$check_file"
     if ! sha256sum -c "$check_file" >/dev/null 2>&1; then
         rm -f "$check_file"
-        echo -e "$(localized_text "${RED}❌ sha256 校验失败，已拒绝覆盖 /usr/local/bin/cy。${PLAIN}" "${RED}❌ sha256 verification failed and coverage of /usr/local/bin/cy has been refused.${PLAIN}" "${RED}Проверка ❌ sha256 не удалась, и в покрытии /usr/local/bin/cy было отказано.${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ SHA256 校验失败，拒绝使用下载文件。${PLAIN}" "${RED}❌ SHA256 verification failed; download rejected.${PLAIN}" "${RED}❌ Проверка SHA256 не пройдена; загруженный файл отклонён.${PLAIN}")"
         return 1
     fi
     rm -f "$check_file"
@@ -9474,6 +9474,10 @@ vpso_mux_config_path() {
     echo "/etc/vps-optimize/vpso-mux.yaml"
 }
 
+vpso_mux_binary_path() {
+    echo "/usr/local/bin/vpso-mux"
+}
+
 vpso_mux_service_name() {
     echo "vpso-mux.service"
 }
@@ -9998,10 +10002,88 @@ require_vpso_mux_binary_for_cutover() {
     return 1
 }
 
+download_vpso_mux_binary() {
+    local target="$1" arch asset
+    local base="https://github.com/Chunlion/VPS-Optimize/releases/latest/download"
+    case "$(uname -m)" in
+        x86_64|amd64) arch=amd64 ;;
+        aarch64|arm64) arch=arm64 ;;
+        *)
+            echo "$(localized_text "此架构暂无预编译核心：$(uname -m)" "No prebuilt binary for this architecture: $(uname -m)" "Нет готового файла для архитектуры: $(uname -m)")" >&2
+            return 1
+            ;;
+    esac
+    asset="vpso-mux-linux-${arch}"
+    download_remote_script "$base/$asset" "$target" || return 1
+    download_remote_script "$base/$asset.sha256" "$target.sha256" || return 1
+    verify_file_sha256 "$target" "$target.sha256" || return 1
+    chmod 755 "$target" || return 1
+    "$target" -h >/dev/null 2>&1
+}
+
+update_vpso_mux_binary() {
+    local binary work config service failed=0
+    local -a active_services=()
+    binary=$(vpso_mux_binary_path)
+    [[ -x "$binary" ]] || { install_vpso_mux_binary; return $?; }
+    load_sni_stack_env || return 1
+    confirm_risk_action "$(localized_text "更新 TCP Peek 核心" "Update TCP Peek core" "Обновить ядро TCP Peek")" \
+        "$(localized_text "下载预编译核心；重启会中断现有连接" "Download a prebuilt binary; restarting interrupts existing connections" "Загрузка готового файла; перезапуск прервёт текущие соединения")" \
+        "$(localized_text "保留配置，启动失败恢复旧核心" "Keep configuration and restore the old binary if startup fails" "Сохранить конфигурацию; при ошибке запуска восстановить старый файл")" || return 1
+    work=$(mktemp -d "${binary}.update.XXXXXX") || return 1
+    download_vpso_mux_binary "$work/vpso-mux" || return 1
+    "$work/vpso-mux" -config "$(vpso_mux_config_path)" -check || return 1
+    config=$(vpso_mux_preflight_config_path)
+    if [[ -f "$config" ]]; then
+        "$work/vpso-mux" -config "$config" -check || return 1
+    fi
+    for service in vpso-mux vpso-mux-preflight; do
+        if systemctl is-active --quiet "$service"; then
+            active_services+=("$service")
+        fi
+    done
+    cp -p "$binary" "$work/previous" || return 1
+    mv -f "$work/vpso-mux" "$binary" || return 1
+    for service in "${active_services[@]}"; do
+        if ! systemctl restart "$service" || ! systemctl is-active --quiet "$service"; then
+            failed=1
+        elif [[ "$service" == vpso-mux ]] && ! verify_public_443_listener_for_mode tcp-peek; then
+            failed=1
+        fi
+    done
+    if [[ "$failed" == 1 ]]; then
+        mv -f "$work/previous" "$binary" || return 1
+        for service in "${active_services[@]}"; do
+            if ! systemctl restart "$service" || ! systemctl is-active --quiet "$service"; then
+                echo "$(localized_text "旧核心已恢复，但服务恢复失败：$service" "Old binary restored, but service recovery failed: $service" "Старый файл восстановлен, но служба не запустилась: $service")" >&2
+                return 1
+            fi
+            if [[ "$service" == vpso-mux ]] && ! verify_public_443_listener_for_mode tcp-peek; then
+                return 1
+            fi
+        done
+        echo "$(localized_text "更新失败，已恢复旧核心。" "Update failed; the old binary was restored." "Обновление не удалось; старый файл восстановлен.")" >&2
+        return 1
+    fi
+    echo "$(localized_text "TCP Peek 核心已更新。旧核心：$work/previous" "TCP Peek core updated. Previous binary: $work/previous" "Ядро TCP Peek обновлено. Старый файл: $work/previous")"
+}
+
 install_vpso_mux_binary() {
-    if [[ -x /usr/local/bin/vpso-mux ]]; then
+    if [[ -x "$(vpso_mux_binary_path)" ]]; then
         return 0
     fi
+
+    case "$(uname -m)" in
+        x86_64|amd64|aarch64|arm64)
+            local binary work
+            binary=$(vpso_mux_binary_path)
+            mkdir -p "$(dirname "$binary")" || return 1
+            work=$(mktemp -d "${binary}.install.XXXXXX") || return 1
+            download_vpso_mux_binary "$work/vpso-mux" || return 1
+            mv -f "$work/vpso-mux" "$binary" || return 1
+            return 0
+            ;;
+    esac
 
     if ! command -v go >/dev/null 2>&1; then
         echo -e "$(localized_text "${CYAN}▶ 未检测到 Go，正在安装 vpso-mux 构建工具链...${PLAIN}" "${CYAN}▶ Go not detected, installing vpso-mux build toolchain...${PLAIN}" "${CYAN}▶ Go не обнаружен, устанавливается набор инструментов сборки vpso-mux...${PLAIN}")"
@@ -23764,6 +23846,7 @@ func_sni_stack_quick_menu() {
         print_menu_item 2 "$(localized_text "安装 / 切换入口模式" "Install or switch entry mode" "Установить или сменить режим")" "Nginx Stream / Xray Fallback / TCP Peek" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
         print_menu_item 6 "$(localized_text "重新应用当前模式" "Reapply current mode" "Повторно применить режим")" "$(localized_text "按现有参数重新生成" "regenerate from saved settings" "пересоздать из сохранённых параметров")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
         print_menu_item 7 "$(localized_text "回滚上次模式切换" "Roll back the last switch" "Откатить последнее переключение")" "$(localized_text "恢复切换前配置" "restore the previous configuration" "восстановить предыдущую конфигурацию")" "$sni_title_column" "$YELLOW" "$YELLOW" "$YELLOW"
+        print_menu_item 18 "$(localized_text "更新 TCP Peek 核心" "Update TCP Peek core" "Обновить ядро TCP Peek")" "$(localized_text "下载预编译版本 / 失败回滚" "prebuilt download / rollback on failure" "готовый файл / откат при ошибке")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ Web、订阅与证书${PLAIN}" "${BOLD}▶ Web, subscriptions, and certificates${PLAIN}" "${BOLD}▶ Web, подписки и сертификаты${PLAIN}")"
         print_menu_item 8 "$(localized_text "Web 域名与反向代理" "Web domains and reverse proxies" "Web-домены и обратный прокси")" "$(localized_text "新增 / 删除 / 查看" "add / remove / view" "добавить / удалить / просмотреть")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
@@ -23800,6 +23883,7 @@ func_sni_stack_quick_menu() {
             15) manage_xray_inbound_routes; continue ;;
             16) view_current_entry_logs ;;
             17) manage_reality_traffic_guard; continue ;;
+            18) update_vpso_mux_binary ;;
             "?") show_sni_help; pause_return; continue ;;
             0) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;

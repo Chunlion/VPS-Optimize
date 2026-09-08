@@ -50,6 +50,8 @@ Nginx Stream 是默认稳定模式。公网 `443` 由 Nginx stream 监听，使�
 
 ## TCP Peek + Splice / vpso-mux 实现
 
+更新已有核心：先更新主脚本，再进入 `[19 443端口复用管理中心] -> [18 更新 TCP Peek 核心]`。Linux amd64、arm64 从 GitHub Release 下载预编译文件，无需安装 Go。脚本校验下载文件和现有配置，备份旧核心后替换，仅重启原本运行的 Peek 服务；启动或公网监听检查失败时恢复旧核心。重启会中断现有连接，成功后显示旧核心备份路径。首次安装也优先使用预编译文件，其他架构保留源码构建方式。
+
 TCP Peek + Splice / vpso-mux 和 Nginx Stream 使用同一套 443端口复用配置。Web 域名、证书、Web 反代引擎后端、Web 白名单和 Xray SNI 分流记录都不需要另起一套；3x-ui 面板、订阅和 Xray 入站仍按本地监听填写。进入 `[2 安装 / 切换 443 入口模式]` 并选择 TCP Peek 后，脚本会安装缺少的构建依赖，生成并校验配置，再通过独立的 `8444` 服务验证 SNI 路由和本地后端。预检通过后才切换公网 `443`。
 
 `vpso-mux` 使用 `MSG_PEEK` 查看 TLS ClientHello 中的 SNI，不消费首包；后端收到的 ClientHello 仍与客户端原始数据一致。转发优先使用 splice，失败或不可用时回退普通 copy。

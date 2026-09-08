@@ -5,6 +5,10 @@ vpso_mux_config_path() {
     echo "/etc/vps-optimize/vpso-mux.yaml"
 }
 
+vpso_mux_binary_path() {
+    echo "/usr/local/bin/vpso-mux"
+}
+
 vpso_mux_service_name() {
     echo "vpso-mux.service"
 }

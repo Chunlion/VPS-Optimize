@@ -288,6 +288,7 @@ func_sni_stack_quick_menu() {
         print_menu_item 2 "$(localized_text "安装 / 切换入口模式" "Install or switch entry mode" "Установить или сменить режим")" "Nginx Stream / Xray Fallback / TCP Peek" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
         print_menu_item 6 "$(localized_text "重新应用当前模式" "Reapply current mode" "Повторно применить режим")" "$(localized_text "按现有参数重新生成" "regenerate from saved settings" "пересоздать из сохранённых параметров")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
         print_menu_item 7 "$(localized_text "回滚上次模式切换" "Roll back the last switch" "Откатить последнее переключение")" "$(localized_text "恢复切换前配置" "restore the previous configuration" "восстановить предыдущую конфигурацию")" "$sni_title_column" "$YELLOW" "$YELLOW" "$YELLOW"
+        print_menu_item 18 "$(localized_text "更新 TCP Peek 核心" "Update TCP Peek core" "Обновить ядро TCP Peek")" "$(localized_text "下载预编译版本 / 失败回滚" "prebuilt download / rollback on failure" "готовый файл / откат при ошибке")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ Web、订阅与证书${PLAIN}" "${BOLD}▶ Web, subscriptions, and certificates${PLAIN}" "${BOLD}▶ Web, подписки и сертификаты${PLAIN}")"
         print_menu_item 8 "$(localized_text "Web 域名与反向代理" "Web domains and reverse proxies" "Web-домены и обратный прокси")" "$(localized_text "新增 / 删除 / 查看" "add / remove / view" "добавить / удалить / просмотреть")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
@@ -324,6 +325,7 @@ func_sni_stack_quick_menu() {
             15) manage_xray_inbound_routes; continue ;;
             16) view_current_entry_logs ;;
             17) manage_reality_traffic_guard; continue ;;
+            18) update_vpso_mux_binary ;;
             "?") show_sni_help; pause_return; continue ;;
             0) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;

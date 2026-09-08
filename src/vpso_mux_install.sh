@@ -73,10 +73,88 @@ require_vpso_mux_binary_for_cutover() {
     return 1
 }
 
+download_vpso_mux_binary() {
+    local target="$1" arch asset
+    local base="https://github.com/Chunlion/VPS-Optimize/releases/latest/download"
+    case "$(uname -m)" in
+        x86_64|amd64) arch=amd64 ;;
+        aarch64|arm64) arch=arm64 ;;
+        *)
+            echo "$(localized_text "此架构暂无预编译核心：$(uname -m)" "No prebuilt binary for this architecture: $(uname -m)" "Нет готового файла для архитектуры: $(uname -m)")" >&2
+            return 1
+            ;;
+    esac
+    asset="vpso-mux-linux-${arch}"
+    download_remote_script "$base/$asset" "$target" || return 1
+    download_remote_script "$base/$asset.sha256" "$target.sha256" || return 1
+    verify_file_sha256 "$target" "$target.sha256" || return 1
+    chmod 755 "$target" || return 1
+    "$target" -h >/dev/null 2>&1
+}
+
+update_vpso_mux_binary() {
+    local binary work config service failed=0
+    local -a active_services=()
+    binary=$(vpso_mux_binary_path)
+    [[ -x "$binary" ]] || { install_vpso_mux_binary; return $?; }
+    load_sni_stack_env || return 1
+    confirm_risk_action "$(localized_text "更新 TCP Peek 核心" "Update TCP Peek core" "Обновить ядро TCP Peek")" \
+        "$(localized_text "下载预编译核心；重启会中断现有连接" "Download a prebuilt binary; restarting interrupts existing connections" "Загрузка готового файла; перезапуск прервёт текущие соединения")" \
+        "$(localized_text "保留配置，启动失败恢复旧核心" "Keep configuration and restore the old binary if startup fails" "Сохранить конфигурацию; при ошибке запуска восстановить старый файл")" || return 1
+    work=$(mktemp -d "${binary}.update.XXXXXX") || return 1
+    download_vpso_mux_binary "$work/vpso-mux" || return 1
+    "$work/vpso-mux" -config "$(vpso_mux_config_path)" -check || return 1
+    config=$(vpso_mux_preflight_config_path)
+    if [[ -f "$config" ]]; then
+        "$work/vpso-mux" -config "$config" -check || return 1
+    fi
+    for service in vpso-mux vpso-mux-preflight; do
+        if systemctl is-active --quiet "$service"; then
+            active_services+=("$service")
+        fi
+    done
+    cp -p "$binary" "$work/previous" || return 1
+    mv -f "$work/vpso-mux" "$binary" || return 1
+    for service in "${active_services[@]}"; do
+        if ! systemctl restart "$service" || ! systemctl is-active --quiet "$service"; then
+            failed=1
+        elif [[ "$service" == vpso-mux ]] && ! verify_public_443_listener_for_mode tcp-peek; then
+            failed=1
+        fi
+    done
+    if [[ "$failed" == 1 ]]; then
+        mv -f "$work/previous" "$binary" || return 1
+        for service in "${active_services[@]}"; do
+            if ! systemctl restart "$service" || ! systemctl is-active --quiet "$service"; then
+                echo "$(localized_text "旧核心已恢复，但服务恢复失败：$service" "Old binary restored, but service recovery failed: $service" "Старый файл восстановлен, но служба не запустилась: $service")" >&2
+                return 1
+            fi
+            if [[ "$service" == vpso-mux ]] && ! verify_public_443_listener_for_mode tcp-peek; then
+                return 1
+            fi
+        done
+        echo "$(localized_text "更新失败，已恢复旧核心。" "Update failed; the old binary was restored." "Обновление не удалось; старый файл восстановлен.")" >&2
+        return 1
+    fi
+    echo "$(localized_text "TCP Peek 核心已更新。旧核心：$work/previous" "TCP Peek core updated. Previous binary: $work/previous" "Ядро TCP Peek обновлено. Старый файл: $work/previous")"
+}
+
 install_vpso_mux_binary() {
-    if [[ -x /usr/local/bin/vpso-mux ]]; then
+    if [[ -x "$(vpso_mux_binary_path)" ]]; then
         return 0
     fi
+
+    case "$(uname -m)" in
+        x86_64|amd64|aarch64|arm64)
+            local binary work
+            binary=$(vpso_mux_binary_path)
+            mkdir -p "$(dirname "$binary")" || return 1
+            work=$(mktemp -d "${binary}.install.XXXXXX") || return 1
+            download_vpso_mux_binary "$work/vpso-mux" || return 1
+            mv -f "$work/vpso-mux" "$binary" || return 1
+            return 0
+            ;;
+    esac
 
     if ! command -v go >/dev/null 2>&1; then
         echo -e "$(localized_text "${CYAN}▶ 未检测到 Go，正在安装 vpso-mux 构建工具链...${PLAIN}" "${CYAN}▶ Go not detected, installing vpso-mux build toolchain...${PLAIN}" "${CYAN}▶ Go не обнаружен, устанавливается набор инструментов сборки vpso-mux...${PLAIN}")"

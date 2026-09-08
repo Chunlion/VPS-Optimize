@@ -439,7 +439,7 @@ verify_file_sha256() {
     printf '%s  %s\n' "$expected" "$file" > "$check_file"
     if ! sha256sum -c "$check_file" >/dev/null 2>&1; then
         rm -f "$check_file"
-        echo -e "$(localized_text "${RED}❌ sha256 校验失败，已拒绝覆盖 /usr/local/bin/cy。${PLAIN}" "${RED}❌ sha256 verification failed and coverage of /usr/local/bin/cy has been refused.${PLAIN}" "${RED}Проверка ❌ sha256 не удалась, и в покрытии /usr/local/bin/cy было отказано.${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ SHA256 校验失败，拒绝使用下载文件。${PLAIN}" "${RED}❌ SHA256 verification failed; download rejected.${PLAIN}" "${RED}❌ Проверка SHA256 не пройдена; загруженный файл отклонён.${PLAIN}")"
         return 1
     fi
     rm -f "$check_file"

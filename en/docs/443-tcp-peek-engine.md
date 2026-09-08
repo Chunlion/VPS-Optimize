@@ -53,6 +53,8 @@ This is the recommended long-term default. It supports the complete Web, REALITY
 
 ## TCP Peek + Splice / vpso-mux implementation
 
+To update an existing binary, update the main script, then select `[19 Port 443 Reuse Manager] -> [18 Update TCP Peek core]`. Linux amd64 and arm64 download prebuilt files from GitHub Release without Go. The script verifies the download and existing configuration, backs up the old binary, replaces it, and restarts only previously running Peek services. Startup or public-listener check failures restore the old binary. Restarting interrupts existing connections; a successful update prints the backup path. New installations also use prebuilt files; other architectures retain source builds.
+
 TCP Peek and Nginx Stream use the same saved configuration. Do not create a second set of domains, certificates, Web backends, allowlists, or Xray SNI routes. Open `[2 Install / switch the port 443 entry mode]` and choose TCP Peek. The script builds `vpso-mux` when required, validates its configuration, and tests the routes on the isolated port `8444`. Public port `443` changes hands only after the preflight succeeds.
 
 `vpso-mux` uses `MSG_PEEK` to inspect SNI in the TLS ClientHello without consuming the first packet. The backend receives the original ClientHello. Forwarding uses splice when available and falls back to ordinary copy when necessary.

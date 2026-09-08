@@ -1,0 +1,51 @@
+name: Build vpso-mux
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cmd/vpso-mux/**'
+      - 'internal/mux/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/vpso-mux.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: vpso-mux-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test
+        run: |
+          go test ./...
+          go vet ./...
+      - name: Build Linux binaries
+        run: |
+          mkdir -p out
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -o "out/vpso-mux-linux-$arch" ./cmd/vpso-mux
+            (cd out && sha256sum "vpso-mux-linux-$arch" > "vpso-mux-linux-$arch.sha256")
+          done
+      - name: Publish binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="vpso-mux-${GITHUB_SHA:0:12}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            exit 0
+          fi
+          gh release create "$tag" out/* --target "$GITHUB_SHA" \
+            --title "$tag" --notes "Linux amd64 and arm64 binaries. Source: $GITHUB_SHA" --latest

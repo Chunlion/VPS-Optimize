@@ -3232,4 +3232,74 @@ rmdir "$reality_guard_smoke_tmp"
     [[ "$result" == 17 ]]
 )
 
+(
+    source src/vpso_mux_install.sh
+    update_tmp=$(mktemp -d /tmp/vpso-mux-update-test.XXXXXX)
+    trap 'rm -rf "$update_tmp"' EXIT
+    vpso_mux_binary_path() { echo "$update_tmp/vpso-mux"; }
+    vpso_mux_config_path() { echo "$update_tmp/config.yaml"; }
+    vpso_mux_preflight_config_path() { echo "$update_tmp/preflight.yaml"; }
+    load_sni_stack_env() { return 0; }
+    confirm_risk_action() { return 0; }
+    uname() { echo x86_64; }
+    download_vpso_mux_binary() {
+        [[ "$scenario" != download-fail ]] || return 1
+        printf '#!/bin/sh\nexit %s\n' "$candidate_exit" > "$1"
+        chmod 755 "$1"
+    }
+    systemctl() {
+        case "$1" in
+            is-active) [[ "$active" == 1 && "$3" == vpso-mux ]] ;;
+            restart)
+                echo "$2" >> "$update_tmp/restarts"
+                [[ "$scenario" != restart-fail ]] || cmp -s "$(vpso_mux_binary_path)" "$update_tmp/original"
+                ;;
+            *) return 1 ;;
+        esac
+    }
+    verify_public_443_listener_for_mode() {
+        [[ "$scenario" != listener-fail ]] || cmp -s "$(vpso_mux_binary_path)" "$update_tmp/original"
+    }
+    printf '#!/bin/sh\nexit 42\n' > "$update_tmp/original"
+    chmod 755 "$update_tmp/original"
+    printf 'unchanged config\n' > "$update_tmp/config.yaml"
+    for scenario in success inactive download-fail config-fail restart-fail listener-fail; do
+        cp -p "$update_tmp/original" "$(vpso_mux_binary_path)"
+        : > "$update_tmp/restarts"
+        candidate_exit=0
+        active=1
+        [[ "$scenario" != config-fail ]] || candidate_exit=1
+        [[ "$scenario" != inactive ]] || active=0
+        result=0
+        update_vpso_mux_binary >/dev/null 2>&1 || result=$?
+        case "$scenario" in
+            success|inactive)
+                [[ "$result" == 0 ]]
+                "$(vpso_mux_binary_path)"
+                if [[ "$scenario" == inactive ]]; then
+                    [[ ! -s "$update_tmp/restarts" ]]
+                else
+                    [[ "$(wc -l < "$update_tmp/restarts")" -eq 1 ]]
+                fi
+                ;;
+            *)
+                [[ "$result" != 0 ]]
+                cmp "$(vpso_mux_binary_path)" "$update_tmp/original"
+                case "$scenario" in
+                    download-fail|config-fail) [[ ! -s "$update_tmp/restarts" ]] ;;
+                    *) [[ "$(wc -l < "$update_tmp/restarts")" -eq 2 ]] ;;
+                esac
+                ;;
+        esac
+        [[ "$(cat "$update_tmp/config.yaml")" == 'unchanged config' ]]
+    done
+    scenario=success
+    candidate_exit=0
+    rm -f "$(vpso_mux_binary_path)"
+    install_vpso_mux_binary
+    "$(vpso_mux_binary_path)"
+    scenario=download-fail
+    install_vpso_mux_binary
+)
+
 echo "Smoke tests passed."
