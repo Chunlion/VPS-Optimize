@@ -19,7 +19,7 @@ The subscription tool is recommended to be deployed in the manner of "local bind
 After enabling the Port 443 Reuse, it is recommended to add the Internet HTTPS domain through the following entry:
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy]
+Main menu [19 Port 443 Reuse manager] -> [6 management Web domains / reverse proxy]
 ```
 
 When the Port 443 Reuse is not enabled, a standalone reverse proxy portal can be used:

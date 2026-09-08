@@ -128,7 +128,7 @@ Nginx HTTPS will reuse the existing `acme.sh + Cloudflare DNS API` certificate p
 Things to note:
 
 1. This process is only suitable for servers that have not yet enabled Port 443 Reuse.
-2. If Port 443 Reuse has been enabled, Nginx HTTPS reverse proxy will seize the public port `443`. You should use `Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy]` instead, and select Caddy or Nginx local web reverse proxy engine in this menu.
+2. If Port 443 Reuse has been enabled, Nginx HTTPS reverse proxy will seize the public port `443`. You should use `Main menu [19 Port 443 Reuse manager] -> [6 management Web domains / reverse proxy]` instead, and select Caddy or Nginx local web reverse proxy engine in this menu.
 3. The same domain can only be managed by one of the portals Caddy or Nginx. Do not configure it repeatedly.
 4. The backend is still recommended to listen to `127.0.0.1:port`, such as `127.0.0.1:3000`. The domain and port are example values, please replace them with your actual values.
 
@@ -176,7 +176,7 @@ Main menu [19 Port 443 Reuse manager] -> [2 initial setup/installation Port 443 
 health check after running:
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
 ```
 
 ### Verify
@@ -219,7 +219,7 @@ Log each site:
 First-time configuration or re-applying Port 443 Reuse may isolate the old Caddy configuration and the old Nginx HTTPS reverse proxy configuration managed by scripts to prevent the old configuration from continuing to seize the public port `443`. After enabling it, do not write down the old rules for preempting `443` by hand, but make up the records one by one:
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy]
+Main menu [19 Port 443 Reuse manager] -> [6 management Web domains / reverse proxy]
 ```
 
 When adding, only fill in the local backend:
@@ -240,7 +240,7 @@ openssl s_client -connect serverIP:443 -servername site.example.com </dev/null
 
 ## Migrate existing Nginx/Apache website
 
-443 In Port 443 Reuse mode, Internet `443` should be bound uniformly by the current entry mode. The old Nginx server, Apache, panel, Xray should no longer be directly bound to the Internet `443`; if you want to continue to use Nginx as a website reverse proxy, please switch to the Nginx local web reverse proxy engine in `[19] -> [8]` instead of retaining the old Internet `443` server.
+443 In Port 443 Reuse mode, Internet `443` should be bound uniformly by the current entry mode. The old Nginx server, Apache, panel, Xray should no longer be directly bound to the Internet `443`; if you want to continue to use Nginx as a website reverse proxy, please switch to the Nginx local web reverse proxy engine in `[19] -> [6]` instead of retaining the old Internet `443` server.
 
 Recommended practices:
 
@@ -288,7 +288,7 @@ Select `[1 Add Caddy reverse proxy]` or `[2 Add Nginx HTTPS reverse proxy]` and 
 If the Port 443 Reuse has been enabled or is ready to be enabled, add an external domain through the Port 443 Reuse:
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy]
+Main menu [19 Port 443 Reuse manager] -> [6 management Web domains / reverse proxy]
 ```
 
 And change the external access address to:
@@ -316,7 +316,7 @@ https://sub.example.com:3000/
 | Subscription backend | `curl -I http://127.0.0.1:2096/sub/` | able to connect |
 | Panel public internet | `curl -I https://panel.example.com/panel/` | HTTPS normal |
 | Website public internet | `curl -I https://site.example.com/` | HTTPS normal |
-| 443 health check | `Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]` | No critical failure |
+| 443 health check | `Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]` | No critical failure |
 | Service overview | `Main menu [15 Service health overview]` | No exception failed service |
 
 Back up immediately after success:
@@ -338,7 +338,7 @@ Main menu [16 Configuration backup and rollback] -> [1 Create full configuration
 Port 443 Reuse rollback entry:
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [6 rollback Port 443 Reuse configuration]
+Main menu [19 Port 443 Reuse manager] -> [10 CF DNS / Caddy Certificate maintenance] -> [6 rollback Port 443 Reuse configuration]
 ```
 
 Script full rollback entry:
@@ -354,8 +354,8 @@ For lost connection or complex faults, see [recovery-runbook.md](recovery-runboo
 | Error | Consequences | Correct approach |
 |---|---|---|
 | Directly configure it for the first time without taking inventory of the old `443` occupancy | Nginx/Caddy port conflict | First `ss -lntp`, record the old service |
-| Rerun the first configuration when adding a new website | Configurations are repeatedly rewritten, making troubleshooting complicated. | Subsequent new additions will only go to `[8 management Web domains / reverse proxy]` |
+| Rerun the first configuration when adding a new website | Configurations are repeatedly rewritten, making troubleshooting complicated. | Subsequent new additions will only go to `[6 management Web domains / reverse proxy]` |
 | Reserved 3x-ui Comes with HTTPS | Redirect loop or 502 | Clear the certificate path and let the web reverse proxy engine take over HTTPS |
 | Write the backend as a public domain | reverse proxy detour, certificate and header confusion | The backend uses `127.0.0.1:port` |
 | REALITY/node domain enabled Cloudflare Orange Cloud | The client cannot directly connect to the VPS, REALITY or SNI link abnormality | The node domain is changed to DNS only / Gray Cloud; the DNS-01 certificate issue is individually checked for Token, zone and TXT propagation |
-| Old Caddy/Nginx sites are not migrated | The old website cannot be opened after enabling 443 | Go through `[8 management Web domains / reverse proxy]` one by one and select the required web reverse proxy engine |
+| Old Caddy/Nginx sites are not migrated | The old website cannot be opened after enabling 443 | Go through `[6 management Web domains / reverse proxy]` one by one and select the required web reverse proxy engine |

@@ -134,7 +134,7 @@ EOF
         echo -e "$(localized_text "${CYAN}▶ 正在为 ${domain} 申请 DNS 证书...${PLAIN}" "${CYAN}▶ Applying for DNS certificate for ${domain}...${PLAIN}" "${CYAN}▶ Подача заявки на сертификат DNS для ${domain}...${PLAIN}")"
         if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
             echo -e "$(localized_text "${RED}❌ 证书申请失败：${domain}${PLAIN}" "${RED}❌ Certificate application failed: ${domain}${PLAIN}" "${RED}❌ Не удалось применить сертификат: ${domain}.${PLAIN}")"
-            echo -e "$(localized_text "${YELLOW}   提示：可进入主菜单 [19] -> [12] -> [14] 一键自动修复后再重试。${PLAIN}" "${YELLOW}Tip: You can enter the main menu [19] -> [12] -> [14] to automatically repair it with one click and then try again.${PLAIN}" "${YELLOW}Совет: вы можете войти в главное меню [19] -> [12] -> [14], чтобы автоматически восстановить его одним щелчком мыши, а затем повторить попытку.${PLAIN}")"
+            echo -e "$(localized_text "${YELLOW}   提示：可进入主菜单 [19] -> [10] -> [14] 一键自动修复后再重试。${PLAIN}" "${YELLOW}Tip: You can enter the main menu [19] -> [10] -> [14] to automatically repair it with one click and then try again.${PLAIN}" "${YELLOW}Совет: вы можете войти в главное меню [19] -> [10] -> [14], чтобы автоматически восстановить его одним щелчком мыши, а затем повторить попытку.${PLAIN}")"
             ((fail_count++))
             continue
         fi

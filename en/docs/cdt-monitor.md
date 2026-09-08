@@ -12,7 +12,7 @@ Main menu [5 Panels, Nodes and Subscription Tools] -> [16 CDT Monitor]
 
 It listens on `127.0.0.1:43210` by default. Its Compose configuration is at `/opt/cdt-monitor/docker-compose.yml`; the first visit opens the administrator setup wizard.
 
-For public HTTPS, configure Caddy or Nginx from main menu `[4 Reverse proxy]`. With Port 443 Reuse enabled, use `[19 Port 443 Reuse Manager] -> [8 Manage Web domains/reverse proxy]`. Do not expose the management port directly to the internet.
+For public HTTPS, configure Caddy or Nginx from main menu `[4 Reverse proxy]`. With Port 443 Reuse enabled, use `[19 Port 443 Reuse Manager] -> [6 Manage Web domains/reverse proxy]`. Do not expose the management port directly to the internet.
 
 ## Console configuration
 

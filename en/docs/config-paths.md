@@ -12,8 +12,8 @@ The menu path in this article is written in the format of "main menu [number men
 | View backup list | `Main menu [16 Configuration backup and rollback] -> [2 View existing backups]` |
 | Rollback from backup | `Main menu [16 Configuration backup and rollback] -> [3 Restore from backup]` |
 | View/edit script applied configuration | `Main menu [16 Configuration backup and rollback] -> [5 View or edit applied configuration]` |
-| 443 Link health check | `Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]` |
-| Caddy/certificate health check | `Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [13 Caddy/Certificate one-click health check]` |
+| 443 Link health check | `Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]` |
+| Caddy/certificate health check | `Main menu [19 Port 443 Reuse manager] -> [10 CF DNS / Caddy Certificate maintenance] -> [13 Caddy/Certificate one-click health check]` |
 | Generate feedback diagnostic information | `Main menu [15 Service health overview]` |
 | Restart common services | `Main menu [15 Service health overview] -> [s Service recovery] -> [r Restart a common service]` |
 | Restart failed service | `Main menu [15 Service health overview] -> [s Service recovery] -> [f Restart failed services]` |
@@ -83,9 +83,9 @@ Related entrances:
 
 ```text
 Main menu [16 Configuration backup and rollback] -> [5 View or edit applied configuration]
-Main menu [19 Port 443 Reuse manager] -> [13 443 Connection health check]
-Main menu [19 Port 443 Reuse manager] -> [6 Reapply current entry mode]
-Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance]
+Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [3 Reapply current entry mode]
+Main menu [19 Port 443 Reuse manager] -> [10 CF DNS / Caddy Certificate maintenance]
 ```
 
 ## Caddy
@@ -119,7 +119,7 @@ Main menu [4 reverse proxy] -> [6 View or edit applied configuration files]
 If the Port 443 Reuse has been enabled, the new website portal is:
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [8 management Web domains / reverse proxy]
+Main menu [19 Port 443 Reuse manager] -> [6 management Web domains / reverse proxy]
 ```
 
 ## Nginx
@@ -171,7 +171,7 @@ Do not post file content to Issues or public chats.
 Update entry:
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [12 CF DNS / Caddy Certificate maintenance] -> [8 update Cloudflare API Token]
+Main menu [19 Port 443 Reuse manager] -> [10 CF DNS / Caddy Certificate maintenance] -> [8 update Cloudflare API Token]
 ```
 
 ## 3x-ui / x-ui

@@ -314,7 +314,7 @@ assert_file_contains docs/recovery-runbook.md "$health_failed_restart_path" "Rec
 assert_file_contains docs/recovery-runbook.md "$health_unit_log_path" "Recovery runbook must document the unit log path."
 assert_file_contains docs/443-single-entry-troubleshooting.md '端口并发连接限制误伤' "443 troubleshooting doc must include connlimit false-positive guidance."
 assert_file_contains docs/443-single-entry-troubleshooting.md '如果公网 `443` 存在本脚本添加的 connlimit 规则，它只能作用于整个公网 `443`，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "443 troubleshooting doc must explain public 443 connlimit scope."
-assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]' "443 troubleshooting doc must point users to the 443 health check."
+assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [19 443端口复用管理中心] -> [11 443 链路体检]' "443 troubleshooting doc must point users to the 443 health check."
 assert_file_contains src/firewall.sh '${GREEN}  5. 限制端口并发连接${PLAIN}' "Firewall menu must keep connlimit on option 5."
 assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]' "443 troubleshooting doc must point users to the connlimit menu."
 assert_file_contains docs/recovery-runbook.md '主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]' "Recovery runbook must point users to the connlimit menu."
@@ -1908,7 +1908,7 @@ grep -q 'vpso_mux_status_json_path' dist/vps.sh
 grep -q '/var/lib/vps-optimize/vpso-mux/status.json' dist/vps.sh
 grep -q 'show_vpso_mux_runtime_status' dist/vps.sh
 grep -Fq '2) manage_entry_mode_install_or_switch ;;' dist/vps.sh
-grep -Fq '7) rollback_last_entry_mode ;;' dist/vps.sh
+grep -Fq '4) rollback_last_entry_mode ;;' dist/vps.sh
 grep -Fq 'install_vpso_mux_binary || {' dist/vps.sh
 grep -Fq 'print_tcppeek_preflight_failure_context "$test_port"' dist/vps.sh
 assert_file_not_contains 'dist/vps.sh' '是否先安装/使用 Nginx Stream 完成本次首次安装？' 'TCP Peek initial setup must run its automatic install and preflight flow.'
@@ -1928,13 +1928,13 @@ while IFS='|' read -r menu_no menu_label case_action; do
     fi
 done <<'SNI_MENU_MAP'
 2|安装 / 切换入口模式|manage_entry_mode_install_or_switch ;;
-10|共享参数|edit_sni_stack_runtime_profile; continue ;;
-11|订阅链接检查|check_sni_stack_subscription_hint ;;
-12|证书维护|func_caddy_cf_maintenance_menu; continue ;;
-13|443 配置检查|sni_stack_health_check_enhanced ;;
-14|外网访问测试|func_443_network_test; continue ;;
-15|Xray SNI 路由|manage_xray_inbound_routes; continue ;;
-16|入口日志|view_current_entry_logs ;;
+8|共享参数|edit_sni_stack_runtime_profile; continue ;;
+9|订阅链接检查|check_sni_stack_subscription_hint ;;
+10|证书维护|func_caddy_cf_maintenance_menu; continue ;;
+11|443 配置检查|sni_stack_health_check_enhanced ;;
+12|外网访问测试|func_443_network_test; continue ;;
+13|Xray SNI 路由|manage_xray_inbound_routes; continue ;;
+14|入口日志|view_current_entry_logs ;;
 SNI_MENU_MAP
 
 docs_menu_files=(
@@ -1964,7 +1964,7 @@ renumbered_sni_doc_files=(
     "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md"
 )
 for file in "${renumbered_sni_doc_files[@]}"; do
-    assert_file_not_contains "$file" '主菜单 [19 443端口复用管理中心] -> [11 443 链路体检]' "${file} must use [13 443 链路体检]."
+    assert_file_not_contains "$file" '主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]' "${file} must use [11 443 链路体检]."
     assert_file_not_contains "$file" '主菜单 [19 443端口复用管理中心] -> [13 CF DNS / Caddy 证书维护]' "${file} must use [12 CF DNS / Caddy 证书维护]."
     assert_file_not_contains "$file" '主菜单 [19 443端口复用管理中心] -> [14 修改 443端口复用参数]' "${file} must use [10 修改 443端口复用参数]."
     assert_file_not_contains "$file" '主菜单 [19 443端口复用管理中心] -> [15 订阅链接 / External Proxy 提示]' "${file} must use [11 订阅链接 / External Proxy 提示]."
@@ -2005,11 +2005,11 @@ assert_file_contains ".github/ISSUE_TEMPLATE/bug_report.md" 'Main menu [15 Servi
 assert_file_contains "docs/443-single-entry.md" 'TCP Peek 的优点' "443 tutorial must list TCP Peek advantages."
 assert_file_contains "docs/443-single-entry.md" '配置过程和 Nginx Stream 一样' "443 tutorial must say TCP Peek uses the same configuration flow."
 assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [2 安装 / 切换 443 入口模式] -> [3 TCP Peek + Splice]' "443 tutorial must show the unified TCP Peek switch path."
-assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [7 回滚上一次入口模式切换]' "443 tutorial must point rollback guidance at the broader entry-mode rollback [7]."
+assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [4 回滚上一次入口模式切换]' "443 tutorial must point rollback guidance at the broader entry-mode rollback [7]."
 assert_file_contains "docs/443-tcp-peek-engine.md" 'TCP Peek 的主要优点' "TCP Peek engine doc must list TCP Peek advantages."
 assert_file_contains "docs/443-tcp-peek-engine.md" '配置过程和 Nginx Stream 一样' "TCP Peek engine doc must say TCP Peek uses the same configuration flow."
 assert_file_contains "docs/443-tcp-peek-engine.md" '  -> [2] 安装 / 切换 443 入口模式' "TCP Peek engine doc must show the unified entry-mode menu."
-assert_file_contains "docs/443-tcp-peek-engine.md" '  -> [7] 回滚上一次入口模式切换' "TCP Peek engine doc must point rollback guidance at the broader entry-mode rollback [7]."
+assert_file_contains "docs/443-tcp-peek-engine.md" '  -> [4] 回滚上一次入口模式切换' "TCP Peek engine doc must point rollback guidance at the broader entry-mode rollback [7]."
 
 single_entry_mode_doc_files=(
     "README.md"
@@ -2976,10 +2976,10 @@ grep -q '3. 查看 / 编辑 Compose 配置' dist/vps.sh
 grep -q 'edit_applied_config_file "$compose_file" "compose"' dist/vps.sh
 assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "Config paths doc must list the global applied-config editor."
 assert_file_not_contains "docs/443-single-entry.md" '[19] -> [9' "443 doc must not point to the stale direct whitelist menu."
-assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "443 doc must describe the current 443 Web whitelist menu path."
-assert_file_contains "src/caddy_proxy.sh" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Nginx standalone whitelist guidance must point users to the current 443 Web whitelist submenu path."
-assert_file_contains "src/caddy_maintenance.sh" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Caddy standalone whitelist guidance must point users to the current 443 Web whitelist submenu path."
-assert_file_contains "src/caddy_maintenance.sh" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Caddy whitelist guidance must point users to the current 443 Web whitelist submenu path."
+assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "443 doc must describe the current 443 Web whitelist menu path."
+assert_file_contains "src/caddy_proxy.sh" '主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Nginx standalone whitelist guidance must point users to the current 443 Web whitelist submenu path."
+assert_file_contains "src/caddy_maintenance.sh" '主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Caddy standalone whitelist guidance must point users to the current 443 Web whitelist submenu path."
+assert_file_contains "src/caddy_maintenance.sh" '主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]' "Caddy whitelist guidance must point users to the current 443 Web whitelist submenu path."
 assert_file_not_contains "src/caddy_proxy.sh" '[19] -> [9]' "Nginx standalone whitelist guidance must not point users to the stale direct [19] -> [9] path."
 assert_file_not_contains "src/caddy_maintenance.sh" '[19] -> [9]' "Caddy standalone whitelist guidance must not point users to the stale direct [19] -> [9] path."
 assert_file_not_contains "src/caddy_maintenance.sh" '[19] -> [9]' "Caddy whitelist guidance must not point users to the stale direct [19] -> [9] path."
@@ -2987,17 +2987,17 @@ assert_file_contains "docs/443-single-entry.md" '[8 切换 Web 反代引擎]' "4
 assert_file_contains "docs/443-single-entry.md" '`xray-fallback` 不支持 Web 白名单' "443 doc must prohibit Web whitelist usage for every xray-fallback Web engine."
 assert_file_contains "docs/443-tcp-peek-engine.md" '`xray-fallback` 无论选择 Caddy 还是 Nginx 本地 Web 反代' "TCP Peek doc must describe the xray-fallback Web whitelist boundary."
 assert_file_contains "docs/443-tcp-peek-engine.md" 'Web 反代引擎可选择 Caddy 或 Nginx' "TCP Peek doc must describe the shared Caddy/Nginx Web proxy engine."
-subscription_public_hint='公网 HTTPS 访问建议：未启用 443端口复用时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443端口复用时，请走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
+subscription_public_hint='公网 HTTPS 访问建议：未启用 443端口复用时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443端口复用时，请走主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代]。'
 assert_file_contains "src/subscription_apps.sh" "$subscription_public_hint" "Subscription/Komari installers must explain both without Port 443 Reuse and Port 443 Reuse reverse proxy paths."
 assert_dist_contains "$subscription_public_hint" "Release script must include the current Subscription/Komari public HTTPS guidance."
 panel_menu_compact_label='Sing-box 管理'
 assert_file_contains "src/menus.sh" "$panel_menu_compact_label" "Panel/tools menu must use the compact script-style label."
 assert_dist_contains "$panel_menu_compact_label" "Release script must include the compact panel/tools menu label."
-panel_help_public_hint='7/8/9 订阅工具，10 Komari，16 CDT Monitor；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]。'
+panel_help_public_hint='7/8/9 订阅工具，10 Komari，16 CDT Monitor；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代]。'
 assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both without Port 443 Reuse and Port 443 Reuse reverse proxy paths."
 assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
-panel_domain_menu_path='主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代] -> [9 修改面板域名]'
-assert_file_contains "src/menus.sh" '修改面板域名：[8 Web 域名与反向代理] -> [9 修改面板域名]。' "443 help must point panel-domain edits to the Web domain submenu."
+panel_domain_menu_path='主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [9 修改面板域名]'
+assert_file_contains "src/menus.sh" '修改面板域名：[6 Web 域名与反向代理] -> [9 修改面板域名]。' "443 help must point panel-domain edits to the Web domain submenu."
 assert_file_contains "src/sni_stack_profiles.sh" "$panel_domain_menu_path" "443 Port 443 Reuse parameters submenu must point panel-domain edits to the Web domain submenu."
 assert_dist_contains "$panel_domain_menu_path" "Release script must include the current panel-domain edit path."
 assert_file_not_contains "src/menus.sh" '共享参数可修改面板域名' "443 help must not say shared parameters modify the panel domain."
@@ -3015,8 +3015,8 @@ if [[ "$subscription_public_hint_calls" -lt 8 ]]; then
     exit 1
 fi
 for stale_hint in \
-    '公网 HTTPS 访问建议走 [19] -> [8]' \
-    '主菜单 [19] -> [8] 为该本地端口添加 443 反代域名' \
+    '公网 HTTPS 访问建议走 [19] -> [6]' \
+    '主菜单 [19] -> [6] 为该本地端口添加 443 反代域名' \
     '公网 HTTPS 可走 Caddy 反代' \
     '未启用 443端口复用可用 [4] -> [1] Caddy 反代' \
     "提示：面板或订阅工具对外访问，""可用 Caddy 反代；已启用 443端口复用时用 [19] 统一管理。" \
@@ -3028,7 +3028,7 @@ do
 done
 assert_file_contains "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '主菜单 [4 反代]' "Subscription tutorial must point without Port 443 Reuse users at the current reverse proxy menu."
 assert_file_contains "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '[2 添加 Nginx HTTPS 反代]' "Subscription tutorial must document the Nginx HTTPS reverse proxy option before Port 443 Reuse is enabled."
-assert_file_contains "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [8 管理 Web 域名/反代]' "Subscription tutorial must keep the current Port 443 Reuse Web reverse proxy path."
+assert_file_contains "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代]' "Subscription tutorial must keep the current Port 443 Reuse Web reverse proxy path."
 assert_file_contains "docs/existing-server-migration.md" '未启用 443端口复用时的 HTTPS 反代过渡' "Migration doc must include the without Port 443 Reuse HTTPS reverse proxy transition flow."
 assert_file_contains "docs/existing-server-migration.md" '[2 添加 Nginx HTTPS 反代]' "Migration doc must document the Nginx HTTPS reverse proxy option before Port 443 Reuse is enabled."
 for file in README.md docs/existing-server-migration.md tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md; do

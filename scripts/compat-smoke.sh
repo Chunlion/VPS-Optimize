@@ -300,7 +300,7 @@ assert_file_contains dist/vps.sh 'traffic_guard_install_checker_or_report'
 assert_file_contains dist/vps.sh 'backend_retry_attempts'
 assert_file_contains dist/vps.sh "STRICT_SNI_GATE='\${strict_sni_gate}'" "Release script must persist the strict SNI gate setting."
 assert_file_contains dist/vps.sh 'limitFallbackUpload' "Release script must include the limited REALITY fallback patcher."
-assert_file_contains dist/vps.sh '17) manage_reality_traffic_guard' "Port 443 Reuse menu must expose REALITY fallback traffic protection."
+assert_file_contains dist/vps.sh '15) manage_reality_traffic_guard' "Port 443 Reuse menu must expose REALITY fallback traffic protection."
 assert_file_contains dist/vps.sh '日志容量摘要'
 assert_file_contains dist/vps.sh '配置与状态文件权限体检'
 
