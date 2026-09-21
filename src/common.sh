@@ -472,6 +472,14 @@ is_trusted_remote_script_url() {
             echo "$(localized_text "2S-UI 官方安装脚本" "2S-UI official installation script" "Официальный скрипт установки 2S-UI")"
             return 0
             ;;
+        "https://raw.githubusercontent.com/kazeyukiro/3m-ui/main/scripts/install.sh")
+            echo "$(localized_text "3m-ui 官方安装脚本" "3m-ui official installation script" "Официальный скрипт установки 3m-ui")"
+            return 0
+            ;;
+        "https://raw.githubusercontent.com/iluobei/miaomiaowuX/main/install.sh")
+            echo "$(localized_text "妙妙屋X 官方安装脚本" "MiaomiaowuX official installation script" "Официальный скрипт установки MiaomiaowuX")"
+            return 0
+            ;;
         "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh")
             echo "$(localized_text "EasyTier 官方安装脚本" "EasyTier official installation script" "Официальный скрипт установки EasyTier")"
             return 0

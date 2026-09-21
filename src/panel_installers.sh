@@ -123,6 +123,30 @@ func_2sui_panel() {
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
 }
 
+func_3m_ui() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}安装 3m-ui 面板${PLAIN}" "${BOLD}Install the 3m-ui panel${PLAIN}" "${BOLD}Установить панель 3m-ui${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}本入口会运行 3m-ui 官方安装器，默认使用稳定版 Release。${PLAIN}" "${YELLOW}This entry runs the official 3m-ui installer, which uses stable releases by default.${PLAIN}" "${YELLOW}Этот пункт запускает официальный установщик 3m-ui, который по умолчанию использует стабильные релизы.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}安装完成后默认访问端口为 8080；初始密码仅显示一次，首次登录必须修改。${PLAIN}" "${YELLOW}After installation, the default panel port is 8080. The initial password is shown once and must be changed on first login.${PLAIN}" "${YELLOW}После установки панель по умолчанию доступна на порту 8080. Начальный пароль показывается один раз и должен быть изменён при первом входе.${PLAIN}")"
+    echo -e "------------------------------------------------"
+    run_remote_script "$(localized_text "安装 3m-ui 面板" "Install the 3m-ui panel" "Установить панель 3m-ui")" "https://raw.githubusercontent.com/kazeyukiro/3m-ui/main/scripts/install.sh"
+    pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
+}
+
+func_miaomiaowux_panel() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}安装 妙妙屋X 主控${PLAIN}" "${BOLD}Install the MiaomiaowuX controller${PLAIN}" "${BOLD}Установить контроллер MiaomiaowuX${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}本入口会运行妙妙屋X官方安装器，交互选择本机或 Docker 部署及数据库。${PLAIN}" "${YELLOW}This entry runs the official MiaomiaowuX installer, which interactively selects native or Docker deployment and the database.${PLAIN}" "${YELLOW}Этот пункт запускает официальный установщик MiaomiaowuX с интерактивным выбором нативного развёртывания или Docker и базы данных.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}安装完成后默认访问 http://服务器IP:12889；初始化向导创建的第一个账号为管理员。${PLAIN}" "${YELLOW}After installation, open http://SERVER_IP:12889 by default. The first account created in the setup wizard is the administrator.${PLAIN}" "${YELLOW}После установки по умолчанию откройте http://SERVER_IP:12889. Первая учётная запись, созданная в мастере настройки, будет администратором.${PLAIN}")"
+    echo -e "------------------------------------------------"
+    run_remote_script "$(localized_text "安装 妙妙屋X 主控" "Install the MiaomiaowuX controller" "Установить контроллер MiaomiaowuX")" "https://raw.githubusercontent.com/iluobei/miaomiaowuX/main/install.sh"
+    pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
+}
+
 func_sui_manage() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"

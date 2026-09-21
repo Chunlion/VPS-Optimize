@@ -484,6 +484,14 @@ is_trusted_remote_script_url() {
             echo "$(localized_text "2S-UI 官方安装脚本" "2S-UI official installation script" "Официальный скрипт установки 2S-UI")"
             return 0
             ;;
+        "https://raw.githubusercontent.com/kazeyukiro/3m-ui/main/scripts/install.sh")
+            echo "$(localized_text "3m-ui 官方安装脚本" "3m-ui official installation script" "Официальный скрипт установки 3m-ui")"
+            return 0
+            ;;
+        "https://raw.githubusercontent.com/iluobei/miaomiaowuX/main/install.sh")
+            echo "$(localized_text "妙妙屋X 官方安装脚本" "MiaomiaowuX official installation script" "Официальный скрипт установки MiaomiaowuX")"
+            return 0
+            ;;
         "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh")
             echo "$(localized_text "EasyTier 官方安装脚本" "EasyTier official installation script" "Официальный скрипт установки EasyTier")"
             return 0
@@ -18732,6 +18740,30 @@ func_2sui_panel() {
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
 }
 
+func_3m_ui() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}安装 3m-ui 面板${PLAIN}" "${BOLD}Install the 3m-ui panel${PLAIN}" "${BOLD}Установить панель 3m-ui${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}本入口会运行 3m-ui 官方安装器，默认使用稳定版 Release。${PLAIN}" "${YELLOW}This entry runs the official 3m-ui installer, which uses stable releases by default.${PLAIN}" "${YELLOW}Этот пункт запускает официальный установщик 3m-ui, который по умолчанию использует стабильные релизы.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}安装完成后默认访问端口为 8080；初始密码仅显示一次，首次登录必须修改。${PLAIN}" "${YELLOW}After installation, the default panel port is 8080. The initial password is shown once and must be changed on first login.${PLAIN}" "${YELLOW}После установки панель по умолчанию доступна на порту 8080. Начальный пароль показывается один раз и должен быть изменён при первом входе.${PLAIN}")"
+    echo -e "------------------------------------------------"
+    run_remote_script "$(localized_text "安装 3m-ui 面板" "Install the 3m-ui panel" "Установить панель 3m-ui")" "https://raw.githubusercontent.com/kazeyukiro/3m-ui/main/scripts/install.sh"
+    pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
+}
+
+func_miaomiaowux_panel() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}安装 妙妙屋X 主控${PLAIN}" "${BOLD}Install the MiaomiaowuX controller${PLAIN}" "${BOLD}Установить контроллер MiaomiaowuX${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${YELLOW}本入口会运行妙妙屋X官方安装器，交互选择本机或 Docker 部署及数据库。${PLAIN}" "${YELLOW}This entry runs the official MiaomiaowuX installer, which interactively selects native or Docker deployment and the database.${PLAIN}" "${YELLOW}Этот пункт запускает официальный установщик MiaomiaowuX с интерактивным выбором нативного развёртывания или Docker и базы данных.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}安装完成后默认访问 http://服务器IP:12889；初始化向导创建的第一个账号为管理员。${PLAIN}" "${YELLOW}After installation, open http://SERVER_IP:12889 by default. The first account created in the setup wizard is the administrator.${PLAIN}" "${YELLOW}После установки по умолчанию откройте http://SERVER_IP:12889. Первая учётная запись, созданная в мастере настройки, будет администратором.${PLAIN}")"
+    echo -e "------------------------------------------------"
+    run_remote_script "$(localized_text "安装 妙妙屋X 主控" "Install the MiaomiaowuX controller" "Установить контроллер MiaomiaowuX")" "https://raw.githubusercontent.com/iluobei/miaomiaowuX/main/install.sh"
+    pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
+}
+
 func_sui_manage() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
@@ -23615,6 +23647,7 @@ show_panel_help() {
     echo "$(localized_text "3 面板 SSL 修复：443 接入前清空面板证书路径。" "3 Panel SSL repair: clear panel certificate paths before using Port 443 Reuse." "3 Исправление SSL панели: очистить пути сертификатов панели перед настройкой повторного использования порта 443.")"
     echo "$(localized_text "4 S-UI：安装、官方菜单、卸载。" "4 S-UI: install, open the official menu, or uninstall." "4 S-UI: установка, официальное меню и удаление.")"
     echo "$(localized_text "15 2S-UI：运行官方安装器；不能与 S-UI 共存。" "15 2S-UI: run the official installer; do not install it alongside S-UI." "15 2S-UI: запустить официальный установщик; не устанавливайте его вместе с S-UI.")"
+    echo "$(localized_text "17 3m-ui：运行官方安装器。18 妙妙屋X：部署主控，后续在主控中生成 Agent 安装命令。" "17 3m-ui: run the official installer. 18 MiaomiaowuX: deploy the controller, then generate Agent install commands from it." "17 3m-ui: запустить официальный установщик. 18 MiaomiaowuX: развернуть контроллер, затем создать в нём команды установки Agent.")"
     echo "$(localized_text "5/6 Sing-box 与 Xray 脚本。" "5/6 Sing-box and Xray scripts." "5/6 Скрипты Sing-box и Xray.")"
     echo "$(localized_text "7/8/9 订阅工具，10 Komari，16 CDT Monitor；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代]。" "7/8/9: subscription tools; 10: Komari; 16: CDT Monitor. Dockge / Compose management is in main menu [11 Docker Management] -> [19]. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [6 Manage Web domains/reverse proxy]." "7/8/9: инструменты подписки; 10: Komari; 16: CDT Monitor. Управление Dockge / Compose находится в главном меню [11 Управление Docker] -> [19]. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [6 Управление Web-доменами и обратным прокси].")"
     echo "$(localized_text "13 端口流量监控（dog）：仅统计已监控端口的实际流量。" "13 Per-port traffic monitor (dog): shows traffic only for monitored ports." "13 Монитор трафика по портам (dog): показывает трафик только отслеживаемых портов.")"
@@ -23786,11 +23819,11 @@ func_panel_deploy_menu() {
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 面板 / 核心服务${PLAIN}" "${BOLD}▶ Panels / Core services${PLAIN}" "${BOLD}▶ Панели / основные службы${PLAIN}")"
         echo -e "$(localized_text "  ${BOLD}${GREEN}1.${PLAIN} ${BOLD}3x-ui 管理${PLAIN}          ${BOLD}${GREEN}2.${PLAIN} ${BOLD}x-ui 增强工具${PLAIN}      ${BOLD}${GREEN}3.${PLAIN} ${BOLD}面板 SSL 修复${PLAIN}" "${BOLD}${GREEN}1.${PLAIN} ${BOLD}3x-ui Management${PLAIN} ${BOLD}${GREEN}2.${PLAIN} ${BOLD}x-ui Tools${PLAIN} ${BOLD}${GREEN}3.${PLAIN} ${BOLD}Panel SSL Repair${PLAIN}" "${BOLD}${GREEN}1.${PLAIN} ${BOLD}Управление 3x-ui${PLAIN} ${BOLD}${GREEN}2.${PLAIN} ${BOLD}Инструменты x-ui${PLAIN} ${BOLD}${GREEN}3.${PLAIN} ${BOLD}Исправление SSL панели${PLAIN}")"
         echo -e "$(localized_text "  ${BOLD}${GREEN}4.${PLAIN} ${BOLD}S-UI 管理${PLAIN}           ${BOLD}${GREEN}5.${PLAIN} ${BOLD}Sing-box 管理${PLAIN}       ${BOLD}${GREEN}6.${PLAIN} ${BOLD}Xray 管理${PLAIN}" "${BOLD}${GREEN}4.${PLAIN} ${BOLD}S-UI Management${PLAIN} ${BOLD}${GREEN}5.${PLAIN} ${BOLD}Sing-box Management${PLAIN} ${BOLD}${GREEN}6.${PLAIN} ${BOLD}Xray Management${PLAIN}" "${BOLD}${GREEN}4.${PLAIN} ${BOLD}Управление S-UI${PLAIN} ${BOLD}${GREEN}5.${PLAIN} ${BOLD}Управление Sing-box${PLAIN} ${BOLD}${GREEN}6.${PLAIN} ${BOLD}Управление Xray${PLAIN}")"
-        echo -e "$(localized_text " ${BOLD}${GREEN}15.${PLAIN} ${BOLD}安装 2S-UI${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Install 2S-UI${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Установить 2S-UI${PLAIN}")"
+        echo -e "$(localized_text " ${BOLD}${GREEN}15.${PLAIN} ${BOLD}安装 2S-UI${PLAIN}          ${BOLD}${GREEN}17.${PLAIN} ${BOLD}安装 3m-ui${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Install 2S-UI${PLAIN} ${BOLD}${GREEN}17.${PLAIN} ${BOLD}Install 3m-ui${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Установить 2S-UI${PLAIN} ${BOLD}${GREEN}17.${PLAIN} ${BOLD}Установить 3m-ui${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 订阅 / 监控${PLAIN}" "${BOLD}▶ Subscription / Monitoring${PLAIN}" "${BOLD}▶ Подписки / Мониторинг${PLAIN}")"
         echo -e "$(localized_text "  ${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN}            ${BOLD}${GREEN}8.${PLAIN} ${BOLD}妙妙屋订阅${PLAIN}          ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Miaomiaowu${PLAIN} ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Miaomiaowu${PLAIN} ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}")"
-        echo -e "$(localized_text " ${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari 监控${PLAIN}          ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari monitoring${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}")"
+        echo -e "$(localized_text " ${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari 监控${PLAIN}          ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}        ${BOLD}${GREEN}18.${PLAIN} ${BOLD}妙妙屋X${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari monitoring${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN} ${BOLD}${GREEN}18.${PLAIN} ${BOLD}MiaomiaowuX${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN} ${BOLD}${GREEN}18.${PLAIN} ${BOLD}MiaomiaowuX${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 网络 / 监控${PLAIN}" "${BOLD}▶ Network / Monitoring${PLAIN}" "${BOLD}▶ Сеть / Мониторинг${PLAIN}")"
         echo -e "$(localized_text " ${BOLD}${GREEN}11.${PLAIN} ${BOLD}DNS 解锁${PLAIN}            ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN}         ${BOLD}${GREEN}13.${PLAIN} ${BOLD}端口流量监控（dog）${PLAIN}" "${BOLD}${GREEN}11.${PLAIN} ${BOLD}DNS Unlock${PLAIN} ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Per-port traffic (dog)${PLAIN}" "${BOLD}${GREEN}11.${PLAIN} ${BOLD}Разблокировка DNS${PLAIN} ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Трафик по портам (dog)${PLAIN}")"
@@ -23819,6 +23852,8 @@ func_panel_deploy_menu() {
             14) func_vps_bot_x ;;
             15) func_2sui_panel ;;
             16) func_cdt_monitor_menu ;;
+            17) func_3m_ui ;;
+            18) func_miaomiaowux_panel ;;
             "?") show_panel_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
