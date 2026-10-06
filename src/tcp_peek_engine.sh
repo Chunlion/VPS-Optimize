@@ -371,23 +371,39 @@ preview_entry_mode_cutover() {
 
 systemd_unit_exists() {
     local unit="$1"
-    systemctl list-unit-files "$unit" >/dev/null 2>&1 || systemctl status "$unit" >/dev/null 2>&1
+    [[ "$(systemctl show -p LoadState --value "$unit" 2>/dev/null)" == "loaded" ]]
 }
 
 xray_entry_service_name() {
-    local svc
+    local svc listener pid unit port="${1:-${XRAY_LISTEN_PORT:-1443}}"
+    local -a services=()
+    listener=$(get_listen_line_by_port "$port")
+    if [[ "$listener" =~ pid=([0-9]+) ]]; then
+        pid="${BASH_REMATCH[1]}"
+        unit=$(ps -o unit= -p "$pid" 2>/dev/null || true)
+        unit=$(trim_input "$unit")
+        case "$unit" in
+            xray.service|x-ui.service|3x-ui.service)
+                systemd_unit_exists "$unit" || return 1
+                echo "${unit%.service}"
+                return 0
+                ;;
+        esac
+    fi
     for svc in xray.service x-ui.service 3x-ui.service; do
         if systemd_unit_exists "$svc"; then
-            echo "${svc%.service}"
-            return 0
+            services+=("${svc%.service}")
         fi
     done
-    return 1
+    [[ ${#services[@]} -eq 1 ]] || return 1
+    echo "${services[0]}"
 }
 
 restart_xray_entry_service() {
-    local svc
-    svc=$(xray_entry_service_name) || { echo -e "$(localized_text "${RED}❌ 未检测到 xray/x-ui/3x-ui systemd 服务。${PLAIN}" "${RED}❌ xray/x-ui/3x-ui systemd service not detected.${PLAIN}" "${RED}❌ xray/x-ui/3x-ui Служба systemd не обнаружена.${PLAIN}")"; return 1; }
+    local svc="${1:-}"
+    if [[ -z "$svc" ]]; then
+        svc=$(xray_entry_service_name) || { echo -e "$(localized_text "${RED}❌ 无法确定 Xray 入站所属服务，请检查监听端口和服务状态。${PLAIN}" "${RED}❌ Cannot identify the Xray inbound service. Check its listening port and service state.${PLAIN}" "${RED}❌ Не удалось определить службу входа Xray. Проверьте порт и состояние службы.${PLAIN}")"; return 1; }
+    fi
     systemctl enable "$svc" >/dev/null 2>&1 || true
     systemctl restart "$svc" || { echo -e "$(localized_text "${RED}❌ ${svc} 重启失败。${PLAIN}" "${RED}❌ ${svc} Restart failed.${PLAIN}" "${RED}❌ ${svc} Не удалось перезапустить.${PLAIN}")"; return 1; }
 }
@@ -396,11 +412,12 @@ stop_xray_entry_service_if_public_443() {
     local listener svc
     listener=$(detect_443_listener)
     listener_info_has_entry "$listener" "xray" || return 0
-    svc=$(xray_entry_service_name) || return 0
+    svc=$(xray_entry_service_name "${NGINX_LISTEN_PORT:-443}") || return 1
     if ! systemctl stop "$svc"; then
         echo -e "$(localized_text "${RED}❌ 停止 ${svc} 失败，公网 443 仍可能被 Xray 占用。${PLAIN}" "${RED}❌ Stop ${svc} failed, public port 443 may still be occupied by Xray.${PLAIN}" "${RED}❌ Не удалось остановить ${svc}, публичный порт 443 всё ещё может быть занят Xray.${PLAIN}")"
         return 1
     fi
+    XRAY_ENTRY_STOPPED_SERVICE="$svc"
     sleep 1
     listener=$(detect_443_listener)
     if listener_info_has_entry "$listener" "xray"; then
@@ -496,6 +513,7 @@ disable_nginx_stream_public_443() {
 stop_public_443_entry_services_for_target() {
     local target_mode="$1"
     target_mode=$(normalize_entry_mode_name "$target_mode") || return 1
+    XRAY_ENTRY_STOPPED_SERVICE=""
     quarantine_legacy_nginx_https_proxy_configs
     stop_caddy_service_if_public_443 || return 1
 
@@ -620,7 +638,7 @@ check_entry_mode_dependencies() {
 
 backup_entry_mode_config() {
     local backup_dir="${1:-}" service_path svc listener_info
-    create_sni_stack_backup "$backup_dir" >/dev/null
+    create_sni_stack_backup "$backup_dir" >/dev/null || return 1
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
     [[ -n "$backup_dir" && -d "$backup_dir" ]] || { echo -e "$(localized_text "${RED}❌ 入口模式切换备份失败。${PLAIN}" "${RED}❌ Entry mode switching backup failed.${PLAIN}" "${RED}❌ Не удалось переключить режим входа в резервную копию.${PLAIN}")"; return 1; }
 
@@ -725,8 +743,9 @@ apply_nginx_stream_mode() {
     fi
     probe_tls_sni_certificate "$(localized_text "Nginx Stream 面板 SNI" "Nginx Stream panel SNI" "Панель Nginx Stream SNI")" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
     tcp_probe_host "$(localized_text "$(web_proxy_engine_label) 本地 TLS" "$(web_proxy_engine_label) local TLS" "$(web_proxy_engine_label) локальный TLS")" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
-    if xray_entry_service_name >/dev/null 2>&1; then
-        restart_xray_entry_service || echo -e "$(localized_text "${YELLOW}⚠️ Xray/3x-ui 服务重启失败；Nginx Stream/Web 入口已恢复，请单独检查 Xray 入站。${PLAIN}" "${YELLOW}⚠️ Xray/3x-ui service failed to restart; Nginx Stream/Web entry has been restored, please check Xray inbound separately.${PLAIN}" "${YELLOW}⚠️ Службу Xray/3x-ui не удалось перезапустить; Вход Nginx Stream/Web восстановлен, проверьте входящий Xray отдельно.${PLAIN}")"
+    if [[ -n "${XRAY_ENTRY_STOPPED_SERVICE:-}" ]]; then
+        restart_xray_entry_service "$XRAY_ENTRY_STOPPED_SERVICE" || return 1
+        XRAY_ENTRY_STOPPED_SERVICE=""
     fi
     if ! tcp_probe_host "$(localized_text "Xray/REALITY 本地入站" "Xray/REALITY local inbound" "Xray/REALITY локальное входящее подключение")" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1; then
         echo -e "$(localized_text "${YELLOW}⚠️ Nginx Stream/Web 入口已恢复，但 Xray/REALITY 本地入站未连通。${PLAIN}" "${YELLOW}⚠️ Nginx Stream/Web ingress has been restored, but Xray/REALITY local inbound is not connected.${PLAIN}" "${YELLOW}⚠️ Вход Nginx Stream/Web восстановлен, но локальное входящее подключение Xray/REALITY не подключен.${PLAIN}")"
@@ -763,8 +782,9 @@ apply_tcppeek_mode() {
     fi
     probe_tls_sni_certificate "$(localized_text "TCP Peek 面板 SNI" "TCP Peek panel SNI" "Панель TCP Peek SNI")" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
     tcp_probe_host "$(localized_text "$(web_proxy_engine_label) 本地 TLS" "$(web_proxy_engine_label) local TLS" "$(web_proxy_engine_label) локальный TLS")" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
-    if xray_entry_service_name >/dev/null 2>&1; then
-        restart_xray_entry_service || return 1
+    if [[ -n "${XRAY_ENTRY_STOPPED_SERVICE:-}" ]]; then
+        restart_xray_entry_service "$XRAY_ENTRY_STOPPED_SERVICE" || return 1
+        XRAY_ENTRY_STOPPED_SERVICE=""
     fi
     tcp_probe_host "$(localized_text "Xray/REALITY 本地入站" "Xray/REALITY local inbound" "Xray/REALITY локальное входящее подключение")" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1 || return 1
     write_single_443_engine_state "tcp-peek" "$backup_dir"

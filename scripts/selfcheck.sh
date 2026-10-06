@@ -17,6 +17,8 @@ done
 
 echo "==> golden render"
 bash tests/golden-render.sh
+bash tests/sni-setup.sh
+bash tests/sni-rollback.sh
 
 echo "==> docs build"
 npm run build

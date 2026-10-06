@@ -6,25 +6,61 @@ sni_stack_backup_dir() {
 }
 
 create_sni_stack_backup() {
-    local backup_dir
+    local backup_dir target snapshot conf_file svc enabled_state
     backup_dir="${1:-$(sni_stack_backup_dir)}"
-    mkdir -p "$backup_dir/nginx_stream.d" "$backup_dir/nginx_conf.d" "$backup_dir/caddy_conf.d" "$backup_dir/vps-optimize" "$backup_dir/systemd" "$backup_dir/usr-local-bin" "$backup_dir/x-ui"
-    [[ -f /etc/nginx/nginx.conf ]] && cp -a /etc/nginx/nginx.conf "$backup_dir/nginx.conf" 2>/dev/null || true
-    [[ -d /etc/nginx/stream.d ]] && cp -a /etc/nginx/stream.d/vps_sni_*.conf "$backup_dir/nginx_stream.d/" 2>/dev/null || true
-    [[ -d /etc/nginx/conf.d ]] && cp -a /etc/nginx/conf.d/vps_sni_web_*.conf "$backup_dir/nginx_conf.d/" 2>/dev/null || true
-    [[ -d /etc/nginx/conf.d ]] && cp -a /etc/nginx/conf.d/vps_proxy_*.conf "$backup_dir/nginx_conf.d/" 2>/dev/null || true
-    [[ -f /etc/nginx/conf.d/00-vps-proxy-map.conf ]] && cp -a /etc/nginx/conf.d/00-vps-proxy-map.conf "$backup_dir/nginx_conf.d/" 2>/dev/null || true
-    [[ -f /etc/caddy/Caddyfile ]] && cp -a /etc/caddy/Caddyfile "$backup_dir/Caddyfile" 2>/dev/null || true
-    [[ -d /etc/caddy/conf.d ]] && cp -a /etc/caddy/conf.d/*.caddy "$backup_dir/caddy_conf.d/" 2>/dev/null || true
-    [[ -f /etc/vps-optimize/sni-stack.env ]] && cp -a /etc/vps-optimize/sni-stack.env "$backup_dir/vps-optimize/sni-stack.env" 2>/dev/null || true
-    [[ -f /etc/vps-optimize/xray-sni-routes.conf ]] && cp -a /etc/vps-optimize/xray-sni-routes.conf "$backup_dir/vps-optimize/xray-sni-routes.conf" 2>/dev/null || true
-    [[ -f /etc/vps-optimize/443-engine.conf ]] && cp -a /etc/vps-optimize/443-engine.conf "$backup_dir/vps-optimize/443-engine.conf" 2>/dev/null || true
-    [[ -f /etc/vps-optimize/vpso-mux.yaml ]] && cp -a /etc/vps-optimize/vpso-mux.yaml "$backup_dir/vps-optimize/vpso-mux.yaml" 2>/dev/null || true
-    [[ -f /etc/systemd/system/vpso-mux.service ]] && cp -a /etc/systemd/system/vpso-mux.service "$backup_dir/systemd/vpso-mux.service" 2>/dev/null || true
-    [[ -f /usr/local/bin/vpso-mux ]] && cp -a /usr/local/bin/vpso-mux "$backup_dir/usr-local-bin/vpso-mux" 2>/dev/null || true
+    mkdir -p "$backup_dir/nginx_stream.d" "$backup_dir/nginx_conf.d" "$backup_dir/nginx_default_sites" "$backup_dir/caddy_conf.d" "$backup_dir/vps-optimize" "$backup_dir/systemd" "$backup_dir/usr-local-bin" "$backup_dir/x-ui" || return 1
+    chmod 700 "$backup_dir" || return 1
+    : > "$backup_dir/absent-files" || return 1
+    while IFS='|' read -r target snapshot; do
+        if [[ -e "$target" || -L "$target" ]]; then
+            cp -a "$target" "$backup_dir/$snapshot" || return 1
+        else
+            printf '%s\n' "$target" >> "$backup_dir/absent-files" || return 1
+        fi
+    done <<'EOF'
+/etc/nginx/nginx.conf|nginx.conf
+/etc/caddy/Caddyfile|Caddyfile
+/etc/nginx/conf.d/00-vps-proxy-map.conf|nginx_conf.d/00-vps-proxy-map.conf
+/etc/nginx/sites-available/default|nginx_default_sites/available-default
+/etc/nginx/sites-enabled/default|nginx_default_sites/enabled-default
+/etc/nginx/conf.d/default.conf|nginx_default_sites/default.conf
+/etc/nginx/conf.d/00-vps-default-drop.conf|nginx_default_sites/00-vps-default-drop.conf
+/etc/vps-optimize/sni-stack.env|vps-optimize/sni-stack.env
+/etc/vps-optimize/xray-sni-routes.conf|vps-optimize/xray-sni-routes.conf
+/etc/vps-optimize/443-engine.conf|vps-optimize/443-engine.conf
+/etc/vps-optimize/vpso-mux.yaml|vps-optimize/vpso-mux.yaml
+/etc/systemd/system/vpso-mux.service|systemd/vpso-mux.service
+/usr/local/bin/vpso-mux|usr-local-bin/vpso-mux
+EOF
+    for conf_file in /etc/nginx/stream.d/vps_sni_*.conf; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" "$backup_dir/nginx_stream.d/" || return 1
+    done
+    for conf_file in /etc/nginx/conf.d/vps_sni_web_*.conf /etc/nginx/conf.d/vps_proxy_*.conf; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" "$backup_dir/nginx_conf.d/" || return 1
+    done
+    for conf_file in /etc/caddy/conf.d/*.caddy; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" "$backup_dir/caddy_conf.d/" || return 1
+    done
+    if command -v systemctl >/dev/null 2>&1; then
+        : > "$backup_dir/web-services" || return 1
+        for svc in nginx caddy; do
+            enabled_state=$(systemctl is-enabled "$svc" 2>/dev/null || true)
+            case "$enabled_state" in
+                enabled|disabled) printf '%s|%s\n' "$svc" "$enabled_state" >> "$backup_dir/web-services" || return 1 ;;
+            esac
+            if systemctl is-active --quiet "$svc"; then
+                printf '%s|active\n' "$svc" >> "$backup_dir/web-services" || return 1
+            else
+                printf '%s|inactive\n' "$svc" >> "$backup_dir/web-services" || return 1
+            fi
+        done
+    fi
     [[ -d /etc/x-ui ]] && cp -a /etc/x-ui "$backup_dir/x-ui/etc-x-ui" 2>/dev/null || true
     [[ -f /usr/local/x-ui/bin/config.json ]] && cp -a /usr/local/x-ui/bin/config.json "$backup_dir/x-ui/config.json" 2>/dev/null || true
-    echo "$backup_dir" > /etc/vps-optimize/sni-stack.last-backup 2>/dev/null || true
+    echo "$backup_dir" > /etc/vps-optimize/sni-stack.last-backup || return 1
     echo -e "$(localized_text "${GREEN}✅ 已创建配置备份：${backup_dir}${PLAIN}" "${GREEN}✅ Configuration backup created: ${backup_dir}${PLAIN}" "${GREEN}✅ Создана резервная копия конфигурации: ${backup_dir}.${PLAIN}")"
 }
 

@@ -1072,15 +1072,18 @@ load_xray_sni_route_arrays() {
 }
 
 save_xray_sni_route_arrays() {
-    local route_file i
+    local route_file route_tmp i
     route_file=$(xray_sni_routes_path)
-    mkdir -p "$(dirname "$route_file")"
-    : > "$route_file"
+    mkdir -p "$(dirname "$route_file")" || return 1
+    route_tmp=$(mktemp "${route_file}.tmp.XXXXXX") || return 1
     for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
         [[ -n "${XRAY_SNI_ROUTE_SNIS[$i]:-}" ]] || continue
-        printf '%s|%s|%s\n' "${XRAY_SNI_ROUTE_SNIS[$i]}" "${XRAY_SNI_ROUTE_ADDRS[$i]}" "${XRAY_SNI_ROUTE_PORTS[$i]}" >> "$route_file"
+        printf '%s|%s|%s\n' "${XRAY_SNI_ROUTE_SNIS[$i]}" "${XRAY_SNI_ROUTE_ADDRS[$i]}" "${XRAY_SNI_ROUTE_PORTS[$i]}" >> "$route_tmp" || { rm -f "$route_tmp"; return 1; }
     done
-    chmod 600 "$route_file" 2>/dev/null || true
+    if ! chmod 600 "$route_tmp" || ! mv -f "$route_tmp" "$route_file"; then
+        rm -f "$route_tmp"
+        return 1
+    fi
 }
 
 xray_sni_route_index() {

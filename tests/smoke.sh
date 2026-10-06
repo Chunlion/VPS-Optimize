@@ -1603,6 +1603,7 @@ assert_file_not_contains src/caddy_maintenance.sh '永久删除该域名的证�
     SITE_DOMAINS=(site.example.com dockge.example.com)
     SITE_BACKEND_ADDRS=(127.0.0.1 backend.internal)
     SITE_BACKEND_PORTS=(3000 5000)
+    nginx() { printf '%s\n' 'nginx version: nginx/1.24.0' >&2; }
     write_nginx_single_443_web_config "$nginx_sni_web_tmp"
     [[ "$(nginx_http_listen_directive "127.0.0.1" "8443")" == "    listen 127.0.0.1:8443 ssl http2;" ]]
     [[ "$(nginx_http_listen_directive "::1" "8443")" == "    listen [::1]:8443 ssl http2;" ]]

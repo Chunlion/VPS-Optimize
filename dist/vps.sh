@@ -1873,41 +1873,67 @@ quarantine_path() {
         dest="${dest}_$RANDOM"
     done
 
-    mv -- "$target" "$dest"
+    mv -- "$target" "$dest" || return 1
     echo -e "$(localized_text "${YELLOW}已隔离：${resolved} -> ${dest}${PLAIN}" "${YELLOW}Has been isolated: ${resolved} -> ${dest}${PLAIN}" "${YELLOW}изолирован: ${resolved} -> ${dest}${PLAIN}")"
 }
 
 restore_sni_stack_backup_files() {
     local backup_dir="$1"
-    local domain conf_file
+    local domain conf_file snapshot
     [[ -n "$backup_dir" && -d "$backup_dir" ]] || return 1
 
-    mkdir -p /etc/nginx/stream.d /etc/nginx/conf.d /etc/caddy/conf.d /etc/vps-optimize /etc/systemd/system /usr/local/bin
-    [[ -f "$backup_dir/nginx.conf" ]] && cp -a "$backup_dir/nginx.conf" /etc/nginx/nginx.conf
-    [[ -f "$backup_dir/Caddyfile" ]] && cp -a "$backup_dir/Caddyfile" /etc/caddy/Caddyfile
-    [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]] && cp -a "$backup_dir/vps-optimize/sni-stack.env" /etc/vps-optimize/sni-stack.env
-    [[ -f "$backup_dir/vps-optimize/xray-sni-routes.conf" ]] && cp -a "$backup_dir/vps-optimize/xray-sni-routes.conf" /etc/vps-optimize/xray-sni-routes.conf
-    [[ -f "$backup_dir/vps-optimize/443-engine.conf" ]] && cp -a "$backup_dir/vps-optimize/443-engine.conf" /etc/vps-optimize/443-engine.conf
-    [[ -f "$backup_dir/vps-optimize/vpso-mux.yaml" ]] && cp -a "$backup_dir/vps-optimize/vpso-mux.yaml" /etc/vps-optimize/vpso-mux.yaml
-    [[ -f "$backup_dir/systemd/vpso-mux.service" ]] && cp -a "$backup_dir/systemd/vpso-mux.service" /etc/systemd/system/vpso-mux.service
-    [[ -f "$backup_dir/usr-local-bin/vpso-mux" ]] && cp -a "$backup_dir/usr-local-bin/vpso-mux" /usr/local/bin/vpso-mux
+    mkdir -p /etc/nginx/stream.d /etc/nginx/conf.d /etc/caddy/conf.d /etc/vps-optimize /etc/systemd/system /usr/local/bin || return 1
+    while IFS='|' read -r conf_file snapshot; do
+        if [[ -e "$backup_dir/$snapshot" || -L "$backup_dir/$snapshot" ]]; then
+            mkdir -p "$(dirname "$conf_file")" || return 1
+            cp -a "$backup_dir/$snapshot" "$conf_file" || return 1
+        elif [[ -f "$backup_dir/absent-files" ]] && grep -Fxq "$conf_file" "$backup_dir/absent-files"; then
+            quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/sni-stack" >/dev/null 2>&1 || return 1
+        fi
+    done <<'EOF'
+/etc/nginx/nginx.conf|nginx.conf
+/etc/caddy/Caddyfile|Caddyfile
+/etc/nginx/conf.d/00-vps-proxy-map.conf|nginx_conf.d/00-vps-proxy-map.conf
+/etc/nginx/sites-available/default|nginx_default_sites/available-default
+/etc/nginx/sites-enabled/default|nginx_default_sites/enabled-default
+/etc/nginx/conf.d/default.conf|nginx_default_sites/default.conf
+/etc/nginx/conf.d/00-vps-default-drop.conf|nginx_default_sites/00-vps-default-drop.conf
+/etc/vps-optimize/sni-stack.env|vps-optimize/sni-stack.env
+/etc/vps-optimize/xray-sni-routes.conf|vps-optimize/xray-sni-routes.conf
+/etc/vps-optimize/443-engine.conf|vps-optimize/443-engine.conf
+/etc/vps-optimize/vpso-mux.yaml|vps-optimize/vpso-mux.yaml
+/etc/systemd/system/vpso-mux.service|systemd/vpso-mux.service
+/usr/local/bin/vpso-mux|usr-local-bin/vpso-mux
+EOF
 
     while IFS= read -r conf_file; do
-        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-sni" >/dev/null 2>&1 || true
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-sni" >/dev/null 2>&1 || return 1
     done < <(find /etc/nginx/stream.d -maxdepth 1 -type f -name 'vps_sni_*.conf' 2>/dev/null | sort)
-    cp -a "$backup_dir/nginx_stream.d/"*.conf /etc/nginx/stream.d/ 2>/dev/null || true
+    for conf_file in "$backup_dir/nginx_stream.d/"*.conf; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" /etc/nginx/stream.d/ || return 1
+    done
 
     while IFS= read -r conf_file; do
-        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-conf-d" >/dev/null 2>&1 || true
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-conf-d" >/dev/null 2>&1 || return 1
     done < <(find /etc/nginx/conf.d -maxdepth 1 \( -name 'vps_sni_web_*.conf' -o -name 'vps_proxy_*.conf' \) 2>/dev/null | sort)
-    cp -a "$backup_dir/nginx_conf.d/"*.conf /etc/nginx/conf.d/ 2>/dev/null || true
+    for conf_file in "$backup_dir/nginx_conf.d/"*.conf; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" /etc/nginx/conf.d/ || return 1
+    done
 
     for domain in "$PANEL_DOMAIN" "${SITE_DOMAINS[@]}"; do
         [[ -n "$domain" ]] || continue
         conf_file="/etc/caddy/conf.d/${domain}.caddy"
-        [[ -e "$conf_file" ]] && quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/caddy-sni" >/dev/null 2>&1 || true
+        if [[ -e "$conf_file" || -L "$conf_file" ]]; then
+            quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/caddy-sni" >/dev/null 2>&1 || return 1
+        fi
     done
-    cp -a "$backup_dir/caddy_conf.d/"*.caddy /etc/caddy/conf.d/ 2>/dev/null || true
+    for conf_file in "$backup_dir/caddy_conf.d/"*.caddy; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" /etc/caddy/conf.d/ || return 1
+    done
+    return 0
 }
 
 rollback_sni_stack_after_failure() {
@@ -1916,11 +1942,11 @@ rollback_sni_stack_after_failure() {
     echo -e "${RED}❌ ${reason}${PLAIN}"
     echo -e "$(localized_text "${YELLOW}▶ 正在从本次操作前备份回滚 Nginx/Caddy 配置...${PLAIN}" "${YELLOW}▶ Rolling back from the backup before this operation Nginx/Caddy configuration...${PLAIN}" "${YELLOW}▶ Откат из резервной копии перед этой операцией. Конфигурация Nginx/Caddy...${PLAIN}")"
     if restore_sni_stack_backup_files "$backup_dir"; then
-        nginx -t >/dev/null 2>&1 || echo -e "$(localized_text "${YELLOW}⚠️ Nginx 回滚后语法检查仍未通过，请手动检查 /etc/nginx/nginx.conf。${PLAIN}" "${YELLOW}⚠️ Nginx The syntax check still fails after rollback. Please check /etc/nginx/nginx.conf manually.${PLAIN}" "${YELLOW}⚠️ Nginx Проверка синтаксиса по-прежнему не выполняется после отката. Пожалуйста, проверьте /etc/nginx/nginx.conf вручную.${PLAIN}")"
-        caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 || echo -e "$(localized_text "${YELLOW}⚠️ Caddy 回滚后配置检查仍未通过，请手动检查 /etc/caddy/Caddyfile。${PLAIN}" "${YELLOW}⚠️ Caddy The configuration check still fails after rollback. Please check /etc/caddy/Caddyfile manually.${PLAIN}" "${YELLOW}⚠️ Caddy Проверка конфигурации после отката по-прежнему не выполняется. Пожалуйста, проверьте /etc/caddy/Caddyfile вручную.${PLAIN}")"
-        restart_service_if_available nginx >/dev/null 2>&1 || true
-        restart_service_if_available caddy >/dev/null 2>&1 || true
         systemctl daemon-reload >/dev/null 2>&1 || true
+        if ! restore_sni_stack_web_services "$backup_dir"; then
+            echo -e "$(localized_text "${RED}❌ 回滚文件已恢复，但 Web 配置校验或服务恢复失败，请检查备份：${backup_dir}${PLAIN}" "${RED}❌ Backup files restored, but Web validation or service recovery failed. Check: ${backup_dir}${PLAIN}" "${RED}❌ Файлы восстановлены, но проверка Web или восстановление служб завершились ошибкой. Проверьте: ${backup_dir}${PLAIN}")"
+            return 1
+        fi
         echo -e "$(localized_text "${YELLOW}已回滚到：${backup_dir}${PLAIN}" "${YELLOW}Has been rolled back to: ${backup_dir}${PLAIN}" "${YELLOW}откатился до: ${backup_dir}.${PLAIN}")"
     else
         echo -e "$(localized_text "${RED}❌ 自动回滚失败，请手动使用备份目录恢复：${backup_dir}${PLAIN}" "${RED}❌ Automatic rollback failed, please manually use the backup directory to restore: ${backup_dir}${PLAIN}" "${RED}❌ Не удалось выполнить автоматический откат. Для восстановления вручную используйте каталог резервной копии: ${backup_dir}.${PLAIN}")"
@@ -1946,14 +1972,51 @@ rollback_sni_stack_config() {
 
     restore_sni_stack_backup_files "$backup_dir" || { echo -e "$(localized_text "${RED}❌ 回滚文件恢复失败。${PLAIN}" "${RED}❌ Rollback file recovery failed.${PLAIN}" "${RED}❌ Не удалось выполнить откат восстановления файла.${PLAIN}")"; return 1; }
 
-    if nginx -t && caddy validate --config /etc/caddy/Caddyfile; then
-        restart_service_if_available nginx >/dev/null 2>&1 || true
-        restart_service_if_available caddy >/dev/null 2>&1 || true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    if restore_sni_stack_web_services "$backup_dir"; then
         echo -e "$(localized_text "${GREEN}✅ 回滚完成。${PLAIN}" "${GREEN}✅ Rollback completed.${PLAIN}" "${GREEN}✅ Откат завершен.${PLAIN}")"
     else
         echo -e "$(localized_text "${RED}❌ 回滚文件已恢复，但配置校验失败，请手动检查备份：${backup_dir}${PLAIN}" "${RED}❌ The rollback file has been restored, but the configuration validation failed. Please check the backup manually: ${backup_dir}${PLAIN}" "${RED}❌ Файл отката восстановлен, но проверка конфигурации не удалась. Пожалуйста, проверьте резервную копию вручную: ${backup_dir}.${PLAIN}")"
         return 1
     fi
+}
+
+restore_sni_stack_web_services() {
+    local backup_dir="${1:-}" svc failed=0
+    for svc in nginx caddy; do
+        if [[ -f "$backup_dir/web-services" ]]; then
+            if grep -Fxq "$svc|enabled" "$backup_dir/web-services"; then
+                systemctl enable "$svc" || failed=1
+            elif grep -Fxq "$svc|disabled" "$backup_dir/web-services"; then
+                systemctl disable "$svc" || failed=1
+            fi
+        fi
+        if [[ -f "$backup_dir/web-services" ]] && grep -Fxq "$svc|inactive" "$backup_dir/web-services"; then
+            if systemctl is-active --quiet "$svc" && ! systemctl stop "$svc"; then
+                failed=1
+            fi
+        fi
+    done
+    [[ "$failed" == 0 ]] || return 1
+    for svc in nginx caddy; do
+        if [[ -f "$backup_dir/web-services" ]] && grep -Fxq "$svc|inactive" "$backup_dir/web-services"; then
+            continue
+        fi
+        case "$svc" in
+            nginx)
+                [[ -f /etc/nginx/nginx.conf ]] || continue
+                nginx -t || { failed=1; continue; }
+                ;;
+            caddy)
+                [[ -f /etc/caddy/Caddyfile ]] || continue
+                caddy validate --config /etc/caddy/Caddyfile || { failed=1; continue; }
+                ;;
+        esac
+        if ! restart_service_if_available "$svc"; then
+            failed=1
+        fi
+    done
+    return "$failed"
 }
 
 restore_backup_file() {
@@ -2019,25 +2082,61 @@ sni_stack_backup_dir() {
 }
 
 create_sni_stack_backup() {
-    local backup_dir
+    local backup_dir target snapshot conf_file svc enabled_state
     backup_dir="${1:-$(sni_stack_backup_dir)}"
-    mkdir -p "$backup_dir/nginx_stream.d" "$backup_dir/nginx_conf.d" "$backup_dir/caddy_conf.d" "$backup_dir/vps-optimize" "$backup_dir/systemd" "$backup_dir/usr-local-bin" "$backup_dir/x-ui"
-    [[ -f /etc/nginx/nginx.conf ]] && cp -a /etc/nginx/nginx.conf "$backup_dir/nginx.conf" 2>/dev/null || true
-    [[ -d /etc/nginx/stream.d ]] && cp -a /etc/nginx/stream.d/vps_sni_*.conf "$backup_dir/nginx_stream.d/" 2>/dev/null || true
-    [[ -d /etc/nginx/conf.d ]] && cp -a /etc/nginx/conf.d/vps_sni_web_*.conf "$backup_dir/nginx_conf.d/" 2>/dev/null || true
-    [[ -d /etc/nginx/conf.d ]] && cp -a /etc/nginx/conf.d/vps_proxy_*.conf "$backup_dir/nginx_conf.d/" 2>/dev/null || true
-    [[ -f /etc/nginx/conf.d/00-vps-proxy-map.conf ]] && cp -a /etc/nginx/conf.d/00-vps-proxy-map.conf "$backup_dir/nginx_conf.d/" 2>/dev/null || true
-    [[ -f /etc/caddy/Caddyfile ]] && cp -a /etc/caddy/Caddyfile "$backup_dir/Caddyfile" 2>/dev/null || true
-    [[ -d /etc/caddy/conf.d ]] && cp -a /etc/caddy/conf.d/*.caddy "$backup_dir/caddy_conf.d/" 2>/dev/null || true
-    [[ -f /etc/vps-optimize/sni-stack.env ]] && cp -a /etc/vps-optimize/sni-stack.env "$backup_dir/vps-optimize/sni-stack.env" 2>/dev/null || true
-    [[ -f /etc/vps-optimize/xray-sni-routes.conf ]] && cp -a /etc/vps-optimize/xray-sni-routes.conf "$backup_dir/vps-optimize/xray-sni-routes.conf" 2>/dev/null || true
-    [[ -f /etc/vps-optimize/443-engine.conf ]] && cp -a /etc/vps-optimize/443-engine.conf "$backup_dir/vps-optimize/443-engine.conf" 2>/dev/null || true
-    [[ -f /etc/vps-optimize/vpso-mux.yaml ]] && cp -a /etc/vps-optimize/vpso-mux.yaml "$backup_dir/vps-optimize/vpso-mux.yaml" 2>/dev/null || true
-    [[ -f /etc/systemd/system/vpso-mux.service ]] && cp -a /etc/systemd/system/vpso-mux.service "$backup_dir/systemd/vpso-mux.service" 2>/dev/null || true
-    [[ -f /usr/local/bin/vpso-mux ]] && cp -a /usr/local/bin/vpso-mux "$backup_dir/usr-local-bin/vpso-mux" 2>/dev/null || true
+    mkdir -p "$backup_dir/nginx_stream.d" "$backup_dir/nginx_conf.d" "$backup_dir/nginx_default_sites" "$backup_dir/caddy_conf.d" "$backup_dir/vps-optimize" "$backup_dir/systemd" "$backup_dir/usr-local-bin" "$backup_dir/x-ui" || return 1
+    chmod 700 "$backup_dir" || return 1
+    : > "$backup_dir/absent-files" || return 1
+    while IFS='|' read -r target snapshot; do
+        if [[ -e "$target" || -L "$target" ]]; then
+            cp -a "$target" "$backup_dir/$snapshot" || return 1
+        else
+            printf '%s\n' "$target" >> "$backup_dir/absent-files" || return 1
+        fi
+    done <<'EOF'
+/etc/nginx/nginx.conf|nginx.conf
+/etc/caddy/Caddyfile|Caddyfile
+/etc/nginx/conf.d/00-vps-proxy-map.conf|nginx_conf.d/00-vps-proxy-map.conf
+/etc/nginx/sites-available/default|nginx_default_sites/available-default
+/etc/nginx/sites-enabled/default|nginx_default_sites/enabled-default
+/etc/nginx/conf.d/default.conf|nginx_default_sites/default.conf
+/etc/nginx/conf.d/00-vps-default-drop.conf|nginx_default_sites/00-vps-default-drop.conf
+/etc/vps-optimize/sni-stack.env|vps-optimize/sni-stack.env
+/etc/vps-optimize/xray-sni-routes.conf|vps-optimize/xray-sni-routes.conf
+/etc/vps-optimize/443-engine.conf|vps-optimize/443-engine.conf
+/etc/vps-optimize/vpso-mux.yaml|vps-optimize/vpso-mux.yaml
+/etc/systemd/system/vpso-mux.service|systemd/vpso-mux.service
+/usr/local/bin/vpso-mux|usr-local-bin/vpso-mux
+EOF
+    for conf_file in /etc/nginx/stream.d/vps_sni_*.conf; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" "$backup_dir/nginx_stream.d/" || return 1
+    done
+    for conf_file in /etc/nginx/conf.d/vps_sni_web_*.conf /etc/nginx/conf.d/vps_proxy_*.conf; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" "$backup_dir/nginx_conf.d/" || return 1
+    done
+    for conf_file in /etc/caddy/conf.d/*.caddy; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" "$backup_dir/caddy_conf.d/" || return 1
+    done
+    if command -v systemctl >/dev/null 2>&1; then
+        : > "$backup_dir/web-services" || return 1
+        for svc in nginx caddy; do
+            enabled_state=$(systemctl is-enabled "$svc" 2>/dev/null || true)
+            case "$enabled_state" in
+                enabled|disabled) printf '%s|%s\n' "$svc" "$enabled_state" >> "$backup_dir/web-services" || return 1 ;;
+            esac
+            if systemctl is-active --quiet "$svc"; then
+                printf '%s|active\n' "$svc" >> "$backup_dir/web-services" || return 1
+            else
+                printf '%s|inactive\n' "$svc" >> "$backup_dir/web-services" || return 1
+            fi
+        done
+    fi
     [[ -d /etc/x-ui ]] && cp -a /etc/x-ui "$backup_dir/x-ui/etc-x-ui" 2>/dev/null || true
     [[ -f /usr/local/x-ui/bin/config.json ]] && cp -a /usr/local/x-ui/bin/config.json "$backup_dir/x-ui/config.json" 2>/dev/null || true
-    echo "$backup_dir" > /etc/vps-optimize/sni-stack.last-backup 2>/dev/null || true
+    echo "$backup_dir" > /etc/vps-optimize/sni-stack.last-backup || return 1
     echo -e "$(localized_text "${GREEN}✅ 已创建配置备份：${backup_dir}${PLAIN}" "${GREEN}✅ Configuration backup created: ${backup_dir}${PLAIN}" "${GREEN}✅ Создана резервная копия конфигурации: ${backup_dir}.${PLAIN}")"
 }
 
@@ -9003,15 +9102,18 @@ load_xray_sni_route_arrays() {
 }
 
 save_xray_sni_route_arrays() {
-    local route_file i
+    local route_file route_tmp i
     route_file=$(xray_sni_routes_path)
-    mkdir -p "$(dirname "$route_file")"
-    : > "$route_file"
+    mkdir -p "$(dirname "$route_file")" || return 1
+    route_tmp=$(mktemp "${route_file}.tmp.XXXXXX") || return 1
     for i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
         [[ -n "${XRAY_SNI_ROUTE_SNIS[$i]:-}" ]] || continue
-        printf '%s|%s|%s\n' "${XRAY_SNI_ROUTE_SNIS[$i]}" "${XRAY_SNI_ROUTE_ADDRS[$i]}" "${XRAY_SNI_ROUTE_PORTS[$i]}" >> "$route_file"
+        printf '%s|%s|%s\n' "${XRAY_SNI_ROUTE_SNIS[$i]}" "${XRAY_SNI_ROUTE_ADDRS[$i]}" "${XRAY_SNI_ROUTE_PORTS[$i]}" >> "$route_tmp" || { rm -f "$route_tmp"; return 1; }
     done
-    chmod 600 "$route_file" 2>/dev/null || true
+    if ! chmod 600 "$route_tmp" || ! mv -f "$route_tmp" "$route_file"; then
+        rm -f "$route_tmp"
+        return 1
+    fi
 }
 
 xray_sni_route_index() {
@@ -10556,23 +10658,39 @@ preview_entry_mode_cutover() {
 
 systemd_unit_exists() {
     local unit="$1"
-    systemctl list-unit-files "$unit" >/dev/null 2>&1 || systemctl status "$unit" >/dev/null 2>&1
+    [[ "$(systemctl show -p LoadState --value "$unit" 2>/dev/null)" == "loaded" ]]
 }
 
 xray_entry_service_name() {
-    local svc
+    local svc listener pid unit port="${1:-${XRAY_LISTEN_PORT:-1443}}"
+    local -a services=()
+    listener=$(get_listen_line_by_port "$port")
+    if [[ "$listener" =~ pid=([0-9]+) ]]; then
+        pid="${BASH_REMATCH[1]}"
+        unit=$(ps -o unit= -p "$pid" 2>/dev/null || true)
+        unit=$(trim_input "$unit")
+        case "$unit" in
+            xray.service|x-ui.service|3x-ui.service)
+                systemd_unit_exists "$unit" || return 1
+                echo "${unit%.service}"
+                return 0
+                ;;
+        esac
+    fi
     for svc in xray.service x-ui.service 3x-ui.service; do
         if systemd_unit_exists "$svc"; then
-            echo "${svc%.service}"
-            return 0
+            services+=("${svc%.service}")
         fi
     done
-    return 1
+    [[ ${#services[@]} -eq 1 ]] || return 1
+    echo "${services[0]}"
 }
 
 restart_xray_entry_service() {
-    local svc
-    svc=$(xray_entry_service_name) || { echo -e "$(localized_text "${RED}❌ 未检测到 xray/x-ui/3x-ui systemd 服务。${PLAIN}" "${RED}❌ xray/x-ui/3x-ui systemd service not detected.${PLAIN}" "${RED}❌ xray/x-ui/3x-ui Служба systemd не обнаружена.${PLAIN}")"; return 1; }
+    local svc="${1:-}"
+    if [[ -z "$svc" ]]; then
+        svc=$(xray_entry_service_name) || { echo -e "$(localized_text "${RED}❌ 无法确定 Xray 入站所属服务，请检查监听端口和服务状态。${PLAIN}" "${RED}❌ Cannot identify the Xray inbound service. Check its listening port and service state.${PLAIN}" "${RED}❌ Не удалось определить службу входа Xray. Проверьте порт и состояние службы.${PLAIN}")"; return 1; }
+    fi
     systemctl enable "$svc" >/dev/null 2>&1 || true
     systemctl restart "$svc" || { echo -e "$(localized_text "${RED}❌ ${svc} 重启失败。${PLAIN}" "${RED}❌ ${svc} Restart failed.${PLAIN}" "${RED}❌ ${svc} Не удалось перезапустить.${PLAIN}")"; return 1; }
 }
@@ -10581,11 +10699,12 @@ stop_xray_entry_service_if_public_443() {
     local listener svc
     listener=$(detect_443_listener)
     listener_info_has_entry "$listener" "xray" || return 0
-    svc=$(xray_entry_service_name) || return 0
+    svc=$(xray_entry_service_name "${NGINX_LISTEN_PORT:-443}") || return 1
     if ! systemctl stop "$svc"; then
         echo -e "$(localized_text "${RED}❌ 停止 ${svc} 失败，公网 443 仍可能被 Xray 占用。${PLAIN}" "${RED}❌ Stop ${svc} failed, public port 443 may still be occupied by Xray.${PLAIN}" "${RED}❌ Не удалось остановить ${svc}, публичный порт 443 всё ещё может быть занят Xray.${PLAIN}")"
         return 1
     fi
+    XRAY_ENTRY_STOPPED_SERVICE="$svc"
     sleep 1
     listener=$(detect_443_listener)
     if listener_info_has_entry "$listener" "xray"; then
@@ -10681,6 +10800,7 @@ disable_nginx_stream_public_443() {
 stop_public_443_entry_services_for_target() {
     local target_mode="$1"
     target_mode=$(normalize_entry_mode_name "$target_mode") || return 1
+    XRAY_ENTRY_STOPPED_SERVICE=""
     quarantine_legacy_nginx_https_proxy_configs
     stop_caddy_service_if_public_443 || return 1
 
@@ -10805,7 +10925,7 @@ check_entry_mode_dependencies() {
 
 backup_entry_mode_config() {
     local backup_dir="${1:-}" service_path svc listener_info
-    create_sni_stack_backup "$backup_dir" >/dev/null
+    create_sni_stack_backup "$backup_dir" >/dev/null || return 1
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
     [[ -n "$backup_dir" && -d "$backup_dir" ]] || { echo -e "$(localized_text "${RED}❌ 入口模式切换备份失败。${PLAIN}" "${RED}❌ Entry mode switching backup failed.${PLAIN}" "${RED}❌ Не удалось переключить режим входа в резервную копию.${PLAIN}")"; return 1; }
 
@@ -10910,8 +11030,9 @@ apply_nginx_stream_mode() {
     fi
     probe_tls_sni_certificate "$(localized_text "Nginx Stream 面板 SNI" "Nginx Stream panel SNI" "Панель Nginx Stream SNI")" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
     tcp_probe_host "$(localized_text "$(web_proxy_engine_label) 本地 TLS" "$(web_proxy_engine_label) local TLS" "$(web_proxy_engine_label) локальный TLS")" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
-    if xray_entry_service_name >/dev/null 2>&1; then
-        restart_xray_entry_service || echo -e "$(localized_text "${YELLOW}⚠️ Xray/3x-ui 服务重启失败；Nginx Stream/Web 入口已恢复，请单独检查 Xray 入站。${PLAIN}" "${YELLOW}⚠️ Xray/3x-ui service failed to restart; Nginx Stream/Web entry has been restored, please check Xray inbound separately.${PLAIN}" "${YELLOW}⚠️ Службу Xray/3x-ui не удалось перезапустить; Вход Nginx Stream/Web восстановлен, проверьте входящий Xray отдельно.${PLAIN}")"
+    if [[ -n "${XRAY_ENTRY_STOPPED_SERVICE:-}" ]]; then
+        restart_xray_entry_service "$XRAY_ENTRY_STOPPED_SERVICE" || return 1
+        XRAY_ENTRY_STOPPED_SERVICE=""
     fi
     if ! tcp_probe_host "$(localized_text "Xray/REALITY 本地入站" "Xray/REALITY local inbound" "Xray/REALITY локальное входящее подключение")" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1; then
         echo -e "$(localized_text "${YELLOW}⚠️ Nginx Stream/Web 入口已恢复，但 Xray/REALITY 本地入站未连通。${PLAIN}" "${YELLOW}⚠️ Nginx Stream/Web ingress has been restored, but Xray/REALITY local inbound is not connected.${PLAIN}" "${YELLOW}⚠️ Вход Nginx Stream/Web восстановлен, но локальное входящее подключение Xray/REALITY не подключен.${PLAIN}")"
@@ -10948,8 +11069,9 @@ apply_tcppeek_mode() {
     fi
     probe_tls_sni_certificate "$(localized_text "TCP Peek 面板 SNI" "TCP Peek panel SNI" "Панель TCP Peek SNI")" "$(probe_host_for_listen_addr "$NGINX_LISTEN_ADDR")" "$NGINX_LISTEN_PORT" "$PANEL_DOMAIN" || return 1
     tcp_probe_host "$(localized_text "$(web_proxy_engine_label) 本地 TLS" "$(web_proxy_engine_label) local TLS" "$(web_proxy_engine_label) локальный TLS")" "$(probe_host_for_listen_addr "$CADDY_LISTEN_ADDR")" "$CADDY_LISTEN_PORT" || return 1
-    if xray_entry_service_name >/dev/null 2>&1; then
-        restart_xray_entry_service || return 1
+    if [[ -n "${XRAY_ENTRY_STOPPED_SERVICE:-}" ]]; then
+        restart_xray_entry_service "$XRAY_ENTRY_STOPPED_SERVICE" || return 1
+        XRAY_ENTRY_STOPPED_SERVICE=""
     fi
     tcp_probe_host "$(localized_text "Xray/REALITY 本地入站" "Xray/REALITY local inbound" "Xray/REALITY локальное входящее подключение")" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1 || return 1
     write_single_443_engine_state "tcp-peek" "$backup_dir"
@@ -12513,10 +12635,17 @@ nginx_single_443_web_conf_path() {
 nginx_http_listen_directive() {
     local addr="$1"
     local port="$2"
+    local version http2_option=" http2" http2_directive=""
+    version=$(nginx -v 2>&1 || true)
+    if [[ "$version" =~ nginx/([0-9]+)\.([0-9]+)\.([0-9]+) ]] &&
+        (( BASH_REMATCH[1] > 1 || (BASH_REMATCH[1] == 1 && (BASH_REMATCH[2] > 25 || (BASH_REMATCH[2] == 25 && BASH_REMATCH[3] >= 1))) )); then
+        http2_option=""
+        http2_directive=$'    http2 on;\n'
+    fi
     if [[ "$addr" == *:* && "$addr" != \[*\] ]]; then
-        printf '    listen [%s]:%s ssl http2;\n' "$addr" "$port"
+        printf '    listen [%s]:%s ssl%s;\n%s' "$addr" "$port" "$http2_option" "$http2_directive"
     else
-        printf '    listen %s:%s ssl http2;\n' "$addr" "$port"
+        printf '    listen %s:%s ssl%s;\n%s' "$addr" "$port" "$http2_option" "$http2_directive"
     fi
 }
 
@@ -12779,7 +12908,9 @@ issue_and_install_cert_for_domain() {
 }
 
 save_sni_stack_env() {
-    mkdir -p /etc/vps-optimize || return 1
+    local env_file env_tmp
+    env_file=$(sni_stack_env_path)
+    mkdir -p "$(dirname "$env_file")" || return 1
     local entry_mode web_proxy_engine strict_sni_gate site_domains_csv site_backend_addrs_csv site_backend_ports_csv
     local tcp_route_snis_csv tcp_route_addrs_csv tcp_route_ports_csv
     local sni_ip_whitelist_domains_csv sni_ip_whitelist_ranges_pipe
@@ -12803,7 +12934,8 @@ save_sni_stack_env() {
     tcp_route_ports_csv=$(IFS=','; echo "${TCP_ROUTE_PORTS[*]}")
     sni_ip_whitelist_domains_csv=$(IFS=','; echo "${SNI_IP_WHITELIST_DOMAINS[*]}")
     sni_ip_whitelist_ranges_pipe=$(IFS='|'; echo "${SNI_IP_WHITELIST_RANGES[*]}")
-    cat <<EOF > /etc/vps-optimize/sni-stack.env || return 1
+    env_tmp=$(mktemp "${env_file}.tmp.XXXXXX") || return 1
+    cat <<EOF > "$env_tmp" || { rm -f "$env_tmp"; return 1; }
 ENTRY_MODE='${entry_mode}'
 STRICT_SNI_GATE='${strict_sni_gate}'
 WEB_PROXY_ENGINE='${web_proxy_engine}'
@@ -12837,7 +12969,10 @@ TCP_ROUTE_PORTS_CSV='${tcp_route_ports_csv}'
 SNI_IP_WHITELIST_DOMAINS_CSV='${sni_ip_whitelist_domains_csv}'
 SNI_IP_WHITELIST_RANGES_PIPE='${sni_ip_whitelist_ranges_pipe}'
 EOF
-    chmod 600 /etc/vps-optimize/sni-stack.env
+    if ! chmod 600 "$env_tmp" || ! save_xray_sni_route_arrays || ! mv -f "$env_tmp" "$env_file"; then
+        rm -f "$env_tmp"
+        return 1
+    fi
 }
 
 harden_single_443_firewall() {
@@ -12959,6 +13094,7 @@ print_sni_stack_result() {
     echo -e "$(localized_text "  安全 security：      reality" "Security security: reality" "Безопасность безопасности: reality")"
     echo -e "  REALITY dest：       ${REALITY_SNI}:443"
     echo -e "  serverNames：        ${REALITY_SNI}"
+    echo -e "$(localized_text "${YELLOW}  TLS/端口检查不代表 REALITY 客户端认证成功。若升级至 Xray 26.9.30 后 Mihomo 超时，可在服务端回退到 26.6.27 后复测。${PLAIN}" "${YELLOW}  TLS/port checks do not verify REALITY client authentication. If Mihomo times out after upgrading to Xray 26.9.30, roll back the server to 26.6.27 and retest.${PLAIN}" "${YELLOW}  Проверки TLS и портов не подтверждают аутентификацию клиента REALITY. Если после обновления Xray до 26.9.30 Mihomo не подключается, верните сервер на 26.6.27 и повторите тест.${PLAIN}")"
     echo -e "  SpiderX：            /"
     echo -e "$(localized_text "  客户端连接地址：     你的服务器 IP 或解析到服务器的域名" "Client connection address: Your server IP or domain resolved to the server" "Адрес подключения клиента: IP-адрес вашего сервера или доменное имя, разрешенное серверу.")"
     echo -e "$(localized_text "  客户端连接端口：     ${NGINX_LISTEN_PORT}" "Client connection port: ${NGINX_LISTEN_PORT}" "Порт подключения клиента: ${NGINX_LISTEN_PORT}")"
@@ -13028,7 +13164,7 @@ apply_sni_stack_runtime_config() {
     current_mode="${ENTRY_MODE:-$(get_entry_mode)}"
     current_mode=$(normalize_entry_mode_name "$current_mode" 2>/dev/null || echo "nginx-stream")
 
-    create_sni_stack_backup
+    create_sni_stack_backup || return 1
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
     guard_current_ssh_not_on_entry_port "$(localized_text "重新应用 443端口复用运行参数" "Reapply Port 443 Reuse Run Parameters" "Повторно применить 443 отдельных рабочих параметра")" || return 1
     check_entry_mode_dependencies "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式依赖检查失败" "Entry mode dependency check failed" "Проверка зависимости режима входа не удалась")"; return 1; }
@@ -14072,7 +14208,7 @@ unregistered_reality_server_names() {
                 printf '%s\n' "$normalized"
             fi
         done
-    done < <(reality_guard_python list "$db_path" 2>/dev/null)
+    done < <(reality_guard_python list-active "$db_path" 2>/dev/null)
 }
 
 validate_strict_sni_gate_reality_server_names() {
@@ -14085,6 +14221,47 @@ validate_strict_sni_gate_reality_server_names() {
     sed 's/^/  - /' <<< "$missing"
     echo -e "$(localized_text "${YELLOW}请先把每个名称登记到对应的 Xray SNI 路由，再重新启用。${PLAIN}" "${YELLOW}Register every name in the matching Xray SNI route, then enable the gate again.${PLAIN}" "${YELLOW}Сначала зарегистрируйте каждое имя в соответствующем маршруте Xray SNI, затем снова включите контроль.${PLAIN}")"
     return 1
+}
+
+register_reality_server_name_routes() {
+    local db_path records id port remark server_names state listen addr name i registered
+    local -a names=()
+    command -v python3 >/dev/null 2>&1 || return 0
+    db_path=$(find_reality_guard_database 2>/dev/null) || return 0
+    records=$(reality_guard_python list-active "$db_path") || return 1
+    while IFS=$'\t' read -r id port remark server_names state listen; do
+        is_registered_reality_backend_port "$port" || continue
+        addr=""
+        [[ "$port" == "${XRAY_LISTEN_PORT:-}" ]] && addr="${XRAY_LISTEN_ADDR:-127.0.0.1}"
+        for i in "${!XRAY_SNI_ROUTE_PORTS[@]}"; do
+            [[ "$port" == "${XRAY_SNI_ROUTE_PORTS[$i]}" ]] || continue
+            if [[ -n "$addr" && "$addr" != "${XRAY_SNI_ROUTE_ADDRS[$i]}" ]]; then
+                addr=""
+                break
+            fi
+            addr="${XRAY_SNI_ROUTE_ADDRS[$i]}"
+        done
+        is_loopback_listen_addr "$addr" || continue
+        case "$listen" in
+            ""|-|0.0.0.0|::|\[::\]) ;;
+            *) [[ "$(normalize_loopback_addr "$listen")" == "$addr" ]] || continue ;;
+        esac
+        IFS=',' read -r -a names <<< "$server_names"
+        for name in "${names[@]}"; do
+            name=$(normalize_domain_input "$name")
+            is_valid_domain "$name" || continue
+            is_registered_reality_sni_for_port "$name" "$port" && continue
+            registered=$(registered_443_snis | tr '[:upper:]' '[:lower:]')
+            if grep -Fxq "$name" <<< "$registered"; then
+                echo -e "$(localized_text "${RED}❌ REALITY SNI ${name} 与已有路由冲突，请检查对应后端。${PLAIN}" "${RED}❌ REALITY SNI ${name} conflicts with an existing route. Check its backend.${PLAIN}" "${RED}❌ SNI REALITY ${name} конфликтует с существующим маршрутом. Проверьте бэкенд.${PLAIN}")"
+                return 1
+            fi
+            XRAY_SNI_ROUTE_SNIS+=("$name")
+            XRAY_SNI_ROUTE_ADDRS+=("$addr")
+            XRAY_SNI_ROUTE_PORTS+=("$port")
+        done
+    done <<< "$records"
+    validate_strict_sni_gate_reality_server_names
 }
 
 strict_sni_gate_mode_supported() {
@@ -14215,8 +14392,10 @@ def parse(row):
     reality = stream.get("realitySettings")
     return stream if isinstance(reality, dict) else None
 
-if operation == "list":
-    for row in conn.execute("select id, port, remark, stream_settings from inbounds order by id"):
+if operation in ("list", "list-active"):
+    for row in conn.execute("select * from inbounds order by id"):
+        if operation == "list-active" and "enable" in columns and not row["enable"]:
+            continue
         stream = parse(row)
         if stream is None:
             continue
@@ -14226,7 +14405,10 @@ if operation == "list":
         download = reality.get("limitFallbackDownload") or {}
         enabled = bool(upload.get("bytesPerSec", 0) or download.get("bytesPerSec", 0))
         remark = str(row["remark"] or "-").replace("\t", " ").replace("\n", " ")
-        print(f"{row['id']}\t{row['port']}\t{remark}\t{names or '-'}\t{'enabled' if enabled else 'disabled'}")
+        record = f"{row['id']}\t{row['port']}\t{remark}\t{names or '-'}\t{'enabled' if enabled else 'disabled'}"
+        if operation == "list-active":
+            record += "\t" + str(row["listen"] or "-") if "listen" in columns else "\t-"
+        print(record)
     raise SystemExit(0)
 
 inbound_id = int(sys.argv[3])
@@ -14509,6 +14691,10 @@ func_caddy_cf_reality_wizard() {
     fi
     select_initial_entry_mode || return 1
     collect_sni_stack_config || return 1
+    load_xray_sni_route_arrays
+    if strict_sni_gate_mode_supported "$ENTRY_MODE" && strict_sni_gate_enabled; then
+        register_reality_server_name_routes || return 1
+    fi
     probe_reality_sni "$REALITY_SNI" || return 1
     print_sni_stack_preview || return 1
     guard_current_ssh_not_on_entry_port "$(localized_text "首次配置 443端口复用" "Initial Port 443 Reuse setup" "Первоначальная настройка повторного использования порта 443")" || return 1
@@ -14521,8 +14707,12 @@ func_caddy_cf_reality_wizard() {
     printf "CF_Token='%s'\n" "$escaped_token" > "$cf_env_file"
     chmod 600 "$cf_env_file"
 
+    (
     local backup_dir
     backup_dir=$(backup_entry_mode_config) || return 1
+    trap 'rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "443 配置被中断（SIGHUP）" "443 setup interrupted (SIGHUP)" "Настройка 443 прервана (SIGHUP)")" || true; exit 129' HUP
+    trap 'rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "443 配置被中断（SIGINT）" "443 setup interrupted (SIGINT)" "Настройка 443 прервана (SIGINT)")" || true; exit 130' INT
+    trap 'rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "443 配置被中断（SIGTERM）" "443 setup interrupted (SIGTERM)" "Настройка 443 прервана (SIGTERM)")" || true; exit 143' TERM
     prepare_initial_entry_mode_dependencies "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式依赖检查失败" "Entry mode dependency check failed" "Проверка зависимости режима входа не удалась")"; return 1; }
     quarantine_legacy_caddy_443_configs
     quarantine_legacy_nginx_https_proxy_configs
@@ -14537,10 +14727,11 @@ func_caddy_cf_reality_wizard() {
     preflight_entry_mode_before_cutover "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式 ${ENTRY_MODE} 预检失败，公网 443 未切换" "entry mode ${ENTRY_MODE} preflight failed, public port 443 not switched" "Режим входа в предполетный режим ${ENTRY_MODE} не выполнен, публичный порт 443 не переключена")"; return 1; }
     stop_public_443_entry_services_for_target "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "停止旧公网 443 入口服务失败" "Stop the old public port 443 entry service failed" "Остановить старую публичную сеть 443, служба входа не удалась")"; return 1; }
     apply_entry_mode_by_name "$ENTRY_MODE" "$backup_dir" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式 ${ENTRY_MODE} 应用失败" "Entry mode ${ENTRY_MODE} application failed" "Режим входа в приложение ${ENTRY_MODE} не выполнен.")"; return 1; }
-    save_sni_stack_env
+    save_sni_stack_env || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "保存入口配置失败" "Failed to save entry configuration" "Не удалось сохранить конфигурацию входа")"; return 1; }
     harden_single_443_firewall
     generate_caddy_cf_manifest
     print_sni_stack_result
+    )
 }
 
 func_caddy_cf_health_check() {

@@ -16,6 +16,10 @@ func_caddy_cf_reality_wizard() {
     fi
     select_initial_entry_mode || return 1
     collect_sni_stack_config || return 1
+    load_xray_sni_route_arrays
+    if strict_sni_gate_mode_supported "$ENTRY_MODE" && strict_sni_gate_enabled; then
+        register_reality_server_name_routes || return 1
+    fi
     probe_reality_sni "$REALITY_SNI" || return 1
     print_sni_stack_preview || return 1
     guard_current_ssh_not_on_entry_port "$(localized_text "首次配置 443端口复用" "Initial Port 443 Reuse setup" "Первоначальная настройка повторного использования порта 443")" || return 1
@@ -28,8 +32,12 @@ func_caddy_cf_reality_wizard() {
     printf "CF_Token='%s'\n" "$escaped_token" > "$cf_env_file"
     chmod 600 "$cf_env_file"
 
+    (
     local backup_dir
     backup_dir=$(backup_entry_mode_config) || return 1
+    trap 'rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "443 配置被中断（SIGHUP）" "443 setup interrupted (SIGHUP)" "Настройка 443 прервана (SIGHUP)")" || true; exit 129' HUP
+    trap 'rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "443 配置被中断（SIGINT）" "443 setup interrupted (SIGINT)" "Настройка 443 прервана (SIGINT)")" || true; exit 130' INT
+    trap 'rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "443 配置被中断（SIGTERM）" "443 setup interrupted (SIGTERM)" "Настройка 443 прервана (SIGTERM)")" || true; exit 143' TERM
     prepare_initial_entry_mode_dependencies "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式依赖检查失败" "Entry mode dependency check failed" "Проверка зависимости режима входа не удалась")"; return 1; }
     quarantine_legacy_caddy_443_configs
     quarantine_legacy_nginx_https_proxy_configs
@@ -44,10 +52,11 @@ func_caddy_cf_reality_wizard() {
     preflight_entry_mode_before_cutover "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式 ${ENTRY_MODE} 预检失败，公网 443 未切换" "entry mode ${ENTRY_MODE} preflight failed, public port 443 not switched" "Режим входа в предполетный режим ${ENTRY_MODE} не выполнен, публичный порт 443 не переключена")"; return 1; }
     stop_public_443_entry_services_for_target "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "停止旧公网 443 入口服务失败" "Stop the old public port 443 entry service failed" "Остановить старую публичную сеть 443, служба входа не удалась")"; return 1; }
     apply_entry_mode_by_name "$ENTRY_MODE" "$backup_dir" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式 ${ENTRY_MODE} 应用失败" "Entry mode ${ENTRY_MODE} application failed" "Режим входа в приложение ${ENTRY_MODE} не выполнен.")"; return 1; }
-    save_sni_stack_env
+    save_sni_stack_env || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "保存入口配置失败" "Failed to save entry configuration" "Не удалось сохранить конфигурацию входа")"; return 1; }
     harden_single_443_firewall
     generate_caddy_cf_manifest
     print_sni_stack_result
+    )
 }
 
 func_caddy_cf_health_check() {

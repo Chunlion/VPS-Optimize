@@ -55,7 +55,7 @@ unregistered_reality_server_names() {
                 printf '%s\n' "$normalized"
             fi
         done
-    done < <(reality_guard_python list "$db_path" 2>/dev/null)
+    done < <(reality_guard_python list-active "$db_path" 2>/dev/null)
 }
 
 validate_strict_sni_gate_reality_server_names() {
@@ -68,6 +68,47 @@ validate_strict_sni_gate_reality_server_names() {
     sed 's/^/  - /' <<< "$missing"
     echo -e "$(localized_text "${YELLOW}请先把每个名称登记到对应的 Xray SNI 路由，再重新启用。${PLAIN}" "${YELLOW}Register every name in the matching Xray SNI route, then enable the gate again.${PLAIN}" "${YELLOW}Сначала зарегистрируйте каждое имя в соответствующем маршруте Xray SNI, затем снова включите контроль.${PLAIN}")"
     return 1
+}
+
+register_reality_server_name_routes() {
+    local db_path records id port remark server_names state listen addr name i registered
+    local -a names=()
+    command -v python3 >/dev/null 2>&1 || return 0
+    db_path=$(find_reality_guard_database 2>/dev/null) || return 0
+    records=$(reality_guard_python list-active "$db_path") || return 1
+    while IFS=$'\t' read -r id port remark server_names state listen; do
+        is_registered_reality_backend_port "$port" || continue
+        addr=""
+        [[ "$port" == "${XRAY_LISTEN_PORT:-}" ]] && addr="${XRAY_LISTEN_ADDR:-127.0.0.1}"
+        for i in "${!XRAY_SNI_ROUTE_PORTS[@]}"; do
+            [[ "$port" == "${XRAY_SNI_ROUTE_PORTS[$i]}" ]] || continue
+            if [[ -n "$addr" && "$addr" != "${XRAY_SNI_ROUTE_ADDRS[$i]}" ]]; then
+                addr=""
+                break
+            fi
+            addr="${XRAY_SNI_ROUTE_ADDRS[$i]}"
+        done
+        is_loopback_listen_addr "$addr" || continue
+        case "$listen" in
+            ""|-|0.0.0.0|::|\[::\]) ;;
+            *) [[ "$(normalize_loopback_addr "$listen")" == "$addr" ]] || continue ;;
+        esac
+        IFS=',' read -r -a names <<< "$server_names"
+        for name in "${names[@]}"; do
+            name=$(normalize_domain_input "$name")
+            is_valid_domain "$name" || continue
+            is_registered_reality_sni_for_port "$name" "$port" && continue
+            registered=$(registered_443_snis | tr '[:upper:]' '[:lower:]')
+            if grep -Fxq "$name" <<< "$registered"; then
+                echo -e "$(localized_text "${RED}❌ REALITY SNI ${name} 与已有路由冲突，请检查对应后端。${PLAIN}" "${RED}❌ REALITY SNI ${name} conflicts with an existing route. Check its backend.${PLAIN}" "${RED}❌ SNI REALITY ${name} конфликтует с существующим маршрутом. Проверьте бэкенд.${PLAIN}")"
+                return 1
+            fi
+            XRAY_SNI_ROUTE_SNIS+=("$name")
+            XRAY_SNI_ROUTE_ADDRS+=("$addr")
+            XRAY_SNI_ROUTE_PORTS+=("$port")
+        done
+    done <<< "$records"
+    validate_strict_sni_gate_reality_server_names
 }
 
 strict_sni_gate_mode_supported() {
@@ -198,8 +239,10 @@ def parse(row):
     reality = stream.get("realitySettings")
     return stream if isinstance(reality, dict) else None
 
-if operation == "list":
-    for row in conn.execute("select id, port, remark, stream_settings from inbounds order by id"):
+if operation in ("list", "list-active"):
+    for row in conn.execute("select * from inbounds order by id"):
+        if operation == "list-active" and "enable" in columns and not row["enable"]:
+            continue
         stream = parse(row)
         if stream is None:
             continue
@@ -209,7 +252,10 @@ if operation == "list":
         download = reality.get("limitFallbackDownload") or {}
         enabled = bool(upload.get("bytesPerSec", 0) or download.get("bytesPerSec", 0))
         remark = str(row["remark"] or "-").replace("\t", " ").replace("\n", " ")
-        print(f"{row['id']}\t{row['port']}\t{remark}\t{names or '-'}\t{'enabled' if enabled else 'disabled'}")
+        record = f"{row['id']}\t{row['port']}\t{remark}\t{names or '-'}\t{'enabled' if enabled else 'disabled'}"
+        if operation == "list-active":
+            record += "\t" + str(row["listen"] or "-") if "listen" in columns else "\t-"
+        print(record)
     raise SystemExit(0)
 
 inbound_id = int(sys.argv[3])

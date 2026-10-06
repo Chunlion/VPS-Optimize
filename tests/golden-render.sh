@@ -180,7 +180,9 @@ VPSO_PROC_NET_IF_INET6="$tmp_dir/no-ipv6"
 VPSO_PROC_SYS_DISABLE_IPV6="$tmp_dir/disable-ipv6"
 printf '1\n' > "$VPSO_PROC_SYS_DISABLE_IPV6"
 
+nginx() { printf '%s\n' 'nginx version: nginx/1.24.0' >&2; }
 write_nginx_single_443_web_config "$tmp_dir/nginx-single-entry-web.conf"
+unset -f nginx
 write_nginx_reverse_proxy_conf "proxy.example.com" "40000" "n" "$tmp_dir/nginx-reverse-proxy.conf" "198.51.100.10 2001:db8::/32"
 write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_dir/vpso-mux.yaml" >/dev/null
 STRICT_SNI_GATE=true

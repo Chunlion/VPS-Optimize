@@ -29,41 +29,67 @@ quarantine_path() {
         dest="${dest}_$RANDOM"
     done
 
-    mv -- "$target" "$dest"
+    mv -- "$target" "$dest" || return 1
     echo -e "$(localized_text "${YELLOW}已隔离：${resolved} -> ${dest}${PLAIN}" "${YELLOW}Has been isolated: ${resolved} -> ${dest}${PLAIN}" "${YELLOW}изолирован: ${resolved} -> ${dest}${PLAIN}")"
 }
 
 restore_sni_stack_backup_files() {
     local backup_dir="$1"
-    local domain conf_file
+    local domain conf_file snapshot
     [[ -n "$backup_dir" && -d "$backup_dir" ]] || return 1
 
-    mkdir -p /etc/nginx/stream.d /etc/nginx/conf.d /etc/caddy/conf.d /etc/vps-optimize /etc/systemd/system /usr/local/bin
-    [[ -f "$backup_dir/nginx.conf" ]] && cp -a "$backup_dir/nginx.conf" /etc/nginx/nginx.conf
-    [[ -f "$backup_dir/Caddyfile" ]] && cp -a "$backup_dir/Caddyfile" /etc/caddy/Caddyfile
-    [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]] && cp -a "$backup_dir/vps-optimize/sni-stack.env" /etc/vps-optimize/sni-stack.env
-    [[ -f "$backup_dir/vps-optimize/xray-sni-routes.conf" ]] && cp -a "$backup_dir/vps-optimize/xray-sni-routes.conf" /etc/vps-optimize/xray-sni-routes.conf
-    [[ -f "$backup_dir/vps-optimize/443-engine.conf" ]] && cp -a "$backup_dir/vps-optimize/443-engine.conf" /etc/vps-optimize/443-engine.conf
-    [[ -f "$backup_dir/vps-optimize/vpso-mux.yaml" ]] && cp -a "$backup_dir/vps-optimize/vpso-mux.yaml" /etc/vps-optimize/vpso-mux.yaml
-    [[ -f "$backup_dir/systemd/vpso-mux.service" ]] && cp -a "$backup_dir/systemd/vpso-mux.service" /etc/systemd/system/vpso-mux.service
-    [[ -f "$backup_dir/usr-local-bin/vpso-mux" ]] && cp -a "$backup_dir/usr-local-bin/vpso-mux" /usr/local/bin/vpso-mux
+    mkdir -p /etc/nginx/stream.d /etc/nginx/conf.d /etc/caddy/conf.d /etc/vps-optimize /etc/systemd/system /usr/local/bin || return 1
+    while IFS='|' read -r conf_file snapshot; do
+        if [[ -e "$backup_dir/$snapshot" || -L "$backup_dir/$snapshot" ]]; then
+            mkdir -p "$(dirname "$conf_file")" || return 1
+            cp -a "$backup_dir/$snapshot" "$conf_file" || return 1
+        elif [[ -f "$backup_dir/absent-files" ]] && grep -Fxq "$conf_file" "$backup_dir/absent-files"; then
+            quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/sni-stack" >/dev/null 2>&1 || return 1
+        fi
+    done <<'EOF'
+/etc/nginx/nginx.conf|nginx.conf
+/etc/caddy/Caddyfile|Caddyfile
+/etc/nginx/conf.d/00-vps-proxy-map.conf|nginx_conf.d/00-vps-proxy-map.conf
+/etc/nginx/sites-available/default|nginx_default_sites/available-default
+/etc/nginx/sites-enabled/default|nginx_default_sites/enabled-default
+/etc/nginx/conf.d/default.conf|nginx_default_sites/default.conf
+/etc/nginx/conf.d/00-vps-default-drop.conf|nginx_default_sites/00-vps-default-drop.conf
+/etc/vps-optimize/sni-stack.env|vps-optimize/sni-stack.env
+/etc/vps-optimize/xray-sni-routes.conf|vps-optimize/xray-sni-routes.conf
+/etc/vps-optimize/443-engine.conf|vps-optimize/443-engine.conf
+/etc/vps-optimize/vpso-mux.yaml|vps-optimize/vpso-mux.yaml
+/etc/systemd/system/vpso-mux.service|systemd/vpso-mux.service
+/usr/local/bin/vpso-mux|usr-local-bin/vpso-mux
+EOF
 
     while IFS= read -r conf_file; do
-        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-sni" >/dev/null 2>&1 || true
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-sni" >/dev/null 2>&1 || return 1
     done < <(find /etc/nginx/stream.d -maxdepth 1 -type f -name 'vps_sni_*.conf' 2>/dev/null | sort)
-    cp -a "$backup_dir/nginx_stream.d/"*.conf /etc/nginx/stream.d/ 2>/dev/null || true
+    for conf_file in "$backup_dir/nginx_stream.d/"*.conf; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" /etc/nginx/stream.d/ || return 1
+    done
 
     while IFS= read -r conf_file; do
-        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-conf-d" >/dev/null 2>&1 || true
+        quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/nginx-conf-d" >/dev/null 2>&1 || return 1
     done < <(find /etc/nginx/conf.d -maxdepth 1 \( -name 'vps_sni_web_*.conf' -o -name 'vps_proxy_*.conf' \) 2>/dev/null | sort)
-    cp -a "$backup_dir/nginx_conf.d/"*.conf /etc/nginx/conf.d/ 2>/dev/null || true
+    for conf_file in "$backup_dir/nginx_conf.d/"*.conf; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" /etc/nginx/conf.d/ || return 1
+    done
 
     for domain in "$PANEL_DOMAIN" "${SITE_DOMAINS[@]}"; do
         [[ -n "$domain" ]] || continue
         conf_file="/etc/caddy/conf.d/${domain}.caddy"
-        [[ -e "$conf_file" ]] && quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/caddy-sni" >/dev/null 2>&1 || true
+        if [[ -e "$conf_file" || -L "$conf_file" ]]; then
+            quarantine_path "$conf_file" "/etc/vps-optimize/quarantine/caddy-sni" >/dev/null 2>&1 || return 1
+        fi
     done
-    cp -a "$backup_dir/caddy_conf.d/"*.caddy /etc/caddy/conf.d/ 2>/dev/null || true
+    for conf_file in "$backup_dir/caddy_conf.d/"*.caddy; do
+        [[ -e "$conf_file" || -L "$conf_file" ]] || continue
+        cp -a "$conf_file" /etc/caddy/conf.d/ || return 1
+    done
+    return 0
 }
 
 rollback_sni_stack_after_failure() {
@@ -72,11 +98,11 @@ rollback_sni_stack_after_failure() {
     echo -e "${RED}❌ ${reason}${PLAIN}"
     echo -e "$(localized_text "${YELLOW}▶ 正在从本次操作前备份回滚 Nginx/Caddy 配置...${PLAIN}" "${YELLOW}▶ Rolling back from the backup before this operation Nginx/Caddy configuration...${PLAIN}" "${YELLOW}▶ Откат из резервной копии перед этой операцией. Конфигурация Nginx/Caddy...${PLAIN}")"
     if restore_sni_stack_backup_files "$backup_dir"; then
-        nginx -t >/dev/null 2>&1 || echo -e "$(localized_text "${YELLOW}⚠️ Nginx 回滚后语法检查仍未通过，请手动检查 /etc/nginx/nginx.conf。${PLAIN}" "${YELLOW}⚠️ Nginx The syntax check still fails after rollback. Please check /etc/nginx/nginx.conf manually.${PLAIN}" "${YELLOW}⚠️ Nginx Проверка синтаксиса по-прежнему не выполняется после отката. Пожалуйста, проверьте /etc/nginx/nginx.conf вручную.${PLAIN}")"
-        caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 || echo -e "$(localized_text "${YELLOW}⚠️ Caddy 回滚后配置检查仍未通过，请手动检查 /etc/caddy/Caddyfile。${PLAIN}" "${YELLOW}⚠️ Caddy The configuration check still fails after rollback. Please check /etc/caddy/Caddyfile manually.${PLAIN}" "${YELLOW}⚠️ Caddy Проверка конфигурации после отката по-прежнему не выполняется. Пожалуйста, проверьте /etc/caddy/Caddyfile вручную.${PLAIN}")"
-        restart_service_if_available nginx >/dev/null 2>&1 || true
-        restart_service_if_available caddy >/dev/null 2>&1 || true
         systemctl daemon-reload >/dev/null 2>&1 || true
+        if ! restore_sni_stack_web_services "$backup_dir"; then
+            echo -e "$(localized_text "${RED}❌ 回滚文件已恢复，但 Web 配置校验或服务恢复失败，请检查备份：${backup_dir}${PLAIN}" "${RED}❌ Backup files restored, but Web validation or service recovery failed. Check: ${backup_dir}${PLAIN}" "${RED}❌ Файлы восстановлены, но проверка Web или восстановление служб завершились ошибкой. Проверьте: ${backup_dir}${PLAIN}")"
+            return 1
+        fi
         echo -e "$(localized_text "${YELLOW}已回滚到：${backup_dir}${PLAIN}" "${YELLOW}Has been rolled back to: ${backup_dir}${PLAIN}" "${YELLOW}откатился до: ${backup_dir}.${PLAIN}")"
     else
         echo -e "$(localized_text "${RED}❌ 自动回滚失败，请手动使用备份目录恢复：${backup_dir}${PLAIN}" "${RED}❌ Automatic rollback failed, please manually use the backup directory to restore: ${backup_dir}${PLAIN}" "${RED}❌ Не удалось выполнить автоматический откат. Для восстановления вручную используйте каталог резервной копии: ${backup_dir}.${PLAIN}")"
@@ -102,14 +128,51 @@ rollback_sni_stack_config() {
 
     restore_sni_stack_backup_files "$backup_dir" || { echo -e "$(localized_text "${RED}❌ 回滚文件恢复失败。${PLAIN}" "${RED}❌ Rollback file recovery failed.${PLAIN}" "${RED}❌ Не удалось выполнить откат восстановления файла.${PLAIN}")"; return 1; }
 
-    if nginx -t && caddy validate --config /etc/caddy/Caddyfile; then
-        restart_service_if_available nginx >/dev/null 2>&1 || true
-        restart_service_if_available caddy >/dev/null 2>&1 || true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    if restore_sni_stack_web_services "$backup_dir"; then
         echo -e "$(localized_text "${GREEN}✅ 回滚完成。${PLAIN}" "${GREEN}✅ Rollback completed.${PLAIN}" "${GREEN}✅ Откат завершен.${PLAIN}")"
     else
         echo -e "$(localized_text "${RED}❌ 回滚文件已恢复，但配置校验失败，请手动检查备份：${backup_dir}${PLAIN}" "${RED}❌ The rollback file has been restored, but the configuration validation failed. Please check the backup manually: ${backup_dir}${PLAIN}" "${RED}❌ Файл отката восстановлен, но проверка конфигурации не удалась. Пожалуйста, проверьте резервную копию вручную: ${backup_dir}.${PLAIN}")"
         return 1
     fi
+}
+
+restore_sni_stack_web_services() {
+    local backup_dir="${1:-}" svc failed=0
+    for svc in nginx caddy; do
+        if [[ -f "$backup_dir/web-services" ]]; then
+            if grep -Fxq "$svc|enabled" "$backup_dir/web-services"; then
+                systemctl enable "$svc" || failed=1
+            elif grep -Fxq "$svc|disabled" "$backup_dir/web-services"; then
+                systemctl disable "$svc" || failed=1
+            fi
+        fi
+        if [[ -f "$backup_dir/web-services" ]] && grep -Fxq "$svc|inactive" "$backup_dir/web-services"; then
+            if systemctl is-active --quiet "$svc" && ! systemctl stop "$svc"; then
+                failed=1
+            fi
+        fi
+    done
+    [[ "$failed" == 0 ]] || return 1
+    for svc in nginx caddy; do
+        if [[ -f "$backup_dir/web-services" ]] && grep -Fxq "$svc|inactive" "$backup_dir/web-services"; then
+            continue
+        fi
+        case "$svc" in
+            nginx)
+                [[ -f /etc/nginx/nginx.conf ]] || continue
+                nginx -t || { failed=1; continue; }
+                ;;
+            caddy)
+                [[ -f /etc/caddy/Caddyfile ]] || continue
+                caddy validate --config /etc/caddy/Caddyfile || { failed=1; continue; }
+                ;;
+        esac
+        if ! restart_service_if_available "$svc"; then
+            failed=1
+        fi
+    done
+    return "$failed"
 }
 
 restore_backup_file() {

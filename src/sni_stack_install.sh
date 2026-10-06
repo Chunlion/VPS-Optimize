@@ -666,10 +666,17 @@ nginx_single_443_web_conf_path() {
 nginx_http_listen_directive() {
     local addr="$1"
     local port="$2"
+    local version http2_option=" http2" http2_directive=""
+    version=$(nginx -v 2>&1 || true)
+    if [[ "$version" =~ nginx/([0-9]+)\.([0-9]+)\.([0-9]+) ]] &&
+        (( BASH_REMATCH[1] > 1 || (BASH_REMATCH[1] == 1 && (BASH_REMATCH[2] > 25 || (BASH_REMATCH[2] == 25 && BASH_REMATCH[3] >= 1))) )); then
+        http2_option=""
+        http2_directive=$'    http2 on;\n'
+    fi
     if [[ "$addr" == *:* && "$addr" != \[*\] ]]; then
-        printf '    listen [%s]:%s ssl http2;\n' "$addr" "$port"
+        printf '    listen [%s]:%s ssl%s;\n%s' "$addr" "$port" "$http2_option" "$http2_directive"
     else
-        printf '    listen %s:%s ssl http2;\n' "$addr" "$port"
+        printf '    listen %s:%s ssl%s;\n%s' "$addr" "$port" "$http2_option" "$http2_directive"
     fi
 }
 
@@ -932,7 +939,9 @@ issue_and_install_cert_for_domain() {
 }
 
 save_sni_stack_env() {
-    mkdir -p /etc/vps-optimize || return 1
+    local env_file env_tmp
+    env_file=$(sni_stack_env_path)
+    mkdir -p "$(dirname "$env_file")" || return 1
     local entry_mode web_proxy_engine strict_sni_gate site_domains_csv site_backend_addrs_csv site_backend_ports_csv
     local tcp_route_snis_csv tcp_route_addrs_csv tcp_route_ports_csv
     local sni_ip_whitelist_domains_csv sni_ip_whitelist_ranges_pipe
@@ -956,7 +965,8 @@ save_sni_stack_env() {
     tcp_route_ports_csv=$(IFS=','; echo "${TCP_ROUTE_PORTS[*]}")
     sni_ip_whitelist_domains_csv=$(IFS=','; echo "${SNI_IP_WHITELIST_DOMAINS[*]}")
     sni_ip_whitelist_ranges_pipe=$(IFS='|'; echo "${SNI_IP_WHITELIST_RANGES[*]}")
-    cat <<EOF > /etc/vps-optimize/sni-stack.env || return 1
+    env_tmp=$(mktemp "${env_file}.tmp.XXXXXX") || return 1
+    cat <<EOF > "$env_tmp" || { rm -f "$env_tmp"; return 1; }
 ENTRY_MODE='${entry_mode}'
 STRICT_SNI_GATE='${strict_sni_gate}'
 WEB_PROXY_ENGINE='${web_proxy_engine}'
@@ -990,7 +1000,10 @@ TCP_ROUTE_PORTS_CSV='${tcp_route_ports_csv}'
 SNI_IP_WHITELIST_DOMAINS_CSV='${sni_ip_whitelist_domains_csv}'
 SNI_IP_WHITELIST_RANGES_PIPE='${sni_ip_whitelist_ranges_pipe}'
 EOF
-    chmod 600 /etc/vps-optimize/sni-stack.env
+    if ! chmod 600 "$env_tmp" || ! save_xray_sni_route_arrays || ! mv -f "$env_tmp" "$env_file"; then
+        rm -f "$env_tmp"
+        return 1
+    fi
 }
 
 harden_single_443_firewall() {
@@ -1112,6 +1125,7 @@ print_sni_stack_result() {
     echo -e "$(localized_text "  安全 security：      reality" "Security security: reality" "Безопасность безопасности: reality")"
     echo -e "  REALITY dest：       ${REALITY_SNI}:443"
     echo -e "  serverNames：        ${REALITY_SNI}"
+    echo -e "$(localized_text "${YELLOW}  TLS/端口检查不代表 REALITY 客户端认证成功。若升级至 Xray 26.9.30 后 Mihomo 超时，可在服务端回退到 26.6.27 后复测。${PLAIN}" "${YELLOW}  TLS/port checks do not verify REALITY client authentication. If Mihomo times out after upgrading to Xray 26.9.30, roll back the server to 26.6.27 and retest.${PLAIN}" "${YELLOW}  Проверки TLS и портов не подтверждают аутентификацию клиента REALITY. Если после обновления Xray до 26.9.30 Mihomo не подключается, верните сервер на 26.6.27 и повторите тест.${PLAIN}")"
     echo -e "  SpiderX：            /"
     echo -e "$(localized_text "  客户端连接地址：     你的服务器 IP 或解析到服务器的域名" "Client connection address: Your server IP or domain resolved to the server" "Адрес подключения клиента: IP-адрес вашего сервера или доменное имя, разрешенное серверу.")"
     echo -e "$(localized_text "  客户端连接端口：     ${NGINX_LISTEN_PORT}" "Client connection port: ${NGINX_LISTEN_PORT}" "Порт подключения клиента: ${NGINX_LISTEN_PORT}")"
@@ -1181,7 +1195,7 @@ apply_sni_stack_runtime_config() {
     current_mode="${ENTRY_MODE:-$(get_entry_mode)}"
     current_mode=$(normalize_entry_mode_name "$current_mode" 2>/dev/null || echo "nginx-stream")
 
-    create_sni_stack_backup
+    create_sni_stack_backup || return 1
     backup_dir=$(cat /etc/vps-optimize/sni-stack.last-backup 2>/dev/null)
     guard_current_ssh_not_on_entry_port "$(localized_text "重新应用 443端口复用运行参数" "Reapply Port 443 Reuse Run Parameters" "Повторно применить 443 отдельных рабочих параметра")" || return 1
     check_entry_mode_dependencies "$current_mode" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式依赖检查失败" "Entry mode dependency check failed" "Проверка зависимости режима входа не удалась")"; return 1; }
