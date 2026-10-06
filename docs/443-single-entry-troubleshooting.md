@@ -652,20 +652,38 @@ curl -I https://panel.example.com/sub/
 - `dest` / `Target` 写成了自己的域名。
 - `serverNames` / `SNI` 不是外部真实 HTTPS 站点。
 - 节点域名被 Cloudflare 代理。
+- 服务端 Xray 升级后与客户端的 REALITY 握手不兼容，或客户端版本限制填写错误。
+- 订阅转换丢失了 REALITY 参数，客户端实际加载的配置与面板导出不同。
 
 ### 检查命令
 
 ```bash
 ss -lntp | grep -E ':1443|:443'
 openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </dev/null
+# 3x-ui 默认安装路径；其他安装方式请使用实际运行的 Xray 路径
+/usr/local/x-ui/bin/xray-linux-amd64 version
+journalctl -u x-ui -n 50 --no-pager
 ```
+
+`openssl s_client` 或 `xray tls ping` 成功只说明 TLS 可握手，不代表 REALITY 节点认证成功。还要用正在使用的客户端和订阅配置测试节点。
 
 ### 解决方法
 
 - REALITY 本地监听建议使用 `127.0.0.1:1443`。
 - REALITY 伪装 SNI 使用外部真实 HTTPS 站点。
 - 节点域名保持 DNS only / 灰云。
-- 重新应用 443 配置。
+- 入口端口或 SNI 路由有误时，修正后重新应用 443 配置。
+
+### 升级 Xray 后节点超时
+
+如果面板和订阅可访问、入口与 SNI 路由正常，但升级 Xray 后 REALITY 节点超时，先处理服务端版本兼容性。已确认的案例是 Xray `26.9.30` 服务端搭配 Mihomo `v1.19.32` 时连接失败，服务端降级到 **`26.6.27`** 后恢复；不能仅凭客户端是最新版就认定兼容。
+
+1. 记录 3x-ui 实际使用的 Xray 版本，备份面板数据库、配置和当前内核文件。同机单独安装的 `xray` 命令可能属于另一项服务，不要替换错实例。
+2. 检查 `minClientVer` / `maxClientVer`。`minClientVer=1.0.0` 不是所有握手问题的通用修复；不需要最高版本限制时，`maxClientVer` 留空，不要也填成 `1.0.0`。
+3. 上述兼容性问题可将服务端 Xray 回退到 **`26.6.27`**。确认该版本能通过现有配置校验后，重启对应面板服务，再用原客户端配置测试。
+4. 确认面板、订阅和原有节点都能使用后，再考虑升级。验证失败时恢复备份，不要同时改动内核、SNI 和客户端全局配置。
+
+如果原始分享链接与 3x-ui 原生 Mihomo 订阅的测试结果不同，再检查订阅转换是否保留了 `reality-opts` 参数，例如 `support-x25519mlkem768`。客户端补齐单个参数只能验证该节点的兼容性，不能代替服务端回退后的完整验证，也不要把单节点修复扩展为所有节点的全局覆写。
 
 ### 相关菜单
 
