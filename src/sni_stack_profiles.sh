@@ -129,8 +129,8 @@ edit_sni_stack_panel_subscription_profile() {
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "3x-ui 面板公网路径 / webBasePath" "3x-ui public panel path / webBasePath" "Публичный путь панели 3x-ui / webBasePath")" "$PANEL_WEB_PATH")")
     SUB_LISTEN_ADDR=$(ask_with_default "$(localized_text "3x-ui 订阅服务监听地址" "3x-ui Subscription service listening address" "3x-ui Адрес прослушивания службы подписки")" "$SUB_LISTEN_ADDR")
     SUB_LISTEN_PORT=$(ask_with_default "$(localized_text "3x-ui 订阅服务端口" "3x-ui Subscription service port" "3x-ui Порт службы подписки")" "$SUB_LISTEN_PORT")
-    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "普通订阅路径前缀（不带客户端 Subscription，建议写 /sub/）" "Standard subscription path prefix (without client identifier; recommended: /sub/)" "Префикс обычной подписки (без идентификатора клиента; рекомендуется /sub/)")" "$SUB_URI_PATH")")
-    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "Clash/Mihomo subscription path prefix (without client identifier; recommended: /clash/)" "Префикс подписки Clash/Mihomo (без идентификатора клиента; рекомендуется /clash/)")" "$CLASH_URI_PATH")")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "普通订阅路径前缀（示例值 /sub/，须与 3x-ui 一致，不带客户端 ID）" "Standard subscription prefix (example: /sub/; match 3x-ui, without client ID)" "Префикс обычной подписки (пример: /sub/; как в 3x-ui, без ID клиента)")" "$SUB_URI_PATH")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "Clash/Mihomo 路径前缀（示例值 /clash/，须与 3x-ui 一致，不带客户端 ID）" "Clash/Mihomo prefix (example: /clash/; match 3x-ui, without client ID)" "Префикс Clash/Mihomo (пример: /clash/; как в 3x-ui, без ID клиента)")" "$CLASH_URI_PATH")")
 
     is_valid_listen_addr "$PANEL_LISTEN_ADDR" || { echo -e "$(localized_text "${RED}❌ 面板监听地址无效：${PANEL_LISTEN_ADDR}${PLAIN}" "${RED}❌ The panel listening address is invalid: ${PANEL_LISTEN_ADDR}${PLAIN}" "${RED}❌ Неверный адрес прослушивания панели: ${PANEL_LISTEN_ADDR}.${PLAIN}")"; return 1; }
     is_valid_listen_addr "$SUB_LISTEN_ADDR" || { echo -e "$(localized_text "${RED}❌ 订阅监听地址无效：${SUB_LISTEN_ADDR}${PLAIN}" "${RED}❌ The subscription listening address is invalid: ${SUB_LISTEN_ADDR}${PLAIN}" "${RED}❌ Неверный адрес прослушивания подписки: ${SUB_LISTEN_ADDR}.${PLAIN}")"; return 1; }
@@ -152,7 +152,7 @@ edit_sni_stack_panel_subscription_profile() {
 edit_sni_stack_reality_profile() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}修改 REALITY 本地监听与伪装 SNI${PLAIN}" "${BOLD}Modified REALITY local listeners and disguise SNI${PLAIN}" "${BOLD}модифицированный REALITY локальный прослушивание и маскировка SNI${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}修改 REALITY 后端与目标 SNI${PLAIN}" "${BOLD}Edit the REALITY backend and target SNI${PLAIN}" "${BOLD}Изменить бэкенд REALITY и целевой SNI${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     echo -e "$(localized_text "${YELLOW}适用于：你在 3x-ui+Reality 入站中修改了监听端口、监听地址，或更换了伪装 SNI。${PLAIN}" "${YELLOW}Applies when you changed the listen port, listen address, or camouflage SNI of a 3x-ui+Reality inbound.${PLAIN}" "${YELLOW}Применяется, если вы изменили порт или адрес прослушивания либо маскировочный SNI входящего 3x-ui+Reality.${PLAIN}")"
@@ -164,7 +164,7 @@ edit_sni_stack_reality_profile() {
     local reality_sni_input
     XRAY_LISTEN_ADDR=$(ask_with_default "$(localized_text "Xray / 3x-ui+Reality 入站本地监听地址" "Xray / 3x-ui+Reality inbound local listening address" "Локальный адрес прослушивания входящего Xray / 3x-ui+Reality")" "$XRAY_LISTEN_ADDR")
     XRAY_LISTEN_PORT=$(ask_with_default "$(localized_text "Xray / 3x-ui+Reality 入站本地监听端口" "Xray / 3x-ui+Reality inbound local listening port" "Локальный порт прослушивания входящего Xray / 3x-ui+Reality")" "$XRAY_LISTEN_PORT")
-    reality_sni_input=$(ask_with_default "$(localized_text "REALITY 伪装 SNI" "REALITY disguise SNI" "Маскировка REALITY SNI")" "$REALITY_SNI")
+    reality_sni_input=$(ask_with_default "$(localized_text "REALITY 目标 SNI（与入站 serverNames 和客户端一致）" "REALITY target SNI (match inbound serverNames and client)" "Целевой SNI REALITY (как в serverNames входа и у клиента)")" "$REALITY_SNI")
     REALITY_SNI=$(normalize_domain_input "$reality_sni_input")
 
     is_valid_listen_addr "$XRAY_LISTEN_ADDR" || { echo -e "$(localized_text "${RED}❌ REALITY 监听地址无效：${XRAY_LISTEN_ADDR}${PLAIN}" "${RED}❌ REALITY The listening address is invalid: ${XRAY_LISTEN_ADDR}${PLAIN}" "${RED}❌ REALITY Неверный адрес прослушивания: ${XRAY_LISTEN_ADDR}${PLAIN}")"; return 1; }
@@ -271,7 +271,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "$(localized_text "${BOLD}🧭 修改 443 共享参数${PLAIN}" "${BOLD}🧭 Edit shared Port 443 settings${PLAIN}" "${BOLD}🧭 Изменение общих параметров порта 443${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}修改面板、订阅、REALITY、监听端口和路径；新增网站请使用 [19] -> [6]。${PLAIN}" "${YELLOW}Edit panel, subscription, REALITY, listener, port, and path settings. Add sites from [19] -> [6].${PLAIN}" "${YELLOW}Изменение панели, подписки, REALITY, слушателей, портов и путей. Сайты добавляются через [19] -> [6].${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
             print_sni_stack_current_summary
@@ -296,7 +296,7 @@ edit_sni_stack_runtime_profile() {
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;
             3) edit_sni_stack_entry_profile ;;
-            4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси-сервером] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
+            4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси-сервером] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
             5) reapply_sni_stack_from_env ;;
             "?") show_sni_help; pause_return; continue ;;
             0) break ;;

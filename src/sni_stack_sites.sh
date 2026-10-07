@@ -62,7 +62,7 @@ add_sni_stack_site() {
     local site_domain site_domain_input site_addr site_port advanced_mode existing idx confirm
     local enable_ip_whitelist whitelist_input whitelist_ranges current_client_ip
     local -a whitelist_array=()
-    read_trimmed site_domain_input "$(localized_text "请输入新网站/反代域名（例如 sub.example.com）: " "Please enter your new website/reverse domain (e.g. sub.example.com):" "Введите имя вашего нового веб-сайта/обратного домена (например, sub.example.com):")"
+    read_trimmed site_domain_input "$(localized_text "新 Web 域名（仅域名；示例值 site.example.com）: " "New Web domain (hostname only; example: site.example.com): " "Новый Web-домен (только имя; пример: site.example.com): ")"
     site_domain=$(normalize_domain_input "$site_domain_input")
     if [[ -z "$site_domain" || "$site_domain" == "0" ]]; then
         echo -e "$(localized_text "${BLUE}已取消新增网站/反代域名。${PLAIN}" "${BLUE}Canceled the new website/reverse domain.${PLAIN}" "${BLUE}отменил новый веб-сайт/обратное доменное имя.${PLAIN}")"
@@ -104,7 +104,7 @@ add_sni_stack_site() {
         echo -e "$(localized_text "${GREEN}后端地址使用 127.0.0.1。${PLAIN}" "${GREEN}Backend address uses 127.0.0.1.${PLAIN}" "${GREEN}Внутренний адрес использует 127.0.0.1.${PLAIN}")"
     fi
     site_addr=$(normalize_backend_addr_input "$site_addr")
-    site_port=$(ask_with_default "$(localized_text "后端端口" "backend port" "внутренний порт")" "$((3000 + ${#SITE_DOMAINS[@]}))")
+    site_port=$(ask_with_default "$(localized_text "程序实际监听端口（显示值仅供参考）" "App listening port (displayed value is for reference)" "Порт приложения (показанное значение для справки)")" "$((3000 + ${#SITE_DOMAINS[@]}))")
 
     is_valid_backend_addr "$site_addr" || { echo -e "$(localized_text "${RED}❌ 后端地址无效：${site_addr}${PLAIN}" "${RED}❌ Invalid backend address: ${site_addr}${PLAIN}" "${RED}❌ Неверный внутренний адрес: ${site_addr}.${PLAIN}")"; return 1; }
     is_valid_port "$site_port" || { echo -e "$(localized_text "${RED}❌ 后端端口无效：${site_port}${PLAIN}" "${RED}❌ Invalid backend port: ${site_port}${PLAIN}" "${RED}❌ Неверный внутренний порт: ${site_port}.${PLAIN}")"; return 1; }
@@ -180,7 +180,7 @@ edit_sni_stack_site_backend() {
     domain="${SITE_DOMAINS[$idx]}"
     new_addr=$(ask_with_default "$(localized_text "后端地址" "Backend address" "Внутренний адрес")" "${SITE_BACKEND_ADDRS[$idx]}")
     new_addr=$(normalize_backend_addr_input "$new_addr")
-    new_port=$(ask_with_default "$(localized_text "后端端口" "backend port" "внутренний порт")" "${SITE_BACKEND_PORTS[$idx]}")
+    new_port=$(ask_with_default "$(localized_text "程序实际监听端口（显示值仅供参考）" "App listening port (displayed value is for reference)" "Порт приложения (показанное значение для справки)")" "${SITE_BACKEND_PORTS[$idx]}")
 
     is_valid_backend_addr "$new_addr" || { echo -e "$(localized_text "${RED}❌ 后端地址无效：${new_addr}${PLAIN}" "${RED}❌ Invalid backend address: ${new_addr}${PLAIN}" "${RED}❌ Неверный внутренний адрес: ${new_addr}.${PLAIN}")"; return 1; }
     is_valid_port "$new_port" || { echo -e "$(localized_text "${RED}❌ 后端端口无效：${new_port}${PLAIN}" "${RED}❌ Invalid backend port: ${new_port}${PLAIN}" "${RED}❌ Неверный внутренний порт: ${new_port}.${PLAIN}")"; return 1; }
@@ -359,7 +359,7 @@ add_sni_stack_tcp_route() {
     echo -e "------------------------------------------------"
 
     local route_sni route_sni_input route_addr route_port existing idx
-    read_trimmed route_sni_input "$(localized_text "请输入用于分流的新 SNI/域名（例如 relay.example.com）: " "Please enter the new SNI/domain to be used for offloading (e.g. relay.example.com):" "Введите новое SNI/имя домена, которое будет использоваться для разгрузки (например, relay.example.com):")"
+    read_trimmed route_sni_input "$(localized_text "入站 SNI（须与客户端一致；普通 TLS 示例值 tls.example.com）: " "Inbound SNI (must match the client; ordinary TLS example: tls.example.com): " "SNI входа (как у клиента; пример для обычного TLS: tls.example.com): ")"
     route_sni=$(normalize_domain_input "$route_sni_input")
     if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
         echo -e "$(localized_text "${BLUE}已取消新增 TCP/SNI 入站。${PLAIN}" "${BLUE}Canceled the addition of TCP/SNI.${PLAIN}" "${BLUE}отменил добавление TCP/SNI.${PLAIN}")"
@@ -383,7 +383,7 @@ add_sni_stack_tcp_route() {
     check_domain_dns_sanity "$route_sni" "$(localized_text "TCP/SNI 入站域名" "TCP/SNI inbound domain" "TCP/SNI имя входящего домена")" "warn" || echo -e "$(localized_text "${YELLOW}⚠️ 如果客户端使用服务器 IP 连接并手动指定 SNI，可忽略该 DNS 警告。${PLAIN}" "${YELLOW}⚠️ This DNS warning can be ignored if the client connects using the server IP and manually specifies SNI.${PLAIN}" "${YELLOW}⚠️ Это предупреждение DNS можно игнорировать, если клиент подключается с использованием IP-адреса сервера и вручную указывает SNI.${PLAIN}")"
     route_addr=$(ask_with_default "$(localized_text "3x-ui 新入站本地监听地址（只允许本地）" "3x-ui New inbound local listening address (only local)" "3x-ui Новый входящий локальный адрес прослушивания (только локальный)")" "127.0.0.1")
     route_addr=$(normalize_loopback_addr "$route_addr")
-    route_port=$(ask_with_default "$(localized_text "3x-ui 新入站本地监听端口" "3x-ui New inbound local listening port" "3x-ui Новый входящий локальный порт прослушивания")" "8443")
+    route_port=$(ask_with_default "$(localized_text "已有入站的本地端口（示例值 2443，以 3x-ui 为准）" "Existing inbound local port (example: 2443; match 3x-ui)" "Локальный порт существующего входа (пример: 2443; как в 3x-ui)")" "8443")
     is_loopback_listen_addr "$route_addr" || { echo -e "$(localized_text "${RED}❌ 为保证安全，TCP/SNI 入站后端只允许 127.0.0.1、localhost 或 ::1。${PLAIN}" "${RED}❌ To ensure security, the TCP/SNI inbound backend only allows 127.0.0.1, localhost or ::1.${PLAIN}" "${RED}❌ В целях обеспечения безопасности входящий сервер TCP/SNI допускает только 127.0.0.1, localhost или ::1.${PLAIN}")"; return 1; }
     is_valid_port "$route_port" || { echo -e "$(localized_text "${RED}❌ 入站端口无效：${route_port}${PLAIN}" "${RED}❌ Invalid inbound port: ${route_port}${PLAIN}" "${RED}❌ Неверный входящий порт: ${route_port}.${PLAIN}")"; return 1; }
     if [[ "$route_port" == "$NGINX_LISTEN_PORT" || "$route_port" == "$CADDY_LISTEN_PORT" || "$route_port" == "$PANEL_LISTEN_PORT" || "$route_port" == "$SUB_LISTEN_PORT" ]]; then

@@ -46,7 +46,7 @@ list_xray_sni_routes() {
     if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -eq 0 ]]; then
         echo -e "$(localized_text "${YELLOW}当前没有 Xray 入站分流规则。${PLAIN}" "${YELLOW}Currently does not have the Xray inbound routing rule.${PLAIN}" "${YELLOW}в настоящее время не имеет правила маршрутизация входящего подключения Xray.${PLAIN}")"
         if [[ -n "${XRAY_LISTEN_PORT:-}" ]]; then
-            echo -e "$(localized_text "${CYAN}旧默认 Xray/REALITY 后端仍是：${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}" "${CYAN}Old default Xray/REALITY backend is still: ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}" "${CYAN}старая версия по умолчанию Xray/REALITY по-прежнему: ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}")"
+            echo -e "$(localized_text "${CYAN}默认 REALITY 路由仍使用：${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}" "${CYAN}The default REALITY route still uses ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}.${PLAIN}" "${CYAN}Маршрут REALITY по умолчанию по-прежнему использует ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}.${PLAIN}")"
             echo -e "$(localized_text "${CYAN}如需多个本地 Xray 入站，可按 SNI 添加新的本地端口分流记录。${PLAIN}" "${CYAN}If requires multiple local Xray inbounds, press SNI to add a new local port offload record.${PLAIN}" "${CYAN}Если для требуется несколько локальных входящих вызовов Xray, нажмите SNI, чтобы добавить новую запись о разгрузке локального порта.${PLAIN}")"
         fi
         return 0
@@ -71,11 +71,11 @@ add_xray_sni_route() {
     echo -e "$(localized_text "${BOLD}添加 Xray 入站分流规则${PLAIN}" "${BOLD}Adds Xray inbound connection routing rule${PLAIN}" "${BOLD}добавляет правило входящей рассылки Xray${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "$(localized_text "${YELLOW}本菜单只记录 SNI -> 本地地址:端口；用于当前支持的端口复用模式渲染分流规则，不会创建、删除或修改 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}This menu only records SNI -> local address: port; used for the currently supported Port 443 Reuse mode rendering routing rules, and will not create, delete or modify the internal configuration of the 3x-ui/Xray inbound connection.${PLAIN}" "${YELLOW}Это меню записывает только SNI -> локальный адрес: порт; используется для поддерживаемых в настоящее время правил маршрутизации в режиме повторного использования порта 443 и не будет создавать, удалять или изменять внутреннюю конфигурацию входящего соединения 3x-ui/Xray.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}先在 3x-ui/Xray 创建并启用本地 TCP 入站，再登记 SNI -> 本地地址:端口。这里只管理入口路由，不修改入站配置。${PLAIN}" "${YELLOW}Create and enable a local TCP inbound in 3x-ui/Xray first, then map its SNI to local address:port. This menu manages entry routes only, not inbound settings.${PLAIN}" "${YELLOW}Сначала создайте и включите локальный TCP-вход в 3x-ui/Xray, затем задайте SNI -> локальный адрес:порт. Здесь меняются только маршруты, а не настройки входа.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local route_sni route_sni_input route_addr route_port existing idx
-    read_trimmed route_sni_input "$(localized_text "SNI/域名: " "SNI/domain:" "SNI/доменное имя:")"
+    read_trimmed route_sni_input "$(localized_text "入站 SNI（REALITY 填实际 serverNames；普通 TLS 填证书域名）: " "Inbound SNI (actual serverNames for REALITY; certificate hostname for ordinary TLS): " "SNI входа (фактический serverNames для REALITY; домен сертификата для обычного TLS): ")"
     route_sni=$(normalize_domain_input "$route_sni_input")
     if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
         echo -e "$(localized_text "${BLUE}已取消添加。${PLAIN}" "${BLUE}Has been canceled.${PLAIN}" "${BLUE}отменен.${PLAIN}")"
@@ -98,7 +98,7 @@ add_xray_sni_route() {
 
     route_addr=$(ask_with_default "$(localized_text "本地监听地址" "local listening address" "местный адрес прослушивания")" "127.0.0.1")
     route_addr=$(normalize_loopback_addr "$route_addr")
-    route_port=$(ask_with_default "$(localized_text "本地监听端口" "local listening port" "локальный порт прослушивания")" "${XRAY_LISTEN_PORT:-1443}")
+    route_port=$(ask_with_default "$(localized_text "已有入站的本地端口（示例值 2443，以 3x-ui 为准）" "Existing inbound local port (example: 2443; match 3x-ui)" "Локальный порт существующего входа (пример: 2443; как в 3x-ui)")" "${XRAY_LISTEN_PORT:-1443}")
     is_loopback_listen_addr "$route_addr" || { echo -e "$(localized_text "${RED}❌ 为避免公网暴露，本地监听地址只允许 127.0.0.1、localhost 或 ::1。${PLAIN}" "${RED}❌ To avoid public exposure, the local listening address is only allowed to be 127.0.0.1, localhost or ::1.${PLAIN}" "${RED}❌ Чтобы избежать воздействия публичной сети, локальным адресом прослушивания может быть только 127.0.0.1, localhost или ::1.${PLAIN}")"; return 1; }
     is_valid_port "$route_port" || { echo -e "$(localized_text "${RED}❌ 本地监听端口无效：${route_port}${PLAIN}" "${RED}❌ The local listening port is invalid: ${route_port}${PLAIN}" "${RED}❌ Неверный локальный порт прослушивания: ${route_port}.${PLAIN}")"; return 1; }
     if [[ "$route_port" == "$CADDY_LISTEN_PORT" ]]; then

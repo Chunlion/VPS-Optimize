@@ -71,7 +71,7 @@ Shortcuts are case-insensitive and behave like selecting the corresponding main-
 | Security hardening | SSH, public-key authentication, Fail2ban, firewall, and port concurrency limits |
 | Panels and subscriptions | 3x-ui, S-UI, 2S-UI, 3m-ui, Miaomiaowu, MiaomiaowuX, Sing-box, Xray, SublinkPro, Sub-Store, Dockge, Komari, and CDT Monitor |
 | Forwarding and networking | Realm, Gost, FLVX, EasyTier, and Tailscale |
-| Port 443 Reuse | Route Web services, panels, subscriptions, and nodes through public port `443` by SNI; only the active entry service listens on that port |
+| Port 443 Reuse | Share public port `443` across Web services, panels, subscriptions, and nodes; Nginx Stream/TCP Peek route by SNI, while Xray Fallback uses the Xray main inbound |
 | Diagnostics and rollback | Service health, port 443 diagnostics, space checks, optional encrypted backups, restore, and quarantine archives |
 
 ## 📚 Documentation and Support

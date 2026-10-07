@@ -7,7 +7,7 @@ outline: 2
 Before troubleshooting, run:
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 ```
 
 If you want to submit an issue, run:
@@ -98,7 +98,7 @@ curl -I http://127.0.0.1:40000/panel/
 ```text
 Main menu [5 Panels, Nodes, and Subscription Tools] -> [3 Panel SSL Repair]
 Main menu [19 Port 443 Reuse manager] -> [8 Modify Port 443 Reuse settings]
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 ```
 
 ## ERR_EMPTY_RESPONSE
@@ -145,7 +145,7 @@ https://panel.example.com:40000/
 
 ```text
 Main menu [19 Port 443 Reuse manager] -> [8 Modify Port 443 Reuse settings] -> [5 Reapply saved configuration]
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 ```
 
 ## ERR_CONNECTION_CLOSED / ERR_SSL_PROTOCOL_ERROR
@@ -200,7 +200,7 @@ A certain node, subscription or website occasionally fails to connect, the hands
 Let’s first look at the “Port Concurrent Connection Limitation” paragraph in the 443 link health check:
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 ```
 
 If the public port `443` has the connlimit rule added by this script, it can only be applied to the entire public port `443`, and cannot be precise to a certain SNI, Xray/3x-ui inbound, UUID or user. Don't think of it as a precise limit on an individual node, an inbound, or a user.
@@ -213,7 +213,7 @@ If the public port `443` has the connlimit rule added by this script, it can onl
 ### Related menu entry
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 Main menu [8 Firewall rules] -> [5 Port concurrent connection limit]
 ```
 
@@ -307,7 +307,7 @@ systemctl reload caddy || systemctl restart caddy
 Main menu [19 Port 443 Reuse manager] -> [8 Modify Port 443 Reuse settings] -> [1 Edit panel/subscription ports and paths]
 Main menu [19 Port 443 Reuse manager] -> [8 Modify Port 443 Reuse settings]
 Main menu [19 Port 443 Reuse manager] -> [3 Reapply current entry mode]
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 ```
 
 ## 502
@@ -339,7 +339,7 @@ curl -I http://10.0.0.20:3000/
 
 - Start or restart 3x-ui / x-ui.
 - Panel/Subscription Backend: Fixed listening address and port at `Main menu [19 Port 443 Reuse manager] -> [8 Modify Port 443 Reuse settings]`.
-- Custom website/reverse backend: Corrected backend address and port at `Main menu [19 Port 443 Reuse manager] -> [6 management Web domains / reverse proxy] -> [3 Edit website/reverse proxy backend]`.
+- Custom website/reverse backend: Corrected backend address and port at `Main menu [19 Port 443 Reuse manager] -> [6 Web domains and reverse proxies] -> [3 Edit website/reverse proxy backend]`.
 - Reapply the configuration and perform a health check.
 
 If the test works according to the actual backend address, but the Internet is still 502, it is usually Caddy/Nginx. The reverse proxy address or port is inconsistent with the actual binding.
@@ -349,7 +349,7 @@ If the test works according to the actual backend address, but the Internet is s
 ```text
 Main menu [5 Panels, Nodes, and Subscription Tools] -> [1 3x-ui Panel Script]
 Main menu [19 Port 443 Reuse manager] -> [8 Modify Port 443 Reuse settings]
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 ```
 
 ## The subscription link still has:2096
@@ -474,7 +474,7 @@ Recommended order:
 ```text
 Main menu [1 Preflight and risk scan]
 Main menu [19 Port 443 Reuse manager] -> [10 CF DNS / Caddy Certificate maintenance]
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 ```
 
 ## Cloudflare Token permission issue
@@ -536,7 +536,7 @@ dig +short A node.example.com @1.1.1.1
 ### Related menu entry
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 ```
 
 ## Port 443 is occupied
@@ -603,7 +603,7 @@ grep -R "listen" /etc/nginx /etc/caddy 2>/dev/null
 ```text
 Main menu [19 Port 443 Reuse manager] -> [8 Modify Port 443 Reuse settings]
 Main menu [19 Port 443 Reuse manager] -> [3 Reapply current entry mode]
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 ```
 
 ## Panel can be opened but subscription is not available
@@ -637,7 +637,7 @@ curl -I https://panel.example.com/sub/
 ```text
 Main menu [19 Port 443 Reuse manager] -> [9 Subscription link / External Proxy Tips]
 Main menu [19 Port 443 Reuse manager] -> [8 Modify Port 443 Reuse settings]
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 ```
 
 ## REALITY connection failed
@@ -672,5 +672,5 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 ```text
 Main menu [19 Port 443 Reuse manager] -> [8 Modify Port 443 Reuse settings]
 Main menu [19 Port 443 Reuse manager] -> [3 Reapply current entry mode]
-Main menu [19 Port 443 Reuse manager] -> [11 443 Connection health check]
+Main menu [19 Port 443 Reuse manager] -> [11 Port 443 configuration check]
 ```

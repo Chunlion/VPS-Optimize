@@ -7120,7 +7120,7 @@ nginx_proxy_domain_exists() {
 nginx_proxy_warn_if_single_entry_enabled() {
     if [[ -f /etc/vps-optimize/sni-stack.env || -f /etc/vps-optimize/443-engine.conf ]]; then
         echo -e "$(localized_text "${RED}❌ 已检测到 443端口复用配置。Nginx HTTPS 反代会抢占公网 443，已拒绝继续。${PLAIN}" "${RED}❌ Port 443 Reuse configuration detected. Nginx HTTPS The reverse proxy will seize public port 443 and has refused to continue.${PLAIN}" "${RED}❌ Обнаружена конфигурация повторного использования порта 443. Nginx HTTPS Обратный прокси-сервер задействует публичный порт 443 и отказывается продолжать работу.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}请改用：主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [6 Management Web domain/Reverse Proxy].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [6 Имя веб-домена управления/обратный прокси].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}请改用：主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [6 Management Web domain/Reverse Proxy].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [6 Имя веб-домена управления/обратный прокси].${PLAIN}")"
         return 1
     fi
     return 0
@@ -7380,7 +7380,7 @@ func_nginx_manage_ip_whitelist() {
     echo -e "$(localized_text "${BOLD}🔐 Nginx 域名 IP 白名单${PLAIN}" "${BOLD}🔐 Nginx domain IP whitelist${PLAIN}" "${BOLD}🔐 Nginx доменное имя Белый список IP-адресов${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}适用于未启用 443端口复用、由 Nginx HTTPS 反代直接对外服务的域名。${PLAIN}" "${YELLOW}Suitable for domains that do not enable the Port 443 Reuse and are directly served externally by the Nginx HTTPS reverse proxy.${PLAIN}" "${YELLOW}подходит для доменных имен, которые не поддерживают повторное использование порта 443 и обслуживаются непосредственно извне обратным прокси-сервером Nginx HTTPS.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443端口复用，请用主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]，不要在 Nginx HTTP 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to Port 443 Reuse, please use the main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Nginx HTTP layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к повторном использовании порта 443, используйте главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси] -> [5 Управление белым списком IP-адресов доменного имени] и не ограничивайте его на уровне Nginx HTTP.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443端口复用，请用主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理] -> [5 管理域名 IP 白名单]，不要在 Nginx HTTP 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to Port 443 Reuse, please use the main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Nginx HTTP layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к повторном использовании порта 443, используйте главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси] -> [5 Управление белым списком IP-адресов доменного имени] и не ограничивайте его на уровне Nginx HTTP.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local domain domain_input conf_file action backup_file
@@ -8509,7 +8509,7 @@ print_sni_stack_preview() {
     esac
 
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}即将写入的 443端口复用配置预览${PLAIN}" "${BOLD}Preview of Port 443 Reuse route configuration to be written${PLAIN}" "${BOLD}Предварительный просмотр конфигурации маршрутизации повторного использования порта 443, которая будет записана${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}保存前核对：443 入口与后端映射${PLAIN}" "${BOLD}Review before saving: port 443 entry and backend mappings${PLAIN}" "${BOLD}Проверьте перед сохранением: вход 443 и бэкенды${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "配置模式 ENTRY_MODE：${entry_mode}" "Configuration mode ENTRY_MODE: ${entry_mode}" "Режим конфигурации ENTRY_MODE: ${entry_mode}")"
     echo -e "$(localized_text "Web 反代引擎 WEB_PROXY_ENGINE：${web_engine} (${web_label})" "Web reverse proxy engine WEB_PROXY_ENGINE: ${web_engine} (${web_label})" "механизм веб-прокси WEB_PROXY_ENGINE: ${web_engine} (${web_label})")"
@@ -9161,10 +9161,10 @@ set_xray_fallback_main_route_from_index() {
 }
 
 print_xray_fallback_mode_explanation() {
-    echo -e "$(localized_text "${YELLOW}Xray 本身可以有多个入站。但在 xray-fallback 模式下，公网 443 默认由一个 Xray 主入站接管。脚本暂不支持在该模式下继续按多个 SNI 分流到多个本地 Xray 入站。${PLAIN}" "${YELLOW}Xray itself can have multiple inbounds. But in xray-fallback mode, public port 443 is taken over by a Xray main inbound by default. The script currently does not support continuing to routing multiple SNI to multiple local Xray inbound in this mode.${PLAIN}" "${YELLOW}Xray сам по себе может иметь несколько входящих подключений. Но в резервном режиме xray публичный порт 443 по умолчанию перехватывается основным входящим подключением Xray. В настоящее время сценарий не поддерживает продолжение перенаправления нескольких SNI на несколько локальных входящих Xray в этом режиме.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}该模式只负责 Xray 主入站监听公网 443，并 fallback 普通 HTTPS 到所选 Web 反代引擎。${PLAIN}" "${YELLOW}This mode is only responsible for Xray's main inbound listening of public port 443, and fallback normal HTTPS to the selected Web reverse proxy engine.${PLAIN}" "${YELLOW}Этот режим отвечает только за основной входящий прослушивание Xray публичного порта 443 и возврат обычного HTTPS к выбранному механизму веб-прокси.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如需多个本地 Xray 入站通过 443 按 SNI 分流，请使用 Nginx Stream 模式或 TCP Peek + Splice 模式。${PLAIN}" "${YELLOW}If you need multiple local Xray inbound pass 443 split by SNI, please use Nginx Stream mode or TCP Peek + Splice mode.${PLAIN}" "${YELLOW}Если вам нужно несколько локальных входящих проходов Xray 443, разделенных на SNI, используйте режим Nginx Stream или режим TCP Peek + Splice.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如果 Web 域名开启 CDN/WAF/源站保护/Cloudflare 回源限制/Web 白名单，403 或拒绝访问通常是 Web/CDN/白名单/SNI 策略阻断，不一定是证书或反代引擎故障。${PLAIN}" "${YELLOW}If the Web domain has CDN/WAF/origin protection/Cloudflare return-to-origin restriction/Web whitelist, 403 or access denied is usually blocked by the Web/CDN/whitelist/SNI policy, and is not necessarily a certificate or reverse proxy engine failure.${PLAIN}" "${YELLOW}Если имя веб-домена имеет CDN/WAF/защиту исходного сайта/ограничения исходного сайта серверной части подключения Cloudflare/белый список веб-сайтов, 403 или отказ в доступе обычно блокируется политикой Интернета/CDN/белого списка/SNI и не обязательно является сбоем сертификата или механизма обратного прокси-сервера.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}xray-fallback：已有 Xray 主入站直接监听公网 443，普通 HTTPS 回落到所选本地 Web 反代引擎。${PLAIN}" "${YELLOW}xray-fallback: the existing Xray main inbound listens on public port 443 and forwards ordinary HTTPS to the selected local Web proxy.${PLAIN}" "${YELLOW}xray-fallback: существующий основной вход Xray слушает публичный порт 443 и передаёт обычный HTTPS выбранному локальному Web-прокси.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}本模式不支持脚本管理多个 SNI 到本地 Xray 入站的路由，也不支持 Web IP 白名单。${PLAIN}" "${YELLOW}This mode does not support script-managed SNI routes to multiple local Xray inbounds or Web IP allowlists.${PLAIN}" "${YELLOW}В этом режиме скрипт не управляет маршрутами SNI к нескольким локальным входам Xray и не поддерживает списки IP для Web.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}需要多入站 SNI 分流或 Web 白名单时，选择 Nginx Stream 或 TCP Peek + Splice。${PLAIN}" "${YELLOW}For SNI routing to multiple inbounds or Web allowlists, select Nginx Stream or TCP Peek + Splice.${PLAIN}" "${YELLOW}Для маршрутизации SNI к нескольким входам или списков доступа Web выберите Nginx Stream либо TCP Peek + Splice.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}Web 返回 403/401 时，先检查 CDN/WAF、源站访问策略与 SNI；再检查证书和反代配置。${PLAIN}" "${YELLOW}For Web 403/401 responses, check CDN/WAF, origin access policies, and SNI before certificates and proxy settings.${PLAIN}" "${YELLOW}При ответе Web 403/401 сначала проверьте CDN/WAF, правила доступа к серверу и SNI, затем сертификаты и прокси.${PLAIN}")"
 }
 
 print_xray_fallback_main_route_summary() {
@@ -11106,9 +11106,9 @@ select_initial_entry_mode() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}选择 443 入口模式${PLAIN}" "${BOLD}Select the 443 entry mode${PLAIN}" "${BOLD}Выберите режим входа 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(默认；兼容现有配置)${PLAIN}" "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(default; compatible with existing setups)${PLAIN}" "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(по умолчанию; совместим с текущей конфигурацией)${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(默认；按 SNI 分流到本地后端)${PLAIN}" "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(default; routes SNI to local backends)${PLAIN}" "${GREEN}  1. Nginx Stream${PLAIN}       ${YELLOW}(по умолчанию; SNI-маршрутизация к локальным бэкендам)${PLAIN}")"
     echo -e "$(localized_text "${GREEN}  2. Xray Fallback${PLAIN}      ${YELLOW}(需已有公网 443 主入站)${PLAIN}" "${GREEN}  2. Xray Fallback${PLAIN}      ${YELLOW}(requires an existing public 443 main inbound)${PLAIN}" "${GREEN}  2. Xray Fallback${PLAIN}      ${YELLOW}(требуется готовый основной входящий порт 443)${PLAIN}")"
-    echo -e "$(localized_text "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(自动安装依赖并完成切换预检)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(installs dependencies and runs switch preflight)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(установит зависимости и выполнит проверку перед переключением)${PLAIN}")"
+    echo -e "$(localized_text "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(同样按 SNI 分流；自动安装 vpso-mux)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(also routes by SNI; installs vpso-mux automatically)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(также маршрутизирует по SNI; автоматически устанавливает vpso-mux)${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}  0. Cancel${PLAIN}" "${RED}  0. Отмена${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     read_trimmed choice "$(localized_text "选择入口模式 [1]: " "Select entry mode [1]: " "Выберите режим входа [1]: ")"
@@ -11617,31 +11617,31 @@ check_sni_stack_subscription_hint() {
 
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🔎 订阅链接与 Hosts / External Proxy 检查提示${PLAIN}" "${BOLD}🔎 Subscription link and Hosts / External Proxy check prompt${PLAIN}" "${BOLD}🔎 Ссылка на подписку и приглашение для проверки хостов/внешнего прокси${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}🔎 核对节点分享链接与订阅地址${PLAIN}" "${BOLD}🔎 Check node links and subscription URLs${PLAIN}" "${BOLD}🔎 Проверьте ссылки узлов и URL подписки${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     web_label=$(web_proxy_engine_label)
     echo -e "$(localized_text "3x-ui v3.4.0 及之后：打开 Hosts / 主机，新增 Host：" "3x-ui v3.4.0 and later: Open Hosts / Host and add a Host:" "3x-ui v3.4.0 и новее: откройте Hosts / Хост и добавьте хост:")"
-    echo -e "$(localized_text "  入站：选择对应的 REALITY 或本地 Xray 入站" "Inbound: Select the corresponding REALITY or local Xray for inbound" "Входящий: выберите соответствующий REALITY или локальный Xray для входящего подключения.")"
-    echo -e "$(localized_text "  地址：你的节点域名或服务器 IP" "Address: your node domain or server IP" "Адрес: доменное имя вашего узла или IP-адрес сервера.")"
+    echo -e "$(localized_text "  入站：选择要通过公网入口访问的本地 Xray 入站" "  Inbound: select the local Xray inbound to expose through the public entry" "  Вход: выберите локальный вход Xray для доступа через публичную точку входа")"
+    echo -e "$(localized_text "  地址：VPS 公网 IP 或节点域名（示例值 node.example.com，须替换）" "  Address: VPS public IP or node domain (example: node.example.com; replace it)" "  Адрес: публичный IP VPS или домен узла (пример: node.example.com; замените своим)")"
     echo -e "$(localized_text "  端口：${NGINX_LISTEN_PORT}" "Port: ${NGINX_LISTEN_PORT}" "Порт: ${NGINX_LISTEN_PORT}")"
     echo -e "$(localized_text "  Security/SNI/Fingerprint/ALPN：按该入站和客户端实际值保持一致" "Security/SNI/Fingerprint/ALPN: The inbound and client actual values are consistent" "Security/SNI/Fingerprint/ALPN: фактические значения входящего и клиентского трафика совпадают.")"
     echo -e ""
     echo -e "$(localized_text "3x-ui v3.3.1 及之前：在 REALITY 入站里开启 External Proxy，并确保：" "3x-ui v3.3.1 and before: Enable External Proxy in REALITY inbound, and make sure:" "3x-ui v3.3.1 и более ранние версии: включите внешний прокси во входящем REALITY и убедитесь:")"
     echo -e "$(localized_text "  类型：相同" "Type: same" "Тип: тот же")"
-    echo -e "$(localized_text "  地址：你的节点域名或服务器 IP" "Address: your node domain or server IP" "Адрес: доменное имя вашего узла или IP-адрес сервера.")"
+    echo -e "$(localized_text "  地址：VPS 公网 IP 或节点域名（示例值 node.example.com，须替换）" "  Address: VPS public IP or node domain (example: node.example.com; replace it)" "  Адрес: публичный IP VPS или домен узла (пример: node.example.com; замените своим)")"
     echo -e "$(localized_text "  端口：${NGINX_LISTEN_PORT}" "Port: ${NGINX_LISTEN_PORT}" "Порт: ${NGINX_LISTEN_PORT}")"
-    echo -e "$(localized_text "${YELLOW}提示：本教程推荐 Cloudflare 灰云 / DNS only。REALITY 节点地址必须直连 VPS，可填灰云节点域名或服务器公网 IP。${PLAIN}" "${YELLOW}Tip: This tutorial recommends Cloudflare Gray Cloud / DNS only. REALITY The node address must be directly connected to the VPS. You can fill in the gray cloud node domain or server public IP.${PLAIN}" "${YELLOW}Совет. В этом руководстве рекомендуется использовать только Cloudflare Grey Cloud / DNS. REALITY Адрес узла должен быть напрямую подключен к VPS. Вы можете указать доменное имя серого облачного узла или IP-адрес сервера в Интернете.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}REALITY 节点域名使用 DNS only / 灰云，直接解析到 VPS；目标 SNI 使用入站 serverNames 中的域名。${PLAIN}" "${YELLOW}Use DNS-only records for the REALITY node domain, pointing directly to the VPS. Use an inbound serverNames hostname as the target SNI.${PLAIN}" "${YELLOW}Домен узла REALITY должен вести прямо на VPS через DNS only. Целевой SNI — домен из serverNames входа.${PLAIN}")"
     echo -e ""
-    echo -e "$(localized_text "复制节点链接后应该看到：" "After copying the node link you should see:" "После копирования ссылки на узел вы должны увидеть:")"
-    echo -e "$(localized_text "  vless://...@节点地址:${NGINX_LISTEN_PORT}?security=reality&sni=${REALITY_SNI}&..." "vless://...@Node address:${NGINX_LISTEN_PORT}?security=reality&sni=${REALITY_SNI}&..." "vless://...@Адрес узла: ${NGINX_LISTEN_PORT}?security=reality&sni=${REALITY_SNI}&...")"
+    echo -e "$(localized_text "REALITY 分享链接结构（省略号代表实际参数，不可直接导入）：" "REALITY link structure (ellipses stand for actual parameters; not importable as shown):" "Структура ссылки REALITY (многоточия заменяют реальные параметры; такой пример нельзя импортировать):")"
+    echo -e "$(localized_text "  vless://...@node.example.com:${NGINX_LISTEN_PORT}?security=reality&sni=${REALITY_SNI}&..." "  vless://...@node.example.com:${NGINX_LISTEN_PORT}?security=reality&sni=${REALITY_SNI}&..." "  vless://...@node.example.com:${NGINX_LISTEN_PORT}?security=reality&sni=${REALITY_SNI}&...")"
     echo -e ""
     echo -e "$(localized_text "订阅公网入口应为：" "The public entry for subscribing should be:" "Вход в публичную сеть для подписки должен быть:")"
     echo -e "$(localized_text "  普通订阅：      https://${PANEL_DOMAIN}${SUB_URI_PATH}" "Ordinary subscription: https://${PANEL_DOMAIN}${SUB_URI_PATH}" "Обычная подписка: https://${PANEL_DOMAIN}${SUB_URI_PATH}.")"
     echo -e "  Clash/Mihomo：  https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
     echo -e "$(localized_text "${YELLOW}不要把公网订阅地址写成 :${SUB_LISTEN_PORT}；该端口只给当前本地 Web 反代引擎（${web_label}）访问，不应写成公网订阅入口。${PLAIN}" "${YELLOW}Do not write the public subscription address as: ${SUB_LISTEN_PORT}; this port is only accessible to the current local Web reverse proxy engine (${web_label}) and should not be written as the public subscription entry.${PLAIN}" "${YELLOW}Не записывайте адрес подписки в публичной сети как: ${SUB_LISTEN_PORT}; этот порт доступен только текущему локальному механизму защиты от создания веб-страниц (${web_label}) и не должен записываться как вход для подписки в публичной сети.${PLAIN}")"
     echo -e ""
-    echo -e "$(localized_text "${YELLOW}如果链接里还是 :${XRAY_LISTEN_PORT}，3x-ui v3.4.0+ 请检查 Hosts / 主机；旧版请检查入站 External Proxy。${PLAIN}" "${YELLOW}If the link is still: ${XRAY_LISTEN_PORT}, 3x-ui v3.4.0+, please check Hosts / Host; for older versions, please check the inbound External Proxy.${PLAIN}" "${YELLOW}Если ссылка все еще: ${XRAY_LISTEN_PORT}, 3x-ui v3.4.0+, проверьте Hosts / Host; для более старых версий проверьте входящий внешний прокси.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}分享链接不应包含 127.0.0.1 或本地入站端口（如 ${XRAY_LISTEN_PORT}）；如仍存在，检查 Hosts / 主机或旧版 External Proxy，然后重新导出。${PLAIN}" "${YELLOW}Node links must not contain 127.0.0.1 or a local inbound port such as ${XRAY_LISTEN_PORT}. Check Hosts or legacy External Proxy and export the link again.${PLAIN}" "${YELLOW}В ссылках узлов не должно быть 127.0.0.1 или локального порта, например ${XRAY_LISTEN_PORT}. Проверьте Hosts или старый External Proxy и экспортируйте ссылку заново.${PLAIN}")"
 }
 
 # ---------------------------------------------------------
@@ -11778,8 +11778,8 @@ edit_sni_stack_panel_subscription_profile() {
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "3x-ui 面板公网路径 / webBasePath" "3x-ui public panel path / webBasePath" "Публичный путь панели 3x-ui / webBasePath")" "$PANEL_WEB_PATH")")
     SUB_LISTEN_ADDR=$(ask_with_default "$(localized_text "3x-ui 订阅服务监听地址" "3x-ui Subscription service listening address" "3x-ui Адрес прослушивания службы подписки")" "$SUB_LISTEN_ADDR")
     SUB_LISTEN_PORT=$(ask_with_default "$(localized_text "3x-ui 订阅服务端口" "3x-ui Subscription service port" "3x-ui Порт службы подписки")" "$SUB_LISTEN_PORT")
-    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "普通订阅路径前缀（不带客户端 Subscription，建议写 /sub/）" "Standard subscription path prefix (without client identifier; recommended: /sub/)" "Префикс обычной подписки (без идентификатора клиента; рекомендуется /sub/)")" "$SUB_URI_PATH")")
-    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "Clash/Mihomo 订阅路径前缀（不带客户端 Subscription，建议写 /clash/）" "Clash/Mihomo subscription path prefix (without client identifier; recommended: /clash/)" "Префикс подписки Clash/Mihomo (без идентификатора клиента; рекомендуется /clash/)")" "$CLASH_URI_PATH")")
+    SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "普通订阅路径前缀（示例值 /sub/，须与 3x-ui 一致，不带客户端 ID）" "Standard subscription prefix (example: /sub/; match 3x-ui, without client ID)" "Префикс обычной подписки (пример: /sub/; как в 3x-ui, без ID клиента)")" "$SUB_URI_PATH")")
+    CLASH_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "Clash/Mihomo 路径前缀（示例值 /clash/，须与 3x-ui 一致，不带客户端 ID）" "Clash/Mihomo prefix (example: /clash/; match 3x-ui, without client ID)" "Префикс Clash/Mihomo (пример: /clash/; как в 3x-ui, без ID клиента)")" "$CLASH_URI_PATH")")
 
     is_valid_listen_addr "$PANEL_LISTEN_ADDR" || { echo -e "$(localized_text "${RED}❌ 面板监听地址无效：${PANEL_LISTEN_ADDR}${PLAIN}" "${RED}❌ The panel listening address is invalid: ${PANEL_LISTEN_ADDR}${PLAIN}" "${RED}❌ Неверный адрес прослушивания панели: ${PANEL_LISTEN_ADDR}.${PLAIN}")"; return 1; }
     is_valid_listen_addr "$SUB_LISTEN_ADDR" || { echo -e "$(localized_text "${RED}❌ 订阅监听地址无效：${SUB_LISTEN_ADDR}${PLAIN}" "${RED}❌ The subscription listening address is invalid: ${SUB_LISTEN_ADDR}${PLAIN}" "${RED}❌ Неверный адрес прослушивания подписки: ${SUB_LISTEN_ADDR}.${PLAIN}")"; return 1; }
@@ -11801,7 +11801,7 @@ edit_sni_stack_panel_subscription_profile() {
 edit_sni_stack_reality_profile() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}修改 REALITY 本地监听与伪装 SNI${PLAIN}" "${BOLD}Modified REALITY local listeners and disguise SNI${PLAIN}" "${BOLD}модифицированный REALITY локальный прослушивание и маскировка SNI${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}修改 REALITY 后端与目标 SNI${PLAIN}" "${BOLD}Edit the REALITY backend and target SNI${PLAIN}" "${BOLD}Изменить бэкенд REALITY и целевой SNI${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
     echo -e "$(localized_text "${YELLOW}适用于：你在 3x-ui+Reality 入站中修改了监听端口、监听地址，或更换了伪装 SNI。${PLAIN}" "${YELLOW}Applies when you changed the listen port, listen address, or camouflage SNI of a 3x-ui+Reality inbound.${PLAIN}" "${YELLOW}Применяется, если вы изменили порт или адрес прослушивания либо маскировочный SNI входящего 3x-ui+Reality.${PLAIN}")"
@@ -11813,7 +11813,7 @@ edit_sni_stack_reality_profile() {
     local reality_sni_input
     XRAY_LISTEN_ADDR=$(ask_with_default "$(localized_text "Xray / 3x-ui+Reality 入站本地监听地址" "Xray / 3x-ui+Reality inbound local listening address" "Локальный адрес прослушивания входящего Xray / 3x-ui+Reality")" "$XRAY_LISTEN_ADDR")
     XRAY_LISTEN_PORT=$(ask_with_default "$(localized_text "Xray / 3x-ui+Reality 入站本地监听端口" "Xray / 3x-ui+Reality inbound local listening port" "Локальный порт прослушивания входящего Xray / 3x-ui+Reality")" "$XRAY_LISTEN_PORT")
-    reality_sni_input=$(ask_with_default "$(localized_text "REALITY 伪装 SNI" "REALITY disguise SNI" "Маскировка REALITY SNI")" "$REALITY_SNI")
+    reality_sni_input=$(ask_with_default "$(localized_text "REALITY 目标 SNI（与入站 serverNames 和客户端一致）" "REALITY target SNI (match inbound serverNames and client)" "Целевой SNI REALITY (как в serverNames входа и у клиента)")" "$REALITY_SNI")
     REALITY_SNI=$(normalize_domain_input "$reality_sni_input")
 
     is_valid_listen_addr "$XRAY_LISTEN_ADDR" || { echo -e "$(localized_text "${RED}❌ REALITY 监听地址无效：${XRAY_LISTEN_ADDR}${PLAIN}" "${RED}❌ REALITY The listening address is invalid: ${XRAY_LISTEN_ADDR}${PLAIN}" "${RED}❌ REALITY Неверный адрес прослушивания: ${XRAY_LISTEN_ADDR}${PLAIN}")"; return 1; }
@@ -11920,7 +11920,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "$(localized_text "${BOLD}🧭 修改 443 共享参数${PLAIN}" "${BOLD}🧭 Edit shared Port 443 settings${PLAIN}" "${BOLD}🧭 Изменение общих параметров порта 443${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}修改面板、订阅、REALITY、监听端口和路径；新增网站请使用 [19] -> [6]。${PLAIN}" "${YELLOW}Edit panel, subscription, REALITY, listener, port, and path settings. Add sites from [19] -> [6].${PLAIN}" "${YELLOW}Изменение панели, подписки, REALITY, слушателей, портов и путей. Сайты добавляются через [19] -> [6].${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
             print_sni_stack_current_summary
@@ -11945,7 +11945,7 @@ edit_sni_stack_runtime_profile() {
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;
             3) edit_sni_stack_entry_profile ;;
-            4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси-сервером] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
+            4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/Reverse Proxy] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси-сервером] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
             5) reapply_sni_stack_from_env ;;
             "?") show_sni_help; pause_return; continue ;;
             0) break ;;
@@ -11975,8 +11975,8 @@ collect_sni_stack_config() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${BOLD}443端口复用部署向导${PLAIN}" "${BOLD}Port 443 Reuse setup${PLAIN}" "${BOLD}Настройка общего порта 443${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}所选入口模式将独占公网 443；Web 域名、反代引擎、证书和白名单由三种模式共用。${PLAIN}" "${YELLOW}The selected entry mode owns public port 443. Web domains, the reverse proxy, certificates, and allowlists are shared across all modes.${PLAIN}" "${YELLOW}Выбранный режим займёт публичный порт 443. Web-домены, обратный прокси, сертификаты и списки доступа общие для всех режимов.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}本地后端默认只监听 127.0.0.1；每项直接回车即可沿用括号中的默认值。${PLAIN}" "${YELLOW}Local backends listen on 127.0.0.1 by default. Press Enter to keep the value shown in parentheses.${PLAIN}" "${YELLOW}По умолчанию локальные бэкенды слушают 127.0.0.1. Нажмите Enter, чтобы принять значение в скобках.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}公网 443 由一个入口服务接管，面板、订阅、网站和节点共用该入口。${PLAIN}" "${YELLOW}One entry service owns public port 443, shared by the panel, subscriptions, websites, and nodes.${PLAIN}" "${YELLOW}Один входной сервис занимает публичный порт 443; панель, подписки, сайты и узлы используют этот вход.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}示例域名须替换为实际域名；回车沿用显示值。面板和订阅优先使用检测值，其余端口须与实际服务一致。${PLAIN}" "${YELLOW}Replace example domains with your own. Enter keeps the displayed value. Panel and subscription values are detected where available; match all ports to the actual services.${PLAIN}" "${YELLOW}Замените домены из примеров своими. Enter сохраняет показанное значение. Для панели и подписки используются обнаруженные настройки; все порты должны соответствовать сервисам.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local default_panel_addr="127.0.0.1"
@@ -12024,12 +12024,12 @@ collect_sni_stack_config() {
     SNI_IP_WHITELIST_RANGES=()
     local site_domains_input
     local -a site_domain_raw_inputs=()
-    echo -e "$(localized_text "${YELLOW}格式示例：app.example.com,status.example.com。只填域名，不要带 https://、端口或路径。${PLAIN}" "${YELLOW}Example format: app.example.com,status.example.com. Enter hostnames only—no https://, port, or path.${PLAIN}" "${YELLOW}Пример: app.example.com,status.example.com. Указывайте только домены, без https://, порта и пути.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}示例值：site.example.com,sub.example.com。仅填写要反代的 Web 域名，不带协议、端口或路径；节点地址不填在这里。${PLAIN}" "${YELLOW}Examples: site.example.com,sub.example.com. Enter Web domains to reverse proxy, without a scheme, port, or path. Do not enter the node address here.${PLAIN}" "${YELLOW}Примеры: site.example.com,sub.example.com. Укажите Web-домены для прокси без протокола, порта и пути. Адрес узла здесь не указывайте.${PLAIN}")"
     read_trimmed site_domains_input "$(localized_text "其他 Web 域名（可留空；多个用英文逗号分隔）: " "Additional Web domains (optional; separate with commas): " "Дополнительные Web-домены (необязательно; через запятую): ")"
     split_csv_to_array "$site_domains_input" SITE_DOMAINS
     site_domain_raw_inputs=("${SITE_DOMAINS[@]}")
-    echo -e "$(localized_text "${YELLOW}REALITY SNI 必须是你实际选择的外部 HTTPS 站点，优先使用不经过 CDN 的域名；不要填写面板域名或节点域名。${PLAIN}" "${YELLOW}REALITY SNI must be an external HTTPS site you actually selected. Prefer a non-CDN hostname; do not use the panel or node domain.${PLAIN}" "${YELLOW}REALITY SNI должен указывать на выбранный вами внешний HTTPS-сайт. Предпочтителен домен без CDN; не используйте домен панели или узла.${PLAIN}")"
-    read_trimmed reality_sni_input "$(localized_text "REALITY 目标 SNI（仅域名）: " "REALITY target SNI (hostname only): " "Целевой SNI REALITY (только домен): ")"
+    echo -e "$(localized_text "${YELLOW}填写 REALITY 入站 serverNames 中实际使用的目标域名，须与客户端 SNI 一致。目标应为可访问的外部 HTTPS 站点，优先不经过 CDN；不要填面板或节点域名。${PLAIN}" "${YELLOW}Enter the target hostname used in the REALITY inbound serverNames; it must match the client SNI. Use a reachable external HTTPS site, preferably without a CDN, rather than the panel or node domain.${PLAIN}" "${YELLOW}Укажите целевой домен из serverNames входа REALITY; он должен совпадать с SNI клиента. Используйте доступный внешний HTTPS-сайт, желательно без CDN, вместо домена панели или узла.${PLAIN}")"
+    read_trimmed reality_sni_input "$(localized_text "REALITY 目标 SNI（仅域名，不带 :443）: " "REALITY target SNI (hostname only, without :443): " "Целевой SNI REALITY (только домен, без :443): ")"
     REALITY_SNI="$reality_sni_input"
     STRICT_SNI_GATE="false"
     if strict_sni_gate_mode_supported "${ENTRY_MODE:-nginx-stream}"; then
@@ -12040,7 +12040,7 @@ collect_sni_stack_config() {
     fi
     echo -e "------------------------------------------------"
     echo -e "$(localized_text "${BOLD}${BLUE}▶ [2/5] 公网入口${PLAIN}" "${BOLD}${BLUE}▶ [2/5] Public entry${PLAIN}" "${BOLD}${BLUE}▶ [2/5] Публичная точка входа${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}一般保持 0.0.0.0:443；只有明确使用其他公网地址或端口时才修改。${PLAIN}" "${YELLOW}Keep 0.0.0.0:443 unless you intentionally use another public address or port.${PLAIN}" "${YELLOW}Обычно оставляйте 0.0.0.0:443. Меняйте только при использовании другого публичного адреса или порта.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}默认 0.0.0.0:443：监听所有 IPv4 地址的 443 端口。0.0.0.0 是监听地址，不能作为客户端连接地址。${PLAIN}" "${YELLOW}Default: 0.0.0.0:443, listening on port 443 on all IPv4 addresses. 0.0.0.0 is a bind address, not a client connection address.${PLAIN}" "${YELLOW}По умолчанию: 0.0.0.0:443, порт 443 на всех IPv4-адресах. 0.0.0.0 — адрес привязки, а не адрес подключения клиента.${PLAIN}")"
     NGINX_LISTEN_ADDR=$(ask_with_default "$(localized_text "公网入口监听地址" "Public entry listen address" "Адрес публичной точки входа")" "0.0.0.0")
     NGINX_LISTEN_PORT=$(ask_with_default "$(localized_text "公网入口端口" "Public entry port" "Порт публичной точки входа")" "443")
 
@@ -12061,11 +12061,11 @@ collect_sni_stack_config() {
         echo -e "$(localized_text "${GREEN}本地监听地址采用检测值或安全默认值；Web 反代和 Xray 使用 127.0.0.1。${PLAIN}" "${GREEN}Using detected or safe local addresses; the Web proxy and Xray use 127.0.0.1.${PLAIN}" "${GREEN}Используются обнаруженные или безопасные локальные адреса; Web-прокси и Xray работают на 127.0.0.1.${PLAIN}")"
     fi
 
-    echo -e "$(localized_text "${YELLOW}下面均为本机内部端口，不要填写公网 443；3x-ui 面板和订阅端口须与面板当前设置一致。${PLAIN}" "${YELLOW}The following are internal ports. Do not enter public port 443; the 3x-ui panel and subscription ports must match the current panel settings.${PLAIN}" "${YELLOW}Ниже указываются внутренние порты. Не вводите публичный порт 443; порты панели и подписки должны совпадать с настройками 3x-ui.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}以下为内部端口，不能与公网入口端口冲突。8443 用于本地 Web HTTPS，1443 对应已有 REALITY 入站；面板和订阅使用 3x-ui 实际端口。${PLAIN}" "${YELLOW}These internal ports must differ from the public entry port. 8443 is for local Web HTTPS; 1443 must match the existing REALITY inbound. Use the actual 3x-ui panel and subscription ports.${PLAIN}" "${YELLOW}Внутренние порты не должны совпадать с публичным входом. 8443 — локальный Web HTTPS, 1443 должен соответствовать существующему входу REALITY. Для панели и подписки используйте фактические порты 3x-ui.${PLAIN}")"
     CADDY_LISTEN_PORT=$(ask_with_default "$(localized_text "$(web_proxy_engine_label "$WEB_PROXY_ENGINE") 本地 HTTPS 端口" "$(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") local HTTPS port" "Локальный HTTPS-порт $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\")")" "8443")
     XRAY_LISTEN_PORT=$(ask_with_default "$(localized_text "Xray REALITY 本地入站端口" "Xray REALITY local inbound port" "Локальный входной порт Xray REALITY")" "1443")
     PANEL_LISTEN_PORT=$(ask_with_default "$(localized_text "3x-ui 面板后端端口" "3x-ui panel backend port" "Порт бэкенда панели 3x-ui")" "$default_panel_port")
-    echo -e "$(localized_text "${YELLOW}路径只填以 / 开头和结尾的前缀，不要填域名、端口或客户端 ID。${PLAIN}" "${YELLOW}Paths must start and end with /. Do not include a domain, port, or client ID.${PLAIN}" "${YELLOW}Пути должны начинаться и заканчиваться символом /. Не указывайте домен, порт или ID клиента.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}路径须与 3x-ui 设置一致，例如 /panel/、/sub/、/clash/。只填以 / 开头和结尾的路径前缀，不带域名、端口或订阅客户端 ID。${PLAIN}" "${YELLOW}Match paths to 3x-ui, for example /panel/, /sub/, /clash/. Enter only the prefix starting and ending with /, without a domain, port, or subscription client ID.${PLAIN}" "${YELLOW}Пути должны совпадать с 3x-ui, например /panel/, /sub/, /clash/. Укажите только префикс с / в начале и конце, без домена, порта и ID клиента подписки.${PLAIN}")"
     PANEL_WEB_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "3x-ui 面板路径（须与 webBasePath 一致）" "3x-ui panel path (must match webBasePath)" "Путь панели 3x-ui (должен совпадать с webBasePath)")" "$default_panel_path")")
     SUB_LISTEN_PORT=$(ask_with_default "$(localized_text "3x-ui 订阅后端端口" "3x-ui subscription backend port" "Порт бэкенда подписки 3x-ui")" "$default_sub_port")
     SUB_URI_PATH=$(normalize_path_prefix "$(ask_with_default "$(localized_text "普通订阅路径（仅路径前缀）" "Standard subscription path (path prefix only)" "Путь обычной подписки (только префикс)")" "$default_sub_path")")
@@ -12090,6 +12090,7 @@ collect_sni_stack_config() {
         panel_whitelist_ranges=$(join_array_by_space "${panel_whitelist_array[@]}")
     fi
     if [[ ${#SITE_DOMAINS[@]} -gt 0 ]]; then
+        echo -e "$(localized_text "${YELLOW}网站后端端口填写程序实际监听的端口；3000、3001 仅为候选值，脚本不会创建对应服务。${PLAIN}" "${YELLOW}Use each app's actual listening port. 3000 and 3001 are suggested values only; the script does not create the backend services.${PLAIN}" "${YELLOW}Укажите фактический порт каждого приложения. 3000 и 3001 — лишь предлагаемые значения; скрипт не создаёт бэкенд-сервисы.${PLAIN}")"
         local i default_site_port
         default_site_port=3000
         for i in "${!SITE_DOMAINS[@]}"; do
@@ -12107,12 +12108,12 @@ collect_sni_stack_config() {
     fi
 
     echo -e "------------------------------------------------"
-    echo -e "$(localized_text "${BOLD}${BLUE}▶ [5/5] 3x-ui 证书与 Cloudflare Token${PLAIN}" "${BOLD}${BLUE}▶ [5/5] 3x-ui certificates and Cloudflare token${PLAIN}" "${BOLD}${BLUE}▶ [5/5] Сертификаты 3x-ui и токен Cloudflare${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}${BLUE}▶ [5/5] 本地 HTTP 与公网证书${PLAIN}" "${BOLD}${BLUE}▶ [5/5] Local HTTP and public certificates${PLAIN}" "${BOLD}${BLUE}▶ [5/5] Локальный HTTP и публичные сертификаты${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}公网证书由 $(web_proxy_engine_label "$WEB_PROXY_ENGINE") 统一托管；3x-ui 面板和订阅后端通过 HTTP 提供服务。${PLAIN}" "${YELLOW}$(web_proxy_engine_label \"$WEB_PROXY_ENGINE\") manages the public certificate. The 3x-ui panel and subscription backends serve HTTP locally.${PLAIN}" "${YELLOW}Публичным сертификатом управляет $(web_proxy_engine_label \"$WEB_PROXY_ENGINE\"); бэкенды панели и подписки 3x-ui локально используют HTTP.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}本地连接：面板 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}；订阅 ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}。${PLAIN}" "${YELLOW}Local targets: panel ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}; subscription ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}.${PLAIN}" "${YELLOW}Локальные адреса: панель ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}; подписка ${SUB_LISTEN_ADDR}:${SUB_LISTEN_PORT}.${PLAIN}")"
     echo -e "$(localized_text "${CYAN}按当前 3x-ui 情况处理：${PLAIN}" "${CYAN}Choose the instruction that matches your 3x-ui setup:${PLAIN}" "${CYAN}Действуйте в зависимости от установки 3x-ui:${PLAIN}")"
     echo -e "$(localized_text "  3x-ui 3.x 新安装：官方安装器选择 4. Skip SSL，再选择 y，仅绑定 127.0.0.1。" "  New 3x-ui 3.x: select 4. Skip SSL in the official installer, then y to bind only to 127.0.0.1." "  Новая установка 3x-ui 3.x: в официальном установщике выберите 4. Skip SSL, затем y для привязки только к 127.0.0.1.")"
-    echo -e "$(localized_text "  3x-ui 2.x、旧配置升级或曾启用 SSL：清空面板和订阅证书路径。" "  3x-ui 2.x, upgraded legacy setup, or SSL used before: clear the panel and subscription certificate paths." "  3x-ui 2.x, обновлённая старая конфигурация или ранее включённый SSL: очистите пути сертификатов панели и подписки.")"
+    echo -e "$(localized_text "  已有配置启用了 SSL：先记录原证书路径；确认切换到本地 HTTP 后，再清空面板和订阅证书路径。" "  Existing setup with SSL: record the current certificate paths, then clear them when switching the panel and subscription backends to local HTTP." "  Если SSL уже включён: сохраните текущие пути сертификатов, затем очистите их при переводе панели и подписки на локальный HTTP.")"
     if confirm_danger \
         "$(localized_text "清空 3x-ui 旧证书路径" "Clear legacy 3x-ui certificate paths" "Очистить старые пути сертификатов 3x-ui")" \
         "$(localized_text "清空 3x-ui 2.x 或旧配置中的面板和订阅证书路径，使本地反代改用 HTTP。" "Clear panel and subscription certificate paths in 3x-ui 2.x or legacy configuration so the local proxy can use HTTP." "Очистить пути сертификатов панели и подписки в 3x-ui 2.x или старой конфигурации, чтобы локальный прокси использовал HTTP.")" \
@@ -13044,7 +13045,7 @@ print_sni_stack_result() {
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "当前入口模式：${entry_label} (${entry_mode})" "Current entry mode: ${entry_label} (${entry_mode})" "Текущий режим ввода: ${entry_label} (${entry_mode})")"
     echo -e "$(localized_text "当前 Web 反代引擎：${web_label} (${web_engine})" "Current web reverse proxy engine: ${web_label} (${web_engine})" "Текущий движок веб-прокси: ${web_label} (${web_engine})")"
-    echo -e "$(localized_text "${BOLD}一、以后从外面只访问这些地址${PLAIN}" "${BOLD}1. In the future, only these addresses will be accessed from the outside.${PLAIN}" "${BOLD}1. В дальнейшем доступ извне будет осуществляться только по этим адресам.${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}一、公网访问地址${PLAIN}" "${BOLD}1. Public access addresses${PLAIN}" "${BOLD}1. Адреса публичного доступа${PLAIN}")"
     echo -e "$(localized_text "  面板入口：      https://${PANEL_DOMAIN}${PANEL_WEB_PATH}" "Panel entry: https://${PANEL_DOMAIN}${PANEL_WEB_PATH}" "Входная панель: https://${PANEL_DOMAIN}${PANEL_WEB_PATH}")"
     echo -e "$(localized_text "  普通订阅入口：  https://${PANEL_DOMAIN}${SUB_URI_PATH}" "Ordinary subscription entry: https://${PANEL_DOMAIN}${SUB_URI_PATH}" "Обычный вход по подписке: https://${PANEL_DOMAIN}${SUB_URI_PATH}.")"
     echo -e "  Clash/Mihomo：  https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
@@ -13057,26 +13058,26 @@ print_sni_stack_result() {
     if [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]]; then
         local tcp_i
         for tcp_i in "${!TCP_ROUTE_SNIS[@]}"; do
-            echo -e "$(localized_text "  TCP/SNI 入站：  ${TCP_ROUTE_SNIS[$tcp_i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]}" "TCP/SNI Inbound: ${TCP_ROUTE_SNIS[$tcp_i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]}" "TCP/SNI Входящий: ${TCP_ROUTE_SNIS[$tcp_i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]}")"
+            echo -e "  TCP/SNI: SNI=${TCP_ROUTE_SNIS[$tcp_i]} -> ${TCP_ROUTE_ADDRS[$tcp_i]}:${TCP_ROUTE_PORTS[$tcp_i]}"
         done
     fi
     if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]]; then
         local xray_route_i
         for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
-            echo -e "$(localized_text "  Xray 入站：     ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}:${NGINX_LISTEN_PORT} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}" "Xray Inbound: ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}:${NGINX_LISTEN_PORT} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}" "Xray Входящий: ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]}:${NGINX_LISTEN_PORT} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}")"
+            echo -e "  Xray: SNI=${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}"
         done
     fi
     echo -e "$(localized_text "  REALITY 端口：  ${NGINX_LISTEN_PORT}" "REALITY Port: ${NGINX_LISTEN_PORT}" "REALITY Порт: ${NGINX_LISTEN_PORT}")"
     echo -e ""
     echo -e "$(localized_text "${YELLOW}不要从公网访问这些内部端口：${CADDY_LISTEN_PORT}/${XRAY_LISTEN_PORT}/${PANEL_LISTEN_PORT}/${SUB_LISTEN_PORT}/${SITE_BACKEND_PORTS[*]} ${TCP_ROUTE_PORTS[*]} ${XRAY_SNI_ROUTE_PORTS[*]}${PLAIN}" "${YELLOW}Do not access these internal ports from the public: ${CADDY_LISTEN_PORT}/${XRAY_LISTEN_PORT}/${PANEL_LISTEN_PORT}/${SUB_LISTEN_PORT}/${SITE_BACKEND_PORTS[*]} ${TCP_ROUTE_PORTS[*]} ${XRAY_SNI_ROUTE_PORTS[*]}${PLAIN}" "${YELLOW}Не обращайтесь к этим внутренним портам из публичной сети: ${CADDY_LISTEN_PORT}/${XRAY_LISTEN_PORT}/${PANEL_LISTEN_PORT}/${SUB_LISTEN_PORT}/${SITE_BACKEND_PORTS[*]} ${TCP_ROUTE_PORTS[*]} ${XRAY_SNI_ROUTE_PORTS[*]}${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}它们应该只给本机内部服务互相连接，不是浏览器入口。${PLAIN}" "${YELLOW}They should only connect the internal services of this machine to each other, not the browser entry.${PLAIN}" "${YELLOW}Они должны соединять между собой только внутренние службы этой машины, а не вход в браузер.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}内部端口用于服务间转发；节点分享链接使用 VPS 公网 IP 或节点域名，以及公网入口端口。${PLAIN}" "${YELLOW}Internal ports are for service forwarding. Node links use the VPS public IP or node domain and the public entry port.${PLAIN}" "${YELLOW}Внутренние порты служат для пересылки между сервисами. В ссылках узлов указывайте публичный IP VPS или домен узла и порт публичного входа.${PLAIN}")"
     echo -e ""
-    echo -e "$(localized_text "${BOLD}二、3x-ui 面板设置建议${PLAIN}" "${BOLD}2. 3x-ui panel setting recommendation${PLAIN}" "${BOLD}2. 3x-ui Рекомендации по настройке панели${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}二、核对 3x-ui 面板与订阅${PLAIN}" "${BOLD}2. Check the 3x-ui panel and subscription settings${PLAIN}" "${BOLD}2. Проверьте настройки панели и подписки 3x-ui${PLAIN}")"
     echo -e "$(localized_text "  面板监听地址：${PANEL_LISTEN_ADDR}" "Panel listening address: ${PANEL_LISTEN_ADDR}" "Адрес прослушивания панели: ${PANEL_LISTEN_ADDR}")"
     echo -e "$(localized_text "  面板端口：    ${PANEL_LISTEN_PORT}" "Panel port: ${PANEL_LISTEN_PORT}" "Порт панели: ${PANEL_LISTEN_PORT}")"
     echo -e "  webBasePath： ${PANEL_WEB_PATH}"
     echo -e "$(localized_text "  3.x 新安装 SSL：第 4 项 Skip SSL，再选 y 仅绑定 127.0.0.1" "3.x new-install SSL: option 4, Skip SSL, then y to bind only to 127.0.0.1" "SSL при новой установке 3.x: пункт 4 Skip SSL, затем y для привязки только к 127.0.0.1")"
-    echo -e "$(localized_text "  2.x/旧配置面板证书路径/私钥路径：清空" "2.x/old configuration panel certificate path/private key path: clear" "2.x/старый путь к сертификату панели конфигурации/путь к секретному ключу: очистить")"
+    echo -e "$(localized_text "  面板本地 HTTP：不设置面板证书和私钥路径" "  Local panel HTTP: leave certificate and private key paths empty" "  Локальный HTTP панели: пути сертификата и ключа должны быть пустыми")"
     echo -e "$(localized_text "  Web 反代引擎后端连接：http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Web reverse proxy engine backend connection: http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Серверное соединение механизма веб-прокси: http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}")"
     echo -e "  Panel URL / Public URL / External URL：https://${PANEL_DOMAIN}${PANEL_WEB_PATH}"
     echo -e "  Subscription URI Path：${SUB_URI_PATH}"
@@ -13084,28 +13085,33 @@ print_sni_stack_result() {
     echo -e "  Clash/Mihomo URI Path：${CLASH_URI_PATH}"
     echo -e "  Clash/Mihomo External URL：https://${PANEL_DOMAIN}${CLASH_URI_PATH}"
     echo -e "$(localized_text "${YELLOW}  不建议使用 webBasePath=/，随机面板路径能降低被批量扫描命中的概率。${PLAIN}" "${YELLOW}It is not recommended to use webBasePath=/. Random panel paths can reduce the probability of being hit by batch scanning.${PLAIN}" "${YELLOW}Не рекомендуется использовать webBasePath=/. Случайное расположение панелей может снизить вероятность попадания в пакетное сканирование.${PLAIN}")"
-    echo -e "$(localized_text "  2.x/旧配置订阅证书路径/私钥路径：清空" "2.x/old configuration subscription certificate path/private key path: clear" "2.x/путь сертификата подписки старой конфигурации/путь закрытого ключа: очистить")"
+    echo -e "$(localized_text "  订阅本地 HTTP：不设置订阅证书和私钥路径" "  Local subscription HTTP: leave certificate and private key paths empty" "  Локальный HTTP подписки: пути сертификата и ключа должны быть пустыми")"
     echo -e ""
-    echo -e "$(localized_text "${BOLD}三、Xray / 3x-ui+Reality 入站这样填${PLAIN}" "${BOLD}3. Configure the Xray / 3x-ui+Reality inbound as follows${PLAIN}" "${BOLD}3. Заполните входящее подключение Xray / 3x-ui+Reality так${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}三、核对 REALITY 入站与客户端${PLAIN}" "${BOLD}3. Check the REALITY inbound and client${PLAIN}" "${BOLD}3. Проверьте вход REALITY и клиент${PLAIN}")"
+    if [[ "$entry_mode" == "xray-fallback" ]]; then
+        print_xray_fallback_mode_explanation
+        echo -e "$(localized_text "${YELLOW}以下为本地 REALITY 后端参考；公网主入站须单独监听 ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT}，不能照搬本地端口。${PLAIN}" "${YELLOW}The local REALITY backend below is for reference. The public main inbound must separately listen on ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT}; do not use the local port there.${PLAIN}" "${YELLOW}Ниже указан локальный бэкенд REALITY для справки. Основной публичный вход должен отдельно слушать ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT}; не используйте для него локальный порт.${PLAIN}")"
+    fi
     echo -e "$(localized_text "  入站监听地址 listen：${XRAY_LISTEN_ADDR}" "Inbound listening address listen: ${XRAY_LISTEN_ADDR}" "Адрес прослушивания входящего подключения: ${XRAY_LISTEN_ADDR}")"
     echo -e "$(localized_text "  入站监听端口 port：  ${XRAY_LISTEN_PORT}" "Inbound listening port port: ${XRAY_LISTEN_PORT}" "Порт входящего прослушивания: ${XRAY_LISTEN_PORT}")"
-    echo -e "$(localized_text "  协议 protocol：      VLESS" "Protocol protocol: VLESS" "Протокол протокола: VLESS")"
-    echo -e "$(localized_text "  传输 network：       tcp" "Transmission network: tcp" "Сеть передачи: tcp")"
-    echo -e "$(localized_text "  安全 security：      reality" "Security security: reality" "Безопасность безопасности: reality")"
+    echo -e "$(localized_text "  协议 protocol：      VLESS" "  Protocol:            VLESS" "  Протокол:            VLESS")"
+    echo -e "$(localized_text "  传输 network：       tcp" "  Transport:           tcp" "  Транспорт:           tcp")"
+    echo -e "$(localized_text "  安全 security：      reality" "  Security:            reality" "  Безопасность:        reality")"
     echo -e "  REALITY dest：       ${REALITY_SNI}:443"
     echo -e "  serverNames：        ${REALITY_SNI}"
     echo -e "$(localized_text "${YELLOW}  TLS/端口检查不代表 REALITY 客户端认证成功。若升级至 Xray 26.9.30 后 Mihomo 超时，可在服务端回退到 26.6.27 后复测。${PLAIN}" "${YELLOW}  TLS/port checks do not verify REALITY client authentication. If Mihomo times out after upgrading to Xray 26.9.30, roll back the server to 26.6.27 and retest.${PLAIN}" "${YELLOW}  Проверки TLS и портов не подтверждают аутентификацию клиента REALITY. Если после обновления Xray до 26.9.30 Mihomo не подключается, верните сервер на 26.6.27 и повторите тест.${PLAIN}")"
     echo -e "  SpiderX：            /"
-    echo -e "$(localized_text "  客户端连接地址：     你的服务器 IP 或解析到服务器的域名" "Client connection address: Your server IP or domain resolved to the server" "Адрес подключения клиента: IP-адрес вашего сервера или доменное имя, разрешенное серверу.")"
+    echo -e "$(localized_text "  客户端连接地址：     VPS 公网 IP 或节点域名（如 node.example.com，须替换为实际值）" "  Client address:      VPS public IP or node domain (e.g. node.example.com; replace with your actual value)" "  Адрес клиента:       публичный IP VPS или домен узла (например node.example.com; замените своим)")"
     echo -e "$(localized_text "  客户端连接端口：     ${NGINX_LISTEN_PORT}" "Client connection port: ${NGINX_LISTEN_PORT}" "Порт подключения клиента: ${NGINX_LISTEN_PORT}")"
     echo -e "$(localized_text "  客户端 SNI/serverName：${REALITY_SNI}" "Client SNI/serverName: ${REALITY_SNI}" "Клиент SNI/имя сервера: ${REALITY_SNI}")"
-    echo -e "$(localized_text "${YELLOW}  注意：REALITY 的 dest/serverNames 必须是外部真实站点，不要写面板域名。${PLAIN}" "${YELLOW}Note: The dest/serverNames of REALITY must be an external real site, do not write the panel domain.${PLAIN}" "${YELLOW}Примечание. Имена dest/serverName для REALITY должны быть внешним реальным сайтом, не записывайте имя домена панели.${PLAIN}")"
+    echo -e "$(localized_text "  3x-ui：Hosts / 主机选择该入站，地址填节点域名，端口填 ${NGINX_LISTEN_PORT}；旧版使用 External Proxy。" "  3x-ui: in Hosts, select this inbound, use the node domain and port ${NGINX_LISTEN_PORT}; older versions use External Proxy." "  3x-ui: в Hosts выберите этот вход, домен узла и порт ${NGINX_LISTEN_PORT}; в старых версиях используйте External Proxy.")"
+    echo -e "$(localized_text "${YELLOW}  target/dest 填目标地址:端口；serverNames 与客户端 SNI 填目标域名。普通 TLS 节点则使用自身证书覆盖的 SNI，另行登记对应本地入站路由。${PLAIN}" "${YELLOW}  target/dest takes target address:port; serverNames and client SNI take the target hostname. Ordinary TLS nodes use an SNI covered by their own certificate and a separate local inbound route.${PLAIN}" "${YELLOW}  target/dest — адрес:порт цели; serverNames и SNI клиента — целевой домен. Для обычного TLS используйте SNI из сертификата узла и отдельный маршрут к локальному входу.${PLAIN}")"
     echo -e ""
-    echo -e "$(localized_text "${BOLD}四、常见错误怎么判断${PLAIN}" "${BOLD}4. How to judge common errors${PLAIN}" "${BOLD}4. Как определить типичные ошибки${PLAIN}")"
-    echo -e "$(localized_text "  ERR_SSL_PROTOCOL_ERROR：通常是访问了内部端口，外部只访问 https://${PANEL_DOMAIN}${PANEL_WEB_PATH}" "ERR_SSL_PROTOCOL_ERROR: Usually the internal port is accessed, and only https://${PANEL_DOMAIN}${PANEL_WEB_PATH} is accessed externally." "ERR_SSL_PROTOCOL_ERROR: Обычно осуществляется доступ к внутреннему порту, и только к https://${PANEL_DOMAIN}${PANEL_WEB_PATH} осуществляется внешний доступ.")"
-    echo -e "$(localized_text "  ERR_TOO_MANY_REDIRECTS：通常是 3.x 误启用 3x-ui SSL、2.x/旧配置证书路径没清空，或外部地址/路径配置不一致" "ERR_TOO_MANY_REDIRECTS: Usually 3.x mistakenly enabled 3x-ui SSL, 2.x/old configuration certificate path is not cleared, or the external address/path configuration is inconsistent" "ERR_TOO_MANY_REDIRECTS: Обычно 3.x ошибочно включен 3x-ui SSL, путь сертификата конфигурации 2.x/старая не очищается или конфигурация внешнего адреса/пути несовместима.")"
-    echo -e "$(localized_text "  HTTP 404：先检查访问路径是否等于 3x-ui 的 webBasePath，再检查 Web 反代引擎是否反代到 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "HTTP 404: First check whether the access path is equal to the webBasePath of 3x-ui, and then check whether the Web reverse proxy engine is reverse proxy to ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "HTTP 404: сначала проверьте, равен ли путь доступа webBasePath 3x-ui, а затем проверьте, соответствует ли обратный прокси-сервер веб-обратного прокси ${PANEL_LISTEN_ADDR}: ${PANEL_LISTEN_PORT}.")"
-    echo -e "$(localized_text "  502 Bad Gateway：通常是 3x-ui 没启动、端口不对，或 3x-ui 后端仍是 HTTPS" "502 Bad Gateway: Usually 3x-ui is not started, the port is wrong, or 3x-ui backend is still HTTPS" "502 Bad Gateway: обычно 3x-ui не запускается, порт неправильный или бэкенд 3x-ui все еще остается HTTPS.")"
+    echo -e "$(localized_text "${BOLD}四、按现象排错${PLAIN}" "${BOLD}4. Troubleshoot by symptom${PLAIN}" "${BOLD}4. Диагностика по симптомам${PLAIN}")"
+    echo -e "$(localized_text "  ERR_SSL_PROTOCOL_ERROR：检查是否误用内部 HTTP 端口；面板公网地址为 https://${PANEL_DOMAIN}${PANEL_WEB_PATH}" "  ERR_SSL_PROTOCOL_ERROR: check for an internal HTTP port in the URL; the public panel URL is https://${PANEL_DOMAIN}${PANEL_WEB_PATH}" "  ERR_SSL_PROTOCOL_ERROR: проверьте, не указан ли внутренний HTTP-порт; публичный URL панели: https://${PANEL_DOMAIN}${PANEL_WEB_PATH}")"
+    echo -e "$(localized_text "  ERR_TOO_MANY_REDIRECTS：核对 3x-ui 本地 HTTP、证书路径和公网 URL/路径是否一致" "  ERR_TOO_MANY_REDIRECTS: check local HTTP, certificate paths, and public URL/path consistency in 3x-ui" "  ERR_TOO_MANY_REDIRECTS: проверьте локальный HTTP, пути сертификатов и соответствие публичного URL/пути в 3x-ui")"
+    echo -e "$(localized_text "  HTTP 404：核对 webBasePath 和访问路径，再检查反代后端 ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "  HTTP 404: match the URL path to webBasePath, then check backend ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "  HTTP 404: сверьте путь URL с webBasePath, затем проверьте бэкенд ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}")"
+    echo -e "$(localized_text "  HTTP 502：检查 3x-ui 是否运行、后端地址和端口是否正确，以及后端是否已改用 HTTP" "  HTTP 502: check that 3x-ui is running, the backend address and port are correct, and the backend serves HTTP" "  HTTP 502: проверьте запуск 3x-ui, адрес и порт бэкенда и использование HTTP")"
     echo -e ""
     echo -e "$(localized_text "${BOLD}五、入口与后端配置${PLAIN}" "${BOLD}5. Entry and backend configuration${PLAIN}" "${BOLD}5. Входная и серверная конфигурация${PLAIN}")"
     echo -e "  ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT} -> ${entry_listener}"
@@ -13132,7 +13138,8 @@ print_sni_stack_result() {
         done
     fi
     echo -e ""
-    echo -e "$(localized_text "${BOLD}六、检查命令${PLAIN}" "${BOLD}6. Check command${PLAIN}" "${BOLD}6. Проверьте команду.${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}六、检查监听、反代与 TLS${PLAIN}" "${BOLD}6. Check listeners, reverse proxy, and TLS${PLAIN}" "${BOLD}6. Проверьте порты, прокси и TLS${PLAIN}")"
+    echo -e "$(localized_text "  VPS_PUBLIC_IP 须替换为 VPS 实际公网 IP；TLS 检查后还需用客户端验证节点连接。" "  Replace VPS_PUBLIC_IP with the VPS public IP. After TLS checks, test the node with a client." "  Замените VPS_PUBLIC_IP публичным IP VPS. После проверки TLS протестируйте узел клиентом.")"
     if [[ -n "$check_regex" ]]; then
         echo -e "  ss -lntp | grep -E '${check_regex}'"
     else
@@ -13144,17 +13151,17 @@ print_sni_stack_result() {
         echo -e "  journalctl -u caddy -n 80 --no-pager"
     fi
     echo -e "  curl -I http://${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}/"
-    echo -e "$(localized_text "  openssl s_client -connect 服务器IP:${NGINX_LISTEN_PORT} -servername ${PANEL_DOMAIN}" "openssl s_client -connect server IP:${NGINX_LISTEN_PORT} -servername ${PANEL_DOMAIN}" "openssl s_client -IP-адрес сервера подключения: ${NGINX_LISTEN_PORT} -имя_сервера ${PANEL_DOMAIN}")"
-    echo -e "$(localized_text "  openssl s_client -connect 服务器IP:${NGINX_LISTEN_PORT} -servername ${REALITY_SNI}" "openssl s_client -connect server IP:${NGINX_LISTEN_PORT} -servername ${REALITY_SNI}" "openssl s_client -IP-адрес сервера подключения: ${NGINX_LISTEN_PORT} -имя_сервера ${REALITY_SNI}")"
+    echo -e "$(localized_text "  openssl s_client -connect VPS_PUBLIC_IP:${NGINX_LISTEN_PORT} -servername ${PANEL_DOMAIN}" "  openssl s_client -connect VPS_PUBLIC_IP:${NGINX_LISTEN_PORT} -servername ${PANEL_DOMAIN}" "  openssl s_client -connect VPS_PUBLIC_IP:${NGINX_LISTEN_PORT} -servername ${PANEL_DOMAIN}")"
+    echo -e "$(localized_text "  openssl s_client -connect VPS_PUBLIC_IP:${NGINX_LISTEN_PORT} -servername ${REALITY_SNI}" "  openssl s_client -connect VPS_PUBLIC_IP:${NGINX_LISTEN_PORT} -servername ${REALITY_SNI}" "  openssl s_client -connect VPS_PUBLIC_IP:${NGINX_LISTEN_PORT} -servername ${REALITY_SNI}")"
     [[ "$web_engine" == "nginx" ]] && echo -e "  journalctl -u nginx -n 80 --no-pager"
     echo -e "  journalctl -u x-ui -u 3x-ui -n 80 --no-pager"
     echo -e ""
     case "$entry_mode" in
         "xray-fallback")
-            echo -e "$(localized_text "${RED}绝对不要做：Web 反代引擎直接监听公网 443；3x-ui 面板、订阅服务或额外本地入站暴露公网；3.x 安装时启用 3x-ui SSL 或 2.x/旧配置证书路径未清空就跑 Web fallback；把 REALITY dest/serverNames 写成面板域名。${PLAIN}" "${RED}Do not: Web reverse proxy engine directly listens on the public port 443; 3x-ui panel, subscription service or additional local inbound exposes the public; enable 3x-ui SSL during 3.x installation or run Web fallback without clearing the certificate path of 2.x/old configuration; set REALITY dest/serverNames to the panel domain.${PLAIN}" "${RED}не должен делать: веб-механизм обратный прокси напрямую прослушивает публичный порт 443; Панель 3x-ui, служба подписки или дополнительный локальное входящее подключение предоставляют доступ к публичной сети; включите 3x-ui SSL во время установки 3.x или запустите веб-резервный вариант без очистки пути сертификата конфигурации 2.x/старой; put REALITY dest/serverNames записывается как доменное имя панели.${PLAIN}")"
+            echo -e "$(localized_text "${RED}公网入口由 Xray 主入站独占；Web 反代、面板、订阅及额外本地入站不应直接暴露公网。${PLAIN}" "${RED}Only the Xray main inbound owns the public entry. Keep the Web proxy, panel, subscriptions, and additional local inbounds off the public Internet.${PLAIN}" "${RED}Публичный вход занимает только основной вход Xray. Web-прокси, панель, подписки и дополнительные локальные входы не должны быть доступны напрямую из Интернета.${PLAIN}")"
             ;;
         *)
-            echo -e "$(localized_text "${RED}绝对不要做：Web 反代引擎直接监听公网 443；Xray/3x-ui 主入站直接占用公网 443；3x-ui 面板或新增本地入站暴露公网；3.x 安装时启用 3x-ui SSL 或 2.x/旧配置证书路径未清空就跑 443；把 REALITY dest/serverNames 写成面板域名。${PLAIN}" "${RED}Do not: Web reverse proxy engine directly listens on the public port 443; Xray/3x-ui main inbound directly occupies the public port 443; 3x-ui panel or adds local inbound to expose the public; 3.x enable 3x-ui SSL or 2.x/old configuration certificate path is not cleared and 443 will occur; write REALITY dest/serverNames as the panel domain.${PLAIN}" "${RED}не должен делать: веб-механизм обратный прокси напрямую прослушивает публичный порт 443; основное входящее подключение Xray/3x-ui непосредственно занимает публичный порт 443; Панель 3x-ui или добавляет локальное входящее подключение для доступа к публичной сети; Путь к сертификату конфигурации 3.x Enable 3x-ui SSL или 2.x/old не очищается и возникает ошибка 443; напишите REALITY dest/serverNames в качестве имени домена панели.${PLAIN}")"
+            echo -e "$(localized_text "${RED}公网入口由 Nginx Stream 或 vpso-mux 独占；Web 反代、Xray 后端、面板和订阅不应直接暴露公网。${PLAIN}" "${RED}Only Nginx Stream or vpso-mux owns the public entry. Keep the Web proxy, Xray backends, panel, and subscriptions off the public Internet.${PLAIN}" "${RED}Публичный вход занимает только Nginx Stream или vpso-mux. Web-прокси, бэкенды Xray, панель и подписки не должны быть доступны напрямую из Интернета.${PLAIN}")"
             ;;
     esac
 }
@@ -13244,7 +13251,7 @@ add_sni_stack_site() {
     local site_domain site_domain_input site_addr site_port advanced_mode existing idx confirm
     local enable_ip_whitelist whitelist_input whitelist_ranges current_client_ip
     local -a whitelist_array=()
-    read_trimmed site_domain_input "$(localized_text "请输入新网站/反代域名（例如 sub.example.com）: " "Please enter your new website/reverse domain (e.g. sub.example.com):" "Введите имя вашего нового веб-сайта/обратного домена (например, sub.example.com):")"
+    read_trimmed site_domain_input "$(localized_text "新 Web 域名（仅域名；示例值 site.example.com）: " "New Web domain (hostname only; example: site.example.com): " "Новый Web-домен (только имя; пример: site.example.com): ")"
     site_domain=$(normalize_domain_input "$site_domain_input")
     if [[ -z "$site_domain" || "$site_domain" == "0" ]]; then
         echo -e "$(localized_text "${BLUE}已取消新增网站/反代域名。${PLAIN}" "${BLUE}Canceled the new website/reverse domain.${PLAIN}" "${BLUE}отменил новый веб-сайт/обратное доменное имя.${PLAIN}")"
@@ -13286,7 +13293,7 @@ add_sni_stack_site() {
         echo -e "$(localized_text "${GREEN}后端地址使用 127.0.0.1。${PLAIN}" "${GREEN}Backend address uses 127.0.0.1.${PLAIN}" "${GREEN}Внутренний адрес использует 127.0.0.1.${PLAIN}")"
     fi
     site_addr=$(normalize_backend_addr_input "$site_addr")
-    site_port=$(ask_with_default "$(localized_text "后端端口" "backend port" "внутренний порт")" "$((3000 + ${#SITE_DOMAINS[@]}))")
+    site_port=$(ask_with_default "$(localized_text "程序实际监听端口（显示值仅供参考）" "App listening port (displayed value is for reference)" "Порт приложения (показанное значение для справки)")" "$((3000 + ${#SITE_DOMAINS[@]}))")
 
     is_valid_backend_addr "$site_addr" || { echo -e "$(localized_text "${RED}❌ 后端地址无效：${site_addr}${PLAIN}" "${RED}❌ Invalid backend address: ${site_addr}${PLAIN}" "${RED}❌ Неверный внутренний адрес: ${site_addr}.${PLAIN}")"; return 1; }
     is_valid_port "$site_port" || { echo -e "$(localized_text "${RED}❌ 后端端口无效：${site_port}${PLAIN}" "${RED}❌ Invalid backend port: ${site_port}${PLAIN}" "${RED}❌ Неверный внутренний порт: ${site_port}.${PLAIN}")"; return 1; }
@@ -13362,7 +13369,7 @@ edit_sni_stack_site_backend() {
     domain="${SITE_DOMAINS[$idx]}"
     new_addr=$(ask_with_default "$(localized_text "后端地址" "Backend address" "Внутренний адрес")" "${SITE_BACKEND_ADDRS[$idx]}")
     new_addr=$(normalize_backend_addr_input "$new_addr")
-    new_port=$(ask_with_default "$(localized_text "后端端口" "backend port" "внутренний порт")" "${SITE_BACKEND_PORTS[$idx]}")
+    new_port=$(ask_with_default "$(localized_text "程序实际监听端口（显示值仅供参考）" "App listening port (displayed value is for reference)" "Порт приложения (показанное значение для справки)")" "${SITE_BACKEND_PORTS[$idx]}")
 
     is_valid_backend_addr "$new_addr" || { echo -e "$(localized_text "${RED}❌ 后端地址无效：${new_addr}${PLAIN}" "${RED}❌ Invalid backend address: ${new_addr}${PLAIN}" "${RED}❌ Неверный внутренний адрес: ${new_addr}.${PLAIN}")"; return 1; }
     is_valid_port "$new_port" || { echo -e "$(localized_text "${RED}❌ 后端端口无效：${new_port}${PLAIN}" "${RED}❌ Invalid backend port: ${new_port}${PLAIN}" "${RED}❌ Неверный внутренний порт: ${new_port}.${PLAIN}")"; return 1; }
@@ -13541,7 +13548,7 @@ add_sni_stack_tcp_route() {
     echo -e "------------------------------------------------"
 
     local route_sni route_sni_input route_addr route_port existing idx
-    read_trimmed route_sni_input "$(localized_text "请输入用于分流的新 SNI/域名（例如 relay.example.com）: " "Please enter the new SNI/domain to be used for offloading (e.g. relay.example.com):" "Введите новое SNI/имя домена, которое будет использоваться для разгрузки (например, relay.example.com):")"
+    read_trimmed route_sni_input "$(localized_text "入站 SNI（须与客户端一致；普通 TLS 示例值 tls.example.com）: " "Inbound SNI (must match the client; ordinary TLS example: tls.example.com): " "SNI входа (как у клиента; пример для обычного TLS: tls.example.com): ")"
     route_sni=$(normalize_domain_input "$route_sni_input")
     if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
         echo -e "$(localized_text "${BLUE}已取消新增 TCP/SNI 入站。${PLAIN}" "${BLUE}Canceled the addition of TCP/SNI.${PLAIN}" "${BLUE}отменил добавление TCP/SNI.${PLAIN}")"
@@ -13565,7 +13572,7 @@ add_sni_stack_tcp_route() {
     check_domain_dns_sanity "$route_sni" "$(localized_text "TCP/SNI 入站域名" "TCP/SNI inbound domain" "TCP/SNI имя входящего домена")" "warn" || echo -e "$(localized_text "${YELLOW}⚠️ 如果客户端使用服务器 IP 连接并手动指定 SNI，可忽略该 DNS 警告。${PLAIN}" "${YELLOW}⚠️ This DNS warning can be ignored if the client connects using the server IP and manually specifies SNI.${PLAIN}" "${YELLOW}⚠️ Это предупреждение DNS можно игнорировать, если клиент подключается с использованием IP-адреса сервера и вручную указывает SNI.${PLAIN}")"
     route_addr=$(ask_with_default "$(localized_text "3x-ui 新入站本地监听地址（只允许本地）" "3x-ui New inbound local listening address (only local)" "3x-ui Новый входящий локальный адрес прослушивания (только локальный)")" "127.0.0.1")
     route_addr=$(normalize_loopback_addr "$route_addr")
-    route_port=$(ask_with_default "$(localized_text "3x-ui 新入站本地监听端口" "3x-ui New inbound local listening port" "3x-ui Новый входящий локальный порт прослушивания")" "8443")
+    route_port=$(ask_with_default "$(localized_text "已有入站的本地端口（示例值 2443，以 3x-ui 为准）" "Existing inbound local port (example: 2443; match 3x-ui)" "Локальный порт существующего входа (пример: 2443; как в 3x-ui)")" "8443")
     is_loopback_listen_addr "$route_addr" || { echo -e "$(localized_text "${RED}❌ 为保证安全，TCP/SNI 入站后端只允许 127.0.0.1、localhost 或 ::1。${PLAIN}" "${RED}❌ To ensure security, the TCP/SNI inbound backend only allows 127.0.0.1, localhost or ::1.${PLAIN}" "${RED}❌ В целях обеспечения безопасности входящий сервер TCP/SNI допускает только 127.0.0.1, localhost или ::1.${PLAIN}")"; return 1; }
     is_valid_port "$route_port" || { echo -e "$(localized_text "${RED}❌ 入站端口无效：${route_port}${PLAIN}" "${RED}❌ Invalid inbound port: ${route_port}${PLAIN}" "${RED}❌ Неверный входящий порт: ${route_port}.${PLAIN}")"; return 1; }
     if [[ "$route_port" == "$NGINX_LISTEN_PORT" || "$route_port" == "$CADDY_LISTEN_PORT" || "$route_port" == "$PANEL_LISTEN_PORT" || "$route_port" == "$SUB_LISTEN_PORT" ]]; then
@@ -13763,7 +13770,7 @@ list_xray_sni_routes() {
     if [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -eq 0 ]]; then
         echo -e "$(localized_text "${YELLOW}当前没有 Xray 入站分流规则。${PLAIN}" "${YELLOW}Currently does not have the Xray inbound routing rule.${PLAIN}" "${YELLOW}в настоящее время не имеет правила маршрутизация входящего подключения Xray.${PLAIN}")"
         if [[ -n "${XRAY_LISTEN_PORT:-}" ]]; then
-            echo -e "$(localized_text "${CYAN}旧默认 Xray/REALITY 后端仍是：${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}" "${CYAN}Old default Xray/REALITY backend is still: ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}" "${CYAN}старая версия по умолчанию Xray/REALITY по-прежнему: ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}")"
+            echo -e "$(localized_text "${CYAN}默认 REALITY 路由仍使用：${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}${PLAIN}" "${CYAN}The default REALITY route still uses ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}.${PLAIN}" "${CYAN}Маршрут REALITY по умолчанию по-прежнему использует ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}.${PLAIN}")"
             echo -e "$(localized_text "${CYAN}如需多个本地 Xray 入站，可按 SNI 添加新的本地端口分流记录。${PLAIN}" "${CYAN}If requires multiple local Xray inbounds, press SNI to add a new local port offload record.${PLAIN}" "${CYAN}Если для требуется несколько локальных входящих вызовов Xray, нажмите SNI, чтобы добавить новую запись о разгрузке локального порта.${PLAIN}")"
         fi
         return 0
@@ -13788,11 +13795,11 @@ add_xray_sni_route() {
     echo -e "$(localized_text "${BOLD}添加 Xray 入站分流规则${PLAIN}" "${BOLD}Adds Xray inbound connection routing rule${PLAIN}" "${BOLD}добавляет правило входящей рассылки Xray${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
-    echo -e "$(localized_text "${YELLOW}本菜单只记录 SNI -> 本地地址:端口；用于当前支持的端口复用模式渲染分流规则，不会创建、删除或修改 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}This menu only records SNI -> local address: port; used for the currently supported Port 443 Reuse mode rendering routing rules, and will not create, delete or modify the internal configuration of the 3x-ui/Xray inbound connection.${PLAIN}" "${YELLOW}Это меню записывает только SNI -> локальный адрес: порт; используется для поддерживаемых в настоящее время правил маршрутизации в режиме повторного использования порта 443 и не будет создавать, удалять или изменять внутреннюю конфигурацию входящего соединения 3x-ui/Xray.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}先在 3x-ui/Xray 创建并启用本地 TCP 入站，再登记 SNI -> 本地地址:端口。这里只管理入口路由，不修改入站配置。${PLAIN}" "${YELLOW}Create and enable a local TCP inbound in 3x-ui/Xray first, then map its SNI to local address:port. This menu manages entry routes only, not inbound settings.${PLAIN}" "${YELLOW}Сначала создайте и включите локальный TCP-вход в 3x-ui/Xray, затем задайте SNI -> локальный адрес:порт. Здесь меняются только маршруты, а не настройки входа.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     local route_sni route_sni_input route_addr route_port existing idx
-    read_trimmed route_sni_input "$(localized_text "SNI/域名: " "SNI/domain:" "SNI/доменное имя:")"
+    read_trimmed route_sni_input "$(localized_text "入站 SNI（REALITY 填实际 serverNames；普通 TLS 填证书域名）: " "Inbound SNI (actual serverNames for REALITY; certificate hostname for ordinary TLS): " "SNI входа (фактический serverNames для REALITY; домен сертификата для обычного TLS): ")"
     route_sni=$(normalize_domain_input "$route_sni_input")
     if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
         echo -e "$(localized_text "${BLUE}已取消添加。${PLAIN}" "${BLUE}Has been canceled.${PLAIN}" "${BLUE}отменен.${PLAIN}")"
@@ -13815,7 +13822,7 @@ add_xray_sni_route() {
 
     route_addr=$(ask_with_default "$(localized_text "本地监听地址" "local listening address" "местный адрес прослушивания")" "127.0.0.1")
     route_addr=$(normalize_loopback_addr "$route_addr")
-    route_port=$(ask_with_default "$(localized_text "本地监听端口" "local listening port" "локальный порт прослушивания")" "${XRAY_LISTEN_PORT:-1443}")
+    route_port=$(ask_with_default "$(localized_text "已有入站的本地端口（示例值 2443，以 3x-ui 为准）" "Existing inbound local port (example: 2443; match 3x-ui)" "Локальный порт существующего входа (пример: 2443; как в 3x-ui)")" "${XRAY_LISTEN_PORT:-1443}")
     is_loopback_listen_addr "$route_addr" || { echo -e "$(localized_text "${RED}❌ 为避免公网暴露，本地监听地址只允许 127.0.0.1、localhost 或 ::1。${PLAIN}" "${RED}❌ To avoid public exposure, the local listening address is only allowed to be 127.0.0.1, localhost or ::1.${PLAIN}" "${RED}❌ Чтобы избежать воздействия публичной сети, локальным адресом прослушивания может быть только 127.0.0.1, localhost или ::1.${PLAIN}")"; return 1; }
     is_valid_port "$route_port" || { echo -e "$(localized_text "${RED}❌ 本地监听端口无效：${route_port}${PLAIN}" "${RED}❌ The local listening port is invalid: ${route_port}${PLAIN}" "${RED}❌ Неверный локальный порт прослушивания: ${route_port}.${PLAIN}")"; return 1; }
     if [[ "$route_port" == "$CADDY_LISTEN_PORT" ]]; then
@@ -14682,7 +14689,7 @@ func_caddy_cf_reality_wizard() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}检测到已有 443端口复用配置${PLAIN}" "${BOLD}Detects that there are already Port 443 Reuse configurations${PLAIN}" "${BOLD}обнаружил, что существует 443 конфигурации с повторным использованием порта 443.${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}如果只是新增网站或反代域名，请返回并选择 [8] 管理 Web 域名/反代。${PLAIN}" "${YELLOW}If you are just adding a new website or reverse proxy domain, please go back and select [8] Manage Web domain/Reverse proxy.${PLAIN}" "${YELLOW}Если вы просто добавляете новый веб-сайт или доменное имя обратного прокси, вернитесь назад и выберите [8] Управление именем веб-домена/обратным прокси.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}新增网站用主菜单 [19] -> [6 Web 域名与反向代理]；修改已有端口和路径用 [19] -> [8 共享参数]。${PLAIN}" "${YELLOW}Add sites under main menu [19] -> [6 Web domains and reverse proxies]; edit existing ports and paths under [19] -> [8 Shared settings].${PLAIN}" "${YELLOW}Добавляйте сайты через главное меню [19] -> [6 Web-домены и обратный прокси]; порты и пути меняйте через [19] -> [8 Общие параметры].${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}继续首次配置会重写 443 入口、Web 反代引擎和 Xray 分流相关核心配置。${PLAIN}" "${YELLOW}Continuing initial setup will rewrite the port 443 entry, Web reverse proxy, and Xray routing configuration.${PLAIN}" "${YELLOW}Продолжение первоначальной настройки перезапишет конфигурацию входа 443, веб-прокси и маршрутизации Xray.${PLAIN}")"
         echo -e "------------------------------------------------"
         grep -E '^(PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null || true
@@ -15503,7 +15510,7 @@ func_caddy_manage_ip_whitelist() {
     echo -e "$(localized_text "${BOLD}🔐 Caddy 域名 IP 白名单${PLAIN}" "${BOLD}🔐 Caddy domain IP whitelist${PLAIN}" "${BOLD}🔐 Caddy доменное имя Белый список IP-адресов${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}适用于未启用 443端口复用、由 Caddy 直接对外服务的域名。${PLAIN}" "${YELLOW}Suitable for domains that do not enable the Port 443 Reuse and are directly served externally by Caddy.${PLAIN}" "${YELLOW}подходит для доменных имен, которые не поддерживают повторное использование порта 443 и обслуживаются напрямую извне Caddy.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443端口复用，请用主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]，不要在 Caddy 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to Port 443 Reuse, please use the main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Caddy layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к повторному использованию порта 443, используйте главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменного имени], не ограничивайте его на уровне Caddy.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443端口复用，请用主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理] -> [5 管理域名 IP 白名单]，不要在 Caddy 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to Port 443 Reuse, please use the main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Caddy layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к повторному использованию порта 443, используйте главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменного имени], не ограничивайте его на уровне Caddy.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     if ! command -v caddy >/dev/null 2>&1 || [[ ! -f /etc/caddy/Caddyfile ]]; then
@@ -15535,7 +15542,7 @@ func_caddy_manage_ip_whitelist() {
         return
     fi
     if [[ "$first_site_line" =~ ^https://[^[:space:]]+:[0-9]+[[:space:]]*\{ ]]; then
-        echo -e "$(localized_text "${RED}❌ 这个配置看起来属于 443端口复用本地 Caddy TLS 站点。请改用主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代] -> [5 管理域名 IP 白名单]。${PLAIN}" "${RED}❌ This configuration appears to belong to the Port 443 Reuse local Caddy TLS site. Please use the main menu instead [19 Port 443 Reuse Manager] -> [6 Manage Web domain/Reverse Proxy] -> [5 Manage domain IP Whitelist].${PLAIN}" "${RED}❌ Похоже, эта конфигурация принадлежит локальному сайту Caddy TLS с повторным использованием порта 443. Вместо этого используйте главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменных имен].${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ 这个配置看起来属于 443端口复用本地 Caddy TLS 站点。请改用主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理] -> [5 管理域名 IP 白名单]。${PLAIN}" "${RED}❌ This configuration appears to belong to the Port 443 Reuse local Caddy TLS site. Please use the main menu instead [19 Port 443 Reuse Manager] -> [6 Manage Web domain/Reverse Proxy] -> [5 Manage domain IP Whitelist].${PLAIN}" "${RED}❌ Похоже, эта конфигурация принадлежит локальному сайту Caddy TLS с повторным использованием порта 443. Вместо этого используйте главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменных имен].${PLAIN}")"
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
         return
     fi
@@ -19433,7 +19440,7 @@ generate_random_secret() {
 }
 
 print_public_https_reverse_proxy_hint() {
-    echo -e "$(localized_text "${YELLOW}公网 HTTPS 访问建议：未启用 443端口复用时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443端口复用时，请走主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代]。${PLAIN}" "${YELLOW}Public HTTPS Access Suggestions: When Port 443 Reuse is not enabled, please go to Caddy or Nginx HTTPS in the main menu [4 reverse proxy]; when Port 443 Reuse is enabled, please go to the main menu [19 Port 443 Reuse Manager] -> [6 Managing Web Domains/reverse proxies].${PLAIN}" "${YELLOW}публичную сеть HTTPS Доступ к предложениям: Если повторное использование порта 443 не включен, перейдите к Caddy или Nginx HTTPS в главном меню [4 обратный прокси]; Когда включен повторное использование порта 443, перейдите в главное меню [19 Центр управления повторным использованием порта 443] -> [6 Управление веб-доменами/обратными прокси].${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}公网 HTTPS 访问建议：未启用 443端口复用时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443端口复用时，请走主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理]。${PLAIN}" "${YELLOW}Public HTTPS Access Suggestions: When Port 443 Reuse is not enabled, please go to Caddy or Nginx HTTPS in the main menu [4 reverse proxy]; when Port 443 Reuse is enabled, please go to the main menu [19 Port 443 Reuse Manager] -> [6 Managing Web Domains/reverse proxies].${PLAIN}" "${YELLOW}публичную сеть HTTPS Доступ к предложениям: Если повторное использование порта 443 не включен, перейдите к Caddy или Nginx HTTPS в главном меню [4 обратный прокси]; Когда включен повторное использование порта 443, перейдите в главное меню [19 Центр управления повторным использованием порта 443] -> [6 Управление веб-доменами/обратными прокси].${PLAIN}")"
 }
 
 func_sublinkpro() {
@@ -23840,7 +23847,7 @@ show_panel_help() {
     echo "$(localized_text "15 2S-UI：运行官方安装器；不能与 S-UI 共存。" "15 2S-UI: run the official installer; do not install it alongside S-UI." "15 2S-UI: запустить официальный установщик; не устанавливайте его вместе с S-UI.")"
     echo "$(localized_text "17 3m-ui：运行官方安装器。18 妙妙屋X：部署主控，后续在主控中生成 Agent 安装命令。" "17 3m-ui: run the official installer. 18 MiaomiaowuX: deploy the controller, then generate Agent install commands from it." "17 3m-ui: запустить официальный установщик. 18 MiaomiaowuX: развернуть контроллер, затем создать в нём команды установки Agent.")"
     echo "$(localized_text "5/6 Sing-box 与 Xray 脚本。" "5/6 Sing-box and Xray scripts." "5/6 Скрипты Sing-box и Xray.")"
-    echo "$(localized_text "7/8/9 订阅工具，10 Komari，16 CDT Monitor；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [6 管理 Web 域名/反代]。" "7/8/9: subscription tools; 10: Komari; 16: CDT Monitor. Dockge / Compose management is in main menu [11 Docker Management] -> [19]. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [6 Manage Web domains/reverse proxy]." "7/8/9: инструменты подписки; 10: Komari; 16: CDT Monitor. Управление Dockge / Compose находится в главном меню [11 Управление Docker] -> [19]. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [6 Управление Web-доменами и обратным прокси].")"
+    echo "$(localized_text "7/8/9 订阅工具，10 Komari，16 CDT Monitor；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理]。" "7/8/9: subscription tools; 10: Komari; 16: CDT Monitor. Dockge / Compose management is in main menu [11 Docker Management] -> [19]. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [6 Manage Web domains/reverse proxy]." "7/8/9: инструменты подписки; 10: Komari; 16: CDT Monitor. Управление Dockge / Compose находится в главном меню [11 Управление Docker] -> [19]. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [6 Управление Web-доменами и обратным прокси].")"
     echo "$(localized_text "13 端口流量监控（dog）：仅统计已监控端口的实际流量。" "13 Per-port traffic monitor (dog): shows traffic only for monitored ports." "13 Монитор трафика по портам (dog): показывает трафик только отслеживаемых портов.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
