@@ -105,29 +105,26 @@ curl_sni_path_probe() {
     local label="$1"
     local domain="$2"
     local port="$3"
-    local path="$4"
-    local url code curl_rc
+    local path="$4" probe_mode="${5:-path}"
+    local url code curl_rc=0 backend_url backend_code="" backend_rc=0 display_label="$label"
     if ! command -v curl >/dev/null 2>&1; then
         echo -e "$(localized_text "${YELLOW}⚠️ ${label}: 缺少 curl，跳过 HTTPS 路径探测。${PLAIN}" "${YELLOW}⚠️ ${label}: Missing curl, skipping HTTPS path detection.${PLAIN}" "${YELLOW}⚠️ ${label}: отсутствует curl, пропускается обнаружение пути HTTPS.${PLAIN}")"
         return 1
     fi
     url=$(https_url_for_port "$domain" "$port" "$path")
-    code=$(curl -k -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 12 --resolve "${domain}:${port}:127.0.0.1" "$url" 2>/dev/null)
-    curl_rc=$?
-    if [[ "$curl_rc" -ne 0 || ! "$code" =~ ^[0-9]{3}$ || "$code" == "000" ]]; then
-        echo -e "$(localized_text "${RED}❌ ${label}: ${url} 无响应或 TLS/SNI 失败（curl exit ${curl_rc}, HTTP ${code:-000}）${PLAIN}" "${RED}❌ ${label}: ${url} does not respond or TLS/SNI fails (curl exit ${curl_rc}, HTTP ${code:-000})${PLAIN}" "${RED}❌ ${label}: ${url} не отвечает или TLS/SNI завершается с ошибкой (curl выходит из ${curl_rc}, HTTP ${code:-000})${PLAIN}")"
-        return 1
+    [[ "$probe_mode" == "path" ]] && display_label="${label}: ${url}"
+    code=$(curl -k -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 12 --resolve "${domain}:${port}:127.0.0.1" "$url" 2>/dev/null) || curl_rc=$?
+    if [[ "$probe_mode" == "subscription" && "$curl_rc" -eq 0 && "$code" == "404" && "${SUB_LISTEN_PORT:-}" =~ ^[0-9]+$ ]]; then
+        backend_url="http://$(format_hostport "$(probe_host_for_listen_addr "${SUB_LISTEN_ADDR:-127.0.0.1}")" "$SUB_LISTEN_PORT")${path}"
+        backend_code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 12 "$backend_url" 2>/dev/null) || backend_rc=$?
+        if [[ "$backend_rc" -ne 0 || ! "$backend_code" =~ ^[0-9]{3}$ || "$backend_code" == "000" ]]; then
+            print_443_http_probe_result "$(localized_text "${label} 本地订阅后端" "${label} local subscription backend" "${label} локальный бэкенд подписки")" "$backend_code" "$backend_rc" || true
+            backend_code=""
+        elif [[ "$backend_code" != 2?? && "$backend_code" != "404" ]]; then
+            print_443_http_probe_result "$(localized_text "${label} 本地订阅后端" "${label} local subscription backend" "${label} локальный бэкенд подписки")" "$backend_code" 0
+        fi
     fi
-    case "$code" in
-        404)
-            echo -e "$(localized_text "${YELLOW}⚠️ ${label}: ${url} HTTP ${code}，443/SNI 已到达，但路径或后端可能不匹配。${PLAIN}" "${YELLOW}⚠️ ${label}: ${url} HTTP ${code}, 443/SNI arrived, but the path or backend may not match.${PLAIN}" "${YELLOW}⚠️ ${label}: ${url} HTTP ${code}, 443/SNI прибыло, но путь или бэкенд могут не совпадать.${PLAIN}")"
-            return 0
-            ;;
-        *)
-            echo -e "${GREEN}✅ ${label}: ${url} HTTP ${code}${PLAIN}"
-            return 0
-            ;;
-    esac
+    print_443_http_probe_result "$display_label" "$code" "$curl_rc" "$probe_mode" "$backend_code"
 }
 
 tls_sni_probe_local() {
@@ -180,11 +177,11 @@ func_443_network_test() {
     echo -e "------------------------------------------------"
     tls_sni_probe_local "$(localized_text "面板 SNI TLS" "Panel SNI TLS" "Панель SNI TLS")" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" || true
     curl_sni_path_probe "$(localized_text "面板路径" "Panel path" "Путь панели")" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" "$PANEL_WEB_PATH" || true
-    curl_sni_path_probe "$(localized_text "普通订阅路径" "Common subscription path" "Общий путь подписки")" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" "$SUB_URI_PATH" || true
-    curl_sni_path_probe "$(localized_text "Clash/Mihomo 路径" "Clash/Mihomo path" "Clash/Mihomo путь")" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" "$CLASH_URI_PATH" || true
+    curl_sni_path_probe "$(localized_text "普通订阅前缀" "Subscription prefix" "Префикс подписки")" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" "$SUB_URI_PATH" subscription-prefix || true
+    curl_sni_path_probe "$(localized_text "Clash/Mihomo 前缀" "Clash/Mihomo prefix" "Префикс Clash/Mihomo")" "$PANEL_DOMAIN" "$NGINX_LISTEN_PORT" "$CLASH_URI_PATH" subscription-prefix || true
 
     echo -e "------------------------------------------------"
-    echo -e "$(localized_text "${YELLOW}说明：HTTP 401/403/302 通常表示链路已到达后端；404 多数是路径或 3x-ui 订阅设置不一致。${PLAIN}" "${YELLOW}Description: HTTP 401/403/302 usually indicates that the link has reached the backend; 404 is mostly caused by inconsistent paths or 3x-ui subscription settings.${PLAIN}" "${YELLOW}Описание: HTTP 401/403/302 обычно указывает, что ссылка достигла серверной части; Ошибка 404 в основном вызвана несогласованными путями или настройками подписки 3x-ui.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}说明：订阅项仅探测前缀，未带 Sub ID；完整订阅 404 需对比本地后端，并检查 HWID 设备限制或订阅设置。${PLAIN}" "${YELLOW}Note: subscription checks probe only prefixes without a Sub ID. For a full subscription returning 404, compare the local backend and check HWID device limits or subscription settings.${PLAIN}" "${YELLOW}Примечание: для подписок проверяются только префиксы без Sub ID. При 404 полной подписки сравните ответ локального бэкенда и проверьте ограничения устройств HWID или настройки подписки.${PLAIN}")"
     read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
 }
 

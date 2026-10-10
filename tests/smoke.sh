@@ -10,6 +10,7 @@ if [[ "${VPSO_CI_CONTAINER:-}" == "1" ]]; then
 fi
 
 bash scripts/build.sh >/dev/null
+bash tests/http-probes.sh
 
 assert_dist_contains() {
     local needle="$1"
