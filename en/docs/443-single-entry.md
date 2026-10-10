@@ -87,7 +87,7 @@ To create the token:
 5. You may leave `Client IP Address Filtering` empty. If you restrict it to the VPS public IP, update the token condition whenever that IP changes.
 6. Select `Continue to summary`, review the scope, and create the token. Cloudflare shows the full token only once, so copy it immediately and keep it out of documentation, screenshots, and chat.
 
-During the first deployment, paste the token at the script's `CF Token` prompt. Do not enter an email address, Zone ID, or Global API Key. On an existing deployment, use main menu `[19 Port 443 Reuse Manager]` → `[10 CF DNS / Caddy certificate maintenance]` → `[8 Update Cloudflare API Token]`. The script verifies the token online; if verification fails, check its permissions, authorized zone, and optional IP restriction first.
+During the first deployment, paste the token at the script's `CF Token` prompt. Do not enter an email address, Zone ID, or Global API Key. On an existing deployment, use main menu `[19 Port 443 Reuse Manager]` → `[7 Maintain HTTPS certificates and Cloudflare tokens]` → `[8 Update Cloudflare API Token]`. The script verifies the token online; if verification fails, check its permissions, authorized zone, and optional IP restriction first.
 
 Cloudflare reference: [Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/).
 
@@ -182,14 +182,14 @@ Let 3x-ui generate the UUID, private/public keys, and short ID. Do not copy anot
 
 The client link should use your node domain and port `443`, not `127.0.0.1:1443`.
 
-Ordinary TLS nodes use a different mapping: if the client SNI is `tls.example.com`, the certificate must cover that name. They do not use a REALITY target site. Create and enable a local TCP/TLS inbound in 3x-ui, then register `tls.example.com -> local address:actual port` under `[19] -> [13 Xray SNI routes]`. The client still connects to the VPS public IP or node domain on the public entry port.
+Ordinary TLS nodes use a different mapping: if the client SNI is `tls.example.com`, the certificate must cover that name. They do not use a REALITY target site. Create and enable a local TCP/TLS inbound in 3x-ui, then register `tls.example.com -> local address:actual port` under `[19] -> [4 Manage Xray SNI forwarding rules]`. The client still connects to the VPS public IP or node domain on the public entry port.
 
 ### 4. Run the Port 443 wizard
 
 Open:
 
 ```text
-Main menu [19 Port 443 Reuse Management] -> [2 Install or switch entry mode]
+Main menu [19 Port 443 Reuse Management] -> [1 Set up or switch the 443 entry mode]
 ```
 
 Select the entry mode first; choose **Nginx Stream** if unsure on a first deployment. Then follow the wizard's five stages:
@@ -258,7 +258,7 @@ If the panel is unavailable, check local ports and the current entry status befo
 TCP Peek uses a lightweight early SNI decision. It is not a second panel setup: **the configuration process is the same as Nginx Stream**. Finish the deployment above first, then switch:
 
 ```text
-Main menu [19 Port 443 Reuse Management] -> [2 Install or switch entry mode] -> [3 TCP Peek + Splice]
+Main menu [19 Port 443 Reuse Management] -> [1 Set up or switch the 443 entry mode] -> [3 TCP Peek + Splice]
 ```
 
 The script checks dependencies, ports, and backend reachability. Keep the SSH session open until the new entry is confirmed.
@@ -272,7 +272,7 @@ Choose this only when an Xray main inbound is already configured to own public `
 If a switch fails, run:
 
 ```text
-Main menu [19 Port 443 Reuse Management] -> [4 Roll back the previous entry-mode switch]
+Main menu [19 Port 443 Reuse Management] -> [10 Roll back the last entry-mode switch]
 ```
 
 Then check the panel domain, node link, and `ss -lntp | grep ':443'` again.
@@ -284,7 +284,7 @@ Then check the panel domain, node link, and `ss -lntp | grep ':443'` again.
 Use:
 
 ```text
-Main menu [19 Port 443 Reuse Management] -> [6 Web domains and reverse proxies]
+Main menu [19 Port 443 Reuse Management] -> [2 Manage Web domains and reverse proxies]
 ```
 
 To change Caddy or Nginx, choose `[8 Switch Web reverse-proxy engine]`. Both engines use the same domain and certificate settings; check the backend before switching.
@@ -292,7 +292,7 @@ To change Caddy or Nginx, choose `[8 Switch Web reverse-proxy engine]`. Both eng
 The full path is:
 
 ```text
-Main menu [19 Port 443 Reuse Management] -> [6 Web domains and reverse proxies] -> [8 Switch Web reverse-proxy engine]
+Main menu [19 Port 443 Reuse Management] -> [2 Manage Web domains and reverse proxies] -> [8 Switch Web reverse-proxy engine]
 ```
 
 The script regenerates the selected engine's configuration and keeps the saved domains, certificates, and backends. Do not start a second hand-written Caddy/Nginx configuration that can take the same port.
@@ -318,7 +318,7 @@ The DNS record, Web domain, backend, external URL, and verification steps for a 
 The Web allowlist applies to websites and the panel, not REALITY node traffic. In `nginx-stream` or `tcp-peek`, use:
 
 ```text
-Main menu [19 Port 443 Reuse Management] -> [6 Web domains and reverse proxies] -> [5 Manage domain IP allowlist]
+Main menu [19 Port 443 Reuse Management] -> [2 Manage Web domains and reverse proxies] -> [5 Manage domain IP allowlist]
 ```
 
 `xray-fallback` does not support Web allowlists: the local Caddy/Nginx proxy cannot reliably retain the client source IP after Xray fallback. Use Nginx Stream or TCP Peek for Web allowlists.
@@ -335,7 +335,7 @@ Nginx Stream and TCP Peek support both controls. Xray Fallback has no front SNI 
 Open the controls here:
 
 ```text
-Main menu [19 Port 443 Reuse Management] -> [15 SNI filtering / REALITY protection]
+Main menu [19 Port 443 Reuse Management] -> [6 Set SNI filtering and REALITY fallback limits]
 ```
 
 The useful actions are:
@@ -366,8 +366,8 @@ Use this order:
 
 1. Create both REALITY inbounds in 3x-ui, each with a different local port and distinguishable SNI. The script records routes; it does not create or edit 3x-ui inbounds.
 2. Keep Nginx Stream or TCP Peek as the entry mode.
-3. Open `Main menu [19 Port 443 Reuse Management] -> [13 Xray SNI routes]` and add one `SNI -> local address -> local port` route for each inbound. After each save, the script offers to apply the routes to the current entry. When entering several routes, you can defer this and synchronize once after all routes are saved.
-4. Open `Main menu [19 Port 443 Reuse Management] -> [15 SNI filtering / REALITY protection] -> [4 Set REALITY fallback rate limits]`. The menu lists every REALITY inbound. Each run modifies only the selected inbound, so repeat it for every inbound that needs protection.
+3. Open `Main menu [19 Port 443 Reuse Management] -> [4 Manage Xray SNI forwarding rules]` and add one `SNI -> local address -> local port` route for each inbound. After each save, the script offers to apply the routes to the current entry. When entering several routes, you can defer this and synchronize once after all routes are saved.
+4. Open `Main menu [19 Port 443 Reuse Management] -> [6 Set SNI filtering and REALITY fallback limits] -> [4 Set REALITY fallback rate limits]`. The menu lists every REALITY inbound. Each run modifies only the selected inbound, so repeat it for every inbound that needs protection.
 5. Synchronizing the routes also regenerates the strict SNI list from the saved domains and routes.
 
 Fallback limits are stored per inbound, not as one global switch and not per user. Each inbound must use a distinct local port and SNI; enabling the limit for inbound A does not protect inbound B. There is currently no batch action to set limits for every inbound, so select and configure each inbound separately. The strict SNI gate is shared by the entry and covers all registered SNIs. When 3x-ui uses PostgreSQL, the script does not support fallback limits because it avoids modifying a remote database; this feature supports only local SQLite 3x-ui.
@@ -383,7 +383,7 @@ If possible, use a non-CDN HTTPS site as the REALITY target; it reduces the impa
 3. Test a node whose link uses the node domain and port `443`.
 4. Confirm that the REALITY SNI is the selected target site.
 5. For `403/401`, check the Web allowlist, CDN/WAF, and Host/SNI first. For `502`, check the backend address and port. For timeouts, check the firewall, cloud security group, and the `443` listener.
-6. Use `Main menu [19 Port 443 Reuse Management] -> [11 Port 443 configuration check]` for entry, certificate, Web, and Xray status. Use `[12 External access test]` for public DNS/TCP/TLS tests.
+6. Use `Main menu [19 Port 443 Reuse Management] -> [13 Check entry configuration, certificates, and routes]` for entry, certificate, Web, and Xray status. Use `[14 Test DNS, ports, and HTTPS access]` for public DNS/TCP/TLS tests.
 7. For failures, read [Troubleshooting and Recovery](443-single-entry-troubleshooting.md). For mode details, read [Entry Modes and Internals](443-tcp-peek-engine.md).
 
 ## Avoid these mistakes

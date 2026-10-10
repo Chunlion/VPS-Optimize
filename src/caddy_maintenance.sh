@@ -7,7 +7,7 @@ func_caddy_cf_reality_wizard() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}检测到已有 443端口复用配置${PLAIN}" "${BOLD}Detects that there are already Port 443 Reuse configurations${PLAIN}" "${BOLD}обнаружил, что существует 443 конфигурации с повторным использованием порта 443.${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}新增网站用主菜单 [19] -> [6 Web 域名与反向代理]；修改已有端口和路径用 [19] -> [8 共享参数]。${PLAIN}" "${YELLOW}Add sites under main menu [19] -> [6 Web domains and reverse proxies]; edit existing ports and paths under [19] -> [8 Shared settings].${PLAIN}" "${YELLOW}Добавляйте сайты через главное меню [19] -> [6 Web-домены и обратный прокси]; порты и пути меняйте через [19] -> [8 Общие параметры].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}新增网站用主菜单 [19] -> [2 管理 Web 域名与反向代理]；修改已有端口和路径用 [19] -> [3 修改端口、路径与 REALITY 参数]。${PLAIN}" "${YELLOW}Add sites under main menu [19] -> [2 Manage Web domains and reverse proxies]; edit existing ports and paths under [19] -> [3 Edit ports, paths, and REALITY settings].${PLAIN}" "${YELLOW}Добавляйте сайты через главное меню [19] -> [2 Управлять Web-доменами и обратным прокси]; порты и пути меняйте через [19] -> [3 Изменить порты, пути и параметры REALITY].${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}继续首次配置会重写 443 入口、Web 反代引擎和 Xray 分流相关核心配置。${PLAIN}" "${YELLOW}Continuing initial setup will rewrite the port 443 entry, Web reverse proxy, and Xray routing configuration.${PLAIN}" "${YELLOW}Продолжение первоначальной настройки перезапишет конфигурацию входа 443, веб-прокси и маршрутизации Xray.${PLAIN}")"
         echo -e "------------------------------------------------"
         grep -E '^(PANEL_DOMAIN|PANEL_WEB_PATH|REALITY_SNI|NGINX_LISTEN_ADDR|NGINX_LISTEN_PORT|CADDY_LISTEN_PORT|XRAY_LISTEN_PORT|SUB_URI_PATH|CLASH_URI_PATH)=' /etc/vps-optimize/sni-stack.env 2>/dev/null || true
@@ -498,7 +498,7 @@ func_caddy_cf_maintenance_menu() {
                 fi
 
                 if [[ ! -x "$acme_bin" ]]; then
-                    echo -e "$(localized_text "${RED}❌ 未检测到 acme.sh，请先运行主菜单 [19] -> [2] 安装 443 入口。${PLAIN}" "${RED}❌ acme.sh was not found. Run main menu [19] -> [2] to install the 443 entry first.${PLAIN}" "${RED}❌ acme.sh не найден. Сначала установите вход 443 через главное меню [19] -> [2].${PLAIN}")"
+                    echo -e "$(localized_text "${RED}❌ 未检测到 acme.sh，请先运行主菜单 [19] -> [1] 安装 443 入口。${PLAIN}" "${RED}❌ acme.sh was not found. Run main menu [19] -> [1] to install the 443 entry first.${PLAIN}" "${RED}❌ acme.sh не найден. Сначала установите вход 443 через главное меню [19] -> [1].${PLAIN}")"
                     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
                     continue
                 fi
@@ -828,7 +828,7 @@ func_caddy_manage_ip_whitelist() {
     echo -e "$(localized_text "${BOLD}🔐 Caddy 域名 IP 白名单${PLAIN}" "${BOLD}🔐 Caddy domain IP whitelist${PLAIN}" "${BOLD}🔐 Caddy доменное имя Белый список IP-адресов${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}适用于未启用 443端口复用、由 Caddy 直接对外服务的域名。${PLAIN}" "${YELLOW}Suitable for domains that do not enable the Port 443 Reuse and are directly served externally by Caddy.${PLAIN}" "${YELLOW}подходит для доменных имен, которые не поддерживают повторное использование порта 443 и обслуживаются напрямую извне Caddy.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443端口复用，请用主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理] -> [5 管理域名 IP 白名单]，不要在 Caddy 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to Port 443 Reuse, please use the main menu [19 Port 443 Reuse Manager] -> [6 Manage Web domain/reverse proxy] -> [5 Manage domain IP whitelist], do not limit it at the Caddy layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к повторному использованию порта 443, используйте главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменного имени], не ограничивайте его на уровне Caddy.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}如果该域名已接入 443端口复用，请用主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [5 管理域名 IP 白名单]，不要在 Caddy 层限制。${PLAIN}" "${YELLOW}If the domain has been connected to Port 443 Reuse, please use the main menu [19 Port 443 Reuse Manager] -> [2 Manage Web domains and reverse proxies] -> [5 Manage domain IP whitelist], do not limit it at the Caddy layer.${PLAIN}" "${YELLOW}Если доменное имя подключено к повторному использованию порта 443, используйте главное меню [19 Управление повторным использованием порта 443] -> [2 Управлять Web-доменами и обратным прокси] -> [5 Управление белым списком IP-адресов доменного имени], не ограничивайте его на уровне Caddy.${PLAIN}")"
     echo -e "------------------------------------------------"
 
     if ! command -v caddy >/dev/null 2>&1 || [[ ! -f /etc/caddy/Caddyfile ]]; then
@@ -860,7 +860,7 @@ func_caddy_manage_ip_whitelist() {
         return
     fi
     if [[ "$first_site_line" =~ ^https://[^[:space:]]+:[0-9]+[[:space:]]*\{ ]]; then
-        echo -e "$(localized_text "${RED}❌ 这个配置看起来属于 443端口复用本地 Caddy TLS 站点。请改用主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理] -> [5 管理域名 IP 白名单]。${PLAIN}" "${RED}❌ This configuration appears to belong to the Port 443 Reuse local Caddy TLS site. Please use the main menu instead [19 Port 443 Reuse Manager] -> [6 Manage Web domain/Reverse Proxy] -> [5 Manage domain IP Whitelist].${PLAIN}" "${RED}❌ Похоже, эта конфигурация принадлежит локальному сайту Caddy TLS с повторным использованием порта 443. Вместо этого используйте главное меню [19 Управление повторным использованием порта 443] -> [6 Управление именем веб-домена/обратным прокси-сервером] -> [5 Управление белым списком IP-адресов доменных имен].${PLAIN}")"
+        echo -e "$(localized_text "${RED}❌ 这个配置看起来属于 443端口复用本地 Caddy TLS 站点。请改用主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [5 管理域名 IP 白名单]。${PLAIN}" "${RED}❌ This configuration appears to belong to the Port 443 Reuse local Caddy TLS site. Please use the main menu instead [19 Port 443 Reuse Manager] -> [2 Manage Web domains and reverse proxies] -> [5 Manage domain IP Whitelist].${PLAIN}" "${RED}❌ Похоже, эта конфигурация принадлежит локальному сайту Caddy TLS с повторным использованием порта 443. Вместо этого используйте главное меню [19 Управление повторным использованием порта 443] -> [2 Управлять Web-доменами и обратным прокси] -> [5 Управление белым списком IP-адресов доменных имен].${PLAIN}")"
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
         return
     fi

@@ -30,9 +30,9 @@ Common menu paths:
 
 ```text
 Main menu [19 Port 443 Reuse Management]
-  -> [2] Install / switch the port 443 entry mode
-  -> [4] Roll back the last entry-mode switch
-  -> [14] View the current entry log
+  -> [1] Set up or switch the 443 entry mode
+  -> [10] Roll back the last entry-mode switch
+  -> [15] View active entry-service logs
 ```
 
 For exact 3x-ui panel, subscription, and inbound fields, see [Port 443 Reuse: Setup and Configuration](443-single-entry.md).
@@ -53,9 +53,9 @@ This is the recommended long-term default. It supports the complete Web, REALITY
 
 ## TCP Peek + Splice / vpso-mux implementation
 
-To update an existing binary, update the main script, then select `[19 Port 443 Reuse Manager] -> [5 Update TCP Peek core]`. Linux amd64 and arm64 download prebuilt files from GitHub Release without Go. The script verifies the download and existing configuration, backs up the old binary, replaces it, and restarts only previously running Peek services. Startup or public-listener check failures restore the old binary. Restarting interrupts existing connections; a successful update prints the backup path. New installations also use prebuilt files; other architectures retain source builds.
+To update an existing binary, update the main script, then select `[19 Port 443 Reuse Manager] -> [8 Update TCP Peek core]`. Linux amd64 and arm64 download prebuilt files from GitHub Release without Go. The script verifies the download and existing configuration, backs up the old binary, replaces it, and restarts only previously running Peek services. Startup or public-listener check failures restore the old binary. Restarting interrupts existing connections; a successful update prints the backup path. New installations also use prebuilt files; other architectures retain source builds.
 
-TCP Peek and Nginx Stream use the same saved configuration. Do not create a second set of domains, certificates, Web backends, allowlists, or Xray SNI routes. Open `[2 Install / switch the port 443 entry mode]` and choose TCP Peek. The script builds `vpso-mux` when required, validates its configuration, and tests the routes on the isolated port `8444`. Public port `443` changes hands only after the preflight succeeds.
+TCP Peek and Nginx Stream use the same saved configuration. Do not create a second set of domains, certificates, Web backends, allowlists, or Xray SNI routes. Open `[1 Set up or switch the 443 entry mode]` and choose TCP Peek. The script builds `vpso-mux` when required, validates its configuration, and tests the routes on the isolated port `8444`. Public port `443` changes hands only after the preflight succeeds.
 
 `vpso-mux` uses `MSG_PEEK` to inspect SNI in the TLS ClientHello without consuming the first packet. The backend receives the original ClientHello. Forwarding uses splice when available and falls back to ordinary copy when necessary.
 
@@ -190,7 +190,7 @@ View status and logs:
 
 ```text
 Main menu [19 Port 443 Reuse Management]
-  -> [14] View the current entry log
+  -> [15] View active entry-service logs
 ```
 
 Commonly used diagnostic commands:
@@ -228,7 +228,7 @@ To switch to TCP Peek + Splice:
 
 ```text
 Main menu [19 Port 443 Reuse Management]
-  -> [2] Install / switch the port 443 entry mode
+  -> [1] Set up or switch the 443 entry mode
   -> [3] TCP Peek + Splice
 ```
 
@@ -244,7 +244,7 @@ Roll back the previous round of entry mode switching:
 
 ```text
 Main menu [19 Port 443 Reuse Management]
-  -> [4] Roll back the last entry-mode switch
+  -> [10] Roll back the last entry-mode switch
 ```
 
 Universal rollback will restore the backup before the last entry mode switch, and is suitable for undoing the latest portal switch triggered by `[3]`, `[4]` or `[5]`. TCP Peek This wider rollback entry is also used when rollback is required after switching.

@@ -16,7 +16,7 @@ list_sni_stack_sites() {
     [[ -n "$panel_ranges" ]] && echo -e "$(localized_text "${YELLOW}面板域名 IP 白名单：${panel_ranges}${PLAIN}" "${YELLOW}Panel domain IP whitelist: ${panel_ranges}${PLAIN}" "${YELLOW}Белый список IP-адресов доменного имени панели : ${panel_ranges}${PLAIN}")"
     echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
     [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "$(localized_text "${CYAN}另有 ${#TCP_ROUTE_SNIS[@]} 个旧 TCP/SNI 入站。${PLAIN}" "${CYAN}And ${#TCP_ROUTE_SNIS[@]} are old and TCP/SNI are inbound.${PLAIN}" "${CYAN}и ${#TCP_ROUTE_SNIS[@]} — старые, а TCP/SNI — входящие.${PLAIN}")"
-        [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "$(localized_text "${CYAN}另有 ${#XRAY_SNI_ROUTE_SNIS[@]} 个 Xray 入站，请在 [19] -> [13] 查看。${PLAIN}" "${CYAN}And ${#XRAY_SNI_ROUTE_SNIS[@]} Xray are inbound, please check at [19] -> [13].${PLAIN}" "${CYAN}и ${#XRAY_SNI_ROUTE_SNIS[@]} Xray входящие, проверьте [19] -> [13].${PLAIN}")"
+        [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "$(localized_text "${CYAN}另有 ${#XRAY_SNI_ROUTE_SNIS[@]} 个 Xray 入站，请在 [19] -> [4] 查看。${PLAIN}" "${CYAN}And ${#XRAY_SNI_ROUTE_SNIS[@]} Xray are inbound, please check at [19] -> [4].${PLAIN}" "${CYAN}и ${#XRAY_SNI_ROUTE_SNIS[@]} Xray входящие, проверьте [19] -> [4].${PLAIN}")"
     echo -e "------------------------------------------------"
     if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
         echo -e "$(localized_text "${YELLOW}当前没有额外的网站/反代域名。${PLAIN}" "${YELLOW}Currently has no additional website/reverse domains.${PLAIN}" "${YELLOW}в настоящее время не имеет дополнительных веб-сайтов или обратных доменных имен.${PLAIN}")"

@@ -59,7 +59,7 @@ show_panel_help() {
     echo "$(localized_text "15 2S-UI：运行官方安装器；不能与 S-UI 共存。" "15 2S-UI: run the official installer; do not install it alongside S-UI." "15 2S-UI: запустить официальный установщик; не устанавливайте его вместе с S-UI.")"
     echo "$(localized_text "17 3m-ui：运行官方安装器。18 妙妙屋X：部署主控，后续在主控中生成 Agent 安装命令。" "17 3m-ui: run the official installer. 18 MiaomiaowuX: deploy the controller, then generate Agent install commands from it." "17 3m-ui: запустить официальный установщик. 18 MiaomiaowuX: развернуть контроллер, затем создать в нём команды установки Agent.")"
     echo "$(localized_text "5/6 Sing-box 与 Xray 脚本。" "5/6 Sing-box and Xray scripts." "5/6 Скрипты Sing-box и Xray.")"
-    echo "$(localized_text "7/8/9 订阅工具，10 Komari，16 CDT Monitor；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [6 Web 域名与反向代理]。" "7/8/9: subscription tools; 10: Komari; 16: CDT Monitor. Dockge / Compose management is in main menu [11 Docker Management] -> [19]. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [6 Manage Web domains/reverse proxy]." "7/8/9: инструменты подписки; 10: Komari; 16: CDT Monitor. Управление Dockge / Compose находится в главном меню [11 Управление Docker] -> [19]. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [6 Управление Web-доменами и обратным прокси].")"
+    echo "$(localized_text "7/8/9 订阅工具，10 Komari，16 CDT Monitor；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理]。" "7/8/9: subscription tools; 10: Komari; 16: CDT Monitor. Dockge / Compose management is in main menu [11 Docker Management] -> [19]. For public HTTPS, use [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse] -> [2 Manage Web domains and reverse proxies]." "7/8/9: инструменты подписки; 10: Komari; 16: CDT Monitor. Управление Dockge / Compose находится в главном меню [11 Управление Docker] -> [19]. Для публичного HTTPS до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [2 Управлять Web-доменами и обратным прокси].")"
     echo "$(localized_text "13 端口流量监控（dog）：仅统计已监控端口的实际流量。" "13 Per-port traffic monitor (dog): shows traffic only for monitored ports." "13 Монитор трафика по портам (dog): показывает трафик только отслеживаемых портов.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
@@ -67,27 +67,27 @@ show_panel_help() {
 show_sni_help() {
     echo -e "$(localized_text "${CYAN}VPS-Optimize > 443端口复用管理中心 > 帮助${PLAIN}" "${CYAN}VPS-Optimize > Port 443 Reuse Manager > Help${PLAIN}" "${CYAN}VPS-Optimize > Управление повторным использованием порта 443 > Справка${PLAIN}")"
     echo -e "$(localized_text "${BOLD}▶ 首次部署 / 切换模式${PLAIN}" "${BOLD}▶ Initial setup / mode selection${PLAIN}" "${BOLD}▶ Первоначальная настройка / выбор режима${PLAIN}")"
-    echo "$(localized_text "2 安装 / 切换入口模式：Nginx Stream、Xray Fallback 或 TCP Peek + Splice。" "2 Install or switch entry mode: Nginx Stream, Xray Fallback, or TCP Peek + Splice." "2 Установить или сменить режим: Nginx Stream, Xray Fallback либо TCP Peek + Splice.")"
+    echo "$(localized_text "1 安装或切换 443 入口模式：首次运行进入配置向导；已部署时切换 Nginx Stream、Xray Fallback 或 TCP Peek。" "1 Set up or switch the 443 entry mode: Open the setup wizard on first use; switch Nginx Stream, Xray Fallback, or TCP Peek after setup." "1 Настроить или сменить режим входа 443: При первом запуске открывает мастер; после настройки переключает Nginx Stream, Xray Fallback или TCP Peek.")"
     echo -e "$(localized_text "${BOLD}▶ 后续修改：域名与共享配置${PLAIN}" "${BOLD}▶ Configuration: domains and shared settings${PLAIN}" "${BOLD}▶ Конфигурация: домены и общие параметры${PLAIN}")"
-    echo "$(localized_text "6 Web 域名与反向代理：新增、删除或查看网站。" "6 Web domains and reverse proxies: add, remove, or view sites." "6 Web-домены и обратный прокси: добавить, удалить или просмотреть сайты.")"
-    echo "$(localized_text "8 共享参数：修改面板、订阅、REALITY、端口和路径。" "8 Shared settings: edit panel, subscription, REALITY, ports, and paths." "8 Общие параметры: панель, подписка, REALITY, порты и пути.")"
+    echo "$(localized_text "2 管理 Web 域名与反向代理：新增或删除网站，修改面板域名、反代后端，切换 Caddy/Nginx。" "2 Manage Web domains and reverse proxies: Add or remove sites, change the panel domain or proxy backend, and switch Caddy/Nginx." "2 Управлять Web-доменами и обратным прокси: Добавлять и удалять сайты, менять домен панели и бэкенды, переключать Caddy/Nginx.")"
+    echo "$(localized_text "3 修改端口、路径与 REALITY 参数：修改面板与订阅端口、路径、REALITY 本地监听及目标 SNI、公网入口与 Web 本地 TLS。" "3 Edit ports, paths, and REALITY settings: Edit panel/subscription ports and paths, the REALITY local listener and target SNI, and public entry/local Web TLS settings." "3 Изменить порты, пути и параметры REALITY: Менять порты и пути панели/подписки, локальный слушатель и целевой SNI REALITY, публичный вход и локальный Web TLS.")"
     echo -e "$(localized_text "${BOLD}▶ 后续修改：路由与访问防护${PLAIN}" "${BOLD}▶ Configuration: routing and access protection${PLAIN}" "${BOLD}▶ Конфигурация: маршруты и защита доступа${PLAIN}")"
-    echo "$(localized_text "13 Xray SNI 路由：记录 SNI -> 本地地址:端口，不编辑 3x-ui/Xray 入站。" "13 Xray SNI routes: map SNI -> local address:port without editing 3x-ui/Xray inbounds." "13 Маршруты Xray SNI: SNI -> локальный адрес:порт без изменения входов 3x-ui/Xray.")"
-    echo "$(localized_text "7 Web IP 白名单：只限制 Web 访问，不影响 Xray 节点。" "7 Web IP allowlist: restrict Web access without affecting Xray nodes." "7 Список разрешённых IP для Web: не влияет на узлы Xray.")"
-    echo "$(localized_text "15 SNI 清洗与回落防护：拦截未知 SNI，限制 REALITY 验证失败后的回落流量。" "15 SNI filtering and fallback protection: block unknown SNI and limit fallback traffic after failed REALITY authentication." "15 Фильтрация SNI и защита fallback: блокировка неизвестного SNI и ограничение трафика после ошибки проверки REALITY.")"
+    echo "$(localized_text "4 管理 Xray SNI 转发规则：登记 SNI 到本地地址:端口的转发规则；不编辑 Xray 入站，Xray Fallback 模式不可用。" "4 Manage Xray SNI forwarding rules: Map SNI to a local address:port without editing Xray inbounds; unavailable in Xray Fallback mode." "4 Управлять правилами передачи Xray SNI: Назначать SNI локальному адресу:порту без изменения входов Xray; недоступно в режиме Xray Fallback.")"
+    echo "$(localized_text "5 设置 Web 域名 IP 白名单：为面板或网站域名设置允许访问的 IP/CIDR；只限制 Web 访问。" "5 Set Web domain IP allowlists: Set allowed IPs/CIDRs for panel or site domains; restrict Web access only." "5 Настроить разрешённые IP для Web-доменов: Задавать разрешённые IP/CIDR для доменов панели и сайтов; ограничивать только Web-доступ.")"
+    echo "$(localized_text "6 设置 SNI 过滤与 REALITY 回落限速：启用或关闭未知 SNI 过滤，并设置 REALITY 验证失败后的回落限速。" "6 Set SNI filtering and REALITY fallback limits: Enable or disable unknown-SNI filtering and set fallback traffic limits after failed REALITY authentication." "6 Настроить фильтрацию SNI и лимиты REALITY fallback: Включать или отключать фильтрацию неизвестного SNI и ограничивать fallback после ошибки проверки REALITY.")"
     echo -e "$(localized_text "${BOLD}▶ 证书与核心维护${PLAIN}" "${BOLD}▶ Certificate and core maintenance${PLAIN}" "${BOLD}▶ Обслуживание сертификатов и ядра${PLAIN}")"
-    echo "$(localized_text "10 证书维护：更新 Cloudflare Token，重签、修复或回滚证书。" "10 Certificate maintenance: update the Cloudflare token, reissue, repair, or roll back certificates." "10 Сертификаты: обновить токен Cloudflare, перевыпустить, исправить или откатить сертификаты.")"
-    echo "$(localized_text "5 更新 TCP Peek 核心：下载预编译版本，失败时恢复旧核心。" "5 Update TCP Peek core: download a prebuilt binary and restore the old binary on failure." "5 Обновить ядро TCP Peek: загрузить готовый файл и восстановить старый при ошибке.")"
+    echo "$(localized_text "7 维护 HTTPS 证书与 Cloudflare Token：更新 Cloudflare Token，重签或修复证书，并管理证书与配置回滚。" "7 Maintain HTTPS certificates and Cloudflare tokens: Update the Cloudflare token, reissue or repair certificates, and restore certificates or configuration." "7 Обслуживать HTTPS-сертификаты и токен Cloudflare: Обновлять токен Cloudflare, перевыпускать и исправлять сертификаты, восстанавливать сертификаты и конфигурацию.")"
+    echo "$(localized_text "8 更新 TCP Peek 核心：更新 vpso-mux 转发程序；更新失败时恢复旧版本。" "8 Update TCP Peek core: Update the vpso-mux forwarding binary; restore the old version if the update fails." "8 Обновить ядро TCP Peek: Обновлять программу передачи vpso-mux; при ошибке восстанавливать прежнюю версию.")"
     echo -e "$(localized_text "${BOLD}▶ 配置应用与恢复${PLAIN}" "${BOLD}▶ Apply and restore configuration${PLAIN}" "${BOLD}▶ Применение и восстановление конфигурации${PLAIN}")"
-    echo "$(localized_text "3 重新应用当前模式：按现有参数重新生成入口配置。" "3 Reapply current mode: regenerate the entry configuration from the saved settings." "3 Повторно применить режим: пересоздать конфигурацию входа из сохранённых параметров.")"
-    echo "$(localized_text "4 回滚上次切换：恢复切换前的入口配置。" "4 Roll back the last switch: restore the previous entry configuration." "4 Откатить последнее переключение: восстановить предыдущую конфигурацию входа.")"
+    echo "$(localized_text "9 重新生成并应用入口配置：按已保存参数重新生成并应用当前入口配置。" "9 Regenerate and apply entry configuration: Regenerate and apply the active entry configuration from saved settings." "9 Пересоздать и применить конфигурацию входа: Пересоздавать и применять конфигурацию текущего входа из сохранённых параметров.")"
+    echo "$(localized_text "10 回滚上次入口模式切换：恢复上次入口模式切换前的备份。" "10 Roll back the last entry-mode switch: Restore the backup from before the last entry-mode switch." "10 Откатить последнее переключение режима входа: Восстанавливать резервную копию до последнего переключения режима входа.")"
     echo -e "$(localized_text "${BOLD}▶ 状态与链路排查${PLAIN}" "${BOLD}▶ Status and connection diagnostics${PLAIN}" "${BOLD}▶ Состояние и диагностика соединений${PLAIN}")"
-    echo "$(localized_text "1 入口状态：查看公网 443、Web 反代、Xray 和相关服务。" "1 Entry status: inspect public 443, Web proxy, Xray, and related services." "1 Состояние входа: публичный порт 443, Web-прокси, Xray и связанные службы.")"
-    echo "$(localized_text "9 订阅链接检查：确认节点链接使用公网 443 和正确的 External Proxy。" "9 Subscription link check: verify public 443 and External Proxy values in node links." "9 Проверка ссылок подписки: публичный порт 443 и значения External Proxy.")"
-    echo "$(localized_text "11 443 配置检查：检查入口、监听、证书、Web 和 Xray 路由。" "11 Port 443 configuration check: inspect the entry, listeners, certificates, Web, and Xray routes." "11 Проверка конфигурации 443: вход, слушатели, сертификаты, Web и маршруты Xray.")"
-    echo "$(localized_text "12 外网访问测试：检查 DNS、TCP、TLS、面板和订阅。" "12 External access test: check DNS, TCP, TLS, panel, and subscription access." "12 Проверка внешнего доступа: DNS, TCP, TLS, панель и подписка.")"
-    echo "$(localized_text "14 入口日志：按当前模式查看 Nginx、Xray/3x-ui 或 vpso-mux 日志。" "14 Entry logs: show Nginx, Xray/3x-ui, or vpso-mux logs for the active mode." "14 Журналы входа: Nginx, Xray/3x-ui или vpso-mux для активного режима.")"
-    echo "$(localized_text "修改面板域名：[6 Web 域名与反向代理] -> [9 修改面板域名]。" "Change the panel domain: [6 Web domains and reverse proxies] -> [9 Change panel domain]." "Изменить домен панели: [6 Web-домены и обратный прокси] -> [9 Изменить домен панели].")"
+    echo "$(localized_text "11 查看 443 入口与服务状态：查看公网入口监听、Web 反代、Xray 与相关服务状态。" "11 View the 443 entry and service status: Inspect the public entry listener, Web proxy, Xray, and related services." "11 Посмотреть состояние входа 443 и служб: Просматривать публичный слушатель, Web-прокси, Xray и связанные службы.")"
+    echo "$(localized_text "12 查看节点链接与订阅填写说明：显示 Hosts / External Proxy 的填写方法、节点链接结构和公网订阅地址。" "12 View node-link and subscription setup guidance: Show Hosts/External Proxy setup guidance, node-link structure, and public subscription URLs." "12 Посмотреть инструкции по ссылкам узлов и подписке: Показывать настройку Hosts/External Proxy, структуру ссылок узлов и публичные URL подписки.")"
+    echo "$(localized_text "13 检查入口配置、证书与转发规则：检查入口监听、证书、Web 后端与 Xray 转发规则。" "13 Check entry configuration, certificates, and routes: Check entry listeners, certificates, Web backends, and Xray forwarding rules." "13 Проверить конфигурацию входа, сертификаты и маршруты: Проверять слушатели входа, сертификаты, Web-бэкенды и правила передачи Xray.")"
+    echo "$(localized_text "14 测试 DNS、端口与 HTTPS 访问：从本机检查 DNS、TCP 端口、TLS，以及面板和订阅路径的 HTTP 响应。" "14 Test DNS, ports, and HTTPS access: Check DNS, TCP ports, TLS, and HTTP responses for panel/subscription paths from the VPS." "14 Проверить DNS, порты и HTTPS-доступ: Проверять с VPS DNS, TCP-порты, TLS и HTTP-ответы путей панели и подписки.")"
+    echo "$(localized_text "15 查看当前入口服务日志：按当前模式查看 Nginx、Xray/3x-ui 或 vpso-mux 日志。" "15 View active entry-service logs: Show Nginx, Xray/3x-ui, or vpso-mux logs for the active mode." "15 Посмотреть журналы текущей службы входа: Показывать журналы Nginx, Xray/3x-ui или vpso-mux для текущего режима.")"
+    echo "$(localized_text "修改面板域名：[2 管理 Web 域名与反向代理] -> [9 修改面板域名]。" "Change the panel domain: [2 Manage Web domains and reverse proxies] -> [9 Change panel domain]." "Изменить домен панели: [2 Управлять Web-доменами и обратным прокси] -> [9 Изменить домен панели].")"
     echo "$(localized_text "未启用 443端口复用时，Web 白名单在主菜单 [4 反代] -> [5] 中管理。" "Before enabling Port 443 Reuse, manage the Web allowlist under main menu [4 Reverse proxy] -> [5]." "До включения общего порта 443 управляйте списком разрешённых IP в главном меню [4 Обратный прокси] -> [5].")"
     echo "$(localized_text "? 查看帮助；0/q 返回。" "? Help; 0/q back." "? Справка; 0/q назад.")"
 }
@@ -294,31 +294,31 @@ func_sni_stack_quick_menu() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 首次部署 / 切换模式${PLAIN}" "${BOLD}▶ Initial setup / mode selection${PLAIN}" "${BOLD}▶ Первоначальная настройка / выбор режима${PLAIN}")"
-        print_menu_item 2 "$(localized_text "安装 / 切换入口模式" "Install or switch entry mode" "Установить или сменить режим")" "Nginx Stream / Xray Fallback / TCP Peek" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
+        print_menu_item 1 "$(localized_text "安装或切换 443 入口模式" "Set up or switch the 443 entry mode" "Настроить или сменить режим входа 443")" "$(localized_text "首次配置向导 / 切换已有入口" "initial setup wizard / switch an existing entry" "мастер настройки / смена настроенного входа")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 后续修改：域名与共享配置${PLAIN}" "${BOLD}▶ Configuration: domains and shared settings${PLAIN}" "${BOLD}▶ Конфигурация: домены и общие параметры${PLAIN}")"
-        print_menu_item 6 "$(localized_text "Web 域名与反向代理" "Web domains and reverse proxies" "Web-домены и обратный прокси")" "$(localized_text "新增 / 删除 / 查看" "add / remove / view" "добавить / удалить / просмотреть")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
-        print_menu_item 8 "$(localized_text "共享参数" "Shared settings" "Общие параметры")" "$(localized_text "面板 / 订阅 / REALITY / 端口 / 路径" "panel / subscription / REALITY / ports / paths" "панель / подписка / REALITY / порты / пути")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
+        print_menu_item 2 "$(localized_text "管理 Web 域名与反向代理" "Manage Web domains and reverse proxies" "Управлять Web-доменами и обратным прокси")" "$(localized_text "面板域名 / 网站 / 反代后端 / Web 引擎" "panel domain / sites / backends / Web engine" "домен панели / сайты / бэкенды / Web-движок")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
+        print_menu_item 3 "$(localized_text "修改端口、路径与 REALITY 参数" "Edit ports, paths, and REALITY settings" "Изменить порты, пути и параметры REALITY")" "$(localized_text "面板 / 订阅 / REALITY SNI / 入口与本地 TLS" "panel / subscription / REALITY SNI / entry and local TLS" "панель / подписка / REALITY SNI / вход и локальный TLS")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 后续修改：路由与访问防护${PLAIN}" "${BOLD}▶ Configuration: routing and access protection${PLAIN}" "${BOLD}▶ Конфигурация: маршруты и защита доступа${PLAIN}")"
-        print_menu_item 13 "$(localized_text "Xray SNI 路由" "Xray SNI routes" "Маршруты Xray SNI")" "SNI -> $(localized_text "本地地址:端口" "local address:port" "локальный адрес:порт")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
-        print_menu_item 7 "$(localized_text "Web IP 白名单" "Web IP allowlist" "Список разрешённых IP для Web")" "$(localized_text "仅限制 Web 访问" "Web access only" "только доступ к Web")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
-        print_menu_item 15 "$(localized_text "SNI 清洗 / REALITY 防护" "SNI filtering / REALITY protection" "Фильтрация SNI / защита REALITY")" "$(localized_text "未知 SNI 丢弃 / 回落限速" "unknown SNI drop / fallback limits" "блокировка SNI / лимиты fallback")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
+        print_menu_item 4 "$(localized_text "管理 Xray SNI 转发规则" "Manage Xray SNI forwarding rules" "Управлять правилами передачи Xray SNI")" "$(localized_text "域名 SNI -> 本地地址:端口" "domain SNI -> local address:port" "SNI домена -> локальный адрес:порт")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
+        print_menu_item 5 "$(localized_text "设置 Web 域名 IP 白名单" "Set Web domain IP allowlists" "Настроить разрешённые IP для Web-доменов")" "$(localized_text "按域名限制访问 / 不影响 Xray 节点" "restrict access per domain / Xray nodes unaffected" "доступ по доменам / без влияния на узлы Xray")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
+        print_menu_item 6 "$(localized_text "设置 SNI 过滤与 REALITY 回落限速" "Set SNI filtering and REALITY fallback limits" "Настроить фильтрацию SNI и лимиты REALITY fallback")" "$(localized_text "过滤未知 SNI / 限制验证失败后的回落流量" "filter unknown SNI / limit failed-authentication fallback" "фильтровать неизвестный SNI / ограничить fallback при ошибке проверки")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 证书与核心维护${PLAIN}" "${BOLD}▶ Certificate and core maintenance${PLAIN}" "${BOLD}▶ Обслуживание сертификатов и ядра${PLAIN}")"
-        print_menu_item 10 "$(localized_text "证书维护" "Certificate maintenance" "Обслуживание сертификатов")" "$(localized_text "Cloudflare DNS / 重签 / 修复 / 回滚" "Cloudflare DNS / reissue / repair / rollback" "Cloudflare DNS / перевыпуск / исправление / откат")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
-        print_menu_item 5 "$(localized_text "更新 TCP Peek 核心" "Update TCP Peek core" "Обновить ядро TCP Peek")" "$(localized_text "下载预编译版本 / 失败回滚" "prebuilt download / rollback on failure" "готовый файл / откат при ошибке")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
+        print_menu_item 7 "$(localized_text "维护 HTTPS 证书与 Cloudflare Token" "Maintain HTTPS certificates and Cloudflare tokens" "Обслуживать HTTPS-сертификаты и токен Cloudflare")" "$(localized_text "更新 Token / 重签证书 / 修复与回滚" "update token / reissue certificates / repair and rollback" "обновить токен / перевыпустить сертификаты / исправить и откатить")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
+        print_menu_item 8 "$(localized_text "更新 TCP Peek 核心" "Update TCP Peek core" "Обновить ядро TCP Peek")" "$(localized_text "下载新版本 / 更新失败恢复旧版本" "download a new version / restore the old version on failure" "загрузить новую версию / восстановить старую при ошибке")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 配置应用与恢复${PLAIN}" "${BOLD}▶ Apply and restore configuration${PLAIN}" "${BOLD}▶ Применение и восстановление конфигурации${PLAIN}")"
-        print_menu_item 3 "$(localized_text "重新应用当前模式" "Reapply current mode" "Повторно применить режим")" "$(localized_text "按现有参数重新生成" "regenerate from saved settings" "пересоздать из сохранённых параметров")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
-        print_menu_item 4 "$(localized_text "回滚上次模式切换" "Roll back the last switch" "Откатить последнее переключение")" "$(localized_text "恢复切换前配置" "restore the previous configuration" "восстановить предыдущую конфигурацию")" "$sni_title_column" "$YELLOW" "$YELLOW" "$YELLOW"
+        print_menu_item 9 "$(localized_text "重新生成并应用入口配置" "Regenerate and apply entry configuration" "Пересоздать и применить конфигурацию входа")" "$(localized_text "使用已保存参数 / 重新应用当前模式" "use saved settings / reapply the active mode" "использовать сохранённые параметры / применить текущий режим")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
+        print_menu_item 10 "$(localized_text "回滚上次入口模式切换" "Roll back the last entry-mode switch" "Откатить последнее переключение режима входа")" "$(localized_text "恢复上次切换前的入口配置" "restore entry configuration from before the last switch" "восстановить конфигурацию до последнего переключения")" "$sni_title_column" "$YELLOW" "$YELLOW" "$YELLOW"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 状态与链路排查${PLAIN}" "${BOLD}▶ Status and connection diagnostics${PLAIN}" "${BOLD}▶ Состояние и диагностика соединений${PLAIN}")"
-        print_menu_item 1 "$(localized_text "入口状态" "Entry status" "Состояние входа")" "$(localized_text "公网 443 / Web / Xray / 服务" "public 443 / Web / Xray / services" "публичный 443 / Web / Xray / службы")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
-        print_menu_item 9 "$(localized_text "订阅链接检查" "Subscription link check" "Проверка ссылок подписки")" "$(localized_text "公网 443 / External Proxy" "public 443 / External Proxy" "публичный 443 / External Proxy")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
-        print_menu_item 11 "$(localized_text "443 配置检查" "Port 443 configuration check" "Проверка конфигурации 443")" "$(localized_text "入口 / 监听 / 证书 / Web / Xray" "entry / listeners / certificates / Web / Xray" "вход / слушатели / сертификаты / Web / Xray")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
-        print_menu_item 12 "$(localized_text "外网访问测试" "External access test" "Проверка внешнего доступа")" "DNS / TCP / TLS / $(localized_text "面板 / 订阅" "panel / subscription" "панель / подписка")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
-        print_menu_item 14 "$(localized_text "入口日志" "Entry logs" "Журналы входа")" "Nginx / Xray / vpso-mux" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
+        print_menu_item 11 "$(localized_text "查看 443 入口与服务状态" "View the 443 entry and service status" "Посмотреть состояние входа 443 и служб")" "$(localized_text "公网监听 / Web 反代 / Xray / 服务" "public listener / Web proxy / Xray / services" "публичный слушатель / Web-прокси / Xray / службы")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
+        print_menu_item 12 "$(localized_text "查看节点链接与订阅填写说明" "View node-link and subscription setup guidance" "Посмотреть инструкции по ссылкам узлов и подписке")" "$(localized_text "Hosts / External Proxy / 公网订阅地址" "Hosts / External Proxy / public subscription URLs" "Hosts / External Proxy / публичные URL подписки")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
+        print_menu_item 13 "$(localized_text "检查入口配置、证书与转发规则" "Check entry configuration, certificates, and routes" "Проверить конфигурацию входа, сертификаты и маршруты")" "$(localized_text "监听端口 / 证书 / Web 后端 / Xray 路由" "listeners / certificates / Web backends / Xray routes" "слушатели / сертификаты / Web-бэкенды / маршруты Xray")" "$sni_title_column" "$GREEN" "$YELLOW" "$GREEN"
+        print_menu_item 14 "$(localized_text "测试 DNS、端口与 HTTPS 访问" "Test DNS, ports, and HTTPS access" "Проверить DNS, порты и HTTPS-доступ")" "$(localized_text "从 VPS 测试 / 面板与订阅链路" "test from the VPS / panel and subscription connections" "проверки с VPS / соединения панели и подписки")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
+        print_menu_item 15 "$(localized_text "查看当前入口服务日志" "View active entry-service logs" "Посмотреть журналы текущей службы входа")" "$(localized_text "Nginx / Xray / vpso-mux" "Nginx / Xray / vpso-mux" "Nginx / Xray / vpso-mux")" "$sni_title_column" "$CYAN" "$YELLOW" "$CYAN"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
@@ -327,21 +327,21 @@ func_sni_stack_quick_menu() {
         local sni_choice
         read_trimmed sni_choice "$(localized_text "输入菜单编号，? 查看帮助: " "Menu number or ? for help: " "Номер пункта или ? для справки: ")"
         case "$sni_choice" in
-            1) show_current_entry_status ;;
-            2) manage_entry_mode_install_or_switch ;;
-            3) reapply_current_entry_mode ;;
-            4) rollback_last_entry_mode ;;
-            5) update_vpso_mux_binary ;;
-            6) manage_sni_stack_sites; continue ;;
-            7) manage_sni_stack_ip_whitelist; continue ;;
-            8) edit_sni_stack_runtime_profile; continue ;;
-            9) check_sni_stack_subscription_hint ;;
-            10) func_caddy_cf_maintenance_menu; continue ;;
-            11) sni_stack_health_check_enhanced ;;
-            12) func_443_network_test; continue ;;
-            13) manage_xray_inbound_routes; continue ;;
-            14) view_current_entry_logs ;;
-            15) manage_reality_traffic_guard; continue ;;
+            1) manage_entry_mode_install_or_switch ;;
+            2) manage_sni_stack_sites; continue ;;
+            3) edit_sni_stack_runtime_profile; continue ;;
+            4) manage_xray_inbound_routes; continue ;;
+            5) manage_sni_stack_ip_whitelist; continue ;;
+            6) manage_reality_traffic_guard; continue ;;
+            7) func_caddy_cf_maintenance_menu; continue ;;
+            8) update_vpso_mux_binary ;;
+            9) reapply_current_entry_mode ;;
+            10) rollback_last_entry_mode ;;
+            11) show_current_entry_status ;;
+            12) check_sni_stack_subscription_hint ;;
+            13) sni_stack_health_check_enhanced ;;
+            14) func_443_network_test; continue ;;
+            15) view_current_entry_logs ;;
             "?") show_sni_help; pause_return; continue ;;
             0) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;
