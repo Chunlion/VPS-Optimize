@@ -11,6 +11,10 @@ source src/sni_stack_install.sh
 source src/reality_guard.sh
 source src/tcp_peek_engine.sh
 source src/caddy_maintenance.sh
+source src/sni_stack_profiles.sh
+source src/sni_stack_menus.sh
+source src/xray_sni_routes.sh
+source src/menus.sh
 localized_text() { printf '%s' "$1"; }
 
 (
@@ -174,5 +178,60 @@ PY
     SITE_DOMAINS=() PANEL_DOMAIN=panel.example.com
     if func_caddy_cf_reality_wizard; then exit 1; fi
     [[ "$(cat "$tmp_dir/rollback-called")" == rollback ]]
+)
+(
+    load_sni_stack_env() { :; }
+    get_entry_mode() { echo nginx-stream; }
+    confirm_danger() { echo 'unexpected duplicate confirmation' >&2; exit 1; }
+    reapply_current_entry_mode() { return 17; }
+    if switch_entry_mode nginx-stream >/dev/null; then exit 1; else [[ $? == 17 ]]; fi
+)
+(
+    load_sni_stack_env() { echo 'unexpected duplicate config load' >&2; exit 1; }
+    print_sni_stack_preview() { echo 'unexpected duplicate preview' >&2; exit 1; }
+    args=''
+    reapply_current_entry_mode() { args="$*"; }
+    reapply_sni_stack_from_env --yes
+    [[ "$args" == --yes ]]
+    reapply_sni_stack_from_env
+    [[ -z "$args" ]]
+)
+(
+    select_initial_entry_mode <<< $'invalid\n3' >/dev/null
+    [[ "$ENTRY_MODE" == tcp-peek ]]
+    select_initial_entry_mode <<< '' >/dev/null
+    [[ "$ENTRY_MODE" == nginx-stream ]]
+    if select_initial_entry_mode </dev/null >/dev/null; then exit 1; fi
+    sni_stack_env_path() { echo "$tmp_dir/menu.env"; }
+    : > "$tmp_dir/menu.env"
+    load_sni_stack_env() { :; }
+    get_entry_mode() { echo nginx-stream; }
+    chosen=''
+    switch_entry_mode() { chosen="$1"; }
+    manage_entry_mode_install_or_switch <<< $'invalid\n3' >/dev/null
+    [[ "$chosen" == tcp-peek ]]
+)
+(
+    load_sni_stack_env() { :; }
+    get_entry_mode() { echo xray-fallback; }
+    read_trimmed() { echo 'unavailable mode must not open a routing menu' >&2; exit 1; }
+    paused=0
+    pause_return() { paused=$((paused + 1)); }
+    manage_xray_inbound_routes >/dev/null
+    [[ "$paused" == 1 ]]
+)
+(
+    VPSO_LANGUAGE=zh
+    load_sni_stack_env() { :; }
+    get_entry_mode() { echo nginx-stream; }
+    show_current_entry_summary() { :; }
+    print_sni_stack_current_summary() { :; }
+    print_breadcrumb() { :; }
+    print_menu_item() { :; }
+    for menu in func_sni_stack_quick_menu manage_sni_stack_sites edit_sni_stack_runtime_profile manage_xray_inbound_routes; do
+        for back in 0 q Q ''; do
+            "$menu" <<< $'invalid\n'"$back" >/dev/null
+        done
+    done
 )
 echo 'SNI setup regression checks passed.'

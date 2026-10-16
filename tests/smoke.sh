@@ -417,9 +417,9 @@ assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '输入菜�
 assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '"?") show_sni_help; pause_return; continue ;;' "443 Web/SNI submenu must accept the displayed ? help entry."
 assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '"?") show_sni_help; pause_return; continue ;;' "443 Port 443 Reuse parameter submenu must accept the displayed ? help entry."
 assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '"?") show_sni_help; pause_return; continue ;;' "Port 443 Reuse menu must accept the displayed ? help entry."
-assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '0) break ;;' "443 Web/SNI submenu must accept the displayed 0/q back entry."
-assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '0) break ;;' "443 Port 443 Reuse parameter submenu must accept the displayed 0/q back entry."
-assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '0) break ;;' "Port 443 Reuse menu must accept the displayed 0/q back entry."
+assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites "0|q|Q|'') break ;;" "443 Web/SNI submenu must accept 0/q/Enter to go back."
+assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile "0|q|Q|'') break ;;" "443 parameter submenu must accept 0/q/Enter to go back."
+assert_function_body_contains src/menus.sh func_sni_stack_quick_menu "0|q|Q|'') break ;;" "Port 443 Reuse menu must accept 0/q/Enter to go back."
 assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites 'q 返回' "443 Web/SNI submenu must advertise only the supported q shortcut."
 assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile 'q 返回' "443 Port 443 Reuse parameter submenu must advertise only the supported q shortcut."
 assert_function_body_contains src/menus.sh func_sni_stack_quick_menu 'q 返回' "Port 443 Reuse menu must advertise only the supported q shortcut."
@@ -1806,10 +1806,10 @@ assert_file_contains "src/environment.sh" '安装 nftables NAT 转发工具' "En
 assert_file_not_contains "src/environment.sh" '哪吒监控' "Environment menu option 10 must not keep the old Nezha entry."
 assert_file_not_contains "dist/vps.sh" 'raw.githubusercontent.com/naiba/nezha/master/script/install.sh' "Release script must not keep the old Nezha install URL."
 grep -q 'func_sni_stack_quick_menu' dist/vps.sh
-grep -q 'manage_sni_stack_tcp_routes' dist/vps.sh
+grep -q 'manage_xray_inbound_routes' dist/vps.sh
 grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh
 grep -q 'single_443_current_engine' dist/vps.sh
-assert_file_contains "src/xray_sni_routes.sh" 'Xray 入站管理' "Xray inbound menu must use the current menu name."
+assert_file_contains "src/xray_sni_routes.sh" 'Xray SNI 路由管理' "Xray route management must display its actual function."
 assert_function_body_contains "src/xray_sni_routes.sh" add_xray_sni_route 'offer_sync_xray_sni_routes' "Adding an Xray SNI route must offer to apply the saved route."
 assert_function_body_contains "src/xray_sni_routes.sh" remove_xray_sni_route 'offer_sync_xray_sni_routes' "Deleting an Xray SNI route must offer to apply the saved route."
 assert_function_body_contains "src/xray_sni_routes.sh" offer_sync_xray_sni_routes 'confirm_risk_action' "Applying saved Xray SNI routes must use the high-risk confirmation flow."

@@ -285,7 +285,6 @@ func_sni_stack_quick_menu() {
         *) sni_title_column=27 ;;
     esac
     while true; do
-        clear
         show_current_entry_summary
         echo -e "------------------------------------------------"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -343,8 +342,8 @@ func_sni_stack_quick_menu() {
             14) func_443_network_test; continue ;;
             15) view_current_entry_logs ;;
             "?") show_sni_help; pause_return; continue ;;
-            0) break ;;
-            *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;
+            0|q|Q|'') break ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; continue ;;
         esac
         echo ""
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"

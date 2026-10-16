@@ -3,7 +3,6 @@
 
 manage_sni_stack_sites() {
     while true; do
-        clear
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}🌐 443 网站/反代域名管理${PLAIN}" "${BOLD}🌐 443 Web domain and reverse-proxy management${PLAIN}" "${BOLD}🌐 443 Управление Web-доменами и обратным прокси${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -37,8 +36,8 @@ manage_sni_stack_sites() {
             8) switch_sni_stack_web_proxy_engine ;;
             9) edit_sni_stack_panel_domain_profile ;;
             "?") show_sni_help; pause_return; continue ;;
-            0) break ;;
-            *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")" ;;
+            0|q|Q|'') break ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; continue ;;
         esac
         echo ""
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"

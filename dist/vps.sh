@@ -754,11 +754,7 @@ print_breadcrumb() {
 
 pause_return() {
     local default_prompt
-    if declare -F localized_text >/dev/null 2>&1; then
-        default_prompt="$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-    else
-        default_prompt="$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-    fi
+    default_prompt="$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
     local prompt="${1:-$default_prompt}"
     read -n 1 -s -r -p "$prompt"
     echo ""
@@ -11111,20 +11107,22 @@ select_initial_entry_mode() {
     echo -e "$(localized_text "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(同样按 SNI 分流；自动安装 vpso-mux)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(also routes by SNI; installs vpso-mux automatically)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(также маршрутизирует по SNI; автоматически устанавливает vpso-mux)${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}  0. Cancel${PLAIN}" "${RED}  0. Отмена${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    read_trimmed choice "$(localized_text "选择入口模式 [1]: " "Select entry mode [1]: " "Выберите режим входа [1]: ")"
-    case "${choice:-1}" in
-        1) ENTRY_MODE="nginx-stream" ;;
-        2) ENTRY_MODE="xray-fallback" ;;
-        3) ENTRY_MODE="tcp-peek" ;;
-        0|q|Q) echo -e "$(localized_text "${BLUE}已取消首次配置。${PLAIN}" "${BLUE}Initial setup canceled.${PLAIN}" "${BLUE}Первоначальная настройка отменена.${PLAIN}")"; return 1 ;;
-        *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"; return 1 ;;
-    esac
+    while true; do
+        read_trimmed choice "$(localized_text "选择入口模式 [1]: " "Select entry mode [1]: " "Выберите режим входа [1]: ")" || return 1
+        case "${choice:-1}" in
+            1) ENTRY_MODE="nginx-stream"; break ;;
+            2) ENTRY_MODE="xray-fallback"; break ;;
+            3) ENTRY_MODE="tcp-peek"; break ;;
+            0|q|Q) echo -e "$(localized_text "${BLUE}已取消首次配置。${PLAIN}" "${BLUE}Initial setup canceled.${PLAIN}" "${BLUE}Первоначальная настройка отменена.${PLAIN}")"; return 1 ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")" ;;
+        esac
+    done
     echo -e "$(localized_text "${GREEN}✅ 已选择 443 入口模式：${ENTRY_MODE}${PLAIN}" "${GREEN}✅ 443 entry mode selected: ${ENTRY_MODE}${PLAIN}" "${GREEN}Выбран 443 режима входа: ${ENTRY_MODE}${PLAIN}")"
 }
 
 manage_entry_mode_install_or_switch() {
     local choice current_mode
-    if [[ ! -f /etc/vps-optimize/sni-stack.env ]]; then
+    if [[ ! -f "$(sni_stack_env_path)" ]]; then
         func_caddy_cf_reality_wizard
         return
     fi
@@ -11139,14 +11137,16 @@ manage_entry_mode_install_or_switch() {
     echo -e "${GREEN}  2. Xray Fallback${PLAIN}"
     echo -e "${GREEN}  3. TCP Peek + Splice${PLAIN}"
     echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-    read_trimmed choice "$(localized_text "选择模式: " "Select a mode: " "Выберите режим: ")"
-    case "$choice" in
-        1) switch_entry_mode "nginx-stream" ;;
-        2) switch_entry_mode "xray-fallback" ;;
-        3) switch_entry_mode "tcp-peek" ;;
-        0|q|Q) return ;;
-        *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"; return 1 ;;
-    esac
+    while true; do
+        read_trimmed choice "$(localized_text "选择模式: " "Select a mode: " "Выберите режим: ")"
+        case "$choice" in
+            1) switch_entry_mode "nginx-stream"; return $? ;;
+            2) switch_entry_mode "xray-fallback"; return $? ;;
+            3) switch_entry_mode "tcp-peek"; return $? ;;
+            0|q|Q|'') return 0 ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")" ;;
+        esac
+    done
 }
 
 prepare_initial_entry_mode_dependencies() {
@@ -11182,10 +11182,6 @@ switch_entry_mode() {
     current_mode=$(get_entry_mode)
 
     if [[ "$target_mode" == "$current_mode" ]]; then
-        confirm_danger \
-            "$(localized_text "重新应用 ${target_mode} 入口模式" "Reapply the ${target_mode} entry mode" "Повторно применить режим входа ${target_mode}")" \
-            "$(localized_text "重新生成公网 443 入口配置并重启相关入口服务。" "Regenerate the public Port 443 entry configuration and restart the related entry services." "Заново создать конфигурацию публичного входа 443 и перезапустить связанные службы.")" \
-            "$(localized_text "使用入口模式备份回滚，或重新应用原入口模式。" "Roll back with the entry-mode backup or reapply the previous entry mode." "Выполните откат из резервной копии режима входа или повторно примените прежний режим.")" || return 1
         reapply_current_entry_mode
         return $?
     fi
@@ -11971,7 +11967,6 @@ edit_sni_stack_panel_domain_profile() {
 
 edit_sni_stack_runtime_profile() {
     while true; do
-        clear
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}🧭 修改 443 共享参数${PLAIN}" "${BOLD}🧭 Edit shared Port 443 settings${PLAIN}" "${BOLD}🧭 Изменение общих параметров порта 443${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -12004,8 +11999,8 @@ edit_sni_stack_runtime_profile() {
             4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [2 Manage Web domains and reverse proxies] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [2 Управлять Web-доменами и обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
             5) reapply_sni_stack_from_env ;;
             "?") show_sni_help; pause_return; continue ;;
-            0) break ;;
-            *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;
+            0|q|Q|'') break ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; continue ;;
         esac
         echo ""
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
@@ -12013,11 +12008,7 @@ edit_sni_stack_runtime_profile() {
 }
 
 reapply_sni_stack_from_env() {
-    load_sni_stack_env || return 1
-    if [[ "${1:-}" != "--yes" ]]; then
-        print_sni_stack_preview || return 1
-    fi
-    reapply_current_entry_mode --yes
+    reapply_current_entry_mode "$@"
 }
 
 # ---------------------------------------------------------
@@ -13572,209 +13563,6 @@ switch_sni_stack_web_proxy_engine() {
     save_and_offer_reapply_sni_stack
 }
 
-list_sni_stack_tcp_routes() {
-    load_sni_stack_env || return 1
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}当前 443 TCP/SNI 本地入站分流${PLAIN}" "${BOLD}Current 443 TCP/SNI local inbound offload${PLAIN}" "${BOLD}текущий 443 TCP/SNI локальная входящая разгрузка${PLAIN}")"
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "公网入口：${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT}" "public entry: ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT}" "Вход в публичную сеть: ${NGINX_LISTEN_ADDR}:${NGINX_LISTEN_PORT}.")"
-    echo -e "$(localized_text "REALITY 默认后端：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "REALITY Default backend: ${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}" "REALITY бэкенд по умолчанию: ${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}")"
-    echo -e "------------------------------------------------"
-    if [[ ${#TCP_ROUTE_SNIS[@]} -eq 0 ]]; then
-        echo -e "$(localized_text "${YELLOW}当前没有额外 TCP/SNI 入站分流。${PLAIN}" "${YELLOW}Currently has no additional TCP/SNI inbound offload.${PLAIN}" "${YELLOW}в настоящее время не имеет дополнительной входящей разгрузки TCP/SNI.${PLAIN}")"
-        return 0
-    fi
-
-    local i num
-    for i in "${!TCP_ROUTE_SNIS[@]}"; do
-        num=$((i + 1))
-        echo -e "${GREEN}${num}.${PLAIN} ${TCP_ROUTE_SNIS[$i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$i]}:${TCP_ROUTE_PORTS[$i]}"
-    done
-}
-
-add_sni_stack_tcp_route() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}新增 443 TCP/SNI 本地入站分流${PLAIN}" "${BOLD}Added 443 TCP/SNI local inbound offload${PLAIN}" "${BOLD}добавлено 443 TCP/SNI локальная входящая разгрузка${PLAIN}")"
-    echo -e "${CYAN}================================================${PLAIN}"
-    load_sni_stack_env || return 1
-    echo -e "$(localized_text "${YELLOW}用途：你已在 3x-ui 新增本地入站，本功能只把某个 SNI 通过公网 ${NGINX_LISTEN_PORT} 分流到该本地端口。${PLAIN}" "${YELLOW}Purpose: You have added a local inbound port in 3x-ui. This function only distributes a certain SNI to the local port through the public ${NGINX_LISTEN_PORT}.${PLAIN}" "${YELLOW}Назначение: вы добавили локальное входящее соединение в 3x-ui. Эта функция направляет только определенный SNI на локальный порт через Интернет ${NGINX_LISTEN_PORT}.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}要求：协议必须是 TCP 且客户端握手能带 SNI；UDP/QUIC/Hysteria2/TUIC 或无 SNI 的裸协议不适用。${PLAIN}" "${YELLOW}Requirements: The protocol must be TCP and the client handshake can carry SNI; UDP/QUIC/Hysteria2/TUIC or bare protocols without SNI are not applicable.${PLAIN}" "${YELLOW}Требования : протокол должен быть TCP, а подтверждение связи клиента может передавать SNI; UDP/QUIC/Hysteria2/TUIC или простые протоколы без SNI неприменимы.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}安全边界：后端只允许 127.0.0.1/localhost/::1，不会开放新公网端口。${PLAIN}" "${YELLOW}Security boundary: The backend only allows 127.0.0.1/localhost/::1 and will not open new public ports.${PLAIN}" "${YELLOW}Граница безопасности : бэкенд разрешает только 127.0.0.1/localhost/::1 и не открывает новые порты публичной сети.${PLAIN}")"
-    echo -e "------------------------------------------------"
-
-    local route_sni route_sni_input route_addr route_port existing idx
-    read_trimmed route_sni_input "$(localized_text "入站 SNI（须与客户端一致；普通 TLS 示例值 tls.example.com）: " "Inbound SNI (must match the client; ordinary TLS example: tls.example.com): " "SNI входа (как у клиента; пример для обычного TLS: tls.example.com): ")"
-    route_sni=$(normalize_domain_input "$route_sni_input")
-    if [[ -z "$route_sni" || "$route_sni" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消新增 TCP/SNI 入站。${PLAIN}" "${BLUE}Canceled the addition of TCP/SNI.${PLAIN}" "${BLUE}отменил добавление TCP/SNI.${PLAIN}")"
-        return 0
-    fi
-    is_valid_domain "$route_sni" || { print_domain_validation_error "$(localized_text "SNI/域名" "SNI/domain" "SNI/доменное имя")" "$route_sni_input" "$route_sni"; return 1; }
-    if [[ "$route_sni" == "$PANEL_DOMAIN" || "$route_sni" == "$REALITY_SNI" ]]; then
-        echo -e "$(localized_text "${RED}❌ TCP/SNI 入站域名不能和面板域名或 REALITY SNI 相同。${PLAIN}" "${RED}❌ The TCP/SNI inbound domain cannot be the same as the panel domain or REALITY SNI.${PLAIN}" "${RED}❌ Имя входящего домена TCP/SNI не может совпадать с именем домена панели или REALITY SNI.${PLAIN}")"
-        return 1
-    fi
-    for existing in "${SITE_DOMAINS[@]}"; do
-        [[ "$route_sni" == "$existing" ]] && { echo -e "$(localized_text "${RED}❌ 该域名已作为网站/反代域名使用。${PLAIN}" "${RED}❌ This domain has been used as a website/reverse proxy domain.${PLAIN}" "${RED}❌ Это доменное имя использовалось в качестве доменного имени веб-сайта/обратного прокси-сервера.${PLAIN}")"; return 1; }
-    done
-    for existing in "${TCP_ROUTE_SNIS[@]}"; do
-        [[ "$route_sni" == "$existing" ]] && { echo -e "$(localized_text "${RED}❌ 该 TCP/SNI 入站已经存在。${PLAIN}" "${RED}❌ The TCP/SNI inbound already exists.${PLAIN}" "${RED}❌ входящее подключение TCP/SNI уже существует.${PLAIN}")"; return 1; }
-    done
-    for existing in "${XRAY_SNI_ROUTE_SNIS[@]}"; do
-        [[ "$route_sni" == "$existing" ]] && { echo -e "$(localized_text "${RED}❌ 该域名已作为 Xray 入站使用。${PLAIN}" "${RED}❌ This domain has been used inbound as Xray.${PLAIN}" "${RED}❌ Это доменное имя использовалось в качестве Xray.${PLAIN}")"; return 1; }
-    done
-
-    check_domain_dns_sanity "$route_sni" "$(localized_text "TCP/SNI 入站域名" "TCP/SNI inbound domain" "TCP/SNI имя входящего домена")" "warn" || echo -e "$(localized_text "${YELLOW}⚠️ 如果客户端使用服务器 IP 连接并手动指定 SNI，可忽略该 DNS 警告。${PLAIN}" "${YELLOW}⚠️ This DNS warning can be ignored if the client connects using the server IP and manually specifies SNI.${PLAIN}" "${YELLOW}⚠️ Это предупреждение DNS можно игнорировать, если клиент подключается с использованием IP-адреса сервера и вручную указывает SNI.${PLAIN}")"
-    route_addr=$(ask_with_default "$(localized_text "3x-ui 新入站本地监听地址（只允许本地）" "3x-ui New inbound local listening address (only local)" "3x-ui Новый входящий локальный адрес прослушивания (только локальный)")" "127.0.0.1")
-    route_addr=$(normalize_loopback_addr "$route_addr")
-    route_port=$(ask_with_default "$(localized_text "已有入站的本地端口（示例值 2443，以 3x-ui 为准）" "Existing inbound local port (example: 2443; match 3x-ui)" "Локальный порт существующего входа (пример: 2443; как в 3x-ui)")" "8443")
-    is_loopback_listen_addr "$route_addr" || { echo -e "$(localized_text "${RED}❌ 为保证安全，TCP/SNI 入站后端只允许 127.0.0.1、localhost 或 ::1。${PLAIN}" "${RED}❌ To ensure security, the TCP/SNI inbound backend only allows 127.0.0.1, localhost or ::1.${PLAIN}" "${RED}❌ В целях обеспечения безопасности входящий сервер TCP/SNI допускает только 127.0.0.1, localhost или ::1.${PLAIN}")"; return 1; }
-    is_valid_port "$route_port" || { echo -e "$(localized_text "${RED}❌ 入站端口无效：${route_port}${PLAIN}" "${RED}❌ Invalid inbound port: ${route_port}${PLAIN}" "${RED}❌ Неверный входящий порт: ${route_port}.${PLAIN}")"; return 1; }
-    if [[ "$route_port" == "$NGINX_LISTEN_PORT" || "$route_port" == "$CADDY_LISTEN_PORT" || "$route_port" == "$PANEL_LISTEN_PORT" || "$route_port" == "$SUB_LISTEN_PORT" ]]; then
-        echo -e "$(localized_text "${RED}❌ 入站端口不能复用公网入口、Web 反代、面板或订阅服务端口。${PLAIN}" "${RED}❌ The inbound port cannot reuse the public entry, Web reverse proxy, panel or subscription service port.${PLAIN}" "${RED}❌ Порт входящего подключения не может повторно использовать интернет-точка входа, обратный веб-прокси, порт панели или службы подписки.${PLAIN}")"
-        return 1
-    fi
-
-    echo -e ""
-    echo -e "$(localized_text "${CYAN}即将添加 TCP/SNI 分流：${route_sni}:${NGINX_LISTEN_PORT} -> ${route_addr}:${route_port}${PLAIN}" "${CYAN}Will be added soon. TCP/SNI routing: ${route_sni}:${NGINX_LISTEN_PORT} -> ${route_addr}:${route_port}${PLAIN}" "${CYAN}будет добавлен в ближайшее время. TCP/SNI маршрутизация: ${route_sni}:${NGINX_LISTEN_PORT} -> ${route_addr}:${route_port}${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}请确认 3x-ui 入站已监听 ${route_addr}:${route_port}，且客户端连接端口使用 ${NGINX_LISTEN_PORT}。${PLAIN}" "${YELLOW}Please confirm that 3x-ui inbound is listening to ${route_addr}:${route_port}, and the client connection port uses ${NGINX_LISTEN_PORT}.${PLAIN}" "${YELLOW}Подтвердите, что 3x-ui прослушивает входящее подключение ${route_addr}:${route_port}, а порт подключения клиента использует ${NGINX_LISTEN_PORT}.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}说明：Web 白名单只保护 Web 域名，不会应用到 TCP/SNI 或 Xray 节点流量。${PLAIN}" "${YELLOW}Note: The Web whitelist only protects Web domains and will not be applied to TCP/SNI or Xray node traffic.${PLAIN}" "${YELLOW}Примечание. Белый список веб-сайтов защищает только имена веб-доменов и не будет применяться к трафику узлов TCP/SNI или Xray.${PLAIN}")"
-    confirm_risk_action "$(localized_text "新增 443 TCP/SNI 入站 ${route_sni}" "Added 443 TCP/SNI inbound ${route_sni}" "Добавлен 443 TCP/SNI входящий ${route_sni}.")" \
-        "$(localized_text "Nginx stream SNI 分流规则，会把该 SNI 直通到本地 3x-ui 入站" "Nginx stream SNI routing rule will pass the SNI directly to the local 3x-ui inbound connection" "Правило маршрутизации Nginx stream SNI передаст SNI непосредственно локальному входящему соединению 3x-ui.")" \
-        "$(localized_text "使用 443端口复用备份恢复，或从 TCP/SNI 入站管理菜单删除该分流" "Restore using a Port 443 Reuse backup, or delete the route from the TCP/SNI inbound connection management menu" "Восстановите резервную копию повторного использования порта 443 или удалите маршрут в меню управления входящими подключениями TCP/SNI.")" \
-        "$(localized_text "确认后端只监听本地地址，不要在安全组或防火墙开放 ${route_port}。" "Confirm that the backend only listens to the local address and does not open ${route_port} in the security group or firewall." "Убедитесь, что бэкенд прослушивает только локальный адрес и не открывает ${route_port} в группе безопасности или брандмауэре.")" || return 1
-
-    idx=${#TCP_ROUTE_SNIS[@]}
-    TCP_ROUTE_SNIS[$idx]="$route_sni"
-    TCP_ROUTE_ADDRS[$idx]="$route_addr"
-    TCP_ROUTE_PORTS[$idx]="$route_port"
-    save_and_offer_reapply_sni_stack
-}
-
-edit_sni_stack_tcp_route() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}修改 443 TCP/SNI 本地入站分流${PLAIN}" "${BOLD}Modification 443 TCP/SNI local inbound offload${PLAIN}" "${BOLD}модификация 443 TCP/SNI локальная входящая разгрузка${PLAIN}")"
-    echo -e "${CYAN}================================================${PLAIN}"
-    load_sni_stack_env || return 1
-    if [[ ${#TCP_ROUTE_SNIS[@]} -eq 0 ]]; then
-        echo -e "$(localized_text "${YELLOW}当前没有可修改的 TCP/SNI 入站分流。${PLAIN}" "${YELLOW}Currently has no modifiable TCP/SNI inbound offload.${PLAIN}" "${YELLOW}в настоящее время не имеет изменяемой входящей разгрузки TCP/SNI.${PLAIN}")"
-        return 0
-    fi
-
-    local i num choice idx old_sni new_sni new_sni_input new_addr new_port existing
-    for i in "${!TCP_ROUTE_SNIS[@]}"; do
-        num=$((i + 1))
-        echo -e "${GREEN}${num}.${PLAIN} ${TCP_ROUTE_SNIS[$i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$i]}:${TCP_ROUTE_PORTS[$i]}"
-    done
-    echo -e "------------------------------------------------"
-    read_trimmed choice "$(localized_text "请输入要修改的序号: " "Please enter the serial number to be modified:" "Пожалуйста, введите серийный номер, который необходимо изменить:")"
-    if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消修改。${PLAIN}" "${BLUE}Edit canceled.${PLAIN}" "${BLUE}Изменение отменено.${PLAIN}")"
-        return 0
-    fi
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#TCP_ROUTE_SNIS[@]} )); then
-        echo -e "$(localized_text "${RED}❌ 序号无效。${PLAIN}" "${RED}❌ The serial number is invalid.${PLAIN}" "${RED}❌ Серийный номер недействителен.${PLAIN}")"
-        return 1
-    fi
-
-    idx=$((choice - 1))
-    old_sni="${TCP_ROUTE_SNIS[$idx]}"
-    new_sni_input=$(ask_with_default "$(localized_text "SNI/域名" "SNI/domain" "SNI/доменное имя")" "$old_sni")
-    new_sni=$(normalize_domain_input "$new_sni_input")
-    new_addr=$(ask_with_default "$(localized_text "本地监听地址（只允许本地）" "Local listening address (only local allowed)" "Локальный адрес прослушивания (разрешено только локальное)")" "${TCP_ROUTE_ADDRS[$idx]}")
-    new_addr=$(normalize_loopback_addr "$new_addr")
-    new_port=$(ask_with_default "$(localized_text "本地监听端口" "local listening port" "локальный порт прослушивания")" "${TCP_ROUTE_PORTS[$idx]}")
-
-    is_valid_domain "$new_sni" || { print_domain_validation_error "$(localized_text "SNI/域名" "SNI/domain" "SNI/доменное имя")" "$new_sni_input" "$new_sni"; return 1; }
-    if [[ "$new_sni" == "$PANEL_DOMAIN" || "$new_sni" == "$REALITY_SNI" ]]; then
-        echo -e "$(localized_text "${RED}❌ TCP/SNI 入站域名不能和面板域名或 REALITY SNI 相同。${PLAIN}" "${RED}❌ The TCP/SNI inbound domain cannot be the same as the panel domain or REALITY SNI.${PLAIN}" "${RED}❌ Имя входящего домена TCP/SNI не может совпадать с именем домена панели или REALITY SNI.${PLAIN}")"
-        return 1
-    fi
-    for existing in "${SITE_DOMAINS[@]}"; do
-        [[ "$new_sni" == "$existing" ]] && { echo -e "$(localized_text "${RED}❌ 该域名已作为网站/反代域名使用。${PLAIN}" "${RED}❌ This domain has been used as a website/reverse proxy domain.${PLAIN}" "${RED}❌ Это доменное имя использовалось в качестве доменного имени веб-сайта/обратного прокси-сервера.${PLAIN}")"; return 1; }
-    done
-    for i in "${!TCP_ROUTE_SNIS[@]}"; do
-        [[ "$i" -eq "$idx" ]] && continue
-        [[ "$new_sni" == "${TCP_ROUTE_SNIS[$i]}" ]] && { echo -e "$(localized_text "${RED}❌ 该 TCP/SNI 入站已经存在。${PLAIN}" "${RED}❌ The TCP/SNI inbound already exists.${PLAIN}" "${RED}❌ входящее подключение TCP/SNI уже существует.${PLAIN}")"; return 1; }
-    done
-    for existing in "${XRAY_SNI_ROUTE_SNIS[@]}"; do
-        [[ "$new_sni" == "$existing" ]] && { echo -e "$(localized_text "${RED}❌ 该域名已作为 Xray 入站使用。${PLAIN}" "${RED}❌ This domain has been used inbound as Xray.${PLAIN}" "${RED}❌ Это доменное имя использовалось в качестве Xray.${PLAIN}")"; return 1; }
-    done
-    is_loopback_listen_addr "$new_addr" || { echo -e "$(localized_text "${RED}❌ 为保证安全，TCP/SNI 入站后端只允许 127.0.0.1、localhost 或 ::1。${PLAIN}" "${RED}❌ To ensure security, the TCP/SNI inbound backend only allows 127.0.0.1, localhost or ::1.${PLAIN}" "${RED}❌ В целях обеспечения безопасности входящий сервер TCP/SNI допускает только 127.0.0.1, localhost или ::1.${PLAIN}")"; return 1; }
-    is_valid_port "$new_port" || { echo -e "$(localized_text "${RED}❌ 入站端口无效：${new_port}${PLAIN}" "${RED}❌ Invalid inbound port: ${new_port}${PLAIN}" "${RED}❌ Неверный входящий порт: ${new_port}.${PLAIN}")"; return 1; }
-    if [[ "$new_port" == "$NGINX_LISTEN_PORT" || "$new_port" == "$CADDY_LISTEN_PORT" || "$new_port" == "$PANEL_LISTEN_PORT" || "$new_port" == "$SUB_LISTEN_PORT" ]]; then
-        echo -e "$(localized_text "${RED}❌ 入站端口不能复用公网入口、Caddy、面板或订阅服务端口。${PLAIN}" "${RED}❌ The inbound port cannot reuse the public entry, Caddy, panel or subscription service port.${PLAIN}" "${RED}❌ Входящий порт не может повторно использовать вход в публичную сеть, Caddy, порт панели или сервисный порт подписки.${PLAIN}")"
-        return 1
-    fi
-
-    echo -e ""
-    echo -e "$(localized_text "${CYAN}即将修改：${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}Is about to be modified: ${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}скоро будет изменен: ${old_sni}:${NGINX_LISTEN_PORT} -> ${new_sni}:${NGINX_LISTEN_PORT} -> ${new_addr}:${new_port}${PLAIN}")"
-    confirm_risk_action "$(localized_text "修改 443 TCP/SNI 入站 ${old_sni}" "Modify 443 TCP/SNI inbound ${old_sni}" "Изменить 443 TCP/SNI входящий ${old_sni}")" \
-        "$(localized_text "Nginx stream SNI 分流规则和本地后端端口" "Nginx stream SNI Offload rules and local backend ports" "Nginx stream SNI Правила разгрузки и локальные серверные порты")" \
-        "$(localized_text "使用 443端口复用备份恢复修改前配置" "Use Port 443 Reuse backup to restore the configuration before modification" "Используйте резервную копию повторного использования порта 443 для восстановления конфигурации до изменения.")" \
-        "$(localized_text "确认 3x-ui 入站已按新地址和端口监听，且未开放该内部端口。" "Confirm that 3x-ui inbound is listening at the new address and port, and the internal port is not open." "Убедитесь, что 3x-ui прослушивает входящее подключение по новому адресу и порту, а внутренний порт не открыт.")" || return 1
-
-    TCP_ROUTE_SNIS[$idx]="$new_sni"
-    TCP_ROUTE_ADDRS[$idx]="$new_addr"
-    TCP_ROUTE_PORTS[$idx]="$new_port"
-    if [[ "$old_sni" != "$new_sni" ]]; then
-        rename_sni_ip_whitelist_domain "$old_sni" "$new_sni"
-    fi
-    save_and_offer_reapply_sni_stack
-}
-
-remove_sni_stack_tcp_route() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}删除 443 TCP/SNI 本地入站分流${PLAIN}" "${BOLD}Deleted 443 TCP/SNI local inbound offload${PLAIN}" "${BOLD}удален 443 TCP/SNI локальная входящая разгрузка${PLAIN}")"
-    echo -e "${CYAN}================================================${PLAIN}"
-    load_sni_stack_env || return 1
-    if [[ ${#TCP_ROUTE_SNIS[@]} -eq 0 ]]; then
-        echo -e "$(localized_text "${YELLOW}当前没有可删除的 TCP/SNI 入站分流。${PLAIN}" "${YELLOW}Currently has no TCP/SNI inbound offloads that can be deleted.${PLAIN}" "${YELLOW}в настоящее время не имеет входящих разгрузок TCP/SNI, которые можно удалить.${PLAIN}")"
-        return 0
-    fi
-
-    local i num choice idx route_sni
-    local -a new_snis=()
-    local -a new_addrs=()
-    local -a new_ports=()
-    for i in "${!TCP_ROUTE_SNIS[@]}"; do
-        num=$((i + 1))
-        echo -e "${GREEN}${num}.${PLAIN} ${TCP_ROUTE_SNIS[$i]}:${NGINX_LISTEN_PORT} -> ${TCP_ROUTE_ADDRS[$i]}:${TCP_ROUTE_PORTS[$i]}"
-    done
-    echo -e "------------------------------------------------"
-    read_trimmed choice "$(localized_text "请输入要删除的序号: " "Please enter the serial number to be deleted:" "Пожалуйста, введите серийный номер, который необходимо удалить:")"
-    if [[ -z "$choice" || "$choice" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Removal canceled.${PLAIN}" "${BLUE}Удаление отменено.${PLAIN}")"
-        return 0
-    fi
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#TCP_ROUTE_SNIS[@]} )); then
-        echo -e "$(localized_text "${RED}❌ 序号无效。${PLAIN}" "${RED}❌ The serial number is invalid.${PLAIN}" "${RED}❌ Серийный номер недействителен.${PLAIN}")"
-        return 1
-    fi
-
-    idx=$((choice - 1))
-    route_sni="${TCP_ROUTE_SNIS[$idx]}"
-    confirm_risk_action "$(localized_text "从 443 分流中移除 TCP/SNI 入站 ${route_sni}" "Remove TCP/SNI from 443 routing inbound ${route_sni}" "Удалить входящее подключение TCP/SNI из маршрутизации 443 ${route_sni}.")" \
-        "$(localized_text "该 SNI 的 Nginx stream 直通规则" "The Nginx stream pass-through rule for SNI" "Правило прохождения Nginx stream для SNI")" \
-        "$(localized_text "使用 443端口复用备份恢复，或重新新增该 TCP/SNI 入站" "Use Port 443 Reuse backup and restore, or re-add the TCP/SNI inbound connection" "Используйте резервное копирование и восстановление повторного использования порта 443 или повторно добавьте входящий TCP/SNI.")" \
-        "$(localized_text "确认没有客户端仍依赖该 SNI 连接。" "Confirm that no clients are still relying on the SNI connection." "Убедитесь, что ни один клиент по-прежнему не использует соединение SNI.")" || return 1
-
-    for i in "${!TCP_ROUTE_SNIS[@]}"; do
-        [[ "$i" -eq "$idx" ]] && continue
-        new_snis+=("${TCP_ROUTE_SNIS[$i]}")
-        new_addrs+=("${TCP_ROUTE_ADDRS[$i]}")
-        new_ports+=("${TCP_ROUTE_PORTS[$i]}")
-    done
-    TCP_ROUTE_SNIS=("${new_snis[@]}")
-    TCP_ROUTE_ADDRS=("${new_addrs[@]}")
-    TCP_ROUTE_PORTS=("${new_ports[@]}")
-    remove_sni_ip_whitelist_for_domain "$route_sni"
-    save_and_offer_reapply_sni_stack
-}
-
 # ---------------------------------------------------------
 # Module: xray_sni_routes.sh
 # ---------------------------------------------------------
@@ -13998,41 +13786,12 @@ sync_xray_sni_routes_to_entry_mode() {
 manage_xray_inbound_routes() {
     load_sni_stack_env || return 1
     if [[ "$(get_entry_mode)" == "xray-fallback" ]]; then
-        while true; do
-            clear
-            echo -e "${CYAN}================================================${PLAIN}"
-            echo -e "$(localized_text "${BOLD}Xray 入站管理${PLAIN}" "${BOLD}Xray Inbound management${PLAIN}" "${BOLD}Управление входящими подключениями Xray${PLAIN}")"
-            echo -e "${CYAN}================================================${PLAIN}"
-            xray_sni_routes_fallback_notice
-            print_xray_fallback_main_route_summary
-            echo -e "------------------------------------------------"
-            echo -e "$(localized_text "${GREEN}  1. 查看入站分流规则${PLAIN}" "${GREEN}1. View the inbound routing rule${PLAIN}" "${GREEN}1. Просмотреть правила маршрутизации входящих подключений${PLAIN}")"
-            echo -e "$(localized_text "${YELLOW}  2. 添加入站分流规则（当前模式不可用）${PLAIN}" "${YELLOW}2. Add inbound routing rules (not available in current mode)${PLAIN}" "${YELLOW}2. Добавьте правила маршрутизация входящего подключения (недоступно в текущем режиме)${PLAIN}")"
-            echo -e "$(localized_text "${YELLOW}  3. 删除入站分流规则（当前模式不可用）${PLAIN}" "${YELLOW}3. Delete inbound routing rules (not available in current mode)${PLAIN}" "${YELLOW}3. Удалить правила маршрутизации входящих подключений (недоступно в текущем режиме)${PLAIN}")"
-            echo -e "$(localized_text "${YELLOW}  4. 同步规则到当前入口模式（当前模式不可用）${PLAIN}" "${YELLOW}4. Synchronize rules to the current entry mode (the current mode is unavailable)${PLAIN}" "${YELLOW}4. Синхронизировать правила с текущим режимом входа (текущий режим недоступен)${PLAIN}")"
-            echo -e "------------------------------------------------"
-            echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
-            echo -e "${CYAN}================================================${PLAIN}"
-
-            local fallback_choice
-            read_trimmed fallback_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
-            case "$fallback_choice" in
-                1) list_xray_sni_routes ;;
-                2|3|4)
-                    echo -e "$(localized_text "${YELLOW}当前为 xray-fallback 模式，Xray 入站管理默认不可新增、删除或同步规则。${PLAIN}" "${YELLOW}xray-fallback mode is active; Xray inbound rules cannot be added, deleted, or synchronized here.${PLAIN}" "${YELLOW}Активен режим xray-fallback; здесь нельзя добавлять, удалять или синхронизировать правила входящих подключений Xray.${PLAIN}")"
-                    echo -e "$(localized_text "${YELLOW}如需多个本地 Xray 入站通过 443 按 SNI 分流，请切换到 nginx-stream 或 tcp-peek。${PLAIN}" "${YELLOW}If multiple local Xray inbound pass 443 split by SNI, please switch to nginx-stream or tcp-peek.${PLAIN}" "${YELLOW}Если несколько локальных входящих каналов Xray 443 разделены на SNI, переключитесь на nginx-stream или tcp-peek.${PLAIN}")"
-                    ;;
-                0|q|Q) break ;;
-                *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")" ;;
-            esac
-            echo ""
-            read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-        done
+        xray_sni_routes_fallback_notice
+        pause_return
         return 0
     fi
 
     while true; do
-        clear
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}Xray SNI 路由管理${PLAIN}" "${BOLD}Xray SNI route management${PLAIN}" "${BOLD}Управление маршрутами Xray SNI${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -14056,54 +13815,14 @@ manage_xray_inbound_routes() {
             3) remove_xray_sni_route ;;
             4) check_xray_sni_route_ports ;;
             5) sync_xray_sni_routes_to_entry_mode ;;
-            0|q|Q) break ;;
-            *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")" ;;
+            0|q|Q|'') break ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"; continue ;;
         esac
         echo ""
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
     done
 }
 
-manage_sni_stack_tcp_routes() {
-    while true; do
-        clear
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}Xray 入站管理${PLAIN}" "${BOLD}Xray Inbound management${PLAIN}" "${BOLD}Управление входящими подключениями Xray${PLAIN}")"
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：记录你已在 3x-ui/Xray 配好的本地入站：SNI -> 本地地址:端口。${PLAIN}" "${YELLOW}Purpose: record the local inbound you have configured in 3x-ui/Xray: SNI -> local address: port.${PLAIN}" "${YELLOW}Назначение: записать локальное входящее подключение, который вы настроили в 3x-ui/Xray: SNI -> локальный адрес: порт.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}这些记录用于当前支持的端口复用模式渲染分流规则；脚本不开放新端口，不改 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}These records are used for the currently supported Port 443 Reuse mode rendering routing rules; the script does not open new ports and does not change the internal configuration of the 3x-ui/Xray inbound connection.${PLAIN}" "${YELLOW}Эти записи используются для поддерживаемых в настоящее время правил разгрузки рендеринга в режиме с повторным использованием порта 443; сценарий не открывает новые порты и не изменяет внутреннюю конфигурацию входящего подключения 3x-ui/Xray.${PLAIN}")"
-        echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 查看当前 TCP/SNI 入站${PLAIN}" "${GREEN}1. View current TCP/SNI inbound${PLAIN}" "${GREEN}1. Просмотр текущего входящего TCP/SNI${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 新增 TCP/SNI 入站${PLAIN}" "${GREEN}2. Add TCP/SNI inbound${PLAIN}" "${GREEN}2. Добавьте входящий TCP/SNI.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 修改 TCP/SNI 入站${PLAIN}" "${GREEN}3. Modify TCP/SNI inbound${PLAIN}" "${GREEN}3. Изменить TCP/SNI входящий${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 删除 TCP/SNI 入站${PLAIN}" "${GREEN}4. Delete TCP/SNI inbound${PLAIN}" "${GREEN}4. Удалить TCP/SNI входящий${PLAIN}")"
-        echo -e "$(localized_text "${BLUE}  5. 查看 Web 白名单适用范围${PLAIN}" "${BLUE}5. View the applicable scope of the Web whitelist${PLAIN}" "${BLUE}5. Просмотрите применимую область белого веб-списка.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}" "${GREEN}6. Reapply and restart Nginx/Caddy${PLAIN}" "${GREEN}6. Повторно примените и перезапустите Nginx/Caddy.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. 443端口复用链路体检${PLAIN}" "${GREEN}7. Port 443 Reuse link health check${PLAIN}" "${GREEN}7. Проверка состояния повторного использования порта 443${PLAIN}")"
-        echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
-        echo -e "${CYAN}================================================${PLAIN}"
-
-        local choice
-        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
-        case "$choice" in
-            1) list_sni_stack_tcp_routes ;;
-            2) add_sni_stack_tcp_route ;;
-            3) edit_sni_stack_tcp_route ;;
-            4) remove_sni_stack_tcp_route ;;
-            5)
-                echo -e "$(localized_text "${YELLOW}Web 白名单只适用于 Web 域名：面板、订阅、普通网站、面板域名和自定义反代域名。${PLAIN}" "${YELLOW}Web whitelist only applies to web domains: panel, subscription, ordinary website, panel domain and custom reverse proxy domain.${PLAIN}" "${YELLOW}Белый список Web применяется только к именам веб-доменов: панель, подписка, обычный веб-сайт, доменное имя панели и собственное доменное имя обратного прокси.${PLAIN}")"
-                echo -e "$(localized_text "${YELLOW}TCP/SNI 入站和 Xray 节点流量不会启用 IP 白名单；如需限制来源，请在后端服务或防火墙侧单独设计。${PLAIN}" "${YELLOW}TCP/SNI inbound and Xray node traffic will not enable IP whitelisting; if you need to limit the source, please design it separately on the backend service or firewall side.${PLAIN}" "${YELLOW}входящее подключение TCP/SNI и трафик узла Xray не будут включать белый список IP-адресов; если вам нужно ограничить источник, спроектируйте его отдельно на стороне серверной службы или брандмауэра.${PLAIN}")"
-                ;;
-            6) reapply_sni_stack_from_env ;;
-            7) sni_stack_health_check ;;
-            0|q|Q) break ;;
-            *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")" ;;
-        esac
-        echo ""
-        read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-    done
-}
 
 manage_sni_stack_ip_whitelist() {
     while true; do
@@ -14691,7 +14410,6 @@ manage_reality_traffic_guard() {
 
 manage_sni_stack_sites() {
     while true; do
-        clear
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}🌐 443 网站/反代域名管理${PLAIN}" "${BOLD}🌐 443 Web domain and reverse-proxy management${PLAIN}" "${BOLD}🌐 443 Управление Web-доменами и обратным прокси${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -14725,8 +14443,8 @@ manage_sni_stack_sites() {
             8) switch_sni_stack_web_proxy_engine ;;
             9) edit_sni_stack_panel_domain_profile ;;
             "?") show_sni_help; pause_return; continue ;;
-            0) break ;;
-            *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")" ;;
+            0|q|Q|'') break ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; continue ;;
         esac
         echo ""
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
@@ -24126,7 +23844,6 @@ func_sni_stack_quick_menu() {
         *) sni_title_column=27 ;;
     esac
     while true; do
-        clear
         show_current_entry_summary
         echo -e "------------------------------------------------"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -24184,8 +23901,8 @@ func_sni_stack_quick_menu() {
             14) func_443_network_test; continue ;;
             15) view_current_entry_logs ;;
             "?") show_sni_help; pause_return; continue ;;
-            0) break ;;
-            *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; sleep 1 ;;
+            0|q|Q|'') break ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; continue ;;
         esac
         echo ""
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"

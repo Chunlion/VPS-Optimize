@@ -824,20 +824,22 @@ select_initial_entry_mode() {
     echo -e "$(localized_text "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(同样按 SNI 分流；自动安装 vpso-mux)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(also routes by SNI; installs vpso-mux automatically)${PLAIN}" "${GREEN}  3. TCP Peek + Splice${PLAIN}  ${YELLOW}(также маршрутизирует по SNI; автоматически устанавливает vpso-mux)${PLAIN}")"
     echo -e "$(localized_text "${RED}  0. 取消${PLAIN}" "${RED}  0. Cancel${PLAIN}" "${RED}  0. Отмена${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
-    read_trimmed choice "$(localized_text "选择入口模式 [1]: " "Select entry mode [1]: " "Выберите режим входа [1]: ")"
-    case "${choice:-1}" in
-        1) ENTRY_MODE="nginx-stream" ;;
-        2) ENTRY_MODE="xray-fallback" ;;
-        3) ENTRY_MODE="tcp-peek" ;;
-        0|q|Q) echo -e "$(localized_text "${BLUE}已取消首次配置。${PLAIN}" "${BLUE}Initial setup canceled.${PLAIN}" "${BLUE}Первоначальная настройка отменена.${PLAIN}")"; return 1 ;;
-        *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"; return 1 ;;
-    esac
+    while true; do
+        read_trimmed choice "$(localized_text "选择入口模式 [1]: " "Select entry mode [1]: " "Выберите режим входа [1]: ")" || return 1
+        case "${choice:-1}" in
+            1) ENTRY_MODE="nginx-stream"; break ;;
+            2) ENTRY_MODE="xray-fallback"; break ;;
+            3) ENTRY_MODE="tcp-peek"; break ;;
+            0|q|Q) echo -e "$(localized_text "${BLUE}已取消首次配置。${PLAIN}" "${BLUE}Initial setup canceled.${PLAIN}" "${BLUE}Первоначальная настройка отменена.${PLAIN}")"; return 1 ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")" ;;
+        esac
+    done
     echo -e "$(localized_text "${GREEN}✅ 已选择 443 入口模式：${ENTRY_MODE}${PLAIN}" "${GREEN}✅ 443 entry mode selected: ${ENTRY_MODE}${PLAIN}" "${GREEN}Выбран 443 режима входа: ${ENTRY_MODE}${PLAIN}")"
 }
 
 manage_entry_mode_install_or_switch() {
     local choice current_mode
-    if [[ ! -f /etc/vps-optimize/sni-stack.env ]]; then
+    if [[ ! -f "$(sni_stack_env_path)" ]]; then
         func_caddy_cf_reality_wizard
         return
     fi
@@ -852,14 +854,16 @@ manage_entry_mode_install_or_switch() {
     echo -e "${GREEN}  2. Xray Fallback${PLAIN}"
     echo -e "${GREEN}  3. TCP Peek + Splice${PLAIN}"
     echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
-    read_trimmed choice "$(localized_text "选择模式: " "Select a mode: " "Выберите режим: ")"
-    case "$choice" in
-        1) switch_entry_mode "nginx-stream" ;;
-        2) switch_entry_mode "xray-fallback" ;;
-        3) switch_entry_mode "tcp-peek" ;;
-        0|q|Q) return ;;
-        *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"; return 1 ;;
-    esac
+    while true; do
+        read_trimmed choice "$(localized_text "选择模式: " "Select a mode: " "Выберите режим: ")"
+        case "$choice" in
+            1) switch_entry_mode "nginx-stream"; return $? ;;
+            2) switch_entry_mode "xray-fallback"; return $? ;;
+            3) switch_entry_mode "tcp-peek"; return $? ;;
+            0|q|Q|'') return 0 ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")" ;;
+        esac
+    done
 }
 
 prepare_initial_entry_mode_dependencies() {
@@ -895,10 +899,6 @@ switch_entry_mode() {
     current_mode=$(get_entry_mode)
 
     if [[ "$target_mode" == "$current_mode" ]]; then
-        confirm_danger \
-            "$(localized_text "重新应用 ${target_mode} 入口模式" "Reapply the ${target_mode} entry mode" "Повторно применить режим входа ${target_mode}")" \
-            "$(localized_text "重新生成公网 443 入口配置并重启相关入口服务。" "Regenerate the public Port 443 entry configuration and restart the related entry services." "Заново создать конфигурацию публичного входа 443 и перезапустить связанные службы.")" \
-            "$(localized_text "使用入口模式备份回滚，或重新应用原入口模式。" "Roll back with the entry-mode backup or reapply the previous entry mode." "Выполните откат из резервной копии режима входа или повторно примените прежний режим.")" || return 1
         reapply_current_entry_mode
         return $?
     fi

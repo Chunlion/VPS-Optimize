@@ -218,41 +218,12 @@ sync_xray_sni_routes_to_entry_mode() {
 manage_xray_inbound_routes() {
     load_sni_stack_env || return 1
     if [[ "$(get_entry_mode)" == "xray-fallback" ]]; then
-        while true; do
-            clear
-            echo -e "${CYAN}================================================${PLAIN}"
-            echo -e "$(localized_text "${BOLD}Xray 入站管理${PLAIN}" "${BOLD}Xray Inbound management${PLAIN}" "${BOLD}Управление входящими подключениями Xray${PLAIN}")"
-            echo -e "${CYAN}================================================${PLAIN}"
-            xray_sni_routes_fallback_notice
-            print_xray_fallback_main_route_summary
-            echo -e "------------------------------------------------"
-            echo -e "$(localized_text "${GREEN}  1. 查看入站分流规则${PLAIN}" "${GREEN}1. View the inbound routing rule${PLAIN}" "${GREEN}1. Просмотреть правила маршрутизации входящих подключений${PLAIN}")"
-            echo -e "$(localized_text "${YELLOW}  2. 添加入站分流规则（当前模式不可用）${PLAIN}" "${YELLOW}2. Add inbound routing rules (not available in current mode)${PLAIN}" "${YELLOW}2. Добавьте правила маршрутизация входящего подключения (недоступно в текущем режиме)${PLAIN}")"
-            echo -e "$(localized_text "${YELLOW}  3. 删除入站分流规则（当前模式不可用）${PLAIN}" "${YELLOW}3. Delete inbound routing rules (not available in current mode)${PLAIN}" "${YELLOW}3. Удалить правила маршрутизации входящих подключений (недоступно в текущем режиме)${PLAIN}")"
-            echo -e "$(localized_text "${YELLOW}  4. 同步规则到当前入口模式（当前模式不可用）${PLAIN}" "${YELLOW}4. Synchronize rules to the current entry mode (the current mode is unavailable)${PLAIN}" "${YELLOW}4. Синхронизировать правила с текущим режимом входа (текущий режим недоступен)${PLAIN}")"
-            echo -e "------------------------------------------------"
-            echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
-            echo -e "${CYAN}================================================${PLAIN}"
-
-            local fallback_choice
-            read_trimmed fallback_choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
-            case "$fallback_choice" in
-                1) list_xray_sni_routes ;;
-                2|3|4)
-                    echo -e "$(localized_text "${YELLOW}当前为 xray-fallback 模式，Xray 入站管理默认不可新增、删除或同步规则。${PLAIN}" "${YELLOW}xray-fallback mode is active; Xray inbound rules cannot be added, deleted, or synchronized here.${PLAIN}" "${YELLOW}Активен режим xray-fallback; здесь нельзя добавлять, удалять или синхронизировать правила входящих подключений Xray.${PLAIN}")"
-                    echo -e "$(localized_text "${YELLOW}如需多个本地 Xray 入站通过 443 按 SNI 分流，请切换到 nginx-stream 或 tcp-peek。${PLAIN}" "${YELLOW}If multiple local Xray inbound pass 443 split by SNI, please switch to nginx-stream or tcp-peek.${PLAIN}" "${YELLOW}Если несколько локальных входящих каналов Xray 443 разделены на SNI, переключитесь на nginx-stream или tcp-peek.${PLAIN}")"
-                    ;;
-                0|q|Q) break ;;
-                *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")" ;;
-            esac
-            echo ""
-            read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-        done
+        xray_sni_routes_fallback_notice
+        pause_return
         return 0
     fi
 
     while true; do
-        clear
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}Xray SNI 路由管理${PLAIN}" "${BOLD}Xray SNI route management${PLAIN}" "${BOLD}Управление маршрутами Xray SNI${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -276,54 +247,14 @@ manage_xray_inbound_routes() {
             3) remove_xray_sni_route ;;
             4) check_xray_sni_route_ports ;;
             5) sync_xray_sni_routes_to_entry_mode ;;
-            0|q|Q) break ;;
-            *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")" ;;
+            0|q|Q|'') break ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"; continue ;;
         esac
         echo ""
         read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
     done
 }
 
-manage_sni_stack_tcp_routes() {
-    while true; do
-        clear
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}Xray 入站管理${PLAIN}" "${BOLD}Xray Inbound management${PLAIN}" "${BOLD}Управление входящими подключениями Xray${PLAIN}")"
-        echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${YELLOW}用途：记录你已在 3x-ui/Xray 配好的本地入站：SNI -> 本地地址:端口。${PLAIN}" "${YELLOW}Purpose: record the local inbound you have configured in 3x-ui/Xray: SNI -> local address: port.${PLAIN}" "${YELLOW}Назначение: записать локальное входящее подключение, который вы настроили в 3x-ui/Xray: SNI -> локальный адрес: порт.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}这些记录用于当前支持的端口复用模式渲染分流规则；脚本不开放新端口，不改 3x-ui/Xray 入站内部配置。${PLAIN}" "${YELLOW}These records are used for the currently supported Port 443 Reuse mode rendering routing rules; the script does not open new ports and does not change the internal configuration of the 3x-ui/Xray inbound connection.${PLAIN}" "${YELLOW}Эти записи используются для поддерживаемых в настоящее время правил разгрузки рендеринга в режиме с повторным использованием порта 443; сценарий не открывает новые порты и не изменяет внутреннюю конфигурацию входящего подключения 3x-ui/Xray.${PLAIN}")"
-        echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${GREEN}  1. 查看当前 TCP/SNI 入站${PLAIN}" "${GREEN}1. View current TCP/SNI inbound${PLAIN}" "${GREEN}1. Просмотр текущего входящего TCP/SNI${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 新增 TCP/SNI 入站${PLAIN}" "${GREEN}2. Add TCP/SNI inbound${PLAIN}" "${GREEN}2. Добавьте входящий TCP/SNI.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. 修改 TCP/SNI 入站${PLAIN}" "${GREEN}3. Modify TCP/SNI inbound${PLAIN}" "${GREEN}3. Изменить TCP/SNI входящий${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  4. 删除 TCP/SNI 入站${PLAIN}" "${GREEN}4. Delete TCP/SNI inbound${PLAIN}" "${GREEN}4. Удалить TCP/SNI входящий${PLAIN}")"
-        echo -e "$(localized_text "${BLUE}  5. 查看 Web 白名单适用范围${PLAIN}" "${BLUE}5. View the applicable scope of the Web whitelist${PLAIN}" "${BLUE}5. Просмотрите применимую область белого веб-списка.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  6. 重新应用并重启 Nginx/Caddy${PLAIN}" "${GREEN}6. Reapply and restart Nginx/Caddy${PLAIN}" "${GREEN}6. Повторно примените и перезапустите Nginx/Caddy.${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. 443端口复用链路体检${PLAIN}" "${GREEN}7. Port 443 Reuse link health check${PLAIN}" "${GREEN}7. Проверка состояния повторного использования порта 443${PLAIN}")"
-        echo -e "------------------------------------------------"
-        echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
-        echo -e "${CYAN}================================================${PLAIN}"
-
-        local choice
-        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
-        case "$choice" in
-            1) list_sni_stack_tcp_routes ;;
-            2) add_sni_stack_tcp_route ;;
-            3) edit_sni_stack_tcp_route ;;
-            4) remove_sni_stack_tcp_route ;;
-            5)
-                echo -e "$(localized_text "${YELLOW}Web 白名单只适用于 Web 域名：面板、订阅、普通网站、面板域名和自定义反代域名。${PLAIN}" "${YELLOW}Web whitelist only applies to web domains: panel, subscription, ordinary website, panel domain and custom reverse proxy domain.${PLAIN}" "${YELLOW}Белый список Web применяется только к именам веб-доменов: панель, подписка, обычный веб-сайт, доменное имя панели и собственное доменное имя обратного прокси.${PLAIN}")"
-                echo -e "$(localized_text "${YELLOW}TCP/SNI 入站和 Xray 节点流量不会启用 IP 白名单；如需限制来源，请在后端服务或防火墙侧单独设计。${PLAIN}" "${YELLOW}TCP/SNI inbound and Xray node traffic will not enable IP whitelisting; if you need to limit the source, please design it separately on the backend service or firewall side.${PLAIN}" "${YELLOW}входящее подключение TCP/SNI и трафик узла Xray не будут включать белый список IP-адресов; если вам нужно ограничить источник, спроектируйте его отдельно на стороне серверной службы или брандмауэра.${PLAIN}")"
-                ;;
-            6) reapply_sni_stack_from_env ;;
-            7) sni_stack_health_check ;;
-            0|q|Q) break ;;
-            *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")" ;;
-        esac
-        echo ""
-        read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
-    done
-}
 
 manage_sni_stack_ip_whitelist() {
     while true; do
