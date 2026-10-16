@@ -85,6 +85,8 @@ These reports are suitable for viewing trends, not strict splitting of bills fro
 
 ## Common operations
 
+In submenus, enter `0`, `q`, or press Enter to go back one level. Select ports by list number, comma-separated numbers, or `all`. Invalid input can be retried in place. When editing an existing quota or bandwidth limit, `0` removes the limit; `q` or Enter cancels the change.
+
 - Add port monitoring: Enter `1. Add/remove port monitoring`, select Add, then enter actual port numbers such as `443,54558` or a range such as `10000-10010`.
 - Remove port monitoring: Select Remove, enter list numbers such as `1,3`, then confirm the displayed ports. This removes monitoring, quotas and rate limits without stopping services.
 - Set quota: Enter `2. Quota/speed limit management` and set the monthly traffic quota for the port.

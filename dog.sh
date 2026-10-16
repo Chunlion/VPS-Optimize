@@ -62,15 +62,17 @@ select_ui_language() {
     echo "  2. 简体中文"
     echo "  3. Русский"
     echo "  0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
-    read_trimmed choice "$(ui_text '请选择 [0-3]: ' 'Select [0-3]: ' 'Выберите [0-3]: ')"
-    case "${choice,,}" in
-        1|en|english) target="en" ;;
-        2|zh|chinese|中文) target="zh" ;;
-        3|ru|russian|русский) target="ru" ;;
-        0|q|quit|back) return 0 ;;
-        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; return 1 ;;
-    esac
-    save_ui_language "$target" || { echo -e "${RED}$(ui_text '语言设置保存失败。' 'Failed to save language setting.' 'Не удалось сохранить язык интерфейса.')${NC}"; return 1; }
+    while true; do
+        read_trimmed choice "$(ui_text '请选择 [0-3，回车返回]: ' 'Select [0-3, Enter to return]: ' 'Выберите [0-3, Enter — назад]: ')"
+        case "${choice,,}" in
+            1|en|english) target="en"; break ;;
+            2|zh|chinese|中文) target="zh"; break ;;
+            3|ru|russian|русский) target="ru"; break ;;
+            ''|0|q|quit|back) return 0 ;;
+            *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}" ;;
+        esac
+    done
+    save_ui_language "$target" || { echo -e "${RED}$(ui_text '语言设置保存失败。' 'Failed to save language setting.' 'Не удалось сохранить язык интерфейса.')${NC}"; return 0; }
     echo -e "${GREEN}$(ui_text '界面语言已更新。' 'Interface language updated.' 'Язык интерфейса обновлён.')${NC}"
 }
 
@@ -90,11 +92,6 @@ read_trimmed() {
     if ! read -r -p "$prompt" input; then
         echo
         exit 0
-    fi
-    if [[ -z "$(trim_input "$input")" ]]; then
-        case "$prompt" in
-            *"(Y/n"*|*"[Y/n]"*|*"直接回车继续"*) input="y" ;;
-        esac
     fi
     printf -v "$__target" '%s' "$(trim_input "$input")"
 }
@@ -284,9 +281,7 @@ check_dependencies() {
     setup_script_permissions
     setup_cron_environment
     local active_ports=($(get_active_ports 2>/dev/null || true))
-    for port in "${active_ports[@]}"; do
-        setup_port_auto_reset_cron "$port" >/dev/null 2>&1 || true
-    done
+    if [ ${#active_ports[@]} -gt 0 ]; then setup_port_auto_reset_cron; fi
 }
 
 setup_script_permissions() {
@@ -307,12 +302,9 @@ ensure_local_script_copy() {
 confirm_danger() {
     local title="$1"
     local impact="$2"
-    local rollback="${3:-取消后不会改动当前配置；继续前建议先导出配置。}"
     local confirm
-    echo -e "${RED}高风险操作: ${title}${NC}"
-    echo -e "${YELLOW}影响: ${impact}${NC}"
-    echo -e "${BLUE}回退: ${rollback}${NC}"
-    read_trimmed confirm "确认继续？[Y/n]: "
+    echo -e "${YELLOW}${title}: ${impact}${NC}"
+    read_trimmed confirm "确认继续？[y/N]: "
     [[ "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
@@ -412,13 +404,11 @@ init_config() {
 EOF
     fi
     chmod 600 "$CONFIG_FILE" 2>/dev/null || true
-    ensure_global_defaults
     ensure_notification_defaults
     sanitize_nftables_config
     ensure_daily_usage_files
     init_nftables
     setup_exit_hooks
-    # 修复：移除残缺的 restore_monitoring_if_needed，改为调用全量恢复函数
     local active_ports=($(get_active_ports 2>/dev/null || true))
     if [ ${#active_ports[@]} -gt 0 ]; then
         # 1. 注入关机前保存的流量数据，防止进度丢失
@@ -644,6 +634,10 @@ parse_multi_choice_input() {
     input="${input//，/,}"
     local CHOICES=() choice
     result_array=()
+    if [[ "$input" == all || "$input" == 全部 ]]; then
+        for ((choice=1; choice<=max_choice; choice++)); do result_array+=("$choice"); done
+        return 0
+    fi
     if [[ -z "$input" || "$input" == *, || "$input" == ,* || "$input" == *,,* ]]; then
         echo -e "${RED}请输入列表序号，多个序号用逗号分隔。${NC}"
         return 1
@@ -659,6 +653,22 @@ parse_multi_choice_input() {
             result_array=()
             return 1
         fi
+    done
+}
+
+select_monitored_ports() {
+    local -n selected_ports=$1
+    local active_ports=() valid_choices=() choice_input choice
+    selected_ports=()
+    mapfile -t active_ports < <(get_active_ports)
+    show_port_list || return 1
+    while true; do
+        read_trimmed choice_input "输入列表序号 [1-${#active_ports[@]}]（如 1,3；all 全选；0/回车返回）: "
+        case "$choice_input" in ''|0|q|Q) return 1 ;; esac
+        parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices || continue
+        for choice in "${valid_choices[@]}"; do selected_ports+=("${active_ports[$((choice-1))]}"); done
+        echo "已选择: ${selected_ports[*]}"
+        return 0
     done
 }
 
@@ -875,30 +885,6 @@ setup_exit_hooks() {
 
 save_traffic_data_on_exit() { save_traffic_data >/dev/null 2>&1 || true; }
 
-restore_monitoring_if_needed() {
-    local active_ports=($(get_active_ports 2>/dev/null || true))
-    if [ ${#active_ports[@]} -eq 0 ]; then return 0; fi
-    local table_name
-    local family
-    table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
-    family=$(jq -r '.nftables.family' "$CONFIG_FILE")
-    
-    for port in "${active_ports[@]}"; do
-        local p_safe=$(echo "$port" | tr '-' '_')
-        # 如果内核里找不到这个端口的计数器，说明规则丢了，自动重新下发
-        if ! nft list counter "$family" "$table_name" "port_${p_safe}_out" >/dev/null 2>&1; then
-            echo -e "${YELLOW}检测到规则丢失，正在为端口 $port 重新下发监控规则...${NC}"
-            add_nftables_rules "$port"
-            
-            # 如果有流量限制，也一并恢复
-            local monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE")
-            if [ "$monthly_limit" != "unlimited" ]; then
-                apply_nftables_quota "$port" "$monthly_limit"
-            fi
-        fi
-    done
-}
-
 restore_traffic_data_from_backup() {
     if [ ! -f "$TRAFFIC_DATA_FILE" ]; then return 0; fi
     local backup_ports=($(jq -r 'keys[]' "$TRAFFIC_DATA_FILE" 2>/dev/null || true))
@@ -944,8 +930,8 @@ restore_all_monitoring_rules() {
             local tc_limit=$(convert_bandwidth_to_tc "$rate_limit")
             if [ -n "$tc_limit" ]; then apply_tc_limit "$port" "$tc_limit" || echo "端口 $port 的带宽限制恢复失败，请检查 tc 规则。" >&2; fi
         fi
-        setup_port_auto_reset_cron "$port"
     done
+    setup_port_auto_reset_cron
 }
 
 calculate_total_traffic() {
@@ -1243,14 +1229,6 @@ format_tc_burst() {
     else echo "$((burst_bytes / 1048576))m"; fi
 }
 
-get_global_display_mode() {
-    echo "raw"
-}
-
-ensure_global_defaults() {
-    :
-}
-
 ensure_daily_usage_files() {
         if [ ! -f "$DAILY_USAGE_FILE" ] || ! jq -e '.' "$DAILY_USAGE_FILE" >/dev/null 2>&1; then
                 cat > "$DAILY_USAGE_FILE" << 'EOF'
@@ -1485,64 +1463,34 @@ show_recent_7_days_trend() {
 }
 
 manage_daily_usage_reports() {
-    echo -e "${BLUE}=== 流量日报与趋势报表 ===${NC}"
-    print_traffic_scope_notice
-    echo "────────────────────────────────────────────────────────"
-    echo "1. 立即采集快照"
-    echo "2. 查看昨日报表"
-    echo "3. 查看近7日趋势"
-    echo "4. 查看指定日期报表"
-    echo "0. 返回主菜单"
-    read_trimmed choice "请选择 [0-4]: "
-
-    case $choice in
-        1)
-            collect_daily_usage_snapshot
-            echo
-            read -r -p "按回车返回..." || true
-            manage_daily_usage_reports
-            ;;
-        2)
-            local day_key=$(get_beijing_time -d "yesterday" +%F)
-            show_daily_report_for_day "$day_key"
-            echo
-            read -r -p "按回车返回..."
-            manage_daily_usage_reports
-            ;;
-        3)
-            show_recent_7_days_trend
-            echo
-            read -r -p "按回车返回..."
-            manage_daily_usage_reports
-            ;;
-        4)
-            read_trimmed day_input "请输入日期 (YYYY-MM-DD): "
-            if [[ ! "$day_input" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-                echo -e "${RED}日期格式错误${NC}"
-                sleep 1
-                manage_daily_usage_reports
-                return
-            fi
-            if ! get_beijing_time -d "$day_input" +%F >/dev/null 2>&1; then
-                echo -e "${RED}无效日期${NC}"
-                sleep 1
-                manage_daily_usage_reports
-                return
-            fi
-            show_daily_report_for_day "$day_input"
-            echo
-            read -r -p "按回车返回..."
-            manage_daily_usage_reports
-            ;;
-        0)
-            show_main_menu
-            ;;
-        *)
-            echo -e "${RED}无效选择${NC}"
-            sleep 1
-            manage_daily_usage_reports
-            ;;
-    esac
+    local choice day_input
+    while true; do
+        echo -e "${BLUE}=== 流量日报与趋势报表 ===${NC}"
+        echo "1. 立即采集快照"
+        echo "2. 查看昨日报表"
+        echo "3. 查看近7日趋势"
+        echo "4. 查看指定日期报表"
+        echo "0. 返回主菜单"
+        read_trimmed choice "请选择 [0-4，回车返回]: "
+        case $choice in
+            1) collect_daily_usage_snapshot ;;
+            2) show_daily_report_for_day "$(get_beijing_time -d yesterday +%F)" ;;
+            3) show_recent_7_days_trend ;;
+            4)
+                while true; do
+                    read_trimmed day_input "日期 YYYY-MM-DD（回车/q 返回）: "
+                    case "$day_input" in ''|q|Q) break ;; esac
+                    if [[ "$day_input" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && get_beijing_time -d "$day_input" +%F >/dev/null 2>&1; then
+                        show_daily_report_for_day "$day_input"
+                        break
+                    fi
+                    echo -e "${RED}日期无效，请重新输入。${NC}"
+                done
+                ;;
+            0|q|Q|'') return 0 ;;
+            *) echo -e "${RED}无效选择${NC}" ;;
+        esac
+    done
 }
 
 format_port_list() {
@@ -1592,12 +1540,12 @@ show_detailed_port_usage() {
         echo -e "${YELLOW}暂无监控端口${NC}"
     fi
     echo "────────────────────────────────────────────────────────"
-    read -r -p "按回车返回主菜单..."
-    show_main_menu
+    local reply
+    read_trimmed reply "按回车返回主菜单..."
 }
 
 show_main_menu() {
-    clear
+    local choice
     local active_ports=($(get_active_ports))
     local port_count=${#active_ports[@]}
     local counter_snapshot_ok=true
@@ -1651,27 +1599,30 @@ show_main_menu() {
         health)
             show_statistics_health_check
             echo
-            read -r -p "$(ui_text '按回车返回主菜单...' 'Press Enter to return to the main menu...' 'Нажмите Enter для возврата в главное меню...')"
-            show_main_menu
+            read_trimmed choice "$(ui_text '按回车返回主菜单...' 'Press Enter to return to the main menu...' 'Нажмите Enter для возврата в главное меню...')"
             ;;
-        language) select_ui_language; sleep 1; show_main_menu ;;
+        language) select_ui_language ;;
         0) exit 0 ;;
-        *) echo -e "${RED}$(ui_text '无效选择，请输入 0-8 或快捷词。' 'Invalid selection. Enter 0-8 or a shortcut.' 'Неверный выбор. Введите 0-8 или команду.')${NC}"; sleep 1; show_main_menu ;;
+        '') return 0 ;;
+        *) echo -e "${RED}$(ui_text '无效选择，请输入 0-8 或快捷词。' 'Invalid selection. Enter 0-8 or a shortcut.' 'Неверный выбор. Введите 0-8 или команду.')${NC}" ;;
     esac
 }
 
 manage_port_monitoring() {
-    echo -e "${BLUE}=== $(ui_text '端口监控' 'Port monitoring' 'Мониторинг портов') ===${NC}"
-    echo "1. $(ui_text '添加端口监控' 'Add port monitoring' 'Добавить мониторинг порта')"
-    echo "2. $(ui_text '删除端口监控' 'Remove port monitoring' 'Удалить мониторинг порта')"
-    echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
-    read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
-    case $choice in
-        1) add_port_monitoring ;;
-        2) remove_port_monitoring ;;
-        0) show_main_menu ;;
-        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; sleep 1; manage_port_monitoring ;;
-    esac
+    local choice
+    while true; do
+        echo -e "${BLUE}=== $(ui_text '端口监控' 'Port monitoring' 'Мониторинг портов') ===${NC}"
+        echo "1. $(ui_text '添加端口监控' 'Add port monitoring' 'Добавить мониторинг порта')"
+        echo "2. $(ui_text '删除端口监控' 'Remove port monitoring' 'Удалить мониторинг порта')"
+        echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
+        read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
+        case $choice in
+            1) add_port_monitoring ;;
+            2) remove_port_monitoring ;;
+            0|q|Q|'') return 0 ;;
+            *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}" ;;
+        esac
+    done
 }
 
 add_port_monitoring() {
@@ -1682,9 +1633,8 @@ add_port_monitoring() {
     echo "────────────────────────────────────────────────────────"
 
     local -A program_ports=()
-    while read -r line; do # 修复: 加入 -r 防止反斜杠丢失
+    while read -r line; do
         if [[ "$line" =~ LISTEN|UNCONN ]]; then
-            # 修复: 加入 local 限定作用域，防止全局污染
             local local_addr=$(echo "$line" | awk '{print $5}')
             local port=$(echo "$local_addr" | grep -o ':[0-9]*$' | cut -d':' -f2)
             local program=$(echo "$line" | awk '{print $7}' | cut -d'"' -f2 2>/dev/null || echo "")
@@ -1702,7 +1652,7 @@ add_port_monitoring() {
 
     if [ ${#program_ports[@]} -gt 0 ]; then
         for program in $(printf '%s\n' "${!program_ports[@]}" | sort); do
-            local ports="${program_ports[$program]}" # 修复: 声明为 local
+            local ports="${program_ports[$program]}"
             printf "%-10s | %-9s\n" "$program" "$ports"
         done
     else
@@ -1711,50 +1661,36 @@ add_port_monitoring() {
 
     echo "────────────────────────────────────────────────────────"
     echo "输入实际端口号，例如 443,54558 或 10000-10010；同时监控 TCP/UDP。"
-    read_trimmed port_input "要添加的端口/端口段（0 或回车取消）: "
-    if [ -z "$port_input" ] || [ "$port_input" = "0" ]; then
-        echo -e "${YELLOW}已取消添加端口监控${NC}"
-        sleep 1
-        manage_port_monitoring
-        return
-    fi
-
-    local PORTS=()
-    if ! parse_port_range_input "$port_input" PORTS; then
-        sleep 2
-        manage_port_monitoring
-        return
-    fi
-    local valid_ports=()
-
-    local existing_ports=() existing overlap
+    local PORTS=() valid_ports=() existing_ports=() existing overlap port_input quota_input remark_input
     mapfile -t existing_ports < <(get_active_ports)
-    for port in "${PORTS[@]}"; do
-        overlap=false
-        for existing in "${existing_ports[@]}" "${valid_ports[@]}"; do
-            if ports_overlap "$port" "$existing"; then
-                echo -e "${YELLOW}端口 $port 与监控项 $existing 重叠，跳过，避免重复统计或限额冲突。${NC}"
-                overlap=true
-                break
-            fi
+    while true; do
+        read_trimmed port_input "要添加的端口/端口段（0/回车/q 返回）: "
+        case "$port_input" in ''|0|q|Q) return 0 ;; esac
+        parse_port_range_input "$port_input" PORTS || continue
+        valid_ports=()
+        for port in "${PORTS[@]}"; do
+            overlap=false
+            for existing in "${existing_ports[@]}" "${valid_ports[@]}"; do
+                if ports_overlap "$port" "$existing"; then
+                    echo -e "${YELLOW}端口 $port 与监控项 $existing 重叠，跳过。${NC}"
+                    overlap=true
+                    break
+                fi
+            done
+            [ "$overlap" = true ] && continue
+            valid_ports+=("$port")
         done
-        [ "$overlap" = true ] && continue
-        valid_ports+=("$port")
+        [ ${#valid_ports[@]} -gt 0 ] && break
+        echo -e "${RED}没有可添加的端口，请重新输入。${NC}"
     done
-
-    if [ ${#valid_ports[@]} -eq 0 ]; then
-        echo -e "${RED}没有有效的端口可添加${NC}"
-        sleep 2
-        manage_port_monitoring
-        return
-    fi
 
     echo
     local port_list=$(IFS=','; echo "${valid_ports[*]}")
     echo "将添加: $port_list（端口段作为一个监控项，共享配额）"
     while true; do
         echo "配额按入站+出站累计，单位 MB/GB/TB（如 50G），0 为不限量；多个值按上述顺序对应，单个值分别用于每项。"
-        read_trimmed quota_input "流量配额(回车默认0): "
+        read_trimmed quota_input "流量配额(回车默认0；q 返回): "
+        case "$quota_input" in q|Q) return 0 ;; esac
         if [ -z "$quota_input" ]; then quota_input="0"; fi
 
         local QUOTAS=()
@@ -1762,7 +1698,7 @@ add_port_monitoring() {
 
         local all_valid=true
         for quota in "${QUOTAS[@]}"; do
-            if [ "$quota" != "0" ] && ! validate_quota "$quota"; then
+            if ! validate_quota "$quota"; then
                 echo -e "${RED}配额格式错误: $quota${NC}"
                 all_valid=false
                 break
@@ -1780,29 +1716,26 @@ add_port_monitoring() {
     done
 
     echo
-    read_trimmed remark_input "请输入当前规则备注(可选，直接回车跳过): "
     local REMARKS=()
-    if [ -n "$remark_input" ]; then
-        parse_comma_separated_input "$remark_input" REMARKS || { sleep 2; manage_port_monitoring; return; }
+    while true; do
+        read_trimmed remark_input "备注（回车跳过；q 返回）: "
+        case "$remark_input" in q|Q) return 0 ;; '') break ;; esac
+        parse_comma_separated_input "$remark_input" REMARKS || continue
         expand_single_value_to_array REMARKS ${#valid_ports[@]}
-        if [ ${#REMARKS[@]} -ne ${#valid_ports[@]} ]; then
-            echo -e "${RED}备注数量与端口数量不匹配${NC}"
-            sleep 2
-            add_port_monitoring
-            return
-        fi
-    fi
+        [ ${#REMARKS[@]} -eq ${#valid_ports[@]} ] && break
+        echo -e "${RED}备注数量与端口数量不匹配，请重新输入。${NC}"
+    done
 
     local added_count=0
     for i in "${!valid_ports[@]}"; do
         local port="${valid_ports[$i]}"
         local quota=$(echo "${QUOTAS[$i]}" | tr -d ' ')
         local remark=""
-        if [ ${#REMARKS[@]} -gt $i ]; then remark=$(echo "${REMARKS[$i]}" | tr -d ' '); fi
+        if [ ${#REMARKS[@]} -gt $i ]; then remark="${REMARKS[$i]}"; fi
 
         local quota_enabled="true"
         local monthly_limit="unlimited"
-        if [ "$quota" != "0" ] && [ -n "$quota" ]; then monthly_limit="$quota"; fi
+        if [ "$quota" != "0" ]; then monthly_limit="$quota"; fi
 
         local quota_config
         if [ "$monthly_limit" != "unlimited" ]; then
@@ -1836,40 +1769,17 @@ add_port_monitoring() {
             echo -e "${RED}端口 $port 已添加监控，但配额未生效，请重新设置。${NC}"
             update_config ".ports.\"$port\".quota.monthly_limit = \"unlimited\" | del(.ports.\"$port\".quota.reset_day)"
         fi
-        setup_port_auto_reset_cron "$port"
         added_count=$((added_count + 1))
     done
+    if [ "$added_count" -gt 0 ]; then setup_port_auto_reset_cron; fi
 
     echo -e "${GREEN}成功添加 $added_count 个端口监控${NC}"
-    sleep 2
-    manage_port_monitoring
 }
 
 remove_port_monitoring() {
     echo -e "${BLUE}=== 删除端口监控 ===${NC}"
-    local active_ports=($(get_active_ports))
-    if ! show_port_list; then sleep 2; manage_port_monitoring; return; fi
-    echo
-
-    read_trimmed choice_input "输入要删除的列表序号（如 1,3；0 或回车取消）: "
-    if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
-        echo -e "${YELLOW}已取消删除端口监控${NC}"
-        sleep 1
-        manage_port_monitoring
-        return
-    fi
-    local valid_choices=()
-    local ports_to_delete=()
-    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices || { sleep 2; manage_port_monitoring; return; }
-
-    for choice in "${valid_choices[@]}"; do
-        ports_to_delete+=("${active_ports[$((choice-1))]}")
-    done
-
-    if [ ${#ports_to_delete[@]} -eq 0 ]; then
-        echo -e "${RED}没有有效的端口可删除${NC}"
-        sleep 2; remove_port_monitoring; return
-    fi
+    local ports_to_delete=() confirm port
+    select_monitored_ports ports_to_delete || return 0
 
     echo "将删除监控、配额和限速: ${ports_to_delete[*]}；不会关闭端口或停止服务。"
     read_trimmed confirm "确认删除上述监控项? [y/N]: "
@@ -1887,13 +1797,10 @@ remove_port_monitoring() {
                 grep -v "|$port|" "$history_file" > "${history_file}.tmp" 2>/dev/null || true
                 mv "${history_file}.tmp" "$history_file" 2>/dev/null || true
             fi
-            remove_port_auto_reset_cron "$port"
             deleted_count=$((deleted_count + 1))
         done
         echo -e "${GREEN}成功删除 $deleted_count 个端口监控${NC}"
     fi
-    sleep 2
-    manage_port_monitoring
 }
 
 port_nftables_rules_are_exact() {
@@ -2009,58 +1916,35 @@ remove_nftables_rules() {
 
 set_port_bandwidth_limit() {
     echo -e "${BLUE}设置端口带宽限制${NC}"
-    local active_ports=($(get_active_ports))
-    if ! show_port_list; then sleep 2; manage_traffic_limits; return; fi
-
-    read_trimmed choice_input "输入要限速的列表序号 [1-${#active_ports[@]}]（如 1,3；0 或回车取消）: "
-    if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
-        echo -e "${YELLOW}已取消设置带宽限制${NC}"
-        sleep 1
-        manage_traffic_limits
-        return
-    fi
-    local valid_choices=()
-    local ports_to_limit=()
-    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices || { sleep 2; manage_traffic_limits; return; }
-
-    for choice in "${valid_choices[@]}"; do
-        ports_to_limit+=("${active_ports[$((choice-1))]}")
-    done
-
-    if [ ${#ports_to_limit[@]} -eq 0 ]; then
-        echo -e "${RED}没有有效的端口可设置限制${NC}"
-        sleep 2; set_port_bandwidth_limit; return
-    fi
-
-    local port_list=$(IFS=','; echo "${ports_to_limit[*]}")
-    echo "已选择: $port_list"
+    local ports_to_limit=() LIMITS=() limit_input limit all_valid i
+    select_monitored_ports ports_to_limit || return 0
     echo "限制默认网卡的出站带宽，覆盖 IPv4/IPv6、TCP/UDP；不限制本机入站带宽。"
     echo "输入 Kbps/Mbps/Gbps（如 10Mbps，约 1.25MB/s），0 取消限速；单个值分别用于每项，多个值按上述顺序对应。"
-    read_trimmed limit_input "带宽限制(回车取消): "
-    if [ -z "$limit_input" ]; then
-        echo -e "${YELLOW}已取消设置带宽限制${NC}"
-        sleep 1
-        manage_traffic_limits
-        return
-    fi
-
-    local LIMITS=()
-    parse_comma_separated_input "$limit_input" LIMITS || { sleep 2; manage_traffic_limits; return; }
-    expand_single_value_to_array LIMITS ${#ports_to_limit[@]}
-    if [ ${#LIMITS[@]} -ne ${#ports_to_limit[@]} ]; then
-        echo -e "${RED}限制值数量与端口数量不匹配${NC}"
-        sleep 2; set_port_bandwidth_limit; return
-    fi
+    while true; do
+        read_trimmed limit_input "带宽限制(回车/q 取消): "
+        case "$limit_input" in ''|q|Q) return 0 ;; esac
+        parse_comma_separated_input "$limit_input" LIMITS || continue
+        expand_single_value_to_array LIMITS ${#ports_to_limit[@]}
+        if [ ${#LIMITS[@]} -ne ${#ports_to_limit[@]} ]; then
+            echo -e "${RED}限制值数量与端口数量不匹配，请重新输入。${NC}"
+            continue
+        fi
+        all_valid=true
+        for i in "${!LIMITS[@]}"; do
+            LIMITS[$i]="${LIMITS[$i]// /}"
+            if ! validate_bandwidth "${LIMITS[$i]}"; then
+                echo -e "${RED}带宽格式错误: ${LIMITS[$i]}，请重新输入。${NC}"
+                all_valid=false
+                break
+            fi
+        done
+        [ "$all_valid" = true ] && break
+    done
 
     local success_count=0
     for i in "${!ports_to_limit[@]}"; do
         local port="${ports_to_limit[$i]}"
-        local limit=$(echo "${LIMITS[$i]}" | tr -d ' ')
-
-        if ! validate_bandwidth "$limit"; then
-            echo -e "${RED}端口 $port 带宽格式错误，原限制未修改。${NC}"
-            continue
-        fi
+        limit="${LIMITS[$i]}"
 
         if [ "$limit" = "0" ]; then
             remove_tc_limit "$port" || { echo "端口 $port 限速移除失败。" >&2; continue; }
@@ -2076,47 +1960,24 @@ set_port_bandwidth_limit() {
         success_count=$((success_count + 1))
     done
     echo -e "${GREEN}成功设置 $success_count 个端口的带宽限制${NC}"
-    sleep 3; manage_traffic_limits
 }
 
 set_port_quota_limit() {
     echo -e "${BLUE}=== 设置端口流量配额 ===${NC}"
-    local active_ports=($(get_active_ports))
-    if ! show_port_list; then sleep 2; manage_traffic_limits; return; fi
-    read_trimmed choice_input "输入要设置配额的列表序号 [1-${#active_ports[@]}]（如 1,3；0 或回车取消）: "
-    if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
-        echo -e "${YELLOW}已取消设置流量配额${NC}"
-        sleep 1
-        manage_traffic_limits
-        return
-    fi
-
-    local valid_choices=()
-    local ports_to_quota=()
-    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices || { sleep 2; manage_traffic_limits; return; }
-
-    for choice in "${valid_choices[@]}"; do
-        ports_to_quota+=("${active_ports[$((choice-1))]}")
-    done
-
-    if [ ${#ports_to_quota[@]} -eq 0 ]; then
-        echo -e "${RED}没有有效的端口可设置配额${NC}"
-        sleep 2; set_port_quota_limit; return
-    fi
-
-    echo "已选择: ${ports_to_quota[*]}"
+    local ports_to_quota=() quota_input
+    select_monitored_ports ports_to_quota || return 0
     echo "配额是本周期入站+出站总上限，保留已有用量；重新开始累计请使用流量重置。"
     while true; do
         echo "输入 MB/GB/TB（如 50G），0 取消配额；单个值分别用于每项，多个值按上述顺序对应。"
-        read_trimmed quota_input "流量配额(回车取消): "
-        if [ -z "$quota_input" ]; then manage_traffic_limits; return; fi
+        read_trimmed quota_input "流量配额(回车/q 取消): "
+        case "$quota_input" in ''|q|Q) return 0 ;; esac
 
         local QUOTAS=()
         parse_comma_separated_input "$quota_input" QUOTAS || continue
 
         local all_valid=true
         for quota in "${QUOTAS[@]}"; do
-            if [ "$quota" != "0" ] && ! validate_quota "$quota"; then
+            if ! validate_quota "$quota"; then
                 echo -e "${RED}配额格式错误: $quota${NC}"
                 all_valid=false; break
             fi
@@ -2135,10 +1996,9 @@ set_port_quota_limit() {
         local port="${ports_to_quota[$i]}"
         local quota=$(echo "${QUOTAS[$i]}" | tr -d ' ')
 
-        if [ "$quota" = "0" ] || [ -z "$quota" ]; then
+        if [ "$quota" = "0" ]; then
             remove_nftables_quota "$port" || { echo "端口 $port 配额移除失败。" >&2; continue; }
             update_config ".ports.\"$port\".quota.enabled = true | .ports.\"$port\".quota.monthly_limit = \"unlimited\" | del(.ports.\"$port\".quota.reset_day) | del(.ports.\"$port\".quota.billing_mode)"
-            remove_port_auto_reset_cron "$port"
             success_count=$((success_count + 1))
             continue
         fi
@@ -2152,25 +2012,27 @@ set_port_quota_limit() {
             update_config ".ports.\"$port\".quota.enabled = true | .ports.\"$port\".quota.monthly_limit = \"$quota\" | del(.ports.\"$port\".quota.billing_mode)"
         fi
         
-        setup_port_auto_reset_cron "$port"
         success_count=$((success_count + 1))
     done
+    if [ "$success_count" -gt 0 ]; then setup_port_auto_reset_cron; fi
     echo -e "${GREEN}成功设置 $success_count 个端口的流量配额${NC}"
-    sleep 3; manage_traffic_limits
 }
 
 manage_traffic_limits() {
-    echo -e "${BLUE}=== $(ui_text '配额与限速' 'Quotas and rate limits' 'Квоты и лимиты скорости') ===${NC}"
-    echo "1. $(ui_text '设置端口带宽限制（速率控制）' 'Set port bandwidth limit (rate control)' 'Ограничить скорость порта')"
-    echo "2. $(ui_text '设置端口流量配额（总量控制）' 'Set port traffic quota (volume control)' 'Задать квоту трафика порта')"
-    echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
-    read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
-    case $choice in
-        1) set_port_bandwidth_limit ;;
-        2) set_port_quota_limit ;;
-        0) show_main_menu ;;
-        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; sleep 1; manage_traffic_limits ;;
-    esac
+    local choice
+    while true; do
+        echo -e "${BLUE}=== $(ui_text '配额与限速' 'Quotas and rate limits' 'Квоты и лимиты скорости') ===${NC}"
+        echo "1. $(ui_text '设置端口带宽限制（速率控制）' 'Set port bandwidth limit (rate control)' 'Ограничить скорость порта')"
+        echo "2. $(ui_text '设置端口流量配额（总量控制）' 'Set port traffic quota (volume control)' 'Задать квоту трафика порта')"
+        echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
+        read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
+        case $choice in
+            1) set_port_bandwidth_limit ;;
+            2) set_port_quota_limit ;;
+            0|q|Q|'') return 0 ;;
+            *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}" ;;
+        esac
+    done
 }
 
 quota_cleanup_commands() {
@@ -2327,96 +2189,60 @@ remove_tc_limit() {
 }
 
 manage_traffic_reset() {
-    echo -e "${BLUE}$(ui_text '流量重置' 'Traffic reset' 'Сброс трафика')${NC}"
-    echo "1. $(ui_text '每月流量重置日设置' 'Monthly reset day' 'День ежемесячного сброса')"
-    echo "2. $(ui_text '立即重置' 'Reset now' 'Сбросить сейчас')"
-    echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
-    read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
-    case $choice in
-        1) set_reset_day ;;
-        2) immediate_reset ;;
-        0) show_main_menu ;;
-        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; sleep 1; manage_traffic_reset ;;
-    esac
+    local choice
+    while true; do
+        echo -e "${BLUE}$(ui_text '流量重置' 'Traffic reset' 'Сброс трафика')${NC}"
+        echo "1. $(ui_text '每月流量重置日设置' 'Monthly reset day' 'День ежемесячного сброса')"
+        echo "2. $(ui_text '立即重置' 'Reset now' 'Сбросить сейчас')"
+        echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
+        read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
+        case $choice in
+            1) set_reset_day ;;
+            2) immediate_reset ;;
+            0|q|Q|'') return 0 ;;
+            *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}" ;;
+        esac
+    done
 }
 
 set_reset_day() {
     echo -e "${BLUE}=== 设置端口每月重置日 ===${NC}"
-    local active_ports=($(get_active_ports))
-    if ! show_port_list; then sleep 2; manage_traffic_reset; return; fi
-    
-    read_trimmed choice_input "请选择要设置重置日期的端口序号（多端口逗号分隔）: "
-    if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
-        echo -e "${YELLOW}已取消设置重置日期${NC}"
-        sleep 1
-        manage_traffic_reset
-        return
-    fi
-    local valid_choices=()
-    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices || { sleep 2; manage_traffic_reset; return; }
-    
-    if [ ${#valid_choices[@]} -eq 0 ]; then
-        echo -e "${RED}❌ 未选择有效端口，操作取消。${NC}"
-        sleep 2
-        manage_traffic_reset
-        return
-    fi
-    
-    read_trimmed reset_day "请输入每月的重置日期 (输入1-31，输入0代表取消自动重置): "
-    
-    if ! [[ "$reset_day" =~ ^[0-9]+$ ]] || [ "$reset_day" -lt 0 ] || [ "$reset_day" -gt 31 ]; then
-        echo -e "${RED}❌ 输入无效，请输入 0-31 之间的数字！${NC}"
-        sleep 2
-        manage_traffic_reset
-        return
-    fi
-    
-    for choice in "${valid_choices[@]}"; do
-        local port=${active_ports[$((choice-1))]}
+    local ports_to_reset=() reset_day port
+    select_monitored_ports ports_to_reset || return 0
+    while true; do
+        read_trimmed reset_day "每月重置日期 [1-31]（0 停用；回车/q 返回）: "
+        case "$reset_day" in ''|q|Q) return 0 ;; esac
+        if [[ "$reset_day" =~ ^[0-9]{1,2}$ ]] && (( 10#$reset_day <= 31 )); then
+            reset_day=$((10#$reset_day))
+            break
+        fi
+        echo -e "${RED}请输入 0-31 之间的数字。${NC}"
+    done
+
+    for port in "${ports_to_reset[@]}"; do
         
         if [ "$reset_day" = "0" ]; then
             update_config "del(.ports.\"$port\".quota.reset_day)"
-            remove_port_auto_reset_cron "$port"
         else
             update_config ".ports.\"$port\".quota.reset_day = $reset_day"
-            setup_port_auto_reset_cron "$port"
         fi
     done
+    if [ "$reset_day" != "0" ]; then setup_port_auto_reset_cron; fi
     
     echo -e "${GREEN}✅ 重置日期设置成功！${NC}"
-    sleep 2
-    manage_traffic_reset
 }
 
 immediate_reset() {
     echo -e "${BLUE}=== 立即重置端口流量 ===${NC}"
-    local active_ports=($(get_active_ports))
-    if ! show_port_list; then sleep 2; manage_traffic_reset; return; fi
-    
-    read_trimmed choice_input "请选择要立即重置的端口序号（多端口逗号分隔）: "
-    if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
-        echo -e "${YELLOW}已取消立即重置${NC}"
-        sleep 1
-        manage_traffic_reset
-        return
-    fi
-    local valid_choices=()
-    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices || { sleep 2; manage_traffic_reset; return; }
-    
-    if [ ${#valid_choices[@]} -eq 0 ]; then
-        echo -e "${RED}❌ 未选择有效端口！${NC}"
-        sleep 2; manage_traffic_reset; return
-    fi
+    local ports_to_reset=() port
+    select_monitored_ports ports_to_reset || return 0
 
     if confirm_danger "立即清零端口流量" "选定端口的当前 nftables 计数和配额计数会被重置，历史实时统计不可恢复。"; then
-        for choice in "${valid_choices[@]}"; do
-            local port=${active_ports[$((choice-1))]}
+        for port in "${ports_to_reset[@]}"; do
             auto_reset_port "$port"
             echo -e "${GREEN}✅ 端口 $port 已清零！${NC}"
         done
     fi
-    sleep 2
-    manage_traffic_reset
 }
 
 auto_reset_port() {
@@ -2471,29 +2297,35 @@ reset_port_nftables_counters() {
         nft reset counter "$family" "$table_name" "port_${port}_out" >/dev/null 2>&1 || true
         nft reset quota "$family" "$table_name" "port_${port}_quota" >/dev/null 2>&1 || true
     fi
+    NFT_COUNTER_SNAPSHOT=""
 }
 
 manage_configuration() {
-    echo -e "${BLUE}=== $(ui_text '配置导入与导出' 'Configuration import/export' 'Импорт/экспорт конфигурации') ===${NC}"
-    echo "1. $(ui_text '导出配置包' 'Export configuration' 'Экспорт конфигурации')"
-    echo "2. $(ui_text '导入配置包' 'Import configuration' 'Импорт конфигурации')"
-    echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
-    read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
-    case $choice in
-        1) export_config ;;
-        2) import_config ;;
-        0) show_main_menu ;;
-        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; sleep 1; manage_configuration ;;
-    esac
+    local choice
+    while true; do
+        echo -e "${BLUE}=== $(ui_text '配置导入与导出' 'Configuration import/export' 'Импорт/экспорт конфигурации') ===${NC}"
+        echo "1. $(ui_text '导出配置包' 'Export configuration' 'Экспорт конфигурации')"
+        echo "2. $(ui_text '导入配置包' 'Import configuration' 'Импорт конфигурации')"
+        echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
+        read_trimmed choice "$(ui_text '请选择 [0-2]: ' 'Select [0-2]: ' 'Выберите [0-2]: ')"
+        case $choice in
+            1) export_config ;;
+            2) import_config ;;
+            0|q|Q|'') return 0 ;;
+            *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}" ;;
+        esac
+    done
 }
 
 export_config() {
     local timestamp=$(get_beijing_time +%Y%m%d-%H%M%S)
     local backup_name="port-traffic-dog-config-${timestamp}.tar.gz"
     local backup_path="/root/${backup_name}"
-    tar -czf "$backup_path" "$CONFIG_DIR" 2>/dev/null
-    echo -e "${GREEN}配置包已导出到: $backup_path${NC}"
-    sleep 2; manage_configuration
+    if tar -czf "$backup_path" "$CONFIG_DIR" 2>/dev/null; then
+        echo -e "${GREEN}配置包已导出到: $backup_path${NC}"
+    else
+        echo -e "${RED}配置导出失败，请检查目标目录权限和剩余空间。${NC}"
+    fi
 }
 
 import_config() {
@@ -2521,7 +2353,6 @@ import_config() {
             fi
         fi
     fi
-    sleep 2; manage_configuration
 }
 
 download_with_sources() {
@@ -2549,31 +2380,14 @@ install_update_script() {
     local temp_file
     temp_file=$(mktemp /tmp/port-traffic-dog-update.XXXXXX.sh) || {
         echo -e "${RED}错误：临时文件创建失败，更新已取消。${NC}"
-        read -r -p "按回车键返回菜单..."
-        show_main_menu
         return
     }
     
     if download_with_sources "$SCRIPT_URL" "$temp_file"; then
-        if [ -s "$temp_file" ] && grep -q "端口流量狗" "$temp_file" 2>/dev/null && bash -n "$temp_file" >/dev/null 2>&1; then
-            # 先展示版本信息并确认，避免"检查"菜单项直接执行不可逆的替换重启
+        if grep -q "端口流量狗" "$temp_file" 2>/dev/null && bash -n "$temp_file" >/dev/null 2>&1; then
             local remote_version=$(grep -m1 '^readonly SCRIPT_VERSION=' "$temp_file" | cut -d'"' -f2)
             echo -e "当前版本: ${GREEN}${SCRIPT_VERSION}${NC}"
             echo -e "远程版本: ${GREEN}${remote_version:-未知}${NC}"
-            if [ -n "$remote_version" ] && [ "$remote_version" = "$SCRIPT_VERSION" ]; then
-                echo -e "${GREEN}当前已是最新版本。${NC}"
-            fi
-            read_trimmed update_confirm "确认更新并原地重启脚本？[Y/n]: "
-            case "$update_confirm" in
-                y|Y) ;;
-                *)
-                    rm -f "$temp_file"
-                    echo -e "${YELLOW}已取消更新${NC}"
-                    read -r -p "按回车键返回菜单..." || true
-                    show_main_menu
-                    return
-                    ;;
-            esac
             echo -e "${GREEN}下载成功，正在进行热替换...${NC}"
 
             mv "$temp_file" "$SCRIPT_PATH"
@@ -2584,8 +2398,6 @@ install_update_script() {
 
             echo -e "${GREEN}脚本更新完成！正在原地热重启...${NC}"
             echo "────────────────────────────────────────────────────────"
-            sleep 1
-            
             exec bash "$SCRIPT_PATH"
         else
             echo -e "${RED}错误：下载的文件验证失败或语法检查未通过，请检查网络或 URL。${NC}"
@@ -2596,8 +2408,6 @@ install_update_script() {
         rm -f "$temp_file"
     fi
 
-    read -r -p "按回车键返回菜单..."
-    show_main_menu
 }
 
 uninstall_script() {
@@ -2613,14 +2423,13 @@ uninstall_script() {
     echo "  7. 删除脚本本身" 
     echo
     echo -e "${RED}🔴 警告：此操作会移除当前 nftables/tc 运行规则，历史配置会尽量隔离保留。${NC}"
-    if confirm_danger "卸载端口流量狗" "会删除 nftables/tc 运行规则、定时任务；机器人服务文件、快捷命令和配置目录会先隔离保留。" "隔离目录可用于手动恢复配置；重新运行脚本后可导入或比对旧配置。"; then
+    if confirm_danger "卸载端口流量狗" "会删除 nftables/tc 运行规则、定时任务；机器人服务文件、快捷命令和配置目录会先隔离保留。"; then
         echo -e "${YELLOW}正在全力卸载中...${NC}"
 
         local active_ports=($(get_active_ports 2>/dev/null || true))
         for port in "${active_ports[@]}"; do
             remove_nftables_rules "$port" 2>/dev/null || true
             remove_tc_limit "$port" 2>/dev/null || true
-            remove_port_auto_reset_cron "$port" 2>/dev/null || true
         done
 
         local table_name
@@ -2656,8 +2465,6 @@ uninstall_script() {
         exit 0
     else
         echo "取消卸载，返回主菜单。"
-        sleep 1
-        show_main_menu
     fi
 }
 
@@ -2667,34 +2474,28 @@ uninstall_script() {
 
 setup_interactive_tg() {
     echo -e "${BLUE}=== 部署 Telegram 交互式查询机器人 ===${NC}"
-    read_secret_trimmed bot_token "请输入 Bot Token (去@BotFather获取): "
-    read_trimmed chat_id "请输入允许查询的 Chat ID (个人的ID或群组ID): "
+    local bot_token chat_id reply
+    read_secret_trimmed bot_token "Bot Token（去 @BotFather 获取；回车取消）: "
+    [ -n "$bot_token" ] || return 0
+    read_trimmed chat_id "允许查询的 Chat ID（回车取消）: "
 
     if [ -z "$bot_token" ] || [ -z "$chat_id" ]; then
         echo -e "${RED}Token或Chat ID不能为空，操作取消。${NC}"
-        sleep 2
-        manage_notifications
         return
     fi
 
     if ! update_telegram_config "$bot_token" "$chat_id"; then
-        sleep 2
-        manage_notifications
         return
     fi
 
     echo -e "${YELLOW}正在部署 Systemd 守护进程...${NC}"
     if ! command -v systemctl >/dev/null 2>&1; then
         echo -e "${RED}未检测到 systemctl，无法部署后台机器人服务。${NC}"
-        sleep 2
-        manage_notifications
         return
     fi
     local runtime_script
     if ! runtime_script=$(ensure_local_script_copy); then
         echo -e "${RED}无法安装本地脚本到 /usr/local/bin/port-traffic-dog.sh。${NC}"
-        sleep 2
-        manage_notifications
         return
     fi
     
@@ -2718,8 +2519,7 @@ EOF
     systemctl enable port-tg-bot 2>/dev/null || true
     if ! systemctl restart port-tg-bot; then
         echo -e "${RED}TG 后台服务启动失败，请查看：systemctl status port-tg-bot --no-pager${NC}"
-        read -r -p "按回车键返回..."
-        manage_notifications
+        read_trimmed reply "按回车键返回..."
         return
     fi
 
@@ -2727,18 +2527,16 @@ EOF
     echo -e "💡 提示: 请确保在 @BotFather 关闭了机器人的 Group Privacy (Turn OFF)"
     echo -e "现在可发送 ${YELLOW}/t 端口号${NC}、${YELLOW}/all${NC}、${YELLOW}/yday${NC}、${YELLOW}/trend${NC}、${YELLOW}/day YYYY-MM-DD${NC}"
     echo
-    read -r -p "按回车键返回..."
-    manage_notifications
+    read_trimmed reply "按回车键返回..."
 }
 
 stop_interactive_tg() {
-    read_trimmed stop_confirm "确认停止并隔离 Telegram 交互机器人服务？[Y/n]: "
+    local stop_confirm
+    read_trimmed stop_confirm "确认停止并隔离 Telegram 交互机器人服务？[y/N]: "
     case "$stop_confirm" in
         y|Y) ;;
         *)
             echo -e "${YELLOW}已取消${NC}"
-            sleep 1
-            manage_notifications
             return
             ;;
     esac
@@ -2748,33 +2546,6 @@ stop_interactive_tg() {
     quarantine_path /etc/systemd/system/port-tg-bot.service "/root/port-traffic-dog-quarantine/systemd" >/dev/null 2>&1 || true
     systemctl daemon-reload >/dev/null 2>&1 || true
     echo -e "${GREEN}✅ 交互式机器人服务已停止，服务文件已隔离。${NC}"
-    sleep 2
-    manage_notifications
-}
-
-manage_display_mode() {
-    echo -e "${BLUE}=== 实际端口流量说明 ===${NC}"
-    echo -e "${GREEN}实际端口流量：${NC}只统计已添加监控的端口实际跑过的流量。"
-    echo
-    echo -e "${YELLOW}未添加到监控列表的端口不会计入这里。${NC}"
-    echo "0. 返回主菜单"
-    read_trimmed mode_choice "请选择 [0]: "
-
-    case $mode_choice in
-        0)
-            show_main_menu
-            return
-            ;;
-        *)
-            echo -e "${RED}无效选择${NC}"
-            sleep 1
-            manage_display_mode
-            return
-            ;;
-    esac
-
-    sleep 2
-    show_main_menu
 }
 
 tg_send_message_checked() {
@@ -2870,8 +2641,6 @@ send_manual_telegram_notification() {
     else
         echo -e "${RED}发送失败，请检查 Telegram 配置、网络和统计健康状态。${NC}"
     fi
-    read -r -p "按回车返回通知管理..."
-    manage_notifications
 }
 
 sync_telegram_notification_cron() {
@@ -2946,52 +2715,49 @@ manage_telegram_schedule() {
     current_enabled=$(jq -r '.notifications.telegram.status_notifications.enabled // false' "$CONFIG_FILE")
     current_interval=$(jq -r '.notifications.telegram.status_notifications.interval // "1h"' "$CONFIG_FILE")
     current_daily_hour=$(jq -r '.notifications.telegram.status_notifications.daily_hour // 9' "$CONFIG_FILE")
-    echo -e "${BLUE}=== Telegram 定时通知 ===${NC}"
-    echo "当前状态: enabled=$current_enabled interval=$current_interval daily_hour=$current_daily_hour"
-    echo "1. 每小时"
-    echo "2. 每 6 小时"
-    echo "3. 每 12 小时"
-    echo "4. 每天指定小时（北京时间）"
-    echo "5. 停用定时通知"
-    echo "0. 返回"
-    read_trimmed choice "请选择 [0-5]: "
-
-    case "$choice" in
-        1) interval="1h" ;;
-        2) interval="6h" ;;
-        3) interval="12h" ;;
-        4)
-            interval="daily"
-            read_trimmed daily_hour "请输入通知小时 [0-23，默认9]: "
-            daily_hour=${daily_hour:-9}
-            if ! [[ "$daily_hour" =~ ^([0-9]|1[0-9]|2[0-3])$ ]]; then
-                echo -e "${RED}小时必须是 0-23。${NC}"
-                sleep 1
-                manage_telegram_schedule
-                return
-            fi
-            ;;
-        5)
-            if update_telegram_schedule_config "$current_interval" "$current_daily_hour" false && sync_telegram_notification_cron; then
-                echo -e "${GREEN}定时通知已停用。${NC}"
-            else
-                echo -e "${RED}定时通知停用失败。${NC}"
-            fi
-            sleep 1
-            manage_notifications
-            return
-            ;;
-        0) manage_notifications; return ;;
-        *) echo -e "${RED}无效选择${NC}"; sleep 1; manage_telegram_schedule; return ;;
-    esac
+    while true; do
+        echo -e "${BLUE}=== Telegram 定时通知 ===${NC}"
+        echo "当前状态: enabled=$current_enabled interval=$current_interval daily_hour=$current_daily_hour"
+        echo "1. 每小时"
+        echo "2. 每 6 小时"
+        echo "3. 每 12 小时"
+        echo "4. 每天指定小时（北京时间）"
+        echo "5. 停用定时通知"
+        echo "0. 返回"
+        read_trimmed choice "请选择 [0-5，回车返回]: "
+        case "$choice" in
+            1) interval="1h"; break ;;
+            2) interval="6h"; break ;;
+            3) interval="12h"; break ;;
+            4)
+                interval="daily"
+                while true; do
+                    read_trimmed daily_hour "通知小时 [0-23，回车默认9；q 返回]: "
+                    case "$daily_hour" in q|Q) continue 2 ;; esac
+                    daily_hour=${daily_hour:-9}
+                    [[ "$daily_hour" =~ ^([0-9]|1[0-9]|2[0-3])$ ]] && break
+                    echo -e "${RED}小时必须是 0-23。${NC}"
+                done
+                break
+                ;;
+            5)
+                if update_telegram_schedule_config "$current_interval" "$current_daily_hour" false && sync_telegram_notification_cron; then
+                    echo -e "${GREEN}定时通知已停用。${NC}"
+                else
+                    echo -e "${RED}定时通知停用失败。${NC}"
+                fi
+                return 0
+                ;;
+            0|q|Q|'') return 0 ;;
+            *) echo -e "${RED}无效选择${NC}" ;;
+        esac
+    done
 
     token=$(jq -r '.notifications.telegram.bot_token // ""' "$CONFIG_FILE" 2>/dev/null || true)
     chat_id=$(jq -r '.notifications.telegram.chat_id // ""' "$CONFIG_FILE" 2>/dev/null || true)
-    if [ -z "$token" ] || [ "$token" = "null" ] || [ -z "$chat_id" ] || [ "$chat_id" = "null" ]; then
+    if [ -z "$token" ] || [ -z "$chat_id" ]; then
         echo -e "${RED}请先部署 Telegram 机器人并配置 Bot Token、Chat ID。${NC}"
-        sleep 1
-        manage_notifications
-        return
+        return 0
     fi
 
     if update_telegram_schedule_config "$interval" "$daily_hour" true && sync_telegram_notification_cron; then
@@ -2999,8 +2765,6 @@ manage_telegram_schedule() {
     else
         echo -e "${RED}定时通知配置失败。${NC}"
     fi
-    sleep 1
-    manage_notifications
 }
 
 update_telegram_template() {
@@ -3025,41 +2789,48 @@ manage_telegram_template() {
     local template=""
     local default_template=$'<b>🐶 {server_name} 端口流量通知</b>\n{report}'
 
-    echo -e "${BLUE}=== Telegram 通知模板 ===${NC}"
-    echo "可用变量: {server_name} {report} {time}"
-    echo "1. 自定义模板"
-    echo "2. 恢复默认模板"
-    echo "0. 返回"
-    read_trimmed choice "请选择 [0-2]: "
-    case "$choice" in
-        1)
-            echo "逐行输入模板，单独输入 . 保存；模板必须包含 {report}。"
-            while IFS= read -r line; do
-                [ "$line" = "." ] && break
-                template+="${template:+$'\n'}${line}"
-            done
-            if [[ "$template" != *"{report}"* ]]; then
-                echo -e "${RED}模板缺少 {report}，未保存。${NC}"
-            elif [ ${#template} -gt 2000 ]; then
-                echo -e "${RED}模板不能超过 2000 字符。${NC}"
-            elif update_telegram_template "$template"; then
-                echo -e "${GREEN}通知模板已保存。${NC}"
-            else
-                echo -e "${RED}通知模板保存失败。${NC}"
-            fi
-            ;;
-        2)
-            if update_telegram_template "$default_template"; then
-                echo -e "${GREEN}已恢复默认通知模板。${NC}"
-            else
-                echo -e "${RED}默认模板恢复失败。${NC}"
-            fi
-            ;;
-        0) manage_notifications; return ;;
-        *) echo -e "${RED}无效选择${NC}" ;;
-    esac
-    sleep 1
-    manage_notifications
+    while true; do
+        echo -e "${BLUE}=== Telegram 通知模板 ===${NC}"
+        echo "可用变量: {server_name} {report} {time}"
+        echo "1. 自定义模板"
+        echo "2. 恢复默认模板"
+        echo "0. 返回"
+        read_trimmed choice "请选择 [0-2，回车返回]: "
+        case "$choice" in
+            1)
+                template=""
+                echo "逐行输入模板，单独输入 . 保存，q 取消；模板必须包含 {report}。"
+                while true; do
+                    IFS= read -r line || return 0
+                    case "$line" in .) break ;; q) return 0 ;; esac
+                    template+="${template:+$'\n'}${line}"
+                done
+                if [[ "$template" != *"{report}"* ]]; then
+                    echo -e "${RED}模板缺少 {report}，未保存。${NC}"
+                    continue
+                fi
+                if [ ${#template} -gt 2000 ]; then
+                    echo -e "${RED}模板不能超过 2000 字符。${NC}"
+                    continue
+                fi
+                if update_telegram_template "$template"; then
+                    echo -e "${GREEN}通知模板已保存。${NC}"
+                else
+                    echo -e "${RED}通知模板保存失败。${NC}"
+                fi
+                ;;
+            2)
+                if update_telegram_template "$default_template"; then
+                    echo -e "${GREEN}已恢复默认通知模板。${NC}"
+                else
+                    echo -e "${RED}默认模板恢复失败。${NC}"
+                fi
+                ;;
+            0|q|Q|'') return 0 ;;
+            *) echo -e "${RED}无效选择${NC}"; continue ;;
+        esac
+        return 0
+    done
 }
 
 build_tg_help_message() {
@@ -3272,27 +3043,30 @@ run_tg_listener() {
 }
 
 manage_notifications() {
-    echo -e "${BLUE}=== $(ui_text '通知管理' 'Notifications' 'Уведомления') ===${NC}"
-    echo "1. $(ui_text '部署 Telegram 查询机器人（/t /all /yday /trend /day）' 'Deploy Telegram query bot (/t /all /yday /trend /day)' 'Развернуть Telegram-бота запросов (/t /all /yday /trend /day)')"
-    echo "2. $(ui_text '停止并卸载 Telegram 查询机器人' 'Stop and uninstall Telegram query bot' 'Остановить и удалить Telegram-бота запросов')"
-    echo "3. $(ui_text '企业微信机器人（保留接口）' 'WeCom bot (legacy interface)' 'Бот WeCom (устаревший интерфейс)')"
-    echo "4. $(ui_text '立即发送实时报告' 'Send a real-time report now' 'Отправить отчёт сейчас')"
-    echo "5. $(ui_text 'Telegram 定时通知' 'Scheduled Telegram notifications' 'Расписание уведомлений Telegram')"
-    echo "6. $(ui_text 'Telegram 通知模板' 'Telegram notification template' 'Шаблон уведомлений Telegram')"
-    echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
-    echo
-    read_trimmed choice "$(ui_text '请选择 [0-6]: ' 'Select [0-6]: ' 'Выберите [0-6]: ')"
+    local choice
+    while true; do
+        echo -e "${BLUE}=== $(ui_text '通知管理' 'Notifications' 'Уведомления') ===${NC}"
+        echo "1. $(ui_text '部署 Telegram 查询机器人（/t /all /yday /trend /day）' 'Deploy Telegram query bot (/t /all /yday /trend /day)' 'Развернуть Telegram-бота запросов (/t /all /yday /trend /day)')"
+        echo "2. $(ui_text '停止并卸载 Telegram 查询机器人' 'Stop and uninstall Telegram query bot' 'Остановить и удалить Telegram-бота запросов')"
+        echo "3. $(ui_text '企业微信机器人（暂未实现）' 'WeCom bot (not implemented)' 'Бот WeCom (не реализован)')"
+        echo "4. $(ui_text '立即发送实时报告' 'Send a real-time report now' 'Отправить отчёт сейчас')"
+        echo "5. $(ui_text 'Telegram 定时通知' 'Scheduled Telegram notifications' 'Расписание уведомлений Telegram')"
+        echo "6. $(ui_text 'Telegram 通知模板' 'Telegram notification template' 'Шаблон уведомлений Telegram')"
+        echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
+        echo
+        read_trimmed choice "$(ui_text '请选择 [0-6]: ' 'Select [0-6]: ' 'Выберите [0-6]: ')"
 
-    case $choice in
-        1) setup_interactive_tg ;;
-        2) stop_interactive_tg ;;
-        3) echo -e "${YELLOW}$(ui_text '请使用旧版逻辑维护。' 'Use the legacy workflow for this item.' 'Используйте прежний сценарий для этого пункта.')${NC}"; sleep 2; manage_notifications ;;
-        4) send_manual_telegram_notification ;;
-        5) manage_telegram_schedule ;;
-        6) manage_telegram_template ;;
-        0) show_main_menu ;;
-        *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}"; sleep 1; manage_notifications ;;
-    esac
+        case $choice in
+            1) setup_interactive_tg ;;
+            2) stop_interactive_tg ;;
+            3) echo -e "${YELLOW}$(ui_text '此功能暂未实现。' 'This feature is not implemented.' 'Эта функция ещё не реализована.')${NC}" ;;
+            4) send_manual_telegram_notification ;;
+            5) manage_telegram_schedule ;;
+            6) manage_telegram_template ;;
+            0|q|Q|'') return 0 ;;
+            *) echo -e "${RED}$(ui_text '无效选择。' 'Invalid selection.' 'Неверный выбор.')${NC}" ;;
+        esac
+    done
 }
 
 setup_port_auto_reset_cron() {
@@ -3309,10 +3083,6 @@ setup_port_auto_reset_cron() {
     rm -f "$temp_cron"
 }
 
-remove_port_auto_reset_cron() {
-    # 既然改为了全局每日心跳，这里不需要再单独删配置了，留空即可
-    : 
-}
 create_shortcut_command() {
     local runtime_script
     runtime_script=$(ensure_local_script_copy) || runtime_script="$SCRIPT_PATH"
@@ -3383,7 +3153,7 @@ main() {
     # 5. 常规的前台菜单逻辑
     check_dependencies
     create_shortcut_command
-    show_main_menu
+    while true; do show_main_menu; done
 }
 
 main "$@"

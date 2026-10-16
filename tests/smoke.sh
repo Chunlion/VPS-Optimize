@@ -1751,8 +1751,8 @@ rmdir "$legacy_tmp_dir"
 
 source <(sed -n '1,/^show_port_list()/p' dog.sh | sed '$d')
 dog_confirm=""
-read_trimmed dog_confirm "确认操作？[Y/n]: " <<< ""
-[[ "$dog_confirm" == "y" ]]
+read_trimmed dog_confirm "确认操作？[y/N]: " <<< ""
+[[ -z "$dog_confirm" ]]
 [[ "$(normalize_menu_choice_input " add ")" == "add" ]]
 [[ "$(normalize_menu_choice_input "tg")" == "tg" ]]
 [[ "$(normalize_menu_choice_input "q")" == "0" ]]

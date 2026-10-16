@@ -46,16 +46,51 @@ class_id=$(generate_tc_class_id 65535)
 
 # A mistyped rate must never remove the previous limit or update configuration.
 (
-    sleep() { :; }
-    manage_traffic_limits() { :; }
     show_port_list() { :; }
     get_active_ports() { echo 54558; }
     remove_tc_limit() { echo 'unexpected removal' >&2; exit 1; }
     apply_tc_limit() { echo 'unexpected application' >&2; exit 1; }
     update_config() { echo 'unexpected config write' >&2; exit 1; }
-    set_port_bandwidth_limit <<< $'1\nbad-rate' >/dev/null
+    set_port_bandwidth_limit <<< $'1\nbad-rate\nq' >/dev/null
 )
 echo 'PASS: selection, units, health variable scope and invalid-rate preservation'
+
+(
+    FUNCNEST=12
+    show_main_menu() { echo 'unexpected parent menu call' >&2; exit 1; }
+    menu_input=$(printf 'invalid\n%.0s' {1..40}; printf '0\n')
+    for menu in manage_port_monitoring manage_traffic_limits manage_traffic_reset manage_configuration manage_notifications manage_daily_usage_reports manage_telegram_schedule manage_telegram_template select_ui_language; do
+        "$menu" <<< "$menu_input" >/dev/null
+    done
+    actions=''
+    add_port_monitoring() { actions+='add '; }
+    remove_port_monitoring() { actions+='remove '; }
+    manage_port_monitoring <<< $'1\n2\n0' >/dev/null
+    [[ "$actions" == 'add remove ' ]]
+)
+(
+    show_port_list() { :; }
+    get_active_ports() { printf '%s\n' 54558 54559; }
+    selected=()
+    select_monitored_ports selected <<< $'54558\n1,1,2' >/dev/null
+    [[ "${selected[*]}" == '54558 54559' ]]
+    select_monitored_ports selected <<< 'all' >/dev/null
+    [[ "${selected[*]}" == '54558 54559' ]]
+    if select_monitored_ports selected <<< 'q' >/dev/null; then exit 1; fi
+    [[ ${#selected[@]} == 0 ]]
+    apply_tc_limit() { echo 'unexpected partial update' >&2; exit 1; }
+    set_port_bandwidth_limit <<< $'all\n10Mbps,bad-rate\nq' >/dev/null
+    expr=''
+    update_config() { expr="$1"; }
+    setup_port_auto_reset_cron() { :; }
+    set_reset_day <<< $'1\ninvalid\n08' >/dev/null
+    [[ "$expr" == '.ports."54558".quota.reset_day = 8' ]]
+    if confirm_danger reset irreversible <<< '' >/dev/null; then exit 1; fi
+    confirm_danger reset irreversible <<< 'yes' >/dev/null
+    update_telegram_template() { echo 'unexpected template save' >&2; exit 1; }
+    manage_telegram_template <<< $'1\n{report}\nq' >/dev/null
+)
+echo 'PASS: menu return depth, in-place retries, batch selection and cancellation'
 
 if [[ "${1:-}" != '--network' ]]; then
     if [[ "$EUID" == 0 ]] && command -v nft >/dev/null && command -v tc >/dev/null && unshare -n true 2>/dev/null; then
@@ -169,6 +204,12 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
 PY
 [[ "$(nft -j list counter inet dog_test port_54558_out | jq '[.nftables[] | .counter.bytes? // empty][0]')" == "$before_bytes" ]]
 apply_nftables_quota 54558 50g true
+refresh_nftables_counter_snapshot
+[[ "$(get_port_monthly_usage 54558)" -gt 1073741824 ]]
+selected_index=$(get_active_ports | awk '$0 == "54558" {print NR}')
+immediate_reset <<< "$selected_index"$'\ny' >/dev/null
+[[ "$(get_port_monthly_usage 54558)" == 0 ]]
+nft -j list quota inet dog_test port_54558_quota | jq -e 'any(.nftables[]; .quota.used? == 0)' >/dev/null
 
 remove_tc_limit 54558
 tc -j filter show dev dog0 parent 1: | jq -e '[.[] | select(.kind == "flower" and .options.classid != null)] | length == 40' >/dev/null
