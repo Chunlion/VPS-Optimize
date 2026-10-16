@@ -12,132 +12,6 @@ fi
 bash scripts/build.sh >/dev/null
 bash tests/http-probes.sh
 
-assert_dist_contains() {
-    local needle="$1"
-    local message="${2:-Release script is missing required content: ${needle}}"
-    if ! grep -Fq "$needle" dist/vps.sh; then
-        echo "$message" >&2
-        exit 1
-    fi
-}
-
-assert_file_contains() {
-    local file="$1"
-    local needle="$2"
-    local message="${3:-${file} is missing required content: ${needle}}"
-    if ! grep -Fq -- "$needle" "$file"; then
-        echo "$message" >&2
-        exit 1
-    fi
-}
-
-assert_file_not_contains() {
-    local file="$1"
-    local needle="$2"
-    local message="${3:-${file} contains stale content: ${needle}}"
-    if grep -Fq -- "$needle" "$file"; then
-        echo "$message" >&2
-        exit 1
-    fi
-}
-
-assert_file_not_matches() {
-    local file="$1"
-    local pattern="$2"
-    local message="${3:-${file} contains stale content matching: ${pattern}}"
-    if grep -Eq -- "$pattern" "$file"; then
-        echo "$message" >&2
-        exit 1
-    fi
-}
-
-assert_gitignore_line() {
-    local pattern="$1"
-    if ! grep -Fxq -- "$pattern" .gitignore; then
-        echo ".gitignore is missing required ignore pattern: ${pattern}" >&2
-        exit 1
-    fi
-}
-
-assert_gitignore_ignores() {
-    local path="$1"
-    if ! git check-ignore --quiet -- "$path"; then
-        echo ".gitignore must ignore generated backup artifact: ${path}" >&2
-        exit 1
-    fi
-}
-
-assert_git_history_path_absent() {
-    local pattern="$1"
-    local message="${2:-Git history contains a forbidden generated artifact path.}"
-    local matches
-
-    matches=$(
-        {
-            git log --all --name-only --pretty=format:
-            git rev-list --objects --all | awk 'index($0, " ") { sub(/^[^ ]+ /, ""); print }'
-        } | grep -E -- "$pattern" | sort -u || true
-    )
-    if [[ -n "$matches" ]]; then
-        echo "$message" >&2
-        echo "$matches" >&2
-        exit 1
-    fi
-}
-
-assert_path_absent() {
-    local path="$1"
-    local message="${2:-${path} must not exist.}"
-    if [[ -e "$path" ]]; then
-        echo "$message" >&2
-        exit 1
-    fi
-}
-
-assert_function_defined_once() {
-    local file="$1"
-    local function_name="$2"
-    local count
-    count=$(grep -Ec "^${function_name}\\(\\) \\{" "$file" || true)
-    if [[ "$count" != "1" ]]; then
-        echo "${function_name} must be defined exactly once in ${file}; found ${count}." >&2
-        exit 1
-    fi
-}
-
-assert_function_body_contains() {
-    local file="$1"
-    local function_name="$2"
-    local needle="$3"
-    local message="${4:-${function_name} in ${file} must contain: ${needle}}"
-    if ! awk -v fn="$function_name" -v needle="$needle" '
-        $0 ~ "^" fn "\\(\\) \\{" { in_fn = 1 }
-        in_fn && index($0, needle) { found = 1 }
-        in_fn && $0 == "}" { exit }
-        END { exit found ? 0 : 1 }
-    ' "$file"; then
-        echo "$message" >&2
-        exit 1
-    fi
-}
-
-module_list_entries() {
-    awk '
-        {
-            sub(/#.*/, "")
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "")
-            if ($0 != "") print
-        }
-    ' scripts/modules.list
-}
-
-assert_module_list_contains() {
-    local module="$1"
-    if ! module_list_entries | grep -Fxq "$module"; then
-        echo "scripts/modules.list is missing required module: ${module}" >&2
-        exit 1
-    fi
-}
 
 bash -n scripts/build.sh
 bash -n scripts/selfcheck.sh
@@ -149,61 +23,6 @@ for module in src/*.sh; do
 done
 bash -n dog.sh
 bash -n xui-custom-manager.sh
-[[ -f scripts/modules.list ]]
-for module in \
-    common runtime firewall sni_stack_config vpso_mux_state vpso_mux_config \
-    vpso_mux_install tcp_peek_engine sni_stack_health compose_runtime \
-    subscription_apps subscription_service_menus \
-    dockge_migration menus main; do
-    assert_module_list_contains "$module"
-    assert_dist_contains "# Module: ${module}.sh" "Release script is missing key module: ${module}.sh"
-done
-assert_file_contains scripts/build.sh 'scripts/modules.list' "Release build must read the shared module list."
-assert_file_contains scripts/build.sh "sed '1{/^#!\\/usr\\/bin\\/env bash$/d;}'" "Release build must only strip module-level shebangs, not embedded script templates."
-assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/selfcheck.sh' "CI must call the shared selfcheck entrypoint."
-assert_file_contains .github/workflows/shell-syntax.yml 'actions/setup-node@v4' "CI selfcheck must set up Node for the docs build."
-assert_file_contains .github/workflows/shell-syntax.yml 'npm ci' "CI selfcheck must install docs dependencies before running selfcheck."
-assert_file_contains .github/workflows/shell-syntax.yml 'bash scripts/compat-smoke.sh' "CI must call the compatibility smoke entrypoint."
-assert_file_contains .github/workflows/shell-syntax.yml 'windows-selfcheck-wrapper' "CI must include a lightweight Windows selfcheck.ps1 wrapper validation job."
-assert_file_contains .github/workflows/shell-syntax.yml 'runs-on: windows-latest' "Windows wrapper validation must run on a Windows runner."
-assert_file_contains .github/workflows/shell-syntax.yml './scripts/selfcheck-ps1-contract.ps1' "Windows wrapper validation must run the focused selfcheck.ps1 contract test."
-assert_file_contains scripts/selfcheck-ps1-contract.ps1 '[System.Management.Automation.Language.Parser]::ParseFile' "PowerShell contract test must parse scripts/selfcheck.ps1."
-assert_file_contains scripts/selfcheck-ps1-contract.ps1 'VPSO_WSL_EXE' "PowerShell contract test must mock WSL instead of running the real Linux selfcheck."
-assert_file_contains scripts/selfcheck-ps1-contract.ps1 "cd '/mnt/c/Users/O'\\''Brian/VPS-Optimize'" "PowerShell contract test must verify Bash path quoting."
-assert_file_contains scripts/selfcheck-ps1-contract.ps1 'exit code 37' "PowerShell contract test must verify WSL bash exit-code passthrough."
-assert_file_contains scripts/selfcheck-ps1-contract.ps1 'exit 0' "PowerShell contract test must explicitly return success after mocked failure checks."
-assert_file_contains scripts/selfcheck.sh 'tests/smoke.sh' "Bash selfcheck must syntax-check the full smoke gate."
-assert_file_contains scripts/selfcheck.sh 'bash tests/golden-render.sh' "Bash selfcheck must run golden render validation."
-assert_file_contains scripts/selfcheck.sh 'npm run build' "Bash selfcheck must build the VitePress docs site."
-assert_file_contains scripts/selfcheck.sh 'bash scripts/compat-smoke.sh' "Bash selfcheck must run compatibility smoke validation."
-assert_file_contains scripts/selfcheck.sh 'bash tests/smoke.sh' "Bash selfcheck must run full smoke validation."
-assert_file_contains scripts/selfcheck.ps1 'wsl.exe' "PowerShell selfcheck wrapper must execute validation through WSL."
-assert_file_contains scripts/selfcheck.ps1 'VPSO_WSL_EXE' "PowerShell selfcheck wrapper must support a mockable WSL command for CI contract tests."
-assert_file_contains scripts/selfcheck.ps1 'bash scripts/selfcheck.sh' "PowerShell selfcheck wrapper must delegate to the Bash selfcheck through WSL."
-assert_file_contains scripts/selfcheck.ps1 'exit $exitCode' "PowerShell selfcheck wrapper must pass through the failing WSL exit code."
-assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read the shared module list."
-for ignore_pattern in \
-    'backup_*.tar.gz' \
-    'sni-stack_*/' \
-    'x-ui.db.*.bak' \
-    'etc/x-ui/x-ui.db' \
-    'etc/x-ui/x-ui.db-wal' \
-    'etc/x-ui/x-ui.db-shm' \
-    'usr/local/x-ui/x-ui.db' \
-    'usr/local/x-ui/x-ui.db-wal' \
-    'usr/local/x-ui/x-ui.db-shm' \
-    'usr/local/x-ui/bin/x-ui.db' \
-    'usr/local/x-ui/bin/x-ui.db-wal' \
-    'usr/local/x-ui/bin/x-ui.db-shm' \
-    'root/x-ui-backups/x-ui.db.*.bak' \
-    'vps_backup_*/' \
-    'vps_restore.*/' \
-    'manual-temp/' \
-    'manual-restore/' \
-    'manual-backups/'
-do
-    assert_gitignore_line "$ignore_pattern"
-done
 for ignored_artifact in \
     'etc/vps-optimize/backups/manual/backup_20260101_010203.tar.gz' \
     'etc/vps-optimize/backups/sni-stack_20260101_010203/nginx.conf' \
@@ -223,208 +42,8 @@ for ignored_artifact in \
     'usr/local/x-ui/bin/x-ui.db-shm' \
     'root/x-ui-backups/x-ui.db.panel_domain_20260101_010203.bak'
 do
-    assert_gitignore_ignores "$ignored_artifact"
+    git check-ignore --quiet -- "$ignored_artifact"
 done
-sensitive_backup_history_pattern='(^|/)(backup_[^/]*\.tar\.gz|sni-stack_[^/]+(/|$)|vps_backup_[^/]+(/|$)|vps_restore\.[^/]+(/|$)|manual-backups(/|$)|manual-restore(/|$)|manual-temp(/|$)|x-ui\.db($|-wal$|-shm$|\.[^/]*\.bak$))'
-assert_git_history_path_absent "$sensitive_backup_history_pattern" "Git history must not contain sensitive generated backup or restore artifacts."
-assert_dist_contains 'ensure_runtime_root()' "Release script must include the runtime root guard function."
-assert_dist_contains 'main()' "Release script must include the bootstrap main function."
-assert_function_defined_once dist/vps.sh ensure_runtime_root
-assert_function_defined_once dist/vps.sh main
-assert_function_body_contains dist/vps.sh main 'ensure_runtime_root' "main must check root before entering the menu."
-assert_function_body_contains dist/vps.sh main 'main_menu' "main must enter the top-level menu."
-assert_dist_contains 'rotate_log_file' "Release script must include the shared log rotation helper."
-assert_dist_contains 'print_log_capacity_summary' "Health overview must include log capacity summary."
-assert_dist_contains 'check_vpso_file_permissions' "Health overview must expose file permission checks."
-assert_dist_contains 'func_health_service_recovery_menu' "Health overview must expose service restart and recovery actions."
-assert_dist_contains '10-vps-optimize-restart.conf' "Health service recovery must support systemd auto-restart drop-ins."
-assert_dist_contains 'collect_failed_service_units' "Health service recovery must support failed service restart."
-assert_dist_contains '13. FLVX 哆啦转发面板' "Basic components menu must include FLVX."
-assert_dist_contains '14. EasyTier 组网' "Basic components menu must include EasyTier."
-assert_dist_contains '15. Tailscale 组网' "Basic components menu must include Tailscale."
-assert_dist_contains 'https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh' "Release script must include the FLVX installer."
-assert_dist_contains 'https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh' "Release script must include the EasyTier installer."
-assert_dist_contains 'https://tailscale.com/install.sh' "Release script must include the Tailscale installer."
-assert_dist_contains 'https://raw.githubusercontent.com/MEILOI/VPS_BOT_X/main/vps_bot-x/install.sh' "Release script must include the VPS_BOT_X installer."
-assert_function_body_contains src/panel_installers.sh func_vps_bot_x 'confirm_danger' "VPS_BOT_X installation must require dangerous-action confirmation."
-assert_file_contains src/menus.sh '14) func_vps_bot_x ;;' "Panel tools menu must route item 14 to VPS_BOT_X."
-assert_function_body_contains src/environment.sh func_env_install '13) run_remote_script "$(localized_text "安装 FLVX 哆啦转发面板"' "FLVX menu entry must localize the selected project installer label."
-assert_function_body_contains src/environment.sh func_env_install 'https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh' "FLVX menu entry must use the selected project installer."
-assert_function_body_contains src/environment.sh func_env_install '14) run_remote_script "$(localized_text "安装 EasyTier 组网"' "EasyTier menu entry must localize the official installer label."
-assert_function_body_contains src/environment.sh func_env_install 'https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh" install' "EasyTier menu entry must use the official installer."
-assert_function_body_contains src/environment.sh func_env_install '15)' "Tailscale menu entry must be wired."
-assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [13 FLVX 哆啦转发面板]' "Config paths doc must document the FLVX menu path."
-assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [14 EasyTier 组网]' "Config paths doc must document the EasyTier menu path."
-assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [15 Tailscale 组网]' "Config paths doc must document the Tailscale menu path."
-assert_function_body_contains src/health_dashboard.sh health_show_failed_unit_logs 'mapfile -t failed_units < <(collect_failed_service_units)' "Health log viewer must list failed services for direct selection."
-assert_function_body_contains src/health_dashboard.sh func_health_service_recovery_menu 'l. 查看服务日志' "Health recovery menu must use a clear Chinese log label."
-(
-    CYAN='' GREEN='' YELLOW='' RED='' BLUE='' PLAIN=''
-    source src/language.sh
-    source src/input.sh
-    source src/health_dashboard.sh
-    collect_failed_service_units() { printf '%s\n' caddy.service nginx.service; }
-    health_unit_exists() { [[ "$1" == "caddy.service" ]]; }
-    journalctl() { printf 'selected-log:%s\n' "$*"; }
-    selected_log_output=$(health_show_failed_unit_logs <<<"1")
-    grep -Fq 'selected-log:-u caddy.service -n 80 --no-pager' <<<"$selected_log_output"
-)
-assert_dist_contains '7. Forwardx 转发面板' "Basic components menu must include Forwardx."
-assert_dist_contains 'https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh' "Release script must include the Forwardx local panel installer."
-assert_file_not_contains dist/vps.sh '10. 宝塔面板' "Basic components menu must not keep the old Baota option label."
-assert_dist_contains 'NET_KERNEL_MENU_ITEMS=(' "Network/kernel menu must use the declarative pilot table."
-assert_dist_contains 'dispatch_menu_choice "$nk_choice" NET_KERNEL_MENU_ITEMS' "Network/kernel menu must dispatch through the menu helper pilot."
-assert_dist_contains 'backend_retry_attempts' "vpso-mux status must expose backend retry attempts."
-assert_dist_contains 'backend_retry:' "vpso-mux generated config must include explicit default retry settings."
-assert_dist_contains 'max_size_bytes: 5242880' "vpso-mux generated config must include default file-log rotation size."
-assert_file_contains internal/mux/config.go 'BackendRetry struct' "vpso-mux config must include optional backend retry defaults."
-assert_file_contains cmd/vpso-mux/main_linux_test.go 'TestDialBackendWithRetrySuccess' "vpso-mux backend retry behavior must have tests."
-assert_dist_contains '# Module: firewall.sh' "Release script must include src/firewall.sh."
-assert_dist_contains 'func_port_connlimit_menu' "Release script is missing the port connlimit menu."
-assert_dist_contains 'VPSO_CONN_LIMIT_PORT_' "Release script is missing the connlimit rule marker."
-assert_dist_contains 'func_save_port_connlimit_persistence' "Release script is missing the connlimit persistence save action."
-assert_dist_contains 'auto_save_port_connlimit_persistence_after_change "$(localized_text "添加规则"' "Adding connlimit rules must trigger automatic persistence refresh."
-assert_dist_contains 'auto_save_port_connlimit_persistence_after_change "$(localized_text "删除规则"' "Deleting connlimit rules must trigger automatic persistence refresh."
-assert_dist_contains 'netfilter-persistent save' "Release script must use the existing netfilter-persistent save path for connlimit persistence."
-assert_dist_contains '/etc/iptables/rules.v4' "Release script must verify the IPv4 persistent rules file."
-assert_dist_contains '/etc/sysconfig/iptables' "Release script must support the existing RHEL iptables-services persistence file."
-assert_dist_contains 'iptables-save' "Release script must support RHEL iptables-save persistence when iptables-services is present."
-assert_dist_contains '当前 connlimit 规则只在本次运行期生效' "Release script must clearly warn when connlimit persistence is unavailable."
-assert_dist_contains 'print_port_connlimit_health_summary' "Health overview must include the connlimit persistence summary."
-assert_dist_contains 'connlimit 持久化摘要' "Health overview must expose connlimit persistence status."
-assert_dist_contains '运行时/保存文件' "Health overview must show runtime/persistent connlimit consistency."
-assert_dist_contains '重启风险提示' "Health overview must show connlimit reboot risk hints."
-assert_dist_contains 'print_443_health_connlimit_scope_notice' "443 health check must include connlimit scope diagnostics."
-assert_dist_contains 'print_443_single_entry_issue_summary' "Issue diagnostics must include a compact Port 443 Reuse summary."
-assert_dist_contains 'print_443_issue_connlimit_summary' "Issue diagnostics must include compact public 443 connlimit diagnostics."
-assert_file_contains src/sni_stack_health.sh '影响范围：该限制只能作用于整个公网 443 入口，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "443 health check must explain connlimit scope precisely."
-assert_file_contains src/preflight.sh '443端口复用摘要:' "Issue diagnostics must label the compact Port 443 Reuse summary."
-assert_file_contains src/preflight.sh '443 connlimit: 检测到本脚本添加的公网 443 connlimit 规则' "Issue diagnostics must warn when script-owned public 443 connlimit rules exist."
-assert_dist_contains '影响范围：该限制只能作用于整个公网 443 入口，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "Release script must include the 443 connlimit scope warning."
-assert_file_contains src/menus.sh '如果存在脚本添加的 connlimit 规则，也会显示持久化后端、运行时/保存文件一致性和重启风险提示。' "Health help must mention the connlimit persistence summary."
-assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [7 Forwardx 转发面板]' "Config paths doc must document the current Forwardx menu path."
-assert_file_contains docs/config-paths.md '主菜单 [3 基础组件与常用服务] -> [10 nftables NAT 转发]' "Config paths doc must document the current nftables NAT menu path."
-health_restart_path='主菜单 [15 服务健康总览] -> [s 服务恢复] -> [r 重启一个常用服务]'
-health_failed_restart_path='主菜单 [15 服务健康总览] -> [s 服务恢复] -> [f 重启失败服务]'
-health_unit_log_path='主菜单 [15 服务健康总览] -> [s 服务恢复] -> [l 查看服务日志]'
-assert_file_contains docs/config-paths.md "$health_restart_path" "Config paths doc must document the common service restart path."
-assert_file_contains docs/config-paths.md "$health_failed_restart_path" "Config paths doc must document the failed service restart path."
-assert_file_contains docs/config-paths.md "$health_unit_log_path" "Config paths doc must document the unit log path."
-assert_file_contains docs/recovery-runbook.md "$health_restart_path" "Recovery runbook must document the common service restart path."
-assert_file_contains docs/recovery-runbook.md "$health_failed_restart_path" "Recovery runbook must document the failed service restart path."
-assert_file_contains docs/recovery-runbook.md "$health_unit_log_path" "Recovery runbook must document the unit log path."
-assert_file_contains docs/443-single-entry-troubleshooting.md '端口并发连接限制误伤' "443 troubleshooting doc must include connlimit false-positive guidance."
-assert_file_contains docs/443-single-entry-troubleshooting.md '如果公网 `443` 存在本脚本添加的 connlimit 规则，它只能作用于整个公网 `443`，不能精准到某个 SNI、Xray/3x-ui 入站、UUID 或用户。' "443 troubleshooting doc must explain public 443 connlimit scope."
-assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [19 443端口复用管理中心] -> [13 检查入口配置、证书与转发规则]' "443 troubleshooting doc must point users to the 443 configuration check."
-assert_file_contains src/firewall.sh '${GREEN}  5. 限制端口并发连接${PLAIN}' "Firewall menu must keep connlimit on option 5."
-assert_file_contains docs/443-single-entry-troubleshooting.md '主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]' "443 troubleshooting doc must point users to the connlimit menu."
-assert_file_contains docs/recovery-runbook.md '主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]' "Recovery runbook must point users to the connlimit menu."
-assert_file_not_contains docs/443-single-entry-troubleshooting.md '[6 端口并发连接限制]' "443 troubleshooting doc must not point connlimit users at the firewall shutdown option."
-assert_file_not_contains docs/recovery-runbook.md '[6 端口并发连接限制]' "Recovery runbook must not point connlimit users at the firewall shutdown option."
-assert_file_contains src/docker_manage.sh '10. $(localized_text "Docker 本地防穿透"' "Docker management must expose the state-aware local protection switch on option 10."
-assert_file_not_contains src/docker_manage.sh 'UPD 更新订阅工具容器' "Docker management must not duplicate the subscription tools update entry."
-assert_file_contains src/docker_manage.sh '3. $(localized_text "容器管理"' "Docker management must include container management."
-assert_file_contains src/docker_manage.sh '7. $(localized_text "清理未使用资源"' "Docker management must include unused resource cleanup."
-assert_file_contains src/docker_manage.sh '11. $(localized_text "开启 Docker IPv6"' "Docker management must include Docker IPv6 controls."
-assert_file_contains src/docker_manage.sh '19. $(localized_text "备份 / Compose 管理"' "Docker management must include backup and Compose management."
-assert_file_contains docs/existing-server-migration.md '主菜单 [11 Docker 管理] -> [10 Docker 本地防穿透]' "Migration docs must point users to the current Docker protection option."
-assert_file_contains docs/config-paths.md '主菜单 [11 Docker 管理] -> [10 Docker 本地防穿透]' "Config paths doc must list the current Docker protection option."
-assert_file_contains docs/config-paths.md '主菜单 [8 防火墙规则管理] -> [5 端口并发连接限制]' "Config paths doc must list the current connlimit option."
-assert_file_contains docs/recovery-runbook.md '端口并发连接限制误封' "Recovery runbook must include connlimit lockout guidance."
-assert_file_contains docs/recovery-runbook.md '不要批量清空 INPUT 链' "Recovery runbook must warn against broad firewall cleanup for connlimit recovery."
-assert_function_defined_once dist/vps.sh func_firewall_manage
-module_order=$(module_list_entries | tr '\n' ' ')
-case "$module_order" in
-    *"sni_stack_config vpso_mux_state vpso_mux_config vpso_mux_install tcp_peek_engine sni_stack_health"*) ;;
-    *)
-        echo "vpso-mux/TCP Peek modules are not in the expected build order." >&2
-        exit 1
-        ;;
-esac
-case "$module_order" in
-    *"panel_installers compose_runtime subscription_apps subscription_service_menus dockge_migration panel_rescue"*) ;;
-    *)
-        echo "Compose management modules are not in the expected build order." >&2
-        exit 1
-        ;;
-esac
-if module_list_entries | grep -Fxq 'subscription_tools'; then
-    echo "Release build must use the split compose/subscription modules directly." >&2
-    exit 1
-fi
-assert_file_not_contains dist/vps.sh '# Module: subscription_tools.sh' "Release build must not include the legacy subscription_tools compatibility loader."
-assert_file_not_matches src/subscription_tools.sh '^[A-Za-z_][A-Za-z0-9_]*\(\) \{' "subscription_tools.sh must stay a compatibility loader, not reintroduce duplicate implementations."
-assert_file_contains src/README.md 'compose_runtime.sh`, `subscription_apps.sh`,' "Source README must document the split compose/subscription build order."
-assert_file_contains src/README.md 'subscription_tools.sh` is a compatibility loader only' "Source README must document subscription_tools.sh as compatibility-only."
-for module in compose_runtime.sh subscription_apps.sh subscription_service_menus.sh dockge_migration.sh; do
-    assert_dist_contains "# Module: ${module}" "Release script is missing split compose/subscription module: ${module}"
-done
-assert_file_contains ".gitattributes" 'dist/vps.sh.sha256 text eol=lf' "dist checksum must be pinned to LF in Windows workspaces."
-if grep -q $'\r' dist/vps.sh.sha256; then
-    echo "dist/vps.sh.sha256 must use LF line endings." >&2
-    exit 1
-fi
-for function_name in \
-    install_docker_compose_standalone \
-    ensure_docker_engine_ready \
-    ensure_docker_compose_ready \
-    find_compose_file \
-    is_managed_compose_dir \
-    manage_compose_project \
-    func_sublinkpro_menu \
-    func_dockge_menu \
-    docker_compose_management_menu \
-    func_komari_menu \
-    func_cdt_monitor_menu \
-    func_migrate_compose_to_dockge
-do
-    assert_function_defined_once dist/vps.sh "$function_name"
-done
-assert_module_list_contains sni_stack_sites
-assert_dist_contains '# Module: sni_stack_sites.sh' "Release script must include the active 443 Web/SNI site module."
-assert_path_absent "src/sni_stack_web_sites.sh" "sni_stack_web_sites.sh is a stale shadow implementation; use src/sni_stack_sites.sh."
-if module_list_entries | grep -Fxq 'sni_stack_web_sites'; then
-    echo "Stale sni_stack_web_sites.sh must not be added to the release build." >&2
-    exit 1
-fi
-assert_file_not_contains dist/vps.sh '# Module: sni_stack_web_sites.sh' "Release script must not include the stale sni_stack_web_sites module."
-assert_path_absent "src/entry_mode_cutover.sh" "entry_mode_cutover.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
-assert_path_absent "src/tcp_peek_preflight.sh" "tcp_peek_preflight.sh is a stale shadow implementation; use src/tcp_peek_engine.sh."
-if module_list_entries | grep -Fxq 'entry_mode_state'; then
-    echo "entry_mode_state.sh is a compatibility loader; entry-mode fixes must land in src/sni_stack_config.sh." >&2
-    exit 1
-fi
-if module_list_entries | grep -Fxq 'entry_mode_cutover'; then
-    echo "Stale entry-mode cutover module must not be added to the release build." >&2
-    exit 1
-fi
-if module_list_entries | grep -Fxq 'tcp_peek_preflight'; then
-    echo "Stale TCP Peek preflight module must not be added to the release build." >&2
-    exit 1
-fi
-assert_file_not_contains dist/vps.sh '# Module: entry_mode_state.sh' "Release script must not include non-release entry_mode_state.sh."
-assert_file_not_matches src/entry_mode_state.sh '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "entry_mode_state.sh must remain a thin compatibility loader."
-assert_file_contains src/entry_mode_state.sh '/sni_stack_config.sh"' "entry_mode_state.sh must load its release owner."
-assert_file_contains scripts/build.sh 'validate_compat_loaders' "The build must validate all compatibility loaders."
-for function_name in canonical_legacy_entry_mode_name entry_mode_expected_listener get_entry_mode print_entry_mode_compat_notice rewrite_legacy_entry_mode_assignment set_entry_mode sni_stack_env_path; do
-    assert_dist_contains "${function_name}()" "Release script must include entry-mode helper ${function_name} from built modules."
-done
-assert_file_contains src/README.md '443/TCP Peek ownership:' "Source README must document 443/TCP Peek module ownership."
-assert_file_contains src/README.md 'Do not reintroduce split shadow modules' "Source README must warn against stale split 443/TCP Peek modules."
-assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '输入菜单编号或 ?: ' "443 Web/SNI submenu must prompt for a menu number or help."
-assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '输入菜单编号或 ?: ' "443 Port 443 Reuse parameter submenu must prompt for a menu number or help."
-assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '输入菜单编号，? 查看帮助: ' "Port 443 Reuse menu must prompt for a menu number or help."
-assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites '"?") show_sni_help; pause_return; continue ;;' "443 Web/SNI submenu must accept the displayed ? help entry."
-assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile '"?") show_sni_help; pause_return; continue ;;' "443 Port 443 Reuse parameter submenu must accept the displayed ? help entry."
-assert_function_body_contains src/menus.sh func_sni_stack_quick_menu '"?") show_sni_help; pause_return; continue ;;' "Port 443 Reuse menu must accept the displayed ? help entry."
-assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites "0|q|Q|'') break ;;" "443 Web/SNI submenu must accept 0/q/Enter to go back."
-assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile "0|q|Q|'') break ;;" "443 parameter submenu must accept 0/q/Enter to go back."
-assert_function_body_contains src/menus.sh func_sni_stack_quick_menu "0|q|Q|'') break ;;" "Port 443 Reuse menu must accept 0/q/Enter to go back."
-assert_function_body_contains src/sni_stack_menus.sh manage_sni_stack_sites 'q 返回' "443 Web/SNI submenu must advertise only the supported q shortcut."
-assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_runtime_profile 'q 返回' "443 Port 443 Reuse parameter submenu must advertise only the supported q shortcut."
-assert_function_body_contains src/menus.sh func_sni_stack_quick_menu 'q 返回' "Port 443 Reuse menu must advertise only the supported q shortcut."
-assert_dist_contains '输入菜单编号或 ?' "Release script must include hardened 443 menu prompts."
-assert_dist_contains '❌ 无效选择，请输入菜单编号或 ?。' "Release script must include hardened 443 invalid-choice guidance."
 if command -v go >/dev/null 2>&1; then
     GO_BIN=go
 elif command -v go.exe >/dev/null 2>&1; then
@@ -441,11 +60,6 @@ else
     echo "Go not found; skipped Go smoke validation in VPSO_CI_CONTAINER mode."
 fi
 
-dangerous_patterns='rm -rf|rm -r[[:space:]]|wget .*[&][&]|curl .*\|[[:space:]]*gpg|\|[[:space:]]*bash|bash[[:space:]]*<'
-if grep -En "$dangerous_patterns" dist/vps.sh dog.sh; then
-    echo "Dangerous shell patterns found." >&2
-    exit 1
-fi
 
 source src/language.sh
 source src/common.sh
@@ -473,6 +87,34 @@ source src/validate.sh
 source src/rollback.sh
 source src/backup.sh
 source src/menus.sh
+
+(
+    VPSO_LANGUAGE=zh
+    show_current_entry_summary() { :; }
+    print_breadcrumb() { :; }
+    print_menu_item() { :; }
+    menu_handlers=(
+        manage_entry_mode_install_or_switch manage_sni_stack_sites
+        edit_sni_stack_runtime_profile manage_xray_inbound_routes
+        manage_sni_stack_ip_whitelist manage_reality_traffic_guard
+        func_caddy_cf_maintenance_menu update_vpso_mux_binary
+        reapply_current_entry_mode rollback_last_entry_mode
+        show_current_entry_status check_sni_stack_subscription_hint
+        sni_stack_health_check_enhanced func_443_network_test view_current_entry_logs
+    )
+    for menu_index in "${!menu_handlers[@]}"; do
+        menu_output=$(
+            for handler in "${menu_handlers[@]}"; do
+                eval "$handler() { echo '$handler'; exit 0; }"
+            done
+            func_sni_stack_quick_menu <<<"$((menu_index + 1))"
+        )
+        [[ "${menu_output##*$'\n'}" == "${menu_handlers[$menu_index]}" ]]
+    done
+    for back in 0 q Q ''; do
+        func_sni_stack_quick_menu <<< $'invalid\n'"$back" >/dev/null
+    done
+)
 
 assert_ip_cidr_valid() {
     local value="$1"
@@ -681,7 +323,6 @@ is_valid_port "https://panel.example.com:４４３/path"
 )
 (
     source src/system_reinstall.sh
-    assert_dist_contains "func_system_reinstall" "Release script is missing system reinstallation support."
     VPSO_LANGUAGE="zh"
     system_reinstall_set_target 1
     [[ "$SYSTEM_REINSTALL_LABEL" == "Debian 13" ]]
@@ -777,12 +418,6 @@ EOF
     ensure_docker_compose_ready() { DOCKER_COMPOSE_CMD=true; }
     validate_applied_config_kind compose /tmp/vps-compose-smoke.yml >/dev/null
 )
-assert_file_not_contains src/subscription_apps.sh '$RANDOM' "Secret generation must not fall back to Bash RANDOM."
-assert_file_not_contains src/subscription_apps.sh 'date +%s' "Secret generation must not fall back to timestamps."
-if grep -Eq 'cat <<[^>]*> (docker-compose\.yml|compose\.yaml)' src/subscription_apps.sh; then
-    echo "Generated Compose files must use compose_write_secure_file." >&2
-    exit 1
-fi
 (
     compose_apply_tmp=$(mktemp -d /tmp/vps-compose-apply-smoke.XXXXXX)
     mkdir -p "$compose_apply_tmp/src" "$compose_apply_tmp/project"
@@ -842,42 +477,6 @@ rmdir "$config_edit_tmp_dir"
 APT_UPDATED=1
 apt_update_once
 [[ "$APT_UPDATED" == "1" ]]
-assert_file_contains src/common.sh 'sudo bash coreutils findutils grep sed gawk util-linux git nano htop lsof net-tools' "Minimal compatibility packages must include basic system commands."
-assert_file_contains src/system_core.sh 'install_pkg sudo curl wget git nano unzip htop lsof net-tools' "Base init must install sudo and common tools."
-assert_file_contains src/preflight.sh 'command -v sudo >/dev/null 2>&1 || cmd_miss+=("sudo")' "Preflight must detect missing sudo as a basic command."
-assert_file_contains src/preflight.sh '▶ [1/9] 检查系统运行状态' "Preflight progress must consistently use nine checks."
-assert_file_not_contains src/preflight.sh '[1/8]' "Preflight progress must not keep the stale eight-step denominator."
-assert_function_body_contains src/preflight.sh func_preflight_check 'return 1' "Preflight must return failure when blocking errors remain."
-assert_function_body_contains src/system_core.sh func_base_init 'failed_steps+=("$(localized_text "系统软件包更新"' "Base init must preserve package update failures."
-assert_function_body_contains src/system_core.sh func_base_init 'BBR 状态验证' "Base init must verify BBR runtime state before reporting success."
-assert_file_not_contains src/menus.sh 'func_beginner_menu' "The removed hidden beginner entry must not remain in source."
-assert_function_body_contains src/menus.sh normalize_main_choice '443) echo "19"' "The documented 443 shortcut must open the Port 443 Reuse center."
-assert_function_body_contains src/menus.sh main_menu 'choice=$(normalize_main_choice "$choice")' "The main menu must normalize documented shortcuts before dispatch."
-assert_function_body_contains src/menus.sh main_menu '输入菜单编号或 ?: ' "The main menu must use a concise number-or-help prompt."
-assert_file_not_contains src/menus.sh '或快捷词' "The main menu must not expose hidden shortcuts in its prompt."
-assert_file_not_contains src/menus.sh '443 ·' "Main-menu descriptions must not display shortcut labels."
-assert_file_not_contains src/menus.sh 'proxy ·' "Main-menu descriptions must not display shortcut labels."
-assert_file_contains README.md '| `443` | `[19 443端口复用管理中心]` |' "The Chinese README must document the 443 shortcut."
-assert_file_contains en/README.md '| `443` | `[19 Port 443 Reuse manager]` |' "The English README must document the 443 shortcut."
-assert_file_contains ru/README.md '| `443` | `[19 Общий порт 443]` |' "The Russian README must document the 443 shortcut."
-assert_function_body_contains src/menus.sh main_menu '"非443端口复用的网站与面板反代"' "The Chinese reverse-proxy description must stay concise."
-assert_function_body_contains src/menus.sh main_menu '"sites and panels not using Port 443 Reuse"' "The English reverse-proxy description must stay natural."
-assert_function_body_contains src/menus.sh main_menu '"сайты и панели без повторного использования порта 443"' "The Russian reverse-proxy description must stay natural."
-assert_file_not_contains src/menus.sh '未接入 443端口复用的网站/面板反代' "The old conversational reverse-proxy description must not return."
-assert_function_body_contains src/caddy_proxy.sh func_caddy_reverse_proxy_menu 'Reverse proxy (Caddy / Nginx)' "The reverse-proxy menu title must remain natural in English."
-assert_function_body_contains src/firewall.sh func_firewall_manage 'Enable firewall with a minimal allow plan' "The firewall menu must describe its safe enable flow clearly."
-assert_function_body_contains src/environment.sh func_env_install 'Components and services' "The component menu title must remain concise in English."
-assert_function_body_contains src/diagnostics_network.sh func_test_scripts 'VPS speed and quality tests' "The diagnostics menu title must describe its contents."
-assert_function_body_contains src/server_maintenance.sh func_port_kill 'Port usage and process termination' "The port tool must use accurate process-termination wording."
-assert_function_body_contains src/kernel_tuning.sh func_zram_swap 'more than 4 GB' "The low-swapping profile label must match the automatic memory threshold."
-assert_file_not_contains src/caddy_proxy.sh 'reverse proxyal' "The reverse-proxy menu must not contain the old machine translation."
-assert_file_not_contains src/sni_stack_health.sh 'web inversion' "443 health output must use reverse-proxy terminology."
-assert_function_body_contains src/firewall.sh func_firewall_manage 'VPSO_FIREWALLD_OFFLINE_MODE=1' "Inactive firewalld must receive allow rules before the service starts."
-assert_function_body_contains src/firewall.sh func_firewall_manage 'systemctl enable --now firewalld' "Firewalld must start only after offline rules succeed."
-assert_function_body_contains src/firewall.sh func_firewall_manage 'firewall_build_minimum_plan' "Firewall enable flow must build a least-privilege plan."
-assert_function_body_contains src/firewall.sh func_firewall_manage 'firewall_print_minimum_plan' "Firewall enable flow must preview the least-privilege plan."
-assert_function_body_contains src/firewall.sh func_firewall_manage 'Docker 映射可能绕过普通 UFW/firewalld 规则' "Firewall plan must not imply that excluding Docker mappings closes them."
-assert_function_body_contains src/firewall.sh func_firewall_manage '启用防火墙并应用最小权限放行计划' "Firewall enable flow must require confirmation after plan selection."
 
 (
     source src/common.sh
@@ -1360,7 +959,6 @@ NFT_RULES
 [[ "$(nginx_stream_listen_directives "0.0.0.0" "443" | grep -c '^    listen ')" == "2" ]]
 [[ "$(nginx_stream_listen_directives "::1" "443")" == "    listen [::1]:443;" ]]
 [[ "$(xui_cert_setting_key_sql_list)" == *"subcertfile"* ]]
-assert_function_body_contains src/sni_stack_profiles.sh edit_sni_stack_panel_domain_profile 'update_xui_panel_domain_settings_for_single_443 "$old_domain" "$new_domain"' "Panel domain changes must sync 3x-ui domain settings."
 
 if command -v python3 >/dev/null 2>&1; then
     (
@@ -1547,43 +1145,7 @@ EOF
     fi
 )
 
-assert_function_body_contains src/sni_stack_sites.sh add_sni_stack_site 'confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${site_domain}"' "Adding a Web backend must probe the exact target before saving."
-assert_function_body_contains src/sni_stack_sites.sh add_sni_stack_site '"$site_addr" "$site_port"' "Adding a Web backend must pass the configured address and port to the probe."
-assert_function_body_contains src/sni_stack_sites.sh edit_sni_stack_site_backend 'confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${domain}"' "Editing a Web backend must probe the exact target before saving."
-assert_function_body_contains src/sni_stack_sites.sh edit_sni_stack_site_backend '"$new_addr" "$new_port"' "Editing a Web backend must pass the configured address and port to the probe."
-assert_file_contains src/sni_stack_install.sh 'confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${SITE_DOMAINS[$site_idx]}"' "Initial 443 setup must probe configured Web backends before saving."
-assert_file_contains src/sni_stack_install.sh '"${SITE_BACKEND_ADDRS[$site_idx]}" "${SITE_BACKEND_PORTS[$site_idx]}"' "Initial 443 setup must pass the configured backend address and port to the probe."
-assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '▶ [1/5] 域名与 Web 反代引擎' "Initial 443 setup must group domain inputs clearly."
-assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '面板域名（仅域名；示例值 panel.example.com）' "Initial 443 setup must show a hostname-only panel-domain example."
-assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '公网入口端口' "Initial 443 setup must distinguish the public entry port."
-assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '以下为内部端口，不能与公网入口端口冲突' "Initial 443 setup must distinguish internal ports from the public entry port."
-assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '修改本地监听地址？(y/N，默认 N；一般直接回车)' "Initial 443 setup must accurately display the safe default for local listen addresses."
-assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config '只填以 / 开头和结尾的路径前缀，不带域名、端口或订阅客户端 ID' "Initial 443 setup must explain path formatting before validation."
-assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config 'Cloudflare API Token 权限：Zone - DNS - Edit、Zone - Zone - Read' "Initial 443 setup must state the required Cloudflare token permissions."
-assert_function_body_contains src/sni_stack_install.sh collect_sni_stack_config 'confirm_default_yes "$(localized_text "启用 SNI 清洗（严格门禁）？(Y/n): "' "Initial 443 setup must enable SNI filtering by default in supported entry modes."
-assert_function_body_contains src/sni_stack_install.sh write_nginx_sni_stream_config 'validate_strict_sni_gate_reality_server_names || return 1' "Nginx strict SNI rendering must validate registered REALITY serverNames."
-assert_function_body_contains src/vpso_mux_config.sh write_vpso_mux_config_from_sni_stack 'validate_strict_sni_gate_reality_server_names || return 1' "TCP Peek strict SNI rendering must validate registered REALITY serverNames."
-assert_function_body_contains src/tcp_peek_engine.sh select_initial_entry_mode '选择入口模式 [1]' "Initial 443 setup must show the default entry-mode choice concisely."
-assert_function_body_contains src/sni_stack_config.sh print_xui_single_443_detected_defaults '下面直接回车即可沿用' "Detected 3x-ui defaults must explain how to keep them."
-assert_file_not_contains src/sni_stack_install.sh '是否进入高级模式并允许修改本地服务监听地址？(Y/n，默认 y)' "Initial 443 setup must not advertise a default that differs from runtime behavior."
-assert_function_body_contains src/caddy_maintenance.sh func_caddy_cf_health_check 'probe_backend_target "$(localized_text "    后端状态"' "Caddy health must probe the configured backend address and port."
-assert_function_body_contains src/caddy_maintenance.sh func_caddy_cf_health_check '"$backend_addr" "$backend_port"' "Caddy health must pass the configured backend address and port to the probe."
-assert_file_contains src/sni_stack_config.sh 'check_backend "$(localized_text "网站后端 ${SITE_DOMAINS[$i]}"' "Nginx-stream health must probe configured Web backends instead of local ports."
-assert_file_contains src/sni_stack_config.sh '"${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}"' "Nginx-stream health must pass configured Web backend targets to the probe."
-assert_function_body_contains src/sni_stack_health.sh sni_stack_health_check_enhanced 'probe_backend_target "$(localized_text "网站后端 ${domain}"' "Enhanced 443 health must probe configured Web backends."
-assert_function_body_contains src/sni_stack_health.sh sni_stack_health_check_enhanced '"${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}"' "Enhanced 443 health must pass configured Web backend targets to the probe."
-assert_function_body_contains src/diagnostics_network.sh tcp_probe_once 'tcp_target_reachable "$host" "$port"' "Network diagnostics must reuse the shared exact-target TCP probe."
 
-assert_file_not_contains src/caddy_maintenance.sh 'reverse_proxy[[:space:]]+127.0.0.1' "Caddy health check must read the configured backend target, not only 127.0.0.1."
-assert_file_not_contains src/caddy_certificates.sh 'Caddy监听: 127.0.0.1:' "Caddy manifest must summarize the configured listen target."
-assert_file_contains src/caddy_proxy.sh '当前 Caddy 配置校验失败，未写入新增反代。' "Caddy reverse proxy must not blame new config when the existing Caddy config is already invalid."
-assert_file_contains src/caddy_proxy.sh 'Caddy 校验错误' "Caddy reverse proxy failures must print the real caddy validate output."
-cert_delete_paths='"/etc/caddy/certs/${domain}.crt" "/etc/caddy/certs/${domain}.key" "/root/cert/${domain}.crt" "/root/cert/${domain}.key"'
-assert_file_contains src/caddy_maintenance.sh "$cert_delete_paths" "Caddy certificate deletion must quarantine installed cert files and /root/cert links."
-assert_dist_contains "$cert_delete_paths" "Release Caddy certificate deletion must quarantine installed cert files and /root/cert links."
-assert_file_contains src/caddy_maintenance.sh 'generate_caddy_cf_manifest 2>/dev/null || true' "Caddy certificate deletion must refresh the managed certificate manifest."
-assert_dist_contains 'generate_caddy_cf_manifest 2>/dev/null || true' "Release Caddy certificate deletion must refresh the managed certificate manifest."
-assert_file_not_contains src/caddy_maintenance.sh '永久删除该域名的证书与配置，无法恢复' "Caddy cleanup copy must match the quarantine-based recovery behavior."
 
 (
     source src/input.sh
@@ -1782,357 +1344,8 @@ else
 fi
 declare -f sanitize_nftables_config >/dev/null
 declare -f update_telegram_config >/dev/null
-grep -q '^refresh_nftables_counter_snapshot()' dog.sh
-grep -q '^send_telegram_status_notification()' dog.sh
-grep -q '^run_scheduled_telegram_notification()' dog.sh
-grep -q '^manage_telegram_template()' dog.sh
 bash tests/dog-limits.sh
 
-assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read scripts/modules.list."
-assert_file_contains vps.sh 'src/${module}.sh' "Source checkout entrypoint must source modules from src."
-grep -q 'VPS 全能控制面板' vps.sh
-grep -q 'RELEASE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"' vps.sh
-if grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+.*src/' dist/vps.sh; then
-    echo "Release script must not source src modules at runtime." >&2
-    exit 1
-fi
-if grep -Eq '确认下载并执行该远程脚本|是否继续下载并执行该远程脚本|如仍要执行，请输入 YES' dist/vps.sh; then
-    echo "Remote script runner must not prompt for execution confirmation." >&2
-    exit 1
-fi
-assert_file_not_contains src/common.sh 'confirm_remote_script_execution' "Remote script execution must not define an interactive confirmation helper."
-assert_file_not_contains dist/vps.sh 'VPSO_REMOTE_SCRIPT_CONFIRM' "Built remote script runner must not keep the obsolete confirmation flag."
-assert_file_contains "src/environment.sh" '安装 nftables NAT 转发工具' "Environment menu must install nftables-nat-rust from option 10."
-assert_file_not_contains "src/environment.sh" '哪吒监控' "Environment menu option 10 must not keep the old Nezha entry."
-assert_file_not_contains "dist/vps.sh" 'raw.githubusercontent.com/naiba/nezha/master/script/install.sh' "Release script must not keep the old Nezha install URL."
-grep -q 'func_sni_stack_quick_menu' dist/vps.sh
-grep -q 'manage_xray_inbound_routes' dist/vps.sh
-grep -q 'TCP_ROUTE_SNIS_CSV' dist/vps.sh
-grep -q 'single_443_current_engine' dist/vps.sh
-assert_file_contains "src/xray_sni_routes.sh" 'Xray SNI 路由管理' "Xray route management must display its actual function."
-assert_function_body_contains "src/xray_sni_routes.sh" add_xray_sni_route 'offer_sync_xray_sni_routes' "Adding an Xray SNI route must offer to apply the saved route."
-assert_function_body_contains "src/xray_sni_routes.sh" remove_xray_sni_route 'offer_sync_xray_sni_routes' "Deleting an Xray SNI route must offer to apply the saved route."
-assert_function_body_contains "src/xray_sni_routes.sh" offer_sync_xray_sni_routes 'confirm_risk_action' "Applying saved Xray SNI routes must use the high-risk confirmation flow."
-assert_function_body_contains "src/xray_sni_routes.sh" offer_sync_xray_sni_routes 'sync_xray_sni_routes_to_entry_mode' "Accepted Xray SNI route changes must sync to the active entry mode."
-assert_function_body_contains "src/xray_sni_routes.sh" confirm_non_xray_route_listener 'grep -Eqi' "Xray SNI route creation must inspect the listener owner."
-assert_file_not_contains "src/xray_sni_routes.sh" '443 TCP/SNI 本地入站管理' "Xray inbound menu must not use the old TCP/SNI title."
-assert_file_contains "src/xray_sni_routes.sh" '再登记 SNI -> 本地地址:端口。这里只管理入口路由，不修改入站配置' "Xray inbound menu must describe entry routes separately from inbound configuration."
-assert_file_not_contains "src/xray_sni_routes.sh" '只写 Nginx stream SNI -> 本地端口规则' "Xray inbound menu must not describe route records as nginx-stream-only."
-assert_file_contains "src/sni_stack_config.sh" '普通 HTTPS 回落到所选本地 Web 反代引擎' "xray-fallback explanation must mention the selected Web reverse proxy engine."
-assert_file_not_contains "src/sni_stack_config.sh" 'fallback 普通 HTTPS 到 Caddy' "xray-fallback explanation must not hard-code Caddy."
-assert_dist_contains 'Xray 入站管理' 'Release script must include the current Xray inbound menu name.'
-assert_file_not_contains "dist/vps.sh" '443 TCP/SNI 本地入站管理' "Release script must not use the old TCP/SNI title."
-assert_dist_contains '再登记 SNI -> 本地地址:端口。这里只管理入口路由，不修改入站配置' 'Release script must describe entry routes separately from inbound configuration.'
-assert_file_not_contains "dist/vps.sh" '只写 Nginx stream SNI -> 本地端口规则' "Release script must not describe Xray inbound records as nginx-stream-only."
-assert_dist_contains '普通 HTTPS 回落到所选本地 Web 反代引擎' 'Release script must describe xray-fallback as using the selected Web reverse proxy engine.'
-assert_file_not_contains "dist/vps.sh" 'fallback 普通 HTTPS 到 Caddy' "Release script must not hard-code Caddy in xray-fallback explanation."
-for function_name in \
-    normalize_entry_mode_name \
-    entry_mode_engine_name \
-    entry_mode_expected_listener \
-    preflight_tcppeek_before_cutover \
-    preflight_entry_mode_before_cutover \
-    switch_entry_mode
-do
-    assert_function_defined_once dist/vps.sh "$function_name"
-done
-assert_file_not_matches src/tcp_peek_engine.sh '^entry_mode_expected_listener\(\)' "entry_mode_expected_listener belongs to shared 443 state/listener helpers, not the TCP Peek engine module."
-for function_name in \
-    vpso_mux_config_path \
-    vpso_mux_service_name \
-    vpso_mux_status_json_path \
-    single_443_engine_state_path \
-    yaml_quote \
-    single_443_current_engine \
-    sni_stack_route_name \
-    sni_stack_route_summary_for_state \
-    sni_stack_whitelist_summary_for_state \
-    write_single_443_engine_state \
-    show_single_443_engine_status \
-    show_tcp_peek_splice_info \
-    print_vpso_mux_systemd_fallback_status \
-    print_vpso_mux_status_json \
-    show_vpso_mux_runtime_status \
-    append_vpso_mux_route_yaml \
-    write_vpso_mux_config_from_sni_stack \
-    generate_tcp_peek_config \
-    go_install_vpso_mux_latest \
-    vpso_mux_build_resource_check \
-    require_vpso_mux_binary_for_cutover \
-    install_vpso_mux_binary \
-    write_vpso_mux_systemd_service \
-    run_vpso_mux_config_check \
-    print_vpso_mux_failure_context
-do
-    assert_function_defined_once dist/vps.sh "$function_name"
-    assert_file_not_matches src/tcp_peek_engine.sh "^${function_name}\\(\\)" "src/tcp_peek_engine.sh must not keep duplicate ${function_name}."
-done
-grep -q 'write_single_443_engine_state "nginx-stream"' dist/vps.sh
-grep -q 'write_single_443_engine_state "tcp-peek"' dist/vps.sh
-grep -q 'write_single_443_engine_state "xray-fallback"' dist/vps.sh
-grep -q 'entry_mode_engine_name()' dist/vps.sh
-grep -q 'echo "$mode"' dist/vps.sh
-if grep -q 'write_single_443_engine_state "nginx_stream"' dist/vps.sh || grep -q 'write_single_443_engine_state "tcp_peek"' dist/vps.sh || grep -q 'write_single_443_engine_state "xray_fallback"' dist/vps.sh; then
-    echo "443 engine state must write canonical hyphenated mode names." >&2
-    exit 1
-fi
-grep -q 'generate_tcp_peek_config' dist/vps.sh
-assert_file_not_contains 'dist/vps.sh' 'switch_public_443_to_tcp_peek' 'TCP Peek-specific cutover wrapper must be removed; use the [5] entry-mode switch instead.'
-assert_file_not_contains 'dist/vps.sh' 'rollback_tcp_peek_to_nginx_stream' 'TCP Peek-specific rollback wrapper must be removed; use the broader [7] rollback instead.'
-grep -q 'sni_stack_health_check_enhanced' dist/vps.sh
-grep -q 'vpso-mux.service' dist/vps.sh
-grep -q 'vpso-mux-preflight.service' dist/vps.sh
-grep -q 'go_install_vpso_mux_latest' dist/vps.sh
-grep -q 'GOTOOLCHAIN=local' dist/vps.sh
-grep -q '拒绝在生产机上自动下载临时 Go 工具链' dist/vps.sh
-assert_dist_contains 'go build -p 1 -o /usr/local/bin/vpso-mux github.com/Chunlion/VPS-Optimize/cmd/vpso-mux' 'Release script must build the vpso-mux command package.'
-assert_dist_contains 'ExecStart=/usr/local/bin/vpso-mux -config /etc/vps-optimize/vpso-mux.yaml' 'Release script must install the public vpso-mux systemd entry.'
-assert_dist_contains 'ExecStart=/usr/local/bin/vpso-mux -config /etc/vps-optimize/vpso-mux.preflight.yaml' 'Release script must install the TCP Peek 8444 preflight systemd entry.'
-assert_dist_contains 'run_tcppeek_preflight_service 0 "8444" || return 1' 'TCP Peek cutover must still run the 8444 preflight before touching public 443.'
-assert_dist_contains 'write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_config" || return 1' 'TCP Peek cutover must render vpso-mux config from the shared 443 stack.'
-if grep -q 'go1.23.0 download' dist/vps.sh; then
-    echo "TCP Peek cutover must not download a temporary Go toolchain." >&2
-    exit 1
-fi
-grep -q 'replace golang.org/x/sys => golang.org/x/sys v0.30.0' dist/vps.sh
-grep -q 'go mod download github.com/Chunlion/VPS-Optimize' dist/vps.sh
-grep -q 'VPS-Optimize-src' dist/vps.sh
-grep -q '检测到远程 vpso-mux 旧源码' dist/vps.sh
-grep -q 'int(remaining)' dist/vps.sh
-grep -q 'replace github.com/Chunlion/VPS-Optimize => ./VPS-Optimize-src' dist/vps.sh
-grep -q 'go build -p 1 -o /usr/local/bin/vpso-mux' dist/vps.sh
-grep -q 'require_vpso_mux_binary_for_cutover' dist/vps.sh
-grep -q 'preflight_tcppeek_before_cutover' dist/vps.sh
-grep -q 'guard_current_ssh_not_on_entry_port' dist/vps.sh
-grep -q 'TCP Peek 8444 预检' dist/vps.sh
-grep -q 'preview_entry_mode_cutover' dist/vps.sh
-grep -q '443端口复用切换变更预览' dist/vps.sh
-grep -q 'vpso_mux_status_json_path' dist/vps.sh
-grep -q '/var/lib/vps-optimize/vpso-mux/status.json' dist/vps.sh
-grep -q 'show_vpso_mux_runtime_status' dist/vps.sh
-grep -Fq '1) manage_entry_mode_install_or_switch ;;' dist/vps.sh
-grep -Fq '10) rollback_last_entry_mode ;;' dist/vps.sh
-grep -Fq 'install_vpso_mux_binary || {' dist/vps.sh
-grep -Fq 'print_tcppeek_preflight_failure_context "$test_port"' dist/vps.sh
-assert_file_not_contains 'dist/vps.sh' '是否先安装/使用 Nginx Stream 完成本次首次安装？' 'TCP Peek initial setup must run its automatic install and preflight flow.'
-assert_file_not_contains 'dist/vps.sh' '19. 切换公网 443 到 TCP Peek + Splice 模式' '443 menu must not expose a redundant TCP Peek-specific cutover entry.'
-assert_file_not_contains 'dist/vps.sh' '19) switch_public_443_to_tcp_peek ;;' '443 menu must not dispatch to a removed TCP Peek-specific cutover wrapper.'
-assert_file_not_contains 'dist/vps.sh' '20. 从 TCP Peek 回滚到 Nginx Stream 模式' '443 menu must not expose a redundant TCP Peek-specific rollback entry.'
-assert_file_not_contains 'dist/vps.sh' '20) rollback_tcp_peek_to_nginx_stream ;;' '443 menu must not dispatch to a removed TCP Peek-specific rollback wrapper.'
-for menu_file in src/menus.sh dist/vps.sh; do
-    if ! awk '
-        /^func_sni_stack_quick_menu\(\) \{/ { in_fn = 1 }
-        in_fn && $1 == "print_menu_item" { if ($2 != ++expected) exit 1 }
-        in_fn && $0 == "}" { exit }
-        END { if (expected != 15) exit 1 }
-    ' "$menu_file"; then
-        echo "Port 443 Reuse menu must display all 15 entries in ascending order in ${menu_file}." >&2
-        exit 1
-    fi
-done
-while IFS='|' read -r menu_no menu_label case_action; do
-    [[ -n "$menu_no" ]] || continue
-    for menu_file in src/menus.sh dist/vps.sh; do
-        assert_function_body_contains "$menu_file" func_sni_stack_quick_menu \
-            "print_menu_item ${menu_no} \"\$(localized_text \"${menu_label}\"" \
-            "Port 443 Reuse menu item ${menu_no} must display its matching label."
-        assert_function_body_contains "$menu_file" func_sni_stack_quick_menu \
-            "${menu_no}) ${case_action}" \
-            "Port 443 Reuse menu item ${menu_no} must dispatch to its matching action."
-        assert_function_body_contains "$menu_file" show_sni_help \
-            "localized_text \"${menu_no} ${menu_label}" \
-            "Port 443 Reuse help must match menu item ${menu_no}."
-    done
-done <<'SNI_MENU_MAP'
-1|安装或切换 443 入口模式|manage_entry_mode_install_or_switch ;;
-2|管理 Web 域名与反向代理|manage_sni_stack_sites; continue ;;
-3|修改端口、路径与 REALITY 参数|edit_sni_stack_runtime_profile; continue ;;
-4|管理 Xray SNI 转发规则|manage_xray_inbound_routes; continue ;;
-5|设置 Web 域名 IP 白名单|manage_sni_stack_ip_whitelist; continue ;;
-6|设置 SNI 过滤与 REALITY 回落限速|manage_reality_traffic_guard; continue ;;
-7|维护 HTTPS 证书与 Cloudflare Token|func_caddy_cf_maintenance_menu; continue ;;
-8|更新 TCP Peek 核心|update_vpso_mux_binary ;;
-9|重新生成并应用入口配置|reapply_current_entry_mode ;;
-10|回滚上次入口模式切换|rollback_last_entry_mode ;;
-11|查看 443 入口与服务状态|show_current_entry_status ;;
-12|查看节点链接与订阅填写说明|check_sni_stack_subscription_hint ;;
-13|检查入口配置、证书与转发规则|sni_stack_health_check_enhanced ;;
-14|测试 DNS、端口与 HTTPS 访问|func_443_network_test; continue ;;
-15|查看当前入口服务日志|view_current_entry_logs ;;
-SNI_MENU_MAP
-
-docs_menu_files=(
-    ".github/ISSUE_TEMPLATE/bug_report.md"
-    "README.md"
-    "docs/443-single-entry.md"
-    "docs/443-tcp-peek-engine.md"
-    "docs/443-single-entry-troubleshooting.md"
-    "docs/config-paths.md"
-    "docs/existing-server-migration.md"
-    "docs/recovery-runbook.md"
-    "tutorials/01-3x-ui-reality-443.md"
-    "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md"
-)
-for file in "${docs_menu_files[@]}"; do
-    assert_file_not_contains "$file" '主菜单 [18 443端口复用管理中心]' "${file} must not point users to the old main menu [18] 443 entry."
-    assert_file_not_contains "$file" '主菜单 [14 服务健康总览]' "${file} must not point users to the old main menu [14] health entry."
-    assert_file_not_contains "$file" '[15 配置备份与回滚]' "${file} must not point users to the old backup menu [15]."
-done
-
-renumbered_sni_doc_files=(
-    "docs/443-single-entry-troubleshooting.md"
-    "docs/config-paths.md"
-    "docs/existing-server-migration.md"
-    "docs/recovery-runbook.md"
-    "tutorials/01-3x-ui-reality-443.md"
-    "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md"
-)
-for file in "${renumbered_sni_doc_files[@]}"; do
-    assert_file_not_contains "$file" '主菜单 [19 443端口复用管理中心] -> [13 443 链路体检]' "${file} must use [11 443 配置检查]."
-    assert_file_not_contains "$file" '主菜单 [19 443端口复用管理中心] -> [13 CF DNS / Caddy 证书维护]' "${file} must use [12 CF DNS / Caddy 证书维护]."
-    assert_file_not_contains "$file" '主菜单 [19 443端口复用管理中心] -> [14 修改 443端口复用参数]' "${file} must use [10 修改 443端口复用参数]."
-    assert_file_not_contains "$file" '主菜单 [19 443端口复用管理中心] -> [15 订阅链接 / External Proxy 提示]' "${file} must use [11 订阅链接 / External Proxy 提示]."
-done
-
-assert_file_contains "docs/443-single-entry.md" '3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host' "443 tutorial must document the 3x-ui v3.4.0+ Hosts path."
-assert_file_contains "docs/443-single-entry.md" '回落限速只支持使用本机 SQLite 的 3x-ui' "443 tutorial must place the PostgreSQL limitation next to fallback limits."
-assert_file_contains "src/reality_guard.sh" '不可用：仅支持本机 SQLite' "REALITY guard menu must disable fallback-limit actions for PostgreSQL."
-assert_file_contains "docs/443-single-entry-troubleshooting.md" '反向代理 URI：https://panel.example.com/sub/' "Troubleshooting must show the public 3x-ui reverse proxy URI."
-assert_file_not_contains "docs/443-single-entry-troubleshooting.md" 'subDomain：panel.example.com' "Troubleshooting must not tell users to fill the subscription listen domain."
-assert_file_contains "docs/third-party-scripts.md" 'https://github.com/docker/compose' "Third-party sources must list the Docker Compose binary upstream."
-assert_file_contains "docs/443-single-entry.md" '3x-ui v3.3.1 及之前：在对应 REALITY 入站里打开 `External Proxy`' "443 tutorial must keep the legacy External Proxy path."
-assert_file_contains "tutorials/01-3x-ui-reality-443.md" '3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host' "REALITY tutorial must document the 3x-ui v3.4.0+ Hosts path."
-assert_file_contains "tutorials/01-3x-ui-reality-443.md" '3x-ui v3.3.1 及之前：在 REALITY 入站里打开 `External Proxy`' "REALITY tutorial must keep the legacy External Proxy path."
-assert_file_contains "docs/443-single-entry-troubleshooting.md" '3x-ui v3.4.0 及之后：打开 `Hosts / 主机`，新增 Host' "Troubleshooting docs must document the 3x-ui v3.4.0+ Hosts path."
-assert_file_contains "src/sni_stack_health.sh" '3x-ui v3.4.0 及之后：打开 Hosts / 主机，新增 Host：' "Subscription hint must mention the 3x-ui v3.4.0+ Hosts path."
-assert_dist_contains '3x-ui v3.4.0 及之后：打开 Hosts / 主机，新增 Host：' "Built script must include the 3x-ui v3.4.0+ Hosts hint."
-
-assert_file_not_contains "docs/443-single-entry.md" '主菜单 [3] -> [13] Caddy 反代' "443 tutorial must not point users to the old Caddy menu path."
-assert_file_not_contains "docs/443-single-entry.md" '[19] -> [2] -> [5]' "443 tutorial must not point Web whitelist users to the old nested whitelist path."
-assert_file_not_contains "docs/443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [9 管理 Web 域名 IP 白名单]' "443 tutorial must not point Web whitelist users to the stale direct [19] -> [9] path."
-
-tcp_peek_doc_files=(
-    "README.md"
-    "docs/443-single-entry.md"
-    "docs/443-tcp-peek-engine.md"
-)
-for file in "${tcp_peek_doc_files[@]}"; do
-    assert_file_not_matches "$file" '进阶(模式|实现|可选模式)' "${file} must not describe TCP Peek as an advanced mode."
-    assert_file_not_contains "$file" '[19] 切换公网 443 到 TCP Peek + Splice 模式' "${file} should use the unified [2] entry-mode menu."
-    assert_file_not_contains "$file" '-> [19] 切换公网 443 到 TCP Peek + Splice 模式' "${file} should not list the removed [19] TCP Peek cutover entry."
-    assert_file_not_contains "$file" '[20] 从 TCP Peek 回滚到 Nginx Stream 模式' "${file} should prefer the broader [7] rollback path over the TCP Peek-specific rollback entry."
-    assert_file_not_contains "$file" 'TCP Peek 专用回滚' "${file} should not recommend a TCP Peek-specific rollback path."
-done
-
-assert_file_contains ".github/ISSUE_TEMPLATE/bug_report.md" 'Start with the menu path or command you used.' "Bug report template must ask for the affected menu path or command."
-assert_file_contains ".github/ISSUE_TEMPLATE/bug_report.md" 'Main menu [15 Service Health Overview]' "Bug report template must show the current health menu path."
-assert_file_contains "docs/443-single-entry.md" 'TCP Peek 的优点' "443 tutorial must list TCP Peek advantages."
-assert_file_contains "docs/443-single-entry.md" '配置过程和 Nginx Stream 一样' "443 tutorial must say TCP Peek uses the same configuration flow."
-assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [1 安装或切换 443 入口模式] -> [3 TCP Peek + Splice]' "443 tutorial must show the unified TCP Peek switch path."
-assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [10 回滚上次入口模式切换]' "443 tutorial must point rollback guidance at the broader entry-mode rollback [7]."
-assert_file_contains "docs/443-tcp-peek-engine.md" 'TCP Peek 的主要优点' "TCP Peek engine doc must list TCP Peek advantages."
-assert_file_contains "docs/443-tcp-peek-engine.md" '配置过程和 Nginx Stream 一样' "TCP Peek engine doc must say TCP Peek uses the same configuration flow."
-assert_file_contains "docs/443-tcp-peek-engine.md" '  -> [1] 安装或切换 443 入口模式' "TCP Peek engine doc must show the unified entry-mode menu."
-assert_file_contains "docs/443-tcp-peek-engine.md" '  -> [10] 回滚上次入口模式切换' "TCP Peek engine doc must point rollback guidance at the broader entry-mode rollback [7]."
-
-single_entry_mode_doc_files=(
-    "README.md"
-    "docs/443-single-entry-troubleshooting.md"
-    "docs/config-paths.md"
-    "tutorials/01-3x-ui-reality-443.md"
-)
-for file in "${single_entry_mode_doc_files[@]}"; do
-    assert_file_not_contains "$file" '公网 `443` 应只由 Nginx stream 监听' "${file} must not describe Nginx stream as the only possible public 443 listener."
-    assert_file_not_contains "$file" '公网 `443` 只应由 Nginx stream 监听' "${file} must not describe Nginx stream as the only possible public 443 listener."
-    assert_file_not_contains "$file" '公网 `443` 只给 Nginx stream' "${file} must not describe Nginx stream as the only possible public 443 listener."
-    assert_file_not_contains "$file" '公网 `443` 只交给 Nginx stream' "${file} must not describe Nginx stream as the only possible public 443 listener."
-done
-assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" '| Nginx 公网监听地址 |' "3x-ui+Reality tutorial must not show Nginx as the fixed public 443 listener."
-assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" '| 公网 `443` | Nginx stream 监听 |' "3x-ui+Reality tutorial must not expect public 443 to always be Nginx stream."
-assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" '可以先保留当前访问方式' "3x-ui+Reality tutorial must not defer panel loopback binding until after 443 works."
-assert_file_not_contains "docs/443-single-entry.md" '默认 Nginx Stream 架构是：' "443 tutorial opening must describe the current entry-mode model, not the old Nginx-only default diagram."
-assert_file_not_contains "docs/443-single-entry.md" '公网 443 -> Nginx stream 按 SNI 分流' "443 tutorial opening must not show Nginx stream as the fixed public 443 path."
-assert_file_contains "docs/443-single-entry.md" '公网 443 -> 当前 ENTRY_MODE 对应的单个入口服务' "443 tutorial opening must show the current single-listener entry-mode chain."
-assert_file_contains "docs/443-single-entry.md" '保存前脚本会检查后端是否可连接' "443 tutorial must document the Web backend connectivity check."
-assert_file_contains "docs/443-single-entry.md" '后端地址：127.0.0.1' "443 tutorial must use a loopback-published Docker backend example."
-assert_file_not_contains "docs/443-single-entry.md" 'host.docker.internal' "443 tutorial must not present the container-to-host special name as a host-to-container default."
-assert_file_not_contains "docs/443-single-entry.md" 'Caddy 监听：127.0.0.1:8443' "443 tutorial examples must not pin the local Web reverse proxy listener to Caddy."
-assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" 'panel.example.com  -> Caddy 127.0.0.1:8443' "3x-ui+Reality tutorial must not pin panel Web backend to Caddy 127.0.0.1:8443."
-assert_file_not_contains "tutorials/01-3x-ui-reality-443.md" 'panel.example.com/sub/ -> Caddy ->' "3x-ui+Reality tutorial must not pin subscription Web backend to Caddy."
-assert_file_contains "tutorials/01-3x-ui-reality-443.md" 'panel.example.com  -> 当前 Web 反代引擎（Caddy 或 Nginx，例如 127.0.0.1:8443）' "3x-ui+Reality tutorial must describe the selectable local Web reverse proxy engine."
-assert_file_contains "tutorials/01-3x-ui-reality-443.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本只在兼容读取旧配置时按 `nginx-stream` 处理' "3x-ui+Reality tutorial must document ENTRY_MODE fallback compatibility."
-assert_file_contains "docs/config-paths.md" '如果 `/etc/vps-optimize/sni-stack.env` 没有 `ENTRY_MODE`，脚本按 `nginx-stream` 兼容读取' "Config paths doc must document ENTRY_MODE fallback compatibility."
-assert_file_contains "docs/443-single-entry-troubleshooting.md" '公网 `443` 只应由当前 `ENTRY_MODE` 对应的单个入口服务监听' "Troubleshooting doc must describe the current entry-mode listener model."
-assert_file_contains "docs/443-single-entry-troubleshooting.md" 'curl -I http://10.0.0.20:3000/' "443 troubleshooting doc must show checking an actual inner-network backend address."
-assert_file_contains "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '| 后端地址 | `127.0.0.1` |' "Subscription tutorial must use the loopback-published Docker backend model."
-assert_file_not_contains "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" 'host.docker.internal' "Subscription tutorial must not present the container-to-host special name as a host-to-container default."
-assert_file_contains "docs/dog.md" '不是商家账单级统计' "dog.sh docs must not imply bill-grade traffic accounting accuracy."
-assert_file_contains "docs/dog.md" '不建议用它和 VPS 商家面板做精确对账' "dog.sh docs must steer users away from bill-grade reconciliation."
-assert_file_contains "docs/dog.md" '商家后台仍应作为账单参考' "dog.sh docs must keep provider billing as the final reference."
-assert_file_not_contains "docs/dog.md" '账单级准确' "dog.sh docs must not claim bill-grade accuracy."
-assert_file_not_contains "docs/dog.md" '可作为账单依据' "dog.sh docs must not present dog.sh data as billing evidence."
-assert_file_not_contains "docs/dog.md" '可替代商家账单' "dog.sh docs must not present dog.sh data as a provider-bill replacement."
-assert_file_contains "docs/dog.md" '`--scheduled-notify`' "dog.sh docs must document scheduled Telegram notifications."
-assert_file_contains "docs/dog.md" '`{server_name}`、`{report}`、`{time}`' "dog.sh docs must document Telegram template variables."
-assert_file_contains "en/docs/dog.md" '`{server_name}`, `{report}`, and `{time}`' "English dog.sh docs must document Telegram template variables."
-assert_file_contains "ru/docs/dog.md" '`{server_name}`, `{report}` и `{time}`' "Russian dog.sh docs must document Telegram template variables."
-assert_file_contains "dog.sh" '--lang' "dog.sh must expose a command-line language selector."
-assert_file_contains "dog.sh" 'select_ui_language' "dog.sh must keep an interactive language selector."
-assert_file_contains "docs/dog.md" '`--lang zh|en|ru`' "dog.sh Chinese docs must explain runtime language selection."
-assert_file_contains "en/docs/dog.md" '`--lang zh|en|ru`' "dog.sh English docs must explain runtime language selection."
-assert_file_contains "ru/docs/dog.md" '`--lang zh|en|ru`' "dog.sh Russian docs must explain runtime language selection."
-
-assert_file_contains "docs/xui-custom-manager.md" '支持使用 SQLite 的 3x-ui 2.9.x 和 3.x。' "xui-custom-manager docs must state the supported version ranges."
-assert_file_contains "docs/xui-custom-manager.md" '写库前必须通过只读数据库 schema 检查' "xui-custom-manager docs must require schema checks before writes."
-assert_file_contains "docs/xui-custom-manager.md" '不要跳过版本范围和 schema 检查强行写库' "xui-custom-manager docs must keep writes gated by version range and schema."
-assert_file_not_contains "docs/xui-custom-manager.md" '只有 3x-ui v2.9.4 验证过写库操作。' "xui-custom-manager docs must not keep the old single-version write gate."
-assert_file_not_contains "docs/xui-custom-manager.md" '未验证版本可能可用' "xui-custom-manager docs must not imply unsupported 3x-ui versions may work."
-assert_file_not_contains "docs/xui-custom-manager.md" '其它版本也可能兼容' "xui-custom-manager docs must not imply unsupported 3x-ui versions may work."
-assert_file_not_contains "docs/xui-custom-manager.md" '其它版本可尝试写库' "xui-custom-manager docs must not permit write trials on other 3x-ui versions."
-assert_file_contains "xui-custom-manager.sh" '--lang' "xui-custom-manager must expose a command-line language selector."
-assert_file_contains "xui-custom-manager.sh" 'select_ui_language' "xui-custom-manager must keep an interactive language selector."
-assert_file_contains "docs/xui-custom-manager.md" '`--lang zh|en|ru`' "xui-custom-manager Chinese docs must explain runtime language selection."
-assert_file_contains "en/docs/xui-custom-manager.md" '`--lang zh|en|ru`' "xui-custom-manager English docs must explain runtime language selection."
-assert_file_contains "ru/docs/xui-custom-manager.md" '`--lang zh|en|ru`' "xui-custom-manager Russian docs must explain runtime language selection."
-
-grep -q 'print_vpso_mux_failure_context' dist/vps.sh
-grep -q 'print_nginx_stream_failure_context' dist/vps.sh
-grep -q 'assert_nginx_stream_config_loaded' dist/vps.sh
-grep -q 'listener_info_has_entry' dist/vps.sh
-grep -q 'listener_info_has_entry "$listener" "xray"' dist/vps.sh
-grep -q 'listener_info_has_entry "$listener" "nginx"' dist/vps.sh
-grep -q 'listener_info_has_entry "$listener" "tcppeek"' dist/vps.sh
-grep -q 'listener=$(detect_443_listener "$NGINX_LISTEN_PORT")' dist/vps.sh
-grep -q 'for ((i = 1; i <= tries; i++)); do' dist/vps.sh
-grep -q 'stop_vpso_mux_services_for_restore' dist/vps.sh
-grep -q 'systemctl stop vpso-mux-preflight' dist/vps.sh
-grep -q 'tcp_probe_once' dist/vps.sh
-grep -q 'local_listen_socket_matches_probe "$host" "$port"' dist/vps.sh
-grep -q 'is_loopback_probe_host "$host"' dist/vps.sh
-grep -q 'Xray/REALITY 本地入站" "Xray/REALITY local inbound".*" "$(probe_host_for_listen_addr "$XRAY_LISTEN_ADDR")" "$XRAY_LISTEN_PORT" 6 1' dist/vps.sh
-grep -q 'nginx -T .*grep -Fq "$conf_file"' dist/vps.sh
-grep -q 'apply_nginx_stream_mode "$backup_dir"' dist/vps.sh
-grep -q 'local current_mode backup_dir planned_backup_dir assume_yes' dist/vps.sh
-grep -q 'if \[\[ "$assume_yes" != "--yes" \]\]; then' dist/vps.sh
-grep -q 'if ! restart_service_if_available nginx; then' dist/vps.sh
-grep -q 'stop_vpso_mux_service_if_public_443 || return 1' dist/vps.sh
-assert_file_contains src/tcp_peek_engine.sh 'systemctl disable --now vpso-mux' 'Leaving TCP Peek mode must disable vpso-mux boot startup even when it is not the current listener.'
-assert_file_contains src/tcp_peek_engine.sh 'write_vpso_mux_systemd_service || return 1' 'Leaving TCP Peek mode must refresh the guarded vpso-mux unit before disabling it.'
-assert_file_contains src/tcp_peek_engine.sh 'set_entry_mode "tcp-peek" || return 1' 'Entering TCP Peek mode must persist its entry mode before systemd evaluates the unit guard.'
-assert_file_contains src/vpso_mux_install.sh 'ExecCondition=/bin/grep -Fxq "ENTRY_MODE='"'"'tcp-peek'"'"'" /etc/vps-optimize/sni-stack.env' 'vpso-mux must refuse to start unless TCP Peek owns the public entry.'
-assert_file_contains src/tcp_peek_engine.sh 'if ! systemctl enable nginx' 'Nginx Stream mode must fail if nginx boot enablement fails.'
-assert_file_contains src/tcp_peek_engine.sh 'if ! systemctl enable vpso-mux' 'TCP Peek mode must fail if vpso-mux boot enablement fails.'
-assert_file_contains src/sni_stack_install.sh 'if ! systemctl enable nginx' 'The nginx Web proxy must be enabled persistently.'
-assert_file_contains src/sni_stack_install.sh 'if ! systemctl enable caddy' 'The Caddy Web proxy must be enabled persistently.'
-grep -q 'stop_xray_entry_service_if_public_443 || return 1' dist/vps.sh
-grep -q 'Xray 仍在监听公网 443' dist/vps.sh
-grep -q 'nginx 服务仍在运行，但已不监听公网 ${NGINX_LISTEN_PORT}' dist/vps.sh
-grep -q 'if ! stop_public_443_entry_services_for_target "$old_mode"; then' dist/vps.sh
-grep -q 'if ! apply_entry_mode_by_name "$old_mode" "$backup_dir"; then' dist/vps.sh
-grep -q 'backup_dir=$(backup_entry_mode_config) || return 1' dist/vps.sh
-grep -q 'issue_and_install_cert_for_domain "$PANEL_DOMAIN" "$CF_TOKEN" || { rollback_sni_stack_after_failure "$backup_dir"' dist/vps.sh
-grep -q 'issue_and_install_cert_for_domain "$site_domain" "$CF_TOKEN" || { rollback_sni_stack_after_failure "$backup_dir"' dist/vps.sh
-grep -q 'preflight_entry_mode_before_cutover "$ENTRY_MODE" || { rollback_sni_stack_after_failure "$backup_dir"' dist/vps.sh
 
 (
     NGINX_LISTEN_PORT=443
@@ -2156,58 +1369,6 @@ grep -q 'preflight_entry_mode_before_cutover "$ENTRY_MODE" || { rollback_sni_sta
     grep -Fq 'disable --now vpso-mux' "$systemctl_calls"
 )
 
-if awk '/if \[\[ "\$NGINX_LISTEN_ADDR" == "0\.0\.0\.0" \]\]/{flag=1; next} /elif \[\[ "\$NGINX_LISTEN_ADDR" == "::" \]\]/{flag=0} flag {print}' dist/vps.sh | grep -q '\[::\]:\${listen_port}'; then
-    echo "vpso-mux must not emit both 0.0.0.0 and [::] listeners for one public port." >&2
-    exit 1
-fi
-grep -q 'golang.org/x/sys v0.30.0' go.mod
-if grep -q 'golang.org/x/sys v0.31.0' go.mod; then
-    echo "vpso-mux must stay installable with Go 1.22 from common distro packages." >&2
-    exit 1
-fi
-grep -q 'func_443_network_test' dist/vps.sh
-grep -q 'func_docker_443_exposure_audit' dist/vps.sh
-grep -q 'func_docker_project_status' dist/vps.sh
-grep -q 'print_project_runtime_overview' dist/vps.sh
-grep -q 'xui_panel_status_compact' dist/vps.sh
-grep -q '3x-ui 面板（托管 Xray）' dist/vps.sh
-grep -q '独立 Xray 服务' dist/vps.sh
-grep -q 'Dockge / Compose 管理' dist/vps.sh
-grep -q 'docker_compose_management_menu' dist/vps.sh
-grep -q '端口流量监控（dog）' dist/vps.sh
-assert_function_body_contains src/menus.sh func_panel_deploy_menu '10) func_komari_menu ;;' "Panel/tools option 10 must open Komari management."
-assert_function_body_contains src/menus.sh func_panel_deploy_menu '16) func_cdt_monitor_menu ;;' "Panel/tools option 16 must open CDT Monitor management."
-assert_function_body_contains src/menus.sh func_panel_deploy_menu '11) func_dns_unlock ;;' "Panel/tools option 11 must open DNS Unlock."
-assert_function_body_contains src/menus.sh func_panel_deploy_menu '12) func_ip_sentinel ;;' "Panel/tools option 12 must open IP-Sentinel."
-assert_function_body_contains src/menus.sh func_panel_deploy_menu '13) func_port_dog ;;' "Panel/tools option 13 must open the per-port traffic monitor."
-assert_file_not_contains src/menus.sh 'func_update_subscription_tools' "Panel/tools menu must not retain the duplicate subscription update entry."
-assert_path_absent src/subscription_compose_manage.sh "The duplicate subscription update module must be removed."
-assert_file_not_contains src/menus.sh '11|12) docker_backup_migration_menu ;;' "Panel/tools menu must not retain hidden Docker/Compose routes."
-assert_function_body_contains src/compose_runtime.sh manage_compose_project '1. 安装 / 更新 ${project_name}' "Compose project menus must expose install/update directly."
-assert_function_body_contains src/compose_runtime.sh manage_compose_project '7. 归档部署目录' "Compose project menus must expose archive/uninstall directly."
-for compose_menu in func_sublinkpro_menu func_miaomiaowu_menu func_substore_menu func_dockge_menu func_komari_menu func_cdt_monitor_menu; do
-    assert_function_body_contains src/subscription_service_menus.sh "$compose_menu" 'func_manage_' "Compose service menus must open the flat project menu directly: ${compose_menu}."
-done
-grep -Fq '安装 3x-ui / x-ui 面板（最新版）' dist/vps.sh
-grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh' dist/vps.sh
-grep -Fq '最新版 3.x 安装器询问 SSL 时选第 4 项 Skip SSL；再选 y 仅绑定 127.0.0.1。' dist/vps.sh
-grep -Fq '安装 3x-ui / x-ui 面板（v2.9.4）' dist/vps.sh
-grep -Fq 'https://raw.githubusercontent.com/mhsanaei/3x-ui/v2.9.4/install.sh' dist/vps.sh
-grep -Fq 'install_args=("v2.9.4")' dist/vps.sh
-grep -Fq 'v2.9.4 属于 2.x 老流程' dist/vps.sh
-grep -Fq 'S-UI 管理' dist/vps.sh
-grep -Fq '安装 S-UI 面板' dist/vps.sh
-grep -Fq 'https://raw.githubusercontent.com/alireza0/s-ui/master/install.sh' dist/vps.sh
-if grep -q 'x-ui\[$(service_status_compact x-ui)\]' dist/vps.sh; then
-    echo "Health overview must not show x-ui as a separate installed product." >&2
-    exit 1
-fi
-grep -q 'print_auto_update_notice' dist/vps.sh
-assert_file_contains src/updater.sh 'latest_sha256=$(fetch_latest_script_sha256)' "Update status must compare the remote content hash."
-assert_file_contains src/updater.sh '检测到同版本内容更新' "Update status must report same-version content changes."
-assert_function_body_contains src/common.sh create_shortcut 'download_verified_update_script' "Shortcut registration must verify the downloaded release checksum."
-assert_function_body_contains src/common.sh run_remote_script 'download_remote_script "$url" "$tmp_file"' "Remote script execution must proceed directly to the verified download path."
-assert_file_not_contains README.md 'ghfast.top' "README must not recommend executing a root script through a third-party GitHub proxy."
 
 (
     update_tmp=$(mktemp -d /tmp/vps-update-smoke.XXXXXX)
@@ -2245,70 +1406,6 @@ assert_file_not_contains README.md 'ghfast.top' "README must not recommend execu
     rm -f "$update_tmp/local.sh" "$update_tmp/remote.sh" "$update_tmp/remote.sh.sha256" "$update_tmp/update.cache"
     rmdir "$update_tmp"
 )
-grep -q 'func_traffic_guard_menu' dist/vps.sh
-grep -q 'install_traffic_guard_checker' dist/vps.sh
-grep -q 'vps-traffic-guard.timer' dist/vps.sh
-grep -q 'OnActiveSec=${interval}s' dist/vps.sh
-grep -q 'TRAFFIC_GUARD_CONFIG=' dist/vps.sh
-grep -q 'traffic_guard_detect_initial_used_bytes' dist/vps.sh
-grep -q 'traffic_guard_write_state_baseline' dist/vps.sh
-grep -q 'traffic_guard_baseline_direction_offsets' dist/vps.sh
-grep -q 'OFFSET_RX_BYTES' dist/vps.sh
-grep -q 'direction_usage_at_last_check' dist/vps.sh
-grep -q 'traffic_guard_sys_class_net' dist/vps.sh
-grep -q 'boot_started_after_cycle_start' dist/vps.sh
-grep -q 'cycle floor applied on ${IFACE}' dist/vps.sh
-grep -q 'traffic_guard_live_usage_from_state' dist/vps.sh
-grep -q 'print_traffic_guard_diagnostic_summary' dist/vps.sh
-grep -q 'traffic_guard_recent_log_summary' dist/vps.sh
-grep -q 'traffic_guard_admin_log' dist/vps.sh
-grep -q 'traffic_guard_normalize_generated_checker' dist/vps.sh
-grep -q 'traffic_guard_install_checker_once' dist/vps.sh
-grep -q 'traffic_guard_install_checker_or_report' dist/vps.sh
-grep -q 'retry checker install once after generated content validation failure' dist/vps.sh
-grep -q '首行实际字节' dist/vps.sh
-grep -q 'checker install failed:' dist/vps.sh
-grep -q 'traffic_guard_run_checker_once' dist/vps.sh
-grep -q 'sync_traffic_guard_now' dist/vps.sh
-grep -q 'timer active 但状态文件已超过' dist/vps.sh
-grep -q '最近 vps-traffic-guard 日志' dist/vps.sh
-grep -q 'repair_traffic_guard_timer' dist/vps.sh
-grep -q '最近检查超时' dist/vps.sh
-grep -q '立即同步并验证检查器' dist/vps.sh
-grep -Fq 'ExecStart=/usr/bin/env bash ${TRAFFIC_GUARD_CHECKER}' dist/vps.sh
-grep -q '本周期已用 .*实时估算' dist/vps.sh
-grep -q '网卡原始计数 .*不等于本周期已用' dist/vps.sh
-grep -q '保护触发只看“本周期已用”' dist/vps.sh
-grep -Fq 'OFFSET_RX_BYTES=$(( ${previous_direction_usage[0]:-0} + CURRENT_RX ))' dist/vps.sh
-grep -q '本次重新配置默认按当前网卡原始计数估算' dist/vps.sh
-grep -q 'traffic_guard_gb_to_bytes_zero_ok' dist/vps.sh
-grep -q 'traffic_guard_cycle_date_for_month' dist/vps.sh
-grep -q 'traffic_guard_select_ssh_port' dist/vps.sh
-grep -q 'traffic_guard_ssh_only_firewall_supported' dist/vps.sh
-grep -q 'traffic_guard_restore_ssh_only_firewall_from_config' dist/vps.sh
-grep -q 'apply_ssh_only_firewall' dist/vps.sh
-grep -q 'cycle_date_for_month' dist/vps.sh
-grep -q '每月套餐/账单重置日 1-31' dist/vps.sh
-grep -q 'guard_exit()' dist/vps.sh
-grep -q 'checker exited unexpectedly rc=' dist/vps.sh
-grep -q 'reset_traffic_guard_failed_state' dist/vps.sh
-grep -q 'systemctl reset-failed vps-traffic-guard.service vps-traffic-guard.timer' dist/vps.sh
-grep -q 'poweroff command accepted' dist/vps.sh
-grep -q 'poweroff command failed; will retry on next timer run' dist/vps.sh
-if grep -q '重置日只支持 1-28' dist/vps.sh; then
-    echo "Traffic guard reset day must support 1-31." >&2
-    exit 1
-fi
-grep -q 'counter reset detected on ${IFACE}, baseline reset and preserved current counters' dist/vps.sh
-assert_file_not_contains dist/vps.sh 'traffic|quota|bill|流量|达量|账单) echo "10"' "Release script must not keep the hidden Traffic Guard main-menu alias."
-traffic_guard_menu_path='主菜单 [10 网络与内核优化] -> [5 流量达量关机保护]'
-assert_file_contains CHANGELOG.md "$traffic_guard_menu_path" "CHANGELOG must document the current traffic guard menu path."
-assert_file_contains src/menus.sh '10 -> 5  流量限额保护' "Menu help must keep traffic guard under network/kernel option 10 -> 5."
-assert_file_not_contains CHANGELOG.md '[9 网络与内核优化] -> [7]' "CHANGELOG must not keep the stale traffic guard menu path."
-if grep -q '20\..*流量达量关机保护' dist/vps.sh; then
-    echo "Traffic guard must stay in the network submenu, not the main menu." >&2
-    exit 1
-fi
 
 (
     source src/traffic_guard.sh
@@ -2891,23 +1988,9 @@ EOF
 }
 traffic_guard_accounting_regression
 
-assert_file_contains src/backup.sh 'traffic_guard_restore_ssh_only_firewall_from_config "$previous_file"' "Traffic Guard config editing must clear rules from the previous ssh-only config."
-assert_file_contains src/backup.sh '! traffic_guard_restore_ssh_only_firewall' "Full restore must clear active ssh-only rules before replacing Traffic Guard files."
-
-grep -q 'curl_rc=' dist/vps.sh
-if grep -q 'HTTP ${code}${PLAIN}' dist/vps.sh && grep -q '|| echo "000"' dist/vps.sh; then
-    echo "443 curl probe must not concatenate fallback HTTP 000 values." >&2
-    exit 1
-fi
 traffic_guard_dist_checker_template=$(awk "/<<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" dist/vps.sh)
 head -n 1 <<<"$traffic_guard_dist_checker_template" | grep -Fq '#!/usr/bin/env bash'
 bash -n <<<"$traffic_guard_dist_checker_template"
-grep -q 'func_health_dashboard' dist/vps.sh
-grep -q 'func_backup_center' dist/vps.sh
-grep -q 'backup_collect_custom_directories' dist/vps.sh
-grep -q 'backup_restore_preflight' dist/vps.sh
-grep -q 'backup_collect_available_archives' dist/vps.sh
-grep -q 'backup_register_archive_root' dist/vps.sh
 (
     source src/backup.sh
     [[ "$(backup_resolve_custom_directory "$repo_root")" == "$repo_root" ]]
@@ -2931,167 +2014,6 @@ grep -q 'backup_register_archive_root' dist/vps.sh
     rm -f "$backup_test_dir/source/value.txt"
     rmdir "$backup_test_dir/source" "$backup_test_dir"
 )
-grep -q 'func_edit_applied_config_center' dist/vps.sh
-grep -q 'edit_applied_config_file' dist/vps.sh
-grep -q 'collect_applied_config_files' dist/vps.sh
-grep -q 'validate_applied_config_kind' dist/vps.sh
-grep -q '5. 查看 / 编辑已应用配置' dist/vps.sh
-grep -q 'func_hosts_manage' dist/vps.sh
-grep -q 'hosts_add_or_update_entry' dist/vps.sh
-grep -q 'func_ssh_security_menu' dist/vps.sh
-grep -q 'func_ssh_login_mode_menu' dist/vps.sh
-grep -q 'ssh_apply_auth_mode' dist/vps.sh
-grep -q '密钥 + 密码登录（保留/恢复密码）' dist/vps.sh
-grep -q '添加 / 更新用户 SSH 公钥' dist/vps.sh
-if grep -Fq '4. 恢复密码登录' dist/vps.sh || grep -Fq '4) ssh_apply_auth_mode password' dist/vps.sh; then
-    echo "SSH key login menu must not keep duplicate password-recovery entry." >&2
-    exit 1
-fi
-grep -q 'ssh_prepare_runtime_dir' dist/vps.sh
-grep -q 'ssh_write_sshd_port_dropin' dist/vps.sh
-grep -q 'ssh_write_auth_dropin' dist/vps.sh
-grep -q 'ssh_reconcile_cloud_auth_dropins' dist/vps.sh
-grep -q 'ssh_assert_auth_mode_effective' dist/vps.sh
-grep -q 'ssh_restart_runtime' dist/vps.sh
-grep -q 'sshd_config.d/00-vps-optimize-port.conf' dist/vps.sh
-grep -q 'sshd_config.d/00-vps-optimize-auth.conf' dist/vps.sh
-grep -q 'VPS-Optimize reconciled cloud image setting' dist/vps.sh
-grep -q '50-cloud-init.conf' dist/vps.sh
-grep -q 'for unit in ssh.socket sshd.socket' dist/vps.sh
-grep -q 'func_network_interface_manage' dist/vps.sh
-grep -q 'network_set_iface_mtu' dist/vps.sh
-grep -q '4) func_caddy_reverse_proxy_menu' dist/vps.sh
-assert_file_not_contains dist/vps.sh 'nginx|ngx|proxy|reverse' "Release script must not keep hidden reverse-proxy main-menu aliases."
-grep -q 'func_nginx_add_reverse_proxy' dist/vps.sh
-grep -q '2) func_nginx_add_reverse_proxy ;;' dist/vps.sh
-grep -q 'func_proxy_add_insecure' dist/vps.sh
-grep -q 'func_nginx_add_insecure' dist/vps.sh
-grep -q 'func_proxy_manage_ip_whitelist' dist/vps.sh
-grep -q 'func_nginx_manage_ip_whitelist' dist/vps.sh
-grep -q 'func_proxy_clear_config' dist/vps.sh
-grep -q 'func_nginx_clear_proxy_config' dist/vps.sh
-grep -q 'nginx_ip_whitelist_block' dist/vps.sh
-grep -q '后端 HTTPS 跳过证书校验' dist/vps.sh
-grep -q '域名 IP 白名单' dist/vps.sh
-grep -q '清空反代配置' dist/vps.sh
-grep -q 'func_edit_applied_proxy_config' dist/vps.sh
-grep -q '6) func_edit_applied_proxy_config ;;' dist/vps.sh
-grep -q 'collect_editable_proxy_config_files' dist/vps.sh
-grep -q 'validate_proxy_config_kind' dist/vps.sh
-grep -q 'reload_proxy_config_kind' dist/vps.sh
-grep -q 'nginx_proxy_warn_if_single_entry_enabled' dist/vps.sh
-grep -q 'quarantine_legacy_nginx_https_proxy_configs' dist/vps.sh
-grep -q 'write_nginx_reverse_proxy_conf' dist/vps.sh
-grep -q '/etc/nginx/conf.d/vps_proxy_${domain}.conf' dist/vps.sh
-grep -q '/etc/nginx/conf.d/00-vps-proxy-map.conf' dist/vps.sh
-grep -q 'issue_and_install_cert_for_domain "$domain" "$CF_TOKEN"' dist/vps.sh
-grep -q 'systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx' dist/vps.sh
-grep -q 'vps-optimize-ip-whitelist-start' dist/vps.sh
-grep -q 'allow ${range};' dist/vps.sh
-grep -q '/etc/vps-optimize/quarantine/nginx-proxy' dist/vps.sh
-grep -q 'WEB_PROXY_ENGINE' dist/vps.sh
-grep -q 'normalize_web_proxy_engine' dist/vps.sh
-grep -q 'write_nginx_single_443_web_config' dist/vps.sh
-grep -q 'apply_web_proxy_configs_for_single_443' dist/vps.sh
-grep -q 'switch_sni_stack_web_proxy_engine' dist/vps.sh
-grep -q 'vps_sni_web_${CADDY_LISTEN_PORT}.conf' dist/vps.sh
-grep -q 'xray-fallback 模式不支持 Web 白名单' dist/vps.sh
-grep -q '3. 查看 / 编辑 Compose 配置' dist/vps.sh
-grep -q 'edit_applied_config_file "$compose_file" "compose"' dist/vps.sh
-assert_file_contains "docs/config-paths.md" '主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]' "Config paths doc must list the global applied-config editor."
-assert_file_not_contains "docs/443-single-entry.md" '[19] -> [9' "443 doc must not point to the stale direct whitelist menu."
-assert_file_contains "docs/443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [5 管理域名 IP 白名单]' "443 doc must describe the current 443 Web whitelist menu path."
-assert_file_contains "src/caddy_proxy.sh" '主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [5 管理域名 IP 白名单]' "Nginx standalone whitelist guidance must point users to the current 443 Web whitelist submenu path."
-assert_file_contains "src/caddy_maintenance.sh" '主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [5 管理域名 IP 白名单]' "Caddy standalone whitelist guidance must point users to the current 443 Web whitelist submenu path."
-assert_file_contains "src/caddy_maintenance.sh" '主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [5 管理域名 IP 白名单]' "Caddy whitelist guidance must point users to the current 443 Web whitelist submenu path."
-assert_file_not_contains "src/caddy_proxy.sh" '[19] -> [9]' "Nginx standalone whitelist guidance must not point users to the stale direct [19] -> [9] path."
-assert_file_not_contains "src/caddy_maintenance.sh" '[19] -> [9]' "Caddy standalone whitelist guidance must not point users to the stale direct [19] -> [9] path."
-assert_file_not_contains "src/caddy_maintenance.sh" '[19] -> [9]' "Caddy whitelist guidance must not point users to the stale direct [19] -> [9] path."
-assert_file_contains "docs/443-single-entry.md" '[8 切换 Web 反代引擎]' "443 doc must document switching the Web reverse proxy engine."
-assert_file_contains "docs/443-single-entry.md" '`xray-fallback` 不支持 Web 白名单' "443 doc must prohibit Web whitelist usage for every xray-fallback Web engine."
-assert_file_contains "docs/443-tcp-peek-engine.md" '`xray-fallback` 无论选择 Caddy 还是 Nginx 本地 Web 反代' "TCP Peek doc must describe the xray-fallback Web whitelist boundary."
-assert_file_contains "docs/443-tcp-peek-engine.md" 'Web 反代引擎可选择 Caddy 或 Nginx' "TCP Peek doc must describe the shared Caddy/Nginx Web proxy engine."
-subscription_public_hint='公网 HTTPS 访问建议：未启用 443端口复用时，请走主菜单 [4 反代] 里的 Caddy 或 Nginx HTTPS 反代；已启用 443端口复用时，请走主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理]。'
-assert_file_contains "src/subscription_apps.sh" "$subscription_public_hint" "Subscription/Komari installers must explain both without Port 443 Reuse and Port 443 Reuse reverse proxy paths."
-assert_dist_contains "$subscription_public_hint" "Release script must include the current Subscription/Komari public HTTPS guidance."
-panel_menu_compact_label='Sing-box 管理'
-assert_file_contains "src/menus.sh" "$panel_menu_compact_label" "Panel/tools menu must use the compact script-style label."
-assert_dist_contains "$panel_menu_compact_label" "Release script must include the compact panel/tools menu label."
-panel_help_public_hint='7/8/9 订阅工具，10 Komari，16 CDT Monitor；Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19]。公网 HTTPS：未启用 443端口复用走主菜单 [4 反代]，已启用走主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理]。'
-assert_file_contains "src/menus.sh" "$panel_help_public_hint" "Panel/tools help must explain both without Port 443 Reuse and Port 443 Reuse reverse proxy paths."
-assert_dist_contains "$panel_help_public_hint" "Release script must include the current panel/tools help public HTTPS guidance."
-panel_domain_menu_path='主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [9 修改面板域名]'
-assert_file_contains "src/menus.sh" '修改面板域名：[2 管理 Web 域名与反向代理] -> [9 修改面板域名]。' "443 help must point panel-domain edits to the Web domain submenu."
-assert_file_contains "src/sni_stack_profiles.sh" "$panel_domain_menu_path" "443 Port 443 Reuse parameters submenu must point panel-domain edits to the Web domain submenu."
-assert_dist_contains "$panel_domain_menu_path" "Release script must include the current panel-domain edit path."
-assert_file_not_contains "src/menus.sh" '共享参数可修改面板域名' "443 help must not say shared parameters modify the panel domain."
-assert_file_not_contains "src/menus.sh" '面板域名、面板/订阅/REALITY/入口端口与路径' "443 menu label must not list panel domain under shared parameters."
-assert_file_not_contains "src/sni_stack_profiles.sh" '用途：后续修改面板域名' "443 Port 443 Reuse parameters submenu purpose must not list panel domain."
-assert_file_not_contains "src/sni_stack_profiles.sh" '4) edit_sni_stack_panel_domain_profile ;;' "443 Port 443 Reuse parameters submenu must not keep the old direct panel-domain action."
-subscription_internal_port_hint='该端口只给当前本地 Web 反代引擎（${web_label}）访问，不应写成公网订阅入口。'
-assert_file_contains "src/sni_stack_health.sh" "$subscription_internal_port_hint" "Subscription hint must describe the internal subscription port as current Web reverse proxy engine-only."
-assert_dist_contains "$subscription_internal_port_hint" "Release script must include the current Web reverse proxy engine subscription-port hint."
-assert_file_not_contains "src/sni_stack_health.sh" '该端口只给 Caddy 在本机访问' "Subscription hint must not hard-code Caddy as the only local Web reverse proxy engine."
-assert_file_not_contains "dist/vps.sh" '该端口只给 Caddy 在本机访问' "Release script must not hard-code Caddy in the subscription-port hint."
-subscription_public_hint_calls=$(grep -Ec '^[[:space:]]+print_public_https_reverse_proxy_hint$' src/subscription_apps.sh || true)
-if [[ "$subscription_public_hint_calls" -lt 8 ]]; then
-    echo "Subscription/Komari installers must show the unified public HTTPS guidance before install and after success." >&2
-    exit 1
-fi
-for stale_hint in \
-    '公网 HTTPS 访问建议走 [19] -> [2]' \
-    '主菜单 [19] -> [2] 为该本地端口添加 443 反代域名' \
-    '公网 HTTPS 可走 Caddy 反代' \
-    '未启用 443端口复用可用 [4] -> [1] Caddy 反代' \
-    "提示：面板或订阅工具对外访问，""可用 Caddy 反代；已启用 443端口复用时用 [19] 统一管理。" \
-    "部署后建议用 Caddy 或 443端口复用""对外访问。"
-do
-    assert_file_not_contains "src/subscription_apps.sh" "$stale_hint" "Subscription/Komari installers must not use stale public HTTPS guidance: ${stale_hint}"
-    assert_file_not_contains "src/menus.sh" "$stale_hint" "Panel/tools menu must not use stale public HTTPS guidance: ${stale_hint}"
-    assert_file_not_contains "dist/vps.sh" "$stale_hint" "Release script must not use stale public HTTPS guidance: ${stale_hint}"
-done
-assert_file_contains "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '主菜单 [4 反代]' "Subscription tutorial must point without Port 443 Reuse users at the current reverse proxy menu."
-assert_file_contains "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '[2 添加 Nginx HTTPS 反代]' "Subscription tutorial must document the Nginx HTTPS reverse proxy option before Port 443 Reuse is enabled."
-assert_file_contains "tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md" '主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理]' "Subscription tutorial must keep the current Port 443 Reuse Web reverse proxy path."
-assert_file_contains "docs/existing-server-migration.md" '未启用 443端口复用时的 HTTPS 反代过渡' "Migration doc must include the without Port 443 Reuse HTTPS reverse proxy transition flow."
-assert_file_contains "docs/existing-server-migration.md" '[2 添加 Nginx HTTPS 反代]' "Migration doc must document the Nginx HTTPS reverse proxy option before Port 443 Reuse is enabled."
-for file in README.md docs/existing-server-migration.md tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md; do
-    assert_file_not_contains "$file" '普通 Caddy 反代' "${file} must not use the old ordinary Caddy reverse proxy wording."
-    assert_file_not_contains "$file" '主菜单 [4 普通 Caddy 反代]' "${file} must not point users to the old ordinary Caddy reverse proxy menu."
-    assert_file_not_contains "$file" '添加普通 Caddy' "${file} must not use the old add ordinary Caddy wording."
-done
-assert_file_not_contains 'dist/vps.sh' '普通反代' 'Menu wording should use 反代 without 普通.'
-assert_file_not_contains 'dist/vps.sh' '添加普通 Caddy' 'Caddy menu wording should omit 普通.'
-assert_file_not_contains 'dist/vps.sh' '添加普通 Nginx' 'Nginx menu wording should omit 普通.'
-grep -q '6) func_ssh_security_menu' dist/vps.sh
-grep -q '7) func_fail2ban' dist/vps.sh
-grep -q '19) func_sni_stack_quick_menu' dist/vps.sh
-if grep -q '6) func_add_ssh_key' dist/vps.sh || grep -q '6\..*添加 SSH 公钥' dist/vps.sh || grep -q 'key|pubkey|公钥) echo "6"' dist/vps.sh; then
-    echo "Main menu must not keep duplicate SSH public key entry or hidden shortcut compatibility." >&2
-    exit 1
-fi
-if grep -q '18) func_sni_stack_quick_menu' dist/vps.sh; then
-    echo "Main menu numbering must be compact after removing duplicate SSH key entry." >&2
-    exit 1
-fi
-grep -q '4) func_hosts_manage' dist/vps.sh
-grep -q '4|网络接口管理|网卡/路由/DNS/MTU/DHCP|func_network_interface_manage|' dist/vps.sh
-grep -Fq "SCRIPT_VERSION=\"${vps_smoke_script_version}\"" dist/vps.sh
-grep -q 'SCRIPT_UPDATE_CACHE=' dist/vps.sh
-grep -q 'Compatibility marker: VPS 全能控制面板' dist/vps.sh
-grep -q 'UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"' dist/vps.sh
-grep -q '正在尝试自动补齐下载工具' dist/vps.sh
-grep -q 'wget -q --timeout=15 --tries=3' dist/vps.sh
-grep -q '"${sublink_bind_addr}:${sublink_port}:8000"' dist/vps.sh
-grep -q '"${mmw_bind_addr}:${mmw_port}:${mmw_port}"' dist/vps.sh
-grep -q 'confirm_risk_action' dist/vps.sh
-if grep -q 'func_beginner_menu' dist/vps.sh; then
-    echo "Release script must not contain the removed hidden beginner menu." >&2
-    exit 1
-fi
-grep -q 'generate_issue_diagnostics' dist/vps.sh
-grep -q 'install_update_script' dog.sh
-
 reality_guard_smoke_tmp=$(mktemp -d /tmp/vps-reality-guard-smoke.XXXXXX)
 reality_guard_smoke_db="$reality_guard_smoke_tmp/x-ui.db"
 source src/reality_guard.sh

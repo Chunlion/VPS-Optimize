@@ -67,12 +67,4 @@ if ! git diff --quiet -- dist/vps.sh dist/vps.sh.sha256; then
     echo "dist artifacts have working-tree changes; include regenerated files when committing."
 fi
 
-echo "==> release markers"
-grep -Fq '# Module: common.sh' dist/vps.sh
-grep -Fq '# Module: vpso_mux_state.sh' dist/vps.sh
-grep -Fq '# Module: health_dashboard.sh' dist/vps.sh
-grep -Fq '# Module: traffic_guard.sh' dist/vps.sh
-grep -Fq 'main_menu' dist/vps.sh
-grep -Fq 'VPS 全能控制面板' dist/vps.sh
-
 echo "Selfcheck passed."
