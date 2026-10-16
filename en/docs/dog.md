@@ -65,9 +65,9 @@ Therefore, it is not recommended to use the results of `dog.sh` for accurate rec
 
 ## Quota and speed limit instructions
 
-Quotas are used for port-level usage control. The script will set quota rules based on the matched port count. After the quota is exceeded, the corresponding port traffic will be restricted according to the current rules.
+Quotas count incoming plus outgoing traffic and block the port when exhausted. `50G`, `50GB`, and `50g` all mean 50 × 1024³ bytes. Changing a quota preserves existing usage; use Traffic reset to start from zero. All ports in a range share one quota. Overlapping monitoring entries cannot be added.
 
-The speed limit depends on `tc` and only takes effect on the port rules configured and matched by the script. If there is a conflict with network card identification, `tc` rules, or other network tools, the rate limit may not be as expected.
+Rate limits use `tc` for outgoing IPv4/IPv6 TCP/UDP traffic on the default interface. They do not limit traffic entering the local host. `10Mbps` is about `1.25MB/s`; enter `0` to remove a limit. Rule application failures are reported as errors, not success.
 
 It is recommended to leave a margin for the quota and not get close to the merchant's monthly traffic limit. For example, when a merchant provides 1 TB of monthly traffic, the port quota should not be set to exactly 1 TB. The merchant's statistical caliber is usually larger and may include system updates, panels, Docker images, DNS, probes and non-monitoring port traffic.
 
@@ -85,8 +85,8 @@ These reports are suitable for viewing trends, not strict splitting of bills fro
 
 ## Common operations
 
-- Add port monitoring: Enter `1. Add/remove port listening`, select add port, support single port, multiple ports and port segments.
-- Delete port monitoring: Enter `1. Add/remove port listening` and select delete port.
+- Add port monitoring: Enter `1. Add/remove port monitoring`, select Add, then enter actual port numbers such as `443,54558` or a range such as `10000-10010`.
+- Remove port monitoring: Select Remove, enter list numbers such as `1,3`, then confirm the displayed ports. This removes monitoring, quotas and rate limits without stopping services.
 - Set quota: Enter `2. Quota/speed limit management` and set the monthly traffic quota for the port.
 - Set speed limit: Enter `2. Quota/speed limit management` and set bandwidth limit for the port.
 - View daily reports: Enter `8. Daily and trend reports`.
@@ -185,6 +185,8 @@ Check:
 - Are there any other firewall tools that are overriding the script rules?
 
 Quotas only take effect on port rules matched by the script.
+
+If traffic stops earlier than expected, run `health` to compare the configured quota with the actual kernel limit, used bytes, and duplicate or overlapping rules. Updating the script reapplies kernel quotas that differ from the configuration; you can also set the port quota again in the menu. Enter `0` to remove a quota, or press Enter to cancel the change.
 
 ### Speed limit is not in effect
 

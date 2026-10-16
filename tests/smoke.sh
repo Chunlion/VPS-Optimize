@@ -1786,6 +1786,7 @@ grep -q '^refresh_nftables_counter_snapshot()' dog.sh
 grep -q '^send_telegram_status_notification()' dog.sh
 grep -q '^run_scheduled_telegram_notification()' dog.sh
 grep -q '^manage_telegram_template()' dog.sh
+bash tests/dog-limits.sh
 
 assert_file_contains vps.sh 'scripts/modules.list' "Source checkout entrypoint must read scripts/modules.list."
 assert_file_contains vps.sh 'src/${module}.sh' "Source checkout entrypoint must source modules from src."

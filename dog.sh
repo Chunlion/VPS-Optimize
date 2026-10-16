@@ -468,7 +468,10 @@ get_network_interfaces() {
 }
 
 get_default_interface() {
-    local default_interface=$(ip route | grep default | awk '{print $5}' | head -n1)
+    local default_interface=$(ip -j route show default | jq -r '.[0].dev // empty')
+    if [ -z "$default_interface" ]; then
+        default_interface=$(ip -j -6 route show default | jq -r '.[0].dev // empty')
+    fi
     if [ -n "$default_interface" ]; then echo "$default_interface"; return; fi
     local interfaces=($(get_network_interfaces))
     if [ ${#interfaces[@]} -gt 0 ]; then echo "${interfaces[0]}"; else echo "eth0"; fi
@@ -620,18 +623,18 @@ show_port_list() {
         echo "暂无监控端口"
         return 1
     fi
-    echo "当前监控的端口:"
+    echo "当前监控列表（操作时输入左侧序号）:"
     for i in "${!active_ports[@]}"; do
         local port=${active_ports[$i]}
         local status_label=$(get_port_status_label "$port")
-        echo "$((i+1)). 端口 $port $status_label"
+        echo "$((i+1)). 端口/端口段 $port $status_label"
     done
     return 0
 }
 
 is_valid_port_number() {
     local port="$1"
-    [[ "$port" =~ ^[0-9]+$ ]] && (( 10#$port >= 1 && 10#$port <= 65535 ))
+    [[ "$port" =~ ^[0-9]{1,5}$ ]] && (( 10#$port >= 1 && 10#$port <= 65535 ))
 }
 
 parse_multi_choice_input() {
@@ -639,14 +642,22 @@ parse_multi_choice_input() {
     local max_choice="$2"
     local -n result_array=$3
     input="${input//，/,}"
-    IFS=',' read -ra CHOICES <<< "$input"
+    local CHOICES=() choice
     result_array=()
+    if [[ -z "$input" || "$input" == *, || "$input" == ,* || "$input" == *,,* ]]; then
+        echo -e "${RED}请输入列表序号，多个序号用逗号分隔。${NC}"
+        return 1
+    fi
+    IFS=',' read -ra CHOICES <<< "$input"
     for choice in "${CHOICES[@]}"; do
         choice=$(trim_input "$choice")
-        if [[ "$choice" =~ ^[0-9]+$ ]] && (( 10#$choice >= 1 && 10#$choice <= max_choice )); then
-            result_array+=("$((10#$choice))")
+        if [[ "$choice" =~ ^[0-9]{1,5}$ ]] && (( 10#$choice >= 1 && 10#$choice <= max_choice )); then
+            choice=$((10#$choice))
+            if [[ " ${result_array[*]} " != *" $choice "* ]]; then result_array+=("$choice"); fi
         else
-            echo -e "${RED}无效选择: $choice${NC}"
+            echo -e "${RED}无效序号: $choice；请输入 1-$max_choice 中的列表序号。${NC}"
+            result_array=()
+            return 1
         fi
     done
 }
@@ -655,9 +666,19 @@ parse_comma_separated_input() {
     local input="$1"
     local -n result_array=$2
     input="${input//，/,}"
+    if [[ -z "$input" || "$input" == *, || "$input" == ,* || "$input" == *,,* ]]; then
+        echo -e "${RED}逗号之间不能留空值。${NC}"
+        result_array=()
+        return 1
+    fi
     IFS=',' read -ra result_array <<< "$input"
     for i in "${!result_array[@]}"; do
         result_array[$i]=$(trim_input "${result_array[$i]}")
+        if [ -z "${result_array[$i]}" ]; then
+            echo -e "${RED}逗号之间不能留空值。${NC}"
+            result_array=()
+            return 1
+        fi
     done
 }
 
@@ -668,20 +689,25 @@ parse_port_range_input() {
     input="${input//：/:}"
     input="${input//－/-}"
     input="${input//—/-}"
-    IFS=',' read -ra PARTS <<< "$input"
+    local PARTS=() part
     result_array=()
+    if [[ -z "$input" || "$input" == *, || "$input" == ,* || "$input" == *,,* ]]; then
+        echo -e "${RED}请输入完整端口号或端口段，逗号之间不能留空。${NC}"
+        return 1
+    fi
+    IFS=',' read -ra PARTS <<< "$input"
     for part in "${PARTS[@]}"; do
         part=$(trim_input "$part")
         part="${part//:/-}"
         if is_port_range "$part"; then
             local start_port=$(echo "$part" | cut -d'-' -f1)
             local end_port=$(echo "$part" | cut -d'-' -f2)
-            if (( 10#$start_port > 10#$end_port )); then
-                echo -e "${RED}错误：端口段 $part 起始端口大于结束端口${NC}"
-                return 1
-            fi
             if ! is_valid_port_number "$start_port" || ! is_valid_port_number "$end_port"; then
                 echo -e "${RED}错误：端口段 $part 包含无效端口${NC}"
+                return 1
+            fi
+            if (( 10#$start_port > 10#$end_port )); then
+                echo -e "${RED}错误：端口段 $part 起始端口大于结束端口${NC}"
                 return 1
             fi
             result_array+=("$((10#$start_port))-$((10#$end_port))")
@@ -698,6 +724,12 @@ parse_port_range_input() {
         fi
     done
     return 0
+}
+
+ports_overlap() {
+    local left_start="${1%%-*}" left_end="${1##*-}"
+    local right_start="${2%%-*}" right_end="${2##*-}"
+    (( 10#$left_start <= 10#$right_end && 10#$right_start <= 10#$left_end ))
 }
 
 expand_single_value_to_array() {
@@ -904,13 +936,13 @@ restore_all_monitoring_rules() {
         local quota_enabled=$(jq -r ".ports.\"$port\".quota.enabled // false" "$CONFIG_FILE")
         local monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE")
         if [ "$quota_enabled" = "true" ] && [ "$monthly_limit" != "unlimited" ]; then
-            apply_nftables_quota "$port" "$monthly_limit"
+            apply_nftables_quota "$port" "$monthly_limit" || echo "端口 $port 配额恢复失败，请检查 nftables 规则。" >&2
         fi
         local limit_enabled=$(jq -r ".ports.\"$port\".bandwidth_limit.enabled // false" "$CONFIG_FILE")
         local rate_limit=$(jq -r ".ports.\"$port\".bandwidth_limit.rate // \"unlimited\"" "$CONFIG_FILE")
         if [ "$limit_enabled" = "true" ] && [ "$rate_limit" != "unlimited" ]; then
             local tc_limit=$(convert_bandwidth_to_tc "$rate_limit")
-            if [ -n "$tc_limit" ]; then apply_tc_limit "$port" "$tc_limit"; fi
+            if [ -n "$tc_limit" ]; then apply_tc_limit "$port" "$tc_limit" || echo "端口 $port 的带宽限制恢复失败，请检查 tc 规则。" >&2; fi
         fi
         setup_port_auto_reset_cron "$port"
     done
@@ -934,19 +966,19 @@ print_json_file_health() {
     local label="$1"
     local file="$2"
     local __problems_var="$3"
-    local problems
+    local health_problem_count
 
-    problems=${!__problems_var}
+    health_problem_count=${!__problems_var}
     if [ ! -f "$file" ]; then
         echo -e "  ${RED}${label}: 缺失：$file${NC}"
-        problems=$((problems + 1))
+        health_problem_count=$((health_problem_count + 1))
     elif jq -e '.' "$file" >/dev/null 2>&1; then
         echo -e "  ${GREEN}${label}: JSON 有效：$file${NC}"
     else
         echo -e "  ${RED}${label}: JSON 无效：$file${NC}"
-        problems=$((problems + 1))
+        health_problem_count=$((health_problem_count + 1))
     fi
-    printf -v "$__problems_var" '%s' "$problems"
+    printf -v "$__problems_var" '%s' "$health_problem_count"
 }
 
 show_statistics_health_check() {
@@ -976,10 +1008,11 @@ show_statistics_health_check() {
     if [ ${#active_ports[@]} -eq 0 ]; then
         echo -e "  ${YELLOW}暂无监控端口。${NC}"
     elif command -v nft >/dev/null 2>&1; then
-        local input_chain output_chain forward_chain
+        local input_chain output_chain forward_chain quota_snapshot
         input_chain=$(nft list chain "$family" "$table_name" input 2>/dev/null || true)
         output_chain=$(nft list chain "$family" "$table_name" output 2>/dev/null || true)
         forward_chain=$(nft list chain "$family" "$table_name" forward 2>/dev/null || true)
+        quota_snapshot=$(nft -j -a list table "$family" "$table_name" 2>/dev/null || printf '{"nftables":[]}')
 
         for port in "${active_ports[@]}"; do
             local port_safe counter_in counter_out
@@ -1025,6 +1058,34 @@ show_statistics_health_check() {
                 echo -e "  ${RED}计数规则数量: 缺失或重复${NC}"
                 problems=$((problems + 1))
             fi
+            local configured_quota quota_name quota_state quota_rules quota_bytes quota_used
+            configured_quota=$(jq -r --arg port "$port" '.ports[$port].quota | if .enabled then .monthly_limit else "unlimited" end' "$CONFIG_FILE")
+            quota_name="port_${port_safe}_quota"
+            quota_state=$(jq -c --arg name "$quota_name" '[.nftables[] | .quota? // empty | select(.name == $name)][0] // {}' <<< "$quota_snapshot")
+            quota_rules=$(jq -c --arg name "$quota_name" '[.nftables[] | .rule? // empty | select(any(.expr[]?; .quota? == $name)) | .chain] | sort' <<< "$quota_snapshot")
+            if [ "$configured_quota" != "unlimited" ] && [ "$configured_quota" != "null" ]; then
+                quota_bytes=$(parse_size_to_bytes "$configured_quota" || printf '0')
+                quota_used=$(jq -r '.used // 0' <<< "$quota_state")
+                echo "  配额: 配置=$configured_quota；内核上限=$(jq -r '.bytes // "缺失"' <<< "$quota_state") bytes；内核已用=$quota_used bytes"
+                echo "  配额计入入站+出站，用完会阻断此端口。"
+                if ! jq -e --argjson bytes "$quota_bytes" '.bytes == $bytes and .inv == true' <<< "$quota_state" >/dev/null || \
+                   [ "$quota_rules" != '["forward","forward","forward","forward","input","input","output","output"]' ]; then
+                    echo -e "  ${RED}配额上限或规则异常（引用链: $quota_rules），可能导致提前断流；请重新设置此端口配额。${NC}"
+                    problems=$((problems + 1))
+                elif [ "$quota_used" -ge "$quota_bytes" ]; then
+                    echo -e "  ${YELLOW}内核配额已耗尽，此端口正在被配额规则阻断。${NC}"
+                fi
+            elif [ "$quota_state" != '{}' ] || [ "$quota_rules" != '[]' ]; then
+                echo -e "  ${RED}配置未启用配额，但内核仍有配额规则；请将此端口配额设为 0 清除。${NC}"
+                problems=$((problems + 1))
+            fi
+            local other_port
+            for other_port in "${active_ports[@]}"; do
+                if [[ "$port" < "$other_port" ]] && ports_overlap "$port" "$other_port"; then
+                    echo -e "  ${RED}监控项 $port 与 $other_port 重叠，可能重复统计或被另一项配额阻断；请删除多余监控项。${NC}"
+                    problems=$((problems + 1))
+                fi
+            done
         done
     fi
 
@@ -1131,7 +1192,7 @@ validate_bandwidth() {
     local input="$1"
     local lower_input=$(echo "$input" | tr '[:upper:]' '[:lower:]')
     if [[ "$input" == "0" ]]; then return 0
-    elif [[ "$lower_input" =~ ^[0-9]+kbps$ ]] || [[ "$lower_input" =~ ^[0-9]+mbps$ ]] || [[ "$lower_input" =~ ^[0-9]+gbps$ ]]; then return 0
+    elif [[ "$lower_input" =~ ^([0-9]{1,7})(kbps|mbps|gbps)$ ]] && (( 10#${BASH_REMATCH[1]} > 0 )); then return 0
     else return 1; fi
 }
 
@@ -1139,15 +1200,17 @@ validate_quota() {
     local input="$1"
     local lower_input=$(echo "$input" | tr '[:upper:]' '[:lower:]')
     if [[ "$input" == "0" ]]; then return 0
-    elif [[ "$lower_input" =~ ^[0-9]+(mb|gb|tb|m|g|t)$ ]]; then return 0
+    elif [[ "$lower_input" =~ ^([0-9]{1,7})(mb|gb|tb|m|g|t)$ ]] && (( 10#${BASH_REMATCH[1]} > 0 )); then
+        [[ "${BASH_REMATCH[2]}" != t* ]] || (( 10#${BASH_REMATCH[1]} <= 8388607 ))
     else return 1; fi
 }
 
 parse_size_to_bytes() {
     local size_str=$1
+    validate_quota "$size_str" && [ "$size_str" != "0" ] || return 1
     local number=$(echo "$size_str" | grep -o '^[0-9]\+')
     local unit=$(echo "$size_str" | grep -o '[A-Za-z]\+$' | tr '[:lower:]' '[:upper:]')
-    [ -z "$number" ] && echo "0" && return 1
+    number=$((10#$number))
     case $unit in
         "MB"|"M") echo $((number * 1048576)) ;;
         "GB"|"G") echo $((number * 1073741824)) ;;
@@ -1214,12 +1277,13 @@ parse_tc_rate_to_kbps() {
     local total_limit=$1
     if [[ "$total_limit" =~ gbit$ ]]; then
         local rate=$(echo "$total_limit" | sed 's/gbit$//')
-        echo $((rate * 1000000))
+        echo $((10#$rate * 1000000))
     elif [[ "$total_limit" =~ mbit$ ]]; then
         local rate=$(echo "$total_limit" | sed 's/mbit$//')
-        echo $((rate * 1000))
+        echo $((10#$rate * 1000))
     else
-        echo $(echo "$total_limit" | sed 's/kbit$//')
+        local rate="${total_limit%kbit}"
+        echo "$((10#$rate))"
     fi
 }
 
@@ -1232,7 +1296,7 @@ convert_bandwidth_to_tc() {
     fi
 }
 
-generate_tc_class_id() {
+legacy_tc_class_id() {
     local port=$1
     if is_port_range "$port"; then
         local mark_id=$(generate_port_range_mark "$port")
@@ -1240,6 +1304,29 @@ generate_tc_class_id() {
     else
         echo "1:$(printf '%x' $((0x1000 + port)))"
     fi
+}
+
+generate_tc_class_id() {
+    local port="$1" saved other other_id candidate minor
+    saved=$(jq -r --arg port "$port" '.ports[$port].bandwidth_limit.class_id // empty' "$CONFIG_FILE") || return 1
+    local occupied=" 1:1 1:30 "
+    while read -r other other_id; do
+        [ "$other" = "$port" ] && continue
+        [ -n "$other_id" ] || other_id=$(legacy_tc_class_id "$other")
+        occupied+="$other_id "
+    done < <(jq -r '.ports | to_entries[] | [.key, (.value.bandwidth_limit.class_id // "")] | join(" ")' "$CONFIG_FILE")
+    candidate="${saved:-$(legacy_tc_class_id "$port")}"
+    if [[ "$candidate" =~ ^1:([0-9a-f]{1,4})$ ]] && \
+       (( 16#${BASH_REMATCH[1]} > 1 )) && [[ "$occupied" != *" $candidate "* ]]; then
+        echo "$candidate"
+        return 0
+    fi
+    for ((minor=2; minor<=65535; minor++)); do
+        printf -v candidate '1:%x' "$minor"
+        if [[ "$occupied" != *" $candidate "* ]]; then echo "$candidate"; return 0; fi
+    done
+    echo "没有可用的 tc 类编号。" >&2
+    return 1
 }
 
 get_daily_total_traffic() {
@@ -1542,7 +1629,7 @@ show_main_menu() {
     fi
 
     echo "────────────────────────────────────────────────────────"
-    echo -e "${BLUE}1.${NC} $(ui_text '端口监控' 'Port monitoring' 'Мониторинг портов')       ${BLUE}2.${NC} $(ui_text '配额与限速' 'Quotas and rate limits' 'Квоты и лимиты скорости')"
+    echo -e "${BLUE}1.${NC} $(ui_text '添加/删除端口监控' 'Add/remove port monitoring' 'Добавить/удалить мониторинг порта')       ${BLUE}2.${NC} $(ui_text '配额与限速' 'Quotas and rate limits' 'Квоты и лимиты скорости')"
     echo -e "${BLUE}3.${NC} $(ui_text '流量重置' 'Traffic reset' 'Сброс трафика')         ${BLUE}4.${NC} $(ui_text '导出/导入配置' 'Export/import config' 'Экспорт/импорт конфигурации')"
     echo -e "${BLUE}5.${NC} $(ui_text '更新脚本' 'Update script' 'Обновить сценарий')        ${BLUE}6.${NC} $(ui_text '卸载' 'Uninstall' 'Удалить')"
     echo -e "${BLUE}7.${NC} $(ui_text 'Telegram 通知' 'Telegram notifications' 'Уведомления Telegram')  ${BLUE}8.${NC} $(ui_text '日报与趋势' 'Daily reports and trends' 'Дневные отчёты и тренды')"
@@ -1594,7 +1681,7 @@ add_port_monitoring() {
     printf "%-15s %-9s\n" "程序名" "端口"
     echo "────────────────────────────────────────────────────────"
 
-    declare -A program_ports
+    local -A program_ports=()
     while read -r line; do # 修复: 加入 -r 防止反斜杠丢失
         if [[ "$line" =~ LISTEN|UNCONN ]]; then
             # 修复: 加入 local 限定作用域，防止全局污染
@@ -1623,7 +1710,8 @@ add_port_monitoring() {
     fi
 
     echo "────────────────────────────────────────────────────────"
-    read_trimmed port_input "请输入要监控的端口号（多端口使用逗号,分隔,端口段使用-分隔）: "
+    echo "输入实际端口号，例如 443,54558 或 10000-10010；同时监控 TCP/UDP。"
+    read_trimmed port_input "要添加的端口/端口段（0 或回车取消）: "
     if [ -z "$port_input" ] || [ "$port_input" = "0" ]; then
         echo -e "${YELLOW}已取消添加端口监控${NC}"
         sleep 1
@@ -1639,11 +1727,18 @@ add_port_monitoring() {
     fi
     local valid_ports=()
 
+    local existing_ports=() existing overlap
+    mapfile -t existing_ports < <(get_active_ports)
     for port in "${PORTS[@]}"; do
-        if jq -e ".ports.\"$port\"" "$CONFIG_FILE" >/dev/null 2>&1; then
-            echo -e "${YELLOW}端口 $port 已在监控列表中，跳过${NC}"
-            continue
-        fi
+        overlap=false
+        for existing in "${existing_ports[@]}" "${valid_ports[@]}"; do
+            if ports_overlap "$port" "$existing"; then
+                echo -e "${YELLOW}端口 $port 与监控项 $existing 重叠，跳过，避免重复统计或限额冲突。${NC}"
+                overlap=true
+                break
+            fi
+        done
+        [ "$overlap" = true ] && continue
         valid_ports+=("$port")
     done
 
@@ -1656,13 +1751,14 @@ add_port_monitoring() {
 
     echo
     local port_list=$(IFS=','; echo "${valid_ports[*]}")
+    echo "将添加: $port_list（端口段作为一个监控项，共享配额）"
     while true; do
-        echo "请输入配额值（0为无限制）（要带单位MB/GB/T）:"
+        echo "配额按入站+出站累计，单位 MB/GB/TB（如 50G），0 为不限量；多个值按上述顺序对应，单个值分别用于每项。"
         read_trimmed quota_input "流量配额(回车默认0): "
         if [ -z "$quota_input" ]; then quota_input="0"; fi
 
         local QUOTAS=()
-        parse_comma_separated_input "$quota_input" QUOTAS
+        parse_comma_separated_input "$quota_input" QUOTAS || continue
 
         local all_valid=true
         for quota in "${QUOTAS[@]}"; do
@@ -1687,7 +1783,7 @@ add_port_monitoring() {
     read_trimmed remark_input "请输入当前规则备注(可选，直接回车跳过): "
     local REMARKS=()
     if [ -n "$remark_input" ]; then
-        parse_comma_separated_input "$remark_input" REMARKS
+        parse_comma_separated_input "$remark_input" REMARKS || { sleep 2; manage_port_monitoring; return; }
         expand_single_value_to_array REMARKS ${#valid_ports[@]}
         if [ ${#REMARKS[@]} -ne ${#valid_ports[@]} ]; then
             echo -e "${RED}备注数量与端口数量不匹配${NC}"
@@ -1732,8 +1828,14 @@ add_port_monitoring() {
                 }' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
         ) 9> "${CONFIG_DIR}/.config.lock" || { echo -e "${RED}配置文件正忙，跳过 $port${NC}"; continue; }
 
-        add_nftables_rules "$port"
-        if [ "$monthly_limit" != "unlimited" ]; then apply_nftables_quota "$port" "$quota"; fi
+        if ! add_nftables_rules "$port"; then
+            update_config "del(.ports.\"$port\")"
+            continue
+        fi
+        if [ "$monthly_limit" != "unlimited" ] && ! apply_nftables_quota "$port" "$quota"; then
+            echo -e "${RED}端口 $port 已添加监控，但配额未生效，请重新设置。${NC}"
+            update_config ".ports.\"$port\".quota.monthly_limit = \"unlimited\" | del(.ports.\"$port\".quota.reset_day)"
+        fi
         setup_port_auto_reset_cron "$port"
         added_count=$((added_count + 1))
     done
@@ -1749,7 +1851,7 @@ remove_port_monitoring() {
     if ! show_port_list; then sleep 2; manage_port_monitoring; return; fi
     echo
 
-    read_trimmed choice_input "请选择要删除的端口（多端口使用逗号,分隔）: "
+    read_trimmed choice_input "输入要删除的列表序号（如 1,3；0 或回车取消）: "
     if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
         echo -e "${YELLOW}已取消删除端口监控${NC}"
         sleep 1
@@ -1758,7 +1860,7 @@ remove_port_monitoring() {
     fi
     local valid_choices=()
     local ports_to_delete=()
-    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices
+    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices || { sleep 2; manage_port_monitoring; return; }
 
     for choice in "${valid_choices[@]}"; do
         ports_to_delete+=("${active_ports[$((choice-1))]}")
@@ -1769,13 +1871,15 @@ remove_port_monitoring() {
         sleep 2; remove_port_monitoring; return
     fi
 
-    read_trimmed confirm "确认删除这些端口的监控? [Y/n]: "
+    echo "将删除监控、配额和限速: ${ports_to_delete[*]}；不会关闭端口或停止服务。"
+    read_trimmed confirm "确认删除上述监控项? [y/N]: "
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
         local deleted_count=0
         for port in "${ports_to_delete[@]}"; do
-            remove_nftables_rules "$port"
-            remove_nftables_quota "$port"
-            remove_tc_limit "$port"
+            if ! remove_nftables_quota "$port" || ! remove_tc_limit "$port" || ! remove_nftables_rules "$port"; then
+                echo -e "${RED}端口 $port 规则清理失败，保留配置，请重试。${NC}"
+                continue
+            fi
             update_config "del(.ports.\"$port\")"
 
             local history_file="$CONFIG_DIR/reset_history.log"
@@ -1787,21 +1891,6 @@ remove_port_monitoring() {
             deleted_count=$((deleted_count + 1))
         done
         echo -e "${GREEN}成功删除 $deleted_count 个端口监控${NC}"
-        echo "正在清理网络状态..."
-        for port in "${ports_to_delete[@]}"; do
-            if is_port_range "$port"; then
-                local start_port=$(echo "$port" | cut -d'-' -f1)
-                local end_port=$(echo "$port" | cut -d'-' -f2)
-                for ((p=start_port; p<=end_port; p++)); do
-                    conntrack -D -p tcp --dport $p 2>/dev/null || true
-                    conntrack -D -p udp --dport $p 2>/dev/null || true
-                done
-            else
-                conntrack -D -p tcp --dport $port 2>/dev/null || true
-                conntrack -D -p udp --dport $port 2>/dev/null || true
-            fi
-        done
-        echo -e "${GREEN}网络状态已清理，现有连接的限制应该已解除${NC}"
     fi
     sleep 2
     manage_port_monitoring
@@ -1905,36 +1994,17 @@ remove_nftables_rules() {
     local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
 
-    # 锚定到计数器全名（含 in/out 后缀和收尾引号），防止把
-    # 端口段规则误删（例如删除端口 80 时波及 80-90 的 port_80_90_in）
-    if is_port_range "$port"; then
-        local port_safe=$(echo "$port" | tr '-' '_')
-        local search_pattern="port_${port_safe}_(in|out)\""
-    else
-        local search_pattern="port_${port}_(in|out)\""
-    fi
-
-    local deleted_count=0
-    while true; do
-        local handle=$(nft -a list table "$family" "$table_name" 2>/dev/null | grep -E "(tcp|udp).*(dport|sport).*$search_pattern" | head -n1 | sed -n 's/.*# handle \([0-9]\+\)$/\1/p')
-        if [ -z "$handle" ]; then break; fi
-        for chain in input output forward; do
-            if nft delete rule "$family" "$table_name" "$chain" handle "$handle" 2>/dev/null; then
-                deleted_count=$((deleted_count + 1))
-                break
-            fi
-        done
-        if [ $deleted_count -ge 150 ]; then break; fi
-    done
-
-    if is_port_range "$port"; then
-        local port_safe=$(echo "$port" | tr '-' '_')
-        nft delete counter "$family" "$table_name" "port_${port_safe}_in" 2>/dev/null || true
-        nft delete counter "$family" "$table_name" "port_${port_safe}_out" 2>/dev/null || true
-    else
-        nft delete counter "$family" "$table_name" "port_${port}_in" 2>/dev/null || true
-        nft delete counter "$family" "$table_name" "port_${port}_out" 2>/dev/null || true
-    fi
+    local snapshot batch_cmds
+    snapshot=$(nft -j -a list table "$family" "$table_name") || return 1
+    batch_cmds=$(jq -r --arg in "port_${port//-/_}_in" --arg out "port_${port//-/_}_out" '
+        (.nftables[] | .rule? // empty |
+         select(any(.expr[]?; .counter? == $in or .counter? == $out)) |
+         "delete rule \(.family) \(.table) \(.chain) handle \(.handle)"),
+        (.nftables[] | .counter? // empty | select(.name == $in or .name == $out) |
+         "delete counter \(.family) \(.table) \(.name)")
+    ' <<< "$snapshot") || return 1
+    [ -z "$batch_cmds" ] || printf '%s\n' "$batch_cmds" | nft -f - || return 1
+    NFT_COUNTER_SNAPSHOT=""
 }
 
 set_port_bandwidth_limit() {
@@ -1942,7 +2012,7 @@ set_port_bandwidth_limit() {
     local active_ports=($(get_active_ports))
     if ! show_port_list; then sleep 2; manage_traffic_limits; return; fi
 
-    read_trimmed choice_input "请选择要限制的端口（多端口使用逗号,分隔） [1-${#active_ports[@]}]: "
+    read_trimmed choice_input "输入要限速的列表序号 [1-${#active_ports[@]}]（如 1,3；0 或回车取消）: "
     if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
         echo -e "${YELLOW}已取消设置带宽限制${NC}"
         sleep 1
@@ -1951,7 +2021,7 @@ set_port_bandwidth_limit() {
     fi
     local valid_choices=()
     local ports_to_limit=()
-    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices
+    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices || { sleep 2; manage_traffic_limits; return; }
 
     for choice in "${valid_choices[@]}"; do
         ports_to_limit+=("${active_ports[$((choice-1))]}")
@@ -1963,7 +2033,9 @@ set_port_bandwidth_limit() {
     fi
 
     local port_list=$(IFS=','; echo "${ports_to_limit[*]}")
-    echo "请输入限制值（0为无限制）（要带单位Kbps/Mbps/Gbps）:"
+    echo "已选择: $port_list"
+    echo "限制默认网卡的出站带宽，覆盖 IPv4/IPv6、TCP/UDP；不限制本机入站带宽。"
+    echo "输入 Kbps/Mbps/Gbps（如 10Mbps，约 1.25MB/s），0 取消限速；单个值分别用于每项，多个值按上述顺序对应。"
     read_trimmed limit_input "带宽限制(回车取消): "
     if [ -z "$limit_input" ]; then
         echo -e "${YELLOW}已取消设置带宽限制${NC}"
@@ -1973,7 +2045,7 @@ set_port_bandwidth_limit() {
     fi
 
     local LIMITS=()
-    parse_comma_separated_input "$limit_input" LIMITS
+    parse_comma_separated_input "$limit_input" LIMITS || { sleep 2; manage_traffic_limits; return; }
     expand_single_value_to_array LIMITS ${#ports_to_limit[@]}
     if [ ${#LIMITS[@]} -ne ${#ports_to_limit[@]} ]; then
         echo -e "${RED}限制值数量与端口数量不匹配${NC}"
@@ -1985,23 +2057,21 @@ set_port_bandwidth_limit() {
         local port="${ports_to_limit[$i]}"
         local limit=$(echo "${LIMITS[$i]}" | tr -d ' ')
 
-        if [ "$limit" = "0" ] || [ -z "$limit" ]; then
-            remove_tc_limit "$port"
+        if ! validate_bandwidth "$limit"; then
+            echo -e "${RED}端口 $port 带宽格式错误，原限制未修改。${NC}"
+            continue
+        fi
+
+        if [ "$limit" = "0" ]; then
+            remove_tc_limit "$port" || { echo "端口 $port 限速移除失败。" >&2; continue; }
             update_config ".ports.\"$port\".bandwidth_limit.enabled = false | .ports.\"$port\".bandwidth_limit.rate = \"unlimited\""
             echo -e "${GREEN}端口 $port 带宽限制已移除${NC}"
             success_count=$((success_count + 1))
             continue
         fi
 
-        remove_tc_limit "$port"
-     
-        if ! validate_bandwidth "$limit"; then
-            echo -e "${RED}端口 $port 格式错误${NC}"
-            continue
-        fi
-
         local tc_limit=$(convert_bandwidth_to_tc "$limit")
-        apply_tc_limit "$port" "$tc_limit"
+        apply_tc_limit "$port" "$tc_limit" || continue
         update_config ".ports.\"$port\".bandwidth_limit.enabled = true | .ports.\"$port\".bandwidth_limit.rate = \"$limit\""
         success_count=$((success_count + 1))
     done
@@ -2013,7 +2083,7 @@ set_port_quota_limit() {
     echo -e "${BLUE}=== 设置端口流量配额 ===${NC}"
     local active_ports=($(get_active_ports))
     if ! show_port_list; then sleep 2; manage_traffic_limits; return; fi
-    read_trimmed choice_input "请选择要设置配额的端口（多端口使用逗号,分隔） [1-${#active_ports[@]}]: "
+    read_trimmed choice_input "输入要设置配额的列表序号 [1-${#active_ports[@]}]（如 1,3；0 或回车取消）: "
     if [ -z "$choice_input" ] || [ "$choice_input" = "0" ]; then
         echo -e "${YELLOW}已取消设置流量配额${NC}"
         sleep 1
@@ -2023,7 +2093,7 @@ set_port_quota_limit() {
 
     local valid_choices=()
     local ports_to_quota=()
-    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices
+    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices || { sleep 2; manage_traffic_limits; return; }
 
     for choice in "${valid_choices[@]}"; do
         ports_to_quota+=("${active_ports[$((choice-1))]}")
@@ -2034,13 +2104,15 @@ set_port_quota_limit() {
         sleep 2; set_port_quota_limit; return
     fi
 
+    echo "已选择: ${ports_to_quota[*]}"
+    echo "配额是本周期入站+出站总上限，保留已有用量；重新开始累计请使用流量重置。"
     while true; do
-        echo "请输入配额值（0为无限制）（要带单位MB/GB/T）:"
-        read_trimmed quota_input "流量配额(回车默认0): "
-        if [ -z "$quota_input" ]; then quota_input="0"; fi
+        echo "输入 MB/GB/TB（如 50G），0 取消配额；单个值分别用于每项，多个值按上述顺序对应。"
+        read_trimmed quota_input "流量配额(回车取消): "
+        if [ -z "$quota_input" ]; then manage_traffic_limits; return; fi
 
         local QUOTAS=()
-        parse_comma_separated_input "$quota_input" QUOTAS
+        parse_comma_separated_input "$quota_input" QUOTAS || continue
 
         local all_valid=true
         for quota in "${QUOTAS[@]}"; do
@@ -2064,15 +2136,14 @@ set_port_quota_limit() {
         local quota=$(echo "${QUOTAS[$i]}" | tr -d ' ')
 
         if [ "$quota" = "0" ] || [ -z "$quota" ]; then
-            remove_nftables_quota "$port"
+            remove_nftables_quota "$port" || { echo "端口 $port 配额移除失败。" >&2; continue; }
             update_config ".ports.\"$port\".quota.enabled = true | .ports.\"$port\".quota.monthly_limit = \"unlimited\" | del(.ports.\"$port\".quota.reset_day) | del(.ports.\"$port\".quota.billing_mode)"
             remove_port_auto_reset_cron "$port"
             success_count=$((success_count + 1))
             continue
         fi
 
-        remove_nftables_quota "$port"
-        apply_nftables_quota "$port" "$quota"
+        apply_nftables_quota "$port" "$quota" true || continue
         local current_monthly_limit=$(jq -r ".ports.\"$port\".quota.monthly_limit // \"unlimited\"" "$CONFIG_FILE")
         
         if [ "$current_monthly_limit" = "unlimited" ]; then
@@ -2102,124 +2173,157 @@ manage_traffic_limits() {
     esac
 }
 
-# 优化5：批量应用 nftables 配额限制规则
+quota_cleanup_commands() {
+    local quota_name="$1" snapshot="$2"
+    jq -r --arg name "$quota_name" '
+        .nftables[] | .rule? // empty |
+        select(any(.expr[]?; .quota? == $name)) |
+        "delete rule \(.family) \(.table) \(.chain) handle \(.handle)"
+    ' <<< "$snapshot"
+    jq -r --arg name "$quota_name" '
+        .nftables[] | .quota? // empty | select(.name == $name) |
+        "delete quota \(.family) \(.table) \(.name)"
+    ' <<< "$snapshot"
+}
+
 apply_nftables_quota() {
     local port=$1
     local quota_limit=$2
+    local replace="${3:-false}"
     local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
-    local quota_bytes=$(parse_size_to_bytes "$quota_limit")
-
-    local current_traffic=($(get_nftables_counter_data "$port"))
-    local current_actual_total=$(( ${current_traffic[0]} + ${current_traffic[1]} ))
-    local effective_quota_bytes=$quota_bytes
-    local effective_used_bytes=$current_actual_total
-    local batch_cmds=""
+    local quota_bytes snapshot current_actual_total batch_cmds rule_chains
+    quota_bytes=$(parse_size_to_bytes "$quota_limit") || return 1
 
     local port_safe=$(echo "$port" | tr '-' '_')
     local quota_name="port_${port_safe}_quota"
 
-    # 恢复路径会在每次运行时反复调用本函数：若内核中已有引用该配额的规则，
-    # 直接跳过，防止 drop 规则不断叠加导致同一数据包被多条规则重复计入配额
-    if nft list table "$family" "$table_name" 2>/dev/null | grep -Fq "quota name \"$quota_name\""; then
+    snapshot=$(nft -j -a list table "$family" "$table_name") || return 1
+    rule_chains=$(jq -c --arg name "$quota_name" '
+        [.nftables[] | .rule? // empty |
+         select(any(.expr[]?; .quota? == $name)) | .chain] | sort
+    ' <<< "$snapshot") || return 1
+    # 已存在的规则只有上限和引用数量都正确时才可复用。
+    if [ "$replace" != "true" ] && \
+       [ "$rule_chains" = '["forward","forward","forward","forward","input","input","output","output"]' ] && \
+       jq -e --arg name "$quota_name" --argjson bytes "$quota_bytes" '
+           any(.nftables[]; .quota.name? == $name and .quota.bytes == $bytes and .quota.inv == true)
+       ' <<< "$snapshot" >/dev/null; then
         return 0
     fi
 
-    nft delete quota "$family" "$table_name" "$quota_name" 2>/dev/null || true
-    nft add quota "$family" "$table_name" "$quota_name" { over "$effective_quota_bytes" bytes used "$effective_used_bytes" bytes } 2>/dev/null || true
+    current_actual_total=$(jq -er --arg in "port_${port_safe}_in" --arg out "port_${port_safe}_out" '
+        [.nftables[] | .counter? // empty | select(.name == $in or .name == $out) | .bytes] |
+        if length == 2 then add else empty end
+    ' <<< "$snapshot") || { echo "端口 $port 计数不完整，未修改配额。" >&2; return 1; }
+    # 内核拒绝 used 大于上限；达到上限已足以让 over 规则阻断后续流量。
+    if [ "$current_actual_total" -gt "$quota_bytes" ]; then current_actual_total=$quota_bytes; fi
+    batch_cmds=$(quota_cleanup_commands "$quota_name" "$snapshot") || return 1
+    batch_cmds+="\nadd quota $family $table_name $quota_name { over $quota_bytes bytes used $current_actual_total bytes; }\n"
 
-    # 配额按被监控端口的实际流量累计。
+    # 同一转发包的源、目标端口都命中时只扣一次配额。
     for proto in tcp udp; do
         batch_cmds+="insert rule $family $table_name output $proto sport $port quota name \"$quota_name\" drop\n"
         batch_cmds+="insert rule $family $table_name forward $proto sport $port quota name \"$quota_name\" drop\n"
         batch_cmds+="insert rule $family $table_name input $proto dport $port quota name \"$quota_name\" drop\n"
-        batch_cmds+="insert rule $family $table_name forward $proto dport $port quota name \"$quota_name\" drop\n"
+        batch_cmds+="insert rule $family $table_name forward $proto dport $port $proto sport != $port quota name \"$quota_name\" drop\n"
     done
 
     if [ -n "$batch_cmds" ]; then
-        echo -e "$batch_cmds" | nft -f - 2>/dev/null || true
+        if ! printf '%b' "$batch_cmds" | nft -f -; then
+            echo -e "${RED}端口 $port 配额应用失败，原规则已保留。${NC}" >&2
+            return 1
+        fi
     fi
+    NFT_COUNTER_SNAPSHOT=""
 }
 
 remove_nftables_quota() {
     local port=$1
     local table_name=$(jq -r '.nftables.table_name' "$CONFIG_FILE")
     local family=$(jq -r '.nftables.family' "$CONFIG_FILE")
-    if is_port_range "$port"; then
-        local port_safe=$(echo "$port" | tr '-' '_')
-        local quota_name="port_${port_safe}_quota"
-    else
-        local quota_name="port_${port}_quota"
-    fi
-
-    local deleted_count=0
-    while true; do
-        local handle=$(nft -a list table "$family" "$table_name" 2>/dev/null | grep "quota name \"$quota_name\"" | head -n1 | sed -n 's/.*# handle \([0-9]\+\)$/\1/p')
-        if [ -z "$handle" ]; then break; fi
-        for chain in input output forward; do
-            if nft delete rule "$family" "$table_name" "$chain" handle "$handle" 2>/dev/null; then
-                deleted_count=$((deleted_count + 1))
-                break
-            fi
-        done
-        if [ $deleted_count -ge 150 ]; then break; fi
-    done
-    nft delete quota "$family" "$table_name" "$quota_name" 2>/dev/null || true
+    local quota_name="port_${port//-/_}_quota" snapshot batch_cmds
+    snapshot=$(nft -j -a list table "$family" "$table_name") || return 1
+    batch_cmds=$(quota_cleanup_commands "$quota_name" "$snapshot") || return 1
+    [ -z "$batch_cmds" ] || printf '%s\n' "$batch_cmds" | nft -f -
 }
 
 apply_tc_limit() {
     local port=$1
     local total_limit=$2
-    local interface=$(get_default_interface)
-
-    tc qdisc add dev $interface root handle 1: htb default 30 2>/dev/null || true
-    # [修复]: 将写死的 1Gbps 根节点上限提升为 100Gbps，防止误伤万兆网卡
-    tc class add dev $interface parent 1: classid 1:1 htb rate 100000mbit 2>/dev/null || true
-
-    local class_id=$(generate_tc_class_id "$port")
-    tc class del dev $interface classid $class_id 2>/dev/null || true
+    local interface class_id minor protocol proto direction pref handle old_rate
+    interface=$(get_default_interface) || return 1
+    class_id=$(generate_tc_class_id "$port") || return 1
+    minor=$((16#${class_id#1:}))
+    tc qdisc add dev "$interface" root handle 1: htb 2>/dev/null || true
+    if ! tc -j qdisc show dev "$interface" | jq -e 'any(.[]; .root == true and .kind == "htb" and .handle == "1:")' >/dev/null; then
+        echo "网卡 $interface 的根队列被其他工具占用，未应用端口 $port 限速。" >&2
+        return 1
+    fi
+    tc class replace dev "$interface" parent 1: classid 1:1 htb rate 100000mbit quantum 1514 || return 1
 
     local base_rate=$(parse_tc_rate_to_kbps "$total_limit")
     local burst_bytes=$(calculate_tc_burst "$base_rate")
     local burst_size=$(format_tc_burst "$burst_bytes")
 
-    # 创建失败时给出警告但不中断脚本（set -e 下裸命令失败会导致整个脚本
-    # 在启动恢复阶段直接退出，例如根 qdisc 已被其他工具占用时）
-    if ! tc class add dev $interface parent 1:1 classid $class_id htb rate $total_limit ceil $total_limit burst $burst_size 2>/dev/null; then
-        echo -e "${YELLOW}警告：在网卡 $interface 上创建限速类失败，端口 $port 的带宽限制未生效。${NC}" >&2
-        return 0
+    if ! tc class replace dev "$interface" parent 1:1 classid "$class_id" htb rate "$total_limit" ceil "$total_limit" burst "$burst_size" quantum 1514; then
+        echo "端口 $port 限速类应用失败。" >&2
+        return 1
     fi
 
-    if is_port_range "$port"; then
-        local mark_id=$(generate_port_range_mark "$port")
-        tc filter add dev $interface protocol ip parent 1:0 prio 1 handle $mark_id fw flowid $class_id 2>/dev/null || true
-    else
-        local filter_prio=$((port % 1000 + 1))
-        tc filter add dev $interface protocol ip parent 1:0 prio $filter_prio u32 match ip protocol 6 0xff match ip sport $port 0xffff flowid $class_id 2>/dev/null || true
-        tc filter add dev $interface protocol ip parent 1:0 prio $filter_prio u32 match ip protocol 6 0xff match ip dport $port 0xffff flowid $class_id 2>/dev/null || true
-        tc filter add dev $interface protocol ip parent 1:0 prio $((filter_prio + 1000)) u32 match ip protocol 17 0xff match ip sport $port 0xffff flowid $class_id 2>/dev/null || true
-        tc filter add dev $interface protocol ip parent 1:0 prio $((filter_prio + 1000)) u32 match ip protocol 17 0xff match ip dport $port 0xffff flowid $class_id 2>/dev/null || true
-    fi
+    for protocol in ip ipv6; do
+        pref=32000
+        [ "$protocol" = "ipv6" ] && pref=32001
+        handle=$((minor * 4))
+        for proto in tcp udp; do
+            for direction in src_port dst_port; do
+                handle=$((handle + 1))
+                if ! tc filter replace dev "$interface" protocol "$protocol" parent 1: prio "$pref" handle "$handle" flower ip_proto "$proto" "$direction" "$port" classid "$class_id"; then
+                    echo "端口 $port 的 $protocol/$proto 限速规则应用失败，未保存新限制。" >&2
+                    old_rate=$(jq -r --arg port "$port" '.ports[$port].bandwidth_limit | select(.enabled == true) | .rate // empty' "$CONFIG_FILE")
+                    if [ -n "$old_rate" ] && [ "$old_rate" != "unlimited" ]; then
+                        old_rate=$(convert_bandwidth_to_tc "$old_rate")
+                        tc class replace dev "$interface" parent 1:1 classid "$class_id" htb rate "$old_rate" ceil "$old_rate" quantum 1514 || return 1
+                    else
+                        remove_tc_limit "$port" || return 1
+                    fi
+                    return 1
+                fi
+            done
+        done
+    done
+    # 按实际 handle 清理旧 u32/fw 规则，避免同优先级的其他端口被误删。
+    remove_tc_filters "$interface" "$(legacy_tc_class_id "$port")" true || return 1
+    update_config ".ports.\"$port\".bandwidth_limit.class_id = \"$class_id\""
+}
+
+remove_tc_filters() {
+    local interface="$1" class_id="$2" legacy_only="${3:-false}"
+    local snapshot filters protocol pref handle kind
+    snapshot=$(tc -j filter show dev "$interface" parent 1:) || return 1
+    filters=$(jq -r --arg id "$class_id" --arg legacy "$legacy_only" '
+        .[] | select((.options.flowid // .options.classid) == $id) |
+        select($legacy != "true" or (.pref != 32000 and .pref != 32001)) |
+        [.protocol, .pref, (.options.handle // .options.fh // .handle), .kind] | @tsv
+    ' <<< "$snapshot") || return 1
+    while read -r protocol pref handle kind; do
+        [ -z "$protocol" ] && continue
+        tc filter del dev "$interface" protocol "$protocol" parent 1: prio "$pref" handle "$handle" "$kind" || return 1
+    done <<< "$filters"
 }
 
 remove_tc_limit() {
-    local port=$1
-    local interface=$(get_default_interface)
-    local class_id=$(generate_tc_class_id "$port")
-
-    if is_port_range "$port"; then
-        local mark_id=$(generate_port_range_mark "$port")
-        local mark_hex=$(printf '0x%x' "$mark_id")
-        tc filter del dev $interface protocol ip parent 1:0 prio 1 handle $mark_hex fw 2>/dev/null || true
-        tc filter del dev $interface protocol ip parent 1:0 prio 1 handle $mark_id fw 2>/dev/null || true
-    else
-        local filter_prio=$((port % 1000 + 1))
-        tc filter del dev $interface protocol ip parent 1:0 prio $filter_prio u32 match ip protocol 6 0xff match ip sport $port 0xffff 2>/dev/null || true
-        tc filter del dev $interface protocol ip parent 1:0 prio $filter_prio u32 match ip protocol 6 0xff match ip dport $port 0xffff 2>/dev/null || true
-        tc filter del dev $interface protocol ip parent 1:0 prio $((filter_prio + 1000)) u32 match ip protocol 17 0xff match ip sport $port 0xffff 2>/dev/null || true
-        tc filter del dev $interface protocol ip parent 1:0 prio $((filter_prio + 1000)) u32 match ip protocol 17 0xff match ip dport $port 0xffff 2>/dev/null || true
+    local port="$1" interface class_id classes
+    interface=$(get_default_interface) || return 1
+    if ! tc -j qdisc show dev "$interface" | jq -e 'any(.[]; .root == true and .kind == "htb" and .handle == "1:")' >/dev/null; then
+        return 0
     fi
-    tc class del dev $interface classid $class_id 2>/dev/null || true
+    class_id=$(generate_tc_class_id "$port") || return 1
+    remove_tc_filters "$interface" "$class_id" || return 1
+    classes=$(tc -j class show dev "$interface") || return 1
+    if jq -e --arg id "$class_id" 'any(.[]; .classid == $id or .handle == $id)' <<< "$classes" >/dev/null; then
+        tc class del dev "$interface" classid "$class_id" || return 1
+    fi
 }
 
 manage_traffic_reset() {
@@ -2249,7 +2353,7 @@ set_reset_day() {
         return
     fi
     local valid_choices=()
-    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices
+    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices || { sleep 2; manage_traffic_reset; return; }
     
     if [ ${#valid_choices[@]} -eq 0 ]; then
         echo -e "${RED}❌ 未选择有效端口，操作取消。${NC}"
@@ -2297,7 +2401,7 @@ immediate_reset() {
         return
     fi
     local valid_choices=()
-    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices
+    parse_multi_choice_input "$choice_input" "${#active_ports[@]}" valid_choices || { sleep 2; manage_traffic_reset; return; }
     
     if [ ${#valid_choices[@]} -eq 0 ]; then
         echo -e "${RED}❌ 未选择有效端口！${NC}"
