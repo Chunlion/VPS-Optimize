@@ -112,7 +112,7 @@ show_net_kernel_help() {
     echo "$(localized_text "6 ZRAM / Swap：适合小内存 VPS。" "6 ZRAM / Swap: suitable for small memory VPS." "6 ZRAM / Swap: подходит для VPS с небольшой памятью.")"
     echo "$(localized_text "7 内核管理：安装、切换或清理内核；操作前确认快照和救援控制台可用。" "7 Kernel management: install, switch, or remove kernels. Confirm snapshot and rescue-console access first." "7 Управление ядрами: установка, смена и удаление ядер. Сначала проверьте доступ к снимку и аварийной консоли.")"
     echo "$(localized_text "8 BBR 直连/落地优化：按上传带宽和主要 RTT 计算缓冲区、连接队列与网卡积压参数。" "8 BBR direct/relay tuning: Size buffers, connection queues, and device backlog from upload bandwidth and primary RTT." "8 Настройка BBR для прямого/промежуточного сервера: рассчитать буферы, очереди соединений и сетевого устройства по отдаче и основному RTT.")"
-    echo "$(localized_text "带宽、iperf3、国际互联和网络质量测试已移至主菜单 [12 测速与质量检测]。" "Bandwidth, iperf3, international connectivity, and network-quality tests are under main menu [12 Speed and quality tests]." "Тесты пропускной способности, iperf3, международной связи и качества сети находятся в пункте [12 Тесты скорости и качества] главного меню.")"
+    echo "$(localized_text "带宽、iperf3、网站延迟/DNS 和网络质量测试已移至主菜单 [12 测速与质量检测]。" "Bandwidth, iperf3, website latency/DNS, and network-quality tests are under main menu [12 Speed and quality tests]." "Тесты пропускной способности, iperf3, задержки сайтов/DNS и качества сети находятся в пункте [12 Тесты скорости и качества] главного меню.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
 
@@ -242,7 +242,7 @@ func_panel_deploy_menu() {
         echo -e "$(localized_text " ${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari 监控${PLAIN}          ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}        ${BOLD}${GREEN}18.${PLAIN} ${BOLD}妙妙屋X${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari monitoring${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN} ${BOLD}${GREEN}18.${PLAIN} ${BOLD}MiaomiaowuX${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN} ${BOLD}${GREEN}18.${PLAIN} ${BOLD}MiaomiaowuX${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 网络 / 监控${PLAIN}" "${BOLD}▶ Network / Monitoring${PLAIN}" "${BOLD}▶ Сеть / Мониторинг${PLAIN}")"
-        echo -e "$(localized_text " ${BOLD}${GREEN}11.${PLAIN} ${BOLD}DNS 解锁${PLAIN}            ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN}         ${BOLD}${GREEN}13.${PLAIN} ${BOLD}端口流量监控（dog）${PLAIN}" "${BOLD}${GREEN}11.${PLAIN} ${BOLD}DNS Unlock${PLAIN} ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Per-port traffic (dog)${PLAIN}" "${BOLD}${GREEN}11.${PLAIN} ${BOLD}Разблокировка DNS${PLAIN} ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Трафик по портам (dog)${PLAIN}")"
+        echo -e "$(localized_text " ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN}         ${BOLD}${GREEN}13.${PLAIN} ${BOLD}端口流量监控（dog）${PLAIN}" "${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Per-port traffic (dog)${PLAIN}" "${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Трафик по портам (dog)${PLAIN}")"
         echo -e "$(localized_text " ${BOLD}${GREEN}14.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}14.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}14.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
@@ -262,7 +262,6 @@ func_panel_deploy_menu() {
             8) func_miaomiaowu_menu ;;
             9) func_substore_menu ;;
             10) func_komari_menu ;;
-            11) func_dns_unlock ;;
             12) func_ip_sentinel ;;
             13) func_port_dog ;;
             14) func_vps_bot_x ;;

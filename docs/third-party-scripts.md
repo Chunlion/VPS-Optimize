@@ -24,7 +24,6 @@
 | Forwardx 转发面板 | Forwardx | <https://github.com/poouo/Forwardx> |
 | FLVX 哆啦转发面板 | FLVX | <https://github.com/Sagit-chu/flvx> |
 | BBR / 多内核调优 | Linux-NetSpeed | <https://github.com/ylx2016/Linux-NetSpeed> |
-| Alice DNS 解锁 | DNS-Alice-Unlock | <https://github.com/Jimmyzxk/DNS-Alice-Unlock> |
 | IP-Sentinel | IP-Sentinel | <https://github.com/hotyue/IP-Sentinel> |
 | 3x-ui 管理 | 3x-ui | <https://github.com/mhsanaei/3x-ui> |
 | S-UI 管理 | S-UI | <https://github.com/alireza0/s-ui> |
@@ -39,17 +38,14 @@
 
 | VPS-Optimize 入口 | 项目名称 | 项目地址 |
 |---|---|---|
-| YABS 硬件性能测试 | yet-another-bench-script | <https://github.com/masonr/yet-another-bench-script> |
-| SuperBench 综合测速 | SuperBench | <https://github.com/oooldking/script> |
-| bench.sh 基础测试 | bench.sh | <https://github.com/teddysun/across> |
-| 融合怪详细测速 | Fusion Monster | <https://gitlab.com/spiritysdx/za> |
+| YABS 硬件性能测试（跳过网络测速） | yet-another-bench-script | <https://github.com/masonr/yet-another-bench-script> |
 | 三网回程路由测试 | backtrace | <https://github.com/zhanghanyun/backtrace> |
 | IP 质量 / 欺诈度检测 | IPQuality | <https://github.com/xykt/IPQuality> |
-| NodeSeek 综合测试 | NodeQuality | <https://github.com/LloydAsp/NodeQuality> |
+| NodeQuality 完整报告（硬件、IP、网络与回程） | NodeQuality | <https://github.com/LloydAsp/NodeQuality> |
 | 流媒体解锁检测 | RegionRestrictionCheck | <https://github.com/lmc999/RegionRestrictionCheck> |
 | TcpQuality TCP 质量测试 | TcpQuality | <https://github.com/ibsgss/TcpQuality> |
-| 国际互联速度测试 | network-latency-tester | <https://github.com/Cd1s/network-latency-tester> |
-| 网络延迟质量检测 | NetQuality | <https://github.com/xykt/NetQuality> |
+| 网站延迟与 DNS 检测 | network-latency-tester | <https://github.com/Cd1s/network-latency-tester> |
+| 网络质量检测（低流量，跳过带宽测速） | NetQuality | <https://github.com/xykt/NetQuality> |
 
 ## 系统重装
 

@@ -253,32 +253,6 @@ func_xray_manage() {
 }
 
 # ---------------------------------------------------------
-# 17. DNS 流媒体分流解锁 (Alice DNS)
-# ---------------------------------------------------------
-func_dns_unlock() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🔓 DNS 流媒体分流解锁 (DNS-Alice-Unlock)${PLAIN}" "${BOLD}🔓 DNS Streaming media split unlock (DNS-Alice-Unlock)${PLAIN}" "${BOLD}🔓 DNS Разделенная разблокировка потокового мультимедиа (DNS-Alice-Unlock)${PLAIN}")"
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}功能介绍与使用说明：${PLAIN}" "${YELLOW}Purpose and instructions for use:${PLAIN}" "${YELLOW}Описание функции и инструкции по использованию:${PLAIN}")"
-    echo -e "$(localized_text " 1. 该脚本通过修改本地 DNS 解析，实现 Netflix, Disney+ 等特定区域流媒体的解锁。" "1. This script modifies the local DNS parsing to unlock streaming media in specific regions such as Netflix and Disney+." "1. Этот скрипт изменяет локальный анализ DNS, чтобы разблокировать потоковое мультимедиа в определенных регионах, таких как Netflix и Disney+.")"
-    echo -e "$(localized_text " 2. ${GREEN}仅对流媒体域名进行分流${PLAIN}，不影响您的原生 IP 和普通上网速度。" "2. ${GREEN}Only offloads the streaming domain${PLAIN} and does not affect your native IP and normal Internet speed." "2. ${GREEN}только разгружает потоковое доменное имя${PLAIN} и не влияет на ваш собственный IP-адрес и нормальную скорость Интернета.")"
-    echo -e "$(localized_text " 3. 项目地址：${BLUE}https://github.com/Jimmyzxk/DNS-Alice-Unlock/${PLAIN}" "3. Project address: ${BLUE}Https://github.com/Jimmyzxk/DNS-Alice-Unlock/${PLAIN}" "3. Адрес проекта: ${BLUE}https://github.com/Jimmyzxk/DNS-Alice-Unlock/${PLAIN}.")"
-    echo -e "------------------------------------------------"
-    echo -e "$(localized_text "${RED}⚠️  风险提示：运行此脚本会修改您服务器的 /etc/resolv.conf 配置。${PLAIN}" "${RED}⚠️ Risk warning: Running this script will modify the /etc/resolv.conf configuration of your server.${PLAIN}" "${RED}⚠️ Предупреждение о риске: запуск этого сценария приведет к изменению конфигурации /etc/resolv.conf вашего сервера.${PLAIN}")"
-    echo -e "$(localized_text "    如果您不懂如何自行配置解锁机的 DNS 记录，请务必先查阅项目文档！" "If you don’t know how to configure the DNS record of the unlocking machine yourself, please be sure to check the project documentation first!" "Если вы не знаете, как самостоятельно настроить запись DNS устройства разблокировки, обязательно сначала ознакомьтесь с проектной документацией!")"
-    echo -e "------------------------------------------------"
-    
-    if confirm_danger "$(localized_text "运行 Alice DNS 解锁脚本" "Run the Alice DNS unlock script" "Запустить сценарий Alice DNS Unlock")" \
-        "$(localized_text "执行远程脚本并修改 /etc/resolv.conf" "run a remote script and modify /etc/resolv.conf" "запустить удалённый сценарий и изменить /etc/resolv.conf")" \
-        "$(localized_text "运行前备份 DNS 配置；恢复方式以项目文档为准" "back up the DNS configuration first; follow the project documentation to restore it" "сначала сохраните конфигурацию DNS; восстановление выполняйте по документации проекта")"; then
-        run_remote_script "$(localized_text "运行 Alice DNS 解锁脚本" "Run the Alice DNS unlocking script" "Запустите скрипт разблокировки Алисы DNS.")" "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"
-    else
-        echo -e "$(localized_text "${BLUE}已安全取消操作。${PLAIN}" "${BLUE}The operation has been safely canceled.${PLAIN}" "${BLUE}Операция была благополучно отменена.${PLAIN}")"
-    fi
-    pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
-}
-# ---------------------------------------------------------
 # 新增功能：安装 IP Sentinel (防止 IP 送中)
 # ---------------------------------------------------------
 func_ip_sentinel() {

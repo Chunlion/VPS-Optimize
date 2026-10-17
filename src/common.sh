@@ -498,11 +498,8 @@ is_trusted_remote_script_url() {
             return 0
             ;;
         "https://yabs.sh"|\
-        "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh"|\
-        "https://about.superbench.pro"|\
-        "https://bench.sh"|\
         "https://check.unlock.media"|\
-        "https://Check.Place"|\
+        "https://Net.Check.Place"|\
         "https://raw.githubusercontent.com/Cd1s/network-latency-tester/main/latency.sh"|\
         "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh"|\
         "https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh"|\
@@ -521,7 +518,6 @@ is_trusted_remote_script_url() {
         "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh"|\
         "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh"|\
         "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh"|\
-        "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"|\
         "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh")
             echo "$(localized_text "项目内置硬编码外部脚本源" "Project built-in hardcoded external script source" "Встроенный в проект жестко закодированный внешний источник сценария")"
             return 0

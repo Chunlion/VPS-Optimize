@@ -191,13 +191,12 @@ func_test_scripts() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}📊 VPS 测速与质量检测${PLAIN}" "${BOLD}📊 VPS speed and quality tests${PLAIN}" "${BOLD}📊 Тесты скорости и качества VPS${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${GREEN}  1. YABS 硬件性能测试      ${YELLOW}  2. SuperBench 综合测速${PLAIN}" "${GREEN}  1. YABS hardware test      ${YELLOW}  2. SuperBench${PLAIN}" "${GREEN}  1. Тест оборудования YABS  ${YELLOW}  2. SuperBench${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. bench.sh 基础测试      ${YELLOW}  4. 融合怪详细测速${PLAIN}" "${GREEN}  3. bench.sh                 ${YELLOW}  4. ECS comprehensive test${PLAIN}" "${GREEN}  3. bench.sh                 ${YELLOW}  4. Комплексный тест ECS${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. YABS 硬件性能测试${PLAIN}" "${GREEN}  1. YABS hardware test${PLAIN}" "${GREEN}  1. Тест оборудования YABS${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  5. 三网回程路由测试       ${YELLOW}  6. IP 质量 / 欺诈度检测${PLAIN}" "${GREEN}  5. China carrier routes     ${YELLOW}  6. IP quality / fraud score${PLAIN}" "${GREEN}  5. Маршруты операторов Китая ${YELLOW}  6. Качество IP / риск мошенничества${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. NodeSeek 综合测试      ${YELLOW}  8. 流媒体解锁检测${PLAIN}" "${GREEN}  7. NodeSeek test            ${YELLOW}  8. Streaming access test${PLAIN}" "${GREEN}  7. Тест NodeSeek            ${YELLOW}  8. Доступ к стриминговым сервисам${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. NodeQuality 完整报告（耗时） ${YELLOW}  8. 流媒体解锁检测${PLAIN}" "${GREEN}  7. NodeQuality full report (slow) ${YELLOW}  8. Streaming access test${PLAIN}" "${GREEN}  7. Полный отчёт NodeQuality (долго) ${YELLOW}  8. Доступ к стриминговым сервисам${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  9. TcpQuality TCP 质量测试${PLAIN}" "${GREEN}  9. TcpQuality TCP test${PLAIN}" "${GREEN}  9. Тест TCP через TcpQuality${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 10. 服务器带宽测试         ${YELLOW} 11. iperf3 单线程测试${PLAIN}" "${GREEN} 10. Server bandwidth test    ${YELLOW} 11. iperf3 single-stream test${PLAIN}" "${GREEN} 10. Тест пропускной способности ${YELLOW} 11. Однопоточный тест iperf3${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 12. 国际互联速度测试       ${YELLOW} 13. 网络延迟质量检测${PLAIN}" "${GREEN} 12. International speed test ${YELLOW} 13. Network latency and quality${PLAIN}" "${GREEN} 12. Международный тест скорости ${YELLOW} 13. Задержка и качество сети${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 10. 服务器带宽测试         ${YELLOW} 11. iperf3 单线程（需服务端）${PLAIN}" "${GREEN} 10. Server bandwidth test    ${YELLOW} 11. iperf3 single stream (server required)${PLAIN}" "${GREEN} 10. Тест пропускной способности ${YELLOW} 11. iperf3: один поток (нужен сервер)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 12. 网站延迟与 DNS 检测    ${YELLOW} 13. 网络质量检测（低流量）${PLAIN}" "${GREEN} 12. Website latency and DNS  ${YELLOW} 13. Network quality (low data)${PLAIN}" "${GREEN} 12. Задержка сайтов и DNS    ${YELLOW} 13. Качество сети (мало трафика)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -206,13 +205,10 @@ func_test_scripts() {
         local ran_test=false
         read_trimmed t "$(localized_text "选择测试: " "Select a test: " "Выберите тест: ")"
         case $t in
-            1) ran_test=true; run_remote_script "$(localized_text "运行 YABS 硬件性能测试" "Run the YABS hardware performance test" "Запустите тест производительности оборудования YABS.")" "https://yabs.sh" ;;
-            2) ran_test=true; run_remote_script "$(localized_text "运行 SuperBench 综合测速" "Run SuperBench comprehensive speed test" "Запустите комплексный тест скорости SuperBench")" "https://about.superbench.pro" ;;
-            3) ran_test=true; run_remote_script "$(localized_text "运行 bench.sh 基础测试" "Run bench.sh basic test" "Запустите базовый тест Bench.sh")" "https://bench.sh" ;;
-            4) ran_test=true; run_remote_script "$(localized_text "运行融合怪详细测速" "Run the fusion monster detailed speed test" "Запустите подробный тест скорости Fusion Monster")" "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh" ;;
+            1) ran_test=true; run_remote_script "$(localized_text "运行 YABS 硬件性能测试" "Run the YABS hardware performance test" "Запустите тест производительности оборудования YABS.")" "https://yabs.sh" -i ;;
             5) ran_test=true; run_remote_script "$(localized_text "运行三网回程路由测试" "Run the three-network backhaul routing test" "Запустите тест транспортной маршрутизации для трех сетей.")" "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh" ;;
             6) ran_test=true; run_remote_script "$(localized_text "运行 IP 质量 / 欺诈度检测" "Run IP quality/fraud detection" "Запустите качество IP/обнаружение мошенничества")" "https://IP.Check.Place" ;;
-            7) ran_test=true; run_remote_script "$(localized_text "运行 NodeSeek 综合测试" "Run NodeSeek synthetic tests" "Запуск синтетических тестов NodeSeek")" "https://run.NodeQuality.com" ;;
+            7) ran_test=true; run_remote_script "$(localized_text "运行 NodeQuality 完整报告" "Run the NodeQuality full report" "Сформировать полный отчёт NodeQuality")" "https://run.NodeQuality.com" ;;
             8) ran_test=true; run_remote_script "$(localized_text "运行流媒体解锁检测" "Run streaming unblock detection" "Запустить обнаружение разблокировки потоковой передачи")" "https://check.unlock.media" ;;
             9) ran_test=true; run_remote_script "$(localized_text "运行 TcpQuality TCP 质量测试" "Run the TcpQuality TCP quality test" "Запустите тест качества TcpQuality TCP.")" "https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh" ;;
             10) func_server_bandwidth_test; continue ;;
@@ -309,7 +305,7 @@ func_iperf3_single_thread_test() {
 
 func_international_speed_test() {
     clear
-    run_remote_script "$(localized_text "运行国际互联速度测试" "Run an international internet speed test" "Запустите международный тест скорости интернета")" \
+    run_remote_script "$(localized_text "运行网站延迟与 DNS 检测" "Run website latency and DNS tests" "Проверить задержку сайтов и DNS")" \
         "https://raw.githubusercontent.com/Cd1s/network-latency-tester/main/latency.sh"
     local rc=$?
     pause_after_external_script "$(localized_text "操作结束，按回车键返回测试菜单..." "When the operation is complete, press Enter to return to the test menu..." "После завершения нажмите Enter, чтобы вернуться в меню тестов...")"
@@ -318,7 +314,7 @@ func_international_speed_test() {
 
 func_network_latency_quality_test() {
     clear
-    run_remote_script "$(localized_text "运行网络延迟质量检测" "Run network latency quality check" "Запустите проверку качества задержки сети")" "https://Check.Place" -N
+    run_remote_script "$(localized_text "运行网络质量检测（低流量）" "Run network quality tests (low data)" "Проверить качество сети с малым расходом трафика")" "https://Net.Check.Place" -L
     local rc=$?
     pause_after_external_script "$(localized_text "操作结束，按回车键返回测试菜单..." "When the operation is complete, press Enter to return to the test menu..." "После завершения нажмите Enter, чтобы вернуться в меню тестов...")"
     return "$rc"

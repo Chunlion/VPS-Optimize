@@ -510,11 +510,8 @@ is_trusted_remote_script_url() {
             return 0
             ;;
         "https://yabs.sh"|\
-        "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh"|\
-        "https://about.superbench.pro"|\
-        "https://bench.sh"|\
         "https://check.unlock.media"|\
-        "https://Check.Place"|\
+        "https://Net.Check.Place"|\
         "https://raw.githubusercontent.com/Cd1s/network-latency-tester/main/latency.sh"|\
         "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh"|\
         "https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh"|\
@@ -533,7 +530,6 @@ is_trusted_remote_script_url() {
         "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh"|\
         "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh"|\
         "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh"|\
-        "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"|\
         "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh")
             echo "$(localized_text "项目内置硬编码外部脚本源" "Project built-in hardcoded external script source" "Встроенный в проект жестко закодированный внешний источник сценария")"
             return 0
@@ -18422,13 +18418,12 @@ func_test_scripts() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${BOLD}📊 VPS 测速与质量检测${PLAIN}" "${BOLD}📊 VPS speed and quality tests${PLAIN}" "${BOLD}📊 Тесты скорости и качества VPS${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${GREEN}  1. YABS 硬件性能测试      ${YELLOW}  2. SuperBench 综合测速${PLAIN}" "${GREEN}  1. YABS hardware test      ${YELLOW}  2. SuperBench${PLAIN}" "${GREEN}  1. Тест оборудования YABS  ${YELLOW}  2. SuperBench${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  3. bench.sh 基础测试      ${YELLOW}  4. 融合怪详细测速${PLAIN}" "${GREEN}  3. bench.sh                 ${YELLOW}  4. ECS comprehensive test${PLAIN}" "${GREEN}  3. bench.sh                 ${YELLOW}  4. Комплексный тест ECS${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. YABS 硬件性能测试${PLAIN}" "${GREEN}  1. YABS hardware test${PLAIN}" "${GREEN}  1. Тест оборудования YABS${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  5. 三网回程路由测试       ${YELLOW}  6. IP 质量 / 欺诈度检测${PLAIN}" "${GREEN}  5. China carrier routes     ${YELLOW}  6. IP quality / fraud score${PLAIN}" "${GREEN}  5. Маршруты операторов Китая ${YELLOW}  6. Качество IP / риск мошенничества${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  7. NodeSeek 综合测试      ${YELLOW}  8. 流媒体解锁检测${PLAIN}" "${GREEN}  7. NodeSeek test            ${YELLOW}  8. Streaming access test${PLAIN}" "${GREEN}  7. Тест NodeSeek            ${YELLOW}  8. Доступ к стриминговым сервисам${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  7. NodeQuality 完整报告（耗时） ${YELLOW}  8. 流媒体解锁检测${PLAIN}" "${GREEN}  7. NodeQuality full report (slow) ${YELLOW}  8. Streaming access test${PLAIN}" "${GREEN}  7. Полный отчёт NodeQuality (долго) ${YELLOW}  8. Доступ к стриминговым сервисам${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  9. TcpQuality TCP 质量测试${PLAIN}" "${GREEN}  9. TcpQuality TCP test${PLAIN}" "${GREEN}  9. Тест TCP через TcpQuality${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 10. 服务器带宽测试         ${YELLOW} 11. iperf3 单线程测试${PLAIN}" "${GREEN} 10. Server bandwidth test    ${YELLOW} 11. iperf3 single-stream test${PLAIN}" "${GREEN} 10. Тест пропускной способности ${YELLOW} 11. Однопоточный тест iperf3${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 12. 国际互联速度测试       ${YELLOW} 13. 网络延迟质量检测${PLAIN}" "${GREEN} 12. International speed test ${YELLOW} 13. Network latency and quality${PLAIN}" "${GREEN} 12. Международный тест скорости ${YELLOW} 13. Задержка и качество сети${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 10. 服务器带宽测试         ${YELLOW} 11. iperf3 单线程（需服务端）${PLAIN}" "${GREEN} 10. Server bandwidth test    ${YELLOW} 11. iperf3 single stream (server required)${PLAIN}" "${GREEN} 10. Тест пропускной способности ${YELLOW} 11. iperf3: один поток (нужен сервер)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 12. 网站延迟与 DNS 检测    ${YELLOW} 13. 网络质量检测（低流量）${PLAIN}" "${GREEN} 12. Website latency and DNS  ${YELLOW} 13. Network quality (low data)${PLAIN}" "${GREEN} 12. Задержка сайтов и DNS    ${YELLOW} 13. Качество сети (мало трафика)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -18437,13 +18432,10 @@ func_test_scripts() {
         local ran_test=false
         read_trimmed t "$(localized_text "选择测试: " "Select a test: " "Выберите тест: ")"
         case $t in
-            1) ran_test=true; run_remote_script "$(localized_text "运行 YABS 硬件性能测试" "Run the YABS hardware performance test" "Запустите тест производительности оборудования YABS.")" "https://yabs.sh" ;;
-            2) ran_test=true; run_remote_script "$(localized_text "运行 SuperBench 综合测速" "Run SuperBench comprehensive speed test" "Запустите комплексный тест скорости SuperBench")" "https://about.superbench.pro" ;;
-            3) ran_test=true; run_remote_script "$(localized_text "运行 bench.sh 基础测试" "Run bench.sh basic test" "Запустите базовый тест Bench.sh")" "https://bench.sh" ;;
-            4) ran_test=true; run_remote_script "$(localized_text "运行融合怪详细测速" "Run the fusion monster detailed speed test" "Запустите подробный тест скорости Fusion Monster")" "https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh" ;;
+            1) ran_test=true; run_remote_script "$(localized_text "运行 YABS 硬件性能测试" "Run the YABS hardware performance test" "Запустите тест производительности оборудования YABS.")" "https://yabs.sh" -i ;;
             5) ran_test=true; run_remote_script "$(localized_text "运行三网回程路由测试" "Run the three-network backhaul routing test" "Запустите тест транспортной маршрутизации для трех сетей.")" "https://raw.githubusercontent.com/zhanghanyun/backtrace/main/install.sh" ;;
             6) ran_test=true; run_remote_script "$(localized_text "运行 IP 质量 / 欺诈度检测" "Run IP quality/fraud detection" "Запустите качество IP/обнаружение мошенничества")" "https://IP.Check.Place" ;;
-            7) ran_test=true; run_remote_script "$(localized_text "运行 NodeSeek 综合测试" "Run NodeSeek synthetic tests" "Запуск синтетических тестов NodeSeek")" "https://run.NodeQuality.com" ;;
+            7) ran_test=true; run_remote_script "$(localized_text "运行 NodeQuality 完整报告" "Run the NodeQuality full report" "Сформировать полный отчёт NodeQuality")" "https://run.NodeQuality.com" ;;
             8) ran_test=true; run_remote_script "$(localized_text "运行流媒体解锁检测" "Run streaming unblock detection" "Запустить обнаружение разблокировки потоковой передачи")" "https://check.unlock.media" ;;
             9) ran_test=true; run_remote_script "$(localized_text "运行 TcpQuality TCP 质量测试" "Run the TcpQuality TCP quality test" "Запустите тест качества TcpQuality TCP.")" "https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh" ;;
             10) func_server_bandwidth_test; continue ;;
@@ -18540,7 +18532,7 @@ func_iperf3_single_thread_test() {
 
 func_international_speed_test() {
     clear
-    run_remote_script "$(localized_text "运行国际互联速度测试" "Run an international internet speed test" "Запустите международный тест скорости интернета")" \
+    run_remote_script "$(localized_text "运行网站延迟与 DNS 检测" "Run website latency and DNS tests" "Проверить задержку сайтов и DNS")" \
         "https://raw.githubusercontent.com/Cd1s/network-latency-tester/main/latency.sh"
     local rc=$?
     pause_after_external_script "$(localized_text "操作结束，按回车键返回测试菜单..." "When the operation is complete, press Enter to return to the test menu..." "После завершения нажмите Enter, чтобы вернуться в меню тестов...")"
@@ -18549,7 +18541,7 @@ func_international_speed_test() {
 
 func_network_latency_quality_test() {
     clear
-    run_remote_script "$(localized_text "运行网络延迟质量检测" "Run network latency quality check" "Запустите проверку качества задержки сети")" "https://Check.Place" -N
+    run_remote_script "$(localized_text "运行网络质量检测（低流量）" "Run network quality tests (low data)" "Проверить качество сети с малым расходом трафика")" "https://Net.Check.Place" -L
     local rc=$?
     pause_after_external_script "$(localized_text "操作结束，按回车键返回测试菜单..." "When the operation is complete, press Enter to return to the test menu..." "После завершения нажмите Enter, чтобы вернуться в меню тестов...")"
     return "$rc"
@@ -18821,32 +18813,6 @@ func_xray_manage() {
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
 }
 
-# ---------------------------------------------------------
-# 17. DNS 流媒体分流解锁 (Alice DNS)
-# ---------------------------------------------------------
-func_dns_unlock() {
-    clear
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}🔓 DNS 流媒体分流解锁 (DNS-Alice-Unlock)${PLAIN}" "${BOLD}🔓 DNS Streaming media split unlock (DNS-Alice-Unlock)${PLAIN}" "${BOLD}🔓 DNS Разделенная разблокировка потокового мультимедиа (DNS-Alice-Unlock)${PLAIN}")"
-    echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${YELLOW}功能介绍与使用说明：${PLAIN}" "${YELLOW}Purpose and instructions for use:${PLAIN}" "${YELLOW}Описание функции и инструкции по использованию:${PLAIN}")"
-    echo -e "$(localized_text " 1. 该脚本通过修改本地 DNS 解析，实现 Netflix, Disney+ 等特定区域流媒体的解锁。" "1. This script modifies the local DNS parsing to unlock streaming media in specific regions such as Netflix and Disney+." "1. Этот скрипт изменяет локальный анализ DNS, чтобы разблокировать потоковое мультимедиа в определенных регионах, таких как Netflix и Disney+.")"
-    echo -e "$(localized_text " 2. ${GREEN}仅对流媒体域名进行分流${PLAIN}，不影响您的原生 IP 和普通上网速度。" "2. ${GREEN}Only offloads the streaming domain${PLAIN} and does not affect your native IP and normal Internet speed." "2. ${GREEN}только разгружает потоковое доменное имя${PLAIN} и не влияет на ваш собственный IP-адрес и нормальную скорость Интернета.")"
-    echo -e "$(localized_text " 3. 项目地址：${BLUE}https://github.com/Jimmyzxk/DNS-Alice-Unlock/${PLAIN}" "3. Project address: ${BLUE}Https://github.com/Jimmyzxk/DNS-Alice-Unlock/${PLAIN}" "3. Адрес проекта: ${BLUE}https://github.com/Jimmyzxk/DNS-Alice-Unlock/${PLAIN}.")"
-    echo -e "------------------------------------------------"
-    echo -e "$(localized_text "${RED}⚠️  风险提示：运行此脚本会修改您服务器的 /etc/resolv.conf 配置。${PLAIN}" "${RED}⚠️ Risk warning: Running this script will modify the /etc/resolv.conf configuration of your server.${PLAIN}" "${RED}⚠️ Предупреждение о риске: запуск этого сценария приведет к изменению конфигурации /etc/resolv.conf вашего сервера.${PLAIN}")"
-    echo -e "$(localized_text "    如果您不懂如何自行配置解锁机的 DNS 记录，请务必先查阅项目文档！" "If you don’t know how to configure the DNS record of the unlocking machine yourself, please be sure to check the project documentation first!" "Если вы не знаете, как самостоятельно настроить запись DNS устройства разблокировки, обязательно сначала ознакомьтесь с проектной документацией!")"
-    echo -e "------------------------------------------------"
-    
-    if confirm_danger "$(localized_text "运行 Alice DNS 解锁脚本" "Run the Alice DNS unlock script" "Запустить сценарий Alice DNS Unlock")" \
-        "$(localized_text "执行远程脚本并修改 /etc/resolv.conf" "run a remote script and modify /etc/resolv.conf" "запустить удалённый сценарий и изменить /etc/resolv.conf")" \
-        "$(localized_text "运行前备份 DNS 配置；恢复方式以项目文档为准" "back up the DNS configuration first; follow the project documentation to restore it" "сначала сохраните конфигурацию DNS; восстановление выполняйте по документации проекта")"; then
-        run_remote_script "$(localized_text "运行 Alice DNS 解锁脚本" "Run the Alice DNS unlocking script" "Запустите скрипт разблокировки Алисы DNS.")" "https://raw.githubusercontent.com/Jimmyzxk/DNS-Alice-Unlock/refs/heads/main/dns-unlock.sh"
-    else
-        echo -e "$(localized_text "${BLUE}已安全取消操作。${PLAIN}" "${BLUE}The operation has been safely canceled.${PLAIN}" "${BLUE}Операция была благополучно отменена.${PLAIN}")"
-    fi
-    pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
-}
 # ---------------------------------------------------------
 # 新增功能：安装 IP Sentinel (防止 IP 送中)
 # ---------------------------------------------------------
@@ -23654,7 +23620,7 @@ show_net_kernel_help() {
     echo "$(localized_text "6 ZRAM / Swap：适合小内存 VPS。" "6 ZRAM / Swap: suitable for small memory VPS." "6 ZRAM / Swap: подходит для VPS с небольшой памятью.")"
     echo "$(localized_text "7 内核管理：安装、切换或清理内核；操作前确认快照和救援控制台可用。" "7 Kernel management: install, switch, or remove kernels. Confirm snapshot and rescue-console access first." "7 Управление ядрами: установка, смена и удаление ядер. Сначала проверьте доступ к снимку и аварийной консоли.")"
     echo "$(localized_text "8 BBR 直连/落地优化：按上传带宽和主要 RTT 计算缓冲区、连接队列与网卡积压参数。" "8 BBR direct/relay tuning: Size buffers, connection queues, and device backlog from upload bandwidth and primary RTT." "8 Настройка BBR для прямого/промежуточного сервера: рассчитать буферы, очереди соединений и сетевого устройства по отдаче и основному RTT.")"
-    echo "$(localized_text "带宽、iperf3、国际互联和网络质量测试已移至主菜单 [12 测速与质量检测]。" "Bandwidth, iperf3, international connectivity, and network-quality tests are under main menu [12 Speed and quality tests]." "Тесты пропускной способности, iperf3, международной связи и качества сети находятся в пункте [12 Тесты скорости и качества] главного меню.")"
+    echo "$(localized_text "带宽、iperf3、网站延迟/DNS 和网络质量测试已移至主菜单 [12 测速与质量检测]。" "Bandwidth, iperf3, website latency/DNS, and network-quality tests are under main menu [12 Speed and quality tests]." "Тесты пропускной способности, iperf3, задержки сайтов/DNS и качества сети находятся в пункте [12 Тесты скорости и качества] главного меню.")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
 }
 
@@ -23784,7 +23750,7 @@ func_panel_deploy_menu() {
         echo -e "$(localized_text " ${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari 监控${PLAIN}          ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}        ${BOLD}${GREEN}18.${PLAIN} ${BOLD}妙妙屋X${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari monitoring${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN} ${BOLD}${GREEN}18.${PLAIN} ${BOLD}MiaomiaowuX${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN} ${BOLD}${GREEN}18.${PLAIN} ${BOLD}MiaomiaowuX${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 网络 / 监控${PLAIN}" "${BOLD}▶ Network / Monitoring${PLAIN}" "${BOLD}▶ Сеть / Мониторинг${PLAIN}")"
-        echo -e "$(localized_text " ${BOLD}${GREEN}11.${PLAIN} ${BOLD}DNS 解锁${PLAIN}            ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN}         ${BOLD}${GREEN}13.${PLAIN} ${BOLD}端口流量监控（dog）${PLAIN}" "${BOLD}${GREEN}11.${PLAIN} ${BOLD}DNS Unlock${PLAIN} ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Per-port traffic (dog)${PLAIN}" "${BOLD}${GREEN}11.${PLAIN} ${BOLD}Разблокировка DNS${PLAIN} ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Трафик по портам (dog)${PLAIN}")"
+        echo -e "$(localized_text " ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN}         ${BOLD}${GREEN}13.${PLAIN} ${BOLD}端口流量监控（dog）${PLAIN}" "${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Per-port traffic (dog)${PLAIN}" "${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Трафик по портам (dog)${PLAIN}")"
         echo -e "$(localized_text " ${BOLD}${GREEN}14.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}14.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}14.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
@@ -23804,7 +23770,6 @@ func_panel_deploy_menu() {
             8) func_miaomiaowu_menu ;;
             9) func_substore_menu ;;
             10) func_komari_menu ;;
-            11) func_dns_unlock ;;
             12) func_ip_sentinel ;;
             13) func_port_dog ;;
             14) func_vps_bot_x ;;
