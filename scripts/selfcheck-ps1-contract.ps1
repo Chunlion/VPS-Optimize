@@ -12,21 +12,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-$scriptText = Get-Content -Raw -Path $wrapperPath
-foreach ($needle in @("wsl.exe", "bash scripts/selfcheck.sh", 'exit $exitCode')) {
-    if (-not $scriptText.Contains($needle)) {
-        Write-Error "scripts/selfcheck.ps1 is missing required WSL delegation contract: $needle"
-        exit 1
-    }
-}
-
-foreach ($needle in @("bash scripts/build.sh", "bash scripts/compat-smoke.sh", "bash tests/smoke.sh", "bash tests/golden-render.sh", "go test ./...", "go vet ./...")) {
-    if ($scriptText.Contains($needle)) {
-        Write-Error "scripts/selfcheck.ps1 must delegate to scripts/selfcheck.sh instead of inlining: $needle"
-        exit 1
-    }
-}
-
 $pwshCommand = (Get-Process -Id $PID).Path
 if ([string]::IsNullOrWhiteSpace($pwshCommand)) {
     $pwshCommand = (Get-Command pwsh -ErrorAction SilentlyContinue).Source

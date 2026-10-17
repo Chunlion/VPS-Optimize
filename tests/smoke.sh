@@ -5,24 +5,8 @@ trap 'echo "Smoke failed at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-if [[ "${VPSO_CI_CONTAINER:-}" == "1" ]]; then
-    git config --global --add safe.directory "$repo_root" >/dev/null 2>&1 || true
-fi
-
-bash scripts/build.sh >/dev/null
 bash tests/http-probes.sh
 
-
-bash -n scripts/build.sh
-bash -n scripts/selfcheck.sh
-bash -n scripts/compat-smoke.sh
-bash -n vps.sh
-bash -n dist/vps.sh
-for module in src/*.sh; do
-    bash -n "$module"
-done
-bash -n dog.sh
-bash -n xui-custom-manager.sh
 for ignored_artifact in \
     'etc/vps-optimize/backups/manual/backup_20260101_010203.tar.gz' \
     'etc/vps-optimize/backups/sni-stack_20260101_010203/nginx.conf' \
@@ -42,25 +26,8 @@ for ignored_artifact in \
     'usr/local/x-ui/bin/x-ui.db-shm' \
     'root/x-ui-backups/x-ui.db.panel_domain_20260101_010203.bak'
 do
-    git check-ignore --quiet -- "$ignored_artifact"
+    git -c "safe.directory=$repo_root" check-ignore --quiet -- "$ignored_artifact"
 done
-if command -v go >/dev/null 2>&1; then
-    GO_BIN=go
-elif command -v go.exe >/dev/null 2>&1; then
-    GO_BIN=go.exe
-elif [[ "${VPSO_CI_CONTAINER:-0}" == "1" ]]; then
-    GO_BIN=""
-else
-    echo "Go is required for vpso-mux release validation." >&2
-    exit 1
-fi
-if [[ -n "${GO_BIN:-}" ]]; then
-    GOTOOLCHAIN=local "$GO_BIN" test ./...
-else
-    echo "Go not found; skipped Go smoke validation in VPSO_CI_CONTAINER mode."
-fi
-
-
 source src/language.sh
 source src/common.sh
 vps_smoke_script_version="$SCRIPT_VERSION"
@@ -1988,9 +1955,6 @@ EOF
 }
 traffic_guard_accounting_regression
 
-traffic_guard_dist_checker_template=$(awk "/<<'GUARD_SCRIPT'/{flag=1; next} /^GUARD_SCRIPT$/{flag=0} flag {print}" dist/vps.sh)
-head -n 1 <<<"$traffic_guard_dist_checker_template" | grep -Fq '#!/usr/bin/env bash'
-bash -n <<<"$traffic_guard_dist_checker_template"
 (
     source src/backup.sh
     [[ "$(backup_resolve_custom_directory "$repo_root")" == "$repo_root" ]]

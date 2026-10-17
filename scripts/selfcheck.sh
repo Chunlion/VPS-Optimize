@@ -9,10 +9,8 @@ echo "==> build release artifact"
 bash scripts/build.sh
 
 echo "==> bash syntax"
-bash -n scripts/build.sh scripts/selfcheck.sh scripts/compat-smoke.sh scripts/validate-traffic-guard-checker.sh tests/golden-render.sh tests/smoke.sh
-bash -n vps.sh dist/vps.sh dog.sh xui-custom-manager.sh
-for module in src/*.sh; do
-    bash -n "$module"
+for script in vps.sh dist/vps.sh dog.sh xui-custom-manager.sh src/*.sh scripts/*.sh tests/*.sh; do
+    bash -n "$script"
 done
 
 echo "==> golden render"

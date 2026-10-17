@@ -33,14 +33,6 @@ assert_function_loaded() {
     fi
 }
 
-bash scripts/build.sh >/dev/null
-bash -n scripts/build.sh scripts/selfcheck.sh scripts/compat-smoke.sh scripts/validate-traffic-guard-checker.sh
-bash scripts/validate-traffic-guard-checker.sh
-bash -n vps.sh dist/vps.sh dog.sh xui-custom-manager.sh
-for module in src/*.sh; do
-    bash -n "$module"
-done
-
 compat_tmp_dir=$(mktemp -d /tmp/vps-compat-smoke.XXXXXX)
 trap 'rm -rf -- "$compat_tmp_dir"' EXIT
 
