@@ -5,6 +5,10 @@ trap 'echo "Smoke failed at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+if [[ "${VPSO_CI_CONTAINER:-}" == "1" ]]; then
+    git config --global --add safe.directory "$repo_root"
+fi
+
 bash tests/http-probes.sh
 
 for ignored_artifact in \
@@ -26,7 +30,7 @@ for ignored_artifact in \
     'usr/local/x-ui/bin/x-ui.db-shm' \
     'root/x-ui-backups/x-ui.db.panel_domain_20260101_010203.bak'
 do
-    git -c "safe.directory=$repo_root" check-ignore --quiet -- "$ignored_artifact"
+    git check-ignore --quiet -- "$ignored_artifact"
 done
 source src/language.sh
 source src/common.sh
