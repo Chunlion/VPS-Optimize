@@ -111,6 +111,57 @@ assert_file_not_contains "$gai_test_file" 'precedence ::ffff:0:0/96  100'
 [[ "$(extract_speedtest_upload_mbps 'Upload: 1.25 Gbit/s')" == "1250" ]]
 [[ "$(extract_speedtest_download_mbps 'Download: 850.6 Mbps')" == "851" ]]
 [[ "$(extract_speedtest_latency_ms 'Latency: 12.6 ms (0.8 ms jitter)')" == "13" ]]
+(
+    PATH="$compat_tmp_dir"
+    MOCK_SPEEDTEST_VERSION='Speedtest by Ookla 1.2.0'
+    speedtest() {
+        if [[ "$1" == '--version' ]]; then
+            printf '%s\n' "$MOCK_SPEEDTEST_VERSION"
+        else
+            printf 'speedtest %s\n' "$*"
+            return "${MOCK_SPEEDTEST_RC:-0}"
+        fi
+    }
+    speedtest-cli() { printf 'speedtest-cli %s\n' "$*"; }
+    [[ "$(run_speedtest_client)" == 'speedtest --accept-license --accept-gdpr' ]]
+    MOCK_SPEEDTEST_VERSION='speedtest-cli 2.1.3'
+    [[ "$(run_speedtest_client)" == 'speedtest --secure' ]]
+    MOCK_SPEEDTEST_RC=23
+    if run_speedtest_client >/dev/null; then exit 1; else [[ "$?" == 23 ]]; fi
+    unset -f speedtest
+    [[ "$(run_speedtest_client)" == 'speedtest-cli --secure' ]]
+    unset -f speedtest-cli
+    if run_speedtest_client; then exit 1; else [[ "$?" == 127 ]]; fi
+)
+(
+    source src/diagnostics_network.sh
+    clear() { :; }
+    print_breadcrumb() { :; }
+    pause_return() { :; }
+    ensure_speedtest_client() { return 0; }
+    run_speedtest_client() { return "$MOCK_TEST_RC"; }
+    MOCK_TEST_RC=23
+    if func_server_bandwidth_test >/dev/null; then exit 1; else [[ "$?" == 23 ]]; fi
+    MOCK_TEST_RC=0
+    func_server_bandwidth_test >/dev/null
+
+    iperf3() { IPERF_ARGS="$*"; return "$MOCK_TEST_RC"; }
+    IPERF_ARGS=''
+    func_iperf3_single_thread_test >/dev/null <<< $'[2001:db8::1]\n5201\n2\n08'
+    [[ "$IPERF_ARGS" == '-c 2001:db8::1 -p 5201 -P 1 -t 8 -f m -R' ]]
+    IPERF_ARGS=''
+    if func_iperf3_single_thread_test >/dev/null <<< $'test.example.com\n5201\n1\n0301'; then
+        exit 1
+    fi
+    [[ -z "$IPERF_ARGS" ]]
+    MOCK_TEST_RC=17
+    if func_iperf3_single_thread_test >/dev/null <<< $'test.example.com\n\n\n'; then
+        exit 1
+    else
+        [[ "$?" == 17 ]]
+    fi
+    [[ "$IPERF_ARGS" == '-c test.example.com -p 5201 -P 1 -t 30 -f m' ]]
+)
 [[ "$(bbr_direct_buffer_mb_for_rtt 100 80)" == "8" ]]
 [[ "$(bbr_direct_buffer_mb_for_rtt 1000 80)" == "20" ]]
 [[ "$(bbr_direct_buffer_mb_for_rtt 1000 250)" == "60" ]]

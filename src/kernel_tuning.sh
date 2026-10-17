@@ -12,7 +12,11 @@ VPSO_BBR_DIRECT_CONF="/etc/sysctl.d/99-vps-optimize-bbr-direct.conf"
 
 speedtest_client_kind() {
     if command -v speedtest >/dev/null 2>&1; then
-        echo "ookla"
+        if [[ "$(speedtest --version 2>&1)" == *speedtest-cli* ]]; then
+            echo "speedtest-python"
+        else
+            echo "ookla"
+        fi
     elif command -v speedtest-cli >/dev/null 2>&1; then
         echo "speedtest-cli"
     else
@@ -33,6 +37,7 @@ ensure_speedtest_client() {
 run_speedtest_client() {
     case "$(speedtest_client_kind 2>/dev/null)" in
         ookla) speedtest --accept-license --accept-gdpr ;;
+        speedtest-python) speedtest --secure ;;
         speedtest-cli) speedtest-cli --secure ;;
         *) return 127 ;;
     esac

@@ -226,6 +226,7 @@ func_test_scripts() {
 }
 
 func_server_bandwidth_test() {
+    local rc=0
     clear
     echo -e "${CYAN}================================================${PLAIN}"
     print_breadcrumb "$(localized_text "测速与质量检测 > 服务器带宽测试" "Speed and quality tests > Server bandwidth test" "Тесты скорости и качества > Тест пропускной способности")"
@@ -243,9 +244,11 @@ func_server_bandwidth_test() {
     if run_speedtest_client; then
         echo -e "$(localized_text "${GREEN}✅ 带宽测试完成。${PLAIN}" "${GREEN}✅ Bandwidth test completed.${PLAIN}" "${GREEN}✅ Тест пропускной способности завершен.${PLAIN}")"
     else
+        rc=$?
         echo -e "$(localized_text "${RED}带宽测试失败，请检查网络连通性或更换测速时段。${PLAIN}" "${RED}Bandwidth test failed, please check the network connectivity or change the speed test period.${PLAIN}" "${RED}Проверка пропускной способности не удалась. Проверьте подключение к сети или измените период проверки скорости.${PLAIN}")"
     fi
     pause_return
+    return "$rc"
 }
 
 func_iperf3_single_thread_test() {
@@ -261,10 +264,11 @@ func_iperf3_single_thread_test() {
         return 1
     fi
 
-    local target port direction duration
+    local target port direction duration rc=0
     local -a args
     read_trimmed target "$(localized_text "请输入已运行 iperf3 服务端的 IP 或域名: " "Please enter the IP or domain of the running iperf3 server:" "Пожалуйста, введите IP или доменное имя работающего сервера iperf3:")"
-    if ! is_valid_backend_addr "$target"; then
+    target="$(normalize_ip_input "$target")"
+    if ! is_valid_backend_addr "$target" && ! is_valid_ip_cidr "$target"; then
         echo -e "$(localized_text "${RED}目标地址格式无效。${PLAIN}" "${RED}Destination address format is invalid.${PLAIN}" "${RED}Неверный формат адреса назначения .${PLAIN}")"
         pause_return
         return 1
@@ -285,11 +289,12 @@ func_iperf3_single_thread_test() {
 
     read_trimmed duration "$(localized_text "请输入测试时长（秒，1-300）[30]: " "Please enter the test duration (seconds, 1-300) [30]:" "Пожалуйста, введите продолжительность теста (секунды, 1–300) [30]:")"
     duration="${duration:-30}"
-    if [[ ! "$duration" =~ ^[0-9]+$ ]] || (( duration < 1 || duration > 300 )); then
+    if [[ ! "$duration" =~ ^[0-9]+$ ]] || (( 10#$duration < 1 || 10#$duration > 300 )); then
         echo -e "$(localized_text "${RED}测试时长必须为 1-300 秒。${PLAIN}" "${RED}Test duration must be 1-300 seconds.${PLAIN}" "${RED}Продолжительность теста должна составлять 1–300 секунд.${PLAIN}")"
         pause_return
         return 1
     fi
+    duration=$((10#$duration))
 
     args=(-c "$target" -p "$port" -P 1 -t "$duration" -f m)
     [[ "$direction" == "2" ]] && args+=(-R)
@@ -298,9 +303,11 @@ func_iperf3_single_thread_test() {
     if iperf3 "${args[@]}"; then
         echo -e "$(localized_text "${GREEN}✅ iperf3 单线程测试完成。${PLAIN}" "${GREEN}✅ iperf3 single-thread test completed.${PLAIN}" "${GREEN}✅ iperf3 Однопоточный тест завершен.${PLAIN}")"
     else
+        rc=$?
         echo -e "$(localized_text "${RED}测试失败，请检查服务端监听、防火墙和端口。${PLAIN}" "${RED}Test failed, please check the server listening, firewall and port.${PLAIN}" "${RED}Тест не пройден, проверьте прослушивающий сервер, брандмауэр и порт.${PLAIN}")"
     fi
     pause_return
+    return "$rc"
 }
 
 func_international_speed_test() {
