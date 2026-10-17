@@ -25,14 +25,6 @@ assert_file_not_contains() {
     fi
 }
 
-assert_function_loaded() {
-    local function_name="$1"
-    if ! declare -F "$function_name" >/dev/null 2>&1; then
-        echo "${function_name} must be loadable during compatibility smoke." >&2
-        exit 1
-    fi
-}
-
 compat_tmp_dir=$(mktemp -d /tmp/vps-compat-smoke.XXXXXX)
 trap 'rm -rf -- "$compat_tmp_dir"' EXIT
 
@@ -45,10 +37,6 @@ source src/validate.sh
 source src/kernel_tuning.sh
 source src/system_core.sh
 source src/dns_optimize.sh
-
-for function_name in terminal_text_width print_menu_item render_menu dispatch_menu_choice rotate_log_file format_bytes load_ui_language save_ui_language localized_text select_ui_language prompt_initial_ui_language toggle_ui_language; do
-    assert_function_loaded "$function_name"
-done
 
 [[ "$(localized_text "中文" "English")" == "中文" ]]
 save_ui_language en

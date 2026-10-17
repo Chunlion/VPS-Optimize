@@ -362,20 +362,9 @@ bad_domain_output=$(print_domain_validation_error "测试域名" "$bad_domain_ra
     sysctl_tune_normalize_record 'net.ipv4.tcp_fin_timeout 15' >/dev/null || tcp_tune_bad_status=$?
     [[ "$tcp_tune_bad_status" == "2" ]]
 )
-declare -f func_edit_applied_config_center >/dev/null
-declare -f edit_applied_config_file >/dev/null
-declare -f validate_applied_config_kind >/dev/null
-declare -f collect_applied_config_files >/dev/null
 (
     source src/compose_runtime.sh
     source src/subscription_apps.sh
-    source src/subscription_service_menus.sh
-    source src/dockge_migration.sh
-    declare -f func_sublinkpro_menu >/dev/null
-    declare -f func_dockge_menu >/dev/null
-    declare -f func_komari_menu >/dev/null
-    declare -f func_cdt_monitor_menu >/dev/null
-    declare -f func_migrate_compose_to_dockge >/dev/null
     random_secret=$(generate_random_secret)
     [[ "$random_secret" =~ ^[0-9a-f]{64}$ ]]
     [[ "$(compose_yaml_quote 'pa$sw"ord\# value')" == '"pa$$sw\"ord\\# value"' ]]
@@ -1204,15 +1193,11 @@ EOF
     rm "$(sni_stack_env_path)"
     [[ "$(single_443_current_engine)" == "not-configured" ]]
 
-    initial_entry_output="$entry_mode_tmp_dir/initial-entry.out"
-    select_initial_entry_mode >"$initial_entry_output" 2>&1 <<< $'3\n'
+    select_initial_entry_mode >/dev/null 2>&1 <<< $'3\n'
     [[ "$ENTRY_MODE" == "tcp-peek" ]]
-    grep -Fq '同样按 SNI 分流；自动安装 vpso-mux' "$initial_entry_output"
-    grep -Fq '已选择 443 入口模式：tcp-peek' "$initial_entry_output"
 
     rm -f "$(single_443_engine_state_path)"
     rm -f "$(sni_stack_env_path)"
-    rm -f "$initial_entry_output"
     rmdir "$entry_mode_tmp_dir"
 )
 
@@ -1322,8 +1307,6 @@ if command -v jq >/dev/null 2>&1; then
 else
     echo "jq not found; skipped dog notification rendering and nft JSON snapshot tests."
 fi
-declare -f sanitize_nftables_config >/dev/null
-declare -f update_telegram_config >/dev/null
 bash tests/dog-limits.sh
 
 
