@@ -7,9 +7,9 @@ save_and_offer_reapply_sni_stack() {
     env_backup=""
     if [[ -f "$env_file" ]]; then
         env_backup="${env_file}.pre_reapply_$(date +%Y%m%d_%H%M%S)"
-        cp -p "$env_file" "$env_backup" 2>/dev/null || env_backup=""
+        cp -p "$env_file" "$env_backup" || return 1
     fi
-    save_sni_stack_env
+    save_sni_stack_env || return 1
     echo -e "$(localized_text "${GREEN}✅ 已保存新的 443端口复用运行参数。${PLAIN}" "${GREEN}✅ New Port 443 Reuse operating parameters have been saved.${PLAIN}" "${GREEN}. Сохранены новые 443 отдельных рабочих параметра.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的域名、端口或路径。${PLAIN}" "${YELLOW}Tips: You need to reapply after saving, so that Nginx/Caddy will use the new domain, port or path.${PLAIN}" "${YELLOW}Советы: вам необходимо повторно подать заявку после сохранения, чтобы Nginx/Caddy использовал новое имя домена, порт или путь.${PLAIN}")"
     if confirm_danger \
@@ -18,7 +18,7 @@ save_and_offer_reapply_sni_stack() {
         "$(localized_text "失败时自动恢复本次修改前的参数文件" "restore the parameter file saved before this change if reapplication fails" "при ошибке восстановить файл параметров, сохранённый до этого изменения")"; then
         if ! reapply_sni_stack_from_env --yes; then
             if [[ -n "$env_backup" && -f "$env_backup" ]]; then
-                cp -p "$env_backup" "$env_file" 2>/dev/null || true
+                cp -p "$env_backup" "$env_file" || return 1
                 echo -e "$(localized_text "${YELLOW}⚠️ 已恢复重新应用前的参数文件：${env_backup}${PLAIN}" "${YELLOW}⚠️ The parameter file before re-application has been restored: ${env_backup}${PLAIN}" "${YELLOW}⚠️ Файл параметров до повторного применения восстановлен: ${env_backup}${PLAIN}")"
             fi
             return 1

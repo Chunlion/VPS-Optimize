@@ -1170,7 +1170,6 @@ EOF
     [[ "$(normalize_entry_mode_name "nginx_stream")" == "nginx-stream" ]]
     [[ "$(normalize_entry_mode_name "xray_fallback")" == "xray-fallback" ]]
     [[ "$(normalize_entry_mode_name "tcp_peek")" == "tcp-peek" ]]
-    [[ "$(entry_mode_engine_name "tcp_peek")" == "tcp-peek" ]]
 
     printf '%s\n' "ENTRY_MODE='tcp_peek'" > "$(sni_stack_env_path)"
     [[ "$(get_entry_mode)" == "tcp-peek" ]]
@@ -1190,6 +1189,16 @@ EOF
     grep -Fq "engine='nginx-stream'" "$(single_443_engine_state_path)"
     printf '%s\n' "engine='xray-fallback'" > "$(single_443_engine_state_path)"
     [[ "$(single_443_current_engine)" == "xray-fallback" ]]
+
+    printf '%s\n' "engine='unknown'" > "$(single_443_engine_state_path)"
+    [[ "$(single_443_current_engine)" == "invalid:unknown" ]]
+    rm "$(single_443_engine_state_path)"
+    printf '%s\n' "ENTRY_MODE='unknown'" > "$(sni_stack_env_path)"
+    [[ "$(single_443_current_engine)" == "invalid:unknown" ]]
+    printf '%s\n' '# legacy configuration without ENTRY_MODE' > "$(sni_stack_env_path)"
+    [[ "$(single_443_current_engine)" == "nginx-stream" ]]
+    rm "$(sni_stack_env_path)"
+    [[ "$(single_443_current_engine)" == "not-configured" ]]
 
     initial_entry_output="$entry_mode_tmp_dir/initial-entry.out"
     select_initial_entry_mode >"$initial_entry_output" 2>&1 <<< $'3\n'

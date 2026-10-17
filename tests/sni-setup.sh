@@ -234,4 +234,42 @@ PY
         done
     done
 )
+(
+    profile_env="$tmp_dir/profile.env"
+    profile_output="$tmp_dir/profile.out"
+    profile_definition=$(declare -f save_and_offer_reapply_sni_stack)
+    profile_definition=${profile_definition//\/etc\/vps-optimize\/sni-stack.env/$profile_env}
+    eval "$profile_definition"
+    printf original > "$profile_env"
+    save_called=0 confirm_called=0
+    save_sni_stack_env() { save_called=1; printf changed > "$profile_env"; }
+    confirm_danger() { confirm_called=1; }
+    reapply_sni_stack_from_env() { return 1; }
+
+    cp() { return 1; }
+    if save_and_offer_reapply_sni_stack >"$profile_output" 2>&1; then exit 1; fi
+    [[ "$save_called" == 0 && "$confirm_called" == 0 ]]
+    [[ "$(cat "$profile_env")" == original ]]
+    unset -f cp
+
+    save_sni_stack_env() { return 1; }
+    if save_and_offer_reapply_sni_stack >"$profile_output" 2>&1; then exit 1; fi
+    [[ "$confirm_called" == 0 ]]
+    [[ "$(cat "$profile_env")" == original ]]
+
+    save_sni_stack_env() { printf changed > "$profile_env"; }
+    cp() {
+        [[ "${!#}" != "$profile_env" ]] || return 1
+        command cp "$@"
+    }
+    if save_and_offer_reapply_sni_stack >"$profile_output" 2>&1; then exit 1; fi
+    [[ "$(cat "$profile_env")" == changed ]]
+    ! grep -Fq '已恢复重新应用前的参数文件' "$profile_output"
+    unset -f cp
+
+    printf original > "$profile_env"
+    if save_and_offer_reapply_sni_stack >"$profile_output" 2>&1; then exit 1; fi
+    [[ "$(cat "$profile_env")" == original ]]
+    grep -Fq '已恢复重新应用前的参数文件' "$profile_output"
+)
 echo 'SNI setup regression checks passed.'

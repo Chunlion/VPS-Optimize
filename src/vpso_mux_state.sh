@@ -28,7 +28,7 @@ yaml_quote() {
 }
 
 single_443_current_engine() {
-    local state_file raw_engine env_mode normalized
+    local state_file raw_engine normalized
     state_file=$(single_443_engine_state_path)
     if [[ -f "$state_file" ]]; then
         raw_engine=$(
@@ -38,11 +38,8 @@ single_443_current_engine() {
             printf '%s' "${engine:-}"
         )
         if [[ -n "$raw_engine" ]]; then
-            normalized=$(normalize_entry_mode_name "$raw_engine" 2>/dev/null || true)
-            if [[ -n "$normalized" ]]; then
-                if declare -F rewrite_legacy_entry_mode_assignment >/dev/null 2>&1; then
-                    rewrite_legacy_entry_mode_assignment "$state_file" "engine" "$raw_engine" 2>/dev/null || true
-                fi
+            if normalized=$(normalize_entry_mode_name "$raw_engine"); then
+                rewrite_legacy_entry_mode_assignment "$state_file" "engine" "$raw_engine" 2>/dev/null || true
                 printf '%s' "$normalized"
             else
                 printf 'invalid:%s' "$raw_engine"
@@ -50,11 +47,7 @@ single_443_current_engine() {
             return 0
         fi
     fi
-    env_mode=$(get_entry_mode)
-    case "$env_mode" in
-        "nginx-stream"|"xray-fallback"|"tcp-peek") printf '%s' "$env_mode" ;;
-        *) printf 'nginx-stream' ;;
-    esac
+    get_entry_mode
 }
 
 sni_stack_route_name() {
@@ -131,7 +124,7 @@ last_backup_id='${backup_id}'
 mux_config_path='${mux_config}'
 mux_systemd_service_name='${mux_service}'
 EOF
-    chmod 600 "$state_file" 2>/dev/null || true
+    chmod 600 "$state_file"
 }
 
 show_single_443_engine_status() {

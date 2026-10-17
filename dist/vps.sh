@@ -9603,7 +9603,7 @@ yaml_quote() {
 }
 
 single_443_current_engine() {
-    local state_file raw_engine env_mode normalized
+    local state_file raw_engine normalized
     state_file=$(single_443_engine_state_path)
     if [[ -f "$state_file" ]]; then
         raw_engine=$(
@@ -9613,11 +9613,8 @@ single_443_current_engine() {
             printf '%s' "${engine:-}"
         )
         if [[ -n "$raw_engine" ]]; then
-            normalized=$(normalize_entry_mode_name "$raw_engine" 2>/dev/null || true)
-            if [[ -n "$normalized" ]]; then
-                if declare -F rewrite_legacy_entry_mode_assignment >/dev/null 2>&1; then
-                    rewrite_legacy_entry_mode_assignment "$state_file" "engine" "$raw_engine" 2>/dev/null || true
-                fi
+            if normalized=$(normalize_entry_mode_name "$raw_engine"); then
+                rewrite_legacy_entry_mode_assignment "$state_file" "engine" "$raw_engine" 2>/dev/null || true
                 printf '%s' "$normalized"
             else
                 printf 'invalid:%s' "$raw_engine"
@@ -9625,11 +9622,7 @@ single_443_current_engine() {
             return 0
         fi
     fi
-    env_mode=$(get_entry_mode)
-    case "$env_mode" in
-        "nginx-stream"|"xray-fallback"|"tcp-peek") printf '%s' "$env_mode" ;;
-        *) printf 'nginx-stream' ;;
-    esac
+    get_entry_mode
 }
 
 sni_stack_route_name() {
@@ -9706,7 +9699,7 @@ last_backup_id='${backup_id}'
 mux_config_path='${mux_config}'
 mux_systemd_service_name='${mux_service}'
 EOF
-    chmod 600 "$state_file" 2>/dev/null || true
+    chmod 600 "$state_file"
 }
 
 show_single_443_engine_status() {
@@ -10497,12 +10490,6 @@ normalize_entry_mode_name() {
     esac
 }
 
-entry_mode_engine_name() {
-    local mode="$1"
-    mode=$(normalize_entry_mode_name "$mode") || return 1
-    echo "$mode"
-}
-
 print_entry_mode_cutover_paths() {
     local target_mode="$1"
     echo -e "$(localized_text "${BOLD}将涉及的配置路径${PLAIN}" "${BOLD}Will involve the configuration path${PLAIN}" "${BOLD}будет включать путь конфигурации.${PLAIN}")"
@@ -10997,7 +10984,6 @@ rollback_last_entry_mode() {
         return 1
     fi
     set_entry_mode "$old_mode" >/dev/null 2>&1 || true
-    write_single_443_engine_state "$(entry_mode_engine_name "$old_mode" 2>/dev/null || echo nginx-stream)" "$backup_dir"
     echo -e "$(localized_text "${GREEN}✅ 已回滚到上一次入口模式：${old_mode}${PLAIN}" "${GREEN}✅ Has rolled back to the last entry mode: ${old_mode}${PLAIN}" "${GREEN}✅ Откатился к последнему режиму входа: ${old_mode}${PLAIN}")"
 }
 
@@ -11225,7 +11211,6 @@ switch_entry_mode() {
         rollback_last_entry_mode "$backup_dir"
         return 1
     fi
-    write_single_443_engine_state "$(entry_mode_engine_name "$target_mode")" "$backup_dir"
     echo -e "$(localized_text "${GREEN}✅ 443 入口模式已切换为：${target_mode}${PLAIN}" "${GREEN}✅ 443 The entry mode has been switched to: ${target_mode}${PLAIN}" "${GREEN}✅ 443 Режим входа переключен на: ${target_mode}${PLAIN}")"
     show_current_entry_status
 }
@@ -11268,7 +11253,6 @@ reapply_current_entry_mode() {
         rollback_last_entry_mode "$backup_dir"
         return 1
     fi
-    write_single_443_engine_state "$(entry_mode_engine_name "$current_mode")" "$backup_dir"
     echo -e "$(localized_text "${GREEN}✅ 当前入口模式已重新应用：${current_mode}${PLAIN}" "${GREEN}✅ The current entry mode has been reapplied: ${current_mode}${PLAIN}" "${GREEN}. Текущий режим входа был применен повторно: ${current_mode}.${PLAIN}")"
     show_current_entry_status
 }
@@ -11708,9 +11692,9 @@ save_and_offer_reapply_sni_stack() {
     env_backup=""
     if [[ -f "$env_file" ]]; then
         env_backup="${env_file}.pre_reapply_$(date +%Y%m%d_%H%M%S)"
-        cp -p "$env_file" "$env_backup" 2>/dev/null || env_backup=""
+        cp -p "$env_file" "$env_backup" || return 1
     fi
-    save_sni_stack_env
+    save_sni_stack_env || return 1
     echo -e "$(localized_text "${GREEN}✅ 已保存新的 443端口复用运行参数。${PLAIN}" "${GREEN}✅ New Port 443 Reuse operating parameters have been saved.${PLAIN}" "${GREEN}. Сохранены новые 443 отдельных рабочих параметра.${PLAIN}")"
     echo -e "$(localized_text "${YELLOW}提示：保存后需要重新应用，Nginx/Caddy 才会使用新的域名、端口或路径。${PLAIN}" "${YELLOW}Tips: You need to reapply after saving, so that Nginx/Caddy will use the new domain, port or path.${PLAIN}" "${YELLOW}Советы: вам необходимо повторно подать заявку после сохранения, чтобы Nginx/Caddy использовал новое имя домена, порт или путь.${PLAIN}")"
     if confirm_danger \
@@ -11719,7 +11703,7 @@ save_and_offer_reapply_sni_stack() {
         "$(localized_text "失败时自动恢复本次修改前的参数文件" "restore the parameter file saved before this change if reapplication fails" "при ошибке восстановить файл параметров, сохранённый до этого изменения")"; then
         if ! reapply_sni_stack_from_env --yes; then
             if [[ -n "$env_backup" && -f "$env_backup" ]]; then
-                cp -p "$env_backup" "$env_file" 2>/dev/null || true
+                cp -p "$env_backup" "$env_file" || return 1
                 echo -e "$(localized_text "${YELLOW}⚠️ 已恢复重新应用前的参数文件：${env_backup}${PLAIN}" "${YELLOW}⚠️ The parameter file before re-application has been restored: ${env_backup}${PLAIN}" "${YELLOW}⚠️ Файл параметров до повторного применения восстановлен: ${env_backup}${PLAIN}")"
             fi
             return 1
@@ -13227,7 +13211,6 @@ apply_sni_stack_runtime_config() {
     apply_entry_mode_by_name "$current_mode" "$backup_dir" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式 ${current_mode} 应用失败" "Entry mode ${current_mode} application failed" "Режим входа в приложение ${current_mode} не выполнен.")"; return 1; }
     ENTRY_MODE="$current_mode"
     save_sni_stack_env || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "保存入口配置失败" "Failed to save entry configuration" "Не удалось сохранить конфигурацию входа")"; return 1; }
-    write_single_443_engine_state "$(entry_mode_engine_name "$current_mode")" "$backup_dir"
     generate_caddy_cf_manifest
 }
 

@@ -214,12 +214,6 @@ normalize_entry_mode_name() {
     esac
 }
 
-entry_mode_engine_name() {
-    local mode="$1"
-    mode=$(normalize_entry_mode_name "$mode") || return 1
-    echo "$mode"
-}
-
 print_entry_mode_cutover_paths() {
     local target_mode="$1"
     echo -e "$(localized_text "${BOLD}将涉及的配置路径${PLAIN}" "${BOLD}Will involve the configuration path${PLAIN}" "${BOLD}будет включать путь конфигурации.${PLAIN}")"
@@ -714,7 +708,6 @@ rollback_last_entry_mode() {
         return 1
     fi
     set_entry_mode "$old_mode" >/dev/null 2>&1 || true
-    write_single_443_engine_state "$(entry_mode_engine_name "$old_mode" 2>/dev/null || echo nginx-stream)" "$backup_dir"
     echo -e "$(localized_text "${GREEN}✅ 已回滚到上一次入口模式：${old_mode}${PLAIN}" "${GREEN}✅ Has rolled back to the last entry mode: ${old_mode}${PLAIN}" "${GREEN}✅ Откатился к последнему режиму входа: ${old_mode}${PLAIN}")"
 }
 
@@ -942,7 +935,6 @@ switch_entry_mode() {
         rollback_last_entry_mode "$backup_dir"
         return 1
     fi
-    write_single_443_engine_state "$(entry_mode_engine_name "$target_mode")" "$backup_dir"
     echo -e "$(localized_text "${GREEN}✅ 443 入口模式已切换为：${target_mode}${PLAIN}" "${GREEN}✅ 443 The entry mode has been switched to: ${target_mode}${PLAIN}" "${GREEN}✅ 443 Режим входа переключен на: ${target_mode}${PLAIN}")"
     show_current_entry_status
 }
@@ -985,7 +977,6 @@ reapply_current_entry_mode() {
         rollback_last_entry_mode "$backup_dir"
         return 1
     fi
-    write_single_443_engine_state "$(entry_mode_engine_name "$current_mode")" "$backup_dir"
     echo -e "$(localized_text "${GREEN}✅ 当前入口模式已重新应用：${current_mode}${PLAIN}" "${GREEN}✅ The current entry mode has been reapplied: ${current_mode}${PLAIN}" "${GREEN}. Текущий режим входа был применен повторно: ${current_mode}.${PLAIN}")"
     show_current_entry_status
 }

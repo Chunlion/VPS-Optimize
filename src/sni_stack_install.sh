@@ -1211,6 +1211,5 @@ apply_sni_stack_runtime_config() {
     apply_entry_mode_by_name "$current_mode" "$backup_dir" || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "入口模式 ${current_mode} 应用失败" "Entry mode ${current_mode} application failed" "Режим входа в приложение ${current_mode} не выполнен.")"; return 1; }
     ENTRY_MODE="$current_mode"
     save_sni_stack_env || { rollback_sni_stack_after_failure "$backup_dir" "$(localized_text "保存入口配置失败" "Failed to save entry configuration" "Не удалось сохранить конфигурацию входа")"; return 1; }
-    write_single_443_engine_state "$(entry_mode_engine_name "$current_mode")" "$backup_dir"
     generate_caddy_cf_manifest
 }
