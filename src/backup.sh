@@ -1033,7 +1033,7 @@ func_backup_center() {
         echo -e "$(localized_text "${CYAN}  5. 查看 / 编辑已应用配置${PLAIN} ${YELLOW}(备份、校验、reload / restart)${PLAIN}" "${CYAN}  5. View or edit applied configuration${PLAIN} ${YELLOW}(backup, validate, reload / restart)${PLAIN}" "${CYAN}  5. Просмотр или правка применённой конфигурации${PLAIN} ${YELLOW}(копия, проверка, reload / restart)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local b_choice

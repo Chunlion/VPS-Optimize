@@ -459,7 +459,7 @@ func_hosts_manage() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "系统开关与清理 > 本机 hosts 解析" "System switch and cleanup > Local hosts resolution" "Переключение и очистка системы > Разрешение локальных хостов")"
+        print_breadcrumb "$(localized_text "系统设置与清理 > 本机 hosts 解析" "System settings and cleanup > Local hosts entries" "Системные настройки и очистка > Локальные записи hosts")"
         echo -e "$(localized_text "${BOLD}🧭 本机 hosts 解析管理${PLAIN}" "${BOLD}🧭 Local hosts resolution management${PLAIN}" "${BOLD}🧭 Управление разрешением локальных хостов${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}修改当前 VPS 的 /etc/hosts，仅影响本机域名解析，不会修改公网 DNS。${PLAIN}" "${YELLOW}Edit /etc/hosts on this VPS. Changes affect only local resolution, not public DNS.${PLAIN}" "${YELLOW}Изменяет /etc/hosts только на этом VPS и не затрагивает публичный DNS.${PLAIN}")"

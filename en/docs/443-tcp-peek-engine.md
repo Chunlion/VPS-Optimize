@@ -29,7 +29,7 @@ The three entry modes share the same set of public configurations:
 Common menu paths:
 
 ```text
-Main menu [19 Port 443 Reuse Management]
+Main menu [19 Port 443 Reuse manager]
   -> [1] Set up or switch the 443 entry mode
   -> [10] Roll back the last entry-mode switch
   -> [15] View active entry-service logs
@@ -53,7 +53,7 @@ This is the recommended long-term default. It supports the complete Web, REALITY
 
 ## TCP Peek + Splice / vpso-mux implementation
 
-To update an existing binary, update the main script, then select `[19 Port 443 Reuse Manager] -> [8 Update TCP Peek core]`. Linux amd64 and arm64 download prebuilt files from GitHub Release without Go. The script verifies the download and existing configuration, backs up the old binary, replaces it, and restarts only previously running Peek services. Startup or public-listener check failures restore the old binary. Restarting interrupts existing connections; a successful update prints the backup path. New installations also use prebuilt files; other architectures retain source builds.
+To update an existing binary, update the main script, then select `[19 Port 443 Reuse manager] -> [8 Update TCP Peek core]`. Linux amd64 and arm64 download prebuilt files from GitHub Release without Go. The script verifies the download and existing configuration, backs up the old binary, replaces it, and restarts only previously running Peek services. Startup or public-listener check failures restore the old binary. Restarting interrupts existing connections; a successful update prints the backup path. New installations also use prebuilt files; other architectures retain source builds.
 
 TCP Peek and Nginx Stream use the same saved configuration. Do not create a second set of domains, certificates, Web backends, allowlists, or Xray SNI routes. Open `[1 Set up or switch the 443 entry mode]` and choose TCP Peek. The script builds `vpso-mux` when required, validates its configuration, and tests the routes on the isolated port `8444`. Public port `443` changes hands only after the preflight succeeds.
 
@@ -189,7 +189,7 @@ Core differences from Nginx Stream:
 View status and logs:
 
 ```text
-Main menu [19 Port 443 Reuse Management]
+Main menu [19 Port 443 Reuse manager]
   -> [15] View active entry-service logs
 ```
 
@@ -227,7 +227,7 @@ The Xray inbound route menu cannot add multi-inbound SNI routes in this mode bec
 To switch to TCP Peek + Splice:
 
 ```text
-Main menu [19 Port 443 Reuse Management]
+Main menu [19 Port 443 Reuse manager]
   -> [1] Set up or switch the 443 entry mode
   -> [3] TCP Peek + Splice
 ```
@@ -243,7 +243,7 @@ If the current SSH session is connected to the ingress port, such as `443`, the 
 Roll back the previous round of entry mode switching:
 
 ```text
-Main menu [19 Port 443 Reuse Management]
+Main menu [19 Port 443 Reuse manager]
   -> [10] Roll back the last entry-mode switch
 ```
 

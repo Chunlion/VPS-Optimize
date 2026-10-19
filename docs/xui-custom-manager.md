@@ -1,9 +1,9 @@
-# x-ui 增强套件 xui-custom-manager.sh 使用说明
+# x-ui 增强工具 xui-custom-manager.sh 使用说明
 
 
 ## 功能定位
 
-`xui-custom-manager.sh` 是 x-ui 增强套件脚本，不替换 3x-ui 程序，也不是 3x-ui 面板本身。它用于补充一些更适合脚本处理的维护功能：
+`xui-custom-manager.sh` 是 x-ui 增强工具脚本，不替换 3x-ui 程序，也不是 3x-ui 面板本身。它用于补充一些更适合脚本处理的维护功能：
 
 - 自定义流量重置日期。
 - 入站单独重置日。

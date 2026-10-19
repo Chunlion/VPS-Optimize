@@ -424,7 +424,7 @@ func_ssh_login_mode_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "SSH 安全中心 > 登录方式" "SSH Security Center > Authentication" "Центр безопасности SSH > Аутентификация")"
+        print_breadcrumb "$(localized_text "SSH 安全中心 > 登录方式" "SSH security center > Authentication" "Центр безопасности SSH > Аутентификация")"
         echo -e "$(localized_text "${BOLD}🔐 SSH 登录方式${PLAIN}" "${BOLD}🔐 SSH authentication${PLAIN}" "${BOLD}🔐 Аутентификация SSH${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "PubkeyAuthentication       : ${CYAN}$(ssh_effective_setting PubkeyAuthentication || echo "$unknown_label")${PLAIN}"
@@ -469,11 +469,11 @@ func_ssh_security_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "SSH 安全中心" "SSH Security Center" "SSH Центр безопасности")"
-        echo -e "$(localized_text "${BOLD}🛡️ SSH 安全中心${PLAIN}" "${BOLD}🛡️ SSH Security Center${PLAIN}" "${BOLD}🛡️ SSH Центр безопасности${PLAIN}")"
+        print_breadcrumb "$(localized_text "SSH 安全中心" "SSH security center" "Центр безопасности SSH")"
+        echo -e "$(localized_text "${BOLD}🛡️ SSH 安全中心${PLAIN}" "${BOLD}🛡️ SSH security center${PLAIN}" "${BOLD}🛡️ Центр безопасности SSH${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${GREEN}  1. 修改 SSH 端口${PLAIN}             ${YELLOW}(防失联校验和回滚)${PLAIN}" "${GREEN}1. Modify SSH port (lockout checks and rollback)${PLAIN}" "${GREEN}1. Измените порт SSH (проверки защиты от потери доступа и откат)${PLAIN}")"
-        echo -e "$(localized_text "${GREEN}  2. 用户密钥登录模式${PLAIN}         ${YELLOW}(添加公钥 / 切换密钥或密码登录)${PLAIN}" "${GREEN}2. User key login mode (add public key / switch key or password login)${PLAIN}" "${GREEN}2. Режим входа в систему с помощью ключа пользователя (добавление открытого ключа/переключение ключа или вход с паролем)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  1. 修改 SSH 端口${PLAIN}             ${YELLOW}(防失联校验和回滚)${PLAIN}" "${GREEN}1. Modify SSH port (lockout checks and rollback)${PLAIN}" "${GREEN}1. Изменить порт SSH (проверка защиты от потери доступа и откат)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. SSH 登录方式${PLAIN}             ${YELLOW}(添加公钥 / 切换密钥或密码登录)${PLAIN}" "${GREEN}2. SSH authentication (add a public key, or switch key/password login)${PLAIN}" "${GREEN}2. Аутентификация SSH (добавить ключ или переключить вход по ключу/паролю)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -756,7 +756,7 @@ func_add_ssh_key() {
         if is_yes "$enable_mode"; then
             ssh_apply_auth_mode key_preferred || true
         fi
-        echo -e "$(localized_text "${YELLOW}确认私钥登录 100% 成功后，可进入 [6 SSH 安全中心] -> [2 用户密钥登录模式] 禁用密码登录。${PLAIN}" "${YELLOW}After confirms that private key login is 100% successful, you can enter [6 SSH Security Center] -> [2 User Key Login Mode] to disable password login.${PLAIN}" "${YELLOW}После того, как подтвердит, что вход с закрытым ключом прошел на 100% успешно, вы можете ввести [6 SSH Центр безопасности] -> [2 Режим входа с помощью ключа пользователя], чтобы отключить вход с паролем.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}确认私钥登录 100% 成功后，可进入 [6 SSH 安全中心] -> [2 SSH 登录方式] 禁用密码登录。${PLAIN}" "${YELLOW}After confirming that private-key login works, open [6 SSH security center] -> [2 SSH authentication] to disable password login.${PLAIN}" "${YELLOW}Убедившись, что вход по ключу работает, откройте [6 Центр безопасности SSH] -> [2 Аутентификация SSH], чтобы отключить вход по паролю.${PLAIN}")"
     fi
     read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
 }

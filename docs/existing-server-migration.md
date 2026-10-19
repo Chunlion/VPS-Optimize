@@ -65,13 +65,13 @@ grep -R "listen .*443" /etc/nginx /etc/caddy 2>/dev/null
 先创建脚本全量备份：
 
 ```text
-主菜单 [16 配置备份与回滚] -> [1 创建全量配置备份]
+主菜单 [16 配置备份与回滚] -> [1 创建备份]
 ```
 
 再确认备份列表：
 
 ```text
-主菜单 [16 配置备份与回滚] -> [2 查看现有备份列表]
+主菜单 [16 配置备份与回滚] -> [2 加载备份包]
 ```
 
 如果已经有 Caddy/Nginx 配置，额外记录这些目录：
@@ -101,7 +101,7 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 | 已有 3x-ui 且自带 HTTPS | 记录证书、端口和路径，准备好反代后再切换为本地 HTTP |
 | 已有 Caddy 反代 | 记录旧域名和后端，启用 443 后逐个补录；可继续选择 Caddy，也可切到 Nginx 本地 Web 反代 |
 | 已有 Nginx/Apache 网站 | 先把网站后端改为本地端口，再用 443端口复用的 Web 域名/反代补录；可选择 Caddy 或 Nginx 本地 Web 反代 |
-| 已有订阅工具 Docker 容器，暂不启用 443端口复用 | 保留容器，用 `主菜单 [4 反代]` 选择 Caddy 或 Nginx HTTPS 反代 |
+| 已有订阅工具 Docker 容器，暂不启用 443端口复用 | 保留容器，用 `主菜单 [4 反向代理（Caddy / Nginx）]` 选择 Caddy 或 Nginx HTTPS 反代 |
 | 已有订阅工具 Docker 容器，准备启用 443端口复用 | 保留容器，把外部访问改成 443端口复用的 Web 域名/反代 |
 
 完整步骤见 [443端口复用：部署与配置](443-single-entry.md)。
@@ -113,15 +113,15 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 如果你暂时不准备启用 443端口复用，只是想先给订阅工具或网站加 HTTPS 域名，可以走独立反代入口：
 
 ```text
-主菜单 [4 反代]
+主菜单 [4 反向代理（Caddy / Nginx）]
 ```
 
 可选流程：
 
 | 入口 | 适合情况 |
 |---|---|
-| `[1 添加 Caddy 反代]` | 已经使用 Caddy，或希望由 Caddy 管理该域名反代 |
-| `[2 添加 Nginx HTTPS 反代]` | 未启用 443端口复用，且希望由 Nginx 直接监听公网 80/443 |
+| `[1 添加 Caddy 反向代理]` | 已经使用 Caddy，或希望由 Caddy 管理该域名反代 |
+| `[2 添加 Nginx HTTPS 反向代理]` | 未启用 443端口复用，且希望由 Nginx 直接监听公网 80/443 |
 
 Nginx HTTPS 反代会复用现有 `acme.sh + Cloudflare DNS API` 证书流程，证书仍安装到 `/etc/caddy/certs/${domain}.crt|key` 并软链到 `/root/cert/`。`${domain}` 是占位写法，实际使用时会换成你的真实域名。
 
@@ -158,7 +158,7 @@ Nginx HTTPS 反代会复用现有 `acme.sh + Cloudflare DNS API` 证书流程，
 进入 3x-ui：
 
 ```text
-主菜单 [5 面板、节点与订阅工具] -> [1 3x-ui 面板脚本]
+主菜单 [5 面板、节点与订阅工具] -> [1 3x-ui 管理]
 ```
 
 如果面板证书或路径已经乱了，先用救砖入口：
@@ -280,10 +280,10 @@ ss -lntp | grep -E ':3000|:3001|:3002'
 如果暂时不启用 443端口复用，进入：
 
 ```text
-主菜单 [4 反代]
+主菜单 [4 反向代理（Caddy / Nginx）]
 ```
 
-选择 `[1 添加 Caddy 反代]` 或 `[2 添加 Nginx HTTPS 反代]`，把独立订阅工具域名反代到本地后端端口。Nginx HTTPS 反代会申请或复用 `/etc/caddy/certs/${domain}.crt|key` 证书，并由 Nginx 直接监听公网 80/443；该方式不能和 443端口复用同时抢公网 `443`。
+选择 `[1 添加 Caddy 反向代理]` 或 `[2 添加 Nginx HTTPS 反向代理]`，把独立订阅工具域名反代到本地后端端口。Nginx HTTPS 反代会申请或复用 `/etc/caddy/certs/${domain}.crt|key` 证书，并由 Nginx 直接监听公网 80/443；该方式不能和 443端口复用同时抢公网 `443`。
 
 如果已经启用或准备启用 443端口复用，则通过 443端口复用新增外部域名：
 
@@ -322,7 +322,7 @@ https://sub.example.com:3000/
 成功后立刻备份：
 
 ```text
-主菜单 [16 配置备份与回滚] -> [1 创建全量配置备份]
+主菜单 [16 配置备份与回滚] -> [1 创建备份]
 ```
 
 ## 回滚方案
@@ -338,13 +338,13 @@ https://sub.example.com:3000/
 443端口复用回滚入口：
 
 ```text
-主菜单 [19 443端口复用管理中心] -> [7 维护 HTTPS 证书与 Cloudflare Token] -> [6 回滚 443端口复用配置]
+主菜单 [19 443端口复用管理中心] -> [7 维护证书、Caddy 与 Cloudflare] -> [6 回滚 443端口复用配置]
 ```
 
 脚本全量回滚入口：
 
 ```text
-主菜单 [16 配置备份与回滚] -> [3 从备份一键回滚]
+主菜单 [16 配置备份与回滚] -> [3 从备份恢复]
 ```
 
 失联或复杂故障见 [recovery-runbook.md](recovery-runbook.md)。

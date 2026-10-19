@@ -872,7 +872,7 @@ prepare_initial_entry_mode_dependencies() {
         "xray-fallback")
             xray_entry_service_name >/dev/null 2>&1 || {
                 echo -e "$(localized_text "${RED}❌ 未检测到 xray/x-ui/3x-ui systemd 服务，无法首次配置为 xray-fallback。${PLAIN}" "${RED}❌ The xray/x-ui/3x-ui systemd service is not detected and cannot be configured as xray-fallback for the first time.${PLAIN}" "${RED}❌ Служба xray/x-ui/3x-ui systemd не обнаружена и не может быть настроена как резервная служба xray в первый раз.${PLAIN}")"
-                echo -e "$(localized_text "${YELLOW}请先在 [5 面板、节点与订阅工具] 中安装并配置 Xray/3x-ui 主入站，或改选 Nginx Stream 模式 / TCP Peek + Splice 模式。${PLAIN}" "${YELLOW}Please first install and configure Xray/3x-ui main inbound in [5 Panels, Nodes and Subscription Tools], or change to Nginx Stream mode / TCP Peek + Splice mode.${PLAIN}" "${YELLOW}Сначала установите и настройте основное входящее подключение Xray/3x-ui в [5 панелей, узлов и инструментов подписки] или переключитесь в режим Nginx Stream/TCP Peek + Splice.${PLAIN}")"
+                echo -e "$(localized_text "${YELLOW}请先在 [5 面板、节点与订阅工具] 中安装并配置 Xray/3x-ui 主入站，或改选 Nginx Stream 模式 / TCP Peek + Splice 模式。${PLAIN}" "${YELLOW}Please first install and configure the Xray/3x-ui main inbound in [5 Panels, nodes, and subscription tools], or switch to Nginx Stream mode / TCP Peek + Splice mode.${PLAIN}" "${YELLOW}Сначала установите и настройте основной вход Xray/3x-ui в разделе [5 Панели, узлы и инструменты подписки] или переключитесь в режим Nginx Stream / TCP Peek + Splice.${PLAIN}")"
                 return 1
             }
             print_xray_fallback_mode_explanation

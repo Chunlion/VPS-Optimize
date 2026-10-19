@@ -65,13 +65,13 @@ grep -R "listen.*443" /etc/nginx /etc/caddy 2>/dev/null
 First create a full backup of the script:
 
 ```text
-Main menu [16 Configuration backup and rollback] -> [1 Create full configuration backup]
+Main menu [16 Configuration backup and rollback] -> [1 Create a backup]
 ```
 
 Confirm the backup list again:
 
 ```text
-Main menu [16 Configuration backup and rollback] -> [2 View existing backups]
+Main menu [16 Configuration backup and rollback] -> [2 Load a backup archive]
 ```
 
 If there is already a Caddy/Nginx configuration, additionally record these directories:
@@ -101,7 +101,7 @@ find /opt -maxdepth 3 -name 'docker-compose.yml' -o -name 'compose.yml' 2>/dev/n
 | Existing 3x-ui with HTTPS | Record certificates, ports, and paths; prepare the reverse proxy before switching to local HTTP |
 | Already have Caddy reverse proxy | Record the old domain and backend, enable 443 and add them one by one; you can continue to select Caddy, or switch to Nginx local web reverse proxy |
 | There is already a Nginx/Apache website | First change the website backend to the local port, and then use the Port 443 Reuse point Web domain/reverse proxy; you can choose Caddy or Nginx local web reverse proxy |
-| There is already a subscription tool Docker container, but the Port 443 Reuse is not enabled yet. | Keep the container, use `Main menu [4 reverse proxy]` to select Caddy or Nginx HTTPS to reverse proxy |
+| There is already a subscription tool Docker container, but the Port 443 Reuse is not enabled yet. | Keep the container, use `Main menu [4 Reverse proxy]` to select Caddy or Nginx HTTPS to reverse proxy |
 | Already have subscription tool Docker container, ready to enable Port 443 Reuse | Keep the container and change external access to Port 443 Reuse point Web domain/reverse proxy |
 
 For complete steps, see [Port 443 Reuse: Setup and Configuration](443-single-entry.md).
@@ -113,15 +113,15 @@ For subscription tool migration, see [Subscription Tools on Port 443](../tutoria
 If you are not ready to enable the Port 443 Reuse for the time being, but just want to add the HTTPS domain to the subscription tool or website first, you can use the independent reverse proxy portal:
 
 ```text
-Main menu [4 reverse proxy]
+Main menu [4 Reverse proxy]
 ```
 
 Optional process:
 
 | entrance | Suitable for the situation |
 |---|---|
-| `[1 add Caddy reverse proxy]` | Already using Caddy, or wishing to have Caddy manage the domain reverse proxy |
-| `[2 add Nginx HTTPS reverse proxy]` | The Port 443 Reuse is not enabled, and it is hoped that Nginx will be directly bound to the Internet 80/443 |
+| `[1 Add Caddy reverse proxy]` | Already using Caddy, or wishing to have Caddy manage the domain reverse proxy |
+| `[2 Add Nginx HTTPS reverse proxy]` | The Port 443 Reuse is not enabled, and it is hoped that Nginx will be directly bound to the Internet 80/443 |
 
 Nginx HTTPS will reuse the existing `acme.sh + Cloudflare DNS API` certificate process, and the certificate will still be installed to `/etc/caddy/certs/${domain}.crt|key` and symlinked to `/root/cert/`. `${domain}` is a placeholder and will be replaced with your real domain when used.
 
@@ -158,13 +158,13 @@ The following `40000`, `2096`, and `1443` are sample ports; the actual configura
 Enter 3x-ui:
 
 ```text
-Main menu [5 panel、Nodes and subscription tools] -> [1 3x-ui panel script]
+Main menu [5 Panels, nodes, and subscription tools] -> [1 3x-ui management]
 ```
 
 If the panel certificate or path is messed up, first use the brick rescue entrance:
 
 ```text
-Main menu [5 panel、Nodes and subscription tools] -> [3 panel SSL Repair]
+Main menu [5 Panels, nodes, and subscription tools] -> [3 Panel SSL repair]
 ```
 
 Access 443 for the first time again:
@@ -272,7 +272,7 @@ ss -lntp | grep -E ':3000|:3001|:3002'
 If the backend is exposed to `0.0.0.0`, consider:
 
 ```text
-Main menu [11 Docker Security management] -> [3 turn on Docker Local anti-penetration]
+Main menu [11 Docker management] -> [10 Docker local exposure protection]
 ```
 
 This operation will affect the Docker network behavior. Before execution, confirm that the container does not rely on the public internet direct port.
@@ -280,7 +280,7 @@ This operation will affect the Docker network behavior. Before execution, confir
 If the Port 443 Reuse is not enabled temporarily, enter:
 
 ```text
-Main menu [4 reverse proxy]
+Main menu [4 Reverse proxy]
 ```
 
 Select `[1 Add Caddy reverse proxy]` or `[2 Add Nginx HTTPS reverse proxy]` and point the standalone subscription tool domain at its local backend port. Nginx HTTPS reverse proxy requests or reuses `/etc/caddy/certs/${domain}.crt|key` and listens directly on public ports 80/443, so it cannot own public `443` at the same time as Port 443 Reuse.
@@ -322,7 +322,7 @@ https://sub.example.com:3000/
 Back up immediately after success:
 
 ```text
-Main menu [16 Configuration backup and rollback] -> [1 Create full configuration backup]
+Main menu [16 Configuration backup and rollback] -> [1 Create a backup]
 ```
 
 ## Rollback scenario
@@ -338,13 +338,13 @@ Main menu [16 Configuration backup and rollback] -> [1 Create full configuration
 Port 443 Reuse rollback entry:
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [7 Maintain HTTPS certificates and Cloudflare tokens] -> [6 rollback Port 443 Reuse configuration]
+Main menu [19 Port 443 Reuse manager] -> [7 Maintain certificates, Caddy, and Cloudflare] -> [6 rollback Port 443 Reuse configuration]
 ```
 
 Script full rollback entry:
 
 ```text
-Main menu [16 Configuration backup and rollback] -> [3 Restore from backup]
+Main menu [16 Configuration backup and rollback] -> [3 Restore from a backup]
 ```
 
 For lost connection or complex faults, see [recovery-runbook.md](recovery-runbook.md).

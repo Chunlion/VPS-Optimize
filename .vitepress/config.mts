@@ -55,7 +55,7 @@ const zhTheme = {
           { text: 'CDT Monitor', link: '/docs/cdt-monitor' },
           { text: '配置路径', link: '/docs/config-paths' },
           { text: '端口流量狗', link: '/docs/dog' },
-          { text: 'x-ui 增强套件', link: '/docs/xui-custom-manager' },
+          { text: 'x-ui 增强工具', link: '/docs/xui-custom-manager' },
           { text: '第三方脚本来源', link: '/docs/third-party-scripts' }
         ]
       },

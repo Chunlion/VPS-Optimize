@@ -7,7 +7,7 @@ Use this guide to publish subscription tools such as SublinkPro, Sub-Store, and 
 | Current status | Recommended method |
 |---|---|
 | Port 443 Reuse is not enabled; you only need domain access to the tool | Use `Main menu [4 Reverse proxy]` and choose Caddy or Nginx HTTPS for the current environment. |
-| Port 443 Reuse is enabled | Add the reverse-proxy domain in `Main menu [19 Port 443 Reuse] -> [2 Manage Web domains and reverse proxies]`. Use its `[8 Switch Web reverse-proxy engine]` option to change between Caddy and Nginx. |
+| Port 443 Reuse is enabled | Add the reverse-proxy domain in `Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies]`. Use its `[8 Switch Web reverse-proxy engine]` option to change between Caddy and Nginx. |
 | The tool is for personal use only | Bind its backend to localhost or a private-network address; expose it through Caddy, Nginx, or Port 443 Reuse. |
 | You are unsure which path applies | Run `Main menu [1 Preflight and risk scan]` and `Main menu [15 Service health overview]` to check port and service status. |
 
@@ -92,7 +92,7 @@ ss -lntp
 Enter:
 
 ```text
-Main menu [5 panel、Nodes and subscription tools]
+Main menu [5 Panels, nodes, and subscription tools]
 ```
 
 The installation process will automatically check Docker/Compose and install it first if missing.
@@ -101,10 +101,10 @@ Common menu paths:
 
 | Tool | Menu path | Use case |
 |---|---|---|
-| SublinkPro | `Main menu [5 Panels, nodes, and subscription tools] -> [7 SublinkPro subscription stack]` | Convert, aggregate, and manage subscriptions. |
-| Miaomiaowu Subscription Management | `Main menu [5 Panels, nodes, and subscription tools] -> [8 Miaomiaowu subscription stack]` | Manage subscriptions through a graphical interface. |
+| SublinkPro | `Main menu [5 Panels, nodes, and subscription tools] -> [7 SublinkPro]` | Convert, aggregate, and manage subscriptions. |
+| Miaomiaowu Subscription Management | `Main menu [5 Panels, nodes, and subscription tools] -> [8 Miaomiaowu subscriptions]` | Manage subscriptions through a graphical interface. |
 | Sub-Store | `Main menu [5 Panels, nodes, and subscription tools] -> [9 Sub-Store subscription stack]` | Advanced subscription processing and scripting. |
-| Dockge | `Main menu [5 Panels, nodes, and subscription tools] -> [11 Dockge Compose]` | Manage multiple Compose projects. |
+| Dockge | `Main menu [11 Docker management] -> [19 Backup / Compose management]` | Manage multiple Compose projects. |
 
 After installation, check the container status first:
 
@@ -140,7 +140,7 @@ curl -I http://10.0.0.20:3000/
 If the backend listens on `0.0.0.0:3000`, it may be reachable from the Internet. Limit exposure with Docker's local exposure protection or firewall rules:
 
 ```text
-Main menu [11 Docker Security management]
+Main menu [11 Docker management]
 Main menu [8 Firewall rules]
 ```
 
@@ -153,7 +153,7 @@ Use this option when Port 443 Reuse is not enabled and you only need to access t
 Enter:
 
 ```text
-Main menu [4 reverse proxy]
+Main menu [4 Reverse proxy]
 ```
 
 Choose for the current environment:
@@ -301,7 +301,7 @@ When inspecting the subscription output, focus on:
 Enter:
 
 ```text
-Main menu [16 Configuration backup and rollback] -> [1 Create full configuration backup]
+Main menu [16 Configuration backup and rollback] -> [1 Create a backup]
 ```
 
 If the tool uses Docker Compose, also record:
@@ -363,12 +363,12 @@ docker logs --tail=80 CONTAINER_NAME
 |---|---|
 | Caddy configuration error | Restore a Caddy backup, or quarantine the new site configuration and reload Caddy. |
 | Nginx HTTPS reverse-proxy error | Check `nginx -t`; the script writes its Nginx reverse-proxy configuration to `/etc/nginx/conf.d/vps_proxy_${domain}.conf`. |
-| Unable to add a domain to Port 443 Reuse | Roll back using the script's automatic backup, or remove the domain in `Main menu [19 Port 443 Reuse] -> [2 Manage Web domains and reverse proxies]`. |
-| Certificate failure | In `Main menu [19 Port 443 Reuse] -> [7 Maintain HTTPS certificates and Cloudflare tokens]`, check the token and DNS, then reissue the certificate. |
+| Unable to add a domain to Port 443 Reuse | Roll back using the script's automatic backup, or remove the domain in `Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies]`. |
+| Certificate failure | In `Main menu [19 Port 443 Reuse manager] -> [7 Maintain certificates, Caddy, and Cloudflare]`, check the token and DNS, then reissue the certificate. |
 | Container will not start | Open the corresponding tool-management menu to check status, restart, or rebuild. |
 | Subscription output includes an internal port | Change the tool's External URL or Public URL. |
-| A port is public | Restrict access in `Main menu [11 Docker security management]` or `Main menu [8 Firewall rules]`. |
-| Configuration is inconsistent | Restore a backup in `Main menu [16 Configuration backup and rollback] -> [3 Restore from backup]`. |
+| A port is public | Restrict access in `Main menu [11 Docker management]` or `Main menu [8 Firewall rules]`. |
+| Configuration is inconsistent | Restore a backup in `Main menu [16 Configuration backup and rollback] -> [3 Restore from a backup]`. |
 
 ## Common problems
 
@@ -387,7 +387,7 @@ docker logs --tail=80 CONTAINER_NAME
 | Maintenance action | Recommended frequency |
 |---|---|
 | Run `Main menu [15 Service health overview]` | After each reverse-proxy change. |
-| Back up in `Main menu [16 Configuration backup and rollback] -> [1 Create full configuration backup]` | After every successful configuration change. |
+| Back up in `Main menu [16 Configuration backup and rollback] -> [1 Create a backup]` | After every successful configuration change. |
 | Check `docker ps` | Each time you update the subscription tool. |
 | Check subscription output | After changing the External URL. |
 | Update the script | Use `Main menu [17 Update script]` only when needed. |

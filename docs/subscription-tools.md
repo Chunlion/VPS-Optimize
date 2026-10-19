@@ -8,7 +8,7 @@
 
 ## 包含内容
 
-该入口用于管理 3x-ui、S-UI、2S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari、CDT Monitor、端口流量狗和 x-ui 增强套件等相关工具。
+该入口用于管理 3x-ui、S-UI、2S-UI、Sing-box、Xray、SublinkPro、Sub-Store、Dockge、Komari、CDT Monitor、端口流量狗和 x-ui 增强工具等相关工具。
 
 CDT Monitor 位于 `[5 面板、节点与订阅工具] -> [16 CDT Monitor]`，用于监控阿里云 CDT 流量、管理 ECS 自动化操作和查看费用。详见 [CDT Monitor](cdt-monitor.md)。
 
@@ -25,7 +25,7 @@ CDT Monitor 位于 `[5 面板、节点与订阅工具] -> [16 CDT Monitor]`，�
 未启用 443端口复用时，可以使用独立反代入口：
 
 ```text
-主菜单 [4 反代]
+主菜单 [4 反向代理（Caddy / Nginx）]
 ```
 
 详细场景见 [订阅工具接入 Caddy/Nginx 反代与 443端口复用](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md)。

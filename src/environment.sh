@@ -5,8 +5,8 @@ func_env_install() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "基础组件与常用服务" "Components and services" "Компоненты и службы")"
-        echo -e "$(localized_text "${BOLD}📦 基础组件与常用服务${PLAIN}" "${BOLD}📦 Basic components and common services${PLAIN}" "${BOLD}📦 Базовые компоненты и общие службы${PLAIN}")"
+        print_breadcrumb "$(localized_text "基础组件与常用服务" "Components and common services" "Компоненты и основные службы")"
+        echo -e "$(localized_text "${BOLD}📦 基础组件与常用服务${PLAIN}" "${BOLD}📦 Components and common services${PLAIN}" "${BOLD}📦 Компоненты и основные службы${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}安装运行环境、转发工具和常用服务。反向代理使用主菜单 [4]，443端口复用使用 [19]。${PLAIN}" "${YELLOW}Install runtimes, forwarding tools, and common services. Use main menu [4] for reverse proxies and [19] for Port 443 Reuse.${PLAIN}" "${YELLOW}Установка сред выполнения, инструментов перенаправления и служб. Обратный прокси — пункт [4], общий порт 443 — пункт [19].${PLAIN}")"
         echo -e "------------------------------------------------"
@@ -18,7 +18,7 @@ func_env_install() {
         echo -e "$(localized_text "${GREEN} 10. nftables NAT 转发  ${YELLOW} 11. Aria2 下载         ${GREEN} 12. PVE 虚拟化工具${PLAIN}" "${GREEN}10. nftables NAT forwarding 11. Aria2 download 12. PVE virtualization tool${PLAIN}" "${GREEN}10. nftables маршрутизация NAT 11. Загрузка Aria2 12. Инструмент виртуализации PVE${PLAIN}")"
         echo -e "$(localized_text "${GREEN} 13. FLVX 哆啦转发面板  ${YELLOW} 14. EasyTier 组网       ${GREEN} 15. Tailscale 组网（不接管 DNS）${PLAIN}" "${GREEN}13. FLVX Doraemon forwarding panel 14. EasyTier networking 15. Tailscale (keep system DNS)${PLAIN}" "${GREEN}13. Панель пересылки FLVX Doraemon 14. Сеть EasyTier 15. Tailscale без управления DNS${PLAIN}")"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
-        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回上一级${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
+        echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
 
         local env_choice

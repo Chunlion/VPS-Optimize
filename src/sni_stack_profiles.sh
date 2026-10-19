@@ -267,10 +267,10 @@ edit_sni_stack_panel_domain_profile() {
 edit_sni_stack_runtime_profile() {
     while true; do
         echo -e "${CYAN}================================================${PLAIN}"
-        echo -e "$(localized_text "${BOLD}🧭 修改 443 共享参数${PLAIN}" "${BOLD}🧭 Edit shared Port 443 settings${PLAIN}" "${BOLD}🧭 Изменение общих параметров порта 443${PLAIN}")"
+        echo -e "$(localized_text "${BOLD}🧭 修改端口、路径与 REALITY 参数${PLAIN}" "${BOLD}🧭 Edit ports, paths, and REALITY settings${PLAIN}" "${BOLD}🧭 Изменение портов, путей и параметров REALITY${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}修改面板、订阅、REALITY、监听端口和路径；新增网站请使用 [19] -> [2]。${PLAIN}" "${YELLOW}Edit panel, subscription, REALITY, listener, port, and path settings. Add sites from [19] -> [2].${PLAIN}" "${YELLOW}Изменение панели, подписки, REALITY, слушателей, портов и путей. Сайты добавляются через [19] -> [2].${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 Port 443 Reuse Manager] -> [2 Manage Web domains and reverse proxies] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 Управление повторным использованием порта 443] -> [2 Управлять Web-доменами и обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 Повторное использование порта 443] -> [2 Управлять Web-доменами и обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
             print_sni_stack_current_summary
@@ -295,7 +295,7 @@ edit_sni_stack_runtime_profile() {
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;
             3) edit_sni_stack_entry_profile ;;
-            4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse Manager] -> [2 Manage Web domains and reverse proxies] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Управление повторным использованием порта 443] -> [2 Управлять Web-доменами и обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
+            4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Повторное использование порта 443] -> [2 Управлять Web-доменами и обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
             5) reapply_sni_stack_from_env ;;
             "?") show_sni_help; pause_return; continue ;;
             0|q|Q|'') break ;;

@@ -96,7 +96,7 @@ curl -I http://127.0.0.1:40000/panel/
 ### Related menu entry
 
 ```text
-Main menu [5 Panels, Nodes, and Subscription Tools] -> [3 Panel SSL Repair]
+Main menu [5 Panels, nodes, and subscription tools] -> [3 Panel SSL repair]
 Main menu [19 Port 443 Reuse manager] -> [3 Edit ports, paths, and REALITY settings]
 Main menu [19 Port 443 Reuse manager] -> [13 Check entry configuration, certificates, and routes]
 ```
@@ -178,7 +178,7 @@ systemctl status caddy --no-pager
 ### Related menu entry
 
 ```text
-Main menu [13 Inspect and release ports]
+Main menu [13 Inspect and free ports]
 Main menu [19 Port 443 Reuse manager] -> [3 Edit ports, paths, and REALITY settings]
 Main menu [19 Port 443 Reuse manager] -> [9 Regenerate and apply entry configuration]
 ```
@@ -339,7 +339,7 @@ curl -I http://10.0.0.20:3000/
 
 - Start or restart 3x-ui / x-ui.
 - Panel/Subscription Backend: Fixed listening address and port at `Main menu [19 Port 443 Reuse manager] -> [3 Edit ports, paths, and REALITY settings]`.
-- Custom website/reverse backend: Corrected backend address and port at `Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [3 Edit website/reverse proxy backend]`.
+- Custom website/reverse backend: Corrected backend address and port at `Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [3 Edit a reverse-proxy backend]`.
 - Reapply the configuration and perform a health check.
 
 If the test works according to the actual backend address, but the Internet is still 502, it is usually Caddy/Nginx. The reverse proxy address or port is inconsistent with the actual binding.
@@ -347,7 +347,7 @@ If the test works according to the actual backend address, but the Internet is s
 ### Related menu entry
 
 ```text
-Main menu [5 Panels, Nodes, and Subscription Tools] -> [1 3x-ui Panel Script]
+Main menu [5 Panels, nodes, and subscription tools] -> [1 3x-ui Panel Script]
 Main menu [19 Port 443 Reuse manager] -> [3 Edit ports, paths, and REALITY settings]
 Main menu [19 Port 443 Reuse manager] -> [13 Check entry configuration, certificates, and routes]
 ```
@@ -473,7 +473,7 @@ Recommended order:
 
 ```text
 Main menu [1 Preflight and risk scan]
-Main menu [19 Port 443 Reuse manager] -> [7 Maintain HTTPS certificates and Cloudflare tokens]
+Main menu [19 Port 443 Reuse manager] -> [7 Maintain certificates, Caddy, and Cloudflare]
 Main menu [19 Port 443 Reuse manager] -> [13 Check entry configuration, certificates, and routes]
 ```
 
@@ -506,7 +506,7 @@ Do not post the original Token text to the Issue.
 ### Related menu entry
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [7 Maintain HTTPS certificates and Cloudflare tokens]
+Main menu [19 Port 443 Reuse manager] -> [7 Maintain certificates, Caddy, and Cloudflare]
 ```
 
 ## DNS is not a gray cloud / DNS only
@@ -567,7 +567,7 @@ systemctl status caddy --no-pager
 ### Related menu entry
 
 ```text
-Main menu [13 Inspect and release ports]
+Main menu [13 Inspect and free ports]
 Main menu [19 Port 443 Reuse manager] -> [3 Edit ports, paths, and REALITY settings]
 Main menu [19 Port 443 Reuse manager] -> [9 Regenerate and apply entry configuration]
 ```

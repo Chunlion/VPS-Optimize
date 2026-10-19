@@ -8,17 +8,17 @@ The menu path in this article is written in the format of "main menu [number men
 
 | target | menu path |
 |---|---|
-| Create a full configuration backup | `Main menu [16 Configuration backup and rollback] -> [1 Create full configuration backup]` |
-| View backup list | `Main menu [16 Configuration backup and rollback] -> [2 View existing backups]` |
-| Rollback from backup | `Main menu [16 Configuration backup and rollback] -> [3 Restore from backup]` |
+| Create a full configuration backup | `Main menu [16 Configuration backup and rollback] -> [1 Create a backup]` |
+| View backup list | `Main menu [16 Configuration backup and rollback] -> [2 Load a backup archive]` |
+| Rollback from backup | `Main menu [16 Configuration backup and rollback] -> [3 Restore from a backup]` |
 | View/edit script applied configuration | `Main menu [16 Configuration backup and rollback] -> [5 View or edit applied configuration]` |
 | 443 Link health check | `Main menu [19 Port 443 Reuse manager] -> [13 Check entry configuration, certificates, and routes]` |
-| Caddy/certificate health check | `Main menu [19 Port 443 Reuse manager] -> [7 Maintain HTTPS certificates and Cloudflare tokens] -> [13 Caddy/Certificate one-click health check]` |
+| Caddy/certificate health check | `Main menu [19 Port 443 Reuse manager] -> [7 Maintain certificates, Caddy, and Cloudflare] -> [13 Check Caddy and certificates]` |
 | Generate feedback diagnostic information | `Main menu [15 Service health overview]` |
 | Restart common services | `Main menu [15 Service health overview] -> [s Service recovery] -> [r Restart a common service]` |
 | Restart failed service | `Main menu [15 Service health overview] -> [s Service recovery] -> [f Restart failed services]` |
 | View service logs | `Main menu [15 Service health overview] -> [s Service recovery] -> [l View service logs]` |
-| Docker local anti-penetration | `Main menu [11 Docker Security management] -> [3 turn on Docker Local anti-penetration]` |
+| Docker local anti-penetration | `Main menu [11 Docker management] -> [10 Docker local exposure protection]` |
 | Port concurrent connection limit | `Main menu [8 Firewall rules] -> [5 Port concurrent connection limit]` |
 | Switch interface language | `Main menu [20 Interface language]` |
 
@@ -85,7 +85,7 @@ Related entrances:
 Main menu [16 Configuration backup and rollback] -> [5 View or edit applied configuration]
 Main menu [19 Port 443 Reuse manager] -> [13 Check entry configuration, certificates, and routes]
 Main menu [19 Port 443 Reuse manager] -> [9 Regenerate and apply entry configuration]
-Main menu [19 Port 443 Reuse manager] -> [7 Maintain HTTPS certificates and Cloudflare tokens]
+Main menu [19 Port 443 Reuse manager] -> [7 Maintain certificates, Caddy, and Cloudflare]
 ```
 
 ## Caddy
@@ -111,9 +111,9 @@ find /etc/caddy -maxdepth 3 -type f
 If it is just reverse proxy, the entry is:
 
 ```text
-Main menu [4 reverse proxy] -> [1 add Caddy reverse proxy]
-Main menu [4 reverse proxy] -> [2 add Nginx HTTPS reverse proxy]
-Main menu [4 reverse proxy] -> [6 View or edit applied configuration files]
+Main menu [4 Reverse proxy] -> [1 Add Caddy reverse proxy]
+Main menu [4 Reverse proxy] -> [2 Add Nginx HTTPS reverse proxy]
+Main menu [4 Reverse proxy] -> [6 View or edit applied configuration]
 ```
 
 If the Port 443 Reuse has been enabled, the new website portal is:
@@ -171,7 +171,7 @@ Do not post file content to Issues or public chats.
 Update entry:
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [7 Maintain HTTPS certificates and Cloudflare tokens] -> [8 update Cloudflare API Token]
+Main menu [19 Port 443 Reuse manager] -> [7 Maintain certificates, Caddy, and Cloudflare] -> [8 Update Cloudflare API token]
 ```
 
 ## 3x-ui / x-ui
@@ -196,11 +196,11 @@ find /usr/local -maxdepth 3 -type d -name '*x-ui*' 2>/dev/null
 VPS-Optimize entrance:
 
 ```text
-Main menu [5 panel、Nodes and subscription tools] -> [1 3x-ui panel script]
-Main menu [5 panel、Nodes and subscription tools] -> [3 panel SSL Repair]
+Main menu [5 Panels, nodes, and subscription tools] -> [1 3x-ui management]
+Main menu [5 Panels, nodes, and subscription tools] -> [3 Panel SSL repair]
 ```
 
-## x-ui Enhancement Kit
+## x-ui extensions
 
 `xui-custom-manager.sh` default path:
 
@@ -228,7 +228,7 @@ tail -n 100 /var/log/xui-custom-manager.log 2>/dev/null
 Entrance:
 
 ```text
-Main menu [5 panel、Nodes and subscription tools] -> [2 x-ui Enhancement Kit]
+Main menu [5 Panels, nodes, and subscription tools] -> [2 x-ui extensions]
 ```
 
 See [xui-custom-manager.md](xui-custom-manager.md) for detailed instructions.
@@ -261,13 +261,13 @@ Entrance:
 
 ```text
 Main menu [3 Components and common services] -> [1 Docker engine]
-Main menu [3 Components and common services] -> [7 Forwardx Forward panel]
-Main menu [3 Components and common services] -> [10 nftables NAT forward]
+Main menu [3 Components and common services] -> [7 Forwardx forwarding panel]
+Main menu [3 Components and common services] -> [10 nftables NAT forwarding]
 Main menu [3 Components and common services] -> [13 FLVX Doraemon forwarding panel]
-Main menu [3 Components and common services] -> [14 EasyTier Networking]
-Main menu [3 Components and common services] -> [15 Tailscale Networking]
-Main menu [5 panel、Nodes and subscription tools]
-Main menu [11 Docker Security management]
+Main menu [3 Components and common services] -> [14 EasyTier networking]
+Main menu [3 Components and common services] -> [15 Tailscale networking]
+Main menu [5 Panels, nodes, and subscription tools]
+Main menu [11 Docker management]
 ```
 
 FLVX is deployed using Docker Compose. Install Docker first. The EasyTier and Tailscale menus only install the client; network name, login, and node authorization are completed by their respective tools.
@@ -305,7 +305,7 @@ nft list ruleset 2>/dev/null | grep -i port_traffic_monitor || true
 Entrance:
 
 ```text
-Main menu [5 panel、Nodes and subscription tools] -> [16 dog traffic meter]
+Main menu [5 Panels, nodes, and subscription tools] -> [13 Per-port traffic monitor (dog)]
 ```
 
 See [dog.md](dog.md) for detailed instructions.
@@ -334,9 +334,9 @@ fail2ban-client status sshd 2>/dev/null || fail2ban-client status ssh 2>/dev/nul
 Entrance:
 
 ```text
-Main menu [6 SSH Security center]
-Main menu [6 SSH Security center] -> [2 User key login mode] -> [1 add for user SSH public key]
-Main menu [7 Fail2ban Explosion-proof]
+Main menu [6 SSH security center]
+Main menu [6 SSH security center] -> [2 SSH authentication] -> [1 Add or update a user's SSH key]
+Main menu [7 Fail2ban protection]
 Main menu [8 Firewall rules]
 ```
 

@@ -7,7 +7,7 @@ list_sni_stack_sites() {
     web_engine=$(current_web_proxy_engine)
     web_label=$(web_proxy_engine_label "$web_engine")
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}当前 443端口复用网站/反代域名${PLAIN}" "${BOLD}Currently Port 443 Reuse/reverse proxy domain${PLAIN}" "${BOLD}в настоящее время 443 веб-сайта с повторным использованием порта 443 / доменное имя обратного прокси${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}443端口复用：Web 域名与反向代理${PLAIN}" "${BOLD}Port 443 Reuse: Web domains and reverse proxies${PLAIN}" "${BOLD}Повторное использование порта 443: Web-домены и обратные прокси${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "Web 反代引擎：${web_label} (${web_engine}) -> $(web_proxy_backend)" "Web reverse proxy engine: ${web_label} (${web_engine}) -> $(web_proxy_backend)" "механизм веб-прокси: ${web_label} (${web_engine}) -> $(web_proxy_backend)")"
     echo -e "$(localized_text "面板域名：${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Panel domain: ${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}" "Доменное имя панели: ${PANEL_DOMAIN} -> ${PANEL_LISTEN_ADDR}:${PANEL_LISTEN_PORT}")"
@@ -15,11 +15,11 @@ list_sni_stack_sites() {
     panel_ranges=$(sni_ip_whitelist_ranges_for_domain "$PANEL_DOMAIN")
     [[ -n "$panel_ranges" ]] && echo -e "$(localized_text "${YELLOW}面板域名 IP 白名单：${panel_ranges}${PLAIN}" "${YELLOW}Panel domain IP whitelist: ${panel_ranges}${PLAIN}" "${YELLOW}Белый список IP-адресов доменного имени панели : ${panel_ranges}${PLAIN}")"
     echo -e "REALITY SNI：${REALITY_SNI} -> ${XRAY_LISTEN_ADDR}:${XRAY_LISTEN_PORT}"
-    [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "$(localized_text "${CYAN}另有 ${#TCP_ROUTE_SNIS[@]} 个旧 TCP/SNI 入站。${PLAIN}" "${CYAN}And ${#TCP_ROUTE_SNIS[@]} are old and TCP/SNI are inbound.${PLAIN}" "${CYAN}и ${#TCP_ROUTE_SNIS[@]} — старые, а TCP/SNI — входящие.${PLAIN}")"
-        [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "$(localized_text "${CYAN}另有 ${#XRAY_SNI_ROUTE_SNIS[@]} 个 Xray 入站，请在 [19] -> [4] 查看。${PLAIN}" "${CYAN}And ${#XRAY_SNI_ROUTE_SNIS[@]} Xray are inbound, please check at [19] -> [4].${PLAIN}" "${CYAN}и ${#XRAY_SNI_ROUTE_SNIS[@]} Xray входящие, проверьте [19] -> [4].${PLAIN}")"
+    [[ ${#TCP_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "$(localized_text "${CYAN}另有 ${#TCP_ROUTE_SNIS[@]} 个旧 TCP/SNI 入站。${PLAIN}" "${CYAN}Plus ${#TCP_ROUTE_SNIS[@]} legacy TCP/SNI inbound(s).${PLAIN}" "${CYAN}Кроме того, есть старых входящих TCP/SNI: ${#TCP_ROUTE_SNIS[@]}.${PLAIN}")"
+        [[ ${#XRAY_SNI_ROUTE_SNIS[@]} -gt 0 ]] && echo -e "$(localized_text "${CYAN}另有 ${#XRAY_SNI_ROUTE_SNIS[@]} 个 Xray 入站，请在 [19] -> [4] 查看。${PLAIN}" "${CYAN}Plus ${#XRAY_SNI_ROUTE_SNIS[@]} Xray inbound(s); check them at [19] -> [4].${PLAIN}" "${CYAN}Кроме того, есть входящих Xray: ${#XRAY_SNI_ROUTE_SNIS[@]}; проверьте их в [19] -> [4].${PLAIN}")"
     echo -e "------------------------------------------------"
     if [[ ${#SITE_DOMAINS[@]} -eq 0 ]]; then
-        echo -e "$(localized_text "${YELLOW}当前没有额外的网站/反代域名。${PLAIN}" "${YELLOW}Currently has no additional website/reverse domains.${PLAIN}" "${YELLOW}в настоящее время не имеет дополнительных веб-сайтов или обратных доменных имен.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}当前没有额外的 Web 域名或反向代理。${PLAIN}" "${YELLOW}No additional Web domains or reverse proxies.${PLAIN}" "${YELLOW}Дополнительных Web-доменов и обратных прокси нет.${PLAIN}")"
         return 0
     fi
 
@@ -36,7 +36,7 @@ list_sni_stack_sites() {
 add_sni_stack_site() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}添加 443 网站/反代域名${PLAIN}" "${BOLD}Added 443 websites/reverse domain${PLAIN}" "${BOLD}добавил 443 веб-сайта/обратное доменное имя${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}新增 Web 域名与反向代理${PLAIN}" "${BOLD}Add a Web domain or reverse proxy${PLAIN}" "${BOLD}Добавление Web-домена или обратного прокси${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
 
@@ -52,7 +52,7 @@ add_sni_stack_site() {
         return 1
     fi
 
-    echo -e "$(localized_text "这个入口适合后续新增网站，例如 SublinkPro、Dockge、博客、订阅管理工具等。" "This entry Suitable for subsequent new websites, such as SublinkPro, Dockge, blogs, subscription management tools, etc." "Этот вход подходит для последующих новых веб-сайтов, таких как SublinkPro, Dockge, блогов, инструментов управления подписками и т. д.")"
+    echo -e "$(localized_text "这个入口适合后续新增网站，例如 SublinkPro、Dockge、博客或订阅管理工具。" "Use this entry to add sites later, such as SublinkPro, Dockge, a blog, or subscription management tools." "Этот раздел предназначен для добавления сайтов: SublinkPro, Dockge, блога или инструментов управления подписками.")"
     local web_engine web_label
     web_engine=$(current_web_proxy_engine)
     web_label=$(web_proxy_engine_label "$web_engine")
@@ -65,7 +65,7 @@ add_sni_stack_site() {
     read_trimmed site_domain_input "$(localized_text "新 Web 域名（仅域名；示例值 site.example.com）: " "New Web domain (hostname only; example: site.example.com): " "Новый Web-домен (только имя; пример: site.example.com): ")"
     site_domain=$(normalize_domain_input "$site_domain_input")
     if [[ -z "$site_domain" || "$site_domain" == "0" ]]; then
-        echo -e "$(localized_text "${BLUE}已取消新增网站/反代域名。${PLAIN}" "${BLUE}Canceled the new website/reverse domain.${PLAIN}" "${BLUE}отменил новый веб-сайт/обратное доменное имя.${PLAIN}")"
+        echo -e "$(localized_text "${BLUE}已取消新增 Web 域名与反向代理。${PLAIN}" "${BLUE}Cancelled adding the Web domain or reverse proxy.${PLAIN}" "${BLUE}Добавление Web-домена или обратного прокси отменено.${PLAIN}")"
         return 0
     fi
 
@@ -108,8 +108,8 @@ add_sni_stack_site() {
 
     is_valid_backend_addr "$site_addr" || { echo -e "$(localized_text "${RED}❌ 后端地址无效：${site_addr}${PLAIN}" "${RED}❌ Invalid backend address: ${site_addr}${PLAIN}" "${RED}❌ Неверный внутренний адрес: ${site_addr}.${PLAIN}")"; return 1; }
     is_valid_port "$site_port" || { echo -e "$(localized_text "${RED}❌ 后端端口无效：${site_port}${PLAIN}" "${RED}❌ Invalid backend port: ${site_port}${PLAIN}" "${RED}❌ Неверный внутренний порт: ${site_port}.${PLAIN}")"; return 1; }
-    warn_if_public_bind "$(localized_text "网站/反代后端 ${site_domain}" "Website/reverse proxy backend ${site_domain}" "Веб-сайт/бэкенд обратного прокси ${site_domain}")" "$site_addr" "$site_port" || return 1
-    confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${site_domain}" "Website/reverse proxy backend ${site_domain}" "Сайт/бэкенд обратного прокси ${site_domain}")" "$site_addr" "$site_port" || return 1
+    warn_if_public_bind "$(localized_text "反向代理后端 ${site_domain}" "Reverse proxy backend ${site_domain}" "Бэкенд обратного прокси ${site_domain}")" "$site_addr" "$site_port" || return 1
+    confirm_backend_target_or_continue "$(localized_text "反向代理后端 ${site_domain}" "Reverse proxy backend ${site_domain}" "Бэкенд обратного прокси ${site_domain}")" "$site_addr" "$site_port" || return 1
 
     if web_proxy_engine_supports_web_whitelist "${ENTRY_MODE:-$(get_entry_mode)}" "$web_engine"; then
         read_trimmed enable_ip_whitelist "$(localized_text "是否为 ${site_domain} 启用 IP 白名单？(y/N，默认 N): " "Enable an IP allowlist for ${site_domain}? (y/N, default N): " "Включить список разрешённых IP-адресов для ${site_domain}? (y/N, по умолчанию N): ")"
@@ -130,7 +130,7 @@ add_sni_stack_site() {
     echo -e ""
     echo -e "$(localized_text "${CYAN}即将添加：${site_domain} -> ${site_addr}:${site_port}${PLAIN}" "${CYAN}Will be added soon: ${site_domain} -> ${site_addr}:${site_port}${PLAIN}" "${CYAN}скоро будет добавлен: ${site_domain} -> ${site_addr}:${site_port}${PLAIN}")"
     [[ -n "${whitelist_ranges:-}" ]] && echo -e "$(localized_text "${YELLOW}IP 白名单：${whitelist_ranges}${PLAIN}" "${YELLOW}IP whitelist: ${whitelist_ranges}${PLAIN}" "${YELLOW}Белый список IP: ${whitelist_ranges}${PLAIN}")"
-    confirm_risk_action "$(localized_text "新增 443 网站/反代域名 ${site_domain}" "Added 443 websites/reverse domain ${site_domain}" "Добавлено 443 веб-сайта/обратное доменное имя ${site_domain}.")" \
+    confirm_risk_action "$(localized_text "新增 Web 域名与反向代理 ${site_domain}" "Add the Web domain or reverse proxy ${site_domain}" "Добавить Web-домен или обратный прокси ${site_domain}")" \
         "$(localized_text "证书、Web 反代引擎配置和 443 入口分流配置" "Certificate, Web reverse proxy engine configuration and 443 entry routing configuration" "Сертификат, конфигурация механизма веб-прокси и конфигурация перенаправления входа 443.")" \
         "$(localized_text "使用 443端口复用备份恢复，或从网站管理菜单删除该域名" "Use the Port 443 Reuse backup and restore, or delete the domain from the website management menu" "Используйте резервную копию повторного использования порта 443 для восстановления или удаления домена из меню управления веб-сайтом.")" \
         "$(localized_text "确认域名已解析到当前 VPS，后端端口可从本机访问。" "Confirm that the domain has been resolved to the current VPS and the backend port can be accessed from this machine." "Убедитесь, что доменное имя было преобразовано в текущий VPS и доступ к внутреннему порту возможен с этого компьютера.")" || return 1
@@ -151,7 +151,7 @@ add_sni_stack_site() {
 edit_sni_stack_site_backend() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    echo -e "$(localized_text "${BOLD}修改 443 网站/反代后端${PLAIN}" "${BOLD}Modified 443 website/reverse backend${PLAIN}" "${BOLD}модифицированный веб-сайт 443/обратный сервер${PLAIN}")"
+    echo -e "$(localized_text "${BOLD}修改反向代理后端${PLAIN}" "${BOLD}Edit a reverse-proxy backend${PLAIN}" "${BOLD}Изменение бэкенда обратного прокси${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     load_sni_stack_env || return 1
 
@@ -184,12 +184,12 @@ edit_sni_stack_site_backend() {
 
     is_valid_backend_addr "$new_addr" || { echo -e "$(localized_text "${RED}❌ 后端地址无效：${new_addr}${PLAIN}" "${RED}❌ Invalid backend address: ${new_addr}${PLAIN}" "${RED}❌ Неверный внутренний адрес: ${new_addr}.${PLAIN}")"; return 1; }
     is_valid_port "$new_port" || { echo -e "$(localized_text "${RED}❌ 后端端口无效：${new_port}${PLAIN}" "${RED}❌ Invalid backend port: ${new_port}${PLAIN}" "${RED}❌ Неверный внутренний порт: ${new_port}.${PLAIN}")"; return 1; }
-    warn_if_public_bind "$(localized_text "网站/反代后端 ${domain}" "Website/reverse proxy backend ${domain}" "Веб-сайт/бэкенд обратного прокси ${domain}")" "$new_addr" "$new_port" || return 1
-    confirm_backend_target_or_continue "$(localized_text "网站/反代后端 ${domain}" "Website/reverse proxy backend ${domain}" "Сайт/бэкенд обратного прокси ${domain}")" "$new_addr" "$new_port" || return 1
+    warn_if_public_bind "$(localized_text "反向代理后端 ${domain}" "Reverse proxy backend ${domain}" "Бэкенд обратного прокси ${domain}")" "$new_addr" "$new_port" || return 1
+    confirm_backend_target_or_continue "$(localized_text "反向代理后端 ${domain}" "Reverse proxy backend ${domain}" "Бэкенд обратного прокси ${domain}")" "$new_addr" "$new_port" || return 1
 
     echo -e ""
     echo -e "$(localized_text "${CYAN}即将修改：${domain} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}The following will be changed: ${domain} -> ${new_addr}:${new_port}${PLAIN}" "${CYAN}скоро будет изменен: ${domain} -> ${new_addr}:${new_port}${PLAIN}")"
-    confirm_risk_action "$(localized_text "修改 443 网站/反代后端" "Modify 443 website/reverse proxy backend" "Изменить веб-сайт 443 / бэкенд обратный прокси")" \
+    confirm_risk_action "$(localized_text "修改反向代理后端" "Edit the reverse proxy backend" "Изменить бэкенд обратного прокси")" \
         "$(localized_text "Web 反代引擎后端和 443 入口分流配置" "Web reverse proxy engine backend and 443 entry routing configuration" "бэкенд механизма веб-прокси и конфигурация перенаправления входа 443")" \
         "$(localized_text "使用 443端口复用备份恢复修改前配置" "Use Port 443 Reuse backup to restore the configuration before modification" "Используйте резервную копию повторного использования порта 443 для восстановления конфигурации до изменения.")" \
         "$(localized_text "确认当前 VPS 能访问新的后端地址和端口。" "Confirm that the current VPS can access the new backend address and port." "Убедитесь, что текущий VPS может получить доступ к новому внутреннему адресу и порту.")" || return 1

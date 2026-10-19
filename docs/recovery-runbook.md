@@ -54,8 +54,8 @@ systemctl status nginx caddy x-ui --no-pager
 
 ```text
 主菜单 [16 配置备份与回滚] -> [5 查看/编辑脚本已应用配置]
-主菜单 [16 配置备份与回滚] -> [2 查看现有备份列表]
-主菜单 [16 配置备份与回滚] -> [3 从备份一键回滚]
+主菜单 [16 配置备份与回滚] -> [2 加载备份包]
+主菜单 [16 配置备份与回滚] -> [3 从备份恢复]
 ```
 
 ## SSH 失联
@@ -212,17 +212,17 @@ caddy validate --config /etc/caddy/Caddyfile
 | 目标 | 菜单路径 |
 |---|---|
 | 新增或删除网站 | `主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理]` |
-| 切换 Caddy/Nginx Web 反代引擎 | `主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [8 切换 Web 反代引擎]` |
+| 切换 Caddy/Nginx Web 反代引擎 | `主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [8 切换 Web 反向代理引擎]` |
 | 重新生成配置 | `主菜单 [19 443端口复用管理中心] -> [9 重新生成并应用入口配置]` |
 | 修改面板/订阅/REALITY 参数 | `主菜单 [19 443端口复用管理中心] -> [3 修改端口、路径与 REALITY 参数]` |
-| Caddy/证书维护 | `主菜单 [19 443端口复用管理中心] -> [7 维护 HTTPS 证书与 Cloudflare Token]` |
-| 回滚 443 配置 | `主菜单 [19 443端口复用管理中心] -> [7 维护 HTTPS 证书与 Cloudflare Token] -> [6 回滚 443端口复用配置]` |
+| Caddy/证书维护 | `主菜单 [19 443端口复用管理中心] -> [7 维护证书、Caddy 与 Cloudflare]` |
+| 回滚 443 配置 | `主菜单 [19 443端口复用管理中心] -> [7 维护证书、Caddy 与 Cloudflare] -> [6 回滚 443端口复用配置]` |
 
 ### 切换 Caddy/Nginx Web 反代引擎后坏了
 
 脚本管理的 443 配置以 `/etc/vps-optimize/sni-stack.env` 为准。通过 `[19] -> [2] -> [8]` 切换 Web 反代引擎时，会读取已经保存的面板、订阅、网站、证书、白名单和后端参数重建目标引擎配置；不会反向解析手写的 Caddy/Nginx 配置。
 
-如果之前手动改过 `/etc/caddy/conf.d`、`/etc/nginx/conf.d/vps_sni_web_*.conf` 或旧 `[4 反代]` 生成的 `/etc/nginx/conf.d/vps_proxy_*.conf`，先通过 `[2 管理 Web 域名与反向代理]` 或 `[3 修改端口、路径与 REALITY 参数]` 把参数同步到脚本，再切换。切换到 Nginx 本地 Web 反代会隔离脚本管理的 Caddy 443 Web 配置；切换回 Caddy 会隔离脚本管理的 Nginx 本地 Web 配置。重新应用 443 时也会隔离旧 Nginx HTTPS 公网反代配置，避免继续抢公网 `443`。
+如果之前手动改过 `/etc/caddy/conf.d`、`/etc/nginx/conf.d/vps_sni_web_*.conf` 或旧 `[4 反向代理（Caddy / Nginx）]` 生成的 `/etc/nginx/conf.d/vps_proxy_*.conf`，先通过 `[2 管理 Web 域名与反向代理]` 或 `[3 修改端口、路径与 REALITY 参数]` 把参数同步到脚本，再切换。切换到 Nginx 本地 Web 反代会隔离脚本管理的 Caddy 443 Web 配置；切换回 Caddy 会隔离脚本管理的 Nginx 本地 Web 配置。重新应用 443 时也会隔离旧 Nginx HTTPS 公网反代配置，避免继续抢公网 `443`。
 
 `ENTRY_MODE=xray-fallback` 不支持 Web 白名单，无论本地 Web 反代引擎选择 Caddy 还是 Nginx。原因是 Xray fallback 后，本地 Web 反代引擎不能可靠拿到真实客户端源 IP。如需 Web 白名单，切到 Nginx Stream 或 TCP Peek，在公网入口层按 `SNI + 源 IP` 限制。
 
@@ -266,7 +266,7 @@ nginx -t
 再进入：
 
 ```text
-主菜单 [19 443端口复用管理中心] -> [7 维护 HTTPS 证书与 Cloudflare Token] -> [15 隔离旧 Caddy 配置]
+主菜单 [19 443端口复用管理中心] -> [7 维护证书、Caddy 与 Cloudflare] -> [15 隔离旧 Caddy 配置]
 主菜单 [19 443端口复用管理中心] -> [9 重新生成并应用入口配置]
 ```
 
@@ -299,11 +299,11 @@ curl -I http://127.0.0.1:2096/sub/
 
 | 问题 | 菜单路径 |
 |---|---|
-| 只是 Caddy 语法或重载问题 | `主菜单 [19 443端口复用管理中心] -> [7 维护 HTTPS 证书与 Cloudflare Token] -> [12 校验并重载 Caddy]` |
+| 只是 Caddy 语法或重载问题 | `主菜单 [19 443端口复用管理中心] -> [7 维护证书、Caddy 与 Cloudflare] -> [12 校验并重载 Caddy]` |
 | Nginx 本地 Web 反代语法或重载问题 | `主菜单 [19 443端口复用管理中心] -> [9 重新生成并应用入口配置]` |
-| 需要切换 Caddy/Nginx Web 反代引擎 | `主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [8 切换 Web 反代引擎]` |
+| 需要切换 Caddy/Nginx Web 反代引擎 | `主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [8 切换 Web 反向代理引擎]` |
 | 后端端口或路径写错 | `主菜单 [19 443端口复用管理中心] -> [3 修改端口、路径与 REALITY 参数] -> [1 修改面板/订阅端口与路径]` |
-| 证书文件或软链接异常 | `主菜单 [19 443端口复用管理中心] -> [7 维护 HTTPS 证书与 Cloudflare Token] -> [10 重建 /root/cert 证书软链接]` |
+| 证书文件或软链接异常 | `主菜单 [19 443端口复用管理中心] -> [7 维护证书、Caddy 与 Cloudflare] -> [10 重建 /root/cert 证书软链接]` |
 | 不知道是哪类问题 | `主菜单 [19 443端口复用管理中心] -> [13 检查入口配置、证书与转发规则]` |
 
 ## 证书失败
@@ -332,9 +332,9 @@ Zone.DNS.Edit
 ### 处理入口
 
 ```text
-主菜单 [19 443端口复用管理中心] -> [7 维护 HTTPS 证书与 Cloudflare Token] -> [8 更新 Cloudflare API Token]
-主菜单 [19 443端口复用管理中心] -> [7 维护 HTTPS 证书与 Cloudflare Token] -> [9 重新签发某个域名证书]
-主菜单 [19 443端口复用管理中心] -> [7 维护 HTTPS 证书与 Cloudflare Token] -> [13 Caddy/证书一键体检]
+主菜单 [19 443端口复用管理中心] -> [7 维护证书、Caddy 与 Cloudflare] -> [8 更新 Cloudflare API Token]
+主菜单 [19 443端口复用管理中心] -> [7 维护证书、Caddy 与 Cloudflare] -> [9 重新签发某个域名证书]
+主菜单 [19 443端口复用管理中心] -> [7 维护证书、Caddy 与 Cloudflare] -> [13 检查 Caddy 与证书]
 ```
 
 菜单名称里保留 Caddy 是历史命名；无论 Web 反代引擎选择 Caddy 还是 Nginx，证书仍由 `acme.sh + Cloudflare DNS API` 签发，并继续使用 `/etc/caddy/certs/${domain}.crt|key` 和 `/root/cert/${domain}.crt|key`。
@@ -434,8 +434,8 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 适合系统还能登录、脚本菜单还能打开时：
 
 ```text
-主菜单 [16 配置备份与回滚] -> [2 查看现有备份列表]
-主菜单 [16 配置备份与回滚] -> [3 从备份一键回滚]
+主菜单 [16 配置备份与回滚] -> [2 加载备份包]
+主菜单 [16 配置备份与回滚] -> [3 从备份恢复]
 ```
 
 备份通常位于：
@@ -449,7 +449,7 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 适合只回滚入口服务、Web 反代和 443 配置：
 
 ```text
-主菜单 [19 443端口复用管理中心] -> [7 维护 HTTPS 证书与 Cloudflare Token] -> [6 回滚 443端口复用配置]
+主菜单 [19 443端口复用管理中心] -> [7 维护证书、Caddy 与 Cloudflare] -> [6 回滚 443端口复用配置]
 ```
 
 相关路径：

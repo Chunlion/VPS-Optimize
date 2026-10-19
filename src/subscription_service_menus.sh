@@ -37,7 +37,7 @@ func_service_action_menu() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "面板、节点与订阅工具 > ${title}" "Panels, Nodes and Subscription Tools > ${title}" "Панели, узлы и инструменты подписки > ${title}")"
+        print_breadcrumb "$(localized_text "面板、节点与订阅工具 > ${title}" "Panels, nodes, and subscription tools > ${title}" "Панели, узлы и инструменты подписки > ${title}")"
         echo -e "${BOLD}🧭 ${title}${PLAIN}"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${YELLOW}${usage}${PLAIN}"

@@ -41,14 +41,14 @@ Shortcuts are case-insensitive and behave like selecting the corresponding main-
 | Shortcut | Main-menu item |
 |---|---|
 | `proxy` | `[4 Reverse proxy]` |
-| `panel` | `[5 Panels, nodes, subscriptions]` |
+| `panel` | `[5 Panels, nodes, and subscription tools]` |
 | `ssh` | `[6 SSH security center]` |
 | `firewall` | `[8 Firewall rules]` |
-| `bbr` | `[10 Network and kernel tuning]` |
-| `docker` | `[11 Docker security management]` |
+| `bbr` | `[10 Network and kernel optimization]` |
+| `docker` | `[11 Docker management]` |
 | `speed` | `[12 Speed and quality tests]` |
 | `health` | `[15 Service health overview]` |
-| `backup` | `[16 Configuration backup]` |
+| `backup` | `[16 Configuration backup and rollback]` |
 | `u` / `update` / `upd` | `[17 Update script]` |
 | `443` | `[19 Port 443 Reuse manager]` |
 | `lang` | `[20 Interface language]` |

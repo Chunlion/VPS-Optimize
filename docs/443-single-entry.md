@@ -87,7 +87,7 @@ REALITY 节点 -> Xray / 3x-ui 的本地入站
 5. `Client IP Address Filtering` 可以留空。若限制为 VPS 公网 IP，服务器 IP 变化后必须同步更新 Token 条件。
 6. 选择 `Continue to summary`，确认后创建 Token。Token 只完整显示一次，请立即复制并妥善保存，不要写进文档、截图或聊天记录。
 
-首次部署时，把 Token 粘贴到脚本的 `CF Token` 提示处，不要填写邮箱、Zone ID 或 Global API Key。已经部署过时，可进入主菜单 `[19 443端口复用管理中心]` → `[7 维护 HTTPS 证书与 Cloudflare Token]` → `[8 更新 Cloudflare API Token]`。脚本会在线校验 Token；校验失败时优先检查权限、授权 Zone 和可选的 IP 限制。
+首次部署时，把 Token 粘贴到脚本的 `CF Token` 提示处，不要填写邮箱、Zone ID 或 Global API Key。已经部署过时，可进入主菜单 `[19 443端口复用管理中心]` → `[7 维护证书、Caddy 与 Cloudflare]` → `[8 更新 Cloudflare API Token]`。脚本会在线校验 Token；校验失败时优先检查权限、授权 Zone 和可选的 IP 限制。
 
 Cloudflare 官方说明：[创建 API Token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)。
 
@@ -289,12 +289,12 @@ TCP Peek 的优点是分流组件更轻量，并且能在连接早期按 SNI 处
 主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理]
 ```
 
-切换 Caddy / Nginx：选择 `[8 切换 Web 反代引擎]`。两者共用域名和证书配置，切换前先确认后端端口可访问。
+切换 Caddy / Nginx：选择 `[8 切换 Web 反向代理引擎]`。两者共用域名和证书配置，切换前先确认后端端口可访问。
 
 完整路径是：
 
 ```text
-主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [8 切换 Web 反代引擎]
+主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [8 切换 Web 反向代理引擎]
 ```
 
 脚本会重新生成所选引擎的配置，并继续使用已有域名、证书和后端。不要同时手动启动另一套 Caddy/Nginx 配置，否则它可能抢占 `443` 或本地 Web 端口。

@@ -3,14 +3,14 @@
 Entries related to nodes and subscriptions are concentrated in:
 
 ```text
-Main menu [5 panel、Nodes and subscription tools]
+Main menu [5 Panels, nodes, and subscription tools]
 ```
 
 ## Contains content
 
 This entry manages related tools such as 3x-ui, S-UI, 2S-UI, Sing-box, Xray, SublinkPro, Sub-Store, Dockge, Komari, CDT Monitor, the dog.sh traffic monitor, and the x-ui extension.
 
-CDT Monitor is at `[5 Panels, Nodes and Subscription Tools] -> [16 CDT Monitor]`. It monitors Alibaba Cloud CDT traffic, manages ECS automation, and shows costs. See [CDT Monitor](cdt-monitor.md).
+CDT Monitor is at `[5 Panels, nodes, and subscription tools] -> [16 CDT Monitor]`. It monitors Alibaba Cloud CDT traffic, manages ECS automation, and shows costs. See [CDT Monitor](cdt-monitor.md).
 
 ## Deployment recommendations
 
@@ -25,7 +25,7 @@ Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxi
 When the Port 443 Reuse is not enabled, a standalone reverse proxy portal can be used:
 
 ```text
-Main menu [4 reverse proxy]
+Main menu [4 Reverse proxy]
 ```
 
 For detailed scenarios, see [Subscription Tool Access Caddy/Nginx reverse proxy and Port 443 Reuse](../tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md).

@@ -55,7 +55,7 @@ print_subscription_compose_status() {
 func_docker_project_status() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "Docker 管理 > 项目容器状态" "Docker Management > Project Container Status" "Docker > Статус контейнеров проекта")"
+    print_breadcrumb "$(localized_text "Docker 管理 > 项目容器状态" "Docker management > Project Container Status" "Docker > Статус контейнеров проекта")"
     echo -e "$(localized_text "${BOLD}🐳 443 / 订阅工具相关容器状态${PLAIN}" "${BOLD}🐳 443 / Subscription tool related container status${PLAIN}" "${BOLD}🐳 443 / Статус контейнера, связанного с инструментом подписки${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}这里只看本项目场景相关容器：SublinkPro、妙妙屋、Sub-Store、Dockge、Komari、CDT Monitor。${PLAIN}" "${YELLOW}Here we only look at the containers related to this project scenario: SublinkPro, Miaomiaowu, Sub-Store, Dockge, Komari, and CDT Monitor.${PLAIN}" "${YELLOW}Здесь мы рассматриваем только контейнеры, относящиеся к этому сценарию проекта: SublinkPro, Miaomiaowu, Sub-Store, Dockge, Komari и CDT Monitor.${PLAIN}")"
@@ -69,7 +69,7 @@ func_docker_project_status() {
 func_docker_443_exposure_audit() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"
-    print_breadcrumb "$(localized_text "Docker 管理 > 443 暴露审计" "Docker Management > 443 Exposure Audit" "Docker > Аудит публикации порта 443")"
+    print_breadcrumb "$(localized_text "Docker 管理 > 443 暴露审计" "Docker management > 443 Exposure Audit" "Docker > Аудит публикации порта 443")"
     echo -e "$(localized_text "${BOLD}🔎 Docker 端口暴露审计${PLAIN}" "${BOLD}🔎 Docker Port exposure audit${PLAIN}" "${BOLD}🔎 Docker Аудит воздействия порта${PLAIN}")"
     echo -e "${CYAN}================================================${PLAIN}"
     echo -e "$(localized_text "${YELLOW}目标：启用 443端口复用后，订阅工具和管理面板应尽量只绑定 127.0.0.1，再由 Caddy/Nginx 对外。${PLAIN}" "${YELLOW}Goal: After enabling the Port 443 Reuse, the subscription tool and management panel should only be bound to 127.0.0.1, and then Caddy/Nginx should be externalized.${PLAIN}" "${YELLOW}Назначение: после включения повторного использования порта 443 инструмент подписки и панель управления должны быть привязаны только к 127.0.0.1, а затем Caddy/Nginx должны быть экспортированы.${PLAIN}")"
@@ -189,7 +189,7 @@ docker_container_manage() {
     local choice target
     while true; do
         clear
-        print_breadcrumb "$(localized_text "Docker 管理 > 容器" "Docker Management > Containers" "Docker > Контейнеры")"
+        print_breadcrumb "$(localized_text "Docker 管理 > 容器" "Docker management > Containers" "Docker > Контейнеры")"
         docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
         echo "------------------------------------------------"
         echo -e "${GREEN}  1. $(localized_text "启动" "Start" "Запустить")${PLAIN}"
@@ -221,7 +221,7 @@ docker_image_manage() {
     local choice target
     while true; do
         clear
-        print_breadcrumb "$(localized_text "Docker 管理 > 镜像" "Docker Management > Images" "Docker > Образы")"
+        print_breadcrumb "$(localized_text "Docker 管理 > 镜像" "Docker management > Images" "Docker > Образы")"
         docker image ls
         echo "------------------------------------------------"
         echo -e "${GREEN}  1. $(localized_text "拉取 / 更新镜像" "Pull / update image" "Загрузить / обновить образ")${PLAIN}"
@@ -245,7 +245,7 @@ docker_network_manage() {
     local choice network container
     while true; do
         clear
-        print_breadcrumb "$(localized_text "Docker 管理 > 网络" "Docker Management > Networks" "Docker > Сети")"
+        print_breadcrumb "$(localized_text "Docker 管理 > 网络" "Docker management > Networks" "Docker > Сети")"
         docker network ls
         echo "------------------------------------------------"
         echo -e "${GREEN}  1. $(localized_text "查看网络详情" "Inspect network" "Сведения о сети")${PLAIN}"
@@ -274,7 +274,7 @@ docker_volume_manage() {
     local choice volume
     while true; do
         clear
-        print_breadcrumb "$(localized_text "Docker 管理 > 数据卷" "Docker Management > Volumes" "Docker > Тома")"
+        print_breadcrumb "$(localized_text "Docker 管理 > 数据卷" "Docker management > Volumes" "Docker > Тома")"
         docker volume ls
         echo "------------------------------------------------"
         echo -e "${GREEN}  1. $(localized_text "查看卷详情" "Inspect volume" "Сведения о томе")${PLAIN}"
@@ -397,7 +397,7 @@ docker_backup_migration_menu() {
     local choice
     while true; do
         clear
-        print_breadcrumb "$(localized_text "Docker 管理 > 备份 / Compose" "Docker Management > Backup / Compose" "Docker > Резервное копирование / Compose")"
+        print_breadcrumb "$(localized_text "Docker 管理 > 备份 / Compose" "Docker management > Backup / Compose" "Docker > Резервное копирование / Compose")"
         echo -e "$(localized_text "${YELLOW}配置备份可还原 daemon.json；不包含镜像和数据卷。${PLAIN}" "${YELLOW}Configuration backups include daemon.json, not images or volumes.${PLAIN}" "${YELLOW}Резервная копия включает daemon.json, но не образы и тома.${PLAIN}")"
         echo -e "${GREEN}  1. $(localized_text "配置备份 / 还原" "Configuration backup / restore" "Резервная копия / восстановление")${PLAIN}"
         echo -e "${GREEN}  2. $(localized_text "Dockge / Compose 管理" "Dockge / Compose management" "Управление Dockge / Compose")${PLAIN}"
@@ -416,7 +416,7 @@ docker_compose_management_menu() {
     local choice
     while true; do
         clear
-        print_breadcrumb "$(localized_text "Docker 管理 > Dockge / Compose" "Docker Management > Dockge / Compose" "Docker > Dockge / Compose")"
+        print_breadcrumb "$(localized_text "Docker 管理 > Dockge / Compose" "Docker management > Dockge / Compose" "Docker > Dockge / Compose")"
         echo -e "${GREEN}  1. $(localized_text "安装 / 管理 Dockge" "Install / manage Dockge" "Установить / управлять Dockge")${PLAIN}"
         echo -e "${GREEN}  2. $(localized_text "迁移已有 Compose 项目" "Migrate existing Compose projects" "Перенести существующие проекты Compose")${PLAIN}"
         echo -e "${RED}  0. $(localized_text "返回" "Back" "Назад")${PLAIN}"
@@ -470,8 +470,8 @@ func_docker_manage() {
         [[ -z "$docker_ver" ]] && docker_ver="$(localized_text "未安装" "Not installed" "Не установлен")"
         protection_state=$(docker_local_protection_state)
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "Docker 管理" "Docker Management" "Управление Docker")"
-        echo -e "$(localized_text "${BOLD}🐳 Docker 管理${PLAIN}  ${CYAN}${docker_ver}${PLAIN}" "${BOLD}🐳 Docker Management${PLAIN}  ${CYAN}${docker_ver}${PLAIN}" "${BOLD}🐳 Управление Docker${PLAIN}  ${CYAN}${docker_ver}${PLAIN}")"
+        print_breadcrumb "$(localized_text "Docker 管理" "Docker management" "Управление Docker")"
+        echo -e "$(localized_text "${BOLD}🐳 Docker 管理${PLAIN}  ${CYAN}${docker_ver}${PLAIN}" "${BOLD}🐳 Docker management${PLAIN}  ${CYAN}${docker_ver}${PLAIN}" "${BOLD}🐳 Управление Docker${PLAIN}  ${CYAN}${docker_ver}${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "${GREEN}  1. $(localized_text "安装 / 更新 Docker" "Install / update Docker" "Установить / обновить Docker")${PLAIN}"
         echo -e "${GREEN}  2. $(localized_text "查看 Docker 全局状态" "View Docker overview" "Обзор Docker")${PLAIN}"

@@ -158,7 +158,7 @@ manage_compose_project() {
     while true; do
         clear
         echo -e "${CYAN}================================================${PLAIN}"
-        print_breadcrumb "$(localized_text "面板、节点与订阅工具 > ${project_name}" "Panels, Nodes and Subscription Tools > ${project_name}" "Панели, узлы и инструменты подписки > ${project_name}")"
+        print_breadcrumb "$(localized_text "面板、节点与订阅工具 > ${project_name}" "Panels, nodes, and subscription tools > ${project_name}" "Панели, узлы и инструменты подписки > ${project_name}")"
         echo -e "$(localized_text "${BOLD}🧭 ${project_name} 管理${PLAIN}" "${BOLD}🧭 Manage ${project_name}${PLAIN}" "${BOLD}🧭 Управление ${project_name}${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}部署目录：${CYAN}${project_dir}${PLAIN}" "${YELLOW}Deployment directory: ${project_dir}${PLAIN}" "${YELLOW}Каталог развертывания : ${project_dir}.${PLAIN}")"

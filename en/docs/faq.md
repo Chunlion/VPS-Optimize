@@ -56,7 +56,7 @@ https://panel.example.com:40000/
 Entrance:
 
 ```text
-Main menu [10 Network and kernel tuning] -> [2 Dynamic TCP Parameter tuning]
+Main menu [10 Network and kernel optimization] -> [2 Dynamic TCP Parameter tuning]
 ```
 
 After entering, follow the prompts to paste multiple lines of `sysctl` parameters. After pasting is completed, enter `EOF` in another line and press Enter to save.
