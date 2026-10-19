@@ -440,7 +440,7 @@ manage_reality_traffic_guard() {
             1) set_strict_sni_gate true ; pause_return ;;
             2) set_strict_sni_gate false ; pause_return ;;
             3)
-                confirm_danger "$(localized_text "重新同步严格 SNI 清单" "Resynchronize the strict SNI list" "Повторно синхронизировать строгий список SNI")" \
+                confirm_standard_action "$(localized_text "重新同步严格 SNI 清单" "Resynchronize the strict SNI list" "Повторно синхронизировать строгий список SNI")" \
                     "$(localized_text "重新生成当前入口配置；运行中的 Nginx 或 vpso-mux 可能重启" "regenerate the current entry configuration; the running Nginx or vpso-mux service may restart" "заново создать текущую конфигурацию точки входа; работающий Nginx или vpso-mux может быть перезапущен")" \
                     "$(localized_text "已保存的域名与路由不会删除；修正后可再次同步" "saved domains and routes are retained; correct them and synchronize again" "сохранённые домены и маршруты останутся; исправьте их и повторите синхронизацию")" && sync_strict_sni_gate_to_current_entry
                 pause_return

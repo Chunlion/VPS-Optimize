@@ -89,14 +89,14 @@ In submenus, enter `0`, `q`, or press Enter to go back one level. Select ports b
 
 - Add port monitoring: Enter `1. Add/remove port monitoring`, select Add, then enter actual port numbers such as `443,54558` or a range such as `10000-10010`.
 - Remove port monitoring: Select Remove, enter list numbers such as `1,3`, then confirm the displayed ports. This removes monitoring, quotas and rate limits without stopping services.
-- Set quota: Enter `2. Quota/speed limit management` and set the monthly traffic quota for the port.
-- Set speed limit: Enter `2. Quota/speed limit management` and set bandwidth limit for the port.
-- View daily reports: Enter `8. Daily and trend reports`.
-- Telegram query: Enter `7. Notification management (Telegram Query/Notification)`, deploy the interactive query bot, and use `/t`, `/all`, `/yday`, `/trend`, or `/day YYYY-MM-DD`.
+- Set quota: Enter `2. Quotas and rate limits` and set the monthly traffic quota for the port.
+- Set speed limit: Enter `2. Quotas and rate limits` and set bandwidth limit for the port.
+- View daily reports: Enter `8. Daily reports and trends`.
+- Telegram query: Enter `7. Telegram notifications`, deploy the interactive query bot, and use `/t`, `/all`, `/yday`, `/trend`, or `/day YYYY-MM-DD`.
 - Telegram notifications: Send a real-time summary immediately or schedule it hourly, every 6 or 12 hours, or once a day at a selected Beijing-time hour.
 - Notification template: The built-in template is used by default. Custom templates support `{server_name}`, `{report}`, and `{time}`, and must contain `{report}`.
-- Update script: Enter `5. Check and hot update scripts`.
-- Uninstall script: Enter `6. uninstall script`. It is recommended to export the configuration before uninstalling.
+- Update script: Enter `5. Update script`.
+- Uninstall script: Enter `6. Uninstall`. It is recommended to export the configuration before uninstalling.
 
 ## file path
 
@@ -209,6 +209,6 @@ The merchant backend is still the final bill reference.
 
 ## Uninstall and clean up
 
-Enter the menu `6. uninstall script` to uninstall. Uninstalling will delete the currently running `nftables` rules, `tc` speed limit, `cron` tasks and configuration file related content. Before uninstalling, it is recommended to export the configuration and confirm that there is a VPS snapshot or other rollback means.
+Enter the menu `6. Uninstall` to uninstall. Uninstalling will delete the currently running `nftables` rules, `tc` speed limit, `cron` tasks and configuration file related content. Before uninstalling, it is recommended to export the configuration and confirm that there is a VPS snapshot or other rollback means.
 
 If the script isolates the old configuration to a directory like `/root/port-traffic-dog-quarantine`, make sure it is no longer needed before cleaning it manually.

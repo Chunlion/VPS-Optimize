@@ -29,16 +29,32 @@ func_env_install() {
                 echo -e "$(localized_text "${CYAN}▶ 正在拉取 Docker 引擎...${PLAIN}" "${CYAN}▶ Pulling Docker engine...${PLAIN}" "${CYAN}▶ Извлечение двигателя Docker...${PLAIN}")"
                 run_remote_script "$(localized_text "安装 Docker 引擎" "Install Docker engine" "Установите двигатель Docker.")" "https://get.docker.com" || echo -e "$(localized_text "${RED}❌ Docker 安装失败，请检查网络！${PLAIN}" "${RED}❌ Docker Installation failed, please check the network!${PLAIN}" "${RED}❌ Docker Установка не удалась, проверьте сеть!${PLAIN}")"
                 ;;
-            2) run_remote_script "$(localized_text "安装 Python 环境" "Install Python environment" "Установите среду Python.")" "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh" ;;
+            2)
+                if is_debian; then
+                    run_safe "$(localized_text "安装 Python 3、pip 与 venv" "Install Python 3, pip, and venv" "Установить Python 3, pip и venv")" install_pkg python3 python3-pip python3-venv || true
+                elif is_redhat; then
+                    run_safe "$(localized_text "安装 Python 3、pip 与 venv" "Install Python 3, pip, and venv" "Установить Python 3, pip и venv")" install_pkg python3 python3-pip || true
+                else
+                    echo -e "$(localized_text "${RED}❌ 当前系统暂不支持自动安装 Python。${PLAIN}" "${RED}❌ This system does not support automatic Python installation.${PLAIN}" "${RED}❌ Эта система не поддерживает автоматическую установку Python.${PLAIN}")"
+                fi
+                if command -v python3 >/dev/null 2>&1; then
+                    echo -e "$(localized_text "${GREEN}✅ 已安装：$(python3 --version 2>&1)${PLAIN}" "${GREEN}✅ Installed: $(python3 --version 2>&1)${PLAIN}" "${GREEN}✅ Установлено: $(python3 --version 2>&1)${PLAIN}")"
+                    if ! python3 -m pip --version >/dev/null 2>&1; then
+                        echo -e "$(localized_text "${YELLOW}⚠️ pip 未就绪，可手动安装 python3-pip 后重试。${PLAIN}" "${YELLOW}⚠️ pip is not ready; install python3-pip manually and retry.${PLAIN}" "${YELLOW}⚠️ pip недоступен; установите python3-pip вручную и повторите попытку.${PLAIN}")"
+                    fi
+                else
+                    echo -e "$(localized_text "${RED}❌ Python 3 未安装，请检查软件源或网络。${PLAIN}" "${RED}❌ Python 3 is not installed; check the package sources or network.${PLAIN}" "${RED}❌ Python 3 не установлен; проверьте источники пакетов или сеть.${PLAIN}")"
+                fi
+                ;;
             3) run_safe "$(localized_text "安装 iperf3" "Install iperf3" "Установить iperf3")" install_pkg iperf3 ;;
             4) run_remote_script "$(localized_text "安装 WARP 解锁/网络工具" "Install WARP Unlock/Network Tool" "Установите инструмент разблокировки/сети WARP.")" "https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh" ;;
             5) run_remote_script "$(localized_text "安装 Realm 端口转发" "Install Realm port forwarding" "Установите переадресацию портов Realm")" "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh" install ;;
             6) run_remote_script "$(localized_text "安装 Gost 隧道" "Install Gost tunnel" "Установите туннель Gost.")" "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh" ;;
             7) run_remote_script "$(localized_text "安装 Forwardx 转发面板" "Install Forwardx forwarding panel" "Установить панель маршрутизация Forwardx")" "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh" install ;;
-            8) run_remote_script "$(localized_text "安装 Argox 节点" "Install Argox node" "Установите узел Argox.")" "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh" ;;
+            8) run_remote_script "$(localized_text "安装 Argox 节点" "Install Argox node" "Установите узел Argox.")" "https://raw.githubusercontent.com/fscarmen/ArgoX/main/argox.sh" ;;
             9) run_remote_script "$(localized_text "安装极光面板" "Install Aurora Panel" "Установить панель Аврора")" "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh" ;;
-            10) run_remote_script "$(localized_text "安装 nftables NAT 转发工具" "Install nftables NAT forwarding tool" "Установите инструмент маршрутизация NAT nftables.")" "https://us.arloor.dev/https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh" toml ;;
-            11) run_remote_script "$(localized_text "安装 Aria2 下载工具" "Install the Aria2 download tool" "Установите инструмент загрузки Aria2.")" "https://git.io/aria2.sh" ;;
+            10) run_remote_script "$(localized_text "安装 nftables NAT 转发工具" "Install nftables NAT forwarding tool" "Установите инструмент маршрутизация NAT nftables.")" "https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh" toml ;;
+            11) run_remote_script "$(localized_text "安装 Aria2 下载工具" "Install the Aria2 download tool" "Установите инструмент загрузки Aria2.")" "https://raw.githubusercontent.com/P3TERX/aria2.sh/master/aria2.sh" ;;
             12) run_remote_script "$(localized_text "安装 PVE 虚拟化工具" "Install PVE virtualization tools" "Установите инструменты виртуализации PVE")" "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh" ;;
             13) run_remote_script "$(localized_text "安装 FLVX 哆啦转发面板" "Install FLVX Doraemon forwarding panel" "Установите панель маршрутизация FLVX Doraemon.")" "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh" ;;
             14) run_remote_script "$(localized_text "安装 EasyTier 组网" "Install EasyTier networking" "Установите сеть EasyTier")" "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh" install ;;

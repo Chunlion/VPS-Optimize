@@ -11,16 +11,14 @@
 | acme.sh 证书安装 | acme.sh | <https://github.com/acmesh-official/acme.sh> |
 | Docker 引擎安装 | Docker Engine | <https://github.com/docker/docker-install> |
 | Docker Compose 二进制 | Docker Compose | <https://github.com/docker/compose> |
-| Python 环境安装 | lxspacepy | <https://github.com/lx969788249/lxspacepy> |
 | WARP 解锁/网络工具 | WARP | <https://gitlab.com/fscarmen/warp> |
 | Realm 端口转发 | Realm-xwPF | <https://github.com/zywe03/realm-xwPF> |
 | Gost 隧道 | EZgost | <https://github.com/qqrrooty/EZgost> |
 | 极光面板 | Aurora Admin Panel | <https://github.com/Aurora-Admin-Panel/deploy> |
 | nftables NAT 转发 | nftables-nat-rust | <https://github.com/arloor/nftables-nat-rust> |
-| Aria2 下载工具 | aria2.sh | <https://github.com/P3TERX/aria2.sh> |
-| 宝塔面板安装（HTTP 源已拒绝执行） | HostCLI | <https://www.hostcli.com/> |
+| Aria2 下载工具 | aria2.sh（上游已归档，仅用于生成配置） | <https://github.com/P3TERX/aria2.sh> |
 | PVE 管理脚本 | oneclickvirt/pve | <https://github.com/oneclickvirt/pve> |
-| Argox 转发面板 | Argox | <https://github.com/fscarmen/argox> |
+| Argox 转发面板 | Argox | <https://github.com/fscarmen/ArgoX> |
 | Forwardx 转发面板 | Forwardx | <https://github.com/poouo/Forwardx> |
 | FLVX 哆啦转发面板 | FLVX | <https://github.com/Sagit-chu/flvx> |
 | BBR / 多内核调优 | Linux-NetSpeed | <https://github.com/ylx2016/Linux-NetSpeed> |
@@ -53,4 +51,6 @@
 |---|---|---|
 | 系统重装 | reinstall | <https://github.com/bin456789/reinstall> |
 
-HostCLI 没有公开源码仓库；其入口是 HTTP，VPS-Optimize 会在下载前拒绝执行，因此仅保留项目页用于追溯。
+Python 环境改为系统软件包安装（`python3`、`pip`、`venv`），不再下载第三方安装脚本。
+
+Aria2 安装器已归档且长期未更新；如只需 aria2 本体，可直接用系统包管理器安装。脚本改用仓库原始地址，不再依赖已停止维护的 `git.io` 短链。

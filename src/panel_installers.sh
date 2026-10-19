@@ -66,7 +66,7 @@ func_xpanel_manage() {
 
     if [[ -z "$panel_cmd" ]]; then
         echo -e "$(localized_text "${YELLOW}未检测到 x-ui 或 3x-ui 管理命令，可能尚未安装面板。${PLAIN}" "${YELLOW}The x-ui and 3x-ui management commands were not found; the panel may not be installed.${PLAIN}" "${YELLOW}Команды управления x-ui и 3x-ui не найдены; возможно, панель не установлена.${PLAIN}")"
-        if confirm_danger "$(localized_text "安装 3x-ui 面板" "Install the 3x-ui panel" "Установить панель 3x-ui")" \
+        if confirm_standard_action "$(localized_text "安装 3x-ui 面板" "Install the 3x-ui panel" "Установить панель 3x-ui")" \
             "$(localized_text "下载并执行 3x-ui 官方安装脚本" "download and run the official 3x-ui installer" "скачать и запустить официальный установщик 3x-ui")" \
             "$(localized_text "安装前备份现有面板配置；卸载方式以 3x-ui 官方菜单为准" "back up any existing panel configuration first; use the official 3x-ui menu to uninstall" "сначала сохраните существующую конфигурацию панели; для удаления используйте официальное меню 3x-ui")"; then
             func_xpanel
@@ -157,7 +157,7 @@ func_sui_manage() {
 
     if ! command -v s-ui >/dev/null 2>&1; then
         echo -e "$(localized_text "${YELLOW}未检测到 s-ui 管理命令，可能尚未安装 S-UI。${PLAIN}" "${YELLOW}The s-ui management command was not found; S-UI may not be installed.${PLAIN}" "${YELLOW}Команда управления s-ui не найдена; возможно, S-UI не установлен.${PLAIN}")"
-        if confirm_danger "$(localized_text "安装 S-UI" "Install S-UI" "Установить S-UI")" \
+        if confirm_standard_action "$(localized_text "安装 S-UI" "Install S-UI" "Установить S-UI")" \
             "$(localized_text "下载并执行 S-UI 官方安装脚本" "download and run the official S-UI installer" "скачать и запустить официальный установщик S-UI")" \
             "$(localized_text "安装前备份现有配置；卸载方式以 S-UI 官方菜单为准" "back up existing configuration first; use the official S-UI menu to uninstall" "сначала сохраните существующую конфигурацию; для удаления используйте официальное меню S-UI")"; then
             func_sui_panel
@@ -234,7 +234,7 @@ func_xray_manage() {
 
     if ! command -v xray >/dev/null 2>&1; then
         echo -e "$(localized_text "${YELLOW}未检测到 xray 管理命令，可能尚未安装 233boy Xray。${PLAIN}" "${YELLOW}The xray management command was not found; 233boy Xray may not be installed.${PLAIN}" "${YELLOW}Команда управления xray не найдена; возможно, 233boy Xray не установлен.${PLAIN}")"
-        if confirm_danger "$(localized_text "安装 233boy Xray" "Install 233boy Xray" "Установить 233boy Xray")" \
+        if confirm_standard_action "$(localized_text "安装 233boy Xray" "Install 233boy Xray" "Установить 233boy Xray")" \
             "$(localized_text "下载并执行 233boy Xray 安装脚本" "download and run the 233boy Xray installer" "скачать и запустить установщик 233boy Xray")" \
             "$(localized_text "安装前备份现有 Xray 配置；卸载方式以该项目菜单为准" "back up existing Xray configuration first; use the project menu to uninstall" "сначала сохраните существующую конфигурацию Xray; для удаления используйте меню проекта")"; then
             func_xray_233boy
@@ -263,7 +263,7 @@ func_ip_sentinel() {
     echo -e "$(localized_text "${YELLOW}该脚本将持续监控并修正路由，防止服务器 IP 被错误定位至中国大陆。${PLAIN}" "${YELLOW}This script will continuously monitor and correct routing to prevent the server IP from being incorrectly located in mainland China.${PLAIN}" "${YELLOW}Этот сценарий будет постоянно отслеживать и корректировать маршрутизацию, чтобы предотвратить неправильное определение IP-адреса сервера в материковом Китае.${PLAIN}")"
     echo -e "------------------------------------------------"
     
-    if confirm_danger "$(localized_text "安装并配置 IP Sentinel" "Install and configure IP Sentinel" "Установить и настроить IP Sentinel")" \
+    if confirm_standard_action "$(localized_text "安装并配置 IP Sentinel" "Install and configure IP Sentinel" "Установить и настроить IP Sentinel")" \
         "$(localized_text "执行远程安装脚本并持续修改网络路由" "run a remote installer that continuously adjusts network routes" "запустить удалённый установщик, который будет постоянно изменять сетевые маршруты")" \
         "$(localized_text "运行前备份网络配置；停止与卸载方式以项目文档为准" "back up the network configuration first; follow the project documentation to stop or uninstall it" "сначала сохраните сетевую конфигурацию; остановку и удаление выполняйте по документации проекта")"; then
         run_remote_script "$(localized_text "安装并配置 IP Sentinel" "Install and configure IP Sentinel" "Установка и настройка IP Sentinel")" "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh"

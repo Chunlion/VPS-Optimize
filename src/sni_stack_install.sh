@@ -297,11 +297,21 @@ install_caddy_if_needed() {
         rm -f "$key_tmp"
         install_pkg caddy || return 1
     elif is_redhat; then
-        install_pkg yum-utils || true
-        if command -v yum-config-manager >/dev/null 2>&1; then
-            yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo >/dev/null 2>&1 || return 1
-        else
-            echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 yum-config-manager，将尝试直接从系统源安装 Caddy。${PLAIN}" "${YELLOW}⚠️ yum-config-manager not detected, will try to install Caddy directly from system sources.${PLAIN}" "${YELLOW}⚠️ yum-config-manager не обнаружен, попытается установить Caddy непосредственно из системных источников.${PLAIN}")"
+        local rhel_ver caddy_repo_ok=0
+        install_pkg dnf-plugins-core >/dev/null 2>&1 || true
+        if command -v dnf >/dev/null 2>&1 && dnf copr enable -y @caddy/caddy >/dev/null 2>&1; then
+            caddy_repo_ok=1
+        fi
+        if [[ "$caddy_repo_ok" -eq 0 ]]; then
+            rhel_ver=$(rpm -E %rhel 2>/dev/null)
+            [[ "$rhel_ver" =~ ^[0-9]+$ ]] || rhel_ver=9
+            command -v yum-config-manager >/dev/null 2>&1 || install_pkg yum-utils >/dev/null 2>&1 || true
+            if command -v yum-config-manager >/dev/null 2>&1; then
+                yum-config-manager --add-repo "https://copr.fedorainfracloud.org/coprs/g/caddy/caddy/repo/epel-${rhel_ver}/caddy-caddy-epel-${rhel_ver}.repo" >/dev/null 2>&1 && caddy_repo_ok=1
+            fi
+        fi
+        if [[ "$caddy_repo_ok" -eq 0 ]]; then
+            echo -e "$(localized_text "${YELLOW}⚠️ Caddy 官方 COPR 源启用失败，将尝试从系统源安装。${PLAIN}" "${YELLOW}⚠️ Failed to enable the official Caddy COPR repository; trying the system repositories.${PLAIN}" "${YELLOW}⚠️ Не удалось включить официальный репозиторий COPR Caddy; попытка установки из системных репозиториев.${PLAIN}")"
         fi
         install_pkg caddy || return 1
     else

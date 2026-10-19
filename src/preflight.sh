@@ -239,7 +239,7 @@ func_preflight_check() {
         $can_fix_ntp && echo -e "$(localized_text "  - 开启 NTP 时间同步" "- Enable NTP time synchronization" "- Включить синхронизацию времени NTP")"
         [[ ${#cmd_miss[@]} -gt 0 ]] && echo -e "$(localized_text "  - 安装缺失基础命令: ${cmd_miss[*]}" "- Installation missing basic command: ${cmd_miss[*]}" "- При установке отсутствует базовая команда: ${cmd_miss[*]}.")"
         [[ ${#minimal_miss[@]} -gt 0 ]] && echo -e "$(localized_text "  - 补齐精简系统兼容组件" "- Completed streamlined system compatible components" "- Завершены оптимизированные компоненты, совместимые с системой.")"
-        if confirm_danger "$(localized_text "自动修复预检问题" "Automatically fix preflight issues" "Автоматически исправить проблемы предварительной проверки")" \
+        if confirm_standard_action "$(localized_text "自动修复预检问题" "Automatically fix preflight issues" "Автоматически исправить проблемы предварительной проверки")" \
             "$(localized_text "可能安装基础软件包并启用 NTP 时间同步" "may install base packages and enable NTP time synchronization" "может установить базовые пакеты и включить синхронизацию времени NTP")" \
             "$(localized_text "软件包变更需按系统包管理器回退；NTP 可在系统服务中关闭" "revert package changes with the system package manager; disable NTP through the system service" "изменения пакетов отменяются через системный менеджер пакетов; NTP можно отключить в системной службе")"; then
             [[ ${#minimal_miss[@]} -gt 0 ]] && ensure_minimal_system_compat

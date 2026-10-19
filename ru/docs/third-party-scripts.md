@@ -11,16 +11,14 @@
 | Установка сертификата acme.sh | acme.sh | <https://github.com/acmesh-official/acme.sh> |
 | Установка Docker Engine | Docker Engine | <https://github.com/docker/docker-install> |
 | Бинарный файл Docker Compose | Docker Compose | <https://github.com/docker/compose> |
-| Установка среды Python | lxspacepy | <https://github.com/lx969788249/lxspacepy> |
 | Инструмент разблокировки/сети WARP | WARP | <https://gitlab.com/fscarmen/warp> |
 | Перенаправление портов Realm | Realm-xwPF | <https://github.com/zywe03/realm-xwPF> |
 | Туннель Gost | EZgost | <https://github.com/qqrrooty/EZgost> |
 | Панель Aurora | Aurora Admin Panel | <https://github.com/Aurora-Admin-Panel/deploy> |
 | NAT-перенаправление nftables | nftables-nat-rust | <https://github.com/arloor/nftables-nat-rust> |
-| Загрузчик Aria2 | aria2.sh | <https://github.com/P3TERX/aria2.sh> |
-| Установщик панели BT (источник HTTP отклонён) | HostCLI | <https://www.hostcli.com/> |
+| Загрузчик Aria2 | aria2.sh (исходный проект архивирован; используется только для генерации конфигурации) | <https://github.com/P3TERX/aria2.sh> |
 | Скрипт управления PVE | oneclickvirt/pve | <https://github.com/oneclickvirt/pve> |
-| Панель перенаправления Argox | Argox | <https://github.com/fscarmen/argox> |
+| Панель перенаправления Argox | Argox | <https://github.com/fscarmen/ArgoX> |
 | Панель перенаправления Forwardx | Forwardx | <https://github.com/poouo/Forwardx> |
 | Панель перенаправления FLVX | FLVX | <https://github.com/Sagit-chu/flvx> |
 | Настройка BBR / нескольких ядер | Linux-NetSpeed | <https://github.com/ylx2016/Linux-NetSpeed> |
@@ -56,4 +54,6 @@
 |---|---|---|
 | Переустановка системы | reinstall | <https://github.com/bin456789/reinstall> |
 
-HostCLI не публикует открытый репозиторий исходного кода. Его входной URL использует HTTP, поэтому VPS-Optimize отклоняет его до загрузки; страница проекта сохранена только для отслеживания источника.
+Среда Python устанавливается из пакетов дистрибутива (`python3`, `pip`, `venv`), без стороннего установочного скрипта.
+
+Установщик aria2 архивирован и больше не обновляется. Если нужен только сам aria2, установите его из пакетов дистрибутива. VPS-Optimize теперь загружает скрипт по прямому URL репозитория, без прекратившей работу короткой ссылки `git.io`.

@@ -1582,6 +1582,7 @@ EOF
         }
         confirm_risk_action() { return 0; }
         confirm_danger() { return 0; }
+        confirm_standard_action() { return 0; }
         pause_return() { :; }
         show_traffic_guard_status() { printf '%s\n' 'STATUS_SHOWN'; }
         journalctl() { printf '%s\n' 'fake journal'; }
@@ -2068,6 +2069,7 @@ PY
     load_sni_stack_env() { ENTRY_MODE="nginx-stream"; return 0; }
     get_entry_mode() { printf '%s' 'nginx-stream'; }
     confirm_danger() { return 0; }
+    confirm_standard_action() { return 0; }
     validate_strict_sni_gate_reality_server_names() { return 0; }
     save_sni_stack_env() { saved_states+="${STRICT_SNI_GATE} "; }
     sync_strict_sni_gate_to_current_entry() {

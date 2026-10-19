@@ -246,7 +246,7 @@ health_restart_failed_services() {
 
     echo -e "$(localized_text "${CYAN}将尝试重启以下失败服务：${PLAIN}" "${CYAN}Will attempt to restart the following failed services:${PLAIN}" "${CYAN}попытается перезапустить следующие отказавшие службы:${PLAIN}")"
     printf '  - %s\n' "${failed_units[@]}"
-    confirm_risk_action "$(localized_text "重启失败的 systemd 服务" "Restart failed systemd service" "Не удалось перезапустить службу systemd.")" \
+    confirm_standard_action "$(localized_text "重启失败的 systemd 服务" "Restart failed systemd service" "Перезапустить отказавшие службы systemd")" \
         "$(localized_text "当前处于失败状态的服务单元" "The service unit that is currently in a failed state" "Сервисный блок, который в данный момент находится в неисправном состоянии")" \
         "$(localized_text "查看对应 journalctl 日志，修正配置后单独重启失败服务" "Check the corresponding journalctl log, correct the configuration and restart the failed service individually." "Проверьте соответствующий журнал Journalctl, исправьте конфигурацию и перезапустите отказавшую службу отдельно.")" \
         "$(localized_text "会跳过 ssh/sshd，其他服务会短暂中断。" "ssh/sshd will be skipped and other services will be briefly interrupted." "ssh/sshd будет пропущен, а другие службы будут ненадолго прерваны.")" || return 1

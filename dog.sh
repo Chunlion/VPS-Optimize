@@ -973,7 +973,7 @@ show_statistics_health_check() {
     local family
     local active_ports=()
 
-    echo -e "${BLUE}=== 统计健康检查 ===${NC}"
+    echo -e "${BLUE}=== $(ui_text '统计健康检查' 'Statistics health check' 'Проверка состояния статистики') ===${NC}"
     print_traffic_scope_notice
     echo
 
@@ -1465,7 +1465,7 @@ show_recent_7_days_trend() {
 manage_daily_usage_reports() {
     local choice day_input
     while true; do
-        echo -e "${BLUE}=== 流量日报与趋势报表 ===${NC}"
+        echo -e "${BLUE}=== $(ui_text '流量日报与趋势报表' 'Daily traffic and trend reports' 'Дневные отчёты и тренды трафика') ===${NC}"
         echo "1. 立即采集快照"
         echo "2. 查看昨日报表"
         echo "3. 查看近7日趋势"
@@ -1529,7 +1529,7 @@ show_detailed_port_usage() {
         NFT_COUNTER_SNAPSHOT=""
     fi
 
-    echo -e "${BLUE}=== 端口流量详细视图 ===${NC}"
+    echo -e "${BLUE}=== $(ui_text '端口流量详细视图' 'Detailed per-port traffic' 'Подробный трафик по портам') ===${NC}"
     print_traffic_scope_notice
     echo "────────────────────────────────────────────────────────"
     if [ "$counter_snapshot_ok" != "true" ]; then
@@ -1559,10 +1559,9 @@ show_main_menu() {
     fi
 
     echo -e "${BLUE}=== $(ui_text '端口流量狗' 'Port Traffic Dog' 'Монитор трафика портов') v$SCRIPT_VERSION ===${NC}"
-    echo -e "${GREEN}$(ui_text '原项目' 'Original project' 'Исходный проект'):${NC}https://github.com/zywe03/realm-xwPF"
+    echo -e "${GREEN}$(ui_text '原项目' 'Original project' 'Исходный проект'): ${NC}https://github.com/zywe03/realm-xwPF"
     echo -e "${GREEN}VPS-Optimize: https://github.com/Chunlion/VPS-Optimize | $(ui_text '快捷命令' 'Command' 'Команда'): dog${NC}"
     echo -e "${YELLOW}$(ui_text '按端口统计流量、设置配额/限速、查看日报趋势和 Telegram 报告。' 'Monitor traffic by port, manage quotas/rate limits, and view daily trends or Telegram reports.' 'Контролируйте трафик по портам, квоты/лимиты скорости, дневные отчёты и Telegram-уведомления.')${NC}"
-    echo -e "${YELLOW}$(ui_text '快捷输入：add、limit、tg、report、detail、health、lang、u、q。' 'Shortcuts: add, limit, tg, report, detail, health, lang, u, q.' 'Быстрые команды: add, limit, tg, report, detail, health, lang, u, q.')${NC}"
     echo
     echo -e "${GREEN}$(ui_text '状态：监控中' 'Status: monitoring' 'Статус: мониторинг')${NC} | ${BLUE}$(ui_text '监控端口' 'Monitored ports' 'Отслеживаемые порты'): ${port_count}${NC}"
     echo -e "${YELLOW}$(ui_text '实际端口总流量' 'Actual monitored-port traffic' 'Фактический трафик отслеживаемых портов'): $port_actual_total${NC}"
@@ -1577,13 +1576,13 @@ show_main_menu() {
     fi
 
     echo "────────────────────────────────────────────────────────"
-    echo -e "${BLUE}1.${NC} $(ui_text '添加/删除端口监控' 'Add/remove port monitoring' 'Добавить/удалить мониторинг порта')       ${BLUE}2.${NC} $(ui_text '配额与限速' 'Quotas and rate limits' 'Квоты и лимиты скорости')"
-    echo -e "${BLUE}3.${NC} $(ui_text '流量重置' 'Traffic reset' 'Сброс трафика')         ${BLUE}4.${NC} $(ui_text '导出/导入配置' 'Export/import config' 'Экспорт/импорт конфигурации')"
-    echo -e "${BLUE}5.${NC} $(ui_text '更新脚本' 'Update script' 'Обновить сценарий')        ${BLUE}6.${NC} $(ui_text '卸载' 'Uninstall' 'Удалить')"
-    echo -e "${BLUE}7.${NC} $(ui_text 'Telegram 通知' 'Telegram notifications' 'Уведомления Telegram')  ${BLUE}8.${NC} $(ui_text '日报与趋势' 'Daily reports and trends' 'Дневные отчёты и тренды')"
-    echo -e "${BLUE}l.${NC} $(ui_text '界面语言' 'Interface language' 'Язык интерфейса')        ${BLUE}0.${NC} $(ui_text '退出' 'Exit' 'Выход')"
+    echo -e "${BLUE}1.${NC} $(ui_text '添加/删除端口监控' 'Add/remove port monitoring' 'Добавить/удалить мониторинг порта') ${YELLOW}[add]${NC}     ${BLUE}2.${NC} $(ui_text '配额与限速' 'Quotas and rate limits' 'Квоты и лимиты скорости') ${YELLOW}[limit]${NC}"
+    echo -e "${BLUE}3.${NC} $(ui_text '流量重置' 'Traffic reset' 'Сброс трафика') ${YELLOW}[reset]${NC}         ${BLUE}4.${NC} $(ui_text '导出/导入配置' 'Export/import config' 'Экспорт/импорт конфигурации') ${YELLOW}[config]${NC}"
+    echo -e "${BLUE}5.${NC} $(ui_text '更新脚本' 'Update script' 'Обновить сценарий') ${YELLOW}[u]${NC}          ${BLUE}6.${NC} $(ui_text '卸载' 'Uninstall' 'Удалить') ${YELLOW}[uninstall]${NC}"
+    echo -e "${BLUE}7.${NC} $(ui_text 'Telegram 通知' 'Telegram notifications' 'Уведомления Telegram') ${YELLOW}[tg]${NC}   ${BLUE}8.${NC} $(ui_text '日报与趋势' 'Daily reports and trends' 'Дневные отчёты и тренды') ${YELLOW}[report]${NC}"
+    echo -e "${BLUE}d.${NC} $(ui_text '端口明细' 'Port details' 'Детали портов')     ${BLUE}h.${NC} $(ui_text '健康检查' 'Health check' 'Проверка состояния')     ${BLUE}l.${NC} $(ui_text '界面语言' 'Interface language' 'Язык интерфейса')     ${BLUE}0.${NC} $(ui_text '退出' 'Exit' 'Выход')"
     echo
-    read_trimmed choice "$(ui_text '请选择 [0-8 或快捷词]: ' 'Select [0-8 or shortcut]: ' 'Выберите [0-8 или команду]: ')"
+    read_trimmed choice "$(ui_text '请选择 [0-8、快捷词或 d/h/l]: ' 'Select [0-8, a shortcut, or d/h/l]: ' 'Выберите [0-8, команду или d/h/l]: ')"
     choice=$(normalize_main_choice "$choice")
 
     case $choice in
@@ -1626,7 +1625,7 @@ manage_port_monitoring() {
 }
 
 add_port_monitoring() {
-    echo -e "${BLUE}=== 添加端口监控 ===${NC}"
+    echo -e "${BLUE}=== $(ui_text '添加端口监控' 'Add port monitoring' 'Добавить мониторинг порта') ===${NC}"
     echo
     echo -e "${GREEN}当前系统端口使用情况:${NC}"
     printf "%-15s %-9s\n" "程序名" "端口"
@@ -1777,7 +1776,7 @@ add_port_monitoring() {
 }
 
 remove_port_monitoring() {
-    echo -e "${BLUE}=== 删除端口监控 ===${NC}"
+    echo -e "${BLUE}=== $(ui_text '删除端口监控' 'Remove port monitoring' 'Удалить мониторинг порта') ===${NC}"
     local ports_to_delete=() confirm port
     select_monitored_ports ports_to_delete || return 0
 
@@ -1963,7 +1962,7 @@ set_port_bandwidth_limit() {
 }
 
 set_port_quota_limit() {
-    echo -e "${BLUE}=== 设置端口流量配额 ===${NC}"
+    echo -e "${BLUE}=== $(ui_text '设置端口流量配额' 'Set port traffic quota' 'Задать квоту трафика порта') ===${NC}"
     local ports_to_quota=() quota_input
     select_monitored_ports ports_to_quota || return 0
     echo "配额是本周期入站+出站总上限，保留已有用量；重新开始累计请使用流量重置。"
@@ -2191,7 +2190,7 @@ remove_tc_limit() {
 manage_traffic_reset() {
     local choice
     while true; do
-        echo -e "${BLUE}$(ui_text '流量重置' 'Traffic reset' 'Сброс трафика')${NC}"
+        echo -e "${BLUE}=== $(ui_text '流量重置' 'Traffic reset' 'Сброс трафика') ===${NC}"
         echo "1. $(ui_text '每月流量重置日设置' 'Monthly reset day' 'День ежемесячного сброса')"
         echo "2. $(ui_text '立即重置' 'Reset now' 'Сбросить сейчас')"
         echo "0. $(ui_text '返回主菜单' 'Back to main menu' 'Назад в главное меню')"
@@ -2206,7 +2205,7 @@ manage_traffic_reset() {
 }
 
 set_reset_day() {
-    echo -e "${BLUE}=== 设置端口每月重置日 ===${NC}"
+    echo -e "${BLUE}=== $(ui_text '设置端口每月重置日' 'Set the monthly reset day' 'Задать день ежемесячного сброса') ===${NC}"
     local ports_to_reset=() reset_day port
     select_monitored_ports ports_to_reset || return 0
     while true; do
@@ -2233,7 +2232,7 @@ set_reset_day() {
 }
 
 immediate_reset() {
-    echo -e "${BLUE}=== 立即重置端口流量 ===${NC}"
+    echo -e "${BLUE}=== $(ui_text '立即重置端口流量' 'Reset port traffic now' 'Сбросить трафик порта сейчас') ===${NC}"
     local ports_to_reset=() port
     select_monitored_ports ports_to_reset || return 0
 
@@ -2373,7 +2372,7 @@ download_with_sources() {
 }
 
 install_update_script() {
-    echo -e "${BLUE}=== 正在启动脚本热更新 ===${NC}"
+    echo -e "${BLUE}=== $(ui_text '正在启动脚本热更新' 'Starting the script hot update' 'Запуск горячего обновления скрипта') ===${NC}"
     echo "────────────────────────────────────────────────────────"
     echo -e "${YELLOW}正在从远程仓库获取最新版本...${NC}"
 
@@ -2411,7 +2410,7 @@ install_update_script() {
 }
 
 uninstall_script() {
-    echo -e "${BLUE}=== 卸载端口流量狗 ===${NC}"
+    echo -e "${BLUE}=== $(ui_text '卸载端口流量狗' 'Uninstall Port Traffic Dog' 'Удалить монитор трафика портов') ===${NC}"
     echo "────────────────────────────────────────────────────────"
     echo -e "${YELLOW}将要执行以下操作:${NC}"
     echo "  1. 清除所有端口的流量监控规则 (nftables)" 
@@ -2473,7 +2472,7 @@ uninstall_script() {
 # ==========================================
 
 setup_interactive_tg() {
-    echo -e "${BLUE}=== 部署 Telegram 交互式查询机器人 ===${NC}"
+    echo -e "${BLUE}=== $(ui_text '部署 Telegram 交互式查询机器人' 'Deploy the Telegram query bot' 'Развернуть Telegram-бота запросов') ===${NC}"
     local bot_token chat_id reply
     read_secret_trimmed bot_token "Bot Token（去 @BotFather 获取；回车取消）: "
     [ -n "$bot_token" ] || return 0
@@ -2635,7 +2634,7 @@ send_telegram_status_notification() {
 }
 
 send_manual_telegram_notification() {
-    echo -e "${BLUE}=== 立即查询并发送 ===${NC}"
+    echo -e "${BLUE}=== $(ui_text '立即查询并发送' 'Query and send now' 'Запросить и отправить сейчас') ===${NC}"
     if send_telegram_status_notification "手动"; then
         echo -e "${GREEN}实时流量报告已发送。${NC}"
     else
@@ -2716,7 +2715,7 @@ manage_telegram_schedule() {
     current_interval=$(jq -r '.notifications.telegram.status_notifications.interval // "1h"' "$CONFIG_FILE")
     current_daily_hour=$(jq -r '.notifications.telegram.status_notifications.daily_hour // 9' "$CONFIG_FILE")
     while true; do
-        echo -e "${BLUE}=== Telegram 定时通知 ===${NC}"
+        echo -e "${BLUE}=== $(ui_text 'Telegram 定时通知' 'Telegram scheduled notifications' 'Плановые уведомления Telegram') ===${NC}"
         echo "当前状态: enabled=$current_enabled interval=$current_interval daily_hour=$current_daily_hour"
         echo "1. 每小时"
         echo "2. 每 6 小时"
@@ -2790,7 +2789,7 @@ manage_telegram_template() {
     local default_template=$'<b>🐶 {server_name} 端口流量通知</b>\n{report}'
 
     while true; do
-        echo -e "${BLUE}=== Telegram 通知模板 ===${NC}"
+        echo -e "${BLUE}=== $(ui_text 'Telegram 通知模板' 'Telegram notification template' 'Шаблон уведомлений Telegram') ===${NC}"
         echo "可用变量: {server_name} {report} {time}"
         echo "1. 自定义模板"
         echo "2. 恢复默认模板"

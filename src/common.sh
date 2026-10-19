@@ -505,16 +505,14 @@ is_trusted_remote_script_url() {
         "https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh"|\
         "https://IP.Check.Place"|\
         "https://run.NodeQuality.com"|\
-        "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh"|\
         "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh"|\
         "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh"|\
         "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh"|\
-        "https://us.arloor.dev/https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh"|\
+        "https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh"|\
         "https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh"|\
-        "https://git.io/aria2.sh"|\
-        "http://v7.hostcli.com/install/install-ubuntu_6.0.sh"|\
+        "https://raw.githubusercontent.com/P3TERX/aria2.sh/master/aria2.sh"|\
         "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh"|\
-        "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh"|\
+        "https://raw.githubusercontent.com/fscarmen/ArgoX/main/argox.sh"|\
         "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh"|\
         "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh"|\
         "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh"|\

@@ -11,16 +11,14 @@ Remote scripts can change upstream. Review the project URL and script content be
 | acme.sh certificate installation | acme.sh | <https://github.com/acmesh-official/acme.sh> |
 | Docker Engine installation | Docker Engine | <https://github.com/docker/docker-install> |
 | Docker Compose binary | Docker Compose | <https://github.com/docker/compose> |
-| Python environment installation | lxspacepy | <https://github.com/lx969788249/lxspacepy> |
 | WARP unlock/network tool | WARP | <https://gitlab.com/fscarmen/warp> |
 | Realm port forwarding | Realm-xwPF | <https://github.com/zywe03/realm-xwPF> |
 | Gost tunnel | EZgost | <https://github.com/qqrrooty/EZgost> |
 | Aurora panel | Aurora Admin Panel | <https://github.com/Aurora-Admin-Panel/deploy> |
 | nftables NAT forwarding | nftables-nat-rust | <https://github.com/arloor/nftables-nat-rust> |
-| Aria2 downloader | aria2.sh | <https://github.com/P3TERX/aria2.sh> |
-| BT panel installer (HTTP source rejected) | HostCLI | <https://www.hostcli.com/> |
+| Aria2 downloader | aria2.sh (upstream archived; used only to generate configuration) | <https://github.com/P3TERX/aria2.sh> |
 | PVE management script | oneclickvirt/pve | <https://github.com/oneclickvirt/pve> |
-| Argox forwarding panel | Argox | <https://github.com/fscarmen/argox> |
+| Argox forwarding panel | Argox | <https://github.com/fscarmen/ArgoX> |
 | Forwardx forwarding panel | Forwardx | <https://github.com/poouo/Forwardx> |
 | FLVX forwarding panel | FLVX | <https://github.com/Sagit-chu/flvx> |
 | BBR / multi-kernel tuning | Linux-NetSpeed | <https://github.com/ylx2016/Linux-NetSpeed> |
@@ -56,4 +54,6 @@ Remote scripts can change upstream. Review the project URL and script content be
 |---|---|---|
 | System reinstallation | reinstall | <https://github.com/bin456789/reinstall> |
 
-HostCLI does not publish a public source repository. Its entry is HTTP, which VPS-Optimize rejects before download; the project page is retained only for traceability.
+Python is installed from distribution packages (`python3`, `pip`, `venv`) instead of a third-party installer script.
+
+The aria2 installer has been archived and is no longer updated. If you only need the aria2 binary, install it from your distribution packages. VPS-Optimize now downloads it from the repository's raw URL instead of the discontinued `git.io` short link.

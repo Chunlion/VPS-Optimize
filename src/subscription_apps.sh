@@ -58,7 +58,7 @@ func_sublinkpro() {
     echo -e "$(localized_text "${YELLOW}部署完成后请尽快登录管理后台修改默认密码。${PLAIN}" "${YELLOW}After deployment, sign in to the admin panel and change the default password promptly.${PLAIN}" "${YELLOW}После развёртывания войдите в панель администратора и сразу измените пароль по умолчанию.${PLAIN}")"
     echo -e "------------------------------------------------"
     
-    if confirm_danger "$(localized_text "部署 SublinkPro" "Deploy SublinkPro" "Развернуть SublinkPro")" \
+    if confirm_standard_action "$(localized_text "部署 SublinkPro" "Deploy SublinkPro" "Развернуть SublinkPro")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir"
@@ -144,7 +144,7 @@ func_miaomiaowu() {
     echo -e "$(localized_text "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}" "${YELLOW}When opens the panel for the first time, it will enter the initialization page. Please create an administrator account and password on the page.${PLAIN}" "${YELLOW}Когда впервые откроет панель, он перейдет на страницу инициализации. Пожалуйста, создайте учетную запись администратора и пароль на странице.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    if confirm_danger "$(localized_text "部署妙妙屋订阅管理" "Deploy Miaomiaowu Subscription Management" "Развернуть Miaomiaowu Subscription Management")" \
+    if confirm_standard_action "$(localized_text "部署妙妙屋订阅管理" "Deploy Miaomiaowu Subscription Management" "Развернуть Miaomiaowu Subscription Management")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir"/{data,subscribes,rule_templates}
@@ -240,7 +240,7 @@ func_substore() {
     echo -e "$(localized_text "${YELLOW}请保存随机后端路径；如对公网开放，请在反代侧额外加认证。${PLAIN}" "${YELLOW}Please save the random backend path; if it is open to the public, please add additional authentication on the reverse proxy side.${PLAIN}" "${YELLOW}Сохраните случайный путь к серверу; если он открыт для доступа в Интернет, добавьте дополнительную аутентификацию на стороне обратного прокси-сервера.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    if confirm_danger "$(localized_text "部署 Sub-Store" "Deploy Sub-Store" "Развернуть Sub-Store")" \
+    if confirm_standard_action "$(localized_text "部署 Sub-Store" "Deploy Sub-Store" "Развернуть Sub-Store")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir/data"
@@ -318,7 +318,7 @@ func_dockge() {
     echo -e "$(localized_text "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}" "${YELLOW}When opens the panel for the first time, it will enter the initialization page. Please create an administrator account and password on the page.${PLAIN}" "${YELLOW}Когда впервые откроет панель, он перейдет на страницу инициализации. Пожалуйста, создайте учетную запись администратора и пароль на странице.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    if confirm_danger "$(localized_text "部署 Dockge" "Deploy Dockge" "Развернуть Dockge")" \
+    if confirm_standard_action "$(localized_text "部署 Dockge" "Deploy Dockge" "Развернуть Dockge")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目即可回退；删除 Stacks 目录前请先备份" "stop the Compose project to roll back; back up the Stacks directory before deleting it" "для отката остановите проект Compose; перед удалением каталога Stacks создайте резервную копию")"; then
         mkdir -p "$install_dir" "$stacks_dir"
@@ -421,7 +421,7 @@ func_komari() {
         echo -e "$(localized_text "${YELLOW}初始管理员：${CYAN}使用 Komari 默认生成账号，请安装后查看容器日志${PLAIN}" "${YELLOW}Initial administrator: uses Komari to generate an account by default. Please check the container log after installation.${PLAIN}" "${YELLOW}Начальный администратор : по умолчанию использует Komari для создания учетной записи. Пожалуйста, проверьте журнал контейнера после установки.${PLAIN}")"
     fi
     echo -e "------------------------------------------------"
-    if confirm_danger "$(localized_text "部署 Komari" "Deploy Komari" "Развернуть Komari")" \
+    if confirm_standard_action "$(localized_text "部署 Komari" "Deploy Komari" "Развернуть Komari")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir/data"
@@ -508,7 +508,7 @@ func_cdt_monitor() {
     print_public_https_reverse_proxy_hint
     echo -e "------------------------------------------------"
 
-    if confirm_danger "$(localized_text "部署 CDT Monitor" "Deploy CDT Monitor" "Развернуть CDT Monitor")" \
+    if confirm_standard_action "$(localized_text "部署 CDT Monitor" "Deploy CDT Monitor" "Развернуть CDT Monitor")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目可回退；归档前请备份 cdt-data 数据卷" "stop the Compose project to roll back; back up the cdt-data volume before archiving" "для отката остановите проект Compose; перед архивацией сохраните резервную копию тома cdt-data")"; then
         mkdir -p "$install_dir"

@@ -812,7 +812,7 @@ reload_applied_config_kind() {
             fi
             ;;
         vpso-mux)
-            if confirm_risk_action "$(localized_text "重启 vpso-mux" "Restart vpso-mux" "Перезагрузите vpso-mux.")" \
+            if confirm_standard_action "$(localized_text "重启 vpso-mux" "Restart vpso-mux" "Перезагрузите vpso-mux.")" \
                 "$(localized_text "TCP Peek/vpso-mux 分流器运行进程" "TCP Peek/vpso-mux routing running process" "Процесс работы маршрутизации TCP Peek/vpso-mux")" \
                 "$(localized_text "使用当前未断开的 SSH 会话恢复 ${target_file}.bak_*，或回到 443端口复用菜单重新应用/回滚入口模式" "Restore ${target_file}.bak_* using the currently undisconnected SSH session, or return to the Port 443 Reuse menu to reapply/rollback entry mode" "Восстановите ${target_file}.bak_*, используя текущий неотключенный сеанс SSH, или вернитесь в меню повторное использование порта 443, чтобы повторно применить/откатить режим входа.")" \
                 "$(localized_text "确认公网 443 当前入口模式和本机后端端口都正常。" "Confirm that the current entry mode of public port 443 and the local backend port are normal." "Убедитесь, что текущий режим входа в публичный порт 443 и локальный внутренний порт являются нормальными.")"; then
@@ -823,14 +823,8 @@ reload_applied_config_kind() {
             ;;
         entry-mode|xray-routes)
             if declare -F reapply_current_entry_mode >/dev/null 2>&1; then
-                if confirm_risk_action "$(localized_text "重新应用当前 443 入口模式" "Reapply current 443 entry pattern" "Повторно применить текущий шаблон входа 443")" \
-                    "$(localized_text "公网 443 入口配置、Caddy/Nginx/vpso-mux/Xray 相关路由" "public port 443 entry configuration, Caddy/Nginx/vpso-mux/Xray related routes" "Конфигурация входа в публичную сеть 443, маршруты, связанные с Caddy/Nginx/vpso-mux/Xray")" \
-                    "$(localized_text "脚本会创建入口模式备份并在失败时回滚；也可从备份与回滚中心恢复" "Script creates entry mode backup and rolls back on failure; can also be restored from the Backup and Rollback Center" "Скрипт создает резервную копию в режим входа и выполняет откат в случае сбоя; также можно восстановить из Центра резервного копирования и отката.")" \
-                    "$(localized_text "确认配置文件中的域名、端口和 ENTRY_MODE 值已经匹配。" "Confirm that the domain, port, and ENTRY_MODE value in the configuration file match." "Убедитесь, что имя домена, порт и значение ENTRY_MODE в файле конфигурации совпадают.")"; then
-                    reapply_current_entry_mode
-                else
-                    echo -e "$(localized_text "${YELLOW}⚠️ 已保存配置，但未重新应用 443 入口模式。${PLAIN}" "${YELLOW}⚠️ Configuration saved, but 443 entry mode was not reapplied.${PLAIN}" "${YELLOW}⚠️ Конфигурация сохранена, но режим входа 443 не был применен повторно.${PLAIN}")"
-                fi
+                echo -e "$(localized_text "${CYAN}配置已保存，接下来显示入口切换预览；在预览中确认后才会应用。${PLAIN}" "${CYAN}Configuration saved. The entry-switch preview follows; nothing is applied until you confirm there.${PLAIN}" "${CYAN}Конфигурация сохранена. Далее откроется предпросмотр переключения входа; изменения применяются только после подтверждения.${PLAIN}")"
+                reapply_current_entry_mode
             else
                 echo -e "$(localized_text "${YELLOW}⚠️ 已保存配置；请回到 443端口复用菜单重新应用当前入口模式。${PLAIN}" "${YELLOW}⚠️ The configuration has been saved; please return to the Port 443 Reuse menu to reapply the current entry mode.${PLAIN}" "${YELLOW}⚠️ Конфигурация сохранена; вернитесь в меню повторного использования порта 443, чтобы повторно применить текущий режим ввода.${PLAIN}")"
             fi
@@ -842,7 +836,7 @@ reload_applied_config_kind() {
                     return 1
                 }
             fi
-            if confirm_risk_action "$(localized_text "重启 Traffic Guard timer" "Restart Traffic Guard timer" "Перезапустить таймер Traffic Guard")" \
+            if confirm_standard_action "$(localized_text "重启 Traffic Guard timer" "Restart Traffic Guard timer" "Перезапустить таймер Traffic Guard")" \
                 "$(localized_text "vps-traffic-guard.timer 和流量阈值检查周期" "vps-traffic-guard.timer and traffic threshold check period" "vps-traffic-guard.timer и период проверки порога трафика")" \
                 "$(localized_text "重新编辑 ${target_file} 或从 ${target_file}.bak_* 恢复；必要时停用 vps-traffic-guard.timer" "Re-edit ${target_file} or restore from ${target_file}.bak_*; disable vps-traffic-guard.timer if necessary" "Отредактируйте ${target_file} повторно или восстановите из ${target_file}.bak_*; при необходимости отключите vps-traffic-guard.timer")" \
                 "$(localized_text "如果 ACTION=poweroff，请确认阈值、账单周期和云厂商救援方式。" "If ACTION=poweroff, confirm the threshold, billing cycle, and cloud vendor rescue method." "Если ACTION=poweroff, подтвердите пороговое значение, цикл выставления счетов и метод восстановления поставщика облачных услуг.")"; then
@@ -860,7 +854,7 @@ reload_applied_config_kind() {
             fi
             ;;
         dns)
-            if confirm_risk_action "$(localized_text "重启 systemd-resolved" "Restart systemd-resolved" "Перезапуск systemd-решено")" \
+            if confirm_standard_action "$(localized_text "重启 systemd-resolved" "Restart systemd-resolved" "Перезапуск systemd-решено")" \
                 "$(localized_text "系统 DNS 解析服务和 resolved drop-in 配置" "System DNS resolution service and resolved drop-in configuration" "Служба разрешения проблем системы DNS и решенная прямая конфигурация")" \
                 "$(localized_text "恢复 ${target_file}.bak_*，或重新进入 DNS 设置菜单切换回原配置" "Restore ${target_file}.bak_*, or reopen DNS settings and select the previous configuration." "Восстановите ${target_file}.bak_* или откройте настройки DNS и выберите прежнюю конфигурацию.")" \
                 "$(localized_text "确认当前 SSH 会话保持连接，必要时可用 IP 直连排障。" "Confirm that the current SSH session remains connected, and use IP direct connection to troubleshoot if necessary." "Убедитесь, что текущий сеанс SSH остается подключенным, и при необходимости используйте прямое IP-соединение для устранения неполадок.")"; then
@@ -870,7 +864,7 @@ reload_applied_config_kind() {
             fi
             ;;
         sysctl)
-            if confirm_risk_action "$(localized_text "应用 sysctl 配置" "Apply sysctl configuration" "Применить конфигурацию sysctl")" \
+            if confirm_standard_action "$(localized_text "应用 sysctl 配置" "Apply sysctl configuration" "Применить конфигурацию sysctl")" \
                 "$(localized_text "当前内核运行中的 sysctl 参数" "sysctl parameters currently running in the kernel" "Параметры sysctl, работающие в настоящее время в ядре")" \
                 "$(localized_text "恢复 ${target_file}.bak_* 后重新执行 sysctl --system，或手动回退异常参数" "Restore ${target_file}.bak_* and re-execute sysctl --system, or manually roll back the abnormal parameters" "Восстановите ${target_file}.bak_* и повторно выполните sysctl --system или вручную откатите ненормальные параметры.")" \
                 "$(localized_text "确认参数来源可信；错误网络参数可能影响远程连接。" "Confirm that the source of the parameters is trustworthy; incorrect network parameters may affect remote connections." "Подтвердите, что источник параметров заслуживает доверия; неправильные параметры сети могут повлиять на удаленные подключения.")"; then
@@ -880,7 +874,7 @@ reload_applied_config_kind() {
             fi
             ;;
         fail2ban)
-            if confirm_risk_action "$(localized_text "重启 fail2ban" "Restart fail2ban" "Перезагрузите fail2ban.")" \
+            if confirm_standard_action "$(localized_text "重启 fail2ban" "Restart fail2ban" "Перезагрузите fail2ban.")" \
                 "$(localized_text "Fail2ban 服务和登录防护规则" "Fail2ban Service and Login Protection Rules" "Fail2ban Правила защиты и защиты входа в систему")" \
                 "$(localized_text "恢复 ${target_file}.bak_* 后重启 fail2ban，或临时停用异常 jail" "Restore ${target_file}.bak_* and then restart fail2ban, or temporarily disable the abnormal jail" "Восстановите ${target_file}.bak_*, а затем перезапустите fail2ban или временно отключите аварийный джейл.")" \
                 "$(localized_text "确认当前 SSH 来源不会被新规则误封。" "Confirm that the current SSH source will not be accidentally blocked by the new rules." "Убедитесь, что текущий источник SSH не будет случайно заблокирован новыми правилами.")"; then
@@ -890,7 +884,7 @@ reload_applied_config_kind() {
             fi
             ;;
         xui-json)
-            if confirm_risk_action "$(localized_text "重启 x-ui/3x-ui" "Restart x-ui/3x-ui" "Перезагрузите x-ui/3x-ui.")" \
+            if confirm_standard_action "$(localized_text "重启 x-ui/3x-ui" "Restart x-ui/3x-ui" "Перезагрузите x-ui/3x-ui.")" \
                 "$(localized_text "x-ui/3x-ui 面板进程和 config.json 运行配置" "x-ui/3x-ui panel process and config.json running configuration" "Процесс и конфигурация панели x-ui/3x-ui. Текущая конфигурация json")" \
                 "$(localized_text "恢复 ${target_file}.bak_* 后重启面板，或用官方 x-ui/3x-ui 命令进入管理菜单修复" "Restore ${target_file}.bak_* and then restart the panel, or use the official x-ui/3x-ui command to enter the management menu to repair" "Восстановите ${target_file}.bak_*, а затем перезапустите панель или используйте официальную команду x-ui/3x-ui, чтобы войти в меню управления для восстановления.")" \
                 "$(localized_text "确认面板端口、证书路径和 443端口复用设置匹配。" "Verify that the panel port, certificate path, and Port 443 Reuse settings match." "Убедитесь, что порт панели, путь к сертификату и настройки записи общего ресурса 443 совпадают.")"; then

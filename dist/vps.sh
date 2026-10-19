@@ -517,16 +517,14 @@ is_trusted_remote_script_url() {
         "https://raw.githubusercontent.com/ibsgss/TcpQuality/main/runTcpQuality.sh"|\
         "https://IP.Check.Place"|\
         "https://run.NodeQuality.com"|\
-        "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh"|\
         "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh"|\
         "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh"|\
         "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh"|\
-        "https://us.arloor.dev/https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh"|\
+        "https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh"|\
         "https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh"|\
-        "https://git.io/aria2.sh"|\
-        "http://v7.hostcli.com/install/install-ubuntu_6.0.sh"|\
+        "https://raw.githubusercontent.com/P3TERX/aria2.sh/master/aria2.sh"|\
         "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh"|\
-        "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh"|\
+        "https://raw.githubusercontent.com/fscarmen/ArgoX/main/argox.sh"|\
         "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh"|\
         "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh"|\
         "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh"|\
@@ -894,6 +892,14 @@ confirm_risk_action() {
         confirm_danger "$@"
         return $?
     fi
+    print_action_summary "risk" "$1" "$2" "$3" "${4:-}" "${5:-}"
+    confirm_default_yes
+}
+
+# Reversible operations that the keyword classifier would otherwise escalate to
+# a typed-YES confirmation: installs, service restarts, reapplying saved config.
+# One explicit Y/n is enough; the summary still lists impact and recovery.
+confirm_standard_action() {
     print_action_summary "risk" "$1" "$2" "$3" "${4:-}" "${5:-}"
     confirm_default_yes
 }
@@ -2880,7 +2886,7 @@ reload_applied_config_kind() {
             fi
             ;;
         vpso-mux)
-            if confirm_risk_action "$(localized_text "重启 vpso-mux" "Restart vpso-mux" "Перезагрузите vpso-mux.")" \
+            if confirm_standard_action "$(localized_text "重启 vpso-mux" "Restart vpso-mux" "Перезагрузите vpso-mux.")" \
                 "$(localized_text "TCP Peek/vpso-mux 分流器运行进程" "TCP Peek/vpso-mux routing running process" "Процесс работы маршрутизации TCP Peek/vpso-mux")" \
                 "$(localized_text "使用当前未断开的 SSH 会话恢复 ${target_file}.bak_*，或回到 443端口复用菜单重新应用/回滚入口模式" "Restore ${target_file}.bak_* using the currently undisconnected SSH session, or return to the Port 443 Reuse menu to reapply/rollback entry mode" "Восстановите ${target_file}.bak_*, используя текущий неотключенный сеанс SSH, или вернитесь в меню повторное использование порта 443, чтобы повторно применить/откатить режим входа.")" \
                 "$(localized_text "确认公网 443 当前入口模式和本机后端端口都正常。" "Confirm that the current entry mode of public port 443 and the local backend port are normal." "Убедитесь, что текущий режим входа в публичный порт 443 и локальный внутренний порт являются нормальными.")"; then
@@ -2891,14 +2897,8 @@ reload_applied_config_kind() {
             ;;
         entry-mode|xray-routes)
             if declare -F reapply_current_entry_mode >/dev/null 2>&1; then
-                if confirm_risk_action "$(localized_text "重新应用当前 443 入口模式" "Reapply current 443 entry pattern" "Повторно применить текущий шаблон входа 443")" \
-                    "$(localized_text "公网 443 入口配置、Caddy/Nginx/vpso-mux/Xray 相关路由" "public port 443 entry configuration, Caddy/Nginx/vpso-mux/Xray related routes" "Конфигурация входа в публичную сеть 443, маршруты, связанные с Caddy/Nginx/vpso-mux/Xray")" \
-                    "$(localized_text "脚本会创建入口模式备份并在失败时回滚；也可从备份与回滚中心恢复" "Script creates entry mode backup and rolls back on failure; can also be restored from the Backup and Rollback Center" "Скрипт создает резервную копию в режим входа и выполняет откат в случае сбоя; также можно восстановить из Центра резервного копирования и отката.")" \
-                    "$(localized_text "确认配置文件中的域名、端口和 ENTRY_MODE 值已经匹配。" "Confirm that the domain, port, and ENTRY_MODE value in the configuration file match." "Убедитесь, что имя домена, порт и значение ENTRY_MODE в файле конфигурации совпадают.")"; then
-                    reapply_current_entry_mode
-                else
-                    echo -e "$(localized_text "${YELLOW}⚠️ 已保存配置，但未重新应用 443 入口模式。${PLAIN}" "${YELLOW}⚠️ Configuration saved, but 443 entry mode was not reapplied.${PLAIN}" "${YELLOW}⚠️ Конфигурация сохранена, но режим входа 443 не был применен повторно.${PLAIN}")"
-                fi
+                echo -e "$(localized_text "${CYAN}配置已保存，接下来显示入口切换预览；在预览中确认后才会应用。${PLAIN}" "${CYAN}Configuration saved. The entry-switch preview follows; nothing is applied until you confirm there.${PLAIN}" "${CYAN}Конфигурация сохранена. Далее откроется предпросмотр переключения входа; изменения применяются только после подтверждения.${PLAIN}")"
+                reapply_current_entry_mode
             else
                 echo -e "$(localized_text "${YELLOW}⚠️ 已保存配置；请回到 443端口复用菜单重新应用当前入口模式。${PLAIN}" "${YELLOW}⚠️ The configuration has been saved; please return to the Port 443 Reuse menu to reapply the current entry mode.${PLAIN}" "${YELLOW}⚠️ Конфигурация сохранена; вернитесь в меню повторного использования порта 443, чтобы повторно применить текущий режим ввода.${PLAIN}")"
             fi
@@ -2910,7 +2910,7 @@ reload_applied_config_kind() {
                     return 1
                 }
             fi
-            if confirm_risk_action "$(localized_text "重启 Traffic Guard timer" "Restart Traffic Guard timer" "Перезапустить таймер Traffic Guard")" \
+            if confirm_standard_action "$(localized_text "重启 Traffic Guard timer" "Restart Traffic Guard timer" "Перезапустить таймер Traffic Guard")" \
                 "$(localized_text "vps-traffic-guard.timer 和流量阈值检查周期" "vps-traffic-guard.timer and traffic threshold check period" "vps-traffic-guard.timer и период проверки порога трафика")" \
                 "$(localized_text "重新编辑 ${target_file} 或从 ${target_file}.bak_* 恢复；必要时停用 vps-traffic-guard.timer" "Re-edit ${target_file} or restore from ${target_file}.bak_*; disable vps-traffic-guard.timer if necessary" "Отредактируйте ${target_file} повторно или восстановите из ${target_file}.bak_*; при необходимости отключите vps-traffic-guard.timer")" \
                 "$(localized_text "如果 ACTION=poweroff，请确认阈值、账单周期和云厂商救援方式。" "If ACTION=poweroff, confirm the threshold, billing cycle, and cloud vendor rescue method." "Если ACTION=poweroff, подтвердите пороговое значение, цикл выставления счетов и метод восстановления поставщика облачных услуг.")"; then
@@ -2928,7 +2928,7 @@ reload_applied_config_kind() {
             fi
             ;;
         dns)
-            if confirm_risk_action "$(localized_text "重启 systemd-resolved" "Restart systemd-resolved" "Перезапуск systemd-решено")" \
+            if confirm_standard_action "$(localized_text "重启 systemd-resolved" "Restart systemd-resolved" "Перезапуск systemd-решено")" \
                 "$(localized_text "系统 DNS 解析服务和 resolved drop-in 配置" "System DNS resolution service and resolved drop-in configuration" "Служба разрешения проблем системы DNS и решенная прямая конфигурация")" \
                 "$(localized_text "恢复 ${target_file}.bak_*，或重新进入 DNS 设置菜单切换回原配置" "Restore ${target_file}.bak_*, or reopen DNS settings and select the previous configuration." "Восстановите ${target_file}.bak_* или откройте настройки DNS и выберите прежнюю конфигурацию.")" \
                 "$(localized_text "确认当前 SSH 会话保持连接，必要时可用 IP 直连排障。" "Confirm that the current SSH session remains connected, and use IP direct connection to troubleshoot if necessary." "Убедитесь, что текущий сеанс SSH остается подключенным, и при необходимости используйте прямое IP-соединение для устранения неполадок.")"; then
@@ -2938,7 +2938,7 @@ reload_applied_config_kind() {
             fi
             ;;
         sysctl)
-            if confirm_risk_action "$(localized_text "应用 sysctl 配置" "Apply sysctl configuration" "Применить конфигурацию sysctl")" \
+            if confirm_standard_action "$(localized_text "应用 sysctl 配置" "Apply sysctl configuration" "Применить конфигурацию sysctl")" \
                 "$(localized_text "当前内核运行中的 sysctl 参数" "sysctl parameters currently running in the kernel" "Параметры sysctl, работающие в настоящее время в ядре")" \
                 "$(localized_text "恢复 ${target_file}.bak_* 后重新执行 sysctl --system，或手动回退异常参数" "Restore ${target_file}.bak_* and re-execute sysctl --system, or manually roll back the abnormal parameters" "Восстановите ${target_file}.bak_* и повторно выполните sysctl --system или вручную откатите ненормальные параметры.")" \
                 "$(localized_text "确认参数来源可信；错误网络参数可能影响远程连接。" "Confirm that the source of the parameters is trustworthy; incorrect network parameters may affect remote connections." "Подтвердите, что источник параметров заслуживает доверия; неправильные параметры сети могут повлиять на удаленные подключения.")"; then
@@ -2948,7 +2948,7 @@ reload_applied_config_kind() {
             fi
             ;;
         fail2ban)
-            if confirm_risk_action "$(localized_text "重启 fail2ban" "Restart fail2ban" "Перезагрузите fail2ban.")" \
+            if confirm_standard_action "$(localized_text "重启 fail2ban" "Restart fail2ban" "Перезагрузите fail2ban.")" \
                 "$(localized_text "Fail2ban 服务和登录防护规则" "Fail2ban Service and Login Protection Rules" "Fail2ban Правила защиты и защиты входа в систему")" \
                 "$(localized_text "恢复 ${target_file}.bak_* 后重启 fail2ban，或临时停用异常 jail" "Restore ${target_file}.bak_* and then restart fail2ban, or temporarily disable the abnormal jail" "Восстановите ${target_file}.bak_*, а затем перезапустите fail2ban или временно отключите аварийный джейл.")" \
                 "$(localized_text "确认当前 SSH 来源不会被新规则误封。" "Confirm that the current SSH source will not be accidentally blocked by the new rules." "Убедитесь, что текущий источник SSH не будет случайно заблокирован новыми правилами.")"; then
@@ -2958,7 +2958,7 @@ reload_applied_config_kind() {
             fi
             ;;
         xui-json)
-            if confirm_risk_action "$(localized_text "重启 x-ui/3x-ui" "Restart x-ui/3x-ui" "Перезагрузите x-ui/3x-ui.")" \
+            if confirm_standard_action "$(localized_text "重启 x-ui/3x-ui" "Restart x-ui/3x-ui" "Перезагрузите x-ui/3x-ui.")" \
                 "$(localized_text "x-ui/3x-ui 面板进程和 config.json 运行配置" "x-ui/3x-ui panel process and config.json running configuration" "Процесс и конфигурация панели x-ui/3x-ui. Текущая конфигурация json")" \
                 "$(localized_text "恢复 ${target_file}.bak_* 后重启面板，或用官方 x-ui/3x-ui 命令进入管理菜单修复" "Restore ${target_file}.bak_* and then restart the panel, or use the official x-ui/3x-ui command to enter the management menu to repair" "Восстановите ${target_file}.bak_*, а затем перезапустите панель или используйте официальную команду x-ui/3x-ui, чтобы войти в меню управления для восстановления.")" \
                 "$(localized_text "确认面板端口、证书路径和 443端口复用设置匹配。" "Verify that the panel port, certificate path, and Port 443 Reuse settings match." "Убедитесь, что порт панели, путь к сертификату и настройки записи общего ресурса 443 совпадают.")"; then
@@ -7773,16 +7773,32 @@ func_env_install() {
                 echo -e "$(localized_text "${CYAN}▶ 正在拉取 Docker 引擎...${PLAIN}" "${CYAN}▶ Pulling Docker engine...${PLAIN}" "${CYAN}▶ Извлечение двигателя Docker...${PLAIN}")"
                 run_remote_script "$(localized_text "安装 Docker 引擎" "Install Docker engine" "Установите двигатель Docker.")" "https://get.docker.com" || echo -e "$(localized_text "${RED}❌ Docker 安装失败，请检查网络！${PLAIN}" "${RED}❌ Docker Installation failed, please check the network!${PLAIN}" "${RED}❌ Docker Установка не удалась, проверьте сеть!${PLAIN}")"
                 ;;
-            2) run_remote_script "$(localized_text "安装 Python 环境" "Install Python environment" "Установите среду Python.")" "https://raw.githubusercontent.com/lx969788249/lxspacepy/master/pyinstall.sh" ;;
+            2)
+                if is_debian; then
+                    run_safe "$(localized_text "安装 Python 3、pip 与 venv" "Install Python 3, pip, and venv" "Установить Python 3, pip и venv")" install_pkg python3 python3-pip python3-venv || true
+                elif is_redhat; then
+                    run_safe "$(localized_text "安装 Python 3、pip 与 venv" "Install Python 3, pip, and venv" "Установить Python 3, pip и venv")" install_pkg python3 python3-pip || true
+                else
+                    echo -e "$(localized_text "${RED}❌ 当前系统暂不支持自动安装 Python。${PLAIN}" "${RED}❌ This system does not support automatic Python installation.${PLAIN}" "${RED}❌ Эта система не поддерживает автоматическую установку Python.${PLAIN}")"
+                fi
+                if command -v python3 >/dev/null 2>&1; then
+                    echo -e "$(localized_text "${GREEN}✅ 已安装：$(python3 --version 2>&1)${PLAIN}" "${GREEN}✅ Installed: $(python3 --version 2>&1)${PLAIN}" "${GREEN}✅ Установлено: $(python3 --version 2>&1)${PLAIN}")"
+                    if ! python3 -m pip --version >/dev/null 2>&1; then
+                        echo -e "$(localized_text "${YELLOW}⚠️ pip 未就绪，可手动安装 python3-pip 后重试。${PLAIN}" "${YELLOW}⚠️ pip is not ready; install python3-pip manually and retry.${PLAIN}" "${YELLOW}⚠️ pip недоступен; установите python3-pip вручную и повторите попытку.${PLAIN}")"
+                    fi
+                else
+                    echo -e "$(localized_text "${RED}❌ Python 3 未安装，请检查软件源或网络。${PLAIN}" "${RED}❌ Python 3 is not installed; check the package sources or network.${PLAIN}" "${RED}❌ Python 3 не установлен; проверьте источники пакетов или сеть.${PLAIN}")"
+                fi
+                ;;
             3) run_safe "$(localized_text "安装 iperf3" "Install iperf3" "Установить iperf3")" install_pkg iperf3 ;;
             4) run_remote_script "$(localized_text "安装 WARP 解锁/网络工具" "Install WARP Unlock/Network Tool" "Установите инструмент разблокировки/сети WARP.")" "https://gitlab.com/fscarmen/warp/-/raw/main/menu.sh" ;;
             5) run_remote_script "$(localized_text "安装 Realm 端口转发" "Install Realm port forwarding" "Установите переадресацию портов Realm")" "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh" install ;;
             6) run_remote_script "$(localized_text "安装 Gost 隧道" "Install Gost tunnel" "Установите туннель Gost.")" "https://raw.githubusercontent.com/qqrrooty/EZgost/main/gost.sh" ;;
             7) run_remote_script "$(localized_text "安装 Forwardx 转发面板" "Install Forwardx forwarding panel" "Установить панель маршрутизация Forwardx")" "https://raw.githubusercontent.com/poouo/Forwardx/main/scripts/install-panel-local.sh" install ;;
-            8) run_remote_script "$(localized_text "安装 Argox 节点" "Install Argox node" "Установите узел Argox.")" "https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh" ;;
+            8) run_remote_script "$(localized_text "安装 Argox 节点" "Install Argox node" "Установите узел Argox.")" "https://raw.githubusercontent.com/fscarmen/ArgoX/main/argox.sh" ;;
             9) run_remote_script "$(localized_text "安装极光面板" "Install Aurora Panel" "Установить панель Аврора")" "https://raw.githubusercontent.com/Aurora-Admin-Panel/deploy/main/install.sh" ;;
-            10) run_remote_script "$(localized_text "安装 nftables NAT 转发工具" "Install nftables NAT forwarding tool" "Установите инструмент маршрутизация NAT nftables.")" "https://us.arloor.dev/https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh" toml ;;
-            11) run_remote_script "$(localized_text "安装 Aria2 下载工具" "Install the Aria2 download tool" "Установите инструмент загрузки Aria2.")" "https://git.io/aria2.sh" ;;
+            10) run_remote_script "$(localized_text "安装 nftables NAT 转发工具" "Install nftables NAT forwarding tool" "Установите инструмент маршрутизация NAT nftables.")" "https://github.com/arloor/nftables-nat-rust/releases/download/v2.0.0/setup.sh" toml ;;
+            11) run_remote_script "$(localized_text "安装 Aria2 下载工具" "Install the Aria2 download tool" "Установите инструмент загрузки Aria2.")" "https://raw.githubusercontent.com/P3TERX/aria2.sh/master/aria2.sh" ;;
             12) run_remote_script "$(localized_text "安装 PVE 虚拟化工具" "Install PVE virtualization tools" "Установите инструменты виртуализации PVE")" "https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh" ;;
             13) run_remote_script "$(localized_text "安装 FLVX 哆啦转发面板" "Install FLVX Doraemon forwarding panel" "Установите панель маршрутизация FLVX Doraemon.")" "https://raw.githubusercontent.com/Sagit-chu/flvx/main/panel_install.sh" ;;
             14) run_remote_script "$(localized_text "安装 EasyTier 组网" "Install EasyTier networking" "Установите сеть EasyTier")" "https://raw.githubusercontent.com/EasyTier/EasyTier/main/script/install.sh" install ;;
@@ -11951,7 +11967,6 @@ edit_sni_stack_runtime_profile() {
         echo -e "$(localized_text "${BOLD}🧭 修改端口、路径与 REALITY 参数${PLAIN}" "${BOLD}🧭 Edit ports, paths, and REALITY settings${PLAIN}" "${BOLD}🧭 Изменение портов, путей и параметров REALITY${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}修改面板、订阅、REALITY、监听端口和路径；新增网站请使用 [19] -> [2]。${PLAIN}" "${YELLOW}Edit panel, subscription, REALITY, listener, port, and path settings. Add sites from [19] -> [2].${PLAIN}" "${YELLOW}Изменение панели, подписки, REALITY, слушателей, портов и путей. Сайты добавляются через [19] -> [2].${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}修改面板域名请走主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}To modify the panel domain, please go to the main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Чтобы изменить имя домена панели, перейдите в главное меню [19 Повторное использование порта 443] -> [2 Управлять Web-доменами и обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")"
         echo -e "------------------------------------------------"
         if load_sni_stack_env >/dev/null 2>&1; then
             print_sni_stack_current_summary
@@ -11963,7 +11978,7 @@ edit_sni_stack_runtime_profile() {
         echo -e "$(localized_text "${GREEN}  1. 修改面板与订阅端口 / 路径${PLAIN}" "${GREEN}  1. Edit panel and subscription ports / paths${PLAIN}" "${GREEN}  1. Изменить порты / пути панели и подписки${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  2. 修改 REALITY 本地监听与目标 SNI${PLAIN}" "${GREEN}  2. Edit REALITY local listener and target SNI${PLAIN}" "${GREEN}  2. Изменить локальный слушатель REALITY и целевой SNI${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  3. 修改公网入口与 Web 本地 TLS${PLAIN}" "${GREEN}  3. Edit public entry and local Web TLS${PLAIN}" "${GREEN}  3. Изменить публичный вход и локальный Web TLS${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}  4. 修改面板域名：请走 [2] -> [9]${PLAIN}" "${YELLOW}4. Modify the panel domain: please go [2] -> [9]${PLAIN}" "${YELLOW}4. Измените доменное имя панели: выберите [2] -> [9].${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  4. 修改面板域名${PLAIN}" "${GREEN}  4. Change the panel domain${PLAIN}" "${GREEN}  4. Изменить домен панели${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  5. 重新应用已保存配置${PLAIN}" "${GREEN}  5. Reapply saved configuration${PLAIN}" "${GREEN}  5. Повторно применить сохранённую конфигурацию${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
@@ -11976,7 +11991,7 @@ edit_sni_stack_runtime_profile() {
             1) edit_sni_stack_panel_subscription_profile ;;
             2) edit_sni_stack_reality_profile ;;
             3) edit_sni_stack_entry_profile ;;
-            4) echo -e "$(localized_text "${YELLOW}请使用：主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [9 修改面板域名]。${PLAIN}" "${YELLOW}Please use: Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [9 Modify Panel domain].${PLAIN}" "${YELLOW}Используйте: Главное меню [19 Повторное использование порта 443] -> [2 Управлять Web-доменами и обратным прокси] -> [9 Изменить имя домена панели].${PLAIN}")" ;;
+            4) edit_sni_stack_panel_domain_profile ;;
             5) reapply_sni_stack_from_env ;;
             "?") show_sni_help; pause_return; continue ;;
             0|q|Q|'') break ;;
@@ -12293,11 +12308,21 @@ install_caddy_if_needed() {
         rm -f "$key_tmp"
         install_pkg caddy || return 1
     elif is_redhat; then
-        install_pkg yum-utils || true
-        if command -v yum-config-manager >/dev/null 2>&1; then
-            yum-config-manager --add-repo https://openrepo.io/repo/caddy/caddy.repo >/dev/null 2>&1 || return 1
-        else
-            echo -e "$(localized_text "${YELLOW}⚠️ 未检测到 yum-config-manager，将尝试直接从系统源安装 Caddy。${PLAIN}" "${YELLOW}⚠️ yum-config-manager not detected, will try to install Caddy directly from system sources.${PLAIN}" "${YELLOW}⚠️ yum-config-manager не обнаружен, попытается установить Caddy непосредственно из системных источников.${PLAIN}")"
+        local rhel_ver caddy_repo_ok=0
+        install_pkg dnf-plugins-core >/dev/null 2>&1 || true
+        if command -v dnf >/dev/null 2>&1 && dnf copr enable -y @caddy/caddy >/dev/null 2>&1; then
+            caddy_repo_ok=1
+        fi
+        if [[ "$caddy_repo_ok" -eq 0 ]]; then
+            rhel_ver=$(rpm -E %rhel 2>/dev/null)
+            [[ "$rhel_ver" =~ ^[0-9]+$ ]] || rhel_ver=9
+            command -v yum-config-manager >/dev/null 2>&1 || install_pkg yum-utils >/dev/null 2>&1 || true
+            if command -v yum-config-manager >/dev/null 2>&1; then
+                yum-config-manager --add-repo "https://copr.fedorainfracloud.org/coprs/g/caddy/caddy/repo/epel-${rhel_ver}/caddy-caddy-epel-${rhel_ver}.repo" >/dev/null 2>&1 && caddy_repo_ok=1
+            fi
+        fi
+        if [[ "$caddy_repo_ok" -eq 0 ]]; then
+            echo -e "$(localized_text "${YELLOW}⚠️ Caddy 官方 COPR 源启用失败，将尝试从系统源安装。${PLAIN}" "${YELLOW}⚠️ Failed to enable the official Caddy COPR repository; trying the system repositories.${PLAIN}" "${YELLOW}⚠️ Не удалось включить официальный репозиторий COPR Caddy; попытка установки из системных репозиториев.${PLAIN}")"
         fi
         install_pkg caddy || return 1
     else
@@ -14354,7 +14379,7 @@ manage_reality_traffic_guard() {
             1) set_strict_sni_gate true ; pause_return ;;
             2) set_strict_sni_gate false ; pause_return ;;
             3)
-                confirm_danger "$(localized_text "重新同步严格 SNI 清单" "Resynchronize the strict SNI list" "Повторно синхронизировать строгий список SNI")" \
+                confirm_standard_action "$(localized_text "重新同步严格 SNI 清单" "Resynchronize the strict SNI list" "Повторно синхронизировать строгий список SNI")" \
                     "$(localized_text "重新生成当前入口配置；运行中的 Nginx 或 vpso-mux 可能重启" "regenerate the current entry configuration; the running Nginx or vpso-mux service may restart" "заново создать текущую конфигурацию точки входа; работающий Nginx или vpso-mux может быть перезапущен")" \
                     "$(localized_text "已保存的域名与路由不会删除；修正后可再次同步" "saved domains and routes are retained; correct them and synchronize again" "сохранённые домены и маршруты останутся; исправьте их и повторите синхронизацию")" && sync_strict_sni_gate_to_current_entry
                 pause_return
@@ -18639,7 +18664,7 @@ func_xpanel_manage() {
 
     if [[ -z "$panel_cmd" ]]; then
         echo -e "$(localized_text "${YELLOW}未检测到 x-ui 或 3x-ui 管理命令，可能尚未安装面板。${PLAIN}" "${YELLOW}The x-ui and 3x-ui management commands were not found; the panel may not be installed.${PLAIN}" "${YELLOW}Команды управления x-ui и 3x-ui не найдены; возможно, панель не установлена.${PLAIN}")"
-        if confirm_danger "$(localized_text "安装 3x-ui 面板" "Install the 3x-ui panel" "Установить панель 3x-ui")" \
+        if confirm_standard_action "$(localized_text "安装 3x-ui 面板" "Install the 3x-ui panel" "Установить панель 3x-ui")" \
             "$(localized_text "下载并执行 3x-ui 官方安装脚本" "download and run the official 3x-ui installer" "скачать и запустить официальный установщик 3x-ui")" \
             "$(localized_text "安装前备份现有面板配置；卸载方式以 3x-ui 官方菜单为准" "back up any existing panel configuration first; use the official 3x-ui menu to uninstall" "сначала сохраните существующую конфигурацию панели; для удаления используйте официальное меню 3x-ui")"; then
             func_xpanel
@@ -18730,7 +18755,7 @@ func_sui_manage() {
 
     if ! command -v s-ui >/dev/null 2>&1; then
         echo -e "$(localized_text "${YELLOW}未检测到 s-ui 管理命令，可能尚未安装 S-UI。${PLAIN}" "${YELLOW}The s-ui management command was not found; S-UI may not be installed.${PLAIN}" "${YELLOW}Команда управления s-ui не найдена; возможно, S-UI не установлен.${PLAIN}")"
-        if confirm_danger "$(localized_text "安装 S-UI" "Install S-UI" "Установить S-UI")" \
+        if confirm_standard_action "$(localized_text "安装 S-UI" "Install S-UI" "Установить S-UI")" \
             "$(localized_text "下载并执行 S-UI 官方安装脚本" "download and run the official S-UI installer" "скачать и запустить официальный установщик S-UI")" \
             "$(localized_text "安装前备份现有配置；卸载方式以 S-UI 官方菜单为准" "back up existing configuration first; use the official S-UI menu to uninstall" "сначала сохраните существующую конфигурацию; для удаления используйте официальное меню S-UI")"; then
             func_sui_panel
@@ -18807,7 +18832,7 @@ func_xray_manage() {
 
     if ! command -v xray >/dev/null 2>&1; then
         echo -e "$(localized_text "${YELLOW}未检测到 xray 管理命令，可能尚未安装 233boy Xray。${PLAIN}" "${YELLOW}The xray management command was not found; 233boy Xray may not be installed.${PLAIN}" "${YELLOW}Команда управления xray не найдена; возможно, 233boy Xray не установлен.${PLAIN}")"
-        if confirm_danger "$(localized_text "安装 233boy Xray" "Install 233boy Xray" "Установить 233boy Xray")" \
+        if confirm_standard_action "$(localized_text "安装 233boy Xray" "Install 233boy Xray" "Установить 233boy Xray")" \
             "$(localized_text "下载并执行 233boy Xray 安装脚本" "download and run the 233boy Xray installer" "скачать и запустить установщик 233boy Xray")" \
             "$(localized_text "安装前备份现有 Xray 配置；卸载方式以该项目菜单为准" "back up existing Xray configuration first; use the project menu to uninstall" "сначала сохраните существующую конфигурацию Xray; для удаления используйте меню проекта")"; then
             func_xray_233boy
@@ -18836,7 +18861,7 @@ func_ip_sentinel() {
     echo -e "$(localized_text "${YELLOW}该脚本将持续监控并修正路由，防止服务器 IP 被错误定位至中国大陆。${PLAIN}" "${YELLOW}This script will continuously monitor and correct routing to prevent the server IP from being incorrectly located in mainland China.${PLAIN}" "${YELLOW}Этот сценарий будет постоянно отслеживать и корректировать маршрутизацию, чтобы предотвратить неправильное определение IP-адреса сервера в материковом Китае.${PLAIN}")"
     echo -e "------------------------------------------------"
     
-    if confirm_danger "$(localized_text "安装并配置 IP Sentinel" "Install and configure IP Sentinel" "Установить и настроить IP Sentinel")" \
+    if confirm_standard_action "$(localized_text "安装并配置 IP Sentinel" "Install and configure IP Sentinel" "Установить и настроить IP Sentinel")" \
         "$(localized_text "执行远程安装脚本并持续修改网络路由" "run a remote installer that continuously adjusts network routes" "запустить удалённый установщик, который будет постоянно изменять сетевые маршруты")" \
         "$(localized_text "运行前备份网络配置；停止与卸载方式以项目文档为准" "back up the network configuration first; follow the project documentation to stop or uninstall it" "сначала сохраните сетевую конфигурацию; остановку и удаление выполняйте по документации проекта")"; then
         run_remote_script "$(localized_text "安装并配置 IP Sentinel" "Install and configure IP Sentinel" "Установка и настройка IP Sentinel")" "https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh"
@@ -19207,7 +19232,7 @@ func_sublinkpro() {
     echo -e "$(localized_text "${YELLOW}部署完成后请尽快登录管理后台修改默认密码。${PLAIN}" "${YELLOW}After deployment, sign in to the admin panel and change the default password promptly.${PLAIN}" "${YELLOW}После развёртывания войдите в панель администратора и сразу измените пароль по умолчанию.${PLAIN}")"
     echo -e "------------------------------------------------"
     
-    if confirm_danger "$(localized_text "部署 SublinkPro" "Deploy SublinkPro" "Развернуть SublinkPro")" \
+    if confirm_standard_action "$(localized_text "部署 SublinkPro" "Deploy SublinkPro" "Развернуть SublinkPro")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir"
@@ -19293,7 +19318,7 @@ func_miaomiaowu() {
     echo -e "$(localized_text "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}" "${YELLOW}When opens the panel for the first time, it will enter the initialization page. Please create an administrator account and password on the page.${PLAIN}" "${YELLOW}Когда впервые откроет панель, он перейдет на страницу инициализации. Пожалуйста, создайте учетную запись администратора и пароль на странице.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    if confirm_danger "$(localized_text "部署妙妙屋订阅管理" "Deploy Miaomiaowu Subscription Management" "Развернуть Miaomiaowu Subscription Management")" \
+    if confirm_standard_action "$(localized_text "部署妙妙屋订阅管理" "Deploy Miaomiaowu Subscription Management" "Развернуть Miaomiaowu Subscription Management")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir"/{data,subscribes,rule_templates}
@@ -19389,7 +19414,7 @@ func_substore() {
     echo -e "$(localized_text "${YELLOW}请保存随机后端路径；如对公网开放，请在反代侧额外加认证。${PLAIN}" "${YELLOW}Please save the random backend path; if it is open to the public, please add additional authentication on the reverse proxy side.${PLAIN}" "${YELLOW}Сохраните случайный путь к серверу; если он открыт для доступа в Интернет, добавьте дополнительную аутентификацию на стороне обратного прокси-сервера.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    if confirm_danger "$(localized_text "部署 Sub-Store" "Deploy Sub-Store" "Развернуть Sub-Store")" \
+    if confirm_standard_action "$(localized_text "部署 Sub-Store" "Deploy Sub-Store" "Развернуть Sub-Store")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir/data"
@@ -19467,7 +19492,7 @@ func_dockge() {
     echo -e "$(localized_text "${YELLOW}首次打开面板会进入初始化页，请在页面中创建管理员账号和密码。${PLAIN}" "${YELLOW}When opens the panel for the first time, it will enter the initialization page. Please create an administrator account and password on the page.${PLAIN}" "${YELLOW}Когда впервые откроет панель, он перейдет на страницу инициализации. Пожалуйста, создайте учетную запись администратора и пароль на странице.${PLAIN}")"
     echo -e "------------------------------------------------"
 
-    if confirm_danger "$(localized_text "部署 Dockge" "Deploy Dockge" "Развернуть Dockge")" \
+    if confirm_standard_action "$(localized_text "部署 Dockge" "Deploy Dockge" "Развернуть Dockge")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目即可回退；删除 Stacks 目录前请先备份" "stop the Compose project to roll back; back up the Stacks directory before deleting it" "для отката остановите проект Compose; перед удалением каталога Stacks создайте резервную копию")"; then
         mkdir -p "$install_dir" "$stacks_dir"
@@ -19570,7 +19595,7 @@ func_komari() {
         echo -e "$(localized_text "${YELLOW}初始管理员：${CYAN}使用 Komari 默认生成账号，请安装后查看容器日志${PLAIN}" "${YELLOW}Initial administrator: uses Komari to generate an account by default. Please check the container log after installation.${PLAIN}" "${YELLOW}Начальный администратор : по умолчанию использует Komari для создания учетной записи. Пожалуйста, проверьте журнал контейнера после установки.${PLAIN}")"
     fi
     echo -e "------------------------------------------------"
-    if confirm_danger "$(localized_text "部署 Komari" "Deploy Komari" "Развернуть Komari")" \
+    if confirm_standard_action "$(localized_text "部署 Komari" "Deploy Komari" "Развернуть Komari")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目即可回退；删除数据目录前请先备份" "stop the Compose project to roll back; back up the data directory before deleting it" "для отката остановите проект Compose; перед удалением каталога данных создайте резервную копию")"; then
         mkdir -p "$install_dir/data"
@@ -19657,7 +19682,7 @@ func_cdt_monitor() {
     print_public_https_reverse_proxy_hint
     echo -e "------------------------------------------------"
 
-    if confirm_danger "$(localized_text "部署 CDT Monitor" "Deploy CDT Monitor" "Развернуть CDT Monitor")" \
+    if confirm_standard_action "$(localized_text "部署 CDT Monitor" "Deploy CDT Monitor" "Развернуть CDT Monitor")" \
         "$(localized_text "创建 Compose 配置、拉取镜像并启动容器" "create a Compose configuration, pull the image, and start the container" "создать конфигурацию Compose, загрузить образ и запустить контейнер")" \
         "$(localized_text "停止 Compose 项目可回退；归档前请备份 cdt-data 数据卷" "stop the Compose project to roll back; back up the cdt-data volume before archiving" "для отката остановите проект Compose; перед архивацией сохраните резервную копию тома cdt-data")"; then
         mkdir -p "$install_dir"
@@ -20597,7 +20622,7 @@ func_preflight_check() {
         $can_fix_ntp && echo -e "$(localized_text "  - 开启 NTP 时间同步" "- Enable NTP time synchronization" "- Включить синхронизацию времени NTP")"
         [[ ${#cmd_miss[@]} -gt 0 ]] && echo -e "$(localized_text "  - 安装缺失基础命令: ${cmd_miss[*]}" "- Installation missing basic command: ${cmd_miss[*]}" "- При установке отсутствует базовая команда: ${cmd_miss[*]}.")"
         [[ ${#minimal_miss[@]} -gt 0 ]] && echo -e "$(localized_text "  - 补齐精简系统兼容组件" "- Completed streamlined system compatible components" "- Завершены оптимизированные компоненты, совместимые с системой.")"
-        if confirm_danger "$(localized_text "自动修复预检问题" "Automatically fix preflight issues" "Автоматически исправить проблемы предварительной проверки")" \
+        if confirm_standard_action "$(localized_text "自动修复预检问题" "Automatically fix preflight issues" "Автоматически исправить проблемы предварительной проверки")" \
             "$(localized_text "可能安装基础软件包并启用 NTP 时间同步" "may install base packages and enable NTP time synchronization" "может установить базовые пакеты и включить синхронизацию времени NTP")" \
             "$(localized_text "软件包变更需按系统包管理器回退；NTP 可在系统服务中关闭" "revert package changes with the system package manager; disable NTP through the system service" "изменения пакетов отменяются через системный менеджер пакетов; NTP можно отключить в системной службе")"; then
             [[ ${#minimal_miss[@]} -gt 0 ]] && ensure_minimal_system_compat
@@ -21045,7 +21070,7 @@ health_restart_failed_services() {
 
     echo -e "$(localized_text "${CYAN}将尝试重启以下失败服务：${PLAIN}" "${CYAN}Will attempt to restart the following failed services:${PLAIN}" "${CYAN}попытается перезапустить следующие отказавшие службы:${PLAIN}")"
     printf '  - %s\n' "${failed_units[@]}"
-    confirm_risk_action "$(localized_text "重启失败的 systemd 服务" "Restart failed systemd service" "Не удалось перезапустить службу systemd.")" \
+    confirm_standard_action "$(localized_text "重启失败的 systemd 服务" "Restart failed systemd service" "Перезапустить отказавшие службы systemd")" \
         "$(localized_text "当前处于失败状态的服务单元" "The service unit that is currently in a failed state" "Сервисный блок, который в данный момент находится в неисправном состоянии")" \
         "$(localized_text "查看对应 journalctl 日志，修正配置后单独重启失败服务" "Check the corresponding journalctl log, correct the configuration and restart the failed service individually." "Проверьте соответствующий журнал Journalctl, исправьте конфигурацию и перезапустите отказавшую службу отдельно.")" \
         "$(localized_text "会跳过 ssh/sshd，其他服务会短暂中断。" "ssh/sshd will be skipped and other services will be briefly interrupted." "ssh/sshd будет пропущен, а другие службы будут ненадолго прерваны.")" || return 1
@@ -23215,7 +23240,7 @@ reset_traffic_guard_baseline() {
         pause_return
         return 1
     fi
-    confirm_risk_action "$(localized_text "重置流量保护基线" "Reset traffic protection baseline" "Сбросить базовый уровень защиты трафика")" \
+    confirm_standard_action "$(localized_text "重置流量保护基线" "Reset traffic protection baseline" "Сбросить базовый уровень защиты трафика")" \
         "$(localized_text "本周期统计会从当前网卡计数重新开始，初始已用设置为 ${initial_used_gb}GB。" "Statistics for this cycle will restart from the current network card count, and the initial used setting is ${initial_used_gb}GB." "Статистика для этого цикла будет перезапущена с текущего количества сетевых карт, а исходная используемая настройка — ${initial_used_gb}GB.")" \
         "$(localized_text "重新进入本菜单再次重置基线，或参考云厂商后台手动修正已用流量。" "Re-enter this menu to reset the baseline again, or refer to the cloud provider's backend to manually correct the used traffic." "Повторно войдите в это меню, чтобы снова сбросить базовый уровень, или обратитесь к серверной части поставщика облачных услуг, чтобы вручную скорректировать использованный трафик.")" \
         "$(localized_text "请只在账单周期开始、刚配置完成或确认云厂商统计后执行。" "Please only execute it at the beginning of the billing cycle, after the configuration has just been completed, or after confirming the cloud provider's statistics." "Пожалуйста, выполняйте его только в начале платежного цикла, после завершения настройки или после подтверждения статистики облачного провайдера.")" || return 1
@@ -23248,12 +23273,12 @@ repair_traffic_guard_timer() {
     fi
 
     if [[ "${ACTION:-poweroff}" == "poweroff" ]]; then
-        confirm_danger "$(localized_text "修复流量保护自动检查 timer" "Fix traffic protection automatic check timer" "Исправить таймер автоматической проверки защиты трафика")" \
+        confirm_standard_action "$(localized_text "修复流量保护自动检查 timer" "Fix traffic protection automatic check timer" "Исправить таймер автоматической проверки защиты трафика")" \
             "$(localized_text "会重新安装 vps-traffic-guard-check 和 systemd timer，恢复后会按 ${interval}s 周期检查。" "vps-traffic-guard-check and systemd timer will be reinstalled, and they will be checked at the ${interval}s period after recovery." "vps-traffic-guard-check и таймер systemd будут переустановлены, и после восстановления они будут проверены в период ${interval}s.")" \
             "$(localized_text "如果当前实时估算已经达到阈值，下一次检查可能会执行 systemctl poweroff。" "If the current live estimate has reached the threshold, the next check may perform a systemctl poweroff." "Если текущая оперативная оценка достигла порога, следующая проверка может выполнить отключение systemctl.")" \
             "$(localized_text "请先确认云厂商后台流量、阈值和当前 SSH/控制台救援方式。" "Please first confirm the cloud provider's background traffic, threshold and current SSH/console rescue method." "Сначала подтвердите фоновый трафик облачного провайдера, пороговое значение и текущий метод восстановления SSH/консоли.")" || return 1
     else
-        confirm_risk_action "$(localized_text "修复流量保护自动检查 timer" "Fix traffic protection automatic check timer" "Исправить таймер автоматической проверки защиты трафика")" \
+        confirm_standard_action "$(localized_text "修复流量保护自动检查 timer" "Fix traffic protection automatic check timer" "Исправить таймер автоматической проверки защиты трафика")" \
             "$(localized_text "会重新安装 vps-traffic-guard-check 和 systemd timer，恢复后会按 ${interval}s 周期检查。" "vps-traffic-guard-check and systemd timer will be reinstalled, and they will be checked at the ${interval}s period after recovery." "vps-traffic-guard-check и таймер systemd будут переустановлены, и после восстановления они будут проверены в период ${interval}s.")" \
             "$(localized_text "当前动作是 ${ACTION:-log}，达到阈值时只按配置动作执行。" "The current action is ${ACTION:-log}. When the threshold is reached, only the configured action will be executed." "Текущее действие — ${ACTION:-log}. При достижении порогового значения будет выполнено только настроенное действие.")" \
             "$(localized_text "修复后请回到状态页确认最近检查时间开始刷新。" "After repair, please return to the status page to confirm that the last check time has started to refresh." "После ремонта вернитесь на страницу состояния и убедитесь, что время последней проверки начало обновляться.")" || return 1

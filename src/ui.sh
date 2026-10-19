@@ -155,6 +155,14 @@ confirm_risk_action() {
     confirm_default_yes
 }
 
+# Reversible operations that the keyword classifier would otherwise escalate to
+# a typed-YES confirmation: installs, service restarts, reapplying saved config.
+# One explicit Y/n is enough; the summary still lists impact and recovery.
+confirm_standard_action() {
+    print_action_summary "risk" "$1" "$2" "$3" "${4:-}" "${5:-}"
+    confirm_default_yes
+}
+
 terminal_text_width() {
     local text="$1"
     local width

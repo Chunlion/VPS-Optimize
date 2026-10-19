@@ -1700,7 +1700,7 @@ reset_traffic_guard_baseline() {
         pause_return
         return 1
     fi
-    confirm_risk_action "$(localized_text "重置流量保护基线" "Reset traffic protection baseline" "Сбросить базовый уровень защиты трафика")" \
+    confirm_standard_action "$(localized_text "重置流量保护基线" "Reset traffic protection baseline" "Сбросить базовый уровень защиты трафика")" \
         "$(localized_text "本周期统计会从当前网卡计数重新开始，初始已用设置为 ${initial_used_gb}GB。" "Statistics for this cycle will restart from the current network card count, and the initial used setting is ${initial_used_gb}GB." "Статистика для этого цикла будет перезапущена с текущего количества сетевых карт, а исходная используемая настройка — ${initial_used_gb}GB.")" \
         "$(localized_text "重新进入本菜单再次重置基线，或参考云厂商后台手动修正已用流量。" "Re-enter this menu to reset the baseline again, or refer to the cloud provider's backend to manually correct the used traffic." "Повторно войдите в это меню, чтобы снова сбросить базовый уровень, или обратитесь к серверной части поставщика облачных услуг, чтобы вручную скорректировать использованный трафик.")" \
         "$(localized_text "请只在账单周期开始、刚配置完成或确认云厂商统计后执行。" "Please only execute it at the beginning of the billing cycle, after the configuration has just been completed, or after confirming the cloud provider's statistics." "Пожалуйста, выполняйте его только в начале платежного цикла, после завершения настройки или после подтверждения статистики облачного провайдера.")" || return 1
@@ -1733,12 +1733,12 @@ repair_traffic_guard_timer() {
     fi
 
     if [[ "${ACTION:-poweroff}" == "poweroff" ]]; then
-        confirm_danger "$(localized_text "修复流量保护自动检查 timer" "Fix traffic protection automatic check timer" "Исправить таймер автоматической проверки защиты трафика")" \
+        confirm_standard_action "$(localized_text "修复流量保护自动检查 timer" "Fix traffic protection automatic check timer" "Исправить таймер автоматической проверки защиты трафика")" \
             "$(localized_text "会重新安装 vps-traffic-guard-check 和 systemd timer，恢复后会按 ${interval}s 周期检查。" "vps-traffic-guard-check and systemd timer will be reinstalled, and they will be checked at the ${interval}s period after recovery." "vps-traffic-guard-check и таймер systemd будут переустановлены, и после восстановления они будут проверены в период ${interval}s.")" \
             "$(localized_text "如果当前实时估算已经达到阈值，下一次检查可能会执行 systemctl poweroff。" "If the current live estimate has reached the threshold, the next check may perform a systemctl poweroff." "Если текущая оперативная оценка достигла порога, следующая проверка может выполнить отключение systemctl.")" \
             "$(localized_text "请先确认云厂商后台流量、阈值和当前 SSH/控制台救援方式。" "Please first confirm the cloud provider's background traffic, threshold and current SSH/console rescue method." "Сначала подтвердите фоновый трафик облачного провайдера, пороговое значение и текущий метод восстановления SSH/консоли.")" || return 1
     else
-        confirm_risk_action "$(localized_text "修复流量保护自动检查 timer" "Fix traffic protection automatic check timer" "Исправить таймер автоматической проверки защиты трафика")" \
+        confirm_standard_action "$(localized_text "修复流量保护自动检查 timer" "Fix traffic protection automatic check timer" "Исправить таймер автоматической проверки защиты трафика")" \
             "$(localized_text "会重新安装 vps-traffic-guard-check 和 systemd timer，恢复后会按 ${interval}s 周期检查。" "vps-traffic-guard-check and systemd timer will be reinstalled, and they will be checked at the ${interval}s period after recovery." "vps-traffic-guard-check и таймер systemd будут переустановлены, и после восстановления они будут проверены в период ${interval}s.")" \
             "$(localized_text "当前动作是 ${ACTION:-log}，达到阈值时只按配置动作执行。" "The current action is ${ACTION:-log}. When the threshold is reached, only the configured action will be executed." "Текущее действие — ${ACTION:-log}. При достижении порогового значения будет выполнено только настроенное действие.")" \
             "$(localized_text "修复后请回到状态页确认最近检查时间开始刷新。" "After repair, please return to the status page to confirm that the last check time has started to refresh." "После ремонта вернитесь на страницу состояния и убедитесь, что время последней проверки начало обновляться.")" || return 1
