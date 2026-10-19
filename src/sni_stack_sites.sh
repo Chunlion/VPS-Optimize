@@ -45,7 +45,6 @@ add_sni_stack_site() {
         echo -e "$(localized_text "${RED}❌ 未找到 Cloudflare Token，请先进入维护菜单 [2] 写入 Token。${PLAIN}" "${RED}❌ Cloudflare Token was not found. Please enter the maintenance menu [2] to write the Token first.${PLAIN}" "${RED}❌ Cloudflare Токен не найден. Пожалуйста, войдите в меню обслуживания [2], чтобы сначала записать токен.${PLAIN}")"
         return 1
     fi
-    # shellcheck disable=SC1090
     source "$cf_env_file"
     if [[ -z "${CF_Token:-}" ]]; then
         echo -e "$(localized_text "${RED}❌ Cloudflare Token 为空，请先进入维护菜单 [2] 更新。${PLAIN}" "${RED}❌ Cloudflare Token is empty, please enter the maintenance menu [2] to update first.${PLAIN}" "${RED}❌ Cloudflare Токен пуст, войдите в меню обслуживания [2] для обновления.${PLAIN}")"

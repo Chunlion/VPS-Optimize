@@ -66,9 +66,11 @@ Minimum verification after editing any `src/*.sh` module:
 3. `bash -n dist/vps.sh`
 4. `bash tests/smoke.sh`
 
-`tests/smoke.sh` is the reusable release gate: it rebuilds `dist/vps.sh`, checks shell syntax, runs `GOTOOLCHAIN=local go test ./...` for `vpso-mux`, and asserts key 443/TCP Peek release menu wiring.
+`scripts/build.sh` validates the module list, concatenates the modules into `dist/vps.sh`, syntax-checks the result, validates the embedded Traffic Guard checker template, and rewrites `dist/vps.sh.sha256`.
+
+`tests/smoke.sh` is the reusable functional gate: it asserts 443/TCP Peek behavior, backup/restore flows, menu wiring, and quota/health logic. `scripts/compat-smoke.sh` covers stateless helpers (language, menu dispatch, log rotation, BBR sizing, sysctl verification). Go tests and docs build are covered by `scripts/selfcheck.sh`, not by `tests/smoke.sh`.
 
 Developer self-check entrypoints:
 
-- `bash scripts/selfcheck.sh` rebuilds `dist/vps.sh`, runs Bash syntax checks, ShellCheck when available, `go test ./...`, `go vet ./...`, and release marker checks.
+- `bash scripts/selfcheck.sh` rebuilds `dist/vps.sh`, runs Bash syntax checks, ShellCheck at error severity, `go test`/`go vet` when Go is available, and dist artifact freshness checks. Go is required in CI and optional locally.
 - `bash scripts/compat-smoke.sh` runs static/semistatic compatibility checks for source modules, key menu numbers, fallback helpers, and generated release markers without installing software or changing system configuration.

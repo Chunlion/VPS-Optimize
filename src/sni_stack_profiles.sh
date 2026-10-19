@@ -224,7 +224,6 @@ edit_sni_stack_panel_domain_profile() {
         echo -e "$(localized_text "${RED}❌ 未找到 Cloudflare Token，请先到证书维护菜单更新 Token。${PLAIN}" "${RED}❌ Cloudflare Token was not found. Please go to the certificate maintenance menu to update the token first.${PLAIN}" "${RED}❌ Cloudflare Токен не найден. Пожалуйста, перейдите в меню обслуживания сертификатов, чтобы сначала обновить токен.${PLAIN}")"
         return 1
     fi
-    # shellcheck disable=SC1090
     source "$cf_env_file"
     if [[ -z "${CF_Token:-}" ]]; then
         echo -e "$(localized_text "${RED}❌ Cloudflare Token 为空，请先到证书维护菜单更新。${PLAIN}" "${RED}❌ Cloudflare Token is empty, please go to the certificate maintenance menu to update it first.${PLAIN}" "${RED}❌ Cloudflare Токен пуст. Сначала перейдите в меню обслуживания сертификата, чтобы обновить его.${PLAIN}")"

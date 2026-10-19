@@ -677,7 +677,6 @@ rollback_last_entry_mode() {
     fi
     if [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]]; then
         old_mode=$(
-            # shellcheck disable=SC1090
             unset ENTRY_MODE
             source "$backup_dir/vps-optimize/sni-stack.env" 2>/dev/null || true
             printf '%s' "${ENTRY_MODE:-nginx-stream}"

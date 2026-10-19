@@ -129,7 +129,6 @@ EOF
             continue
         fi
 
-        # shellcheck disable=SC1090
         source "$cf_env_file"
         echo -e "$(localized_text "${CYAN}▶ 正在为 ${domain} 申请 DNS 证书...${PLAIN}" "${CYAN}▶ Applying for DNS certificate for ${domain}...${PLAIN}" "${CYAN}▶ Подача заявки на сертификат DNS для ${domain}...${PLAIN}")"
         if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then

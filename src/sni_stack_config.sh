@@ -585,7 +585,6 @@ get_entry_mode() {
     fi
 
     mode=$(
-        # shellcheck disable=SC1090
         unset ENTRY_MODE
         source "$env_file" 2>/dev/null || true
         printf '%s' "${ENTRY_MODE:-}"
@@ -618,7 +617,6 @@ print_entry_mode_compat_notice() {
 
     if [[ -f "$env_file" ]]; then
         env_mode=$(
-            # shellcheck disable=SC1090
             unset ENTRY_MODE
             source "$env_file" 2>/dev/null || true
             printf '%s' "${ENTRY_MODE:-}"
@@ -639,7 +637,6 @@ print_entry_mode_compat_notice() {
 
     if [[ -f "$state_file" ]]; then
         state_engine=$(
-            # shellcheck disable=SC1090
             unset engine
             source "$state_file" 2>/dev/null || true
             printf '%s' "${engine:-}"
@@ -805,7 +802,6 @@ detect_current_entry_status() {
     ENTRY_STATUS_XRAY_PORT="not-configured"
 
     if [[ -f "$env_file" ]]; then
-        # shellcheck disable=SC1090
         source "$env_file" 2>/dev/null || true
         ENTRY_STATUS_CADDY_ADDR="${CADDY_LISTEN_ADDR:-not-configured}"
         ENTRY_STATUS_CADDY_PORT="${CADDY_LISTEN_PORT:-not-configured}"
@@ -898,7 +894,6 @@ load_sni_stack_env() {
         return 1
     fi
     STRICT_SNI_GATE=false
-    # shellcheck disable=SC1090
     source "$env_file" || return 1
     ENTRY_MODE=$(get_entry_mode)
     STRICT_SNI_GATE=$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")

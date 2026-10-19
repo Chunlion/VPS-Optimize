@@ -74,21 +74,13 @@ read_trimmed() {
             printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
             ;;
         p_choice|final_p|*port*)
-            if declare -F normalize_port_input >/dev/null 2>&1; then
-                printf -v "$__target" '%s' "$(normalize_port_input "$__raw_input")"
-            else
-                printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
-            fi
+            printf -v "$__target" '%s' "$(normalize_port_input "$__raw_input")"
             ;;
         *choice*|action|c|t)
             printf -v "$__target" '%s' "$(normalize_menu_choice_input "$__raw_input")"
             ;;
         ip|*_ip|*addr*)
-            if declare -F normalize_ip_input >/dev/null 2>&1; then
-                printf -v "$__target" '%s' "$(normalize_ip_input "$__raw_input")"
-            else
-                printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
-            fi
+            printf -v "$__target" '%s' "$(normalize_ip_input "$__raw_input")"
             ;;
         *)
             printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
@@ -117,14 +109,10 @@ ask_with_default() {
         *路径*|*[Pp]ath*|*путь*|*Путь*)
             ;;
         *端口*|*[Pp][Oo][Rr][Tt]*|*порт*|*Порт*)
-            if declare -F normalize_port_input >/dev/null 2>&1; then
-                value="$(normalize_port_input "$value")"
-            fi
+            value="$(normalize_port_input "$value")"
             ;;
         *监听地址*|*[Ll]isten*address*|*адрес*прослуш*|*Адрес*прослуш*)
-            if declare -F normalize_ip_input >/dev/null 2>&1; then
-                value="$(normalize_ip_input "$value")"
-            fi
+            value="$(normalize_ip_input "$value")"
             ;;
     esac
     echo "$value"

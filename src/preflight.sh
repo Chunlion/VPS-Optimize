@@ -369,7 +369,6 @@ generate_issue_diagnostics() {
     local os_desc kernel arch now script_path firewall_status latest_backups log_path
     os_desc="$(localized_text "未知" "unknown" "неизвестно")"
     if [[ -r /etc/os-release ]]; then
-        # shellcheck disable=SC1091
         . /etc/os-release
         os_desc="${PRETTY_NAME:-${ID:-unknown} ${VERSION_ID:-}}"
     fi

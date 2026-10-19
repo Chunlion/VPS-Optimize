@@ -45,7 +45,6 @@ VPSO_DEFAULT_LOG_MAX_BYTES=$((5 * 1024 * 1024))
 VPSO_DEFAULT_LOG_ROTATE_KEEP=3
 
 if [[ -f /etc/os-release ]]; then
-    # shellcheck disable=SC1091
     . /etc/os-release
     OS=$ID
     OS_LIKE=${ID_LIKE:-""}
@@ -1049,21 +1048,13 @@ read_trimmed() {
             printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
             ;;
         p_choice|final_p|*port*)
-            if declare -F normalize_port_input >/dev/null 2>&1; then
-                printf -v "$__target" '%s' "$(normalize_port_input "$__raw_input")"
-            else
-                printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
-            fi
+            printf -v "$__target" '%s' "$(normalize_port_input "$__raw_input")"
             ;;
         *choice*|action|c|t)
             printf -v "$__target" '%s' "$(normalize_menu_choice_input "$__raw_input")"
             ;;
         ip|*_ip|*addr*)
-            if declare -F normalize_ip_input >/dev/null 2>&1; then
-                printf -v "$__target" '%s' "$(normalize_ip_input "$__raw_input")"
-            else
-                printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
-            fi
+            printf -v "$__target" '%s' "$(normalize_ip_input "$__raw_input")"
             ;;
         *)
             printf -v "$__target" '%s' "$(trim_input "$__raw_input")"
@@ -1092,14 +1083,10 @@ ask_with_default() {
         *路径*|*[Pp]ath*|*путь*|*Путь*)
             ;;
         *端口*|*[Pp][Oo][Rr][Tt]*|*порт*|*Порт*)
-            if declare -F normalize_port_input >/dev/null 2>&1; then
-                value="$(normalize_port_input "$value")"
-            fi
+            value="$(normalize_port_input "$value")"
             ;;
         *监听地址*|*[Ll]isten*address*|*адрес*прослуш*|*Адрес*прослуш*)
-            if declare -F normalize_ip_input >/dev/null 2>&1; then
-                value="$(normalize_ip_input "$value")"
-            fi
+            value="$(normalize_ip_input "$value")"
             ;;
     esac
     echo "$value"
@@ -7958,7 +7945,6 @@ EOF
             continue
         fi
 
-        # shellcheck disable=SC1090
         source "$cf_env_file"
         echo -e "$(localized_text "${CYAN}▶ 正在为 ${domain} 申请 DNS 证书...${PLAIN}" "${CYAN}▶ Applying for DNS certificate for ${domain}...${PLAIN}" "${CYAN}▶ Подача заявки на сертификат DNS для ${domain}...${PLAIN}")"
         if ! issue_cf_dns_cert_with_retry "$domain" "$CF_Token" "$acme_bin"; then
@@ -8623,7 +8609,6 @@ get_entry_mode() {
     fi
 
     mode=$(
-        # shellcheck disable=SC1090
         unset ENTRY_MODE
         source "$env_file" 2>/dev/null || true
         printf '%s' "${ENTRY_MODE:-}"
@@ -8656,7 +8641,6 @@ print_entry_mode_compat_notice() {
 
     if [[ -f "$env_file" ]]; then
         env_mode=$(
-            # shellcheck disable=SC1090
             unset ENTRY_MODE
             source "$env_file" 2>/dev/null || true
             printf '%s' "${ENTRY_MODE:-}"
@@ -8677,7 +8661,6 @@ print_entry_mode_compat_notice() {
 
     if [[ -f "$state_file" ]]; then
         state_engine=$(
-            # shellcheck disable=SC1090
             unset engine
             source "$state_file" 2>/dev/null || true
             printf '%s' "${engine:-}"
@@ -8843,7 +8826,6 @@ detect_current_entry_status() {
     ENTRY_STATUS_XRAY_PORT="not-configured"
 
     if [[ -f "$env_file" ]]; then
-        # shellcheck disable=SC1090
         source "$env_file" 2>/dev/null || true
         ENTRY_STATUS_CADDY_ADDR="${CADDY_LISTEN_ADDR:-not-configured}"
         ENTRY_STATUS_CADDY_PORT="${CADDY_LISTEN_PORT:-not-configured}"
@@ -8936,7 +8918,6 @@ load_sni_stack_env() {
         return 1
     fi
     STRICT_SNI_GATE=false
-    # shellcheck disable=SC1090
     source "$env_file" || return 1
     ENTRY_MODE=$(get_entry_mode)
     STRICT_SNI_GATE=$(normalize_strict_sni_gate "${STRICT_SNI_GATE:-false}")
@@ -9619,7 +9600,6 @@ single_443_current_engine() {
     state_file=$(single_443_engine_state_path)
     if [[ -f "$state_file" ]]; then
         raw_engine=$(
-            # shellcheck disable=SC1090
             unset engine
             source "$state_file" 2>/dev/null || true
             printf '%s' "${engine:-}"
@@ -10965,7 +10945,6 @@ rollback_last_entry_mode() {
     fi
     if [[ -f "$backup_dir/vps-optimize/sni-stack.env" ]]; then
         old_mode=$(
-            # shellcheck disable=SC1090
             unset ENTRY_MODE
             source "$backup_dir/vps-optimize/sni-stack.env" 2>/dev/null || true
             printf '%s' "${ENTRY_MODE:-nginx-stream}"
@@ -11921,7 +11900,6 @@ edit_sni_stack_panel_domain_profile() {
         echo -e "$(localized_text "${RED}❌ 未找到 Cloudflare Token，请先到证书维护菜单更新 Token。${PLAIN}" "${RED}❌ Cloudflare Token was not found. Please go to the certificate maintenance menu to update the token first.${PLAIN}" "${RED}❌ Cloudflare Токен не найден. Пожалуйста, перейдите в меню обслуживания сертификатов, чтобы сначала обновить токен.${PLAIN}")"
         return 1
     fi
-    # shellcheck disable=SC1090
     source "$cf_env_file"
     if [[ -z "${CF_Token:-}" ]]; then
         echo -e "$(localized_text "${RED}❌ Cloudflare Token 为空，请先到证书维护菜单更新。${PLAIN}" "${RED}❌ Cloudflare Token is empty, please go to the certificate maintenance menu to update it first.${PLAIN}" "${RED}❌ Cloudflare Токен пуст. Сначала перейдите в меню обслуживания сертификата, чтобы обновить его.${PLAIN}")"
@@ -13285,7 +13263,6 @@ add_sni_stack_site() {
         echo -e "$(localized_text "${RED}❌ 未找到 Cloudflare Token，请先进入维护菜单 [2] 写入 Token。${PLAIN}" "${RED}❌ Cloudflare Token was not found. Please enter the maintenance menu [2] to write the Token first.${PLAIN}" "${RED}❌ Cloudflare Токен не найден. Пожалуйста, войдите в меню обслуживания [2], чтобы сначала записать токен.${PLAIN}")"
         return 1
     fi
-    # shellcheck disable=SC1090
     source "$cf_env_file"
     if [[ -z "${CF_Token:-}" ]]; then
         echo -e "$(localized_text "${RED}❌ Cloudflare Token 为空，请先进入维护菜单 [2] 更新。${PLAIN}" "${RED}❌ Cloudflare Token is empty, please enter the maintenance menu [2] to update first.${PLAIN}" "${RED}❌ Cloudflare Токен пуст, войдите в меню обслуживания [2] для обновления.${PLAIN}")"
@@ -14532,7 +14509,6 @@ func_caddy_cf_health_check() {
 
     echo -e "$(localized_text "${YELLOW}▶ [1/5] 检查 Cloudflare Token ...${PLAIN}" "${YELLOW}▶ [1/5] Check Cloudflare Token ...${PLAIN}" "${YELLOW}▶ [1/5] Проверить токен Cloudflare ...${PLAIN}")"
     if [[ -f "$cf_env_file" ]]; then
-        # shellcheck disable=SC1090
         source "$cf_env_file"
         if [[ -n "$CF_Token" ]]; then
             if command -v curl >/dev/null 2>&1; then
@@ -14747,7 +14723,6 @@ EOF
     local renew_count=0
     local renew_fail=0
     if [[ -x "$acme_bin" && -f "$cf_env_file" ]]; then
-        # shellcheck disable=SC1090
         source "$cf_env_file"
         if [[ -n "$CF_Token" ]]; then
             while IFS= read -r conf_file; do
@@ -14968,7 +14943,6 @@ func_caddy_cf_maintenance_menu() {
                     continue
                 fi
 
-                # shellcheck disable=SC1090
                 source "$cf_env_file"
                 confirm_risk_action "$(localized_text "重签并安装 ${domain} 的证书" "Re-sign and install the certificate of ${domain}" "Переподпишите и установите сертификат ${domain}.")" \
                     "$(localized_text "acme.sh 证书缓存、/etc/caddy/certs 和 /root/cert 软链接" "acme.sh certificate cache, /etc/caddy/certs and /root/cert symlinks" "Кэш сертификатов acme.sh, символическая ссылка /etc/caddy/certs и /root/cert")" \
@@ -20752,7 +20726,6 @@ generate_issue_diagnostics() {
     local os_desc kernel arch now script_path firewall_status latest_backups log_path
     os_desc="$(localized_text "未知" "unknown" "неизвестно")"
     if [[ -r /etc/os-release ]]; then
-        # shellcheck disable=SC1091
         . /etc/os-release
         os_desc="${PRETTY_NAME:-${ID:-unknown} ${VERSION_ID:-}}"
     fi
@@ -21845,9 +21818,7 @@ traffic_guard_existing_state_usage() {
     [[ -r "$TRAFFIC_GUARD_CONFIG" && -r "$state_file" ]] || return 1
     (
         local expected_cycle
-        # shellcheck disable=SC1090
         . "$TRAFFIC_GUARD_CONFIG"
-        # shellcheck disable=SC1090
         . "$state_file"
         [[ "${IFACE:-}" == "$iface" && "${MODE:-}" == "$mode" ]] || exit 1
         expected_cycle=$(traffic_guard_current_cycle_key "${cycle_day:-${CYCLE_DAY:-1}}")
@@ -22116,7 +22087,6 @@ apply_ssh_only_firewall() {
 
 if [[ "${1:-}" == "--restore-ssh-only-firewall" ]]; then
     if [[ -r "$CONFIG" ]]; then
-        # shellcheck disable=SC1090
         . "$CONFIG"
     fi
     if clear_ssh_only_firewall; then
@@ -22314,7 +22284,6 @@ save_state() {
 }
 
 [[ -r "$CONFIG" ]] || exit 0
-# shellcheck disable=SC1090
 . "$CONFIG"
 
 [[ "${ENABLED:-0}" == "1" ]] || exit 0
@@ -22344,7 +22313,6 @@ CYCLE_NOW=$(current_cycle_key "$CYCLE_DAY")
 STATE_EXISTS=0
 if [[ -r "$STATE_FILE" ]]; then
     STATE_EXISTS=1
-    # shellcheck disable=SC1090
     . "$STATE_FILE"
 fi
 
@@ -22668,7 +22636,6 @@ EOF
 
 load_traffic_guard_config() {
     [[ -r "$TRAFFIC_GUARD_CONFIG" ]] || return 1
-    # shellcheck disable=SC1090
     . "$TRAFFIC_GUARD_CONFIG"
 }
 
@@ -22678,7 +22645,6 @@ traffic_guard_restore_ssh_only_firewall_from_config() {
     [[ -r "$config_path" ]] || return 0
     configured_action=$(
         unset ACTION
-        # shellcheck disable=SC1090
         . "$config_path" || exit 1
         printf '%s' "${ACTION:-poweroff}"
     ) || return 1
@@ -22697,7 +22663,6 @@ traffic_guard_restore_ssh_only_firewall() {
 traffic_guard_usage_from_state() {
     local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
     [[ -r "$state_file" ]] || return 1
-    # shellcheck disable=SC1090
     . "$state_file"
     printf '%s' "${LAST_USAGE:-0}"
 }
@@ -22706,7 +22671,6 @@ traffic_guard_direction_usage_from_state() {
     local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
     local base_rx base_tx last_rx last_tx offset_rx offset_tx delta_rx=0 delta_tx=0
     [[ -r "$state_file" ]] || return 1
-    # shellcheck disable=SC1090
     . "$state_file"
     base_rx="${BASE_RX:-0}"
     base_tx="${BASE_TX:-0}"
@@ -22768,7 +22732,6 @@ traffic_guard_live_usage_from_state() {
         return 0
     fi
 
-    # shellcheck disable=SC1090
     . "$state_file"
     cycle_now=$(traffic_guard_current_cycle_key "${CYCLE_DAY:-1}")
     if [[ "${STATE_IFACE:-$IFACE}" != "$IFACE" || "${STATE_MODE:-$mode}" != "$mode" ]]; then
@@ -22880,7 +22843,6 @@ print_traffic_guard_diagnostic_summary() {
     if [[ "$has_config" != "yes" ]]; then
         echo "$(localized_text "- 当前配置: 未配置或不可读" "- Current configuration: Not configured or unreadable" "- Текущая конфигурация: не настроена или нечитаема.")"
     else
-        # shellcheck disable=SC1090
         . "$TRAFFIC_GUARD_CONFIG"
         limit="${LIMIT_BYTES:-0}"
         if read -r usage live_rx live_tx < <(traffic_guard_live_usage_from_state 2>/dev/null); then

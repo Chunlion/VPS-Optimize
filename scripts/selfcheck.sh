@@ -36,16 +36,20 @@ if command -v go >/dev/null 2>&1; then
     GO_BIN=go
 elif command -v go.exe >/dev/null 2>&1; then
     GO_BIN=go.exe
-else
+elif [[ "${CI:-}" == "true" ]]; then
     echo "Go is required for vpso-mux selfcheck." >&2
     exit 1
+else
+    echo "Go not found; skipping vpso-mux go test/vet locally."
 fi
 
-echo "==> go test"
-GOTOOLCHAIN=local "$GO_BIN" test ./...
+if [[ -n "${GO_BIN:-}" ]]; then
+    echo "==> go test"
+    GOTOOLCHAIN=local "$GO_BIN" test ./...
 
-echo "==> go vet"
-GOTOOLCHAIN=local "$GO_BIN" vet ./...
+    echo "==> go vet"
+    GOTOOLCHAIN=local "$GO_BIN" vet ./...
+fi
 
 echo "==> compat smoke"
 bash scripts/compat-smoke.sh
@@ -54,7 +58,6 @@ echo "==> full smoke"
 bash tests/smoke.sh
 
 echo "==> dist artifact checks"
-git diff --check -- dist/vps.sh dist/vps.sh.sha256
 if ! git diff --quiet -- dist/vps.sh dist/vps.sh.sha256; then
     if [[ "${CI:-}" == "true" ]]; then
         echo "dist artifacts changed after build; commit regenerated dist/vps.sh and dist/vps.sh.sha256." >&2

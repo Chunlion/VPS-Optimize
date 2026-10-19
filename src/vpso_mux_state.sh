@@ -32,7 +32,6 @@ single_443_current_engine() {
     state_file=$(single_443_engine_state_path)
     if [[ -f "$state_file" ]]; then
         raw_engine=$(
-            # shellcheck disable=SC1090
             unset engine
             source "$state_file" 2>/dev/null || true
             printf '%s' "${engine:-}"

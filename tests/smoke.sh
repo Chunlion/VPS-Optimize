@@ -1314,7 +1314,6 @@ bash tests/dog-limits.sh
     NGINX_LISTEN_PORT=443
     systemctl_calls=$(mktemp /tmp/vpso-mux-systemctl-smoke.XXXXXX)
     trap 'rm -f "$systemctl_calls"' EXIT
-    # shellcheck disable=SC1091
     source src/tcp_peek_engine.sh
     detect_443_listener() { printf '%s\n' 'unknown|none'; }
     listener_info_has_entry() { return 1; }
@@ -1456,7 +1455,6 @@ traffic_guard_install_failure_regression() {
     local case_name="$1"
     local expected_reason="$2"
     (
-        # shellcheck disable=SC1091
         source src/traffic_guard.sh
         tmp=$(mktemp -d /tmp/vps-traffic-guard-install-fail-smoke.XXXXXX)
         TRAFFIC_GUARD_CHECKER="${tmp}/vps-traffic-guard-check"
@@ -1508,7 +1506,6 @@ traffic_guard_install_failure_regression crlf '检测到 CRLF/回车字符'
 traffic_guard_install_failure_regression syntax 'Bash 语法检查未通过'
 
 (
-    # shellcheck disable=SC1091
     source src/traffic_guard.sh
     tmp=$(mktemp -d /tmp/vps-traffic-guard-report-smoke.XXXXXX)
     TRAFFIC_GUARD_CHECKER="${tmp}/vps-traffic-guard-check"
@@ -1535,7 +1532,6 @@ traffic_guard_install_failure_regression syntax 'Bash 语法检查未通过'
 
 traffic_guard_checker_menu_path_regression() {
     (
-        # shellcheck disable=SC1091
         source src/traffic_guard.sh
         local tmp state_file old_checked call_log systemctl_calls output sync_output fail_output install_fail_output last_checked
 
@@ -1659,7 +1655,6 @@ EOF
 traffic_guard_checker_menu_path_regression
 
 traffic_guard_accounting_regression() {
-    # shellcheck disable=SC1091
     source src/traffic_guard.sh
     local offsets usage_rx usage_tx usage
     local tmp fake_sys fake_proc fake_bin fake_calls fake_firewall_calls fake_firewall_rules guard config state_dir log_file iface current_cycle detected_port insert_count
@@ -1756,7 +1751,6 @@ EOF
     traffic_guard_write_fake_iface "$fake_sys" "$iface" 100000 9000500
     traffic_guard_write_smoke_config log 1000000000 1000
     traffic_guard_run_smoke_checker
-    # shellcheck disable=SC1090
     source "${state_dir}/state"
     if [[ "${LAST_USAGE:-}" != "1500" ]]; then
         echo "Traffic guard first baseline must preserve manual initial usage plus post-baseline delta; got ${LAST_USAGE:-unset}." >&2
@@ -1783,7 +1777,6 @@ LAST_CHECKED_AT='2000-01-01T00:00:00+00:00'
 EOF
     traffic_guard_write_smoke_config log 1000000000 0
     traffic_guard_run_smoke_checker
-    # shellcheck disable=SC1090
     source "${state_dir}/state"
     if [[ "${CYCLE_KEY:-}" != "$current_cycle" || "${BASE_TX:-}" != "3400" || "${LAST_USAGE:-}" != "0" || "${WARN_SENT:-}" != "0" || "${TRIPPED:-}" != "0" ]]; then
         echo "Traffic guard must reset baseline cleanly across billing cycles; cycle=${CYCLE_KEY:-unset} base_tx=${BASE_TX:-unset} usage=${LAST_USAGE:-unset}." >&2
@@ -1809,7 +1802,6 @@ LAST_CHECKED_AT='${current_cycle}T00:00:00+00:00'
 EOF
     traffic_guard_write_smoke_config log 1000000000 0
     traffic_guard_run_smoke_checker
-    # shellcheck disable=SC1090
     source "${state_dir}/state"
     if [[ "${BASE_TX:-}" != "100" || "${OFFSET_TX_BYTES:-}" != "2300" || "${LAST_USAGE:-}" != "2300" ]]; then
         echo "Traffic guard must preserve usage after counter reset/wrap; base_tx=${BASE_TX:-unset} offset_tx=${OFFSET_TX_BYTES:-unset} usage=${LAST_USAGE:-unset}." >&2
@@ -1845,7 +1837,6 @@ LAST_CHECKED_AT='${current_cycle}T00:00:00+00:00'
 EOF
     traffic_guard_write_smoke_config poweroff 1000 0
     PATH="${fake_bin}:$PATH" traffic_guard_run_smoke_checker
-    # shellcheck disable=SC1090
     source "${state_dir}/state"
     if [[ "${LAST_USAGE:-}" != "2000" || "${TRIPPED:-}" != "0" ]]; then
         echo "Traffic guard poweroff failure must keep retry state honest; usage=${LAST_USAGE:-unset} tripped=${TRIPPED:-unset}." >&2
@@ -1904,7 +1895,6 @@ LAST_CHECKED_AT='${current_cycle}T00:00:00+00:00'
 EOF
     traffic_guard_write_smoke_config ssh-only 1000 0 2222
     PATH="${fake_bin}:$PATH" traffic_guard_run_smoke_checker
-    # shellcheck disable=SC1090
     source "${state_dir}/state"
     if [[ "${LAST_USAGE:-}" != "2000" || "${TRIPPED:-}" != "1" ]]; then
         echo "Traffic guard ssh-only success must persist the tripped state; usage=${LAST_USAGE:-unset} tripped=${TRIPPED:-unset}." >&2

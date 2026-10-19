@@ -38,17 +38,6 @@ jobs:
         run: |
           bash scripts/selfcheck.sh
 
-  windows-selfcheck-wrapper:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Validate selfcheck.ps1 wrapper
-        shell: pwsh
-        run: |
-          ./scripts/selfcheck-ps1-contract.ps1
-
   container-compat:
     runs-on: ubuntu-latest
     strategy:

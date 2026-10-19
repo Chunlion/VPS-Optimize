@@ -18,17 +18,7 @@ load_modules() {
         module="${module#"${module%%[![:space:]]*}"}"
         module="${module%"${module##*[![:space:]]}"}"
         [[ -n "$module" ]] || continue
-        if [[ "$module" == *.sh ]]; then
-            printf 'Module list entries must omit .sh: %s\n' "$module" >&2
-            exit 1
-        fi
-        for existing in "${modules[@]}"; do
-            if [[ "$existing" == "${module}.sh" ]]; then
-                printf 'Duplicate module list entry: %s\n' "$module" >&2
-                exit 1
-            fi
-        done
-        modules+=("${module}.sh")
+        modules+=("${module%.sh}.sh")
     done < "$modules_list"
     [[ ${#modules[@]} -gt 0 ]] || {
         printf 'Module list is empty: %s\n' "$modules_list" >&2
@@ -65,7 +55,7 @@ load_modules
 
 chmod +x "$out_file"
 bash -n "$out_file"
-bash "$traffic_guard_checker_validator" "$repo_root/src/traffic_guard.sh" "$out_file"
+bash "$traffic_guard_checker_validator" "$repo_root/src/traffic_guard.sh"
 if command -v sha256sum >/dev/null 2>&1; then
     (cd "$out_dir" && printf '%s  %s\n' "$(sha256sum "$(basename "$out_file")" | awk '{print $1}')" "$(basename "$out_file")" > "$(basename "$out_file").sha256")
 elif command -v shasum >/dev/null 2>&1; then

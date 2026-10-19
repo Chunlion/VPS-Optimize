@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 清理 CI 驱动的过度防御代码：删除 `windows-selfcheck-wrapper` 作业及其配套的 `scripts/selfcheck-ps1-contract.ps1`（用 mock wsl 验证一个只负责转发 WSL 的包装器）；重写 `scripts/validate-traffic-guard-checker.sh`，去掉 dist/src 模板比对（dist 是 src 的拼接，比对恒等），只保留模板存在性、CRLF、shebang 与 `bash -n` 校验；精简 `build.sh` 的模块清单校验；`selfcheck.sh` 在本地缺 Go 时跳过 go test/vet（CI 仍要求），并去掉与 dist 新鲜度检查重复的 `git diff --check`；移除源码中永不触发的 `declare -F` 分支和 `-S error` 下不生效的 36 处 shellcheck 豁免。
 - 修复外部依赖：Aria2 改用仓库原始地址（`git.io` 短链已停止维护、上游仓库已归档）；nftables NAT 去掉第三方反代前缀直连 GitHub Release；RHEL 系 Caddy 源从不存在的 `openrepo.io` 改为官方 COPR；Python 环境改为系统软件包安装，修复该脚本仅支持 Debian/Ubuntu 却在全平台提供的问题。
 - 清理过度确认：新增 `confirm_standard_action`，部署订阅工具、安装面板、编辑配置后重启服务、重置统计基线、修复 timer、预检自动修复等可回退操作改为单次 `Y/n`，不再要求输入 `YES`；编辑配置后的 443 重新应用去掉重复确认，只保留切换预览。
 - 443 流程：`修改端口、路径与 REALITY 参数` 子菜单第 4 项改为直接修改面板域名，不再只打印跳转提示。

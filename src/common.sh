@@ -33,7 +33,6 @@ VPSO_DEFAULT_LOG_MAX_BYTES=$((5 * 1024 * 1024))
 VPSO_DEFAULT_LOG_ROTATE_KEEP=3
 
 if [[ -f /etc/os-release ]]; then
-    # shellcheck disable=SC1091
     . /etc/os-release
     OS=$ID
     OS_LIKE=${ID_LIKE:-""}

@@ -305,9 +305,7 @@ traffic_guard_existing_state_usage() {
     [[ -r "$TRAFFIC_GUARD_CONFIG" && -r "$state_file" ]] || return 1
     (
         local expected_cycle
-        # shellcheck disable=SC1090
         . "$TRAFFIC_GUARD_CONFIG"
-        # shellcheck disable=SC1090
         . "$state_file"
         [[ "${IFACE:-}" == "$iface" && "${MODE:-}" == "$mode" ]] || exit 1
         expected_cycle=$(traffic_guard_current_cycle_key "${cycle_day:-${CYCLE_DAY:-1}}")
@@ -576,7 +574,6 @@ apply_ssh_only_firewall() {
 
 if [[ "${1:-}" == "--restore-ssh-only-firewall" ]]; then
     if [[ -r "$CONFIG" ]]; then
-        # shellcheck disable=SC1090
         . "$CONFIG"
     fi
     if clear_ssh_only_firewall; then
@@ -774,7 +771,6 @@ save_state() {
 }
 
 [[ -r "$CONFIG" ]] || exit 0
-# shellcheck disable=SC1090
 . "$CONFIG"
 
 [[ "${ENABLED:-0}" == "1" ]] || exit 0
@@ -804,7 +800,6 @@ CYCLE_NOW=$(current_cycle_key "$CYCLE_DAY")
 STATE_EXISTS=0
 if [[ -r "$STATE_FILE" ]]; then
     STATE_EXISTS=1
-    # shellcheck disable=SC1090
     . "$STATE_FILE"
 fi
 
@@ -1128,7 +1123,6 @@ EOF
 
 load_traffic_guard_config() {
     [[ -r "$TRAFFIC_GUARD_CONFIG" ]] || return 1
-    # shellcheck disable=SC1090
     . "$TRAFFIC_GUARD_CONFIG"
 }
 
@@ -1138,7 +1132,6 @@ traffic_guard_restore_ssh_only_firewall_from_config() {
     [[ -r "$config_path" ]] || return 0
     configured_action=$(
         unset ACTION
-        # shellcheck disable=SC1090
         . "$config_path" || exit 1
         printf '%s' "${ACTION:-poweroff}"
     ) || return 1
@@ -1157,7 +1150,6 @@ traffic_guard_restore_ssh_only_firewall() {
 traffic_guard_usage_from_state() {
     local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
     [[ -r "$state_file" ]] || return 1
-    # shellcheck disable=SC1090
     . "$state_file"
     printf '%s' "${LAST_USAGE:-0}"
 }
@@ -1166,7 +1158,6 @@ traffic_guard_direction_usage_from_state() {
     local state_file="${TRAFFIC_GUARD_STATE_DIR}/state"
     local base_rx base_tx last_rx last_tx offset_rx offset_tx delta_rx=0 delta_tx=0
     [[ -r "$state_file" ]] || return 1
-    # shellcheck disable=SC1090
     . "$state_file"
     base_rx="${BASE_RX:-0}"
     base_tx="${BASE_TX:-0}"
@@ -1228,7 +1219,6 @@ traffic_guard_live_usage_from_state() {
         return 0
     fi
 
-    # shellcheck disable=SC1090
     . "$state_file"
     cycle_now=$(traffic_guard_current_cycle_key "${CYCLE_DAY:-1}")
     if [[ "${STATE_IFACE:-$IFACE}" != "$IFACE" || "${STATE_MODE:-$mode}" != "$mode" ]]; then
@@ -1340,7 +1330,6 @@ print_traffic_guard_diagnostic_summary() {
     if [[ "$has_config" != "yes" ]]; then
         echo "$(localized_text "- 当前配置: 未配置或不可读" "- Current configuration: Not configured or unreadable" "- Текущая конфигурация: не настроена или нечитаема.")"
     else
-        # shellcheck disable=SC1090
         . "$TRAFFIC_GUARD_CONFIG"
         limit="${LIMIT_BYTES:-0}"
         if read -r usage live_rx live_tx < <(traffic_guard_live_usage_from_state 2>/dev/null); then

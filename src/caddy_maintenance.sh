@@ -72,7 +72,6 @@ func_caddy_cf_health_check() {
 
     echo -e "$(localized_text "${YELLOW}▶ [1/5] 检查 Cloudflare Token ...${PLAIN}" "${YELLOW}▶ [1/5] Check Cloudflare Token ...${PLAIN}" "${YELLOW}▶ [1/5] Проверить токен Cloudflare ...${PLAIN}")"
     if [[ -f "$cf_env_file" ]]; then
-        # shellcheck disable=SC1090
         source "$cf_env_file"
         if [[ -n "$CF_Token" ]]; then
             if command -v curl >/dev/null 2>&1; then
@@ -287,7 +286,6 @@ EOF
     local renew_count=0
     local renew_fail=0
     if [[ -x "$acme_bin" && -f "$cf_env_file" ]]; then
-        # shellcheck disable=SC1090
         source "$cf_env_file"
         if [[ -n "$CF_Token" ]]; then
             while IFS= read -r conf_file; do
@@ -508,7 +506,6 @@ func_caddy_cf_maintenance_menu() {
                     continue
                 fi
 
-                # shellcheck disable=SC1090
                 source "$cf_env_file"
                 confirm_risk_action "$(localized_text "重签并安装 ${domain} 的证书" "Re-sign and install the certificate of ${domain}" "Переподпишите и установите сертификат ${domain}.")" \
                     "$(localized_text "acme.sh 证书缓存、/etc/caddy/certs 和 /root/cert 软链接" "acme.sh certificate cache, /etc/caddy/certs and /root/cert symlinks" "Кэш сертификатов acme.sh, символическая ссылка /etc/caddy/certs и /root/cert")" \
