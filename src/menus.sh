@@ -405,7 +405,7 @@ main_menu() {
             print_menu_item 6 "Центр безопасности SSH" "порт, открытые ключи и вход только по ключу"
             print_menu_item 7 "Защита Fail2ban" "автоматическая блокировка перебора паролей SSH"
             print_menu_item 8 "Правила брандмауэра" "разрешение, удаление и просмотр правил, лимиты соединений"
-            print_menu_item 9 "Системные настройки и очистка" "IPv6, приоритет IPv4, ping, имя хоста и очистка"
+            print_menu_item 9 "Системные настройки и очистка" "IPv6, IPv4, ping, имя хоста, очистка и зеркала пакетов"
 
             echo -e " ${BOLD}${BLUE}▶ ③ Производительность сети и контейнеры${PLAIN}"
             print_menu_item 10 "Оптимизация сети и ядра" "BBR, TCP, ZRAM, DNS и облегчённые ядра"
@@ -445,7 +445,7 @@ main_menu() {
             print_menu_item 6 "SSH security center" "port, public keys, and key-only login modes"
             print_menu_item 7 "Fail2ban protection" "automatically block SSH brute-force IPs"
             print_menu_item 8 "Firewall rules" "allow, remove, inspect, disable, and limit connections"
-            print_menu_item 9 "System settings and cleanup" "IPv6, IPv4 priority, ping, hostname, and cleanup"
+            print_menu_item 9 "System settings and cleanup" "IPv6, IPv4 priority, ping, hostname, cleanup, and package mirrors"
 
             echo -e " ${BOLD}${BLUE}▶ ③ Network performance and containers${PLAIN}"
             print_menu_item 10 "Network and kernel optimization" "BBR, TCP, ZRAM, DNS, and lightweight kernels"
@@ -485,7 +485,7 @@ main_menu() {
         print_menu_item 6 "SSH 安全中心" "端口/公钥/密钥登录模式"
         print_menu_item 7 "Fail2ban 防爆破" "自动封禁 SSH 爆破 IP"
         print_menu_item 8 "防火墙规则管理" "放行/删除/查看/关闭/连接数限制"
-        print_menu_item 9 "系统设置与清理" "IPv6/IPv4优先/Ping/主机名/清理"
+        print_menu_item 9 "系统设置与清理" "IPv6/IPv4优先/Ping/主机名/清理/软件源"
 
         echo -e " ${BOLD}${BLUE}▶ ③ 网络性能与容器${PLAIN}"
         print_menu_item 10 "网络与内核优化" "BBR/TCP/ZRAM/DNS/轻量内核"

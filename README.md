@@ -67,12 +67,14 @@ cy
 
 | 场景 | 功能 |
 |---|---|
-| 系统初始化 | 预检、常用工具、时区、IPv4 出站优先和基础 BBR |
+| 系统初始化 | 预检、常用工具、时区、IPv4 出站优先、基础 BBR 和系统软件源切换 |
 | 安全加固 | SSH、公钥登录、Fail2ban、防火墙、端口并发限制 |
 | 面板与订阅 | 3x-ui、S-UI、2S-UI、3m-ui、妙妙屋、妙妙屋X、Sing-box、Xray、xray-relay、SublinkPro、Sub-Store、Dockge、Komari、CDT Monitor |
 | 转发与组网 | Realm、Gost、FLVX 哆啦转发面板、EasyTier、Tailscale |
 | 443端口复用 | Web、面板、订阅和节点共享公网 `443`；Nginx Stream/TCP Peek 按 SNI 分流，Xray Fallback 由 Xray 主入站接管 |
 | 诊断与回滚 | 服务健康、443 链路体检、空间预检、可选加密备份、恢复和隔离归档 |
+
+换源入口：`主菜单 [9 系统设置与清理] -> [9 切换系统软件源]`。通过 [LinuxMirrors](https://linuxmirrors.cn/use/) 选择中国大陆、海外、教育网镜像，或自定义域名与仓库路径。只切换系统软件源，不自动升级软件包；GitHub、Docker、pip/npm 下载源需分别配置，速度取决于本机线路。
 
 ## 📚 文档与反馈
 

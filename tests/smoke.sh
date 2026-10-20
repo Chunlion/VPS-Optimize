@@ -294,6 +294,50 @@ is_valid_port "https://panel.example.com:４４３/path"
     [[ "${host_names_smoke[2]}" == "vps01" ]]
 )
 (
+    source src/system_core.sh
+    clear() { :; }
+    print_breadcrumb() { :; }
+    sleep() { :; }
+    mirror_status=0
+    mirror_call=()
+    run_remote_script() { mirror_call=("$@"); return "$mirror_status"; }
+    pause_after_external_script() { :; }
+    for VPSO_LANGUAGE in zh en ru; do
+        if [[ "$VPSO_LANGUAGE" == zh ]]; then mirror_language=zh; else mirror_language=en; fi
+        for mirror_choice in 1 2 3; do
+            func_system_mirrors <<<"$mirror_choice" >/dev/null
+            [[ "${mirror_call[1]}" == https://linuxmirrors.cn/main.sh ]]
+            [[ "${mirror_call[*]:2:4}" == "--upgrade-software false --lang $mirror_language" ]]
+            case "$mirror_choice" in
+                1) [[ ${#mirror_call[@]} == 6 ]] ;;
+                2) [[ "${mirror_call[6]}" == --abroad ]] ;;
+                3) [[ "${mirror_call[6]}" == --edu ]] ;;
+            esac
+        done
+        func_system_mirrors <<< $'4\nmirror.example.com\nlinux/debian' >/dev/null
+        [[ "${mirror_call[*]:6}" == '--source mirror.example.com --branch linux/debian' ]]
+        func_system_mirrors <<< $'4\nmirror.example.com\n\n' >/dev/null
+        [[ "${mirror_call[*]:6}" == '--source mirror.example.com' ]]
+        func_system_mirrors <<< $'invalid\n2' >/dev/null
+        [[ "${mirror_call[6]}" == --abroad ]]
+        for mirror_back in 0 q Q ''; do
+            mirror_call=()
+            func_system_mirrors <<<"$mirror_back" >/dev/null
+            [[ ${#mirror_call[@]} == 0 ]]
+        done
+        mirror_call=()
+        func_system_mirrors <<< $'4\n\n0' >/dev/null
+        [[ ${#mirror_call[@]} == 0 ]]
+    done
+    mirror_status=23
+    if func_system_mirrors <<<1 >/dev/null; then
+        echo 'Mirror switch must preserve the remote script failure.' >&2
+        exit 1
+    else
+        [[ $? == 23 ]]
+    fi
+)
+(
     source src/system_reinstall.sh
     VPSO_LANGUAGE="zh"
     system_reinstall_set_target 1

@@ -491,6 +491,48 @@ func_hosts_manage() {
 # ---------------------------------------------------------
 # 2. 系统高级开关 (已修复显示丢失问题)
 # ---------------------------------------------------------
+func_system_mirrors() {
+    local choice source branch language rc=0
+    local -a mirror_args=(--upgrade-software false)
+    case "$VPSO_LANGUAGE" in
+        zh) language=zh ;;
+        *) language=en ;;
+    esac
+    mirror_args+=(--lang "$language")
+
+    while true; do
+        clear
+        print_breadcrumb "$(localized_text "系统设置与清理 > 切换系统软件源" "System settings and cleanup > Switch package mirrors" "Системные настройки и очистка > Смена зеркала пакетов")"
+        echo -e "$(localized_text "${CYAN}切换系统软件源（LinuxMirrors）${PLAIN}" "${CYAN}Switch package mirrors (LinuxMirrors)${PLAIN}" "${CYAN}Смена зеркала пакетов (LinuxMirrors)${PLAIN}")"
+        echo "$(localized_text "用于系统软件包下载；GitHub、Docker、pip/npm 的下载源不受影响。" "Applies to system packages; GitHub, Docker, and pip/npm download sources are unchanged." "Меняет источники системных пакетов; источники GitHub, Docker и pip/npm остаются прежними.")"
+        echo "$(localized_text "选择地区后再选镜像站；实际速度取决于本机线路，不自动升级软件包。" "Select a region, then a mirror. Speed depends on your network route; packages will not be upgraded." "Выберите регион, затем зеркало. Скорость зависит от маршрута сети; пакеты обновляться не будут.")"
+        echo "$(localized_text "1. 中国大陆（阿里云、腾讯云、华为云、清华、中科大等）" "1. Mainland China (Alibaba, Tencent, Huawei, Tsinghua, USTC, and more)" "1. Материковый Китай (Alibaba, Tencent, Huawei, Tsinghua, USTC и другие)")"
+        echo "$(localized_text "2. 境外及海外镜像站" "2. Mirrors outside mainland China" "2. Зеркала за пределами материкового Китая")"
+        echo "$(localized_text "3. 中国大陆教育网镜像站" "3. Mainland China education network mirrors" "3. Зеркала образовательной сети Китая")"
+        echo "$(localized_text "4. 自定义镜像地址" "4. Custom mirror address" "4. Свой адрес зеркала")"
+        echo "$(localized_text "0. 返回 / q 返回" "0. Back / q Back" "0. Назад / q Назад")"
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
+        case "$choice" in
+            1) break ;;
+            2) mirror_args+=(--abroad); break ;;
+            3) mirror_args+=(--edu); break ;;
+            4)
+                read_trimmed source "$(localized_text "镜像域名或 IP（不含协议，空白取消）: " "Mirror hostname or IP (without protocol, blank to cancel): " "Домен или IP зеркала (без протокола, пусто для отмены): ")"
+                [[ -n "$source" ]] || continue
+                read_trimmed branch "$(localized_text "仓库路径（空白使用系统默认目录）: " "Repository path (blank for the distribution default): " "Путь репозитория (пусто для стандартного пути системы): ")"
+                mirror_args+=(--source "$source")
+                [[ -z "$branch" ]] || mirror_args+=(--branch "$branch")
+                break
+                ;;
+            0|q|Q|'') return 0 ;;
+            *) echo "$(localized_text "无效选择。" "Invalid selection." "Неверный выбор.")"; sleep 1 ;;
+        esac
+    done
+    run_remote_script "$(localized_text "切换系统软件源" "Switch package mirrors" "Смена зеркала пакетов")" "https://linuxmirrors.cn/main.sh" "${mirror_args[@]}" || rc=$?
+    pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
+    return "$rc"
+}
+
 func_system_tweaks() {
     while true; do
         clear
@@ -539,6 +581,7 @@ func_system_tweaks() {
         echo -e "$(localized_text "${GREEN}  6. 自动安全更新${PLAIN}           当前: [ $str_update ]" "${GREEN}  6. Automatic security updates${PLAIN} Status: [ $str_update ]" "${GREEN}  6. Автоматические обновления безопасности${PLAIN} Состояние: [ $str_update ]")"
         echo -e "$(localized_text "${GREEN}  7. 清理系统${PLAIN}               (日志 / 缓存 / 无用包)" "${GREEN}  7. Clean up system${PLAIN}       (logs / cache / unused packages)" "${GREEN}  7. Очистить систему${PLAIN}      (журналы / кэш / ненужные пакеты)")"
         echo -e "$(localized_text "${RED}  8. 系统重装${PLAIN}               (重启后清空主硬盘；高风险)" "${RED}8. System reinstallation${PLAIN} (erases the main disk after reboot; high risk)" "${RED}8. Переустановка системы${PLAIN} (очистит основной диск после перезагрузки; высокий риск)")"
+        echo -e "$(localized_text "${GREEN}  9. 切换系统软件源${PLAIN}         (国内 / 海外 / 教育网 / 自定义)" "${GREEN}  9. Switch package mirrors${PLAIN} (China / overseas / education / custom)" "${GREEN}  9. Сменить зеркало пакетов${PLAIN} (Китай / другие страны / образование / своё)")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -617,6 +660,7 @@ func_system_tweaks() {
                 echo -e "$(localized_text "${GREEN}✅ 清理完成！${PLAIN}" "${GREEN}✅ Cleanup completed!${PLAIN}" "${GREEN}✅ Очистка завершена!${PLAIN}")"
                 sleep 1 ;;
             8) func_system_reinstall ;;
+            9) func_system_mirrors ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac

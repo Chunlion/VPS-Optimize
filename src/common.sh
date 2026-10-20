@@ -496,6 +496,7 @@ is_trusted_remote_script_url() {
             echo "$(localized_text "VPS_BOT_X 项目安装脚本" "VPS_BOT_X project installation script" "Скрипт установки проекта VPS_BOT_X")"
             return 0
             ;;
+        "https://linuxmirrors.cn/main.sh"|\
         "https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh"|\
         "https://yabs.sh"|\
         "https://check.unlock.media"|\
