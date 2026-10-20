@@ -21,9 +21,9 @@ fi
 
 SCRIPT_VERSION="v2.7"
 UPDATE_BASE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
-UPDATE_MIRROR="https://ghfast.top"
+UPDATE_MIRROR=""
 UPDATE_MIRROR_CONFIG="/etc/vps-optimize/update-mirror.conf"
-UPDATE_URL="${UPDATE_MIRROR}/${UPDATE_BASE_URL}"
+UPDATE_URL="$UPDATE_BASE_URL"
 UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
 TRAFFIC_GUARD_CONFIG="/etc/vps-optimize/traffic-guard.conf"
@@ -499,7 +499,7 @@ is_trusted_remote_script_url() {
             echo "$(localized_text "VPS_BOT_X 项目安装脚本" "VPS_BOT_X project installation script" "Скрипт установки проекта VPS_BOT_X")"
             return 0
             ;;
-        "${UPDATE_MIRROR}/https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh"|\
+        "${UPDATE_MIRROR:+$UPDATE_MIRROR/}https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh"|\
         "https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh"|\
         "https://yabs.sh"|\
         "https://check.unlock.media"|\

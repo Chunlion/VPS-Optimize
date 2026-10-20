@@ -29,7 +29,7 @@
 | 路径 | 说明 |
 |---|---|
 | `/usr/local/bin/cy` | 主脚本快捷入口 |
-| `/etc/vps-optimize/update-mirror.conf` | GitHub 更新镜像前缀，纯文本；无自定义配置时默认 `https://ghfast.top` |
+| `/etc/vps-optimize/update-mirror.conf` | 用户主动保存的 GitHub 更新镜像前缀，纯文本；未配置时直连 GitHub |
 | 当前目录的 `vps.sh` | 手动下载运行时的脚本文件 |
 | `/etc/vps-optimize` | VPS-Optimize 配置、备份索引和隔离目录 |
 | `/etc/vps-optimize/language.conf` | 界面语言设置；支持 `LANGUAGE=zh`、`LANGUAGE=en`、`LANGUAGE=ru` |

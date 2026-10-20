@@ -33,9 +33,9 @@ fi
 
 SCRIPT_VERSION="v2.7"
 UPDATE_BASE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
-UPDATE_MIRROR="https://ghfast.top"
+UPDATE_MIRROR=""
 UPDATE_MIRROR_CONFIG="/etc/vps-optimize/update-mirror.conf"
-UPDATE_URL="${UPDATE_MIRROR}/${UPDATE_BASE_URL}"
+UPDATE_URL="$UPDATE_BASE_URL"
 UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
 TRAFFIC_GUARD_CONFIG="/etc/vps-optimize/traffic-guard.conf"
@@ -511,7 +511,7 @@ is_trusted_remote_script_url() {
             echo "$(localized_text "VPS_BOT_X 项目安装脚本" "VPS_BOT_X project installation script" "Скрипт установки проекта VPS_BOT_X")"
             return 0
             ;;
-        "${UPDATE_MIRROR}/https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh"|\
+        "${UPDATE_MIRROR:+$UPDATE_MIRROR/}https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh"|\
         "https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh"|\
         "https://yabs.sh"|\
         "https://check.unlock.media"|\
@@ -4125,7 +4125,7 @@ func_system_mirrors() {
     done
     mirror_args+=(--source "$source")
     [[ -z "$branch" ]] || mirror_args+=(--branch "$branch")
-    run_remote_script "$(localized_text "切换系统软件源" "Switch package mirrors" "Смена зеркала пакетов")" "${UPDATE_MIRROR}/https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh" "${mirror_args[@]}" || rc=$?
+    run_remote_script "$(localized_text "切换系统软件源" "Switch package mirrors" "Смена зеркала пакетов")" "${UPDATE_MIRROR:+$UPDATE_MIRROR/}https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh" "${mirror_args[@]}" || rc=$?
     pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
     return "$rc"
 }
@@ -20306,11 +20306,12 @@ func_reboot_server() {
 # Script update cache, version comparison, notice, and hot-update workflows.
 
 load_script_update_mirror() {
+    UPDATE_MIRROR=""
     if [[ -s "$UPDATE_MIRROR_CONFIG" ]]; then
         UPDATE_MIRROR=$(<"$UPDATE_MIRROR_CONFIG")
     fi
     UPDATE_MIRROR="${UPDATE_MIRROR%/}"
-    UPDATE_URL="${UPDATE_MIRROR}/${UPDATE_BASE_URL}"
+    UPDATE_URL="${UPDATE_MIRROR:+$UPDATE_MIRROR/}${UPDATE_BASE_URL}"
     UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 }
 
@@ -20319,7 +20320,7 @@ func_configure_update_mirror() {
     while true; do
         clear
         print_breadcrumb "$(localized_text "系统设置与清理 > GitHub 更新镜像" "System settings and cleanup > GitHub update mirror" "Системные настройки и очистка > Зеркало обновлений GitHub")"
-        echo "$(localized_text "当前更新镜像：${UPDATE_MIRROR}" "Current update mirror: ${UPDATE_MIRROR}" "Текущее зеркало обновлений: ${UPDATE_MIRROR}")"
+        echo "$(localized_text "当前更新方式：${UPDATE_MIRROR:-GitHub 直连}" "Current update source: ${UPDATE_MIRROR:-direct GitHub}" "Текущий источник обновлений: ${UPDATE_MIRROR:-GitHub напрямую}")"
         echo "$(localized_text "输入你信任的 HTTPS 镜像前缀；保存后，版本检查、脚本和校验文件统一使用它。" "Enter a trusted HTTPS mirror prefix. Version checks, scripts, and checksum files will all use it." "Введите префикс доверенного HTTPS-зеркала. Проверка версии, сценарий и контрольная сумма будут загружаться через него.")"
         read_trimmed mirror "$(localized_text "镜像前缀（回车保持，q 返回）: " "Mirror prefix (Enter to keep, q to return): " "Префикс зеркала (Enter — оставить, q — назад): ")"
         case "$mirror" in
@@ -20513,7 +20514,7 @@ func_update_script() {
         read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
         return 1
     }
-    echo -e "$(localized_text "${CYAN}👉 正在通过 ${UPDATE_MIRROR} 下载最新版本...${PLAIN}" "${CYAN}👉 Downloading the latest version through ${UPDATE_MIRROR}...${PLAIN}" "${CYAN}👉 Загрузка последней версии через ${UPDATE_MIRROR}...${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}👉 正在通过 ${UPDATE_MIRROR:-GitHub 直连} 下载最新版本...${PLAIN}" "${CYAN}👉 Downloading the latest version through ${UPDATE_MIRROR:-direct GitHub}...${PLAIN}" "${CYAN}👉 Загрузка последней версии через ${UPDATE_MIRROR:-GitHub напрямую}...${PLAIN}")"
     if download_verified_update_script "$tmp_file" \
         && grep -q "func_sni_stack_quick_menu" "$tmp_file" 2>/dev/null \
         && grep -q "main_menu" "$tmp_file" 2>/dev/null \

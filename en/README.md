@@ -26,13 +26,13 @@
 wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
 
-If GitHub is unreachable directly:
+If GitHub is unreachable directly, choose a mirror yourself. This example uses `ghfast.top`:
 
 ```bash
 wget -qO vps.sh https://ghfast.top/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
 
-Script updates default to `https://ghfast.top`. Change it at `[9 System settings and cleanup] -> [10 GitHub update mirror]`. The prefix is saved in `/etc/vps-optimize/update-mirror.conf` and survives updates. To replace an older `cy`, run the new script and select `[17 Update script]`.
+The script connects to GitHub directly by default. A mirror is used only after you save its address at `[9 System settings and cleanup] -> [10 GitHub update mirror]`. The setting is stored in `/etc/vps-optimize/update-mirror.conf` and survives updates. To replace an older `cy`, run the new script, configure a mirror if needed, and select `[17 Update script]`.
 
 The first run registers the global shortcut:
 

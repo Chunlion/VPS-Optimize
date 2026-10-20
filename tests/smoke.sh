@@ -340,6 +340,9 @@ is_valid_port "https://panel.example.com:４４３/path"
         func_system_mirrors <<< $'1\nq\n0' >/dev/null
         [[ ${#mirror_call[@]} == 0 ]]
     done
+    UPDATE_MIRROR=""
+    func_system_mirrors <<< $'1\n2' >/dev/null
+    [[ "${mirror_call[1]}" == https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh ]]
     mirror_status=23
     if func_system_mirrors <<< $'1\n1' >/dev/null; then
         echo 'Mirror switch must preserve the remote script failure.' >&2
@@ -1402,15 +1405,19 @@ bash tests/dog-limits.sh
     print_breadcrumb() { :; }
     pause_after_external_script() { :; }
     sleep() { :; }
+    UPDATE_MIRROR=https://previous.example
     load_script_update_mirror
-    [[ "$UPDATE_URL" == https://ghfast.top/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh ]]
+    [[ -z "$UPDATE_MIRROR" ]]
+    [[ "$UPDATE_URL" == https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh ]]
     [[ "$UPDATE_SHA256_URL" == "${UPDATE_URL}.sha256" ]]
+    func_configure_update_mirror <<<q >/dev/null
+    [[ ! -e "$UPDATE_MIRROR_CONFIG" && -z "$UPDATE_MIRROR" ]]
     for VPSO_LANGUAGE in zh en ru; do
         touch "$SCRIPT_UPDATE_CACHE"
         func_configure_update_mirror <<< $'http://mirror.example\nhttps://mirror.example/' >/dev/null
         [[ "$(cat "$UPDATE_MIRROR_CONFIG")" == https://mirror.example ]]
         [[ ! -f "$SCRIPT_UPDATE_CACHE" ]]
-        UPDATE_MIRROR=https://ghfast.top
+        UPDATE_MIRROR=""
         load_script_update_mirror
         [[ "$UPDATE_URL" == https://mirror.example/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh ]]
         [[ "$UPDATE_SHA256_URL" == "${UPDATE_URL}.sha256" ]]

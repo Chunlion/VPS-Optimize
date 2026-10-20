@@ -26,13 +26,13 @@
 wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
 
-无法直连 GitHub 时：
+无法直连 GitHub 时，可自行选择镜像。以下命令以 `ghfast.top` 为例：
 
 ```bash
 wget -qO vps.sh https://ghfast.top/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
 
-新版脚本更新默认使用 `https://ghfast.top`。可在 `[9 系统设置与清理] -> [10 GitHub 更新镜像]` 修改，地址保存在 `/etc/vps-optimize/update-mirror.conf`，更新后保留。已有旧版 `cy` 时，运行新版后选择 `[17 更新脚本]` 完成替换。
+脚本默认直连 GitHub。需要镜像时，在 `[9 系统设置与清理] -> [10 GitHub 更新镜像]` 主动保存地址后才启用，配置保存在 `/etc/vps-optimize/update-mirror.conf`，更新后保留。已有旧版 `cy` 时，运行新版、按需设置镜像，再选择 `[17 更新脚本]` 完成替换。
 
 首次运行会注册全局快捷命令：
 

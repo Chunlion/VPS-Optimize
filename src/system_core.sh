@@ -618,7 +618,7 @@ func_system_mirrors() {
     done
     mirror_args+=(--source "$source")
     [[ -z "$branch" ]] || mirror_args+=(--branch "$branch")
-    run_remote_script "$(localized_text "切换系统软件源" "Switch package mirrors" "Смена зеркала пакетов")" "${UPDATE_MIRROR}/https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh" "${mirror_args[@]}" || rc=$?
+    run_remote_script "$(localized_text "切换系统软件源" "Switch package mirrors" "Смена зеркала пакетов")" "${UPDATE_MIRROR:+$UPDATE_MIRROR/}https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh" "${mirror_args[@]}" || rc=$?
     pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
     return "$rc"
 }
