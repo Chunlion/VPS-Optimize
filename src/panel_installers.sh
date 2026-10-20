@@ -135,6 +135,12 @@ func_3m_ui() {
     pause_after_external_script "$(localized_text "操作结束，按回车键返回菜单..." "When the operation is completed, press the Enter key to return to the menu..." "Когда операция будет завершена, нажмите клавишу Enter, чтобы вернуться в меню...")"
 }
 
+func_xray_relay() {
+    clear
+    run_remote_script "$(localized_text "安装 / 更新 Xray 中转" "Install / update Xray relay" "Установить / обновить ретранслятор Xray")" "https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh"
+    pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
+}
+
 func_miaomiaowux_panel() {
     clear
     echo -e "${CYAN}================================================${PLAIN}"

@@ -305,7 +305,7 @@ nft list ruleset 2>/dev/null | grep -i port_traffic_monitor || true
 Entrance:
 
 ```text
-Main menu [5 Panels, nodes, and subscription tools] -> [16 Per-port traffic monitor (dog)]
+Main menu [5 Panels, nodes, and subscription tools] -> [17 Per-port traffic monitor (dog)]
 ```
 
 See [dog.md](dog.md) for detailed instructions.

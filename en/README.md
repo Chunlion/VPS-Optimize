@@ -69,7 +69,7 @@ Shortcuts are case-insensitive and behave like selecting the corresponding main-
 |---|---|
 | System setup | Preflight checks, common tools, timezone, IPv4 outbound preference, and basic BBR |
 | Security hardening | SSH, public-key authentication, Fail2ban, firewall, and port concurrency limits |
-| Panels and subscriptions | 3x-ui, S-UI, 2S-UI, 3m-ui, Miaomiaowu, MiaomiaowuX, Sing-box, Xray, SublinkPro, Sub-Store, Dockge, Komari, and CDT Monitor |
+| Panels and subscriptions | 3x-ui, S-UI, 2S-UI, 3m-ui, Miaomiaowu, MiaomiaowuX, Sing-box, Xray, xray-relay, SublinkPro, Sub-Store, Dockge, Komari, and CDT Monitor |
 | Forwarding and networking | Realm, Gost, FLVX, EasyTier, and Tailscale |
 | Port 443 Reuse | Share public port `443` across Web services, panels, subscriptions, and nodes; Nginx Stream/TCP Peek route by SNI, while Xray Fallback uses the Xray main inbound |
 | Diagnostics and rollback | Service health, port 443 diagnostics, space checks, optional encrypted backups, restore, and quarantine archives |

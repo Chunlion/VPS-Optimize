@@ -8,9 +8,11 @@
 
 ## Содержит контент
 
-В этом разделе доступны 3x-ui, S-UI, 2S-UI, Sing-box, Xray, SublinkPro, Sub-Store, Dockge, Komari, CDT Monitor, монитор трафика dog.sh и расширение x-ui.
+В этом разделе доступны 3x-ui, S-UI, 2S-UI, Sing-box, Xray, xray-relay, SublinkPro, Sub-Store, Dockge, Komari, CDT Monitor, монитор трафика dog.sh и расширение x-ui.
 
-CDT Monitor находится в `[5 Панели, узлы и инструменты подписки] -> [13 CDT Monitor]`. Он отслеживает трафик Alibaba Cloud CDT, управляет автоматизацией ECS и показывает расходы. Подробнее: [CDT Monitor](cdt-monitor.md).
+Ретранслятор Xray находится в `[5 Панели, узлы и инструменты подписки] -> [9 Ретранслятор Xray]`. Этот пункт запускает [установщик xray-relay](https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh), который устанавливает или обновляет `xrelay` и открывает меню управления.
+
+CDT Monitor находится в `[5 Панели, узлы и инструменты подписки] -> [14 CDT Monitor]`. Он отслеживает трафик Alibaba Cloud CDT, управляет автоматизацией ECS и показывает расходы. Подробнее: [CDT Monitor](cdt-monitor.md).
 
 ## Рекомендации по развертыванию
 

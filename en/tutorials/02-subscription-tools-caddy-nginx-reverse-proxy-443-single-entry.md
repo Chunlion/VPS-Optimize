@@ -101,9 +101,9 @@ Common menu paths:
 
 | Tool | Menu path | Use case |
 |---|---|---|
-| SublinkPro | `Main menu [5 Panels, nodes, and subscription tools] -> [9 SublinkPro]` | Convert, aggregate, and manage subscriptions. |
-| Miaomiaowu Subscription Management | `Main menu [5 Panels, nodes, and subscription tools] -> [10 Miaomiaowu subscriptions]` | Manage subscriptions through a graphical interface. |
-| Sub-Store | `Main menu [5 Panels, nodes, and subscription tools] -> [11 Sub-Store subscription stack]` | Advanced subscription processing and scripting. |
+| SublinkPro | `Main menu [5 Panels, nodes, and subscription tools] -> [10 SublinkPro]` | Convert, aggregate, and manage subscriptions. |
+| Miaomiaowu Subscription Management | `Main menu [5 Panels, nodes, and subscription tools] -> [11 Miaomiaowu subscriptions]` | Manage subscriptions through a graphical interface. |
+| Sub-Store | `Main menu [5 Panels, nodes, and subscription tools] -> [12 Sub-Store subscription stack]` | Advanced subscription processing and scripting. |
 | Dockge | `Main menu [11 Docker management] -> [19 Backup / Compose management]` | Manage multiple Compose projects. |
 
 After installation, check the container status first:
