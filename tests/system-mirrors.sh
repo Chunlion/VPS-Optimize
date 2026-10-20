@@ -32,9 +32,10 @@ system_mirror_source_reachable() { return 0; }
 mapfile -t catalog_all < <(for catalog_category in {1..7}; do system_mirror_catalog "$catalog_category"; done)
 [[ "${#catalog_all[@]}" -ge 40 ]]
 for catalog_entry in "${catalog_all[@]}"; do
-    IFS='|' read -r catalog_zh catalog_en catalog_source <<<"$catalog_entry"
+    IFS='|' read -r catalog_zh catalog_en catalog_source catalog_apt <<<"$catalog_entry"
     [[ -n "$catalog_zh" && -n "$catalog_en" && -n "$catalog_source" ]]
     case "$catalog_source" in *://*) exit 1 ;; esac
+    case "$catalog_apt" in du|d|u|-|\?) ;; *) echo "Bad apt tag: ${catalog_entry}" >&2; exit 1 ;; esac
 done
 [[ "$(printf '%s\n' "${catalog_all[@]}" | awk -F'|' '{print $3}' | sort -u | wc -l)" -eq "${#catalog_all[@]}" ]]
 
@@ -70,12 +71,34 @@ VPSO_LANGUAGE=zh
 UPDATE_MIRROR=https://mirror.example
 for mirror_category in {1..7}; do
     mapfile -t mirror_entries < <(system_mirror_catalog "$mirror_category")
-    mirror_last=$(( ${#mirror_entries[@]} - 1 ))
-    mirror_last_source=$(printf '%s' "${mirror_entries[mirror_last]}" | awk -F'|' '{print $3}')
+    mirror_last_source=""
+    mirror_visible=0
+    for mirror_entry in "${mirror_entries[@]}"; do
+        system_mirror_supports_os "${mirror_entry##*|}" || continue
+        mirror_visible=$((mirror_visible + 1))
+        mirror_last_source=$(printf '%s' "$mirror_entry" | awk -F'|' '{print $3}')
+    done
+    [[ -n "$mirror_last_source" ]]
     mirror_call=()
-    func_system_mirrors <<< "$mirror_category"$'\n'"$((mirror_last + 1))"$'\n' >/dev/null
+    func_system_mirrors <<< "$mirror_category"$'\n'"$mirror_visible"$'\n' >/dev/null
     [[ "${mirror_call[*]:6}" == "--source ${mirror_last_source}" ]]
 done
+
+# 发行版过滤：Debian 隐藏仅 Ubuntu 与都不支持的条目，其它发行版不过滤。
+OS=debian
+system_mirror_supports_os du
+system_mirror_supports_os d
+if system_mirror_supports_os u; then exit 1; fi
+if system_mirror_supports_os -; then exit 1; fi
+system_mirror_supports_os '?'
+OS=ubuntu
+system_mirror_supports_os du
+system_mirror_supports_os u
+if system_mirror_supports_os d; then exit 1; fi
+OS=rocky
+system_mirror_supports_os d
+system_mirror_supports_os -
+OS=debian
 
 # 分类输入接受 1. 与全角数字。
 mirror_call=()

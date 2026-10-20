@@ -494,67 +494,86 @@ func_hosts_manage() {
 system_mirror_catalog() {
     case "$1" in
         1) printf '%s\n' \
-            '阿里云|Alibaba Cloud|mirrors.aliyun.com' \
-            '腾讯云|Tencent Cloud|mirrors.tencent.com' \
-            '华为云|Huawei Cloud|mirrors.huaweicloud.com' \
-            '移动云|China Mobile Cloud|mirrors.cmecloud.cn' \
-            '天翼云|China Telecom Cloud|mirrors.ctyun.cn' \
-            '网易|NetEase|mirrors.163.com' \
-            '火山引擎|Volcengine|mirrors.volces.com' \
-            '清华大学 TUNA|Tsinghua TUNA|mirrors.tuna.tsinghua.edu.cn' \
-            '北京大学|Peking University|mirrors.pku.edu.cn' \
-            '浙江大学|Zhejiang University|mirrors.zju.edu.cn' \
-            '南京大学|Nanjing University|mirrors.nju.edu.cn' \
-            '兰州大学|Lanzhou University|mirror.lzu.edu.cn' \
-            '上海交通大学|Shanghai Jiao Tong University|mirror.sjtu.edu.cn' \
-            '华中科技大学|Huazhong University of Science and Technology|mirrors.hust.edu.cn' \
-            '中国科学技术大学|USTC|mirrors.ustc.edu.cn' \
-            '中科院软件所|ISCAS|mirror.iscas.ac.cn' \
-            '中国科技云|China Science and Technology Cloud|mirrors.cstcloud.cn' ;;
+            '阿里云|Alibaba Cloud|mirrors.aliyun.com|du' \
+            '腾讯云|Tencent Cloud|mirrors.tencent.com|du' \
+            '华为云|Huawei Cloud|mirrors.huaweicloud.com|du' \
+            '移动云|China Mobile Cloud|mirrors.cmecloud.cn|u' \
+            '天翼云|China Telecom Cloud|mirrors.ctyun.cn|du' \
+            '网易|NetEase|mirrors.163.com|du' \
+            '火山引擎|Volcengine|mirrors.volces.com|du' \
+            '清华大学 TUNA|Tsinghua TUNA|mirrors.tuna.tsinghua.edu.cn|du' \
+            '北京大学|Peking University|mirrors.pku.edu.cn|du' \
+            '浙江大学|Zhejiang University|mirrors.zju.edu.cn|du' \
+            '南京大学|Nanjing University|mirrors.nju.edu.cn|du' \
+            '兰州大学|Lanzhou University|mirror.lzu.edu.cn|du' \
+            '上海交通大学|Shanghai Jiao Tong University|mirror.sjtu.edu.cn|du' \
+            '华中科技大学|Huazhong University of Science and Technology|mirrors.hust.edu.cn|du' \
+            '中国科学技术大学|USTC|mirrors.ustc.edu.cn|du' \
+            '中科院软件所|ISCAS|mirror.iscas.ac.cn|du' \
+            '中国科技云|China Science and Technology Cloud|mirrors.cstcloud.cn|du' ;;
         2) printf '%s\n' \
-            '中国香港 xTom|xTom Hong Kong, China|mirrors.xtom.hk' \
-            '中国香港 01Link|01Link Hong Kong, China|mirror.01link.hk' \
-            '新加坡国立大学|National University of Singapore|download.nus.edu.sg/mirror' \
-            '新加坡 SG.GS|SG.GS Singapore|mirror.sg.gs' \
-            '新加坡 xTom|xTom Singapore|mirrors.xtom.sg' \
-            '中国台湾 NCHC|NCHC Taiwan, China|free.nchc.org.tw' \
-            '中国台湾 OSS Planet|OSS Planet Taiwan, China|mirror.ossplanet.net' \
-            '日本 JAIST|JAIST Japan|ftp.jaist.ac.jp/pub/Linux' \
-            '日本 xTom|xTom Japan|mirrors.xtom.jp' \
-            '马来西亚 GB Network|GB Network Malaysia|mirrors.gbnetwork.com' \
-            '泰国孔敬大学|Khon Kaen University Thailand|mirror.kku.ac.th' ;;
+            '中国香港 xTom|xTom Hong Kong, China|mirrors.xtom.hk|?' \
+            '中国香港 01Link|01Link Hong Kong, China|mirror.01link.hk|u' \
+            '新加坡国立大学|National University of Singapore|download.nus.edu.sg/mirror|?' \
+            '新加坡 SG.GS|SG.GS Singapore|mirror.sg.gs|du' \
+            '新加坡 xTom|xTom Singapore|mirrors.xtom.sg|?' \
+            '中国台湾 NCHC|NCHC Taiwan, China|free.nchc.org.tw|du' \
+            '中国台湾 OSS Planet|OSS Planet Taiwan, China|mirror.ossplanet.net|u' \
+            '日本 JAIST|JAIST Japan|ftp.jaist.ac.jp/pub/Linux|du' \
+            '日本 xTom|xTom Japan|mirrors.xtom.jp|?' \
+            '马来西亚 GB Network|GB Network Malaysia|mirrors.gbnetwork.com|u' \
+            '泰国孔敬大学|Khon Kaen University Thailand|mirror.kku.ac.th|du' ;;
         3) printf '%s\n' \
-            '英国 Vorboss|Vorboss UK|mirror.vorboss.net' \
-            '德国 dogado|dogado Germany|mirror.dogado.de' \
-            '德国 xTom|xTom Germany|mirrors.xtom.de' \
-            '德国亚琛工业大学|RWTH Aachen Germany|ftp.halifax.rwth-aachen.de' \
-            '法国 CCIN2P3|CCIN2P3 France|mirror.in2p3.fr/pub/linux' \
-            '荷兰 xTom|xTom Netherlands|mirrors.xtom.nl' \
-            '荷兰 Linux Kernel|Linux Kernel Netherlands|eu.edge.kernel.org' \
-            '丹麦 Dotsrc|Dotsrc Denmark|mirrors.dotsrc.org' \
-            '瑞典 Academic Computer Club|Academic Computer Club Sweden|mirror.accum.se' \
-            '俄罗斯 Yandex|Yandex Russia|mirror.yandex.ru' ;;
+            '英国 Vorboss|Vorboss UK|mirror.vorboss.net|d' \
+            '德国 dogado|dogado Germany|mirror.dogado.de|du' \
+            '德国 xTom|xTom Germany|mirrors.xtom.de|du' \
+            '德国亚琛工业大学|RWTH Aachen Germany|ftp.halifax.rwth-aachen.de|du' \
+            '法国 CCIN2P3|CCIN2P3 France|mirror.in2p3.fr/pub/linux|du' \
+            '荷兰 xTom|xTom Netherlands|mirrors.xtom.nl|du' \
+            '荷兰 Linux Kernel|Linux Kernel Netherlands|eu.edge.kernel.org|du' \
+            '丹麦 Dotsrc|Dotsrc Denmark|mirrors.dotsrc.org|du' \
+            '瑞典 Academic Computer Club|Academic Computer Club Sweden|mirror.accum.se|du' \
+            '俄罗斯 Yandex|Yandex Russia|mirror.yandex.ru|du' ;;
         4) printf '%s\n' \
-            '美国 Linux Kernel|Linux Kernel USA|mirrors.kernel.org' \
-            '美国麻省理工学院|MIT USA|mirrors.mit.edu' \
-            '美国普林斯顿大学|Princeton University USA|mirror.math.princeton.edu/pub' \
-            '美国俄勒冈州立大学|Oregon State University USA|ftp-chi.osuosl.org/pub' \
-            '美国 FCIX|FCIX USA|mirror.fcix.net' \
-            '美国 xTom|xTom USA|mirrors.xtom.com' \
-            '加拿大不列颠哥伦比亚大学|University of British Columbia Canada|mirror.it.ubc.ca' \
-            '加拿大 GoCodeIT|GoCodeIT Canada|mirror.xenyth.net' ;;
+            '美国 Linux Kernel|Linux Kernel USA|mirrors.kernel.org|du' \
+            '美国麻省理工学院|MIT USA|mirrors.mit.edu|du' \
+            '美国普林斯顿大学|Princeton University USA|mirror.math.princeton.edu/pub|du' \
+            '美国俄勒冈州立大学|Oregon State University USA|ftp-chi.osuosl.org/pub|u' \
+            '美国 FCIX|FCIX USA|mirror.fcix.net|u' \
+            '美国 xTom|xTom USA|mirrors.xtom.com|?' \
+            '加拿大不列颠哥伦比亚大学|University of British Columbia Canada|mirror.it.ubc.ca|du' \
+            '加拿大 GoCodeIT|GoCodeIT Canada|mirror.xenyth.net|-' ;;
         5) printf '%s\n' \
-            '巴西 PoP-SC|PoP-SC Brazil|mirror.pop-sc.rnp.br/mirror' \
-            '巴西蓬塔格罗萨州立大学|UEPG Brazil|mirror.uepg.br' ;;
+            '巴西 PoP-SC|PoP-SC Brazil|mirror.pop-sc.rnp.br/mirror|-' \
+            '巴西蓬塔格罗萨州立大学|UEPG Brazil|mirror.uepg.br|du' ;;
         6) printf '%s\n' \
-            '澳大利亚 FCIX|FCIX Australia|gsl-syd.mm.fcix.net' \
-            '澳大利亚 AARNet|AARNet Australia|mirror.aarnet.edu.au/pub' \
-            '澳大利亚 xTom|xTom Australia|mirrors.xtom.au' \
-            '新西兰 Free Software Mirror Group|Free Software Mirror Group New Zealand|mirror.fsmg.org.nz' ;;
+            '澳大利亚 FCIX|FCIX Australia|gsl-syd.mm.fcix.net|-' \
+            '澳大利亚 AARNet|AARNet Australia|mirror.aarnet.edu.au/pub|d' \
+            '澳大利亚 xTom|xTom Australia|mirrors.xtom.au|?' \
+            '新西兰 Free Software Mirror Group|Free Software Mirror Group New Zealand|mirror.fsmg.org.nz|du' ;;
         7) printf '%s\n' \
-            'Liquid Telecom|Liquid Telecom|mirror.liquidtelecom.com' \
-            'Dimension Data|Dimension Data|mirror.dimensiondata.com' ;;
+            'Liquid Telecom|Liquid Telecom|mirror.liquidtelecom.com|-' \
+            'Dimension Data|Dimension Data|mirror.dimensiondata.com|du' ;;
     esac
+}
+
+# 目录第 4 列是实测的 apt 支持情况：du 两者都支持、d 仅 Debian、u 仅 Ubuntu、- 都不支持、? 未验证。
+# 只在 Debian / Ubuntu 上过滤，其它发行版照旧展示全部条目。
+system_mirror_supports_os() {
+    local tag="$1"
+    case "$OS" in
+        debian | ubuntu) ;;
+        *) return 0 ;;
+    esac
+    case "$tag" in
+        -) return 1 ;;
+        \?) return 0 ;;
+    esac
+    if [[ "$OS" == debian ]]; then
+        [[ "$tag" == *d* ]]
+    else
+        [[ "$tag" == *u* ]]
+    fi
 }
 
 system_package_mirror_host() {
@@ -600,8 +619,9 @@ system_mirror_source_reachable() {
 }
 
 func_system_mirrors() {
-    local category_choice choice source branch="" language label_zh label_en label index rc=0 current_host
+    local category_choice choice source branch="" language label_zh label_en label index rc=0 current_host mirror_row
     local -a mirrors=()
+    local -a mirror_rows=()
     local -a mirror_args=(--upgrade-software false)
     case "$VPSO_LANGUAGE" in
         zh) language=zh ;;
@@ -629,12 +649,25 @@ func_system_mirrors() {
             read_trimmed category_choice "$(localized_text "选择分类: " "Select a category: " "Выберите категорию: ")"
             case "$category_choice" in
                 1|2|3|4|5|6|7)
-                    mapfile -t mirrors < <(system_mirror_catalog "$category_choice")
+                    mapfile -t mirror_rows < <(system_mirror_catalog "$category_choice")
+                    mirrors=()
+                    for mirror_row in "${mirror_rows[@]}"; do
+                        system_mirror_supports_os "${mirror_row##*|}" || continue
+                        mirrors+=("$mirror_row")
+                    done
+                    if (( ${#mirrors[@]} == 0 )); then
+                        echo "$(localized_text "该地区没有支持当前发行版的镜像站，请换一个分类或使用自定义地址。" "No mirror in this region serves packages for this distribution; pick another region or use a custom address." "В этом регионе нет зеркал с пакетами для этого дистрибутива; выберите другой регион или свой адрес.")"
+                        sleep 1
+                        continue
+                    fi
                     while true; do
                         clear
                         echo "$(localized_text "选择具体镜像站：" "Select a mirror:" "Выберите зеркало:")"
+                        if (( ${#mirrors[@]} != ${#mirror_rows[@]} )); then
+                            echo "$(localized_text "（已隐藏 $(( ${#mirror_rows[@]} - ${#mirrors[@]} )) 个不支持当前发行版的镜像站）" "($(( ${#mirror_rows[@]} - ${#mirrors[@]} )) mirrors without repositories for this distribution are hidden)" "(скрыто зеркал без репозиториев для этого дистрибутива: $(( ${#mirror_rows[@]} - ${#mirrors[@]} )))")"
+                        fi
                         for index in "${!mirrors[@]}"; do
-                            IFS='|' read -r label_zh label_en source <<<"${mirrors[index]}"
+                            IFS='|' read -r label_zh label_en source _ <<<"${mirrors[index]}"
                             if [[ "$VPSO_LANGUAGE" == zh ]]; then label="$label_zh"; else label="$label_en"; fi
                             printf '%2d. %s (%s)\n' "$((index + 1))" "$label" "$source"
                         done
@@ -642,7 +675,7 @@ func_system_mirrors() {
                         read_trimmed choice "$(localized_text "选择镜像站: " "Select a mirror: " "Выберите зеркало: ")"
                         case "$choice" in 0|q|Q|'') break ;; esac
                         if [[ "$choice" =~ ^[1-9][0-9]?$ ]] && (( choice <= ${#mirrors[@]} )); then
-                            IFS='|' read -r label_zh label_en source <<<"${mirrors[choice - 1]}"
+                            IFS='|' read -r label_zh label_en source _ <<<"${mirrors[choice - 1]}"
                             # 阿里云把 Rocky Linux 的仓库目录命名为 rockylinux，多数镜像站用 rocky。
                             if [[ "$OS" == rocky && "$source" == mirrors.aliyun.com ]]; then branch=rockylinux; fi
                             break 2
