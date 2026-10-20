@@ -10,7 +10,7 @@
 
 该入口用于管理 3x-ui、S-UI、2S-UI、Sing-box、Xray、xray-relay、SublinkPro、Sub-Store、Dockge、Komari、CDT Monitor、端口流量狗和 x-ui 增强工具等相关工具。
 
-Xray 中转位于 `[5 面板、节点与订阅工具] -> [9 Xray 中转]`，运行 [xray-relay 安装器](https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh)安装或更新 `xrelay`，并进入管理菜单。
+Xray 中转位于 `[5 面板、节点与订阅工具] -> [9 Xray 中转（xrelay）]`，运行 [xray-relay 安装器](https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh)安装或更新 `xrelay`，并进入管理菜单。
 
 CDT Monitor 位于 `[5 面板、节点与订阅工具] -> [14 CDT Monitor]`，用于监控阿里云 CDT 流量、管理 ECS 自动化操作和查看费用。详见 [CDT Monitor](cdt-monitor.md)。
 

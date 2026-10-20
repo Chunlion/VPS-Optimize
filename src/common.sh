@@ -23,6 +23,8 @@ SCRIPT_VERSION="v2.7"
 UPDATE_BASE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
 UPDATE_MIRROR=""
 UPDATE_MIRROR_CONFIG="/etc/vps-optimize/update-mirror.conf"
+# 镜像前缀不能带账号密码，也不能带通配符（会进入 case 模式匹配），因此这里显式排除 @ 和 *。
+UPDATE_MIRROR_PATTERN='^https://[^/?#[:space:]@*]+(/[^?#[:space:]@*]*)?$'
 UPDATE_URL="$UPDATE_BASE_URL"
 UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
@@ -451,6 +453,11 @@ verify_file_sha256() {
 
 is_trusted_remote_script_url() {
     local url="$1"
+    if [[ -n "$UPDATE_MIRROR" ]] \
+        && [[ "$url" == "${UPDATE_MIRROR}/https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh" ]]; then
+        echo "$(localized_text "LinuxMirrors 换源脚本（经你配置的镜像下载，内容由镜像方提供）" "LinuxMirrors change-mirror script (fetched through your configured mirror; content is served by that mirror)" "Скрипт смены зеркала LinuxMirrors (загружается через ваше зеркало; содержимое предоставляет зеркало)")"
+        return 0
+    fi
     case "$url" in
         "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dog.sh"|\
         "https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/xui-custom-manager.sh")
@@ -499,8 +506,14 @@ is_trusted_remote_script_url() {
             echo "$(localized_text "VPS_BOT_X 项目安装脚本" "VPS_BOT_X project installation script" "Скрипт установки проекта VPS_BOT_X")"
             return 0
             ;;
-        "${UPDATE_MIRROR:+$UPDATE_MIRROR/}https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh"|\
-        "https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh"|\
+        "https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh")
+            echo "$(localized_text "LinuxMirrors 官方换源脚本" "LinuxMirrors official change-mirror script" "Официальный скрипт смены зеркала LinuxMirrors")"
+            return 0
+            ;;
+        "https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh")
+            echo "$(localized_text "xray-relay 安装脚本" "xray-relay installation script" "Скрипт установки xray-relay")"
+            return 0
+            ;;
         "https://yabs.sh"|\
         "https://check.unlock.media"|\
         "https://Net.Check.Place"|\
@@ -536,7 +549,7 @@ run_remote_script() {
     echo -e "${CYAN}▶ ${desc}${PLAIN}"
     echo -e "$(localized_text "${YELLOW}脚本来源：${url}${PLAIN}" "${YELLOW}Script source: ${url}${PLAIN}" "${YELLOW}Источник сценария : ${url}${PLAIN}")"
     if trusted_source=$(is_trusted_remote_script_url "$url"); then
-        echo -e "$(localized_text "${GREEN}内置已知来源：${trusted_source}${PLAIN}" "${GREEN}Built-in Known source: ${trusted_source}${PLAIN}" "${GREEN}встроенный Известный источник: ${trusted_source}${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}来源说明：${trusted_source}${PLAIN}" "${GREEN}Source note: ${trusted_source}${PLAIN}" "${GREEN}Источник: ${trusted_source}${PLAIN}")"
     else
         trusted_source=""
         echo -e "$(localized_text "${RED}⚠️ 非内置已知来源：该 URL 不在 VPS-Optimize 内置远程脚本白名单内。${PLAIN}" "${RED}⚠️ Non-built-in known sources: The URL is not in the VPS-Optimize built-in remote script whitelist.${PLAIN}" "${RED}⚠️ Невстроенные известные источники: URL-адрес отсутствует в белом списке встроенных удаленных сценариев VPS-Optimize.${PLAIN}")"

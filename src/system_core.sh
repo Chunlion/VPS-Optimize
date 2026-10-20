@@ -512,13 +512,13 @@ system_mirror_catalog() {
             '中科院软件所|ISCAS|mirror.iscas.ac.cn' \
             '中国科技云|China Science and Technology Cloud|mirrors.cstcloud.cn' ;;
         2) printf '%s\n' \
-            '香港 xTom|xTom Hong Kong|mirrors.xtom.hk' \
-            '香港 01Link|01Link Hong Kong|mirror.01link.hk' \
+            '中国香港 xTom|xTom Hong Kong, China|mirrors.xtom.hk' \
+            '中国香港 01Link|01Link Hong Kong, China|mirror.01link.hk' \
             '新加坡国立大学|National University of Singapore|download.nus.edu.sg/mirror' \
             '新加坡 SG.GS|SG.GS Singapore|mirror.sg.gs' \
             '新加坡 xTom|xTom Singapore|mirrors.xtom.sg' \
-            '台湾 NCHC|NCHC Taiwan|free.nchc.org.tw' \
-            '台湾 OSS Planet|OSS Planet Taiwan|mirror.ossplanet.net' \
+            '中国台湾 NCHC|NCHC Taiwan, China|free.nchc.org.tw' \
+            '中国台湾 OSS Planet|OSS Planet Taiwan, China|mirror.ossplanet.net' \
             '日本 JAIST|JAIST Japan|ftp.jaist.ac.jp/pub/Linux' \
             '日本 xTom|xTom Japan|mirrors.xtom.jp' \
             '马来西亚 GB Network|GB Network Malaysia|mirrors.gbnetwork.com' \
@@ -557,8 +557,50 @@ system_mirror_catalog() {
     esac
 }
 
+system_package_mirror_host() {
+    local host=""
+    if is_debian; then
+        host=$(grep -rhoE '^[[:space:]]*deb[[:space:]]+https?://[^/[:space:]]+' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null | awk 'NR == 1 {print $2}')
+        if [[ -z "$host" ]]; then
+            host=$(grep -rhoE '^URIs:[[:space:]]*https?://[^/[:space:]]+' /etc/apt/sources.list.d/*.sources 2>/dev/null | awk 'NR == 1 {print $2}')
+        fi
+    else
+        host=$(grep -rhoE '^[[:space:]]*baseurl=https?://[^/[:space:]]+' /etc/yum.repos.d/*.repo 2>/dev/null | awk 'NR == 1 {print $1}')
+        host="${host#*=}"
+    fi
+    host="${host#*://}"
+    printf '%s' "${host%%/*}"
+}
+
+# 返回探测用的仓库元数据地址；非 apt 系发行版返回 1，表示不做探测。
+system_mirror_repo_probe_url() {
+    local source="$1"
+    local branch="$2"
+    local codename="${VERSION_CODENAME:-}"
+    case "$OS" in
+        debian | ubuntu) ;;
+        *) return 1 ;;
+    esac
+    [[ -n "$branch" ]] || branch="$OS"
+    [[ -n "$codename" ]] || codename=stable
+    printf 'https://%s/%s/dists/%s/Release' "$source" "$branch" "$codename"
+}
+
+# 无法探测（非 apt 系、缺少 curl/wget）时按“可用”处理，避免误拦。
+system_mirror_source_reachable() {
+    local probe_url
+    probe_url=$(system_mirror_repo_probe_url "$1" "$2") || return 0
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL -o /dev/null --connect-timeout 4 --max-time 8 "$probe_url" >/dev/null 2>&1
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q --tries=1 --timeout=8 -O /dev/null "$probe_url" >/dev/null 2>&1
+    else
+        return 0
+    fi
+}
+
 func_system_mirrors() {
-    local category choice source branch="" language label_zh label_en label index rc=0
+    local category_choice choice source branch="" language label_zh label_en label index rc=0 current_host
     local -a mirrors=()
     local -a mirror_args=(--upgrade-software false)
     case "$VPSO_LANGUAGE" in
@@ -568,59 +610,91 @@ func_system_mirrors() {
     mirror_args+=(--lang "$language")
 
     while true; do
-        clear
-        print_breadcrumb "$(localized_text "系统设置与清理 > 切换系统软件源" "System settings and cleanup > Switch package mirrors" "Системные настройки и очистка > Смена зеркала пакетов")"
-        echo -e "$(localized_text "${CYAN}切换系统软件源（LinuxMirrors）${PLAIN}" "${CYAN}Switch package mirrors (LinuxMirrors)${PLAIN}" "${CYAN}Смена зеркала пакетов (LinuxMirrors)${PLAIN}")"
-        echo "$(localized_text "用于系统软件包下载；GitHub、Docker、pip/npm 的下载源不受影响。" "Applies to system packages; GitHub, Docker, and pip/npm download sources are unchanged." "Меняет источники системных пакетов; источники GitHub, Docker и pip/npm остаются прежними.")"
-        echo "$(localized_text "选择地区后直接选择镜像站，不自动升级软件包。" "Select a region, then a mirror. Packages will not be upgraded." "Выберите регион, затем зеркало. Пакеты обновляться не будут.")"
-        echo "$(localized_text "1. 中国大陆" "1. Mainland China" "1. Материковый Китай")"
-        echo "$(localized_text "2. 亚洲（香港 / 台湾 / 日本 / 新加坡等）" "2. Asia (Hong Kong, Taiwan, Japan, Singapore, and more)" "2. Азия (Гонконг, Тайвань, Япония, Сингапур и другие)")"
-        echo "$(localized_text "3. 欧洲" "3. Europe" "3. Европа")"
-        echo "$(localized_text "4. 北美" "4. North America" "4. Северная Америка")"
-        echo "$(localized_text "5. 南美" "5. South America" "5. Южная Америка")"
-        echo "$(localized_text "6. 大洋洲" "6. Oceania" "6. Океания")"
-        echo "$(localized_text "7. 非洲" "7. Africa" "7. Африка")"
-        echo "$(localized_text "8. 自定义镜像地址（高级）" "8. Custom mirror address (advanced)" "8. Свой адрес зеркала (дополнительно)")"
-        echo "$(localized_text "0. 返回 / q 返回" "0. Back / q Back" "0. Назад / q Назад")"
-        read_trimmed category "$(localized_text "选择分类: " "Select a category: " "Выберите категорию: ")"
-        case "$category" in
-            1|2|3|4|5|6|7)
-                mapfile -t mirrors < <(system_mirror_catalog "$category")
-                while true; do
-                    clear
-                    echo "$(localized_text "选择具体镜像站：" "Select a mirror:" "Выберите зеркало:")"
-                    for index in "${!mirrors[@]}"; do
-                        IFS='|' read -r label_zh label_en source <<<"${mirrors[index]}"
-                        if [[ "$VPSO_LANGUAGE" == zh ]]; then label="$label_zh"; else label="$label_en"; fi
-                        printf '%2d. %s (%s)\n' "$((index + 1))" "$label" "$source"
+        while true; do
+            clear
+            current_host=$(system_package_mirror_host)
+            print_breadcrumb "$(localized_text "系统设置与清理 > 切换系统软件源" "System settings and cleanup > Switch package mirrors" "Системные настройки и очистка > Смена зеркала пакетов")"
+            echo -e "$(localized_text "${CYAN}切换系统软件源（LinuxMirrors）${PLAIN}" "${CYAN}Switch package mirrors (LinuxMirrors)${PLAIN}" "${CYAN}Смена зеркала пакетов (LinuxMirrors)${PLAIN}")"
+            echo "$(localized_text "当前主源：${current_host:-未知}" "Current main mirror: ${current_host:-unknown}" "Текущее основное зеркало: ${current_host:-неизвестно}")"
+            echo "$(localized_text "用于系统软件包下载，不自动升级软件包；GitHub、Docker、pip/npm 的下载源不受影响。" "Applies to system packages without upgrading them; GitHub, Docker, and pip/npm download sources are unchanged." "Меняет только источники системных пакетов без их обновления; источники GitHub, Docker и pip/npm остаются прежними.")"
+            echo "$(localized_text "1. 中国大陆" "1. Mainland China" "1. Материковый Китай")"
+            echo "$(localized_text "2. 亚洲（中国香港 / 中国台湾 / 日本 / 新加坡等）" "2. Asia (Hong Kong, China / Taiwan, China / Japan / Singapore, and more)" "2. Азия (Гонконг, Китай / Тайвань, Китай / Япония / Сингапур и другие)")"
+            echo "$(localized_text "3. 欧洲" "3. Europe" "3. Европа")"
+            echo "$(localized_text "4. 北美" "4. North America" "4. Северная Америка")"
+            echo "$(localized_text "5. 南美" "5. South America" "5. Южная Америка")"
+            echo "$(localized_text "6. 大洋洲" "6. Oceania" "6. Океания")"
+            echo "$(localized_text "7. 非洲" "7. Africa" "7. Африка")"
+            echo "$(localized_text "8. 自定义镜像地址（高级）" "8. Custom mirror address (advanced)" "8. Свой адрес зеркала (дополнительно)")"
+            echo "$(localized_text "0. 返回 / q 返回" "0. Back / q Back" "0. Назад / q Назад")"
+            read_trimmed category_choice "$(localized_text "选择分类: " "Select a category: " "Выберите категорию: ")"
+            case "$category_choice" in
+                1|2|3|4|5|6|7)
+                    mapfile -t mirrors < <(system_mirror_catalog "$category_choice")
+                    while true; do
+                        clear
+                        echo "$(localized_text "选择具体镜像站：" "Select a mirror:" "Выберите зеркало:")"
+                        for index in "${!mirrors[@]}"; do
+                            IFS='|' read -r label_zh label_en source <<<"${mirrors[index]}"
+                            if [[ "$VPSO_LANGUAGE" == zh ]]; then label="$label_zh"; else label="$label_en"; fi
+                            printf '%2d. %s (%s)\n' "$((index + 1))" "$label" "$source"
+                        done
+                        echo "$(localized_text "0. 返回分类 / q 返回分类" "0. Back to categories / q Back" "0. К категориям / q Назад")"
+                        read_trimmed choice "$(localized_text "选择镜像站: " "Select a mirror: " "Выберите зеркало: ")"
+                        case "$choice" in 0|q|Q|'') break ;; esac
+                        if [[ "$choice" =~ ^[1-9][0-9]?$ ]] && (( choice <= ${#mirrors[@]} )); then
+                            IFS='|' read -r label_zh label_en source <<<"${mirrors[choice - 1]}"
+                            # 阿里云把 Rocky Linux 的仓库目录命名为 rockylinux，多数镜像站用 rocky。
+                            if [[ "$OS" == rocky && "$source" == mirrors.aliyun.com ]]; then branch=rockylinux; fi
+                            break 2
+                        fi
+                        echo "$(localized_text "无效选择。" "Invalid selection." "Неверный выбор.")"
+                        sleep 1
                     done
-                    echo "$(localized_text "0. 返回分类 / q 返回分类" "0. Back to categories / q Back" "0. К категориям / q Назад")"
-                    read_trimmed choice "$(localized_text "选择镜像站: " "Select a mirror: " "Выберите зеркало: ")"
-                    case "$choice" in 0|q|Q|'') break ;; esac
-                    if [[ "$choice" =~ ^[1-9][0-9]?$ ]] && (( choice <= ${#mirrors[@]} )); then
-                        IFS='|' read -r label_zh label_en source <<<"${mirrors[choice - 1]}"
-                        if [[ "$OS" == rocky && "$source" == mirrors.aliyun.com ]]; then branch=rockylinux; fi
-                        break 2
-                    fi
-                    echo "$(localized_text "无效选择。" "Invalid selection." "Неверный выбор.")"
-                    sleep 1
-                done
-                ;;
-            8)
-                read_trimmed source "$(localized_text "镜像域名或 IP（不含协议，空白取消）: " "Mirror hostname or IP (without protocol, blank to cancel): " "Домен или IP зеркала (без протокола, пусто для отмены): ")"
-                [[ -n "$source" ]] || continue
-                read_trimmed branch "$(localized_text "仓库路径（空白使用系统默认目录）: " "Repository path (blank for the distribution default): " "Путь репозитория (пусто для стандартного пути системы): ")"
-                break
-                ;;
-            0|q|Q|'') return 0 ;;
-            *) echo "$(localized_text "无效选择。" "Invalid selection." "Неверный выбор.")"; sleep 1 ;;
-        esac
+                    ;;
+                8)
+                    read_trimmed source "$(localized_text "镜像域名或 IP（不含协议和路径，空白取消）: " "Mirror hostname or IP (no protocol or path, blank to cancel): " "Домен или IP зеркала (без протокола и пути, пусто для отмены): ")"
+                    [[ -n "$source" ]] || continue
+                    source="${source#https://}"
+                    source="${source#http://}"
+                    source="${source%/}"
+                    read_trimmed branch "$(localized_text "仓库名（如 bookworm / rockylinux，空白用发行版默认）: " "Repository name (e.g. bookworm / rockylinux, blank for the distribution default): " "Имя репозитория (например bookworm / rockylinux, пусто для значения по умолчанию): ")"
+                    break
+                    ;;
+                0|q|Q|'') return 0 ;;
+                *) echo "$(localized_text "无效选择。" "Invalid selection." "Неверный выбор.")"; sleep 1 ;;
+            esac
+        done
+
+        if ! system_mirror_source_reachable "$source" "$branch"; then
+            echo "$(localized_text "⚠️ 探测不到 ${source} 上对应发行版的软件源目录，换源后 apt/dnf 可能无法更新。" "⚠️ No package repository for this distribution could be found on ${source}; apt/dnf may fail after switching." "⚠️ На ${source} не найден репозиторий для этого дистрибутива; после смены apt/dnf может не работать.")"
+            read_trimmed yn "$(localized_text "仍要继续？(y 继续 / n 换一个镜像): " "Continue anyway? (y continue / n pick another mirror): " "Всё равно продолжить? (y продолжить / n выбрать другое): ")"
+            if ! is_yes "$yn"; then
+                source=""
+                branch=""
+                continue
+            fi
+        fi
+
+        echo "$(localized_text "目标镜像：${source}    仓库：${branch:-发行版默认}" "Target mirror: ${source}    Repository: ${branch:-distribution default}" "Целевое зеркало: ${source}    Репозиторий: ${branch:-по умолчанию}")"
+        echo "$(localized_text "原有软件源文件会先备份为同名 .bak。" "Existing package source files are backed up as same-name .bak files." "Текущие файлы источников сохраняются как файлы .bak.")"
+        read_trimmed yn "$(localized_text "继续换源？(Y/n): " "Switch the mirrors now? (Y/n): " "Сменить зеркала сейчас? (Y/n): ")"
+        if is_no "$yn"; then
+            source=""
+            branch=""
+            continue
+        fi
+
+        mirror_args+=(--source "$source")
+        [[ -z "$branch" ]] || mirror_args+=(--branch "$branch")
+        run_remote_script "$(localized_text "切换系统软件源" "Switch package mirrors" "Смена зеркала пакетов")" "${UPDATE_MIRROR:+$UPDATE_MIRROR/}https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh" "${mirror_args[@]}" || rc=$?
+        if (( rc == 0 )); then
+            echo -e "$(localized_text "${GREEN}✅ 已切换到 ${source}${PLAIN}" "${GREEN}✅ Switched to ${source}${PLAIN}" "${GREEN}✅ Переключено на ${source}${PLAIN}")"
+        else
+            echo -e "$(localized_text "${RED}❌ 换源未完成（退出码 ${rc}）；原软件源文件已备份为同名 .bak，可手动恢复。${PLAIN}" "${RED}❌ Mirror switch did not finish (exit code ${rc}); original files are backed up as .bak for manual restore.${PLAIN}" "${RED}❌ Смена зеркал не завершена (код ${rc}); исходные файлы сохранены как .bak.${PLAIN}")"
+        fi
+        pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
+        return "$rc"
     done
-    mirror_args+=(--source "$source")
-    [[ -z "$branch" ]] || mirror_args+=(--branch "$branch")
-    run_remote_script "$(localized_text "切换系统软件源" "Switch package mirrors" "Смена зеркала пакетов")" "${UPDATE_MIRROR:+$UPDATE_MIRROR/}https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh" "${mirror_args[@]}" || rc=$?
-    pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
-    return "$rc"
 }
 
 func_system_tweaks() {
@@ -662,6 +736,12 @@ func_system_tweaks() {
         current_hostname="$(trim_input "$current_hostname")"
         current_hostname="$(localized_text "${current_hostname:-未知}" "${current_hostname:-未知}" "${current_hostname:-未知}")"
 
+        local str_mirror
+        local str_gh_mirror
+        str_mirror=$(system_package_mirror_host)
+        str_mirror="${str_mirror:-$(localized_text "未知" "unknown" "неизвестно")}"
+        str_gh_mirror="${UPDATE_MIRROR:-$(localized_text "GitHub 直连" "direct GitHub" "GitHub напрямую")}"
+
         # 完美修复：一字不落的菜单显示
         echo -e "$(localized_text "${GREEN}  1. IPv6 开关${PLAIN}              当前: [ $str_ipv6 ]" "${GREEN}  1. IPv6${PLAIN}                  Status: [ $str_ipv6 ]" "${GREEN}  1. IPv6${PLAIN}                  Состояние: [ $str_ipv6 ]")"
         echo -e "$(localized_text "${GREEN}  2. IPv4 出站优先${PLAIN}          当前: [ $str_ipv4_first ]" "${GREEN}  2. Prefer IPv4 outbound${PLAIN}   Status: [ $str_ipv4_first ]" "${GREEN}  2. Приоритет IPv4${PLAIN}         Состояние: [ $str_ipv4_first ]")"
@@ -670,9 +750,9 @@ func_system_tweaks() {
         echo -e "$(localized_text "${GREEN}  5. 修改主机名${PLAIN}             当前: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}  5. Change hostname${PLAIN}        Current: [ ${CYAN}${current_hostname}${PLAIN} ]" "${GREEN}  5. Изменить имя хоста${PLAIN}     Текущее: [ ${CYAN}${current_hostname}${PLAIN} ]")"
         echo -e "$(localized_text "${GREEN}  6. 自动安全更新${PLAIN}           当前: [ $str_update ]" "${GREEN}  6. Automatic security updates${PLAIN} Status: [ $str_update ]" "${GREEN}  6. Автоматические обновления безопасности${PLAIN} Состояние: [ $str_update ]")"
         echo -e "$(localized_text "${GREEN}  7. 清理系统${PLAIN}               (日志 / 缓存 / 无用包)" "${GREEN}  7. Clean up system${PLAIN}       (logs / cache / unused packages)" "${GREEN}  7. Очистить систему${PLAIN}      (журналы / кэш / ненужные пакеты)")"
-        echo -e "$(localized_text "${RED}  8. 系统重装${PLAIN}               (重启后清空主硬盘；高风险)" "${RED}8. System reinstallation${PLAIN} (erases the main disk after reboot; high risk)" "${RED}8. Переустановка системы${PLAIN} (очистит основной диск после перезагрузки; высокий риск)")"
-        echo -e "$(localized_text "${GREEN}  9. 切换系统软件源${PLAIN}         (按地区选择具体镜像站)" "${GREEN}  9. Switch package mirrors${PLAIN} (select a region and mirror)" "${GREEN}  9. Сменить зеркало пакетов${PLAIN} (выбор региона и зеркала)")"
-        echo -e "$(localized_text "${GREEN} 10. GitHub 更新镜像${PLAIN}         (设置默认脚本更新镜像)" "${GREEN} 10. GitHub update mirror${PLAIN}  (set the default script update mirror)" "${GREEN} 10. Зеркало обновлений GitHub${PLAIN} (зеркало для обновления сценария)")"
+        echo -e "$(localized_text "${RED}  8. 系统重装${PLAIN}               (重启后清空主硬盘；高风险)" "${RED}  8. System reinstallation${PLAIN} (erases the main disk after reboot; high risk)" "${RED}  8. Переустановка системы${PLAIN} (очистит основной диск после перезагрузки; высокий риск)")"
+        echo -e "$(localized_text "${GREEN}  9. 切换系统软件源${PLAIN}        当前: [ $str_mirror ]" "${GREEN}  9. Switch package mirrors${PLAIN} Status: [ $str_mirror ]" "${GREEN}  9. Сменить зеркало пакетов${PLAIN} Состояние: [ $str_mirror ]")"
+        echo -e "$(localized_text "${GREEN} 10. GitHub 更新镜像${PLAIN}       当前: [ $str_gh_mirror ]" "${GREEN} 10. GitHub update mirror${PLAIN}  Status: [ $str_gh_mirror ]" "${GREEN} 10. Зеркало обновлений GitHub${PLAIN} Состояние: [ $str_gh_mirror ]")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"

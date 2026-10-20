@@ -5,37 +5,73 @@ load_script_update_mirror() {
     UPDATE_MIRROR=""
     if [[ -s "$UPDATE_MIRROR_CONFIG" ]]; then
         UPDATE_MIRROR=$(<"$UPDATE_MIRROR_CONFIG")
+        UPDATE_MIRROR="${UPDATE_MIRROR%/}"
+        # 配置文件用户可手工编辑，非法内容直接忽略，避免拼出无法使用的更新地址。
+        [[ "$UPDATE_MIRROR" =~ $UPDATE_MIRROR_PATTERN ]] || UPDATE_MIRROR=""
     fi
-    UPDATE_MIRROR="${UPDATE_MIRROR%/}"
     UPDATE_URL="${UPDATE_MIRROR:+$UPDATE_MIRROR/}${UPDATE_BASE_URL}"
     UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 }
 
+update_mirror_prefix_is_reachable() {
+    local prefix="$1"
+    local probe_url="${prefix}/${UPDATE_BASE_URL}.sha256"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL -o /dev/null --connect-timeout 4 --max-time 10 "$probe_url" >/dev/null 2>&1
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q --tries=1 --timeout=10 -O /dev/null "$probe_url" >/dev/null 2>&1
+    else
+        return 0
+    fi
+}
+
 func_configure_update_mirror() {
     local mirror
+    clear
+    print_breadcrumb "$(localized_text "系统设置与清理 > GitHub 更新镜像" "System settings and cleanup > GitHub update mirror" "Системные настройки и очистка > Зеркало обновлений GitHub")"
+    echo "$(localized_text "当前更新方式：${UPDATE_MIRROR:-GitHub 直连}" "Current update source: ${UPDATE_MIRROR:-direct GitHub}" "Текущий источник обновлений: ${UPDATE_MIRROR:-GitHub напрямую}")"
+    if [[ -s "$UPDATE_MIRROR_CONFIG" && -z "$UPDATE_MIRROR" ]]; then
+        echo "$(localized_text "⚠️ 配置文件内容无效，已忽略：${UPDATE_MIRROR_CONFIG}" "⚠️ The config file is invalid and has been ignored: ${UPDATE_MIRROR_CONFIG}" "⚠️ Содержимое файла конфигурации неверно и проигнорировано: ${UPDATE_MIRROR_CONFIG}")"
+    fi
+    echo "$(localized_text "只影响脚本自身更新与换源工具下载，其它第三方安装脚本仍直连 GitHub。" "Only script self-updates and the change-mirror tool download use it; other third-party installers still use GitHub directly." "Действует только на самообновление сценария и загрузку инструмента смены зеркала; остальные установщики идут напрямую с GitHub.")"
+    echo "$(localized_text "输入你信任的 HTTPS 镜像前缀；保存后，版本检查、脚本和校验文件统一使用它。输入 - 恢复 GitHub 直连。" "Enter a trusted HTTPS mirror prefix. Version checks, the script, and the checksum file will all use it. Enter - to restore direct GitHub access." "Введите префикс доверенного HTTPS-зеркала. Проверка версии, сценарий и контрольная сумма будут загружаться через него. Введите - для прямого доступа к GitHub.")"
     while true; do
-        clear
-        print_breadcrumb "$(localized_text "系统设置与清理 > GitHub 更新镜像" "System settings and cleanup > GitHub update mirror" "Системные настройки и очистка > Зеркало обновлений GitHub")"
-        echo "$(localized_text "当前更新方式：${UPDATE_MIRROR:-GitHub 直连}" "Current update source: ${UPDATE_MIRROR:-direct GitHub}" "Текущий источник обновлений: ${UPDATE_MIRROR:-GitHub напрямую}")"
-        echo "$(localized_text "输入你信任的 HTTPS 镜像前缀；保存后，版本检查、脚本和校验文件统一使用它。" "Enter a trusted HTTPS mirror prefix. Version checks, scripts, and checksum files will all use it." "Введите префикс доверенного HTTPS-зеркала. Проверка версии, сценарий и контрольная сумма будут загружаться через него.")"
-        read_trimmed mirror "$(localized_text "镜像前缀（回车保持，q 返回）: " "Mirror prefix (Enter to keep, q to return): " "Префикс зеркала (Enter — оставить, q — назад): ")"
+        read_trimmed mirror "$(localized_text "镜像前缀（回车保持，- 恢复直连，q 返回）: " "Mirror prefix (Enter to keep, - for direct GitHub, q to return): " "Префикс зеркала (Enter — оставить, - — напрямую, q — назад): ")"
         case "$mirror" in
             ''|q|Q) return 0 ;;
+            -)
+                rm -f "$UPDATE_MIRROR_CONFIG"
+                load_script_update_mirror
+                rm -f "$SCRIPT_UPDATE_CACHE"
+                echo "$(localized_text "已恢复 GitHub 直连并清除缓存。" "Direct GitHub access restored and cache cleared." "Прямой доступ к GitHub восстановлен, кэш очищен.")"
+                pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
+                return 0
+                ;;
         esac
-        if [[ ! "$mirror" =~ ^https://[^/?#[:space:]@]+(/[^?#[:space:]@]*)?$ ]]; then
-            echo "$(localized_text "请输入不含账号密码的完整 HTTPS 镜像前缀。" "Enter a complete HTTPS mirror prefix without credentials." "Введите полный HTTPS-префикс зеркала без логина и пароля.")"
+        if [[ ! "$mirror" =~ $UPDATE_MIRROR_PATTERN ]]; then
+            echo "$(localized_text "请输入不含账号密码和通配符的完整 HTTPS 镜像前缀。" "Enter a complete HTTPS mirror prefix without credentials or wildcards." "Введите полный HTTPS-префикс зеркала без логина, пароля и подстановочных знаков.")"
             sleep 1
             continue
         fi
-        mirror="${mirror%/}"
-        mkdir -p "$(dirname "$UPDATE_MIRROR_CONFIG")" || return 1
-        printf '%s\n' "$mirror" > "$UPDATE_MIRROR_CONFIG" || return 1
-        load_script_update_mirror
-        rm -f "$SCRIPT_UPDATE_CACHE"
-        echo "$(localized_text "已保存，后续脚本更新默认使用：${UPDATE_MIRROR}" "Saved. Future script updates will use: ${UPDATE_MIRROR}" "Сохранено. Обновления сценария будут использовать: ${UPDATE_MIRROR}")"
-        pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
-        return 0
+        break
     done
+    mirror="${mirror%/}"
+    if ! update_mirror_prefix_is_reachable "$mirror"; then
+        echo "$(localized_text "⚠️ 无法通过该前缀下载校验文件：镜像不可达，或路径规则不匹配。" "⚠️ The checksum file could not be downloaded through this prefix: the mirror is unreachable or the path rules do not match." "⚠️ Не удалось загрузить файл контрольной суммы через этот префикс: зеркало недоступно или правила путей не совпадают.")"
+        read_trimmed yn "$(localized_text "仍要保存吗？(y 保存 / n 取消): " "Save anyway? (y save / n cancel): " "Всё равно сохранить? (y сохранить / n отмена): ")"
+        if ! is_yes "$yn"; then
+            echo "$(localized_text "未保存，更新方式保持：${UPDATE_MIRROR:-GitHub 直连}" "Not saved. The update source stays: ${UPDATE_MIRROR:-direct GitHub}" "Не сохранено. Источник обновлений: ${UPDATE_MIRROR:-GitHub напрямую}")"
+            pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
+            return 0
+        fi
+    fi
+    mkdir -p "$(dirname "$UPDATE_MIRROR_CONFIG")" || return 1
+    printf '%s\n' "$mirror" > "$UPDATE_MIRROR_CONFIG" || return 1
+    load_script_update_mirror
+    rm -f "$SCRIPT_UPDATE_CACHE"
+    echo "$(localized_text "已保存，后续脚本更新默认使用：${UPDATE_MIRROR}" "Saved. Future script updates will use: ${UPDATE_MIRROR}" "Сохранено. Обновления сценария будут использовать: ${UPDATE_MIRROR}")"
+    pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
+    return 0
 }
 
 fetch_latest_script_version() {

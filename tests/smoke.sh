@@ -294,64 +294,6 @@ is_valid_port "https://panel.example.com:４４３/path"
     [[ "${host_names_smoke[2]}" == "vps01" ]]
 )
 (
-    source src/system_core.sh
-    clear() { :; }
-    print_breadcrumb() { :; }
-    sleep() { :; }
-    mirror_status=0
-    mirror_call=()
-    run_remote_script() { mirror_call=("$@"); return "$mirror_status"; }
-    pause_after_external_script() { :; }
-    for VPSO_LANGUAGE in zh en ru; do
-        if [[ "$VPSO_LANGUAGE" == zh ]]; then mirror_language=zh; else mirror_language=en; fi
-        UPDATE_MIRROR=https://mirror.example
-        OS=debian
-        for mirror_category in {1..7}; do
-            mapfile -t mirror_entries < <(system_mirror_catalog "$mirror_category")
-            for mirror_index in "${!mirror_entries[@]}"; do
-                IFS='|' read -r mirror_zh mirror_en mirror_source <<<"${mirror_entries[mirror_index]}"
-                func_system_mirrors <<< "$mirror_category"$'\n'"$((mirror_index + 1))" >/dev/null
-                [[ "${mirror_call[1]}" == https://mirror.example/https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh ]]
-                [[ "${mirror_call[*]:2:4}" == "--upgrade-software false --lang $mirror_language" ]]
-                [[ "${mirror_call[*]:6}" == "--source $mirror_source" ]]
-                [[ -n "$mirror_zh" && -n "$mirror_en" ]]
-            done
-        done
-        OS=rocky
-        func_system_mirrors <<< $'1\n1' >/dev/null
-        [[ "${mirror_call[*]:6}" == '--source mirrors.aliyun.com --branch rockylinux' ]]
-        OS=debian
-        func_system_mirrors <<< $'8\nmirror.example.com\nlinux/debian' >/dev/null
-        [[ "${mirror_call[*]:6}" == '--source mirror.example.com --branch linux/debian' ]]
-        func_system_mirrors <<< $'8\nmirror.example.com\n\n' >/dev/null
-        [[ "${mirror_call[*]:6}" == '--source mirror.example.com' ]]
-        func_system_mirrors <<< $'invalid\n1\n99\n2' >/dev/null
-        [[ "${mirror_call[*]:6}" == '--source mirrors.tencent.com' ]]
-        func_system_mirrors <<< $'1\n0\n2\n1' >/dev/null
-        [[ "${mirror_call[*]:6}" == '--source mirrors.xtom.hk' ]]
-        for mirror_back in 0 q Q ''; do
-            mirror_call=()
-            func_system_mirrors <<<"$mirror_back" >/dev/null
-            [[ ${#mirror_call[@]} == 0 ]]
-        done
-        mirror_call=()
-        func_system_mirrors <<< $'8\n\n0' >/dev/null
-        [[ ${#mirror_call[@]} == 0 ]]
-        func_system_mirrors <<< $'1\nq\n0' >/dev/null
-        [[ ${#mirror_call[@]} == 0 ]]
-    done
-    UPDATE_MIRROR=""
-    func_system_mirrors <<< $'1\n2' >/dev/null
-    [[ "${mirror_call[1]}" == https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh ]]
-    mirror_status=23
-    if func_system_mirrors <<< $'1\n1' >/dev/null; then
-        echo 'Mirror switch must preserve the remote script failure.' >&2
-        exit 1
-    else
-        [[ $? == 23 ]]
-    fi
-)
-(
     source src/system_reinstall.sh
     VPSO_LANGUAGE="zh"
     system_reinstall_set_target 1
@@ -1367,6 +1309,8 @@ else
     echo "jq not found; skipped dog notification rendering and nft JSON snapshot tests."
 fi
 bash tests/dog-limits.sh
+bash tests/system-mirrors.sh
+bash tests/update-mirror.sh
 
 
 (
@@ -1399,61 +1343,6 @@ bash tests/dog-limits.sh
     sha256sum "$update_tmp/remote.sh" > "$update_tmp/remote.sh.sha256"
 
     source src/updater.sh
-    UPDATE_MIRROR_CONFIG="${update_tmp}/mirror.conf"
-    SCRIPT_UPDATE_CACHE="${update_tmp}/update.cache"
-    clear() { :; }
-    print_breadcrumb() { :; }
-    pause_after_external_script() { :; }
-    sleep() { :; }
-    UPDATE_MIRROR=https://previous.example
-    load_script_update_mirror
-    [[ -z "$UPDATE_MIRROR" ]]
-    [[ "$UPDATE_URL" == https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh ]]
-    [[ "$UPDATE_SHA256_URL" == "${UPDATE_URL}.sha256" ]]
-    func_configure_update_mirror <<<q >/dev/null
-    [[ ! -e "$UPDATE_MIRROR_CONFIG" && -z "$UPDATE_MIRROR" ]]
-    for VPSO_LANGUAGE in zh en ru; do
-        touch "$SCRIPT_UPDATE_CACHE"
-        func_configure_update_mirror <<< $'http://mirror.example\nhttps://mirror.example/' >/dev/null
-        [[ "$(cat "$UPDATE_MIRROR_CONFIG")" == https://mirror.example ]]
-        [[ ! -f "$SCRIPT_UPDATE_CACHE" ]]
-        UPDATE_MIRROR=""
-        load_script_update_mirror
-        [[ "$UPDATE_URL" == https://mirror.example/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh ]]
-        [[ "$UPDATE_SHA256_URL" == "${UPDATE_URL}.sha256" ]]
-        for mirror_back in q Q ''; do
-            func_configure_update_mirror <<<"$mirror_back" >/dev/null
-            [[ "$(cat "$UPDATE_MIRROR_CONFIG")" == https://mirror.example ]]
-        done
-    done
-    curl() {
-        local url="${!#}"
-        case "$url" in
-            "$UPDATE_URL") cat "$update_tmp/remote.sh" ;;
-            "$UPDATE_SHA256_URL") cat "$update_tmp/remote.sh.sha256" ;;
-            *) return 1 ;;
-        esac
-    }
-    [[ "$(fetch_latest_script_version)" == "$vps_smoke_script_version" ]]
-    [[ "$(fetch_latest_script_sha256)" == "$(sha256sum "$update_tmp/remote.sh" | awk '{print $1}')" ]]
-    (
-        download_remote_script() {
-            case "$1" in
-                "$UPDATE_URL") cp "$update_tmp/remote.sh" "$2" ;;
-                "$UPDATE_SHA256_URL") cp "$update_tmp/remote.sh.sha256" "$2" ;;
-                *) return 1 ;;
-            esac
-        }
-        download_verified_update_script "$update_tmp/verified.sh"
-        cmp "$update_tmp/remote.sh" "$update_tmp/verified.sh"
-        printf '%064d  remote.sh\n' 0 > "$update_tmp/remote.sh.sha256"
-        if download_verified_update_script "$update_tmp/rejected.sh"; then
-            echo 'A mirrored update with a checksum mismatch must be rejected.' >&2
-            exit 1
-        fi
-        [[ ! -e "$update_tmp/rejected.sh" ]]
-    )
-    sha256sum "$update_tmp/remote.sh" > "$update_tmp/remote.sh.sha256"
     UPDATE_URL="file://${update_tmp}/remote.sh"
     UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
     SCRIPT_UPDATE_CACHE="${update_tmp}/update.cache"
@@ -1479,7 +1368,7 @@ bash tests/dog-limits.sh
         echo "Remote script runner must reject non-HTTPS sources." >&2
         exit 1
     fi
-    rm -f "$update_tmp/local.sh" "$update_tmp/remote.sh" "$update_tmp/remote.sh.sha256" "$update_tmp/update.cache" "$update_tmp/mirror.conf" "$update_tmp/verified.sh"
+    rm -f "$update_tmp/local.sh" "$update_tmp/remote.sh" "$update_tmp/remote.sh.sha256" "$update_tmp/update.cache"
     rmdir "$update_tmp"
 )
 

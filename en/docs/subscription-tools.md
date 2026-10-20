@@ -10,7 +10,7 @@ Main menu [5 Panels, nodes, and subscription tools]
 
 This entry manages related tools such as 3x-ui, S-UI, 2S-UI, Sing-box, Xray, xray-relay, SublinkPro, Sub-Store, Dockge, Komari, CDT Monitor, the dog.sh traffic monitor, and the x-ui extension.
 
-Xray relay is at `[5 Panels, nodes, and subscription tools] -> [9 Xray relay]`. It runs the [xray-relay installer](https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh) to install or update `xrelay` and open its management menu.
+Xray relay is at `[5 Panels, nodes, and subscription tools] -> [9 Xray relay (xrelay)]`. It runs the [xray-relay installer](https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh) to install or update `xrelay` and open its management menu.
 
 CDT Monitor is at `[5 Panels, nodes, and subscription tools] -> [14 CDT Monitor]`. It monitors Alibaba Cloud CDT traffic, manages ECS automation, and shows costs. See [CDT Monitor](cdt-monitor.md).
 

@@ -32,7 +32,7 @@ If GitHub is unreachable directly, choose a mirror yourself. This example uses `
 wget -qO vps.sh https://ghfast.top/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
 
-The script connects to GitHub directly by default. A mirror is used only after you save its address at `[9 System settings and cleanup] -> [10 GitHub update mirror]`. The setting is stored in `/etc/vps-optimize/update-mirror.conf` and survives updates. To replace an older `cy`, run the new script, configure a mirror if needed, and select `[17 Update script]`.
+The script connects to GitHub directly by default. A mirror is used only after you save its address at `[9 System settings and cleanup] -> [10 GitHub update mirror]`. It applies only to the script's own updates and to the change-mirror tool download; other third-party installers still use GitHub directly. The setting is stored in `/etc/vps-optimize/update-mirror.conf` and survives updates. Enter `-` in the same menu to restore direct access. To replace an older `cy`, run the new script, configure a mirror if needed, then select `[17 Update script]`.
 
 The first run registers the global shortcut:
 
@@ -77,7 +77,7 @@ Shortcuts are case-insensitive and behave like selecting the corresponding main-
 |---|---|
 | System setup | Preflight checks, common tools, timezone, IPv4 outbound preference, basic BBR, and package mirror switching |
 | Security hardening | SSH, public-key authentication, Fail2ban, firewall, and port concurrency limits |
-| Panels and subscriptions | 3x-ui, S-UI, 2S-UI, 3m-ui, Miaomiaowu, MiaomiaowuX, Sing-box, Xray, xray-relay, SublinkPro, Sub-Store, Dockge, Komari, and CDT Monitor |
+| Panels and subscriptions | 3x-ui, S-UI, 2S-UI, 3m-ui, Miaomiaowu, MiaomiaowuX, Sing-box, Xray, Xray relay (xray-relay), SublinkPro, Sub-Store, Dockge, Komari, and CDT Monitor |
 | Forwarding and networking | Realm, Gost, FLVX, EasyTier, and Tailscale |
 | Port 443 Reuse | Share public port `443` across Web services, panels, subscriptions, and nodes; Nginx Stream/TCP Peek route by SNI, while Xray Fallback uses the Xray main inbound |
 | Diagnostics and rollback | Service health, port 443 diagnostics, space checks, optional encrypted backups, restore, and quarantine archives |

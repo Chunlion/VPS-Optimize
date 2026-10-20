@@ -32,7 +32,7 @@ wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dis
 wget -qO vps.sh https://ghfast.top/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
 
-脚本默认直连 GitHub。需要镜像时，在 `[9 系统设置与清理] -> [10 GitHub 更新镜像]` 主动保存地址后才启用，配置保存在 `/etc/vps-optimize/update-mirror.conf`，更新后保留。已有旧版 `cy` 时，运行新版、按需设置镜像，再选择 `[17 更新脚本]` 完成替换。
+脚本默认直连 GitHub。需要镜像时，在 `[9 系统设置与清理] -> [10 GitHub 更新镜像]` 主动保存地址后才启用；该镜像只作用于脚本自身更新和换源工具下载，其它第三方安装脚本仍直连 GitHub。配置保存在 `/etc/vps-optimize/update-mirror.conf`，更新后保留；在同一菜单输入 `-` 可恢复直连。已有旧版 `cy` 时，先运行新版并按需设置镜像，再选择 `[17 更新脚本]` 完成替换。
 
 首次运行会注册全局快捷命令：
 
@@ -77,7 +77,7 @@ cy
 |---|---|
 | 系统初始化 | 预检、常用工具、时区、IPv4 出站优先、基础 BBR 和系统软件源切换 |
 | 安全加固 | SSH、公钥登录、Fail2ban、防火墙、端口并发限制 |
-| 面板与订阅 | 3x-ui、S-UI、2S-UI、3m-ui、妙妙屋、妙妙屋X、Sing-box、Xray、xray-relay、SublinkPro、Sub-Store、Dockge、Komari、CDT Monitor |
+| 面板与订阅 | 3x-ui、S-UI、2S-UI、3m-ui、妙妙屋、妙妙屋X、Sing-box、Xray、Xray 中转（xray-relay）、SublinkPro、Sub-Store、Dockge、Komari、CDT Monitor |
 | 转发与组网 | Realm、Gost、FLVX 哆啦转发面板、EasyTier、Tailscale |
 | 443端口复用 | Web、面板、订阅和节点共享公网 `443`；Nginx Stream/TCP Peek 按 SNI 分流，Xray Fallback 由 Xray 主入站接管 |
 | 诊断与回滚 | 服务健康、443 链路体检、空间预检、可选加密备份、恢复和隔离归档 |

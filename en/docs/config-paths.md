@@ -21,6 +21,8 @@ The menu path in this article is written in the format of "main menu [number men
 | Docker local anti-penetration | `Main menu [11 Docker management] -> [10 Docker local exposure protection]` |
 | Port concurrent connection limit | `Main menu [8 Firewall rules] -> [5 Port concurrent connection limit]` |
 | Switch interface language | `Main menu [20 Interface language]` |
+| Switch package mirrors | `Main menu [9 System settings and cleanup] -> [9 Switch package mirrors]` |
+| Set the GitHub update mirror | `Main menu [9 System settings and cleanup] -> [10 GitHub update mirror]` |
 
 "Full configuration backup" is the name of the menu, which actually refers to the script management configuration backup and does not include Docker volume, container business data, mirroring and complete firewall running status.
 
