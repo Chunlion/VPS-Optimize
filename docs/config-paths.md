@@ -305,7 +305,7 @@ nft list ruleset 2>/dev/null | grep -i port_traffic_monitor || true
 入口：
 
 ```text
-主菜单 [5 面板、节点与订阅工具] -> [13 端口流量监控（dog）]
+主菜单 [5 面板、节点与订阅工具] -> [16 端口流量监控（dog）]
 ```
 
 详细说明见 [dog.md](dog.md)。

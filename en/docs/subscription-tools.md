@@ -10,7 +10,7 @@ Main menu [5 Panels, nodes, and subscription tools]
 
 This entry manages related tools such as 3x-ui, S-UI, 2S-UI, Sing-box, Xray, SublinkPro, Sub-Store, Dockge, Komari, CDT Monitor, the dog.sh traffic monitor, and the x-ui extension.
 
-CDT Monitor is at `[5 Panels, nodes, and subscription tools] -> [16 CDT Monitor]`. It monitors Alibaba Cloud CDT traffic, manages ECS automation, and shows costs. See [CDT Monitor](cdt-monitor.md).
+CDT Monitor is at `[5 Panels, nodes, and subscription tools] -> [13 CDT Monitor]`. It monitors Alibaba Cloud CDT traffic, manages ECS automation, and shows costs. See [CDT Monitor](cdt-monitor.md).
 
 ## Deployment recommendations
 

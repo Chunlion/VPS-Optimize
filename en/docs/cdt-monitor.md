@@ -7,7 +7,7 @@
 Install or manage it from:
 
 ```text
-Main menu [5 Panels, nodes, and subscription tools] -> [16 CDT Monitor]
+Main menu [5 Panels, nodes, and subscription tools] -> [13 CDT Monitor]
 ```
 
 It listens on `127.0.0.1:43210` by default. Its Compose configuration is at `/opt/cdt-monitor/docker-compose.yml`; the first visit opens the administrator setup wizard.

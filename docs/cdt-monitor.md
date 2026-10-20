@@ -7,7 +7,7 @@
 从以下入口安装或管理：
 
 ```text
-主菜单 [5 面板、节点与订阅工具] -> [16 CDT Monitor]
+主菜单 [5 面板、节点与订阅工具] -> [13 CDT Monitor]
 ```
 
 默认监听 `127.0.0.1:43210`，Compose 配置位于 `/opt/cdt-monitor/docker-compose.yml`。首次访问会进入管理员初始化向导。

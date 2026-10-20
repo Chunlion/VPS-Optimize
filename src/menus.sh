@@ -57,13 +57,13 @@ show_panel_help() {
     echo "$(localized_text "3 面板 SSL 修复：443 接入前清空面板证书路径。" "3 Panel SSL repair: clear panel certificate paths before using Port 443 Reuse." "3 Исправление SSL панели: очистить пути сертификатов панели перед настройкой повторного использования порта 443.")"
     echo "$(localized_text "4 S-UI：安装、官方菜单、卸载。" "4 S-UI: install, open the official menu, or uninstall." "4 S-UI: установка, официальное меню и удаление.")"
     echo "$(localized_text "5/6 Sing-box 与 Xray：安装脚本，或进入脚本的管理菜单。" "5/6 Sing-box and Xray: install each script or open its management menu." "5/6 Sing-box и Xray: установить скрипт или открыть его меню управления.")"
-    echo "$(localized_text "7/8/9 订阅工具：SublinkPro、妙妙屋订阅、Sub-Store。" "7/8/9 Subscription tools: SublinkPro, Miaomiaowu subscriptions, and Sub-Store." "7/8/9 Инструменты подписок: SublinkPro, подписки Miaomiaowu и Sub-Store.")"
-    echo "$(localized_text "10 Komari：服务器监控面板。" "10 Komari: server monitoring panel." "10 Komari: панель мониторинга сервера.")"
-    echo "$(localized_text "13 端口流量监控（dog）：仅统计已监控端口的实际流量。" "13 Per-port traffic monitor (dog): shows traffic only for monitored ports." "13 Монитор трафика по портам (dog): показывает трафик только отслеживаемых портов.")"
-    echo "$(localized_text "15 2S-UI：运行官方安装器；不能与 S-UI 共存。" "15 2S-UI: run the official installer; do not install it alongside S-UI." "15 2S-UI: запустить официальный установщик; не устанавливайте его вместе с S-UI.")"
-    echo "$(localized_text "16 CDT Monitor：阿里云 CDT 流量与 ECS 监控。" "16 CDT Monitor: Alibaba Cloud CDT traffic and ECS monitoring." "16 CDT Monitor: мониторинг трафика CDT и ECS в Alibaba Cloud.")"
-    echo "$(localized_text "17 3m-ui：运行官方安装器。" "17 3m-ui: run the official installer." "17 3m-ui: запустить официальный установщик.")"
-    echo "$(localized_text "18 妙妙屋X：部署主控，后续在主控中生成 Agent 安装命令。" "18 MiaomiaowuX: deploy the controller, then generate Agent install commands from it." "18 MiaomiaowuX: развернуть контроллер, затем создать в нём команды установки Agent.")"
+    echo "$(localized_text "7 2S-UI：运行官方安装器；不能与 S-UI 共存。" "7 2S-UI: run the official installer; do not install it alongside S-UI." "7 2S-UI: запустить официальный установщик; не устанавливайте его вместе с S-UI.")"
+    echo "$(localized_text "8 3m-ui：运行官方安装器。" "8 3m-ui: run the official installer." "8 3m-ui: запустить официальный установщик.")"
+    echo "$(localized_text "9/10/11 订阅工具：SublinkPro、妙妙屋订阅、Sub-Store。" "9/10/11 Subscription tools: SublinkPro, Miaomiaowu subscriptions, and Sub-Store." "9/10/11 Инструменты подписок: SublinkPro, подписки Miaomiaowu и Sub-Store.")"
+    echo "$(localized_text "12 Komari：服务器监控面板。" "12 Komari: server monitoring panel." "12 Komari: панель мониторинга сервера.")"
+    echo "$(localized_text "13 CDT Monitor：阿里云 CDT 流量与 ECS 监控。" "13 CDT Monitor: Alibaba Cloud CDT traffic and ECS monitoring." "13 CDT Monitor: мониторинг трафика CDT и ECS в Alibaba Cloud.")"
+    echo "$(localized_text "14 妙妙屋X：部署主控，后续在主控中生成 Agent 安装命令。" "14 MiaomiaowuX: deploy the controller, then generate Agent install commands from it." "14 MiaomiaowuX: развернуть контроллер, затем создать в нём команды установки Agent.")"
+    echo "$(localized_text "16 端口流量监控（dog）：仅统计已监控端口的实际流量。" "16 Per-port traffic monitor (dog): shows traffic only for monitored ports." "16 Монитор трафика по портам (dog): показывает трафик только отслеживаемых портов.")"
     echo "$(localized_text "Dockge / Compose 管理在主菜单 [11 Docker 管理] -> [19 备份 / Compose 管理]。" "Dockge / Compose management is in main menu [11 Docker management] -> [19 Backup / Compose management]." "Управление Dockge / Compose находится в главном меню [11 Управление Docker] -> [19 Резервное копирование / управление Compose].")"
     echo "$(localized_text "公网 HTTPS：未启用 443端口复用时，走主菜单 [4 反向代理（Caddy / Nginx）]；已启用时，走 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理]。" "Public HTTPS: use main menu [4 Reverse proxy] before Port 443 Reuse; afterwards use [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies]." "Публичный HTTPS: до повторного использования порта 443 используйте [4 Обратный прокси], после — [19 Повторное использование порта 443] -> [2 Управлять Web-доменами и обратным прокси].")"
     echo "$(localized_text "? 查看帮助，0/q 返回主菜单。" "? View help, 0/q returns to the main menu." "? Просмотр справки, 0/q возвращает в главное меню.")"
@@ -240,15 +240,15 @@ func_panel_deploy_menu() {
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 面板 / 核心服务${PLAIN}" "${BOLD}▶ Panels / Core services${PLAIN}" "${BOLD}▶ Панели / основные службы${PLAIN}")"
         echo -e "$(localized_text "  ${BOLD}${GREEN}1.${PLAIN} ${BOLD}3x-ui 管理${PLAIN}          ${BOLD}${GREEN}2.${PLAIN} ${BOLD}x-ui 增强工具${PLAIN}      ${BOLD}${GREEN}3.${PLAIN} ${BOLD}面板 SSL 修复${PLAIN}" "${BOLD}${GREEN}1.${PLAIN} ${BOLD}3x-ui management${PLAIN} ${BOLD}${GREEN}2.${PLAIN} ${BOLD}x-ui extensions${PLAIN} ${BOLD}${GREEN}3.${PLAIN} ${BOLD}Panel SSL repair${PLAIN}" "${BOLD}${GREEN}1.${PLAIN} ${BOLD}Управление 3x-ui${PLAIN} ${BOLD}${GREEN}2.${PLAIN} ${BOLD}Расширения x-ui${PLAIN} ${BOLD}${GREEN}3.${PLAIN} ${BOLD}Исправление SSL панели${PLAIN}")"
         echo -e "$(localized_text "  ${BOLD}${GREEN}4.${PLAIN} ${BOLD}S-UI 管理${PLAIN}           ${BOLD}${GREEN}5.${PLAIN} ${BOLD}Sing-box 管理${PLAIN}       ${BOLD}${GREEN}6.${PLAIN} ${BOLD}Xray 管理${PLAIN}" "${BOLD}${GREEN}4.${PLAIN} ${BOLD}S-UI Management${PLAIN} ${BOLD}${GREEN}5.${PLAIN} ${BOLD}Sing-box Management${PLAIN} ${BOLD}${GREEN}6.${PLAIN} ${BOLD}Xray Management${PLAIN}" "${BOLD}${GREEN}4.${PLAIN} ${BOLD}Управление S-UI${PLAIN} ${BOLD}${GREEN}5.${PLAIN} ${BOLD}Управление Sing-box${PLAIN} ${BOLD}${GREEN}6.${PLAIN} ${BOLD}Управление Xray${PLAIN}")"
-        echo -e "$(localized_text " ${BOLD}${GREEN}15.${PLAIN} ${BOLD}安装 2S-UI${PLAIN}          ${BOLD}${GREEN}17.${PLAIN} ${BOLD}安装 3m-ui${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Install 2S-UI${PLAIN} ${BOLD}${GREEN}17.${PLAIN} ${BOLD}Install 3m-ui${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}Установить 2S-UI${PLAIN} ${BOLD}${GREEN}17.${PLAIN} ${BOLD}Установить 3m-ui${PLAIN}")"
+        echo -e "$(localized_text "  ${BOLD}${GREEN}7.${PLAIN} ${BOLD}安装 2S-UI${PLAIN}          ${BOLD}${GREEN}8.${PLAIN} ${BOLD}安装 3m-ui${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}Install 2S-UI${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Install 3m-ui${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}Установить 2S-UI${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Установить 3m-ui${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 订阅 / 监控${PLAIN}" "${BOLD}▶ Subscription / Monitoring${PLAIN}" "${BOLD}▶ Подписки / Мониторинг${PLAIN}")"
-        echo -e "$(localized_text "  ${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN}            ${BOLD}${GREEN}8.${PLAIN} ${BOLD}妙妙屋订阅${PLAIN}          ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Miaomiaowu subscriptions${PLAIN} ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}7.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}8.${PLAIN} ${BOLD}Подписки Miaomiaowu${PLAIN} ${BOLD}${GREEN}9.${PLAIN} ${BOLD}Sub-Store${PLAIN}")"
-        echo -e "$(localized_text " ${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari 监控${PLAIN}          ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN}        ${BOLD}${GREEN}18.${PLAIN} ${BOLD}妙妙屋X${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Komari monitoring${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN} ${BOLD}${GREEN}18.${PLAIN} ${BOLD}MiaomiaowuX${PLAIN}" "${BOLD}${GREEN}10.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}CDT Monitor${PLAIN} ${BOLD}${GREEN}18.${PLAIN} ${BOLD}MiaomiaowuX${PLAIN}")"
+        echo -e "$(localized_text "  ${BOLD}${GREEN}9.${PLAIN} ${BOLD}SublinkPro${PLAIN}           ${BOLD}${GREEN}10.${PLAIN} ${BOLD}妙妙屋订阅${PLAIN}          ${BOLD}${GREEN}11.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}9.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}10.${PLAIN} ${BOLD}Miaomiaowu subscriptions${PLAIN} ${BOLD}${GREEN}11.${PLAIN} ${BOLD}Sub-Store${PLAIN}" "${BOLD}${GREEN}9.${PLAIN} ${BOLD}SublinkPro${PLAIN} ${BOLD}${GREEN}10.${PLAIN} ${BOLD}Подписки Miaomiaowu${PLAIN} ${BOLD}${GREEN}11.${PLAIN} ${BOLD}Sub-Store${PLAIN}")"
+        echo -e "$(localized_text " ${BOLD}${GREEN}12.${PLAIN} ${BOLD}Komari 监控${PLAIN}          ${BOLD}${GREEN}13.${PLAIN} ${BOLD}CDT Monitor${PLAIN}        ${BOLD}${GREEN}14.${PLAIN} ${BOLD}妙妙屋X${PLAIN}" "${BOLD}${GREEN}12.${PLAIN} ${BOLD}Komari monitoring${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}CDT Monitor${PLAIN} ${BOLD}${GREEN}14.${PLAIN} ${BOLD}MiaomiaowuX${PLAIN}" "${BOLD}${GREEN}12.${PLAIN} ${BOLD}Мониторинг Komari${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}CDT Monitor${PLAIN} ${BOLD}${GREEN}14.${PLAIN} ${BOLD}MiaomiaowuX${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BOLD}${BLUE}▶ 网络与运维工具${PLAIN}" "${BOLD}▶ Network and operations tools${PLAIN}" "${BOLD}▶ Сеть и служебные утилиты${PLAIN}")"
-        echo -e "$(localized_text " ${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN}         ${BOLD}${GREEN}13.${PLAIN} ${BOLD}端口流量监控（dog）${PLAIN}" "${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Per-port traffic (dog)${PLAIN}" "${BOLD}${GREEN}12.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}13.${PLAIN} ${BOLD}Трафик по портам (dog)${PLAIN}")"
-        echo -e "$(localized_text " ${BOLD}${GREEN}14.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}14.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}14.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}")"
+        echo -e "$(localized_text " ${BOLD}${GREEN}15.${PLAIN} ${BOLD}IP-Sentinel${PLAIN}         ${BOLD}${GREEN}16.${PLAIN} ${BOLD}端口流量监控（dog）${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}Per-port traffic (dog)${PLAIN}" "${BOLD}${GREEN}15.${PLAIN} ${BOLD}IP-Sentinel${PLAIN} ${BOLD}${GREEN}16.${PLAIN} ${BOLD}Трафик по портам (dog)${PLAIN}")"
+        echo -e "$(localized_text " ${BOLD}${GREEN}17.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}17.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}" "${BOLD}${GREEN}17.${PLAIN} ${BOLD}Telegram VPS Bot${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
@@ -263,17 +263,17 @@ func_panel_deploy_menu() {
             4) func_sui_menu ;;
             5) func_singbox_menu ;;
             6) func_xray_menu ;;
-            7) func_sublinkpro_menu ;;
-            8) func_miaomiaowu_menu ;;
-            9) func_substore_menu ;;
-            10) func_komari_menu ;;
-            12) func_ip_sentinel ;;
-            13) func_port_dog ;;
-            14) func_vps_bot_x ;;
-            15) func_2sui_panel ;;
-            16) func_cdt_monitor_menu ;;
-            17) func_3m_ui ;;
-            18) func_miaomiaowux_panel ;;
+            7) func_2sui_panel ;;
+            8) func_3m_ui ;;
+            9) func_sublinkpro_menu ;;
+            10) func_miaomiaowu_menu ;;
+            11) func_substore_menu ;;
+            12) func_komari_menu ;;
+            13) func_cdt_monitor_menu ;;
+            14) func_miaomiaowux_panel ;;
+            15) func_ip_sentinel ;;
+            16) func_port_dog ;;
+            17) func_vps_bot_x ;;
             "?") show_panel_help; pause_return ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
