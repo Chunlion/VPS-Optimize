@@ -82,7 +82,7 @@ Shortcuts are case-insensitive and behave like selecting the corresponding main-
 | Port 443 Reuse | Share public port `443` across Web services, panels, subscriptions, and nodes; Nginx Stream/TCP Peek route by SNI, while Xray Fallback uses the Xray main inbound |
 | Diagnostics and rollback | Service health, port 443 diagnostics, space checks, optional encrypted backups, restore, and quarantine archives |
 
-Mirror selection: `Main menu [9 System settings and cleanup] -> [9 Switch package mirrors]`. [LinuxMirrors](https://linuxmirrors.cn/use/) provides mainland China, overseas, education-network, and custom mirrors. This changes system package sources without upgrading packages. GitHub, Docker, and pip/npm sources are configured separately; download speed depends on the server's network route.
+Mirror selection: `Main menu [9 System settings and cleanup] -> [9 Switch package mirrors]`. Choose mainland China, Asia, Europe, North America, South America, Oceania, or Africa, then select a mirror. Custom addresses are an advanced option. The [LinuxMirrors](https://linuxmirrors.cn/use/) tool is downloaded through the configured GitHub mirror. This changes system package sources without upgrading packages. GitHub, Docker, and pip/npm sources are configured separately; download speed depends on the server's network route.
 
 ## 📚 Documentation and Support
 

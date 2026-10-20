@@ -491,8 +491,75 @@ func_hosts_manage() {
 # ---------------------------------------------------------
 # 2. 系统高级开关 (已修复显示丢失问题)
 # ---------------------------------------------------------
+system_mirror_catalog() {
+    case "$1" in
+        1) printf '%s\n' \
+            '阿里云|Alibaba Cloud|mirrors.aliyun.com' \
+            '腾讯云|Tencent Cloud|mirrors.tencent.com' \
+            '华为云|Huawei Cloud|mirrors.huaweicloud.com' \
+            '移动云|China Mobile Cloud|mirrors.cmecloud.cn' \
+            '天翼云|China Telecom Cloud|mirrors.ctyun.cn' \
+            '网易|NetEase|mirrors.163.com' \
+            '火山引擎|Volcengine|mirrors.volces.com' \
+            '清华大学 TUNA|Tsinghua TUNA|mirrors.tuna.tsinghua.edu.cn' \
+            '北京大学|Peking University|mirrors.pku.edu.cn' \
+            '浙江大学|Zhejiang University|mirrors.zju.edu.cn' \
+            '南京大学|Nanjing University|mirrors.nju.edu.cn' \
+            '兰州大学|Lanzhou University|mirror.lzu.edu.cn' \
+            '上海交通大学|Shanghai Jiao Tong University|mirror.sjtu.edu.cn' \
+            '华中科技大学|Huazhong University of Science and Technology|mirrors.hust.edu.cn' \
+            '中国科学技术大学|USTC|mirrors.ustc.edu.cn' \
+            '中科院软件所|ISCAS|mirror.iscas.ac.cn' \
+            '中国科技云|China Science and Technology Cloud|mirrors.cstcloud.cn' ;;
+        2) printf '%s\n' \
+            '香港 xTom|xTom Hong Kong|mirrors.xtom.hk' \
+            '香港 01Link|01Link Hong Kong|mirror.01link.hk' \
+            '新加坡国立大学|National University of Singapore|download.nus.edu.sg/mirror' \
+            '新加坡 SG.GS|SG.GS Singapore|mirror.sg.gs' \
+            '新加坡 xTom|xTom Singapore|mirrors.xtom.sg' \
+            '台湾 NCHC|NCHC Taiwan|free.nchc.org.tw' \
+            '台湾 OSS Planet|OSS Planet Taiwan|mirror.ossplanet.net' \
+            '日本 JAIST|JAIST Japan|ftp.jaist.ac.jp/pub/Linux' \
+            '日本 xTom|xTom Japan|mirrors.xtom.jp' \
+            '马来西亚 GB Network|GB Network Malaysia|mirrors.gbnetwork.com' \
+            '泰国孔敬大学|Khon Kaen University Thailand|mirror.kku.ac.th' ;;
+        3) printf '%s\n' \
+            '英国 Vorboss|Vorboss UK|mirror.vorboss.net' \
+            '德国 dogado|dogado Germany|mirror.dogado.de' \
+            '德国 xTom|xTom Germany|mirrors.xtom.de' \
+            '德国亚琛工业大学|RWTH Aachen Germany|ftp.halifax.rwth-aachen.de' \
+            '法国 CCIN2P3|CCIN2P3 France|mirror.in2p3.fr/pub/linux' \
+            '荷兰 xTom|xTom Netherlands|mirrors.xtom.nl' \
+            '荷兰 Linux Kernel|Linux Kernel Netherlands|eu.edge.kernel.org' \
+            '丹麦 Dotsrc|Dotsrc Denmark|mirrors.dotsrc.org' \
+            '瑞典 Academic Computer Club|Academic Computer Club Sweden|mirror.accum.se' \
+            '俄罗斯 Yandex|Yandex Russia|mirror.yandex.ru' ;;
+        4) printf '%s\n' \
+            '美国 Linux Kernel|Linux Kernel USA|mirrors.kernel.org' \
+            '美国麻省理工学院|MIT USA|mirrors.mit.edu' \
+            '美国普林斯顿大学|Princeton University USA|mirror.math.princeton.edu/pub' \
+            '美国俄勒冈州立大学|Oregon State University USA|ftp-chi.osuosl.org/pub' \
+            '美国 FCIX|FCIX USA|mirror.fcix.net' \
+            '美国 xTom|xTom USA|mirrors.xtom.com' \
+            '加拿大不列颠哥伦比亚大学|University of British Columbia Canada|mirror.it.ubc.ca' \
+            '加拿大 GoCodeIT|GoCodeIT Canada|mirror.xenyth.net' ;;
+        5) printf '%s\n' \
+            '巴西 PoP-SC|PoP-SC Brazil|mirror.pop-sc.rnp.br/mirror' \
+            '巴西蓬塔格罗萨州立大学|UEPG Brazil|mirror.uepg.br' ;;
+        6) printf '%s\n' \
+            '澳大利亚 FCIX|FCIX Australia|gsl-syd.mm.fcix.net' \
+            '澳大利亚 AARNet|AARNet Australia|mirror.aarnet.edu.au/pub' \
+            '澳大利亚 xTom|xTom Australia|mirrors.xtom.au' \
+            '新西兰 Free Software Mirror Group|Free Software Mirror Group New Zealand|mirror.fsmg.org.nz' ;;
+        7) printf '%s\n' \
+            'Liquid Telecom|Liquid Telecom|mirror.liquidtelecom.com' \
+            'Dimension Data|Dimension Data|mirror.dimensiondata.com' ;;
+    esac
+}
+
 func_system_mirrors() {
-    local choice source branch language rc=0
+    local category choice source branch="" language label_zh label_en label index rc=0
+    local -a mirrors=()
     local -a mirror_args=(--upgrade-software false)
     case "$VPSO_LANGUAGE" in
         zh) language=zh ;;
@@ -505,30 +572,53 @@ func_system_mirrors() {
         print_breadcrumb "$(localized_text "系统设置与清理 > 切换系统软件源" "System settings and cleanup > Switch package mirrors" "Системные настройки и очистка > Смена зеркала пакетов")"
         echo -e "$(localized_text "${CYAN}切换系统软件源（LinuxMirrors）${PLAIN}" "${CYAN}Switch package mirrors (LinuxMirrors)${PLAIN}" "${CYAN}Смена зеркала пакетов (LinuxMirrors)${PLAIN}")"
         echo "$(localized_text "用于系统软件包下载；GitHub、Docker、pip/npm 的下载源不受影响。" "Applies to system packages; GitHub, Docker, and pip/npm download sources are unchanged." "Меняет источники системных пакетов; источники GitHub, Docker и pip/npm остаются прежними.")"
-        echo "$(localized_text "选择地区后再选镜像站；实际速度取决于本机线路，不自动升级软件包。" "Select a region, then a mirror. Speed depends on your network route; packages will not be upgraded." "Выберите регион, затем зеркало. Скорость зависит от маршрута сети; пакеты обновляться не будут.")"
-        echo "$(localized_text "1. 中国大陆（阿里云、腾讯云、华为云、清华、中科大等）" "1. Mainland China (Alibaba, Tencent, Huawei, Tsinghua, USTC, and more)" "1. Материковый Китай (Alibaba, Tencent, Huawei, Tsinghua, USTC и другие)")"
-        echo "$(localized_text "2. 境外及海外镜像站" "2. Mirrors outside mainland China" "2. Зеркала за пределами материкового Китая")"
-        echo "$(localized_text "3. 中国大陆教育网镜像站" "3. Mainland China education network mirrors" "3. Зеркала образовательной сети Китая")"
-        echo "$(localized_text "4. 自定义镜像地址" "4. Custom mirror address" "4. Свой адрес зеркала")"
+        echo "$(localized_text "选择地区后直接选择镜像站，不自动升级软件包。" "Select a region, then a mirror. Packages will not be upgraded." "Выберите регион, затем зеркало. Пакеты обновляться не будут.")"
+        echo "$(localized_text "1. 中国大陆" "1. Mainland China" "1. Материковый Китай")"
+        echo "$(localized_text "2. 亚洲（香港 / 台湾 / 日本 / 新加坡等）" "2. Asia (Hong Kong, Taiwan, Japan, Singapore, and more)" "2. Азия (Гонконг, Тайвань, Япония, Сингапур и другие)")"
+        echo "$(localized_text "3. 欧洲" "3. Europe" "3. Европа")"
+        echo "$(localized_text "4. 北美" "4. North America" "4. Северная Америка")"
+        echo "$(localized_text "5. 南美" "5. South America" "5. Южная Америка")"
+        echo "$(localized_text "6. 大洋洲" "6. Oceania" "6. Океания")"
+        echo "$(localized_text "7. 非洲" "7. Africa" "7. Африка")"
+        echo "$(localized_text "8. 自定义镜像地址（高级）" "8. Custom mirror address (advanced)" "8. Свой адрес зеркала (дополнительно)")"
         echo "$(localized_text "0. 返回 / q 返回" "0. Back / q Back" "0. Назад / q Назад")"
-        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
-        case "$choice" in
-            1) break ;;
-            2) mirror_args+=(--abroad); break ;;
-            3) mirror_args+=(--edu); break ;;
-            4)
+        read_trimmed category "$(localized_text "选择分类: " "Select a category: " "Выберите категорию: ")"
+        case "$category" in
+            1|2|3|4|5|6|7)
+                mapfile -t mirrors < <(system_mirror_catalog "$category")
+                while true; do
+                    clear
+                    echo "$(localized_text "选择具体镜像站：" "Select a mirror:" "Выберите зеркало:")"
+                    for index in "${!mirrors[@]}"; do
+                        IFS='|' read -r label_zh label_en source <<<"${mirrors[index]}"
+                        if [[ "$VPSO_LANGUAGE" == zh ]]; then label="$label_zh"; else label="$label_en"; fi
+                        printf '%2d. %s (%s)\n' "$((index + 1))" "$label" "$source"
+                    done
+                    echo "$(localized_text "0. 返回分类 / q 返回分类" "0. Back to categories / q Back" "0. К категориям / q Назад")"
+                    read_trimmed choice "$(localized_text "选择镜像站: " "Select a mirror: " "Выберите зеркало: ")"
+                    case "$choice" in 0|q|Q|'') break ;; esac
+                    if [[ "$choice" =~ ^[1-9][0-9]?$ ]] && (( choice <= ${#mirrors[@]} )); then
+                        IFS='|' read -r label_zh label_en source <<<"${mirrors[choice - 1]}"
+                        if [[ "$OS" == rocky && "$source" == mirrors.aliyun.com ]]; then branch=rockylinux; fi
+                        break 2
+                    fi
+                    echo "$(localized_text "无效选择。" "Invalid selection." "Неверный выбор.")"
+                    sleep 1
+                done
+                ;;
+            8)
                 read_trimmed source "$(localized_text "镜像域名或 IP（不含协议，空白取消）: " "Mirror hostname or IP (without protocol, blank to cancel): " "Домен или IP зеркала (без протокола, пусто для отмены): ")"
                 [[ -n "$source" ]] || continue
                 read_trimmed branch "$(localized_text "仓库路径（空白使用系统默认目录）: " "Repository path (blank for the distribution default): " "Путь репозитория (пусто для стандартного пути системы): ")"
-                mirror_args+=(--source "$source")
-                [[ -z "$branch" ]] || mirror_args+=(--branch "$branch")
                 break
                 ;;
             0|q|Q|'') return 0 ;;
             *) echo "$(localized_text "无效选择。" "Invalid selection." "Неверный выбор.")"; sleep 1 ;;
         esac
     done
-    run_remote_script "$(localized_text "切换系统软件源" "Switch package mirrors" "Смена зеркала пакетов")" "https://linuxmirrors.cn/main.sh" "${mirror_args[@]}" || rc=$?
+    mirror_args+=(--source "$source")
+    [[ -z "$branch" ]] || mirror_args+=(--branch "$branch")
+    run_remote_script "$(localized_text "切换系统软件源" "Switch package mirrors" "Смена зеркала пакетов")" "${UPDATE_MIRROR}/https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh" "${mirror_args[@]}" || rc=$?
     pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
     return "$rc"
 }
@@ -581,7 +671,7 @@ func_system_tweaks() {
         echo -e "$(localized_text "${GREEN}  6. 自动安全更新${PLAIN}           当前: [ $str_update ]" "${GREEN}  6. Automatic security updates${PLAIN} Status: [ $str_update ]" "${GREEN}  6. Автоматические обновления безопасности${PLAIN} Состояние: [ $str_update ]")"
         echo -e "$(localized_text "${GREEN}  7. 清理系统${PLAIN}               (日志 / 缓存 / 无用包)" "${GREEN}  7. Clean up system${PLAIN}       (logs / cache / unused packages)" "${GREEN}  7. Очистить систему${PLAIN}      (журналы / кэш / ненужные пакеты)")"
         echo -e "$(localized_text "${RED}  8. 系统重装${PLAIN}               (重启后清空主硬盘；高风险)" "${RED}8. System reinstallation${PLAIN} (erases the main disk after reboot; high risk)" "${RED}8. Переустановка системы${PLAIN} (очистит основной диск после перезагрузки; высокий риск)")"
-        echo -e "$(localized_text "${GREEN}  9. 切换系统软件源${PLAIN}         (国内 / 海外 / 教育网 / 自定义)" "${GREEN}  9. Switch package mirrors${PLAIN} (China / overseas / education / custom)" "${GREEN}  9. Сменить зеркало пакетов${PLAIN} (Китай / другие страны / образование / своё)")"
+        echo -e "$(localized_text "${GREEN}  9. 切换系统软件源${PLAIN}         (按地区选择具体镜像站)" "${GREEN}  9. Switch package mirrors${PLAIN} (select a region and mirror)" "${GREEN}  9. Сменить зеркало пакетов${PLAIN} (выбор региона и зеркала)")"
         echo -e "$(localized_text "${GREEN} 10. GitHub 更新镜像${PLAIN}         (设置默认脚本更新镜像)" "${GREEN} 10. GitHub update mirror${PLAIN}  (set the default script update mirror)" "${GREEN} 10. Зеркало обновлений GitHub${PLAIN} (зеркало для обновления сценария)")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
