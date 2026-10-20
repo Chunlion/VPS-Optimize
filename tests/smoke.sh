@@ -1385,6 +1385,57 @@ bash tests/dog-limits.sh
     sha256sum "$update_tmp/remote.sh" > "$update_tmp/remote.sh.sha256"
 
     source src/updater.sh
+    UPDATE_MIRROR_CONFIG="${update_tmp}/mirror.conf"
+    SCRIPT_UPDATE_CACHE="${update_tmp}/update.cache"
+    clear() { :; }
+    print_breadcrumb() { :; }
+    pause_after_external_script() { :; }
+    sleep() { :; }
+    load_script_update_mirror
+    [[ "$UPDATE_URL" == https://ghfast.top/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh ]]
+    [[ "$UPDATE_SHA256_URL" == "${UPDATE_URL}.sha256" ]]
+    for VPSO_LANGUAGE in zh en ru; do
+        touch "$SCRIPT_UPDATE_CACHE"
+        func_configure_update_mirror <<< $'http://mirror.example\nhttps://mirror.example/' >/dev/null
+        [[ "$(cat "$UPDATE_MIRROR_CONFIG")" == https://mirror.example ]]
+        [[ ! -f "$SCRIPT_UPDATE_CACHE" ]]
+        UPDATE_MIRROR=https://ghfast.top
+        load_script_update_mirror
+        [[ "$UPDATE_URL" == https://mirror.example/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh ]]
+        [[ "$UPDATE_SHA256_URL" == "${UPDATE_URL}.sha256" ]]
+        for mirror_back in q Q ''; do
+            func_configure_update_mirror <<<"$mirror_back" >/dev/null
+            [[ "$(cat "$UPDATE_MIRROR_CONFIG")" == https://mirror.example ]]
+        done
+    done
+    curl() {
+        local url="${!#}"
+        case "$url" in
+            "$UPDATE_URL") cat "$update_tmp/remote.sh" ;;
+            "$UPDATE_SHA256_URL") cat "$update_tmp/remote.sh.sha256" ;;
+            *) return 1 ;;
+        esac
+    }
+    [[ "$(fetch_latest_script_version)" == "$vps_smoke_script_version" ]]
+    [[ "$(fetch_latest_script_sha256)" == "$(sha256sum "$update_tmp/remote.sh" | awk '{print $1}')" ]]
+    (
+        download_remote_script() {
+            case "$1" in
+                "$UPDATE_URL") cp "$update_tmp/remote.sh" "$2" ;;
+                "$UPDATE_SHA256_URL") cp "$update_tmp/remote.sh.sha256" "$2" ;;
+                *) return 1 ;;
+            esac
+        }
+        download_verified_update_script "$update_tmp/verified.sh"
+        cmp "$update_tmp/remote.sh" "$update_tmp/verified.sh"
+        printf '%064d  remote.sh\n' 0 > "$update_tmp/remote.sh.sha256"
+        if download_verified_update_script "$update_tmp/rejected.sh"; then
+            echo 'A mirrored update with a checksum mismatch must be rejected.' >&2
+            exit 1
+        fi
+        [[ ! -e "$update_tmp/rejected.sh" ]]
+    )
+    sha256sum "$update_tmp/remote.sh" > "$update_tmp/remote.sh.sha256"
     UPDATE_URL="file://${update_tmp}/remote.sh"
     UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
     SCRIPT_UPDATE_CACHE="${update_tmp}/update.cache"
@@ -1410,7 +1461,7 @@ bash tests/dog-limits.sh
         echo "Remote script runner must reject non-HTTPS sources." >&2
         exit 1
     fi
-    rm -f "$update_tmp/local.sh" "$update_tmp/remote.sh" "$update_tmp/remote.sh.sha256" "$update_tmp/update.cache"
+    rm -f "$update_tmp/local.sh" "$update_tmp/remote.sh" "$update_tmp/remote.sh.sha256" "$update_tmp/update.cache" "$update_tmp/mirror.conf" "$update_tmp/verified.sh"
     rmdir "$update_tmp"
 )
 

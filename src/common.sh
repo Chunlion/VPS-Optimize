@@ -20,7 +20,10 @@ if [[ -n "${NO_COLOR+x}" ]]; then
 fi
 
 SCRIPT_VERSION="v2.7"
-UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
+UPDATE_BASE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
+UPDATE_MIRROR="https://ghfast.top"
+UPDATE_MIRROR_CONFIG="/etc/vps-optimize/update-mirror.conf"
+UPDATE_URL="${UPDATE_MIRROR}/${UPDATE_BASE_URL}"
 UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
 TRAFFIC_GUARD_CONFIG="/etc/vps-optimize/traffic-guard.conf"

@@ -20,11 +20,19 @@
 
 ## 🚀 Быстрый старт
 
-> ⚠️ Загружайте скрипт из этого репозитория или через GitHub Raw. Не запускайте от `root` файл, полученный через недоверенный GitHub-прокси.
+> ⚠️ Загружайте скрипт только из этого репозитория или через доверенное зеркало. Не используйте неизвестные прокси ускорения.
 
 ```bash
 wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
+
+Если GitHub недоступен напрямую:
+
+```bash
+wget -qO vps.sh https://ghfast.top/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
+```
+
+Обновления сценария по умолчанию используют `https://ghfast.top`. Изменить зеркало можно в `[9 Системные настройки и очистка] -> [10 Зеркало обновлений GitHub]`. Префикс сохраняется в `/etc/vps-optimize/update-mirror.conf` и остаётся после обновления. Чтобы заменить старый `cy`, запустите новый сценарий и выберите `[17 Обновить скрипт]`.
 
 При первом запуске регистрируется глобальная команда:
 

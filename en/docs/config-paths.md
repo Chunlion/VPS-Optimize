@@ -29,6 +29,7 @@ The menu path in this article is written in the format of "main menu [number men
 | path | Description |
 |---|---|
 | `/usr/local/bin/cy` | Main script quick entry |
+| `/etc/vps-optimize/update-mirror.conf` | GitHub update mirror prefix in plain text; defaults to `https://ghfast.top` without a custom setting |
 | `vps.sh` of the current directory | Manually download the runtime script file |
 | `/etc/vps-optimize` | VPS-Optimize configuration, backup index and quarantine directory |
 | `/etc/vps-optimize/language.conf` | Interface language setting; supports `LANGUAGE=zh`, `LANGUAGE=en`, `LANGUAGE=ru` |

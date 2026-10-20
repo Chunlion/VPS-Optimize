@@ -32,7 +32,10 @@ if [[ -n "${NO_COLOR+x}" ]]; then
 fi
 
 SCRIPT_VERSION="v2.7"
-UPDATE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
+UPDATE_BASE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
+UPDATE_MIRROR="https://ghfast.top"
+UPDATE_MIRROR_CONFIG="/etc/vps-optimize/update-mirror.conf"
+UPDATE_URL="${UPDATE_MIRROR}/${UPDATE_BASE_URL}"
 UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
 SCRIPT_UPDATE_CACHE="/etc/vps-optimize/update-check.cache"
 TRAFFIC_GUARD_CONFIG="/etc/vps-optimize/traffic-guard.conf"
@@ -4086,6 +4089,7 @@ func_system_tweaks() {
         echo -e "$(localized_text "${GREEN}  7. 清理系统${PLAIN}               (日志 / 缓存 / 无用包)" "${GREEN}  7. Clean up system${PLAIN}       (logs / cache / unused packages)" "${GREEN}  7. Очистить систему${PLAIN}      (журналы / кэш / ненужные пакеты)")"
         echo -e "$(localized_text "${RED}  8. 系统重装${PLAIN}               (重启后清空主硬盘；高风险)" "${RED}8. System reinstallation${PLAIN} (erases the main disk after reboot; high risk)" "${RED}8. Переустановка системы${PLAIN} (очистит основной диск после перезагрузки; высокий риск)")"
         echo -e "$(localized_text "${GREEN}  9. 切换系统软件源${PLAIN}         (国内 / 海外 / 教育网 / 自定义)" "${GREEN}  9. Switch package mirrors${PLAIN} (China / overseas / education / custom)" "${GREEN}  9. Сменить зеркало пакетов${PLAIN} (Китай / другие страны / образование / своё)")"
+        echo -e "$(localized_text "${GREEN} 10. GitHub 更新镜像${PLAIN}         (设置默认脚本更新镜像)" "${GREEN} 10. GitHub update mirror${PLAIN}  (set the default script update mirror)" "${GREEN} 10. Зеркало обновлений GitHub${PLAIN} (зеркало для обновления сценария)")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -4165,6 +4169,7 @@ func_system_tweaks() {
                 sleep 1 ;;
             8) func_system_reinstall ;;
             9) func_system_mirrors ;;
+            10) func_configure_update_mirror ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac
@@ -20210,6 +20215,42 @@ func_reboot_server() {
 # shellcheck shell=bash
 # Script update cache, version comparison, notice, and hot-update workflows.
 
+load_script_update_mirror() {
+    if [[ -s "$UPDATE_MIRROR_CONFIG" ]]; then
+        UPDATE_MIRROR=$(<"$UPDATE_MIRROR_CONFIG")
+    fi
+    UPDATE_MIRROR="${UPDATE_MIRROR%/}"
+    UPDATE_URL="${UPDATE_MIRROR}/${UPDATE_BASE_URL}"
+    UPDATE_SHA256_URL="${UPDATE_URL}.sha256"
+}
+
+func_configure_update_mirror() {
+    local mirror
+    while true; do
+        clear
+        print_breadcrumb "$(localized_text "系统设置与清理 > GitHub 更新镜像" "System settings and cleanup > GitHub update mirror" "Системные настройки и очистка > Зеркало обновлений GitHub")"
+        echo "$(localized_text "当前更新镜像：${UPDATE_MIRROR}" "Current update mirror: ${UPDATE_MIRROR}" "Текущее зеркало обновлений: ${UPDATE_MIRROR}")"
+        echo "$(localized_text "输入你信任的 HTTPS 镜像前缀；保存后，版本检查、脚本和校验文件统一使用它。" "Enter a trusted HTTPS mirror prefix. Version checks, scripts, and checksum files will all use it." "Введите префикс доверенного HTTPS-зеркала. Проверка версии, сценарий и контрольная сумма будут загружаться через него.")"
+        read_trimmed mirror "$(localized_text "镜像前缀（回车保持，q 返回）: " "Mirror prefix (Enter to keep, q to return): " "Префикс зеркала (Enter — оставить, q — назад): ")"
+        case "$mirror" in
+            ''|q|Q) return 0 ;;
+        esac
+        if [[ ! "$mirror" =~ ^https://[^/?#[:space:]@]+(/[^?#[:space:]@]*)?$ ]]; then
+            echo "$(localized_text "请输入不含账号密码的完整 HTTPS 镜像前缀。" "Enter a complete HTTPS mirror prefix without credentials." "Введите полный HTTPS-префикс зеркала без логина и пароля.")"
+            sleep 1
+            continue
+        fi
+        mirror="${mirror%/}"
+        mkdir -p "$(dirname "$UPDATE_MIRROR_CONFIG")" || return 1
+        printf '%s\n' "$mirror" > "$UPDATE_MIRROR_CONFIG" || return 1
+        load_script_update_mirror
+        rm -f "$SCRIPT_UPDATE_CACHE"
+        echo "$(localized_text "已保存，后续脚本更新默认使用：${UPDATE_MIRROR}" "Saved. Future script updates will use: ${UPDATE_MIRROR}" "Сохранено. Обновления сценария будут использовать: ${UPDATE_MIRROR}")"
+        pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
+        return 0
+    done
+}
+
 fetch_latest_script_version() {
     local line version
     if command -v curl >/dev/null 2>&1; then
@@ -20382,7 +20423,7 @@ func_update_script() {
         read -n 1 -s -r -p "$(localized_text "按任意键返回..." "Press any key to return..." "Нажмите любую клавишу, чтобы вернуться...")"
         return 1
     }
-    echo -e "$(localized_text "${CYAN}👉 正在从 GitHub 源地址拉取最新版本...${PLAIN}" "${CYAN}👉 Pulling the latest version from the GitHub source address...${PLAIN}" "${CYAN}👉 Получение последней версии с исходного адреса GitHub...${PLAIN}")"
+    echo -e "$(localized_text "${CYAN}👉 正在通过 ${UPDATE_MIRROR} 下载最新版本...${PLAIN}" "${CYAN}👉 Downloading the latest version through ${UPDATE_MIRROR}...${PLAIN}" "${CYAN}👉 Загрузка последней версии через ${UPDATE_MIRROR}...${PLAIN}")"
     if download_verified_update_script "$tmp_file" \
         && grep -q "func_sni_stack_quick_menu" "$tmp_file" 2>/dev/null \
         && grep -q "main_menu" "$tmp_file" 2>/dev/null \
@@ -24115,6 +24156,7 @@ main_menu() {
 main() {
     load_ui_language
     ensure_runtime_root
+    load_script_update_mirror
     acquire_vpso_session_lock
     prompt_initial_ui_language
     main_menu "$@"

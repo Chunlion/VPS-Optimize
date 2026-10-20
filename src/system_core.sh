@@ -582,6 +582,7 @@ func_system_tweaks() {
         echo -e "$(localized_text "${GREEN}  7. 清理系统${PLAIN}               (日志 / 缓存 / 无用包)" "${GREEN}  7. Clean up system${PLAIN}       (logs / cache / unused packages)" "${GREEN}  7. Очистить систему${PLAIN}      (журналы / кэш / ненужные пакеты)")"
         echo -e "$(localized_text "${RED}  8. 系统重装${PLAIN}               (重启后清空主硬盘；高风险)" "${RED}8. System reinstallation${PLAIN} (erases the main disk after reboot; high risk)" "${RED}8. Переустановка системы${PLAIN} (очистит основной диск после перезагрузки; высокий риск)")"
         echo -e "$(localized_text "${GREEN}  9. 切换系统软件源${PLAIN}         (国内 / 海外 / 教育网 / 自定义)" "${GREEN}  9. Switch package mirrors${PLAIN} (China / overseas / education / custom)" "${GREEN}  9. Сменить зеркало пакетов${PLAIN} (Китай / другие страны / образование / своё)")"
+        echo -e "$(localized_text "${GREEN} 10. GitHub 更新镜像${PLAIN}         (设置默认脚本更新镜像)" "${GREEN} 10. GitHub update mirror${PLAIN}  (set the default script update mirror)" "${GREEN} 10. Зеркало обновлений GitHub${PLAIN} (зеркало для обновления сценария)")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${RED}  0. 返回主菜单 / q 返回${PLAIN}" "${RED}0. Main menu / q Back${PLAIN}" "${RED}0. Главное меню / q Назад${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
@@ -661,6 +662,7 @@ func_system_tweaks() {
                 sleep 1 ;;
             8) func_system_reinstall ;;
             9) func_system_mirrors ;;
+            10) func_configure_update_mirror ;;
             0|q|Q) break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择！${PLAIN}" "${RED}❌ Invalid selection!${PLAIN}" "${RED}❌ Неверный выбор!${PLAIN}")"; sleep 1 ;;
         esac

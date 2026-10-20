@@ -20,11 +20,19 @@
 
 ## 🚀 Quick Start
 
-> ⚠️ Download the script from this repository or GitHub Raw. Do not run a file obtained through an untrusted GitHub proxy as `root`.
+> ⚠️ Download the script only from this repository or a mirror you trust. Avoid unknown acceleration proxies.
 
 ```bash
 wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
+
+If GitHub is unreachable directly:
+
+```bash
+wget -qO vps.sh https://ghfast.top/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
+```
+
+Script updates default to `https://ghfast.top`. Change it at `[9 System settings and cleanup] -> [10 GitHub update mirror]`. The prefix is saved in `/etc/vps-optimize/update-mirror.conf` and survives updates. To replace an older `cy`, run the new script and select `[17 Update script]`.
 
 The first run registers the global shortcut:
 
