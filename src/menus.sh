@@ -289,6 +289,7 @@ func_sni_stack_quick_menu() {
         *) sni_title_column=27 ;;
     esac
     while true; do
+        clear
         show_current_entry_summary
         echo -e "------------------------------------------------"
         echo -e "${CYAN}================================================${PLAIN}"
