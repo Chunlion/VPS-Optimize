@@ -61,6 +61,7 @@ source src/menus.sh
 
 (
     VPSO_LANGUAGE=zh
+    clear() { :; }
     show_current_entry_summary() { :; }
     print_breadcrumb() { :; }
     print_menu_item() { :; }

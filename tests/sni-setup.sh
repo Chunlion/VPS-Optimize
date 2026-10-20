@@ -222,6 +222,7 @@ PY
 )
 (
     VPSO_LANGUAGE=zh
+    clear() { :; }
     load_sni_stack_env() { :; }
     get_entry_mode() { echo nginx-stream; }
     show_current_entry_summary() { :; }
