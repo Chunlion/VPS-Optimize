@@ -32,7 +32,7 @@ wget -qO vps.sh https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dis
 wget -qO vps.sh https://ghfast.top/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
 
-脚本默认直连 GitHub。需要镜像时，在 `[9 系统设置与清理] -> [10 GitHub 更新镜像]` 主动保存地址后才启用；该镜像只作用于脚本自身更新和换源工具下载，其它第三方安装脚本仍直连 GitHub。配置保存在 `/etc/vps-optimize/update-mirror.conf`，更新后保留；在同一菜单输入 `-` 可恢复直连。已有旧版 `cy` 时，先运行新版并按需设置镜像，再选择 `[17 更新脚本]` 完成替换。
+脚本默认直连 GitHub。访问不了 GitHub 的机器，先在 `[9 系统设置与清理] -> [10 GitHub 更新镜像]` 保存一个可用镜像：脚本自身更新会走它，其它 GitHub 安装脚本直连失败时也会自动改走它重试。系统换源工具优先从 LinuxMirrors 官方站点（linuxmirrors.cn）下载，不依赖 GitHub。配置保存在 `/etc/vps-optimize/update-mirror.conf`，更新后保留；在同一菜单输入 `-` 可恢复直连。已有旧版 `cy` 时，先运行新版并按需设置镜像，再选择 `[17 更新脚本]` 完成替换。
 
 首次运行会注册全局快捷命令：
 

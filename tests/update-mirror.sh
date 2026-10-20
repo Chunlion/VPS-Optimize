@@ -126,4 +126,32 @@ curl() {
     [[ ! -e "$tmp_dir/rejected.sh" ]]
 )
 
+# 10. GitHub 直连失败时，远程脚本下载自动改用已配置镜像重试。
+mirror_target="https://mirror.example/https://raw.githubusercontent.com/example/install.sh"
+download_remote_script() {
+    case "$1" in
+        "$mirror_target") printf '#!/usr/bin/env bash\necho MIRRORED-OK\n' > "$2" ;;
+        *) return 1 ;;
+    esac
+}
+UPDATE_MIRROR=https://mirror.example
+fallback_output=$(run_remote_script "fallback" "https://raw.githubusercontent.com/example/install.sh" 2>&1)
+[[ "$fallback_output" == *"改用已配置的镜像重试"* ]]
+[[ "$fallback_output" == *"MIRRORED-OK"* ]]
+if run_remote_script "fallback" "https://raw.githubusercontent.com/other/install.sh" >/dev/null 2>&1; then
+    echo 'Unreachable direct URL and mirror must fail.' >&2
+    exit 1
+fi
+
+# github.com 形式的脚本地址同样会走镜像重试。
+mirror_target="https://mirror.example/https://github.com/233boy/Xray/raw/main/install.sh"
+download_remote_script() {
+    case "$1" in
+        "$mirror_target") printf '#!/usr/bin/env bash\necho GITHUB-MIRRORED\n' > "$2" ;;
+        *) return 1 ;;
+    esac
+}
+fallback_output=$(run_remote_script "fallback" "https://github.com/233boy/Xray/raw/main/install.sh" 2>&1)
+[[ "$fallback_output" == *"GITHUB-MIRRORED"* ]]
+
 echo "Update mirror tests passed."

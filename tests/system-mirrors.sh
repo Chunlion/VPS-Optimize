@@ -27,6 +27,7 @@ mirror_status=0
 mirror_call=()
 run_remote_script() { mirror_call=("$@"); return "$mirror_status"; }
 system_mirror_source_reachable() { return 0; }
+remote_url_available() { return 0; }
 
 # 目录结构：每站都有中英标签与地址，地址不含协议，且不重复。
 mapfile -t catalog_all < <(for catalog_category in {1..7}; do system_mirror_catalog "$catalog_category"; done)
@@ -151,11 +152,27 @@ func_system_mirrors <<< $'1\n1\ny\n' >/dev/null
 [[ "${mirror_call[*]:6}" == '--source mirrors.aliyun.com' ]]
 system_mirror_source_reachable() { return 0; }
 
-# 未配置 GitHub 镜像时直接请求原始地址。
+# 未配置 GitHub 镜像时优先 LinuxMirrors 官方站点（国内可直连）。
 UPDATE_MIRROR=""
 mirror_call=()
 func_system_mirrors <<< $'1\n2\n' >/dev/null
+[[ "${mirror_call[1]}" == https://linuxmirrors.cn/main.sh ]]
+
+# 官方站点不可用时退回 GitHub 原始地址。
+remote_url_available() { [[ "$1" == https://raw.githubusercontent.com/* ]]; }
+mirror_call=()
+func_system_mirrors <<< $'1\n2\n' >/dev/null
 [[ "${mirror_call[1]}" == https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh ]]
+
+# 所有下载地址都不可用时直接报错，不调用远程脚本。
+remote_url_available() { return 1; }
+mirror_call=()
+if func_system_mirrors <<< $'1\n1\n' >/dev/null; then
+    echo 'Mirror switch must fail when no download source is reachable.' >&2
+    exit 1
+fi
+[[ ${#mirror_call[@]} == 0 ]]
+remote_url_available() { return 0; }
 
 # 换源失败要原样返回退出码。
 mirror_status=23

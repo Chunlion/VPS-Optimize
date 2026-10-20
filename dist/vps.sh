@@ -400,6 +400,7 @@ restart_service_if_available() {
 download_remote_script() {
     local url="$1"
     local output_file="$2"
+    local quiet="${3:-false}"
     local downloaded=1
     local local_file
 
@@ -429,10 +430,22 @@ download_remote_script() {
     fi
 
     if [[ "$downloaded" -ne 0 ]]; then
-        echo -e "$(localized_text "${RED}❌ 下载远程脚本失败，请检查网络、DNS 或 GitHub 连通性。${PLAIN}" "${RED}❌ Failed to download remote script, please check network, DNS or GitHub connectivity.${PLAIN}" "${RED}❌ Не удалось загрузить удаленный сценарий. Проверьте сеть, подключение DNS или GitHub.${PLAIN}")"
+        [[ "$quiet" == "true" ]] || echo -e "$(localized_text "${RED}❌ 下载远程脚本失败，请检查网络、DNS 或 GitHub 连通性。${PLAIN}" "${RED}❌ Failed to download remote script, please check network, DNS or GitHub connectivity.${PLAIN}" "${RED}❌ Не удалось загрузить удаленный сценарий. Проверьте сеть, подключение DNS или GitHub.${PLAIN}")"
         return 1
     fi
     [[ -s "$output_file" ]]
+}
+
+# 轻量探测：只取前 2KB，判断地址是否能下载，用于在多来源之间挑选可用地址。
+remote_url_available() {
+    local url="$1"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL -o /dev/null -r 0-2047 --connect-timeout 4 --max-time 8 "$url" >/dev/null 2>&1
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q --tries=1 --timeout=8 --header='Range: bytes=0-2047' -O /dev/null "$url" >/dev/null 2>&1
+    else
+        return 1
+    fi
 }
 
 verify_file_sha256() {
@@ -522,6 +535,11 @@ is_trusted_remote_script_url() {
             echo "$(localized_text "LinuxMirrors 官方换源脚本" "LinuxMirrors official change-mirror script" "Официальный скрипт смены зеркала LinuxMirrors")"
             return 0
             ;;
+        "https://linuxmirrors.cn/main.sh"|\
+        "https://edgeone.linuxmirrors.cn/main.sh")
+            echo "$(localized_text "LinuxMirrors 官方站点换源脚本" "LinuxMirrors change-mirror script (official site)" "Скрипт смены зеркала LinuxMirrors (официальный сайт)")"
+            return 0
+            ;;
         "https://raw.githubusercontent.com/Chunlion/xray-relay/main/install.sh")
             echo "$(localized_text "xray-relay 安装脚本" "xray-relay installation script" "Скрипт установки xray-relay")"
             return 0
@@ -575,10 +593,21 @@ run_remote_script() {
         echo -e "$(localized_text "${RED}❌ 临时文件创建失败，已取消执行。${PLAIN}" "${RED}❌ Temporary file creation failed and execution has been cancelled.${PLAIN}" "${RED}❌ Не удалось создать временный файл, и выполнение было отменено.${PLAIN}")"
         return 1
     }
-    if ! download_remote_script "$url" "$tmp_file"; then
-        rm -f "$tmp_file"
-        echo -e "$(localized_text "${RED}❌ 下载失败，请检查网络或脚本来源。${PLAIN}" "${RED}❌ Download failed, please check the network or script source.${PLAIN}" "${RED}❌ Не удалось загрузить, проверьте сеть или источник сценария.${PLAIN}")"
-        return 1
+    if ! download_remote_script "$url" "$tmp_file" true; then
+        if [[ -n "$UPDATE_MIRROR" && ( "$url" == https://raw.githubusercontent.com/* || "$url" == https://github.com/* ) ]]; then
+            url="${UPDATE_MIRROR}/${url}"
+            echo -e "$(localized_text "${YELLOW}⚠️ GitHub 直连失败，改用已配置的镜像重试：${UPDATE_MIRROR}${PLAIN}" "${YELLOW}⚠️ Direct GitHub access failed; retrying through the configured mirror: ${UPDATE_MIRROR}${PLAIN}" "${YELLOW}⚠️ Прямой доступ к GitHub не удался; повтор через настроенное зеркало: ${UPDATE_MIRROR}${PLAIN}")"
+            download_remote_script "$url" "$tmp_file" true || {
+                rm -f "$tmp_file"
+                echo -e "$(localized_text "${RED}❌ 直连与镜像均下载失败，请检查网络。可在 [9 系统设置与清理] -> [10 GitHub 更新镜像] 更换镜像后重试。${PLAIN}" "${RED}❌ Both direct access and the mirror failed. Check the network, or change the mirror at [9 System settings and cleanup] -> [10 GitHub update mirror].${PLAIN}" "${RED}❌ Не удалось загрузить ни напрямую, ни через зеркало. Проверьте сеть или смените зеркало в [9]->[10].${PLAIN}")"
+                return 1
+            }
+        else
+            rm -f "$tmp_file"
+            echo -e "$(localized_text "${RED}❌ 下载失败，请检查网络或脚本来源。${PLAIN}" "${RED}❌ Download failed, please check the network or script source.${PLAIN}" "${RED}❌ Не удалось загрузить, проверьте сеть или источник сценария.${PLAIN}")"
+            echo -e "$(localized_text "${YELLOW}若目标地址是 GitHub，可先在 [9 系统设置与清理] -> [10 GitHub 更新镜像] 配置可用镜像。${PLAIN}" "${YELLOW}If the target is GitHub, configure a working mirror at [9 System settings and cleanup] -> [10 GitHub update mirror] first.${PLAIN}" "${YELLOW}Если это GitHub, сначала настройте зеркало в [9 Системные настройки и очистка] -> [10 Зеркало обновлений GitHub].${PLAIN}")"
+            return 1
+        fi
     fi
     if ! bash -n "$tmp_file" >/dev/null 2>&1; then
         echo -e "$(localized_text "${RED}❌ 远程脚本未通过 Bash 语法检查，已中止执行。${PLAIN}" "${RED}❌ The remote script failed the Bash syntax check and execution was aborted.${PLAIN}" "${RED}❌ Удаленный сценарий не прошел проверку синтаксиса Bash, и выполнение было прервано.${PLAIN}")"
@@ -4138,8 +4167,30 @@ system_mirror_source_reachable() {
     fi
 }
 
+# 换源工具优先走 LinuxMirrors 官方站点：国内机器通常访问不了 GitHub Raw。
+# 配置了 GitHub 镜像时先试镜像，再退回官方站点与 GitHub 原始地址。
+linuxmirrors_script_candidates() {
+    if [[ -n "$UPDATE_MIRROR" ]]; then
+        printf '%s\n' "${UPDATE_MIRROR}/https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh"
+    fi
+    printf '%s\n' \
+        "https://linuxmirrors.cn/main.sh" \
+        "https://edgeone.linuxmirrors.cn/main.sh" \
+        "https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh"
+}
+
+resolve_linuxmirrors_script_url() {
+    local candidate
+    while IFS= read -r candidate; do
+        remote_url_available "$candidate" || continue
+        printf '%s' "$candidate"
+        return 0
+    done < <(linuxmirrors_script_candidates)
+    return 1
+}
+
 func_system_mirrors() {
-    local category_choice choice source branch="" language label_zh label_en label index rc=0 current_host mirror_row
+    local category_choice choice source branch="" language label_zh label_en label index rc=0 current_host mirror_row script_url
     local -a mirrors=()
     local -a mirror_rows=()
     local -a mirror_args=(--upgrade-software false)
@@ -4237,13 +4288,18 @@ func_system_mirrors() {
             continue
         fi
 
+        if ! script_url=$(resolve_linuxmirrors_script_url); then
+            echo -e "$(localized_text "${RED}❌ 换源工具下载地址都不可用（GitHub 与 LinuxMirrors 官方站点）。请检查网络，或先在 [9 系统设置与清理] -> [10 GitHub 更新镜像] 配置可用镜像后重试。${PLAIN}" "${RED}❌ None of the change-mirror download sources is reachable (GitHub and the official LinuxMirrors site). Check the network, or configure a working mirror at [9 System settings and cleanup] -> [10 GitHub update mirror].${PLAIN}" "${RED}❌ Все источники скрипта недоступны (GitHub и официальный сайт LinuxMirrors). Проверьте сеть или настройте зеркало в [9]->[10].${PLAIN}")"
+            pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
+            return 1
+        fi
         mirror_args+=(--source "$source")
         [[ -z "$branch" ]] || mirror_args+=(--branch "$branch")
-        run_remote_script "$(localized_text "切换系统软件源" "Switch package mirrors" "Смена зеркала пакетов")" "${UPDATE_MIRROR:+$UPDATE_MIRROR/}https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh" "${mirror_args[@]}" || rc=$?
+        run_remote_script "$(localized_text "切换系统软件源" "Switch package mirrors" "Смена зеркала пакетов")" "$script_url" "${mirror_args[@]}" || rc=$?
         if (( rc == 0 )); then
             echo -e "$(localized_text "${GREEN}✅ 已切换到 ${source}${PLAIN}" "${GREEN}✅ Switched to ${source}${PLAIN}" "${GREEN}✅ Переключено на ${source}${PLAIN}")"
         else
-            echo -e "$(localized_text "${RED}❌ 换源未完成（退出码 ${rc}）；原软件源文件已备份为同名 .bak，可手动恢复。${PLAIN}" "${RED}❌ Mirror switch did not finish (exit code ${rc}); original files are backed up as .bak for manual restore.${PLAIN}" "${RED}❌ Смена зеркал не завершена (код ${rc}); исходные файлы сохранены как .bak.${PLAIN}")"
+            echo -e "$(localized_text "${RED}❌ 换源未完成（退出码 ${rc}）。脚本若已开始改写软件源，原文件会备份为同名 .bak。${PLAIN}" "${RED}❌ Mirror switch did not finish (exit code ${rc}). If the script already rewrote the package sources, the originals are saved as .bak files.${PLAIN}" "${RED}❌ Смена зеркал не завершена (код ${rc}). Если скрипт уже изменил источники, исходные файлы сохранены как .bak.${PLAIN}")"
         fi
         pause_after_external_script "$(localized_text "按回车键返回菜单..." "Press Enter to return to the menu..." "Нажмите Enter, чтобы вернуться в меню...")"
         return "$rc"

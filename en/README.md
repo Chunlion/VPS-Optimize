@@ -32,7 +32,7 @@ If GitHub is unreachable directly, choose a mirror yourself. This example uses `
 wget -qO vps.sh https://ghfast.top/https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh && chmod +x vps.sh && ./vps.sh
 ```
 
-The script connects to GitHub directly by default. A mirror is used only after you save its address at `[9 System settings and cleanup] -> [10 GitHub update mirror]`. It applies only to the script's own updates and to the change-mirror tool download; other third-party installers still use GitHub directly. The setting is stored in `/etc/vps-optimize/update-mirror.conf` and survives updates. Enter `-` in the same menu to restore direct access. To replace an older `cy`, run the new script, configure a mirror if needed, then select `[17 Update script]`.
+The script connects to GitHub directly by default. On machines that cannot reach GitHub, save a working mirror at `[9 System settings and cleanup] -> [10 GitHub update mirror]`: script self-updates use it, and other GitHub-hosted installers automatically retry through it when direct access fails. The package mirror tool is downloaded from the official LinuxMirrors site (linuxmirrors.cn) and does not depend on GitHub. The setting is stored in `/etc/vps-optimize/update-mirror.conf` and survives updates. Enter `-` in the same menu to restore direct access. To replace an older `cy`, run the new script, configure a mirror if needed, then select `[17 Update script]`.
 
 The first run registers the global shortcut:
 
