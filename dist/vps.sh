@@ -70,7 +70,7 @@ is_redhat() {
 
 apt_update_once() {
     [[ "$APT_UPDATED" == "1" ]] && return 0
-    apt-get update -qq >/dev/null 2>&1 && APT_UPDATED=1
+    apt-get update -qq && APT_UPDATED=1
 }
 
 file_size_bytes() {
@@ -153,8 +153,8 @@ install_pkg() {
     if is_debian; then
         # 使用 apt-get 代替 apt，消除 "stable CLI interface" 警告 
         export DEBIAN_FRONTEND=noninteractive
-        apt_update_once >>"$log_file" 2>&1 || true
-        apt-get install -y -qq "${pkgs[@]}" >>"$log_file" 2>&1
+        apt_update_once >>"$log_file" 2>&1 &&
+            apt-get install -y -qq "${pkgs[@]}" >>"$log_file" 2>&1
         rc=$?
         unset DEBIAN_FRONTEND
     elif is_redhat; then

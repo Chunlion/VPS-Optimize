@@ -38,6 +38,56 @@ source src/kernel_tuning.sh
 source src/system_core.sh
 source src/dns_optimize.sh
 
+(
+    OS=debian
+    OS_LIKE=""
+    APT_UPDATED=0
+    update_rc=100
+    install_rc=0
+    pkg_log_file() { printf '%s\n' "$compat_tmp_dir/pkg-install.log"; }
+    apt-get() {
+        printf '%s\n' "$1" >> "$compat_tmp_dir/apt-calls"
+        case "$1" in
+            update)
+                if [[ "$update_rc" -ne 0 ]]; then
+                    echo 'E: Could not get lock /var/lib/apt/lists/lock. It is held by process 3814 (apt)' >&2
+                fi
+                return "$update_rc"
+                ;;
+            install) return "$install_rc" ;;
+        esac
+    }
+
+    if install_pkg sqlite3 > "$compat_tmp_dir/pkg-output" 2>&1; then
+        echo "install_pkg must fail when apt update fails." >&2
+        exit 1
+    else
+        [[ "$?" -eq 100 ]]
+    fi
+    [[ "$(cat "$compat_tmp_dir/apt-calls")" == update ]]
+    [[ "$APT_UPDATED" == 0 ]]
+    [[ -z "${DEBIAN_FRONTEND+x}" ]]
+    grep -Fq 'held by process 3814 (apt)' "$compat_tmp_dir/pkg-install.log"
+    grep -Fq 'held by process 3814 (apt)' "$compat_tmp_dir/pkg-output"
+
+    update_rc=0
+    : > "$compat_tmp_dir/apt-calls"
+    install_pkg sqlite3 > "$compat_tmp_dir/pkg-output" 2>&1
+    [[ "$(cat "$compat_tmp_dir/apt-calls")" == $'update\ninstall' ]]
+    [[ "$APT_UPDATED" == 1 ]]
+    [[ ! -e "$compat_tmp_dir/pkg-install.log" ]]
+
+    : > "$compat_tmp_dir/apt-calls"
+    install_rc=42
+    if install_pkg sqlite3 > "$compat_tmp_dir/pkg-output" 2>&1; then
+        echo "install_pkg must preserve apt install failures." >&2
+        exit 1
+    else
+        [[ "$?" -eq 42 ]]
+    fi
+    [[ "$(cat "$compat_tmp_dir/apt-calls")" == install ]]
+)
+
 [[ "$(localized_text "中文" "English")" == "中文" ]]
 save_ui_language en
 [[ "$VPSO_LANGUAGE" == "en" ]]
