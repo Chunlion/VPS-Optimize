@@ -56,6 +56,7 @@ restore_sni_stack_backup_files() {
 /etc/nginx/conf.d/00-vps-default-drop.conf|nginx_default_sites/00-vps-default-drop.conf
 /etc/vps-optimize/sni-stack.env|vps-optimize/sni-stack.env
 /etc/vps-optimize/xray-sni-routes.conf|vps-optimize/xray-sni-routes.conf
+/etc/vps-optimize/xhttp-paths.conf|vps-optimize/xhttp-paths.conf
 /etc/vps-optimize/443-engine.conf|vps-optimize/443-engine.conf
 /etc/vps-optimize/vpso-mux.yaml|vps-optimize/vpso-mux.yaml
 /etc/systemd/system/vpso-mux.service|systemd/vpso-mux.service

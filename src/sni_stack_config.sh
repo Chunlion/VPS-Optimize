@@ -904,6 +904,7 @@ load_sni_stack_env() {
     normalize_site_stack_arrays
     normalize_tcp_route_arrays
     load_xray_sni_route_arrays
+    load_xhttp_path_arrays
     normalize_sni_ip_whitelist_arrays
 }
 
@@ -939,6 +940,12 @@ print_sni_stack_current_summary() {
         local xray_route_i
         for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
             echo -e "$(localized_text "Xray 入站：  ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}" "Xray Inbound: ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}" "Xray Входящий: ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}")"
+        done
+    fi
+    if [[ ${#XHTTP_PATH_DOMAINS[@]} -gt 0 ]]; then
+        local xhttp_i
+        for xhttp_i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+            echo -e "$(localized_text "xhttp 路径： https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}" "xhttp path:  https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}" "xhttp путь:  https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}")"
         done
     fi
     echo -e "$(localized_text "Web 反代：  ${web_label} (${web_backend})" "Web reverse proxy: ${web_label} (${web_backend})" "веб-прокси: ${web_label} (${web_backend})")"
@@ -1079,6 +1086,117 @@ save_xray_sni_route_arrays() {
         rm -f "$route_tmp"
         return 1
     fi
+}
+
+xhttp_paths_path() {
+    echo "/etc/vps-optimize/xhttp-paths.conf"
+}
+
+normalize_xhttp_path() {
+    local path
+    path="$(trim_input "${1:-}")"
+    [[ -n "$path" ]] || return 1
+    [[ "$path" == /* ]] || path="/${path}"
+    path="${path%/}"
+    [[ -n "$path" && "$path" != "/" ]] || return 1
+    [[ "$path" == *"|"* || "$path" == *"?"* || "$path" == *"#"* || "$path" == *".."* ]] && return 1
+    [[ "$path" =~ [[:space:]] ]] && return 1
+    printf '%s\n' "$path"
+}
+
+load_xhttp_path_arrays() {
+    local route_file line domain route_path addr port
+    route_file=$(xhttp_paths_path)
+    XHTTP_PATH_DOMAINS=()
+    XHTTP_PATH_PATHS=()
+    XHTTP_PATH_ADDRS=()
+    XHTTP_PATH_PORTS=()
+
+    [[ -f "$route_file" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%#*}"
+        [[ -n "$(trim_input "$line")" ]] || continue
+        IFS='|' read -r domain route_path addr port _ <<< "$line"
+        domain=$(normalize_domain_input "$domain")
+        route_path=$(normalize_xhttp_path "$route_path" 2>/dev/null || true)
+        addr=$(normalize_loopback_addr "${addr:-127.0.0.1}")
+        port="$(trim_input "${port:-}")"
+        if is_valid_domain "$domain" && [[ -n "$route_path" ]] && is_loopback_listen_addr "$addr" && is_valid_port "$port"; then
+            XHTTP_PATH_DOMAINS+=("$domain")
+            XHTTP_PATH_PATHS+=("$route_path")
+            XHTTP_PATH_ADDRS+=("$addr")
+            XHTTP_PATH_PORTS+=("$port")
+        fi
+    done < "$route_file"
+}
+
+save_xhttp_path_arrays() {
+    local route_file route_tmp i
+    route_file=$(xhttp_paths_path)
+    mkdir -p "$(dirname "$route_file")" || return 1
+    route_tmp=$(mktemp "${route_file}.tmp.XXXXXX") || return 1
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ -n "${XHTTP_PATH_DOMAINS[$i]:-}" && -n "${XHTTP_PATH_PATHS[$i]:-}" ]] || continue
+        printf '%s|%s|%s|%s\n' \
+            "${XHTTP_PATH_DOMAINS[$i]}" \
+            "${XHTTP_PATH_PATHS[$i]}" \
+            "${XHTTP_PATH_ADDRS[$i]}" \
+            "${XHTTP_PATH_PORTS[$i]}" >> "$route_tmp" || { rm -f "$route_tmp"; return 1; }
+    done
+    if ! chmod 600 "$route_tmp" || ! mv -f "$route_tmp" "$route_file"; then
+        rm -f "$route_tmp"
+        return 1
+    fi
+}
+
+xhttp_paths_for_domain() {
+    local domain="$1" i
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$domain" ]] || continue
+        printf '%s|%s|%s\n' "${XHTTP_PATH_PATHS[$i]}" "${XHTTP_PATH_ADDRS[$i]}" "${XHTTP_PATH_PORTS[$i]}"
+    done
+}
+
+rename_xhttp_path_domain() {
+    local old_domain="$1" new_domain="$2" i
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$old_domain" ]] && XHTTP_PATH_DOMAINS[$i]="$new_domain"
+    done
+    return 0
+}
+
+remove_xhttp_paths_for_domain() {
+    local domain="$1" i
+    local -a domains=() paths=() addrs=() ports=()
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$domain" ]] && continue
+        domains+=("${XHTTP_PATH_DOMAINS[$i]}")
+        paths+=("${XHTTP_PATH_PATHS[$i]}")
+        addrs+=("${XHTTP_PATH_ADDRS[$i]}")
+        ports+=("${XHTTP_PATH_PORTS[$i]}")
+    done
+    XHTTP_PATH_DOMAINS=("${domains[@]}")
+    XHTTP_PATH_PATHS=("${paths[@]}")
+    XHTTP_PATH_ADDRS=("${addrs[@]}")
+    XHTTP_PATH_PORTS=("${ports[@]}")
+    return 0
+}
+
+xhttp_path_conflicts_with_web_paths() {
+    local candidate="$1" existing
+    local -a reserved=()
+    [[ -n "${PANEL_WEB_PATH:-}" ]] && reserved+=("$(normalize_xhttp_path "$PANEL_WEB_PATH" 2>/dev/null || true)")
+    [[ -n "${SUB_URI_PATH:-}" ]] && reserved+=("$(normalize_xhttp_path "$SUB_URI_PATH" 2>/dev/null || true)")
+    [[ -n "${CLASH_URI_PATH:-}" ]] && reserved+=("$(normalize_xhttp_path "$CLASH_URI_PATH" 2>/dev/null || true)")
+    for existing in "${reserved[@]}"; do
+        [[ -n "$existing" ]] || continue
+        # Nginx serves these with prefix locations, so plain prefix overlap is also a conflict.
+        if [[ "$candidate" == "$existing"* || "$existing" == "$candidate"* ]]; then
+            printf '%s\n' "$existing"
+            return 0
+        fi
+    done
+    return 1
 }
 
 xray_sni_route_index() {

@@ -27,6 +27,7 @@ create_sni_stack_backup() {
 /etc/nginx/conf.d/00-vps-default-drop.conf|nginx_default_sites/00-vps-default-drop.conf
 /etc/vps-optimize/sni-stack.env|vps-optimize/sni-stack.env
 /etc/vps-optimize/xray-sni-routes.conf|vps-optimize/xray-sni-routes.conf
+/etc/vps-optimize/xhttp-paths.conf|vps-optimize/xhttp-paths.conf
 /etc/vps-optimize/443-engine.conf|vps-optimize/443-engine.conf
 /etc/vps-optimize/vpso-mux.yaml|vps-optimize/vpso-mux.yaml
 /etc/systemd/system/vpso-mux.service|systemd/vpso-mux.service
@@ -206,6 +207,7 @@ backup_copy_managed_configuration() {
     backup_copy_path /etc/vps-optimize/sni-stack.env etc/vps-optimize/sni-stack.env "$manifest_file" "$work_dir" && copied=0
     backup_copy_path /etc/vps-optimize/sni-stack.last-backup etc/vps-optimize/sni-stack.last-backup "$manifest_file" "$work_dir" && copied=0
     backup_copy_path /etc/vps-optimize/443-engine.conf etc/vps-optimize/443-engine.conf "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/vps-optimize/xhttp-paths.conf etc/vps-optimize/xhttp-paths.conf "$manifest_file" "$work_dir" && copied=0
     backup_copy_path /etc/vps-optimize/vpso-mux.yaml etc/vps-optimize/vpso-mux.yaml "$manifest_file" "$work_dir" && copied=0
     backup_copy_path /etc/systemd/system/vpso-mux.service etc/systemd/system/vpso-mux.service "$manifest_file" "$work_dir" && copied=0
     backup_copy_path /usr/local/bin/vpso-mux usr/local/bin/vpso-mux "$manifest_file" "$work_dir" && copied=0

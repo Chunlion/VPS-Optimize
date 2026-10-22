@@ -83,6 +83,11 @@ assert_nginx_single_entry_web_render() {
         "ssl_certificate /etc/caddy/certs/panel.example.com.crt;" \
         "location ^~ /sub/ {" \
         "location ^~ /clash/ {" \
+        "location ^~ /xhttp {" \
+        "location ^~ /xhttpdl {" \
+        "proxy_buffering off;" \
+        "proxy_request_buffering off;" \
+        "proxy_pass http://127.0.0.1:2400;" \
         "proxy_set_header X-Forwarded-Port 443;" \
         "proxy_pass http://127.0.0.1:2096;" \
         "proxy_pass http://127.0.0.1:40000;" \
@@ -91,9 +96,30 @@ assert_nginx_single_entry_web_render() {
         "proxy_pass http://127.0.0.1:3000;"; do
         assert_contains "$file" "$needle"
     done
+    assert_grep_count "$file" '^    location \^~ /xhttp \{' 1
+    assert_grep_count "$file" '^    location \^~ /xhttpdl \{' 1
     for needle in "listen 443 ssl" "listen 0.0.0.0:443" "listen [::]:443" "server_name tcp.example.com;" "server_name node.example.com;"; do
         assert_not_contains "$file" "$needle"
     done
+}
+
+assert_caddy_single_entry_web_render() {
+    local panel_file="$1"
+    local site_file="$2"
+    assert_contains "$panel_file" "    @xhttp_0 path /xhttp /xhttp/*"
+    assert_contains "$panel_file" "    handle @xhttp_0 {"
+    assert_contains "$panel_file" "        reverse_proxy 127.0.0.1:2400 {"
+    assert_contains "$panel_file" "            flush_interval -1"
+    assert_contains "$panel_file" "    @sub path /sub /sub/* /clash /clash/*"
+    assert_contains "$site_file" "    @xhttp_0 path /xhttpdl /xhttpdl/*"
+    assert_contains "$site_file" "        reverse_proxy 127.0.0.1:2401 {"
+    assert_contains "$site_file" "    handle {"
+    assert_contains "$site_file" "        reverse_proxy 127.0.0.1:3000 {"
+    local handle_line backend_line
+    handle_line=$(grep -nF "    handle {" "$site_file" | head -n 1 | cut -d: -f1)
+    backend_line=$(grep -nF "        reverse_proxy 127.0.0.1:3000 {" "$site_file" | head -n 1 | cut -d: -f1)
+    [[ -n "$handle_line" && -n "$backend_line" ]] || fail_golden_assertion "Caddy site config must wrap the default backend in a handle block."
+    (( handle_line < backend_line )) || fail_golden_assertion "Caddy site handle must precede the default backend."
 }
 
 assert_nginx_reverse_proxy_render() {
@@ -133,6 +159,8 @@ cleanup_golden_tmp() {
     rm -f "$tmp_dir/nginx-reverse-proxy.conf"
     rm -f "$tmp_dir/vpso-mux.yaml"
     rm -f "$tmp_dir/nginx-strict-sni.conf"
+    rm -f "$tmp_dir/panel.caddy"
+    rm -f "$tmp_dir/site.example.com.caddy"
     rm -f "$tmp_dir/disable-ipv6"
     rmdir "$tmp_dir" 2>/dev/null || true
 }
@@ -171,6 +199,10 @@ TCP_ROUTE_PORTS=(2443 2444 2445)
 XRAY_SNI_ROUTE_SNIS=(node.example.com)
 XRAY_SNI_ROUTE_ADDRS=(127.0.0.1)
 XRAY_SNI_ROUTE_PORTS=(3443)
+XHTTP_PATH_DOMAINS=(panel.example.com site.example.com)
+XHTTP_PATH_PATHS=(/xhttp /xhttpdl)
+XHTTP_PATH_ADDRS=(127.0.0.1 127.0.0.1)
+XHTTP_PATH_PORTS=(2400 2401)
 SNI_IP_WHITELIST_DOMAINS=(panel.example.com site.example.com)
 SNI_IP_WHITELIST_RANGES=("198.51.100.10 2001:db8::/32" "203.0.113.5")
 WEB_PROXY_ENGINE=nginx
@@ -182,6 +214,8 @@ printf '1\n' > "$VPSO_PROC_SYS_DISABLE_IPV6"
 
 nginx() { printf '%s\n' 'nginx version: nginx/1.24.0' >&2; }
 write_nginx_single_443_web_config "$tmp_dir/nginx-single-entry-web.conf"
+write_caddy_panel_config "$tmp_dir/panel.caddy"
+write_caddy_site_config "$tmp_dir"
 unset -f nginx
 write_nginx_reverse_proxy_conf "proxy.example.com" "40000" "n" "$tmp_dir/nginx-reverse-proxy.conf" "198.51.100.10 2001:db8::/32"
 write_vpso_mux_config_from_sni_stack "$NGINX_LISTEN_PORT" "$tmp_dir/vpso-mux.yaml" >/dev/null
@@ -194,6 +228,7 @@ diff -u tests/golden/nginx-reverse-proxy.expected "$tmp_dir/nginx-reverse-proxy.
 diff -u tests/golden/vpso-mux.yaml.expected "$tmp_dir/vpso-mux.yaml"
 
 assert_nginx_single_entry_web_render "$tmp_dir/nginx-single-entry-web.conf"
+assert_caddy_single_entry_web_render "$tmp_dir/panel.caddy" "$tmp_dir/site.example.com.caddy"
 assert_nginx_reverse_proxy_render "$tmp_dir/nginx-reverse-proxy.conf"
 assert_vpso_mux_render "$tmp_dir/vpso-mux.yaml"
 assert_contains "$tmp_dir/nginx-strict-sni.conf" "    default vps_ip_reject_backend;"

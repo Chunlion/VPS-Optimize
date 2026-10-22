@@ -1932,6 +1932,7 @@ restore_sni_stack_backup_files() {
 /etc/nginx/conf.d/00-vps-default-drop.conf|nginx_default_sites/00-vps-default-drop.conf
 /etc/vps-optimize/sni-stack.env|vps-optimize/sni-stack.env
 /etc/vps-optimize/xray-sni-routes.conf|vps-optimize/xray-sni-routes.conf
+/etc/vps-optimize/xhttp-paths.conf|vps-optimize/xhttp-paths.conf
 /etc/vps-optimize/443-engine.conf|vps-optimize/443-engine.conf
 /etc/vps-optimize/vpso-mux.yaml|vps-optimize/vpso-mux.yaml
 /etc/systemd/system/vpso-mux.service|systemd/vpso-mux.service
@@ -2135,6 +2136,7 @@ create_sni_stack_backup() {
 /etc/nginx/conf.d/00-vps-default-drop.conf|nginx_default_sites/00-vps-default-drop.conf
 /etc/vps-optimize/sni-stack.env|vps-optimize/sni-stack.env
 /etc/vps-optimize/xray-sni-routes.conf|vps-optimize/xray-sni-routes.conf
+/etc/vps-optimize/xhttp-paths.conf|vps-optimize/xhttp-paths.conf
 /etc/vps-optimize/443-engine.conf|vps-optimize/443-engine.conf
 /etc/vps-optimize/vpso-mux.yaml|vps-optimize/vpso-mux.yaml
 /etc/systemd/system/vpso-mux.service|systemd/vpso-mux.service
@@ -2314,6 +2316,7 @@ backup_copy_managed_configuration() {
     backup_copy_path /etc/vps-optimize/sni-stack.env etc/vps-optimize/sni-stack.env "$manifest_file" "$work_dir" && copied=0
     backup_copy_path /etc/vps-optimize/sni-stack.last-backup etc/vps-optimize/sni-stack.last-backup "$manifest_file" "$work_dir" && copied=0
     backup_copy_path /etc/vps-optimize/443-engine.conf etc/vps-optimize/443-engine.conf "$manifest_file" "$work_dir" && copied=0
+    backup_copy_path /etc/vps-optimize/xhttp-paths.conf etc/vps-optimize/xhttp-paths.conf "$manifest_file" "$work_dir" && copied=0
     backup_copy_path /etc/vps-optimize/vpso-mux.yaml etc/vps-optimize/vpso-mux.yaml "$manifest_file" "$work_dir" && copied=0
     backup_copy_path /etc/systemd/system/vpso-mux.service etc/systemd/system/vpso-mux.service "$manifest_file" "$work_dir" && copied=0
     backup_copy_path /usr/local/bin/vpso-mux usr/local/bin/vpso-mux "$manifest_file" "$work_dir" && copied=0
@@ -9251,6 +9254,7 @@ load_sni_stack_env() {
     normalize_site_stack_arrays
     normalize_tcp_route_arrays
     load_xray_sni_route_arrays
+    load_xhttp_path_arrays
     normalize_sni_ip_whitelist_arrays
 }
 
@@ -9286,6 +9290,12 @@ print_sni_stack_current_summary() {
         local xray_route_i
         for xray_route_i in "${!XRAY_SNI_ROUTE_SNIS[@]}"; do
             echo -e "$(localized_text "Xray 入站：  ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}" "Xray Inbound: ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}" "Xray Входящий: ${XRAY_SNI_ROUTE_SNIS[$xray_route_i]} -> ${XRAY_SNI_ROUTE_ADDRS[$xray_route_i]}:${XRAY_SNI_ROUTE_PORTS[$xray_route_i]}")"
+        done
+    fi
+    if [[ ${#XHTTP_PATH_DOMAINS[@]} -gt 0 ]]; then
+        local xhttp_i
+        for xhttp_i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+            echo -e "$(localized_text "xhttp 路径： https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}" "xhttp path:  https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}" "xhttp путь:  https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}")"
         done
     fi
     echo -e "$(localized_text "Web 反代：  ${web_label} (${web_backend})" "Web reverse proxy: ${web_label} (${web_backend})" "веб-прокси: ${web_label} (${web_backend})")"
@@ -9426,6 +9436,117 @@ save_xray_sni_route_arrays() {
         rm -f "$route_tmp"
         return 1
     fi
+}
+
+xhttp_paths_path() {
+    echo "/etc/vps-optimize/xhttp-paths.conf"
+}
+
+normalize_xhttp_path() {
+    local path
+    path="$(trim_input "${1:-}")"
+    [[ -n "$path" ]] || return 1
+    [[ "$path" == /* ]] || path="/${path}"
+    path="${path%/}"
+    [[ -n "$path" && "$path" != "/" ]] || return 1
+    [[ "$path" == *"|"* || "$path" == *"?"* || "$path" == *"#"* || "$path" == *".."* ]] && return 1
+    [[ "$path" =~ [[:space:]] ]] && return 1
+    printf '%s\n' "$path"
+}
+
+load_xhttp_path_arrays() {
+    local route_file line domain route_path addr port
+    route_file=$(xhttp_paths_path)
+    XHTTP_PATH_DOMAINS=()
+    XHTTP_PATH_PATHS=()
+    XHTTP_PATH_ADDRS=()
+    XHTTP_PATH_PORTS=()
+
+    [[ -f "$route_file" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%#*}"
+        [[ -n "$(trim_input "$line")" ]] || continue
+        IFS='|' read -r domain route_path addr port _ <<< "$line"
+        domain=$(normalize_domain_input "$domain")
+        route_path=$(normalize_xhttp_path "$route_path" 2>/dev/null || true)
+        addr=$(normalize_loopback_addr "${addr:-127.0.0.1}")
+        port="$(trim_input "${port:-}")"
+        if is_valid_domain "$domain" && [[ -n "$route_path" ]] && is_loopback_listen_addr "$addr" && is_valid_port "$port"; then
+            XHTTP_PATH_DOMAINS+=("$domain")
+            XHTTP_PATH_PATHS+=("$route_path")
+            XHTTP_PATH_ADDRS+=("$addr")
+            XHTTP_PATH_PORTS+=("$port")
+        fi
+    done < "$route_file"
+}
+
+save_xhttp_path_arrays() {
+    local route_file route_tmp i
+    route_file=$(xhttp_paths_path)
+    mkdir -p "$(dirname "$route_file")" || return 1
+    route_tmp=$(mktemp "${route_file}.tmp.XXXXXX") || return 1
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ -n "${XHTTP_PATH_DOMAINS[$i]:-}" && -n "${XHTTP_PATH_PATHS[$i]:-}" ]] || continue
+        printf '%s|%s|%s|%s\n' \
+            "${XHTTP_PATH_DOMAINS[$i]}" \
+            "${XHTTP_PATH_PATHS[$i]}" \
+            "${XHTTP_PATH_ADDRS[$i]}" \
+            "${XHTTP_PATH_PORTS[$i]}" >> "$route_tmp" || { rm -f "$route_tmp"; return 1; }
+    done
+    if ! chmod 600 "$route_tmp" || ! mv -f "$route_tmp" "$route_file"; then
+        rm -f "$route_tmp"
+        return 1
+    fi
+}
+
+xhttp_paths_for_domain() {
+    local domain="$1" i
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$domain" ]] || continue
+        printf '%s|%s|%s\n' "${XHTTP_PATH_PATHS[$i]}" "${XHTTP_PATH_ADDRS[$i]}" "${XHTTP_PATH_PORTS[$i]}"
+    done
+}
+
+rename_xhttp_path_domain() {
+    local old_domain="$1" new_domain="$2" i
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$old_domain" ]] && XHTTP_PATH_DOMAINS[$i]="$new_domain"
+    done
+    return 0
+}
+
+remove_xhttp_paths_for_domain() {
+    local domain="$1" i
+    local -a domains=() paths=() addrs=() ports=()
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$domain" ]] && continue
+        domains+=("${XHTTP_PATH_DOMAINS[$i]}")
+        paths+=("${XHTTP_PATH_PATHS[$i]}")
+        addrs+=("${XHTTP_PATH_ADDRS[$i]}")
+        ports+=("${XHTTP_PATH_PORTS[$i]}")
+    done
+    XHTTP_PATH_DOMAINS=("${domains[@]}")
+    XHTTP_PATH_PATHS=("${paths[@]}")
+    XHTTP_PATH_ADDRS=("${addrs[@]}")
+    XHTTP_PATH_PORTS=("${ports[@]}")
+    return 0
+}
+
+xhttp_path_conflicts_with_web_paths() {
+    local candidate="$1" existing
+    local -a reserved=()
+    [[ -n "${PANEL_WEB_PATH:-}" ]] && reserved+=("$(normalize_xhttp_path "$PANEL_WEB_PATH" 2>/dev/null || true)")
+    [[ -n "${SUB_URI_PATH:-}" ]] && reserved+=("$(normalize_xhttp_path "$SUB_URI_PATH" 2>/dev/null || true)")
+    [[ -n "${CLASH_URI_PATH:-}" ]] && reserved+=("$(normalize_xhttp_path "$CLASH_URI_PATH" 2>/dev/null || true)")
+    for existing in "${reserved[@]}"; do
+        [[ -n "$existing" ]] || continue
+        # Nginx serves these with prefix locations, so plain prefix overlap is also a conflict.
+        if [[ "$candidate" == "$existing"* || "$existing" == "$candidate"* ]]; then
+            printf '%s\n' "$existing"
+            return 0
+        fi
+    done
+    return 1
 }
 
 xray_sni_route_index() {
@@ -12259,6 +12380,7 @@ edit_sni_stack_panel_domain_profile() {
     [[ -f "$old_conf" ]] && quarantine_path "$old_conf" "/etc/caddy/conf.d_quarantine" >/dev/null 2>&1 || true
     PANEL_DOMAIN="$new_domain"
     rename_sni_ip_whitelist_domain "$old_domain" "$new_domain"
+    rename_xhttp_path_domain "$old_domain" "$new_domain"
     save_and_offer_reapply_sni_stack
 }
 
@@ -12915,22 +13037,49 @@ import conf.d/*
 EOF
 }
 
+caddy_xhttp_path_blocks() {
+    local domain="$1" i count=0 backend block
+    block=""
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$domain" ]] || continue
+        backend=$(format_hostport "${XHTTP_PATH_ADDRS[$i]}" "${XHTTP_PATH_PORTS[$i]}")
+        block+="    @xhttp_${count} path ${XHTTP_PATH_PATHS[$i]} ${XHTTP_PATH_PATHS[$i]}/*"$'\n'
+        block+="    handle @xhttp_${count} {"$'\n'
+        block+="        reverse_proxy ${backend} {"$'\n'
+        block+="            flush_interval -1"$'\n'
+        block+="            header_up Host {http.request.host}"$'\n'
+        block+="            header_up X-Forwarded-Proto https"$'\n'
+        block+="            header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}"$'\n'
+        block+="            header_up X-Real-IP {remote_host}"$'\n'
+        block+="        }"$'\n'
+        block+="    }"$'\n'
+        block+=$'\n'
+        count=$((count + 1))
+    done
+    [[ -n "$block" ]] && printf '%s' "$block"
+    return 0
+}
+
 write_caddy_panel_config() {
     local output_file="${1:-/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy}"
     local panel_backend
     local sub_backend
     local sub_match_paths
+    local xhttp_blocks
     panel_backend=$(format_hostport "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT")
     sub_backend=$(format_hostport "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT")
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
     CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
     sub_match_paths=$(caddy_path_match_tokens "$SUB_URI_PATH" "$CLASH_URI_PATH")
+    xhttp_blocks=$(caddy_xhttp_path_blocks "$PANEL_DOMAIN")
+    [[ -n "$xhttp_blocks" ]] && xhttp_blocks="${xhttp_blocks}"$'\n'
     cat <<EOF > "$output_file"
 https://${PANEL_DOMAIN}:${CADDY_LISTEN_PORT} {
     bind ${CADDY_LISTEN_ADDR}
     tls /etc/caddy/certs/${PANEL_DOMAIN}.crt /etc/caddy/certs/${PANEL_DOMAIN}.key
     encode gzip
 
+${xhttp_blocks}
     @sub path ${sub_match_paths}
     handle @sub {
         reverse_proxy ${sub_backend} {
@@ -12960,11 +13109,33 @@ EOF
 write_caddy_site_config() {
     [[ ${#SITE_DOMAINS[@]} -eq 0 ]] && return 0
     local output_dir="${1:-/etc/caddy/conf.d}"
-    local i site_domain site_backend
+    local i site_domain site_backend xhttp_blocks
     for i in "${!SITE_DOMAINS[@]}"; do
         site_domain="${SITE_DOMAINS[$i]}"
         [[ -z "$site_domain" ]] && continue
         site_backend=$(format_hostport "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}")
+        xhttp_blocks=$(caddy_xhttp_path_blocks "$site_domain")
+        [[ -n "$xhttp_blocks" ]] && xhttp_blocks="${xhttp_blocks}"$'\n'
+        if [[ -n "$xhttp_blocks" ]]; then
+            cat <<EOF > "${output_dir}/${site_domain}.caddy"
+https://${site_domain}:${CADDY_LISTEN_PORT} {
+    bind ${CADDY_LISTEN_ADDR}
+    tls /etc/caddy/certs/${site_domain}.crt /etc/caddy/certs/${site_domain}.key
+    encode gzip
+
+${xhttp_blocks}
+    handle {
+        reverse_proxy ${site_backend} {
+            header_up Host {http.request.host}
+            header_up X-Forwarded-Proto https
+            header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+}
+EOF
+            continue
+        fi
         cat <<EOF > "${output_dir}/${site_domain}.caddy"
 https://${site_domain}:${CADDY_LISTEN_PORT} {
     bind ${CADDY_LISTEN_ADDR}
@@ -13040,6 +13211,40 @@ EOF
 EOF
 }
 
+append_nginx_xhttp_path_proxy() {
+    local output_file="$1"
+    local path_prefix="$2"
+    local backend="$3"
+    cat <<EOF >> "$output_file"
+
+    location ^~ ${path_prefix} {
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port ${NGINX_LISTEN_PORT};
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        proxy_pass http://${backend};
+    }
+EOF
+}
+
+append_nginx_xhttp_paths_for_domain() {
+    local output_file="$1"
+    local domain="$2"
+    local i backend
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$domain" ]] || continue
+        backend=$(format_hostport "${XHTTP_PATH_ADDRS[$i]}" "${XHTTP_PATH_PORTS[$i]}")
+        append_nginx_xhttp_path_proxy "$output_file" "${XHTTP_PATH_PATHS[$i]}" "$backend"
+    done
+}
+
 write_nginx_single_443_web_config() {
     local conf_file="${1:-$(nginx_single_443_web_conf_path)}"
     local panel_backend sub_backend site_backend i site_domain
@@ -13063,6 +13268,7 @@ $(nginx_http_listen_directive "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
 EOF
     append_nginx_single_443_path_proxy "$conf_file" "$SUB_URI_PATH" "$sub_backend"
     append_nginx_single_443_path_proxy "$conf_file" "$CLASH_URI_PATH" "$sub_backend"
+    append_nginx_xhttp_paths_for_domain "$conf_file" "$PANEL_DOMAIN"
     cat <<EOF >> "$conf_file"
 
     location / {
@@ -13089,6 +13295,9 @@ $(nginx_http_listen_directive "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers off;
     gzip on;
+EOF
+        append_nginx_xhttp_paths_for_domain "$conf_file" "$site_domain"
+        cat <<EOF >> "$conf_file"
 
     location / {
 EOF
@@ -13323,7 +13532,7 @@ TCP_ROUTE_PORTS_CSV='${tcp_route_ports_csv}'
 SNI_IP_WHITELIST_DOMAINS_CSV='${sni_ip_whitelist_domains_csv}'
 SNI_IP_WHITELIST_RANGES_PIPE='${sni_ip_whitelist_ranges_pipe}'
 EOF
-    if ! chmod 600 "$env_tmp" || ! save_xray_sni_route_arrays || ! mv -f "$env_tmp" "$env_file"; then
+    if ! chmod 600 "$env_tmp" || ! save_xray_sni_route_arrays || ! save_xhttp_path_arrays || ! mv -f "$env_tmp" "$env_file"; then
         rm -f "$env_tmp"
         return 1
     fi
@@ -13789,6 +13998,7 @@ remove_sni_stack_site() {
     SITE_BACKEND_ADDRS=("${new_addrs[@]}")
     SITE_BACKEND_PORTS=("${new_ports[@]}")
     remove_sni_ip_whitelist_for_domain "$domain"
+    remove_xhttp_paths_for_domain "$domain"
     quarantine_path "/etc/caddy/conf.d/${domain}.caddy" "/etc/vps-optimize/quarantine/caddy-sni" >/dev/null 2>&1 || true
 
     apply_sni_stack_runtime_config || return 1
@@ -14100,6 +14310,7 @@ manage_xray_inbound_routes() {
         echo -e "$(localized_text "${BOLD}Xray SNI 路由管理${PLAIN}" "${BOLD}Xray SNI route management${PLAIN}" "${BOLD}Управление маршрутами Xray SNI${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}管理 SNI -> 本地地址:端口 路由记录；不会创建或修改 3x-ui/Xray 入站。${PLAIN}" "${YELLOW}Manage SNI -> local address:port routes without creating or editing 3x-ui/Xray inbounds.${PLAIN}" "${YELLOW}Управление маршрутами SNI -> локальный адрес:порт без создания или изменения входящих подключений 3x-ui/Xray.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}xhttp 节点与 Web 域名共用 443 时，请到 [19] -> [2] -> [10] 添加路径反代。${PLAIN}" "${YELLOW}To share port 443 between an xhttp node and a Web domain, add a path reverse proxy at [19] -> [2] -> [10].${PLAIN}" "${YELLOW}Чтобы разделить порт 443 между узлом xhttp и Web-доменом, добавьте обратный прокси пути в [19] -> [2] -> [10].${PLAIN}")"
         echo -e "$(localized_text "配置文件：$(xray_sni_routes_path)" "Configuration file: $(xray_sni_routes_path)" "Файл конфигурации: $(xray_sni_routes_path).")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 查看 SNI 路由${PLAIN}" "${GREEN}  1. View SNI routes${PLAIN}" "${GREEN}  1. Показать маршруты SNI${PLAIN}")"
@@ -14231,6 +14442,224 @@ manage_sni_stack_ip_whitelist() {
                 pause_return
                 ;;
         esac
+    done
+}
+
+# ---------------------------------------------------------
+# Module: xhttp_path_routes.sh
+# ---------------------------------------------------------
+# shellcheck shell=bash
+# xhttp path reverse-proxy records for Web domains served by the 443 entry.
+
+xhttp_path_mode_notice() {
+    local mode
+    mode=$(get_entry_mode)
+    if [[ "$mode" == "xray-fallback" ]]; then
+        echo -e "$(localized_text "${RED}❌ xray-fallback 模式下 Xray 主入站独占公网 443，本菜单不可用。${PLAIN}" "${RED}❌ In xray-fallback mode the Xray main inbound owns public port 443, so this menu is unavailable.${PLAIN}" "${RED}❌ В режиме xray-fallback основной вход Xray занимает публичный порт 443, поэтому это меню недоступно.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}需要 xhttp 共用 Web 域名时，请切到 nginx-stream 或 tcp-peek。${PLAIN}" "${YELLOW}Switch to nginx-stream or tcp-peek to share a Web domain with xhttp.${PLAIN}" "${YELLOW}Чтобы использовать общий Web-домен для xhttp, переключитесь на nginx-stream или tcp-peek.${PLAIN}")"
+        return 0
+    fi
+    return 1
+}
+
+list_xhttp_path_routes() {
+    load_sni_stack_env || return 1
+    local i num owner ranges
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}xhttp 节点路径反代${PLAIN}" "${BOLD}xhttp node path reverse proxy${PLAIN}" "${BOLD}Обратный прокси пути узла xhttp${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "配置文件：$(xhttp_paths_path)" "Configuration file: $(xhttp_paths_path)" "Файл конфигурации: $(xhttp_paths_path)")"
+    echo -e "$(localized_text "规则格式：域名|路径|本地地址|本地端口" "Rule format: DOMAIN|PATH|ADDR|PORT" "Формат правила: DOMAIN|PATH|ADDR|PORT")"
+    echo -e "$(localized_text "${YELLOW}TLS 由本地 Web 反代引擎终结；本地 xhttp 入站必须不启用 TLS。${PLAIN}" "${YELLOW}TLS terminates on the local Web proxy; the local xhttp inbound must run without TLS.${PLAIN}" "${YELLOW}TLS завершается на локальном Web-прокси; локальный вход xhttp должен работать без TLS.${PLAIN}")"
+    echo -e "------------------------------------------------"
+    if [[ ${#XHTTP_PATH_DOMAINS[@]} -eq 0 ]]; then
+        echo -e "$(localized_text "${YELLOW}当前没有 xhttp 路径反代规则。${PLAIN}" "${YELLOW}No xhttp path reverse-proxy rules currently.${PLAIN}" "${YELLOW}Правил обратного прокси пути xhttp нет.${PLAIN}")"
+        return 0
+    fi
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        num=$((i + 1))
+        if [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$PANEL_DOMAIN" ]]; then
+            owner="$(localized_text "面板域名" "panel domain" "домен панели")"
+        else
+            owner="$(localized_text "Web 域名" "Web domain" "Web-домен")"
+        fi
+        echo -e "${GREEN}${num}.${PLAIN} https://${XHTTP_PATH_DOMAINS[$i]}${XHTTP_PATH_PATHS[$i]} -> ${XHTTP_PATH_ADDRS[$i]}:${XHTTP_PATH_PORTS[$i]} ${CYAN}[${owner}]${PLAIN}"
+        ranges=$(sni_ip_whitelist_ranges_for_domain "${XHTTP_PATH_DOMAINS[$i]}")
+        if [[ -n "$ranges" ]]; then
+            echo -e "$(localized_text "    ${YELLOW}该域名启用了 Web 白名单，xhttp 流量同样受限：${ranges}${PLAIN}" "    ${YELLOW}This domain has a Web whitelist, so xhttp traffic is limited too: ${ranges}${PLAIN}" "    ${YELLOW}Для этого домена включён белый список, xhttp тоже ограничен: ${ranges}${PLAIN}")"
+        fi
+    done
+}
+
+add_xhttp_path_route() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}添加 xhttp 路径反代${PLAIN}" "${BOLD}Add an xhttp path reverse proxy${PLAIN}" "${BOLD}Добавить обратный прокси пути xhttp${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    xhttp_path_mode_notice && return 0
+
+    local -a domains=("$PANEL_DOMAIN")
+    local site_domain
+    for site_domain in "${SITE_DOMAINS[@]}"; do
+        [[ -n "$site_domain" ]] && domains+=("$site_domain")
+    done
+
+    echo -e "$(localized_text "${YELLOW}先在 3x-ui 创建并启用 xhttp 入站：监听 127.0.0.1，本地端口自定，security 选 none（不要在该入站启用 TLS），path 与下面填写的路径一致。${PLAIN}" "${YELLOW}First create and enable an xhttp inbound in 3x-ui: listen on 127.0.0.1, pick a local port, set security to none (do not enable TLS on that inbound), and use the same path as below.${PLAIN}" "${YELLOW}Сначала создайте вход xhttp в 3x-ui: адрес 127.0.0.1, свой локальный порт, security = none (не включайте TLS на этом входе), путь совпадает с указанным ниже.${PLAIN}")"
+    echo -e "$(localized_text "${YELLOW}这里只登记 域名 + 路径 -> 本地地址:端口；证书和 TLS 由本地 Web 反代引擎处理。${PLAIN}" "${YELLOW}This menu only records DOMAIN + PATH -> local address:port; certificates and TLS stay on the local Web proxy.${PLAIN}" "${YELLOW}Здесь登记 только DOMAIN + PATH -> локальный адрес:порт; сертификат и TLS остаются на локальном Web-прокси.${PLAIN}")"
+    echo -e "------------------------------------------------"
+
+    local i choice idx domain path_input route_path conflict addr port listen_line
+    for i in "${!domains[@]}"; do
+        echo -e "${GREEN}$((i + 1)).${PLAIN} ${domains[$i]}"
+    done
+    echo -e "------------------------------------------------"
+    read_trimmed choice "$(localized_text "选择承载 xhttp 的 Web 域名序号: " "Select the Web domain that will carry xhttp: " "Выберите Web-домен для xhttp: ")"
+    if [[ -z "$choice" || "$choice" == "0" ]]; then
+        echo -e "$(localized_text "${BLUE}已取消添加。${PLAIN}" "${BLUE}Add cancelled.${PLAIN}" "${BLUE}Добавление отменено.${PLAIN}")"
+        return 0
+    fi
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#domains[@]} )); then
+        echo -e "$(localized_text "${RED}❌ 序号无效。${PLAIN}" "${RED}❌ The serial number is invalid.${PLAIN}" "${RED}❌ Серийный номер недействителен.${PLAIN}")"
+        return 1
+    fi
+    idx=$((choice - 1))
+    domain="${domains[$idx]}"
+
+    read_trimmed path_input "$(localized_text "xhttp 路径（示例值 /xxx；须与 3x-ui 入站 path 一致，不带域名）: " "xhttp path (example: /xxx; must match the 3x-ui inbound path, no host): " "Путь xhttp (пример: /xxx; должен совпадать с path входа 3x-ui, без домена): ")"
+    route_path=$(normalize_xhttp_path "$path_input" 2>/dev/null || true)
+    if [[ -z "$route_path" ]]; then
+        echo -e "$(localized_text "${RED}❌ 路径无效：必须是以 / 开头的单一前缀，不能是 /，也不能包含空格、?、# 或 ..。${PLAIN}" "${RED}❌ Invalid path: use a single prefix starting with /, not /, without spaces, ?, # or ...${PLAIN}" "${RED}❌ Неверный путь: нужен префикс с /, не /, без пробелов, ?, # и ...${PLAIN}")"
+        return 1
+    fi
+    conflict=$(xhttp_path_conflicts_with_web_paths "$route_path" || true)
+    if [[ -n "$conflict" ]]; then
+        echo -e "$(localized_text "${RED}❌ 路径 ${route_path} 与面板/订阅路径 ${conflict} 冲突。${PLAIN}" "${RED}❌ Path ${route_path} conflicts with the panel/subscription path ${conflict}.${PLAIN}" "${RED}❌ Путь ${route_path} конфликтует с путём панели/подписки ${conflict}.${PLAIN}")"
+        return 1
+    fi
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        if [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$domain" && "${XHTTP_PATH_PATHS[$i]}" == "$route_path" ]]; then
+            echo -e "$(localized_text "${RED}❌ ${domain}${route_path} 已存在相同的 xhttp 路径规则。${PLAIN}" "${RED}❌ ${domain}${route_path} already has an xhttp path rule.${PLAIN}" "${RED}❌ Для ${domain}${route_path} уже есть правило xhttp.${PLAIN}")"
+            return 1
+        fi
+    done
+
+    addr=$(ask_with_default "$(localized_text "本地监听地址" "local listening address" "локальный адрес прослушивания")" "127.0.0.1")
+    addr=$(normalize_loopback_addr "$addr")
+    port=$(ask_with_default "$(localized_text "已有 xhttp 入站的本地端口（示例值 2400，以 3x-ui 为准）" "Existing xhttp inbound local port (example: 2400; match 3x-ui)" "Локальный порт существующего входа xhttp (пример: 2400; как в 3x-ui)")" "2400")
+    is_loopback_listen_addr "$addr" || { echo -e "$(localized_text "${RED}❌ 本地监听地址只允许 127.0.0.1、localhost 或 ::1。${PLAIN}" "${RED}❌ The local listening address must be 127.0.0.1, localhost or ::1.${PLAIN}" "${RED}❌ Локальный адрес должен быть 127.0.0.1, localhost или ::1.${PLAIN}")"; return 1; }
+    is_valid_port "$port" || { echo -e "$(localized_text "${RED}❌ 本地监听端口无效：${port}${PLAIN}" "${RED}❌ Invalid local listening port: ${port}${PLAIN}" "${RED}❌ Неверный локальный порт: ${port}${PLAIN}")"; return 1; }
+    if [[ "$port" == "$NGINX_LISTEN_PORT" || "$port" == "$CADDY_LISTEN_PORT" || "$port" == "$PANEL_LISTEN_PORT" || "$port" == "$SUB_LISTEN_PORT" ]]; then
+        echo -e "$(localized_text "${RED}❌ 该端口与公网入口、Web 反代、面板或订阅端口冲突。${PLAIN}" "${RED}❌ This port conflicts with the public entry, Web proxy, panel or subscription port.${PLAIN}" "${RED}❌ Порт конфликтует с публичным входом, Web-прокси, панелью или подпиской.${PLAIN}")"
+        return 1
+    fi
+
+    print_xray_route_port_status "$domain" "$addr" "$port"
+    listen_line=$(xray_route_listen_line_by_addr_port "$addr" "$port")
+    if [[ -z "$listen_line" ]]; then
+        echo -e "$(localized_text "${RED}❌ 端口未监听，请先去 3x-ui 创建并启用对应 xhttp 入站。${PLAIN}" "${RED}❌ The port is not listening. Create and enable the xhttp inbound in 3x-ui first.${PLAIN}" "${RED}❌ Порт не прослушивается. Сначала создайте и включите вход xhttp в 3x-ui.${PLAIN}")"
+        return 1
+    fi
+    confirm_non_xray_route_listener "$listen_line" || return 0
+
+    echo -e "------------------------------------------------"
+    echo -e "$(localized_text "${CYAN}即将添加：https://${domain}${route_path} -> ${addr}:${port}${PLAIN}" "${CYAN}Will be added: https://${domain}${route_path} -> ${addr}:${port}${PLAIN}" "${CYAN}Будет добавлено: https://${domain}${route_path} -> ${addr}:${port}${PLAIN}")"
+    confirm_risk_action \
+        "$(localized_text "添加 xhttp 路径反代 ${domain}${route_path}" "Add the xhttp path reverse proxy ${domain}${route_path}" "Добавить обратный прокси пути xhttp ${domain}${route_path}")" \
+        "$(localized_text "重新渲染 Web 反代配置；本地 ${addr}:${port} 会通过 ${domain} 的 443 对外提供 xhttp" "regenerate the Web proxy configuration; local ${addr}:${port} will serve xhttp through ${domain} on port 443" "пересоздать конфигурацию Web-прокси; локальный ${addr}:${port} будет отдавать xhttp через ${domain} на порту 443")" \
+        "$(localized_text "从本菜单删除该规则并重新应用" "remove the rule from this menu and reapply" "удалить правило в этом меню и применить заново")" \
+        "$(localized_text "确认 3x-ui 入站的 path 与 ${route_path} 完全一致，且该入站没有启用 TLS。" "Confirm the 3x-ui inbound path is exactly ${route_path} and TLS is disabled on that inbound." "Убедитесь, что path входа 3x-ui совпадает с ${route_path}, а TLS отключён.")" || return 0
+
+    idx=${#XHTTP_PATH_DOMAINS[@]}
+    XHTTP_PATH_DOMAINS[$idx]="$domain"
+    XHTTP_PATH_PATHS[$idx]="$route_path"
+    XHTTP_PATH_ADDRS[$idx]="$addr"
+    XHTTP_PATH_PORTS[$idx]="$port"
+    save_and_offer_reapply_sni_stack || return 1
+    echo -e "$(localized_text "${GREEN}✅ 已保存 xhttp 路径反代：https://${domain}${route_path} -> ${addr}:${port}${PLAIN}" "${GREEN}✅ Saved xhttp path reverse proxy: https://${domain}${route_path} -> ${addr}:${port}${PLAIN}" "${GREEN}✅ Сохранён обратный прокси пути xhttp: https://${domain}${route_path} -> ${addr}:${port}${PLAIN}")"
+}
+
+remove_xhttp_path_route() {
+    clear
+    echo -e "${CYAN}================================================${PLAIN}"
+    echo -e "$(localized_text "${BOLD}删除 xhttp 路径反代${PLAIN}" "${BOLD}Remove an xhttp path reverse proxy${PLAIN}" "${BOLD}Удалить обратный прокси пути xhttp${PLAIN}")"
+    echo -e "${CYAN}================================================${PLAIN}"
+    load_sni_stack_env || return 1
+    xhttp_path_mode_notice && return 0
+    if [[ ${#XHTTP_PATH_DOMAINS[@]} -eq 0 ]]; then
+        echo -e "$(localized_text "${YELLOW}当前没有可删除的 xhttp 路径反代规则。${PLAIN}" "${YELLOW}No xhttp path reverse-proxy rules can be removed.${PLAIN}" "${YELLOW}Нет правил обратного прокси пути xhttp для удаления.${PLAIN}")"
+        return 0
+    fi
+
+    local i num choice idx domain route_path
+    local -a new_domains=() new_paths=() new_addrs=() new_ports=()
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        num=$((i + 1))
+        echo -e "${GREEN}${num}.${PLAIN} https://${XHTTP_PATH_DOMAINS[$i]}${XHTTP_PATH_PATHS[$i]} -> ${XHTTP_PATH_ADDRS[$i]}:${XHTTP_PATH_PORTS[$i]}"
+    done
+    echo -e "------------------------------------------------"
+    read_trimmed choice "$(localized_text "请输入要删除的序号: " "Please enter the serial number to be removed:" "Введите номер для удаления:")"
+    if [[ -z "$choice" || "$choice" == "0" ]]; then
+        echo -e "$(localized_text "${BLUE}已取消删除。${PLAIN}" "${BLUE}Removal cancelled.${PLAIN}" "${BLUE}Удаление отменено.${PLAIN}")"
+        return 0
+    fi
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#XHTTP_PATH_DOMAINS[@]} )); then
+        echo -e "$(localized_text "${RED}❌ 序号无效。${PLAIN}" "${RED}❌ The serial number is invalid.${PLAIN}" "${RED}❌ Серийный номер недействителен.${PLAIN}")"
+        return 1
+    fi
+
+    idx=$((choice - 1))
+    domain="${XHTTP_PATH_DOMAINS[$idx]}"
+    route_path="${XHTTP_PATH_PATHS[$idx]}"
+    confirm_risk_action \
+        "$(localized_text "删除 xhttp 路径反代 ${domain}${route_path}" "Remove the xhttp path reverse proxy ${domain}${route_path}" "Удалить обратный прокси пути xhttp ${domain}${route_path}")" \
+        "$(localized_text "重新渲染 Web 反代配置；该路径会回落到域名默认后端" "regenerate the Web proxy configuration; the path falls back to the domain default backend" "пересоздать конфигурацию Web-прокси; путь вернётся к бэкенду домена по умолчанию")" \
+        "$(localized_text "重新添加相同的域名、路径和本地端口" "add the same domain, path, and local port again" "снова добавить тот же домен, путь и локальный порт")" || return 0
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "$i" -eq "$idx" ]] && continue
+        new_domains+=("${XHTTP_PATH_DOMAINS[$i]}")
+        new_paths+=("${XHTTP_PATH_PATHS[$i]}")
+        new_addrs+=("${XHTTP_PATH_ADDRS[$i]}")
+        new_ports+=("${XHTTP_PATH_PORTS[$i]}")
+    done
+    XHTTP_PATH_DOMAINS=("${new_domains[@]}")
+    XHTTP_PATH_PATHS=("${new_paths[@]}")
+    XHTTP_PATH_ADDRS=("${new_addrs[@]}")
+    XHTTP_PATH_PORTS=("${new_ports[@]}")
+    save_and_offer_reapply_sni_stack || return 1
+    echo -e "$(localized_text "${GREEN}✅ 已删除 xhttp 路径反代：${domain}${route_path}${PLAIN}" "${GREEN}✅ Removed xhttp path reverse proxy: ${domain}${route_path}${PLAIN}" "${GREEN}✅ Удалён обратный прокси пути xhttp: ${domain}${route_path}${PLAIN}")"
+}
+
+manage_xhttp_path_routes() {
+    load_sni_stack_env || return 1
+    xhttp_path_mode_notice && { pause_return; return 0; }
+
+    while true; do
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "$(localized_text "${BOLD}xhttp 节点路径反代${PLAIN}" "${BOLD}xhttp node path reverse proxy${PLAIN}" "${BOLD}Обратный прокси пути узла xhttp${PLAIN}")"
+        echo -e "${CYAN}================================================${PLAIN}"
+        echo -e "$(localized_text "${YELLOW}让 xhttp 节点与面板/网站共用同一个 443 和同一个域名，按路径分流；TLS 由本地 Web 反代引擎终结。${PLAIN}" "${YELLOW}Share one port 443 and one domain between xhttp nodes and the panel/site, routed by path; TLS terminates on the local Web proxy.${PLAIN}" "${YELLOW}xhttp и панель/сайт используют один порт 443 и один домен, разделение по пути; TLS завершается на локальном Web-прокси.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}只管理路径反代记录，不创建或修改 3x-ui/Xray 入站。${PLAIN}" "${YELLOW}Only manages path reverse-proxy records; does not create or edit 3x-ui/Xray inbounds.${PLAIN}" "${YELLOW}Управляет только записями обратного прокси; входы 3x-ui/Xray не создаются и не изменяются.${PLAIN}")"
+        echo -e "$(localized_text "配置文件：$(xhttp_paths_path)" "Configuration file: $(xhttp_paths_path)" "Файл конфигурации: $(xhttp_paths_path)")"
+        echo -e "------------------------------------------------"
+        echo -e "$(localized_text "${GREEN}  1. 查看 xhttp 路径规则${PLAIN}" "${GREEN}  1. View xhttp path rules${PLAIN}" "${GREEN}  1. Показать правила пути xhttp${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  2. 添加 xhttp 路径规则${PLAIN}" "${GREEN}  2. Add an xhttp path rule${PLAIN}" "${GREEN}  2. Добавить правило пути xhttp${PLAIN}")"
+        echo -e "$(localized_text "${GREEN}  3. 删除 xhttp 路径规则${PLAIN}" "${GREEN}  3. Remove an xhttp path rule${PLAIN}" "${GREEN}  3. Удалить правило пути xhttp${PLAIN}")"
+        echo -e "------------------------------------------------"
+        echo -e "$(localized_text "${RED}  0. 返回 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
+        echo -e "${CYAN}================================================${PLAIN}"
+
+        local choice
+        read_trimmed choice "$(localized_text "选择操作: " "Select an option: " "Выберите действие: ")"
+        case "$choice" in
+            1) list_xhttp_path_routes ;;
+            2) add_xhttp_path_route ;;
+            3) remove_xhttp_path_route ;;
+            0|q|Q|'') break ;;
+            *) echo -e "$(localized_text "${RED}❌ 无效选择。${PLAIN}" "${RED}❌ Invalid selection.${PLAIN}" "${RED}❌ Неверный выбор.${PLAIN}")"; continue ;;
+        esac
+        echo ""
+        read -n 1 -s -r -p "$(localized_text "按任意键继续..." "Press any key to continue..." "Нажмите любую клавишу, чтобы продолжить...")"
     done
 }
 
@@ -14729,6 +15158,7 @@ manage_sni_stack_sites() {
         echo -e "$(localized_text "${GREEN}  7. 443端口复用链路体检${PLAIN}" "${GREEN}7. Port 443 Reuse diagnostics${PLAIN}" "${GREEN}7. Диагностика повторного использования порта 443${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  8. 切换 Web 反向代理引擎${PLAIN}       ${YELLOW}(Caddy / Nginx 本地反代)${PLAIN}" "${GREEN}8. Switch the Web reverse-proxy engine (local Caddy/Nginx)${PLAIN}" "${GREEN}8. Сменить Web-движок обратного прокси (локальный Caddy/Nginx)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  9. 修改面板域名${PLAIN}" "${GREEN}9. Change the panel domain${PLAIN}" "${GREEN}9. Изменить домен панели${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 10. xhttp 节点路径反代${PLAIN}       ${YELLOW}(与 Web 域名共用 443)${PLAIN}" "${GREEN}10. xhttp node path reverse proxy (share port 443 with a Web domain)${PLAIN}" "${GREEN}10. Обратный прокси пути xhttp (общий порт 443 с Web-доменом)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
@@ -14746,6 +15176,7 @@ manage_sni_stack_sites() {
             7) sni_stack_health_check ;;
             8) switch_sni_stack_web_proxy_engine ;;
             9) edit_sni_stack_panel_domain_profile ;;
+            10) manage_xhttp_path_routes ;;
             "?") show_sni_help; pause_return; continue ;;
             0|q|Q|'') break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; continue ;;

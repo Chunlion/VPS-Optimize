@@ -53,6 +53,7 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 | `/etc/vps-optimize/sni-stack.env` | Port 443 Reuse core settings; `ENTRY_MODE` stores the entry mode and `STRICT_SNI_GATE` stores the strict SNI gate state |
 | `/etc/vps-optimize/443-engine.conf` | Current Port 443 Reuse point engine status, default `nginx-stream` |
 | `/etc/vps-optimize/vpso-mux.yaml` | `tcp-peek` / `vpso-mux` routing configuration |
+| `/etc/vps-optimize/xhttp-paths.conf` | xhttp path reverse-proxy records (domain, path, local address, local port); TLS terminates on the local Web proxy |
 | `/etc/vps-optimize/sni-stack.last-backup` | The most recent Port 443 Reuse point backup path record |
 | `/etc/vps-optimize/backups/sni-stack_*` | Port 443 Reuse automatic backup directory |
 | `/etc/nginx/stream.d/vps_sni_*.conf` | Nginx stream SNI routing configuration |

@@ -184,6 +184,18 @@ The client link should use your node domain and port `443`, not `127.0.0.1:1443`
 
 Ordinary TLS nodes use a different mapping: if the client SNI is `tls.example.com`, the certificate must cover that name. They do not use a REALITY target site. Create and enable a local TCP/TLS inbound in 3x-ui, then register `tls.example.com -> local address:actual port` under `[19] -> [4 Manage Xray SNI forwarding rules]`. The client still connects to the VPS public IP or node domain on the public entry port.
 
+xhttp nodes have two options:
+
+- **Dedicated node domain**: identical to an ordinary TLS node. Create an xhttp inbound in 3x-ui with TLS enabled, make sure the certificate covers the node domain, then register `node.example.com -> local address:actual port`. The inbound itself parses the client `path`; the entry layer never reads HTTP paths.
+- **Share port 443 with a Web domain**: use `[19] -> [2 Manage Web domains and reverse proxies] -> [10 xhttp node path reverse proxy]`. First create an xhttp inbound in 3x-ui with TLS disabled (listen on `127.0.0.1`, example port `2400`), then register `domain + path -> 127.0.0.1:2400`. TLS terminates on Caddy/Nginx at the local `8443` port; the public port stays `443`.
+
+When sharing a domain, confirm the following:
+
+- The `path` you enter must match the 3x-ui inbound exactly and must not overlap the panel `webBasePath`, the subscription paths, or the Clash path.
+- If that domain has a Web IP allowlist, xhttp traffic is restricted by it too. REALITY nodes do not use this path and are unaffected.
+- The entry still routes by SNI, so this menu is unavailable in `xray-fallback` mode.
+- TCP only: xhttp over HTTP/3 (QUIC) needs UDP `443`, which the entry does not listen on.
+
 ### 4. Run the Port 443 wizard
 
 Open:

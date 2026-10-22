@@ -53,6 +53,7 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 | `/etc/vps-optimize/sni-stack.env` | 443端口复用核心参数；`ENTRY_MODE` 保存入口模式，`STRICT_SNI_GATE` 保存严格 SNI 门禁状态 |
 | `/etc/vps-optimize/443-engine.conf` | 当前 443端口复用引擎状态，默认 `nginx-stream` |
 | `/etc/vps-optimize/vpso-mux.yaml` | `tcp-peek` / `vpso-mux` 分流器配置 |
+| `/etc/vps-optimize/xhttp-paths.conf` | xhttp 路径反代记录（域名、路径、本地地址、本地端口）；TLS 由本地 Web 反代引擎终结 |
 | `/etc/vps-optimize/sni-stack.last-backup` | 最近一次 443端口复用备份路径记录 |
 | `/etc/vps-optimize/backups/sni-stack_*` | 443端口复用自动备份目录 |
 | `/etc/nginx/stream.d/vps_sni_*.conf` | Nginx stream SNI 分流配置 |

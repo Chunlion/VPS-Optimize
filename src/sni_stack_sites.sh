@@ -248,6 +248,7 @@ remove_sni_stack_site() {
     SITE_BACKEND_ADDRS=("${new_addrs[@]}")
     SITE_BACKEND_PORTS=("${new_ports[@]}")
     remove_sni_ip_whitelist_for_domain "$domain"
+    remove_xhttp_paths_for_domain "$domain"
     quarantine_path "/etc/caddy/conf.d/${domain}.caddy" "/etc/vps-optimize/quarantine/caddy-sni" >/dev/null 2>&1 || true
 
     apply_sni_stack_runtime_config || return 1

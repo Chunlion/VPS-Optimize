@@ -53,6 +53,7 @@ find /etc/vps-optimize/quarantine -maxdepth 2 -type d 2>/dev/null
 | `/etc/vps-optimize/sni-stack.env` | Основные параметры повторного использования порта 443; `ENTRY_MODE` хранит режим входа, а `STRICT_SNI_GATE` — состояние строгого контроля SNI |
 | `/etc/vps-optimize/443-engine.conf` | Текущее состояние механизма общих записей 443, по умолчанию `nginx-stream` |
 | `/etc/vps-optimize/vpso-mux.yaml` | Конфигурация маршрутизацияа `tcp-peek` / `vpso-mux` |
+| `/etc/vps-optimize/xhttp-paths.conf` | Записи обратного прокси пути xhttp (домен, путь, локальный адрес, локальный порт); TLS завершается на локальном Web-прокси |
 | `/etc/vps-optimize/sni-stack.last-backup` | Самая последняя запись пути резервного копирования повторного использования порта 443. |
 | `/etc/vps-optimize/backups/sni-stack_*` | 443 Каталог автоматического резервного копирования с повторным использованием порта 443 |
 | `/etc/nginx/stream.d/vps_sni_*.conf` | Nginx stream SNI конфигурация маршрутизацияа |

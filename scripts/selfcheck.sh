@@ -15,6 +15,7 @@ done
 
 echo "==> golden render"
 bash tests/golden-render.sh
+bash tests/xhttp-paths.sh
 bash tests/sni-setup.sh
 bash tests/sni-rollback.sh
 

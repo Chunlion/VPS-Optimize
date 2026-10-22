@@ -260,6 +260,7 @@ edit_sni_stack_panel_domain_profile() {
     [[ -f "$old_conf" ]] && quarantine_path "$old_conf" "/etc/caddy/conf.d_quarantine" >/dev/null 2>&1 || true
     PANEL_DOMAIN="$new_domain"
     rename_sni_ip_whitelist_domain "$old_domain" "$new_domain"
+    rename_xhttp_path_domain "$old_domain" "$new_domain"
     save_and_offer_reapply_sni_stack
 }
 

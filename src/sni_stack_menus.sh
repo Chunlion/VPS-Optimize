@@ -18,6 +18,7 @@ manage_sni_stack_sites() {
         echo -e "$(localized_text "${GREEN}  7. 443端口复用链路体检${PLAIN}" "${GREEN}7. Port 443 Reuse diagnostics${PLAIN}" "${GREEN}7. Диагностика повторного использования порта 443${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  8. 切换 Web 反向代理引擎${PLAIN}       ${YELLOW}(Caddy / Nginx 本地反代)${PLAIN}" "${GREEN}8. Switch the Web reverse-proxy engine (local Caddy/Nginx)${PLAIN}" "${GREEN}8. Сменить Web-движок обратного прокси (локальный Caddy/Nginx)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  9. 修改面板域名${PLAIN}" "${GREEN}9. Change the panel domain${PLAIN}" "${GREEN}9. Изменить домен панели${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 10. xhttp 节点路径反代${PLAIN}       ${YELLOW}(与 Web 域名共用 443)${PLAIN}" "${GREEN}10. xhttp node path reverse proxy (share port 443 with a Web domain)${PLAIN}" "${GREEN}10. Обратный прокси пути xhttp (общий порт 443 с Web-доменом)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"
@@ -35,6 +36,7 @@ manage_sni_stack_sites() {
             7) sni_stack_health_check ;;
             8) switch_sni_stack_web_proxy_engine ;;
             9) edit_sni_stack_panel_domain_profile ;;
+            10) manage_xhttp_path_routes ;;
             "?") show_sni_help; pause_return; continue ;;
             0|q|Q|'') break ;;
             *) echo -e "$(localized_text "${RED}❌ 无效选择，请输入菜单编号或 ?。${PLAIN}" "${RED}❌ Invalid selection, please enter the menu number or ?.${PLAIN}" "${RED}❌ Неверный выбор, введите номер меню или ?.${PLAIN}")"; continue ;;

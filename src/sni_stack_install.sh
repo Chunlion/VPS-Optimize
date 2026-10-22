@@ -603,22 +603,49 @@ import conf.d/*
 EOF
 }
 
+caddy_xhttp_path_blocks() {
+    local domain="$1" i count=0 backend block
+    block=""
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$domain" ]] || continue
+        backend=$(format_hostport "${XHTTP_PATH_ADDRS[$i]}" "${XHTTP_PATH_PORTS[$i]}")
+        block+="    @xhttp_${count} path ${XHTTP_PATH_PATHS[$i]} ${XHTTP_PATH_PATHS[$i]}/*"$'\n'
+        block+="    handle @xhttp_${count} {"$'\n'
+        block+="        reverse_proxy ${backend} {"$'\n'
+        block+="            flush_interval -1"$'\n'
+        block+="            header_up Host {http.request.host}"$'\n'
+        block+="            header_up X-Forwarded-Proto https"$'\n'
+        block+="            header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}"$'\n'
+        block+="            header_up X-Real-IP {remote_host}"$'\n'
+        block+="        }"$'\n'
+        block+="    }"$'\n'
+        block+=$'\n'
+        count=$((count + 1))
+    done
+    [[ -n "$block" ]] && printf '%s' "$block"
+    return 0
+}
+
 write_caddy_panel_config() {
     local output_file="${1:-/etc/caddy/conf.d/${PANEL_DOMAIN}.caddy}"
     local panel_backend
     local sub_backend
     local sub_match_paths
+    local xhttp_blocks
     panel_backend=$(format_hostport "$PANEL_LISTEN_ADDR" "$PANEL_LISTEN_PORT")
     sub_backend=$(format_hostport "$SUB_LISTEN_ADDR" "$SUB_LISTEN_PORT")
     SUB_URI_PATH=$(normalize_path_prefix "${SUB_URI_PATH:-/sub/}")
     CLASH_URI_PATH=$(normalize_path_prefix "${CLASH_URI_PATH:-/clash/}")
     sub_match_paths=$(caddy_path_match_tokens "$SUB_URI_PATH" "$CLASH_URI_PATH")
+    xhttp_blocks=$(caddy_xhttp_path_blocks "$PANEL_DOMAIN")
+    [[ -n "$xhttp_blocks" ]] && xhttp_blocks="${xhttp_blocks}"$'\n'
     cat <<EOF > "$output_file"
 https://${PANEL_DOMAIN}:${CADDY_LISTEN_PORT} {
     bind ${CADDY_LISTEN_ADDR}
     tls /etc/caddy/certs/${PANEL_DOMAIN}.crt /etc/caddy/certs/${PANEL_DOMAIN}.key
     encode gzip
 
+${xhttp_blocks}
     @sub path ${sub_match_paths}
     handle @sub {
         reverse_proxy ${sub_backend} {
@@ -648,11 +675,33 @@ EOF
 write_caddy_site_config() {
     [[ ${#SITE_DOMAINS[@]} -eq 0 ]] && return 0
     local output_dir="${1:-/etc/caddy/conf.d}"
-    local i site_domain site_backend
+    local i site_domain site_backend xhttp_blocks
     for i in "${!SITE_DOMAINS[@]}"; do
         site_domain="${SITE_DOMAINS[$i]}"
         [[ -z "$site_domain" ]] && continue
         site_backend=$(format_hostport "${SITE_BACKEND_ADDRS[$i]}" "${SITE_BACKEND_PORTS[$i]}")
+        xhttp_blocks=$(caddy_xhttp_path_blocks "$site_domain")
+        [[ -n "$xhttp_blocks" ]] && xhttp_blocks="${xhttp_blocks}"$'\n'
+        if [[ -n "$xhttp_blocks" ]]; then
+            cat <<EOF > "${output_dir}/${site_domain}.caddy"
+https://${site_domain}:${CADDY_LISTEN_PORT} {
+    bind ${CADDY_LISTEN_ADDR}
+    tls /etc/caddy/certs/${site_domain}.crt /etc/caddy/certs/${site_domain}.key
+    encode gzip
+
+${xhttp_blocks}
+    handle {
+        reverse_proxy ${site_backend} {
+            header_up Host {http.request.host}
+            header_up X-Forwarded-Proto https
+            header_up X-Forwarded-Port ${NGINX_LISTEN_PORT}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+}
+EOF
+            continue
+        fi
         cat <<EOF > "${output_dir}/${site_domain}.caddy"
 https://${site_domain}:${CADDY_LISTEN_PORT} {
     bind ${CADDY_LISTEN_ADDR}
@@ -728,6 +777,40 @@ EOF
 EOF
 }
 
+append_nginx_xhttp_path_proxy() {
+    local output_file="$1"
+    local path_prefix="$2"
+    local backend="$3"
+    cat <<EOF >> "$output_file"
+
+    location ^~ ${path_prefix} {
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port ${NGINX_LISTEN_PORT};
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        proxy_pass http://${backend};
+    }
+EOF
+}
+
+append_nginx_xhttp_paths_for_domain() {
+    local output_file="$1"
+    local domain="$2"
+    local i backend
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "${XHTTP_PATH_DOMAINS[$i]}" == "$domain" ]] || continue
+        backend=$(format_hostport "${XHTTP_PATH_ADDRS[$i]}" "${XHTTP_PATH_PORTS[$i]}")
+        append_nginx_xhttp_path_proxy "$output_file" "${XHTTP_PATH_PATHS[$i]}" "$backend"
+    done
+}
+
 write_nginx_single_443_web_config() {
     local conf_file="${1:-$(nginx_single_443_web_conf_path)}"
     local panel_backend sub_backend site_backend i site_domain
@@ -751,6 +834,7 @@ $(nginx_http_listen_directive "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
 EOF
     append_nginx_single_443_path_proxy "$conf_file" "$SUB_URI_PATH" "$sub_backend"
     append_nginx_single_443_path_proxy "$conf_file" "$CLASH_URI_PATH" "$sub_backend"
+    append_nginx_xhttp_paths_for_domain "$conf_file" "$PANEL_DOMAIN"
     cat <<EOF >> "$conf_file"
 
     location / {
@@ -777,6 +861,9 @@ $(nginx_http_listen_directive "$CADDY_LISTEN_ADDR" "$CADDY_LISTEN_PORT")
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers off;
     gzip on;
+EOF
+        append_nginx_xhttp_paths_for_domain "$conf_file" "$site_domain"
+        cat <<EOF >> "$conf_file"
 
     location / {
 EOF
@@ -1011,7 +1098,7 @@ TCP_ROUTE_PORTS_CSV='${tcp_route_ports_csv}'
 SNI_IP_WHITELIST_DOMAINS_CSV='${sni_ip_whitelist_domains_csv}'
 SNI_IP_WHITELIST_RANGES_PIPE='${sni_ip_whitelist_ranges_pipe}'
 EOF
-    if ! chmod 600 "$env_tmp" || ! save_xray_sni_route_arrays || ! mv -f "$env_tmp" "$env_file"; then
+    if ! chmod 600 "$env_tmp" || ! save_xray_sni_route_arrays || ! save_xhttp_path_arrays || ! mv -f "$env_tmp" "$env_file"; then
         rm -f "$env_tmp"
         return 1
     fi
