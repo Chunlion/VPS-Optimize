@@ -2,6 +2,8 @@
 
 ## v2.8 - 2026-10-22
 
+本版整理 v2.7 之后的主要变更，重点是 443端口复用 xhttp 路径反代、系统软件源切换与 GitHub 更新镜像；早期条目为此前积压的 Unreleased 记录。完整提交对比见 `v2.7...v2.8`。
+
 ### 新增功能
 
 - **443端口复用：xhttp 节点路径反代**。新增 `[19] -> [2 管理 Web 域名与反向代理] -> [10 xhttp 节点路径反代]`，在同一个公网 `443` 和同一个 Web 域名下按路径分流到本地 xhttp 入站：Caddy 生成 `@xhttp_N` handle 块并置于默认 handle 之前，Nginx 生成关闭请求/响应缓冲、读写超时 1 小时的前缀 location。记录保存到 `/etc/vps-optimize/xhttp-paths.conf`（`域名|路径|本地地址|本地端口`），只登记路由，不创建或修改 3x-ui 入站；TLS 由本地 Web 反代终结。路径与面板 `webBasePath`、订阅路径重叠时拒绝，`xray-fallback` 模式下菜单不可用。
