@@ -124,6 +124,7 @@ PY
 (
     sni_stack_env_path() { echo "$tmp_dir/sni-stack.env"; }
     xray_sni_routes_path() { echo "$tmp_dir/routes"; }
+    xhttp_paths_path() { echo "$tmp_dir/xhttp-paths.conf"; }
     ENTRY_MODE=nginx-stream WEB_PROXY_ENGINE=nginx STRICT_SNI_GATE=true
     PANEL_DOMAIN=panel.example.com REALITY_SNI=www.example.org
     NGINX_LISTEN_ADDR=0.0.0.0 NGINX_LISTEN_PORT=443
@@ -135,6 +136,7 @@ PY
     TCP_ROUTE_SNIS=() TCP_ROUTE_ADDRS=() TCP_ROUTE_PORTS=()
     SNI_IP_WHITELIST_DOMAINS=() SNI_IP_WHITELIST_RANGES=()
     XRAY_SNI_ROUTE_SNIS=(example.org) XRAY_SNI_ROUTE_ADDRS=(127.0.0.1) XRAY_SNI_ROUTE_PORTS=(1443)
+    XHTTP_PATH_DOMAINS=() XHTTP_PATH_PATHS=() XHTTP_PATH_ADDRS=() XHTTP_PATH_PORTS=()
     save_sni_stack_env
     [[ "$(cat "$tmp_dir/routes")" == 'example.org|127.0.0.1|1443' ]]
     [[ "$(stat -c %a "$tmp_dir/sni-stack.env")" == 600 ]]

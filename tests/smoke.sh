@@ -888,6 +888,10 @@ NFT_RULES
     XRAY_SNI_ROUTE_SNIS=()
     XRAY_SNI_ROUTE_ADDRS=()
     XRAY_SNI_ROUTE_PORTS=()
+    XHTTP_PATH_DOMAINS=()
+    XHTTP_PATH_PATHS=()
+    XHTTP_PATH_ADDRS=()
+    XHTTP_PATH_PORTS=()
     SNI_IP_WHITELIST_DOMAINS=()
     SNI_IP_WHITELIST_RANGES=()
 
@@ -1127,6 +1131,10 @@ EOF
     SITE_DOMAINS=(site.example.com dockge.example.com)
     SITE_BACKEND_ADDRS=(127.0.0.1 backend.internal)
     SITE_BACKEND_PORTS=(3000 5000)
+    XHTTP_PATH_DOMAINS=()
+    XHTTP_PATH_PATHS=()
+    XHTTP_PATH_ADDRS=()
+    XHTTP_PATH_PORTS=()
     nginx() { printf '%s\n' 'nginx version: nginx/1.24.0' >&2; }
     write_nginx_single_443_web_config "$nginx_sni_web_tmp"
     [[ "$(nginx_http_listen_directive "127.0.0.1" "8443")" == "    listen 127.0.0.1:8443 ssl http2;" ]]
