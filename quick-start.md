@@ -63,6 +63,7 @@ Select interface language:
 |---|---|
 | 部署或配置 443端口复用 | [443端口复用：部署与配置](docs/443-single-entry.md) |
 | 接入订阅工具 | [订阅工具接入 443](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
+| 增加 xhttp 节点并与 REALITY 共存 | [REALITY 与 xhttp 共存](tutorials/03-xhttp-reality-shared-443.md) |
 | 查看端口流量 | [端口流量狗](docs/dog.md) |
 | 使用 x-ui 增强工具 | [x-ui 增强套件](docs/xui-custom-manager.md) |
 | 排查 443 问题 | [443 排错/恢复](docs/443-single-entry-troubleshooting.md) |

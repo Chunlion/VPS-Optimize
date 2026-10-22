@@ -20,7 +20,7 @@ The three entry modes share the same set of public configurations:
 
 - Web domains, Web reverse-proxy backend mappings, and certificates are shared by all modes. Web allowlists are shared only between Nginx Stream and TCP Peek.
 - The certificate still uses the existing `acme.sh + Cloudflare DNS API` process, does not introduce the Caddy DNS module, and does not use `xcaddy`.
-- The Web allowlist protects Web domains only; it never filters Xray node traffic.
+- The Web allowlist protects Web domains only; it never filters Xray node traffic. Exception: an xhttp node sharing a Web domain on port `443` is Web traffic for that domain and is filtered too. Dedicated-domain xhttp nodes and REALITY nodes are unaffected.
 - The local Web reverse proxy may be Caddy or Nginx, and the same mapping is reused when switching entry modes.
 - In Nginx Stream and TCP Peek, the Web allowlist is checked at the entry layer using `SNI + source IP`. Xray Fallback does not support that front allowlist.
 - If `/etc/vps-optimize/sni-stack.env` has no `ENTRY_MODE`, the script reads it as `nginx-stream` for compatibility.
@@ -97,7 +97,7 @@ TLS record
 
 The initial peek buffer is about 4 KiB, capped at 16 KiB; `timeouts.peek` defaults to `3s`. SNI is lowercased and its trailing dot removed. Duplicate SNI, invalid names, and malformed extensions are not used for routing. With SNI filtering enabled, unknown or missing SNI and non-TLS connections are dropped; only when filtering is disabled do they reach the default Xray/REALITY backend. TCP Peek always closes connections that exceed `timeouts.peek` while waiting for ClientHello.
 
-This is why this solution is suitable for HTTPS/TLS/SNI traffic, but not suitable for diverting traffic based on HTTP path or plain text protocol content. After the TLS handshake, the application layer content has been encrypted, and `vpso-mux` cannot and cannot rely on it to determine the path.
+This is why this solution is suitable for HTTPS/TLS/SNI traffic, but not suitable for diverting traffic based on HTTP path or plain text protocol content. After the TLS handshake, the application layer content has been encrypted, and `vpso-mux` cannot and cannot rely on it to determine the path. When path separation is required, it has to happen in the Web proxy after TLS terminates: an xhttp node sharing a Web domain on `443` is wired that way, and the entry still forwards only by SNI to Caddy/Nginx.
 
 ### routing rules
 
@@ -106,13 +106,13 @@ The script generates `/etc/vps-optimize/vpso-mux.yaml` based on the Port 443 Reu
 | Route source | target backend | Whether to use web whitelist |
 | --- | --- | --- |
 | Panel domain | Caddy/Nginx local web reverse proxy HTTPS port | Yes, if the domain is configured with a whitelist |
-| Ordinary website / reverse proxy domain | Caddy/Nginx local web reverse proxy HTTPS port | Yes, if the domain is configured with a whitelist |
+| Ordinary website / reverse proxy domain (including xhttp paths shared on that domain) | Caddy/Nginx local web reverse proxy HTTPS port | Yes, if the domain is configured with a whitelist |
 | Old TCP/SNI local inbound records | Corresponds to local address and port | No |
 | Xray Inbound management record | Corresponds to the local Xray inbound address and port | No |
 | REALITY disguise SNI | Default Xray/REALITY local backend | No |
 | Unknown SNI / No SNI / Non-TLS | Drop or forward to the default backend according to SNI filtering | No |
 
-When matching, first do the exact SNI match, and then do the wildcard domain match. Wildcards only match one level of subdomains. For example, `*.example.com` can match `a.example.com`, but will not match `a.b.example.com`. If a web route is configured with a whitelist, `vpso-mux` will check the client source IP before routing; if it is not in the whitelist, the connection will be intercepted directly. Xray inbound connections, REALITY SNI and the default backend do not use the web whitelist to avoid accidentally damaging node traffic.
+When matching, first do the exact SNI match, and then do the wildcard domain match. Wildcards only match one level of subdomains. For example, `*.example.com` can match `a.example.com`, but will not match `a.b.example.com`. If a web route is configured with a whitelist, `vpso-mux` will check the client source IP before routing; if it is not in the whitelist, the connection will be intercepted directly. Xray inbound connections, REALITY SNI and the default backend do not use the web whitelist to avoid accidentally damaging node traffic. An xhttp node reached through a Web domain path is a Web route and is filtered by that domain's whitelist.
 
 ### The difference between splice and copy
 

@@ -79,7 +79,7 @@ cy
 | Усиление безопасности | SSH, аутентификация по открытому ключу, Fail2ban, межсетевой экран и ограничения соединений по портам |
 | Панели и подписки | 3x-ui, S-UI, 2S-UI, 3m-ui, Miaomiaowu, MiaomiaowuX, Sing-box, Xray, ретранслятор Xray (xray-relay), SublinkPro, Sub-Store, Dockge, Komari и CDT Monitor |
 | Перенаправление и сети | Realm, Gost, FLVX, EasyTier и Tailscale |
-| Повторное использование порта 443 | Web-сервисы, панель, подписки и узлы используют общий публичный порт `443`; Nginx Stream/TCP Peek маршрутизируют по SNI, Xray Fallback использует основной вход Xray |
+| Повторное использование порта 443 | Web-сервисы, панель, подписки и узлы используют общий публичный порт `443`; Nginx Stream/TCP Peek маршрутизируют по SNI, узлы xhttp могут делить Web-домен по пути, Xray Fallback использует основной вход Xray |
 | Диагностика и откат | Состояние служб, диагностика порта 443, проверка свободного места, дополнительное шифрование копий, восстановление и карантин архивов |
 
 Смена зеркала: `Главное меню [9 Системные настройки и очистка] -> [9 Сменить зеркало пакетов]`. Выберите материковый Китай, Азию, Европу, Северную или Южную Америку, Океанию либо Африку, затем конкретное зеркало. Зеркала без пакетов для текущего дистрибутива скрываются. Свой адрес доступен как дополнительная настройка. Инструмент [LinuxMirrors](https://linuxmirrors.cn/use/) загружается через настроенное зеркало GitHub. Меняются только источники системных пакетов без обновления пакетов. Источники GitHub, Docker и pip/npm настраиваются отдельно; скорость зависит от сетевого маршрута сервера.
@@ -88,6 +88,7 @@ cy
 
 - [Быстрый старт](https://chunlion.github.io/VPS-Optimize/ru/quick-start)
 - [Порт 443: развёртывание и настройка](https://chunlion.github.io/VPS-Optimize/ru/docs/443-single-entry)
+- [Порт 443: REALITY и xhttp вместе](https://chunlion.github.io/VPS-Optimize/ru/tutorials/03-xhttp-reality-shared-443)
 - [Диагностика и восстановление повторного использования порта 443](https://chunlion.github.io/VPS-Optimize/ru/docs/443-single-entry-troubleshooting)
 - [Восстановление и откат](https://chunlion.github.io/VPS-Optimize/ru/docs/recovery-runbook)
 - [CDT Monitor: трафик Alibaba Cloud CDT и управление ECS](https://chunlion.github.io/VPS-Optimize/ru/docs/cdt-monitor)

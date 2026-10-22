@@ -182,17 +182,7 @@ UUID、私钥、公钥和 shortId 由 3x-ui 的生成按钮创建；不要把别
 
 普通 TLS 节点使用另一套对应关系：例如客户端 SNI 为 `tls.example.com`，证书须覆盖该域名；它不使用 REALITY 的目标网站。先在 3x-ui 创建并启用本地 TCP/TLS 入站，再到 `[19] -> [4 管理 Xray SNI 转发规则]` 登记 `tls.example.com -> 本地地址:实际端口`。客户端连接地址仍为 VPS 公网 IP 或节点域名，端口使用公网入口端口。
 
-xhttp 节点有两种接入方式：
-
-- **独立节点域名**：与上面的普通 TLS 节点一致。在 3x-ui 创建 xhttp 入站并启用 TLS，证书覆盖节点域名，再登记 `node.example.com -> 本地地址:实际端口`。客户端的 `path` 由该入站自己解析，入口层不读取 HTTP 路径。
-- **与 Web 域名共用 443**：走 `[19] -> [2 管理 Web 域名与反向代理] -> [10 xhttp 节点路径反代]`。先在 3x-ui 创建一个不启用 TLS 的 xhttp 入站（监听 `127.0.0.1`，示例端口 `2400`），再登记 `域名 + 路径 -> 127.0.0.1:2400`。TLS 由 Caddy/Nginx 在本地 `8443` 终结，公网仍是 `443`。
-
-共用域名时需要确认：
-
-- 填写的 `path` 必须与 3x-ui 入站完全一致，且不能与面板 `webBasePath`、普通订阅路径或 Clash 路径重叠。
-- 该域名若启用了 Web IP 白名单，xhttp 流量同样受限；REALITY 节点不走这条链路，不受影响。
-- 入口层仍按 SNI 分流，因此 `xray-fallback` 模式下该菜单不可用。
-- 只支持 TCP：xhttp 的 HTTP/3（QUIC）需要 UDP `443`，当前入口不监听 UDP。
+xhttp 节点有两种接法：独立节点域名，按上面的普通 TLS 节点方式登记 SNI 路由；或者与面板/网站共用域名，使用 `[19] -> [2 管理 Web 域名与反向代理] -> [10 xhttp 节点路径反代]`，由本地 Web 反代引擎按路径分流，TLS 在本地 `8443` 终结。完整步骤、客户端参数和排错见 [REALITY 与 xhttp 共存教程](../tutorials/03-xhttp-reality-shared-443.md)。
 
 如果面板正常、入口与 SNI 路由检查通过，但升级到 Xray `26.9.30` 后 Mihomo 节点超时，可按[服务端版本兼容性排查](./443-single-entry-troubleshooting.md#升级-xray-后节点超时)回退到已验证可用的 **`26.6.27`**，再测试原客户端配置；不要直接全局修改客户端参数。
 
@@ -211,7 +201,7 @@ xhttp 节点有两种接入方式：
 | `[1/5]` 域名与 Web 反代引擎 | 面板域名、Caddy/Nginx、可选 Web 域名、REALITY SNI | Web 域名不包含协议、端口或路径；REALITY SNI 与已有入站 `serverNames` 和客户端一致 |
 | `[2/5]` 公网入口 | 默认 `0.0.0.0:443` | `0.0.0.0` 表示监听所有 IPv4 地址，不能填进节点连接地址 |
 | `[3/5]` 本地后端 | Web HTTPS 端口、REALITY 入站端口、面板和订阅端口及路径 | `8443`、`1443` 分别用于 Web 和 REALITY；面板、订阅以检测结果和 3x-ui 实际设置为准 |
-| `[4/5]` 访问控制与网站后端 | 可选面板 IP 白名单、每个网站的实际后端端口 | 白名单只限制 Web；`xray-fallback` 不支持。`3000`、`3001` 只是候选值，不会创建服务 |
+| `[4/5]` 访问控制与网站后端 | 可选面板 IP 白名单、每个网站的实际后端端口 | 白名单只作用于 Web 域名；REALITY 和 SNI 路由不受影响。`xray-fallback` 不支持。`3000`、`3001` 只是候选值，不会创建服务 |
 | `[5/5]` 本地 HTTP 与公网证书 | 核对 3x-ui 本地 HTTP 设置，输入 Cloudflare API Token | 原来启用 SSL 的配置先记录证书路径，再按提示清空；公网证书交给 Web 反代引擎 |
 
 节点域名 `node.example.com` 不在此向导中填写，也不要放进“其他 Web 域名”。它用于下一步的 Hosts / External Proxy 和客户端连接地址。SNI 分流依据客户端握手中的 SNI，不依据节点地址字段。
@@ -321,6 +311,8 @@ TCP Peek 的优点是分流组件更轻量，并且能在连接早期按 SNI 处
 
 保存后用浏览器打开 `https://site.example.com`。如果程序实际只监听 Docker 容器内部地址，先发布到宿主机的 `127.0.0.1`，不要把容器名或容器内部专用主机名当作 VPS 后端地址。
 
+如果要在同一个域名下再挂一个 xhttp 节点，使用 `[10 xhttp 节点路径反代]`。它只登记“域名 + 路径 -> 本地端口”，证书和 TLS 仍由本地 Web 反代引擎处理；3x-ui 侧的入站必须监听 `127.0.0.1` 并且不启用 TLS。完整步骤见 [REALITY 与 xhttp 共存教程](../tutorials/03-xhttp-reality-shared-443.md)。
+
 ### 反向代理 URL 怎么填
 
 先分清服务类型：3x-ui 订阅填写 `https://panel.example.com + URI 路径`，例如 `https://panel.example.com/sub/`；SublinkPro、Sub-Store 等独立订阅工具使用自己的 Web 域名，不能套用 3x-ui 的填写方式。
@@ -329,7 +321,7 @@ TCP Peek 的优点是分流组件更轻量，并且能在连接早期按 SNI 处
 
 ### 管理域名 IP 白名单
 
-Web 白名单只限制网站和面板域名，不限制 REALITY 节点流量。入口模式为 `nginx-stream` 或 `tcp-peek` 时，使用以下入口：
+Web 白名单按域名生效，只作用于面板和网站这类 Web 域名，不限制 REALITY 节点和 SNI 路由。通过 Web 域名路径接入的 xhttp 节点属于 Web 流量，会一起受限。入口模式为 `nginx-stream` 或 `tcp-peek` 时，使用以下入口：
 
 ```text
 主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [5 管理域名 IP 白名单]
@@ -406,6 +398,8 @@ Nginx Stream 和 TCP Peek 支持这两项保护；Xray Fallback 没有前置的 
 
 - 不要让 3x-ui 面板、订阅或后端端口直接监听公网。
 - 不要让两个服务同时监听公网 `443`。
+- 不要把 xhttp 路径设在 `/panel/`、`/sub/`、`/clash/` 或它们的子路径下。
+- 不要在 xhttp 入站和本地 Web 反代之间同时启用 TLS。
 - 不要把面板域名、节点域名或本机地址当作 REALITY 的伪装目标。
 - 不要在没有 SSH 保底连接和备份的情况下切换入口。
 - 不要把示例域名、端口和路径原样复制到生产环境。

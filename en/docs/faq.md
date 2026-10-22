@@ -40,16 +40,25 @@ In port 443 sharing mode, the browser only accesses the standard HTTPS address:
 
 ```text
 https://panel.example.com/panel/
-https://sub.example.com/
+https://panel.example.com/sub/
 ```
 
-Do not access internal ports from the public internet:
+A 3x-ui subscription uses the panel domain plus its URI path. Only standalone subscription tools such as SublinkPro or Sub-Store use their own domain, for example `https://tool.example.com/`. Do not access internal ports from the public internet:
 
 ```text
 https://panel.example.com:8443/
 https://panel.example.com:1443/
 https://panel.example.com:40000/
 ```
+
+## Can an xhttp node share port 443 with the panel
+
+Yes, with two possible wirings:
+
+- **Shared Web domain**: `Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [10 xhttp node path reverse proxy]`. The xhttp inbound in 3x-ui must listen on `127.0.0.1` with TLS disabled; TLS stays on the local Caddy/Nginx. The client uses the same domain and the registered path.
+- **Dedicated node domain**: same as an ordinary TLS node. Register the domain and local port under `[4 Manage Xray SNI forwarding rules]`, and let the xhttp inbound use its own certificate.
+
+With a shared domain, the domain's Web allowlist limits xhttp too. `xray-fallback` does not support path reverse proxying, and xhttp over HTTP/3 needs UDP `443`, which the entry does not listen on. Full steps are in [REALITY and xhttp Together](../tutorials/03-xhttp-reality-shared-443.md).
 
 ## How to paste dynamic TCP parameters
 

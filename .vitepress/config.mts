@@ -15,6 +15,7 @@ const zhTheme = {
         { text: '文档首页', link: '/' },
         { text: '443端口复用：部署与配置', link: '/docs/443-single-entry' },
         { text: '443端口复用：独立订阅工具反代', link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+        { text: '443端口复用：REALITY 与 xhttp 共存', link: '/tutorials/03-xhttp-reality-shared-443' },
         { text: '安全与回滚', link: '/docs/security-rollback' },
         { text: '常见问题', link: '/docs/faq' }
       ]
@@ -37,6 +38,7 @@ const zhTheme = {
         items: [
           { text: '部署与配置', link: '/docs/443-single-entry' },
           { text: '独立订阅工具反代', link: '/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+          { text: 'REALITY 与 xhttp 共存', link: '/tutorials/03-xhttp-reality-shared-443' },
           { text: '入口模式与原理', link: '/docs/443-tcp-peek-engine' },
           { text: '排错与恢复', link: '/docs/443-single-entry-troubleshooting' }
         ]
@@ -112,6 +114,7 @@ const enTheme = {
         { text: 'Documentation Home', link: '/en/' },
         { text: 'Port 443 Reuse: Setup and Configuration', link: '/en/docs/443-single-entry' },
         { text: 'Port 443 Reuse: Standalone Subscription Tool Proxy', link: '/en/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+        { text: 'Port 443 Reuse: REALITY and xhttp Together', link: '/en/tutorials/03-xhttp-reality-shared-443' },
         { text: 'Security and Rollback', link: '/en/docs/security-rollback' },
         { text: 'FAQ', link: '/en/docs/faq' }
       ]
@@ -134,6 +137,7 @@ const enTheme = {
         items: [
           { text: 'Setup and Configuration', link: '/en/docs/443-single-entry' },
           { text: 'Standalone Subscription Tool Proxy', link: '/en/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+          { text: 'REALITY and xhttp Together', link: '/en/tutorials/03-xhttp-reality-shared-443' },
           { text: 'Entry Modes and Internals', link: '/en/docs/443-tcp-peek-engine' },
           { text: 'Troubleshooting and Recovery', link: '/en/docs/443-single-entry-troubleshooting' }
         ]
@@ -185,6 +189,7 @@ const ruTheme = {
         { text: 'Главная документации', link: '/ru/' },
         { text: 'Порт 443: развёртывание и настройка', link: '/ru/docs/443-single-entry' },
         { text: 'Порт 443: прокси отдельного сервиса подписок', link: '/ru/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+        { text: 'Порт 443: REALITY и xhttp вместе', link: '/ru/tutorials/03-xhttp-reality-shared-443' },
         { text: 'Безопасность и откат', link: '/ru/docs/security-rollback' },
         { text: 'Частые вопросы', link: '/ru/docs/faq' }
       ]
@@ -207,6 +212,7 @@ const ruTheme = {
         items: [
           { text: 'Развёртывание и настройка', link: '/ru/docs/443-single-entry' },
           { text: 'Прокси отдельного сервиса подписок', link: '/ru/tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry' },
+          { text: 'REALITY и xhttp вместе', link: '/ru/tutorials/03-xhttp-reality-shared-443' },
           { text: 'Режимы входа и принципы работы', link: '/ru/docs/443-tcp-peek-engine' },
           { text: 'Диагностика и восстановление', link: '/ru/docs/443-single-entry-troubleshooting' }
         ]

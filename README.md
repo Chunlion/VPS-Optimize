@@ -79,7 +79,7 @@ cy
 | 安全加固 | SSH、公钥登录、Fail2ban、防火墙、端口并发限制 |
 | 面板与订阅 | 3x-ui、S-UI、2S-UI、3m-ui、妙妙屋、妙妙屋X、Sing-box、Xray、Xray 中转（xray-relay）、SublinkPro、Sub-Store、Dockge、Komari、CDT Monitor |
 | 转发与组网 | Realm、Gost、FLVX 哆啦转发面板、EasyTier、Tailscale |
-| 443端口复用 | Web、面板、订阅和节点共享公网 `443`；Nginx Stream/TCP Peek 按 SNI 分流，Xray Fallback 由 Xray 主入站接管 |
+| 443端口复用 | Web、面板、订阅和节点共享公网 `443`；Nginx Stream/TCP Peek 按 SNI 分流，xhttp 节点可与 Web 域名按路径共用，Xray Fallback 由 Xray 主入站接管 |
 | 诊断与回滚 | 服务健康、443 链路体检、空间预检、可选加密备份、恢复和隔离归档 |
 
 换源入口：`主菜单 [9 系统设置与清理] -> [9 切换系统软件源]`。先选中国大陆、亚洲、欧洲、北美、南美、大洋洲或非洲，再直接选择镜像站（不支持当前发行版的镜像站会自动隐藏）；自定义地址放在高级选项。[LinuxMirrors](https://linuxmirrors.cn/use/) 换源工具通过已设置的 GitHub 镜像下载。只切换系统软件源，不自动升级软件包；GitHub、Docker、pip/npm 下载源需分别配置，速度取决于本机线路。
@@ -88,6 +88,7 @@ cy
 
 - [快速开始](https://chunlion.github.io/VPS-Optimize/quick-start)
 - [443端口复用：部署与配置](https://chunlion.github.io/VPS-Optimize/docs/443-single-entry)
+- [443端口复用：REALITY 与 xhttp 共存](https://chunlion.github.io/VPS-Optimize/tutorials/03-xhttp-reality-shared-443)
 - [443端口复用排错与恢复](https://chunlion.github.io/VPS-Optimize/docs/443-single-entry-troubleshooting)
 - [失联与回滚急救](https://chunlion.github.io/VPS-Optimize/docs/recovery-runbook)
 - [CDT Monitor：阿里云 CDT 流量与 ECS 管理](https://chunlion.github.io/VPS-Optimize/docs/cdt-monitor)

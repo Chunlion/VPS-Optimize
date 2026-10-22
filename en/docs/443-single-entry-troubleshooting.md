@@ -29,6 +29,7 @@ Remove tokens, passwords, private keys, and subscription keys before posting. Fu
 | [Connection closed or TLS error](#err-connection-closed-err-ssl-protocol-error) | Public listener and forwarding target |
 | [Page not found](#_404) | Panel or subscription path |
 | [Bad gateway](#_502) | Local backend and reverse proxy |
+| [xhttp node will not connect](#xhttp-node-will-not-connect) | Path, TLS, and SNI routes |
 
 ## Website selection suggestions
 
@@ -673,4 +674,63 @@ openssl s_client -connect www.microsoft.com:443 -servername www.microsoft.com </
 Main menu [19 Port 443 Reuse manager] -> [3 Edit ports, paths, and REALITY settings]
 Main menu [19 Port 443 Reuse manager] -> [9 Regenerate and apply entry configuration]
 Main menu [19 Port 443 Reuse manager] -> [13 Check entry configuration, certificates, and routes]
+```
+
+### Xray timeout after upgrade
+
+If the panel and subscriptions are reachable and the entry and SNI routes are correct, but REALITY nodes time out after an Xray upgrade, handle server-side version compatibility first. The confirmed case is Xray `26.9.30` on the server with Mihomo `v1.19.32` on the client; rolling the server back to **`26.6.27`** restored connectivity. A current client does not by itself mean compatibility.
+
+1. Record the Xray version 3x-ui actually uses, and back up the panel database, configuration, and current core binary. A separately installed `xray` command may belong to another service; do not replace the wrong instance.
+2. Check `minClientVer` / `maxClientVer`. `minClientVer=1.0.0` is not a universal fix for handshake failures; when no maximum is needed, leave `maxClientVer` empty rather than filling in `1.0.0`.
+3. For the compatibility issue above, roll the server-side Xray back to **`26.6.27`**. Confirm the version passes the existing configuration check, restart the matching panel service, and retest with the original client configuration.
+4. Only consider upgrading again after the panel, subscriptions, and existing nodes all work. Restore the backup if verification fails, and do not change the core, SNI routing, and global client settings at the same time.
+
+If the original share link and the 3x-ui native Mihomo subscription behave differently, check whether the subscription conversion kept `reality-opts` parameters such as `support-x25519mlkem768`. Fixing one parameter on the client only proves that node works; it does not replace full verification after a server rollback, and it must not be turned into a global override for every node.
+
+### Related menu entry
+
+```text
+Main menu [19 Port 443 Reuse manager] -> [3 Edit ports, paths, and REALITY settings]
+Main menu [19 Port 443 Reuse manager] -> [9 Regenerate and apply entry configuration]
+Main menu [19 Port 443 Reuse manager] -> [13 Check entry configuration, certificates, and routes]
+```
+
+## xhttp node will not connect
+
+### Symptoms
+
+REALITY nodes work, but the xhttp node completes the handshake and then carries no data; or, with a shared Web domain, the node path returns the panel login page.
+
+### Common causes
+
+- The client `path` does not match the 3x-ui inbound, usually a missing or extra trailing slash.
+- With a shared Web domain, TLS is enabled on the xhttp inbound while the local Web proxy forwards plain HTTP.
+- The dedicated node domain has no SNI route, or the route was saved but not synced to the active entry.
+- The path overlaps the panel `webBasePath` or a subscription path, so the default Web rule matches first.
+- The Web domain has an IP allowlist and the client egress IP is outside it.
+
+### Commands
+
+```bash
+ss -lntp | grep -E ':(443|2400|2410)'
+curl -sS -o /dev/null -w '%{http_code}\n' https://panel.example.com/xhttp
+curl -sS http://127.0.0.1:2400/xhttp -o /dev/null -w '%{http_code}\n'
+journalctl -u caddy -n 80 --no-pager
+```
+
+If the two `curl` calls return different status codes, the problem is in the Web proxy layer. If they match but the client still fails, the problem is in the inbound or the client settings. A 404 or 400 is expected and means the request reached the xhttp backend rather than the panel.
+
+### Solution
+
+- Match `path` exactly, including case and the trailing slash.
+- Disable TLS on the xhttp inbound for a shared domain; only the local Web proxy uses the certificate.
+- For a dedicated domain, register it under `[4 Manage Xray SNI forwarding rules]` and sync it to the active entry.
+- Keep the path away from `/panel/`, `/sub/`, `/clash/`, and their subpaths.
+- For an allowlisted domain, add the client egress IP or switch to a dedicated node domain.
+
+### Related menu entry
+
+```text
+Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [10 xhttp node path reverse proxy]
+Main menu [19 Port 443 Reuse manager] -> [4 Manage Xray SNI forwarding rules]
 ```

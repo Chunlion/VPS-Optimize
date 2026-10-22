@@ -184,17 +184,7 @@ The client link should use your node domain and port `443`, not `127.0.0.1:1443`
 
 Ordinary TLS nodes use a different mapping: if the client SNI is `tls.example.com`, the certificate must cover that name. They do not use a REALITY target site. Create and enable a local TCP/TLS inbound in 3x-ui, then register `tls.example.com -> local address:actual port` under `[19] -> [4 Manage Xray SNI forwarding rules]`. The client still connects to the VPS public IP or node domain on the public entry port.
 
-xhttp nodes have two options:
-
-- **Dedicated node domain**: identical to an ordinary TLS node. Create an xhttp inbound in 3x-ui with TLS enabled, make sure the certificate covers the node domain, then register `node.example.com -> local address:actual port`. The inbound itself parses the client `path`; the entry layer never reads HTTP paths.
-- **Share port 443 with a Web domain**: use `[19] -> [2 Manage Web domains and reverse proxies] -> [10 xhttp node path reverse proxy]`. First create an xhttp inbound in 3x-ui with TLS disabled (listen on `127.0.0.1`, example port `2400`), then register `domain + path -> 127.0.0.1:2400`. TLS terminates on Caddy/Nginx at the local `8443` port; the public port stays `443`.
-
-When sharing a domain, confirm the following:
-
-- The `path` you enter must match the 3x-ui inbound exactly and must not overlap the panel `webBasePath`, the subscription paths, or the Clash path.
-- If that domain has a Web IP allowlist, xhttp traffic is restricted by it too. REALITY nodes do not use this path and are unaffected.
-- The entry still routes by SNI, so this menu is unavailable in `xray-fallback` mode.
-- TCP only: xhttp over HTTP/3 (QUIC) needs UDP `443`, which the entry does not listen on.
+xhttp nodes have two wirings: a dedicated node domain, registered as an SNI route the same way as an ordinary TLS node; or sharing the panel/site domain through `[19] -> [2 Manage Web domains and reverse proxies] -> [10 xhttp node path reverse proxy]`, where the local Web proxy routes by path and terminates TLS at local `8443`. Full steps, client settings, and troubleshooting are in [REALITY and xhttp Together](../tutorials/03-xhttp-reality-shared-443.md).
 
 ### 4. Run the Port 443 wizard
 
@@ -211,7 +201,7 @@ Select the entry mode first; choose **Nginx Stream** if unsure on a first deploy
 | `[1/5]` Domains and Web reverse proxy | Panel domain, Caddy/Nginx, optional Web domains, REALITY SNI | Web domains contain no scheme, port, or path. REALITY SNI matches the existing inbound serverNames and client |
 | `[2/5]` Public entry | Default `0.0.0.0:443` | `0.0.0.0` binds all IPv4 addresses; it is not a client connection address |
 | `[3/5]` Local backends | Web HTTPS and REALITY ports, panel/subscription ports and paths | `8443` is for Web; `1443` is for REALITY. Match panel and subscription values to detected and actual 3x-ui settings |
-| `[4/5]` Access control and site backends | Optional panel IP allowlist, each app's actual backend port | Allowlists affect Web only and are unavailable in xray-fallback. `3000` and `3001` are suggested values, not services created by the script |
+| `[4/5]` Access control and site backends | Optional panel IP allowlist, each app's actual backend port | Allowlists apply to Web domains only; REALITY and SNI routes are unaffected. Unavailable in xray-fallback. `3000` and `3001` are suggested values, not services created by the script |
 | `[5/5]` Local HTTP and public certificates | Check local HTTP settings in 3x-ui; enter the Cloudflare API token | Record existing SSL certificate paths before clearing them. The Web reverse proxy handles public certificates |
 
 The node domain `node.example.com` is not entered in this wizard or under additional Web domains. Use it in Hosts / External Proxy and as the client connection address in the next step. SNI routing uses the SNI in the client handshake, not the node address field.
@@ -319,6 +309,8 @@ Backend port: 3000
 
 Then open `https://site.example.com` in a browser. If the app is inside a container, publish it to the host loopback address first; do not use a container-only hostname as the VPS backend address.
 
+To serve an xhttp node under the same domain, use `[10 xhttp node path reverse proxy]`. It only records "domain + path -> local port"; certificates and TLS stay on the local Web proxy, and the 3x-ui inbound must listen on `127.0.0.1` with TLS disabled. See [REALITY and xhttp Together](../tutorials/03-xhttp-reality-shared-443.md).
+
 ### How to fill in the reverse-proxy URL
 
 First identify the service. A 3x-ui subscription uses `https://panel.example.com + URI path`, such as `https://panel.example.com/sub/`. A standalone tool such as SublinkPro or Sub-Store uses its own Web domain and must not reuse the 3x-ui field values.
@@ -327,7 +319,7 @@ The DNS record, Web domain, backend, external URL, and verification steps for a 
 
 ### Manage the Web IP allowlist
 
-The Web allowlist applies to websites and the panel, not REALITY node traffic. In `nginx-stream` or `tcp-peek`, use:
+The Web allowlist works per domain and applies to Web domains such as the panel and sites. It does not limit REALITY nodes or SNI routes. xhttp nodes reached through a Web domain path are Web traffic and are limited as well. In `nginx-stream` or `tcp-peek`, use:
 
 ```text
 Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [5 Manage domain IP allowlist]
@@ -402,6 +394,8 @@ If possible, use a non-CDN HTTPS site as the REALITY target; it reduces the impa
 
 - Do not expose the 3x-ui panel, subscription service, or website backend directly to the Internet.
 - Do not let two services listen on public `443` at the same time.
+- Do not put an xhttp path on `/panel/`, `/sub/`, `/clash/`, or their subpaths.
+- Do not enable TLS on both the xhttp inbound and the local Web proxy.
 - Do not use the panel domain, node domain, or a local address as the REALITY camouflage target.
 - Do not switch the entry without a working SSH session and a backup.
 - Do not copy example domains, ports, or paths into production unchanged.

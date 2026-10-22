@@ -40,16 +40,25 @@ systemctl status ssh --no-pager || systemctl status sshd --no-pager
 
 ```text
 https://panel.example.com/panel/
-https://sub.example.com/
+https://panel.example.com/sub/
 ```
 
-不要从公网访问内部端口：
+3x-ui 的订阅走面板域名加 URI 路径。只有独立订阅工具（SublinkPro、Sub-Store 等）才使用它自己的域名，例如 `https://tool.example.com/`。不要从公网访问内部端口：
 
 ```text
 https://panel.example.com:8443/
 https://panel.example.com:1443/
 https://panel.example.com:40000/
 ```
+
+## xhttp 节点能和面板共用 443 吗
+
+可以，但有两种接法：
+
+- **共用 Web 域名**：`主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [10 xhttp 节点路径反代]`。3x-ui 里的 xhttp 入站要监听 `127.0.0.1` 且不启用 TLS，TLS 由本地 Caddy/Nginx 处理。客户端使用同一个域名，路径填登记过的路径。
+- **独立节点域名**：和普通 TLS 节点一样，在 `[4 管理 Xray SNI 转发规则]` 登记域名到本地端口，证书由 xhttp 入站自己使用。
+
+共用域名时，该域名的 Web 白名单会一起限制 xhttp；`xray-fallback` 模式不支持路径反代；xhttp 的 HTTP/3 需要 UDP `443`，当前入口不支持。完整步骤见 [REALITY 与 xhttp 共存教程](../tutorials/03-xhttp-reality-shared-443.md)。
 
 ## 动态 TCP 参数怎么粘贴
 

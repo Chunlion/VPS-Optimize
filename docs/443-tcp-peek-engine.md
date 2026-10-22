@@ -10,7 +10,7 @@
 
 - Web 域名、Web 反代引擎后端映射和证书共用；Web 白名单只在 Nginx Stream 与 TCP Peek 之间共用。
 - 证书仍使用现有 `acme.sh + Cloudflare DNS API` 流程，不引入 Caddy DNS 模块，不使用 `xcaddy`。
-- Web 白名单只保护 Web 域名，不用于限制 Xray 节点流量。
+- Web 白名单只保护 Web 域名，不用于限制 Xray 节点流量。例外情况：与 Web 域名共用 `443` 的 xhttp 节点属于该域名的 Web 流量，会一起受限；独立域名的 xhttp 节点和 REALITY 节点不受影响。
 - 443端口复用下的 Web 反代引擎可选择 Caddy 或 Nginx，切换入口模式时复用同一份配置。
 - 使用 Nginx Stream 或 TCP Peek 时，Web 白名单在入口层按 `SNI + 源 IP` 生效；`xray-fallback` 无论选择 Caddy 还是 Nginx 本地 Web 反代，都不允许新增、保留或应用 Web 白名单。
 - 只有一个服务可以监听公网 `443`：`nginx`、`xray` 或 `vpso-mux`。
@@ -94,7 +94,7 @@ TLS record
 
 实现上先 peek 约 4 KiB，缓冲最多 16 KiB，`timeouts.peek` 默认为 `3s`。SNI 转为小写并去掉末尾的点；重复 SNI、非法名称或畸形扩展不会用于路由。 SNI 清洗开启时，未知、无 SNI 和非 TLS 连接直接丢弃；关闭时才转发到默认 Xray/REALITY 后端。TCP Peek 等待 ClientHello 超过 `timeouts.peek` 时始终关闭连接。
 
-这也是为什么本方案适合 HTTPS/TLS/SNI 流量，不适合按 HTTP path 或明文协议内容分流。到了 TLS 握手之后，应用层内容已经加密，`vpso-mux` 不会也不能靠它判断路径。
+这也是为什么本方案适合 HTTPS/TLS/SNI 流量，不适合按 HTTP path 或明文协议内容分流。到了 TLS 握手之后，应用层内容已经加密，`vpso-mux` 不会也不能靠它判断路径。需要按路径区分时，路径判断只能放在 TLS 之后的 Web 反代层：xhttp 节点与 Web 域名共用 `443` 就是用这种方式接入的，入口仍然只按 SNI 转发到 Caddy/Nginx。
 
 ### 路由选择规则
 
@@ -103,13 +103,13 @@ TLS record
 | 路由来源 | 目标后端 | 是否使用 Web 白名单 |
 | --- | --- | --- |
 | 面板域名 | Caddy/Nginx 本地 Web 反代 HTTPS 端口 | 是，如果该域名配置了白名单 |
-| 普通网站 / 反代域名 | Caddy/Nginx 本地 Web 反代 HTTPS 端口 | 是，如果该域名配置了白名单 |
+| 普通网站 / 反代域名（含共用该域名的 xhttp 路径） | Caddy/Nginx 本地 Web 反代 HTTPS 端口 | 是，如果该域名配置了白名单 |
 | 旧 TCP/SNI 本地入站记录 | 对应本地地址和端口 | 否 |
 | Xray 入站管理记录 | 对应本地 Xray 入站地址和端口 | 否 |
 | REALITY 伪装 SNI | 默认 Xray/REALITY 本地后端 | 否 |
 | 未命中 SNI / 无 SNI / 非 TLS | 按 SNI 清洗开关丢弃或转发到默认后端 | 否 |
 
-匹配时先做精确 SNI 匹配，再做通配域名匹配。通配只匹配一层子域名，例如 `*.example.com` 可以匹配 `a.example.com`，不会匹配 `a.b.example.com`。如果某个 Web 路由配置了白名单，`vpso-mux` 会在分流前检查客户端源 IP；不在白名单内时直接拦截该连接。Xray 入站、REALITY SNI 和默认后端不应用 Web 白名单，避免把节点流量误伤。
+匹配时先做精确 SNI 匹配，再做通配域名匹配。通配只匹配一层子域名，例如 `*.example.com` 可以匹配 `a.example.com`，不会匹配 `a.b.example.com`。如果某个 Web 路由配置了白名单，`vpso-mux` 会在分流前检查客户端源 IP；不在白名单内时直接拦截该连接。Xray 入站、REALITY SNI 和默认后端不应用 Web 白名单，避免把节点流量误伤。通过 Web 域名路径接入的 xhttp 节点属于 Web 路由，会按该域名的白名单拦截。
 
 ### splice 和 copy 的区别
 
