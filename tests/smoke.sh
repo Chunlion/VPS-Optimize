@@ -5,6 +5,17 @@ trap 'echo "Smoke failed at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+# MSYS/Cygwin 的 chmod 不会真正改变权限位，权限断言只在类 Unix 环境执行。
+tests_posix_semantics() {
+    case "${OSTYPE:-}" in
+        msys*|cygwin*) return 1 ;;
+    esac
+    case "$(uname -s 2>/dev/null)" in
+        MINGW*|MSYS*|CYGWIN*) return 1 ;;
+    esac
+    return 0
+}
+
 if [[ "${VPSO_CI_CONTAINER:-}" == "1" ]]; then
     git config --global --add safe.directory "$repo_root"
 fi
@@ -374,7 +385,9 @@ bad_domain_output=$(print_domain_validation_error "测试域名" "$bad_domain_ra
     compose_write_secure_file "$compose_secure_tmp" <<'EOF'
 services: {}
 EOF
-    [[ "$(stat -c '%a' "$compose_secure_tmp")" == "600" ]]
+    if tests_posix_semantics; then
+        [[ "$(stat -c '%a' "$compose_secure_tmp")" == "600" ]]
+    fi
     rm -f "$compose_secure_tmp"
     ensure_docker_compose_ready() { DOCKER_COMPOSE_CMD=true; }
     validate_applied_config_kind compose /tmp/vps-compose-smoke.yml >/dev/null

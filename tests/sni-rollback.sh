@@ -2,7 +2,9 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-fixture=$(mktemp -d)
+# Use the POSIX form so the path can be injected into source with sed;
+# a Windows-style path would have its backslashes eaten as escapes.
+fixture=$(cd "$(mktemp -d)" && pwd)
 trap 'rm -rf -- "$fixture"' EXIT
 mkdir -p "$fixture/etc/nginx/stream.d" "$fixture/etc/nginx/conf.d" "$fixture/etc/vps-optimize"
 mkdir -p "$fixture/etc/nginx/sites-available" "$fixture/etc/nginx/sites-enabled"
@@ -18,6 +20,17 @@ for module in backup rollback; do
     source <(sed -e "s|/etc/|$fixture/etc/|g" -e "s|/usr/local/|$fixture/usr/local/|g" "$repo_root/src/$module.sh")
 done
 localized_text() { printf '%s' "$1"; }
+
+# MSYS/Cygwin 没有真实的 POSIX 权限位，权限断言只在类 Unix 环境执行。
+tests_posix_semantics() {
+    case "${OSTYPE:-}" in
+        msys*|cygwin*) return 1 ;;
+    esac
+    case "$(uname -s 2>/dev/null)" in
+        MINGW*|MSYS*|CYGWIN*) return 1 ;;
+    esac
+    return 0
+}
 RED= YELLOW= GREEN= PLAIN= PANEL_DOMAIN=
 SITE_DOMAINS=()
 service_log="$fixture/services.log"
@@ -44,7 +57,9 @@ create_sni_stack_backup "$backup_dir" >/dev/null
 grep -Fxq "$fixture/etc/vps-optimize/sni-stack.env" "$backup_dir/absent-files"
 grep -Fxq 'caddy|inactive' "$backup_dir/web-services"
 grep -Fxq 'caddy|disabled' "$backup_dir/web-services"
-[[ "$(stat -c %a "$backup_dir")" == 700 ]]
+if tests_posix_semantics; then
+    [[ "$(stat -c %a "$backup_dir")" == 700 ]]
+fi
 printf 'new config\n' > "$fixture/etc/vps-optimize/sni-stack.env"
 printf 'new state\n' > "$fixture/etc/vps-optimize/443-engine.conf"
 printf 'changed stream\n' > "$fixture/etc/nginx/stream.d/vps_sni_443.conf"

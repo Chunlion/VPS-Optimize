@@ -17,6 +17,18 @@ source src/xray_sni_routes.sh
 source src/menus.sh
 localized_text() { printf '%s' "$1"; }
 
+# MSYS/Cygwin 没有真实的 POSIX 权限位，SIGHUP 也会波及宿主进程组，
+# 这两类断言只在类 Unix 环境执行，Linux CI 仍会覆盖。
+tests_posix_semantics() {
+    case "${OSTYPE:-}" in
+        msys*|cygwin*) return 1 ;;
+    esac
+    case "$(uname -s 2>/dev/null)" in
+        MINGW*|MSYS*|CYGWIN*) return 1 ;;
+    esac
+    return 0
+}
+
 (
     nginx() { echo 'nginx version: nginx/1.25.1' >&2; }
     [[ "$(nginx_http_listen_directive ::1 8443)" == $'    listen [::1]:8443 ssl;\n    http2 on;' ]]
@@ -139,7 +151,9 @@ PY
     XHTTP_PATH_DOMAINS=() XHTTP_PATH_PATHS=() XHTTP_PATH_ADDRS=() XHTTP_PATH_PORTS=()
     save_sni_stack_env
     [[ "$(cat "$tmp_dir/routes")" == 'example.org|127.0.0.1|1443' ]]
-    [[ "$(stat -c %a "$tmp_dir/sni-stack.env")" == 600 ]]
+    if tests_posix_semantics; then
+        [[ "$(stat -c %a "$tmp_dir/sni-stack.env")" == 600 ]]
+    fi
     cp "$tmp_dir/sni-stack.env" "$tmp_dir/original.env"
     PANEL_DOMAIN=changed.example.com
     mv() { return 1; }
@@ -165,10 +179,12 @@ PY
     print_sni_stack_preview() { :; }
     guard_current_ssh_not_on_entry_port() { :; }
     rollback_sni_stack_after_failure() { echo rollback >> "$tmp_dir/rollback-called"; return 1; }
-    prepare_initial_entry_mode_dependencies() { kill -HUP "$BASHPID"; }
-    if func_caddy_cf_reality_wizard; then exit 1; else [[ $? == 129 ]]; fi
-    [[ "$(cat "$tmp_dir/rollback-called")" == rollback ]]
-    rm "$tmp_dir/rollback-called"
+    if tests_posix_semantics; then
+        prepare_initial_entry_mode_dependencies() { kill -HUP "$BASHPID"; }
+        if func_caddy_cf_reality_wizard; then exit 1; else [[ $? == 129 ]]; fi
+        [[ "$(cat "$tmp_dir/rollback-called")" == rollback ]]
+        rm "$tmp_dir/rollback-called"
+    fi
     prepare_initial_entry_mode_dependencies() { :; }
     quarantine_legacy_caddy_443_configs() { :; }
     quarantine_legacy_nginx_https_proxy_configs() { :; }
