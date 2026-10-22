@@ -19,7 +19,7 @@ if [[ -n "${NO_COLOR+x}" ]]; then
     BOLD=''
 fi
 
-SCRIPT_VERSION="v2.7"
+SCRIPT_VERSION="v2.8"
 UPDATE_BASE_URL="https://raw.githubusercontent.com/Chunlion/VPS-Optimize/main/dist/vps.sh"
 UPDATE_MIRROR=""
 UPDATE_MIRROR_CONFIG="/etc/vps-optimize/update-mirror.conf"

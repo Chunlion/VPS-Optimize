@@ -1,16 +1,46 @@
 # Changelog
 
-## Unreleased
+## v2.8 - 2026-10-22
 
-- 清理 CI 驱动的过度防御代码：删除 `windows-selfcheck-wrapper` 作业及其配套的 `scripts/selfcheck-ps1-contract.ps1`（用 mock wsl 验证一个只负责转发 WSL 的包装器）；重写 `scripts/validate-traffic-guard-checker.sh`，去掉 dist/src 模板比对（dist 是 src 的拼接，比对恒等），只保留模板存在性、CRLF、shebang 与 `bash -n` 校验；精简 `build.sh` 的模块清单校验；`selfcheck.sh` 在本地缺 Go 时跳过 go test/vet（CI 仍要求），并去掉与 dist 新鲜度检查重复的 `git diff --check`；移除源码中永不触发的 `declare -F` 分支和 `-S error` 下不生效的 36 处 shellcheck 豁免。
+### 新增功能
+
+- **443端口复用：xhttp 节点路径反代**。新增 `[19] -> [2 管理 Web 域名与反向代理] -> [10 xhttp 节点路径反代]`，在同一个公网 `443` 和同一个 Web 域名下按路径分流到本地 xhttp 入站：Caddy 生成 `@xhttp_N` handle 块并置于默认 handle 之前，Nginx 生成关闭请求/响应缓冲、读写超时 1 小时的前缀 location。记录保存到 `/etc/vps-optimize/xhttp-paths.conf`（`域名|路径|本地地址|本地端口`），只登记路由，不创建或修改 3x-ui 入站；TLS 由本地 Web 反代终结。路径与面板 `webBasePath`、订阅路径重叠时拒绝，`xray-fallback` 模式下菜单不可用。
+- **切换系统软件源**：新增 `[9 系统设置与清理] -> [9 切换系统软件源]`，可按中国大陆、境外、教育网或自定义地址选择镜像站；只切换系统软件包源，不自动升级软件包，也不改动 GitHub、Docker、pip/npm 源。
+- **GitHub 更新镜像**：支持配置镜像前缀加速脚本下载，默认不启用；输入 `-` 恢复直连，配置持久化到 `/etc/vps-optimize/update-mirror.conf`，非法前缀（含 `@`、`*`）读取时忽略。
+- **面板工具**：新增 Xray 中转（xray-relay）安装入口。
+
+### 修复
+
+- 换源按发行版校验：镜像清单标注每个站点实测支持的发行版，不支持当前发行版的站点自动隐藏；Debian/Ubuntu 先探测仓库元数据，探测不到时不换源，避免把系统源改坏。
+- 换源可逆与输入校验：自定义地址自动剥离协议与结尾斜杠，保存前先用 `.sha256` 探测，非法内容不写入，`-` 即可恢复直连，不再需要手工删除配置文件。
+- 国内机器下载换源脚本：优先 `linuxmirrors.cn` 与 `edgeone.linuxmirrors.cn`，GitHub raw 作为兜底；已配置镜像时镜像地址优先，并对 `raw.githubusercontent.com` / `github.com` 地址自动加镜像前缀重试。
+- `apt update` 失败时不再继续安装软件包：更新与安装改为链式执行，避免软件源不可用时继续装包并留下半成品。
 - 修复外部依赖：Aria2 改用仓库原始地址（`git.io` 短链已停止维护、上游仓库已归档）；nftables NAT 去掉第三方反代前缀直连 GitHub Release；RHEL 系 Caddy 源从不存在的 `openrepo.io` 改为官方 COPR；Python 环境改为系统软件包安装，修复该脚本仅支持 Debian/Ubuntu 却在全平台提供的问题。
-- 清理过度确认：新增 `confirm_standard_action`，部署订阅工具、安装面板、编辑配置后重启服务、重置统计基线、修复 timer、预检自动修复等可回退操作改为单次 `Y/n`，不再要求输入 `YES`；编辑配置后的 443 重新应用去掉重复确认，只保留切换预览。
 - 443 流程：`修改端口、路径与 REALITY 参数` 子菜单第 4 项改为直接修改面板域名，不再只打印跳转提示。
-- `dog.sh`：菜单项直接标注快捷词，补齐 `d/h/l` 入口，子页面标题接入三语，修正标题格式；同步三语 `dog.md` 菜单名。
-- 详细审查记录见 `maintenance-audit.md`。
+- 增强流量达量关机保护检查器安装流程：生成时先写临时文件、规范化 BOM/CRLF 后再替换正式 checker；安装失败会显示实际首行字节、待检查文件和日志路径，并写入 `vps-traffic-guard.log` 便于排查。
+
+### 优化
+
+- 清理过度确认：新增 `confirm_standard_action`，部署订阅工具、安装面板、编辑配置后重启服务、重置统计基线、修复 timer、预检自动修复等可回退操作改为单次 `Y/n`，不再要求输入 `YES`；编辑配置后的 443 重新应用去掉重复确认，只保留切换预览。
 - 统一中/英/俄三语菜单与帮助文案：修正英文、俄文中与中文功能不符的条目（Docker 管理、配置备份与回滚、443 入口、面板工具、系统设置等），统一二级菜单、面包屑、帮助与文档中的菜单名称；对照清单见 `copy-audit.md`。
 - 合并 SSH 用户密钥登录模式里的重复入口：`密钥 + 密码登录（保留/恢复密码）` 同时承担保留密码和从仅密钥模式恢复密码登录的作用，菜单不再单独显示重复的“恢复密码登录”。
-- 增强流量达量关机保护检查器安装流程：生成时会先写临时文件、规范化 BOM/CRLF 后再替换正式 checker；安装失败会显示实际首行字节、待检查文件和日志路径，并写入 `vps-traffic-guard.log` 便于排查。
+- 菜单显示：面板工具按分组重新编号，443端口复用菜单进入前清屏，诊断测试菜单改为单列，避免长标题换行错位。
+- `dog.sh`：菜单项直接标注快捷词，补齐 `d/h/l` 入口，子页面标题接入三语，修正标题格式；同步三语 `dog.md` 菜单名。
+- 清理 CI 驱动的过度防御代码：删除 `windows-selfcheck-wrapper` 作业及其配套的 `scripts/selfcheck-ps1-contract.ps1`（用 mock wsl 验证一个只负责转发 WSL 的包装器）；重写 `scripts/validate-traffic-guard-checker.sh`，去掉 dist/src 模板比对（dist 是 src 的拼接，比对恒等），只保留模板存在性、CRLF、shebang 与 `bash -n` 校验；精简 `build.sh` 的模块清单校验；`selfcheck.sh` 在本地缺 Go 时跳过 go test/vet（CI 仍要求），并去掉与 dist 新鲜度检查重复的 `git diff --check`；移除源码中永不触发的 `declare -F` 分支和 `-S error` 下不生效的 36 处 shellcheck 豁免。
+- 详细审查记录见 `maintenance-audit.md`。
+
+### 文档
+
+- 新增三语教程「REALITY 与 xhttp 共存：独立域名与共用 443」，覆盖两种接法的完整步骤、3x-ui 入站字段、客户端参数、验证命令、排错表与已知限制（HTTP/3 需要 UDP 443、`xray-fallback` 不可用、白名单影响范围）。
+- 统一 Web 白名单口径：按域名作用于 Web 域名，共用域名的 xhttp 同样受限，REALITY 与 SNI 路由不受影响；同步修正入口模式文档的路由表与匹配说明。
+- 修正 FAQ 订阅示例（3x-ui 订阅为 `https://panel.example.com/sub/`，只有独立订阅工具才使用自己的域名），补齐英文、俄文缺失的「升级 Xray 后节点超时」一节，排错文档新增 xhttp 章节与症状索引。
+- README、快速开始、配置路径与站点导航三语同步。
+
+### 测试
+
+- 新增 `tests/xhttp-paths.sh`，覆盖路径规范化、与面板/订阅路径的前缀冲突、配置读写往返、面板域名迁移与站点删除清理。
+- 渲染基准新增 Caddy xhttp 断言，并更新 Nginx 单入口 Web 配置基准。
+- 菜单 smoke 测试 mock 终端清屏，避免进入 443 菜单时阻塞；修正 nftables NAT 白名单断言为 GitHub Release 地址。
 
 ## v2.3 - 2026-05-27
 
