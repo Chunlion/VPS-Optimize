@@ -78,7 +78,7 @@ Use this when the node and the panel or site should answer on one domain:
 
 ```text
 https://panel.example.com/panel/   -> 3x-ui panel
-https://panel.example.com/xhttp    -> xhttp node
+https://panel.example.com/xhttp    -> XHTTP node
 ```
 
 ### 1. Create an XHTTP inbound without TLS in 3x-ui
@@ -153,6 +153,10 @@ This example uses Cloudflare with Option B. It needs neither a different entry e
 
 The origin Web allowlist checks connection source IPs. Behind a CDN, these are CDN origin-facing IPs, so a campus egress IP no longer identifies the visitor. Use a separate node Web domain rather than relaxing the panel allowlist. Keep the original REALITY address and SNI route direct; an ordinary HTTP CDN cannot proxy REALITY.
 
+Do not narrow public `443` to CDN origin ranges with a firewall: REALITY and Option A SNI routes share that `443`, so an origin-IP filter on the port also cuts every direct node. The CDN origin must stay on `443`; custom origin ports are not supported. Put access control on the domain and route layer, not on the port.
+
+XHTTP POST uploads are not truncated by the Web proxy: the generated Nginx path location sets `client_max_body_size 0`, and Caddy imposes no body limit by default. The CDN side still needs the cache bypass from step 3.
+
 References: [Cloudflare Full (strict)](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/), [Cache Rules](https://developers.cloudflare.com/cache/how-to/cache-rules/settings/).
 
 ## Split upload and download: direct upload, CDN download
@@ -164,7 +168,9 @@ Splitting uses different connection entry points, not two unrelated nodes. Reuse
 | Upload `up.example.com` | DNS only (grey cloud), direct to VPS | `/xhttp -> 127.0.0.1:2400` |
 | Download `down.example.com` | Proxied (orange cloud), through CDN | `/xhttp -> 127.0.0.1:2400` |
 
-Both must be registered Web domains with matching origin certificates. Public `443` on both must reach **the same inbound in the same Xray process, with the same path**. Do not create separate upload and download inbounds or load-balance requests across instances.
+Both must be registered Web domains with matching origin certificates. Public `443` on both must reach **the same inbound in the same Xray process, with the same path**. Do not create separate upload and download inbounds or load-balance requests across instances. When a second rule reuses an existing path, the script compares the local address and port and warns on any mismatch.
+
+The download domain is still an ordinary Web domain, so its default backend stays reachable at `/`; do not point that default backend at an internal service, the panel, or a subscription port.
 
 Set the client's main connection to `up.example.com:443`, TLS enabled, SNI/Host `up.example.com`, path `/xhttp`, and mode `packet-up`. In an Xray client supporting `downloadSettings`, enter this object in **XHTTP extra** (the location in custom JSON is `streamSettings.xhttpSettings.extra`):
 

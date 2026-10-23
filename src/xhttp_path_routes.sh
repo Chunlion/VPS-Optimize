@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# xhttp path reverse-proxy records for Web domains served by the 443 entry.
+# XHTTP path reverse-proxy records for Web domains served by the 443 entry.
 
 xhttp_path_mode_notice() {
     local mode
@@ -104,6 +104,22 @@ add_xhttp_path_route() {
         return 1
     fi
 
+    # 上下行分离要求两个域名落到同一个入站；后端不一致就是两个独立节点。
+    local peer_backend
+    for i in "${!XHTTP_PATH_DOMAINS[@]}"; do
+        [[ "${XHTTP_PATH_PATHS[$i]}" == "$route_path" ]] || continue
+        peer_backend="${XHTTP_PATH_ADDRS[$i]}:${XHTTP_PATH_PORTS[$i]}"
+        [[ "$peer_backend" == "${addr}:${port}" ]] && continue
+        echo -e "$(localized_text "${YELLOW}⚠️ 路径 ${route_path} 已被 ${XHTTP_PATH_DOMAINS[$i]} 指向 ${peer_backend}。上下行分离必须两个域名指向同一本地地址和端口，否则是两个独立节点。${PLAIN}" "${YELLOW}⚠️ ${XHTTP_PATH_DOMAINS[$i]} already maps ${route_path} to ${peer_backend}. Split upload/download needs both domains on the same local address and port; otherwise these are two independent nodes.${PLAIN}" "${YELLOW}⚠️ ${XHTTP_PATH_DOMAINS[$i]} уже указывает ${route_path} на ${peer_backend}. Для разделения направлений нужен один адрес и порт; иначе это два независимых узла.${PLAIN}")"
+    done
+
+    # 套 CDN 后 Web 白名单匹配 CDN 回源 IP，客户端真实 IP 不会被看到。
+    local whitelist_ranges
+    whitelist_ranges=$(sni_ip_whitelist_ranges_for_domain "$domain")
+    if [[ -n "$whitelist_ranges" ]]; then
+        echo -e "$(localized_text "${YELLOW}⚠️ ${domain} 启用了 Web 白名单（${whitelist_ranges}）。该域名套 CDN 后白名单按 CDN 回源 IP 判断，客户端真实 IP 不生效。${PLAIN}" "${YELLOW}⚠️ ${domain} has a Web allowlist (${whitelist_ranges}). Behind a CDN the allowlist matches CDN origin IPs, so client addresses are never evaluated.${PLAIN}" "${YELLOW}⚠️ Для ${domain} включён белый список (${whitelist_ranges}). За CDN он проверяет IP CDN, а не адрес клиента.${PLAIN}")"
+    fi
+
     print_xray_route_port_status "$domain" "$addr" "$port"
     listen_line=$(xray_route_listen_line_by_addr_port "$addr" "$port")
     if [[ -z "$listen_line" ]]; then
@@ -190,8 +206,8 @@ manage_xhttp_path_routes() {
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}让 XHTTP 节点与面板/网站共用同一个 443 和同一个域名，按路径分流；TLS 由本地 Web 反代引擎终结。${PLAIN}" "${YELLOW}Share one port 443 and one domain between XHTTP nodes and the panel/site, routed by path; TLS terminates on the local Web proxy.${PLAIN}" "${YELLOW}XHTTP и панель/сайт используют один порт 443 и один домен, разделение по пути; TLS завершается на локальном Web-прокси.${PLAIN}")"
         echo -e "$(localized_text "${YELLOW}只管理路径反代记录，不创建或修改 3x-ui/Xray 入站。${PLAIN}" "${YELLOW}Only manages path reverse-proxy records; does not create or edit 3x-ui/Xray inbounds.${PLAIN}" "${YELLOW}Управляет только записями обратного прокси; входы 3x-ui/Xray не создаются и не изменяются.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}CDN：先直连验证，再启用 HTTPS 回源和路径缓存绕过；Web 白名单看到的是 CDN 回源 IP。${PLAIN}" "${YELLOW}CDN: verify directly first, then use HTTPS to the origin and bypass cache for the path; Web allowlists see CDN origin-facing IPs.${PLAIN}" "${YELLOW}CDN: сначала проверьте прямое подключение, затем включите HTTPS до сервера и обход кэша пути; Web-список видит IP CDN.${PLAIN}")"
-    echo -e "$(localized_text "${YELLOW}上下行分离：两个 Web 域名的同一路径指向同一入站，Host 留空；客户端用 downloadSettings 指定下行。${PLAIN}" "${YELLOW}Split upload/download: route the same path on two Web domains to one inbound, leave inbound Host empty, and set client downloadSettings for downloads.${PLAIN}" "${YELLOW}Разделение направлений: одинаковый путь двух Web-доменов ведёт на один вход с пустым Host; downloadSettings клиента задаёт скачивание.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}CDN：先直连验证，再开 HTTPS 回源并绕过该路径缓存；域名开了 Web 白名单会按 CDN 回源 IP 放行。${PLAIN}" "${YELLOW}CDN: verify directly first, then use HTTPS to the origin and bypass cache for the path; a Web allowlist on the domain matches CDN origin IPs, not clients.${PLAIN}" "${YELLOW}CDN: сначала проверьте прямое подключение, затем включите HTTPS до сервера и обход кэша пути; белый список домена увидит IP CDN, а не клиента.${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}上下行分离：两个 Web 域名的同一路径指向同一个本地端口，入站 Host 留空，客户端用 downloadSettings 指定下行。${PLAIN}" "${YELLOW}Split upload/download: point the same path on two Web domains to the same local port, leave the inbound Host empty, and set client downloadSettings for downloads.${PLAIN}" "${YELLOW}Разделение направлений: одинаковый путь двух Web-доменов ведёт на один локальный порт, Host входа пустой, downloadSettings клиента задаёт скачивание.${PLAIN}")"
         echo -e "$(localized_text "配置文件：$(xhttp_paths_path)" "Configuration file: $(xhttp_paths_path)" "Файл конфигурации: $(xhttp_paths_path)")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 查看 XHTTP 路径规则${PLAIN}" "${GREEN}  1. View XHTTP path rules${PLAIN}" "${GREEN}  1. Показать правила пути XHTTP${PLAIN}")"

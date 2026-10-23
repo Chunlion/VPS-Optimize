@@ -2,11 +2,11 @@
 
 ## v2.8 - 2026-10-22
 
-本版整理 v2.7 之后的主要变更，重点是 443端口复用 xhttp 路径反代、系统软件源切换与 GitHub 更新镜像；早期条目为此前积压的 Unreleased 记录。完整提交对比见 `v2.7...v2.8`。
+本版整理 v2.7 之后的主要变更，重点是 443端口复用 XHTTP 路径反代、系统软件源切换与 GitHub 更新镜像；早期条目为此前积压的 Unreleased 记录。完整提交对比见 `v2.7...v2.8`。
 
 ### 新增功能
 
-- **443端口复用：xhttp 节点路径反代**。新增 `[19] -> [2 管理 Web 域名与反向代理] -> [10 xhttp 节点路径反代]`，在同一个公网 `443` 和同一个 Web 域名下按路径分流到本地 xhttp 入站：Caddy 生成 `@xhttp_N` handle 块并置于默认 handle 之前，Nginx 生成关闭请求/响应缓冲、读写超时 1 小时的前缀 location。记录保存到 `/etc/vps-optimize/xhttp-paths.conf`（`域名|路径|本地地址|本地端口`），只登记路由，不创建或修改 3x-ui 入站；TLS 由本地 Web 反代终结。路径与面板 `webBasePath`、订阅路径重叠时拒绝，`xray-fallback` 模式下菜单不可用。
+- **443端口复用：XHTTP 节点路径反代**。新增 `[19] -> [2 管理 Web 域名与反向代理] -> [10 XHTTP 节点路径反代]`，在同一个公网 `443` 和同一个 Web 域名下按路径分流到本地 XHTTP 入站：Caddy 生成 `@xhttp_N` handle 块并置于默认 handle 之前，Nginx 生成关闭请求/响应缓冲、读写超时 1 小时的前缀 location。记录保存到 `/etc/vps-optimize/xhttp-paths.conf`（`域名|路径|本地地址|本地端口`），只登记路由，不创建或修改 3x-ui 入站；TLS 由本地 Web 反代终结。路径与面板 `webBasePath`、订阅路径重叠时拒绝，`xray-fallback` 模式下菜单不可用。
 - **切换系统软件源**：新增 `[9 系统设置与清理] -> [9 切换系统软件源]`，可按中国大陆、境外、教育网或自定义地址选择镜像站；只切换系统软件包源，不自动升级软件包，也不改动 GitHub、Docker、pip/npm 源。
 - **GitHub 更新镜像**：支持配置镜像前缀加速脚本下载，默认不启用；输入 `-` 恢复直连，配置持久化到 `/etc/vps-optimize/update-mirror.conf`，非法前缀（含 `@`、`*`）读取时忽略。
 - **面板工具**：新增 Xray 中转（xray-relay）安装入口。
@@ -33,15 +33,15 @@
 
 ### 文档
 
-- 新增三语教程「REALITY 与 xhttp 共存：独立域名与共用 443」，覆盖两种接法的完整步骤、3x-ui 入站字段、客户端参数、验证命令、排错表与已知限制（HTTP/3 需要 UDP 443、`xray-fallback` 不可用、白名单影响范围）。
-- 统一 Web 白名单口径：按域名作用于 Web 域名，共用域名的 xhttp 同样受限，REALITY 与 SNI 路由不受影响；同步修正入口模式文档的路由表与匹配说明。
-- 修正 FAQ 订阅示例（3x-ui 订阅为 `https://panel.example.com/sub/`，只有独立订阅工具才使用自己的域名），补齐英文、俄文缺失的「升级 Xray 后节点超时」一节，排错文档新增 xhttp 章节与症状索引。
+- 新增三语教程「REALITY 与 XHTTP 共存：独立域名与共用 443」，覆盖两种接法的完整步骤、3x-ui 入站字段、客户端参数、验证命令、排错表与已知限制（HTTP/3 需要 UDP 443、`xray-fallback` 不可用、白名单影响范围）。
+- 统一 Web 白名单口径：按域名作用于 Web 域名，共用域名的 XHTTP 同样受限，REALITY 与 SNI 路由不受影响；同步修正入口模式文档的路由表与匹配说明。
+- 修正 FAQ 订阅示例（3x-ui 订阅为 `https://panel.example.com/sub/`，只有独立订阅工具才使用自己的域名），补齐英文、俄文缺失的「升级 Xray 后节点超时」一节，排错文档新增 XHTTP 章节与症状索引。
 - README、快速开始、配置路径与站点导航三语同步。
 
 ### 测试
 
 - 新增 `tests/xhttp-paths.sh`，覆盖路径规范化、与面板/订阅路径的前缀冲突、配置读写往返、面板域名迁移与站点删除清理。
-- 渲染基准新增 Caddy xhttp 断言，并更新 Nginx 单入口 Web 配置基准。
+- 渲染基准新增 Caddy XHTTP 断言，并更新 Nginx 单入口 Web 配置基准。
 - 菜单 smoke 测试 mock 终端清屏，避免进入 443 菜单时阻塞；修正 nftables NAT 白名单断言为 GitHub Release 地址。
 
 ## v2.3 - 2026-05-27

@@ -784,6 +784,8 @@ append_nginx_xhttp_path_proxy() {
     cat <<EOF >> "$output_file"
 
     location ^~ ${path_prefix} {
+        # XHTTP uploads use POST bodies; the 1m default would return 413, especially via a CDN.
+        client_max_body_size 0;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;

@@ -78,7 +78,7 @@ SNI / serverName：xhttp.example.com
 
 ```text
 https://panel.example.com/panel/   -> 3x-ui 面板
-https://panel.example.com/xhttp    -> xhttp 节点
+https://panel.example.com/xhttp    -> XHTTP 节点
 ```
 
 ### 1. 在 3x-ui 创建不带 TLS 的 XHTTP 入站
@@ -153,6 +153,10 @@ UUID 使用新入站的值，`encryption=none`、flow 留空、证书验证开�
 
 源站 Web 白名单按连接来源判断，套 CDN 后看到的是 CDN 回源 IP，不能继续用校园网出口 IP 限制访客，也不要通过放宽面板白名单解决；使用单独的节点 Web 域名。原 REALITY 仍走原有直连地址和 SNI 路由，普通 HTTP CDN 不能代理 REALITY。
 
+不要把公网 `443` 用防火墙收窄成 CDN 回源段：REALITY 和方案 A 的 SNI 路由共用这个 `443`，按来源 IP 限制端口会同时掐掉直连节点。CDN 回源固定用 `443`，不支持改回源端口；访问控制放在域名和路由层。
+
+XHTTP 的 POST 上传不会被 Web 反代截断：脚本生成的 Nginx 路径 location 已设 `client_max_body_size 0`，Caddy 默认也不限请求体。CDN 侧仍需按第 3 步绕过该路径缓存。
+
 参考：[Cloudflare Full (strict)](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/)、[Cache Rules](https://developers.cloudflare.com/cache/how-to/cache-rules/settings/)。
 
 ## 上下行分离：直连上传、CDN 下载
@@ -164,7 +168,9 @@ UUID 使用新入站的值，`encryption=none`、flow 留空、证书验证开�
 | 上传 `up.example.com` | DNS only（灰云），直连 VPS | `/xhttp -> 127.0.0.1:2400` |
 | 下载 `down.example.com` | Proxied（橙云），经 CDN 回源 | `/xhttp -> 127.0.0.1:2400` |
 
-两个域名都须登记为 Web 域名、有对应源站证书，且能通过公网 `443` 到达**同一个 Xray 进程的同一个入站、同一路径**；不要分别创建上传和下载入站，也不要把请求负载均衡到不同实例。
+两个域名都须登记为 Web 域名、有对应源站证书，且能通过公网 `443` 到达**同一个 Xray 进程的同一个入站、同一路径**；不要分别创建上传和下载入站，也不要把请求负载均衡到不同实例。脚本在添加第二条同路径规则时会比对本地地址和端口，不一致会直接提示。
+
+下载域名仍是一个普通 Web 域名，它的默认后端在 `/` 上照常对外；不要把该默认后端指向内网服务、面板或订阅端口。
 
 客户端主连接改用 `up.example.com:443`，TLS 开启，SNI/Host 为 `up.example.com`，path `/xhttp`、mode `packet-up`。使用支持 `downloadSettings` 的 Xray 客户端，在 **XHTTP extra** 中填入以下对象（自定义 JSON 的位置为 `streamSettings.xhttpSettings.extra`）：
 
