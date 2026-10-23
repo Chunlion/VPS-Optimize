@@ -239,4 +239,17 @@ assert_contains "$tmp_dir/nginx-strict-sni.conf" "upstream vps_ip_reject_backend
 assert_contains "$tmp_dir/nginx-strict-sni.conf" "    server unix:/dev/null;"
 assert_not_contains "$tmp_dir/nginx-strict-sni.conf" "127.0.0.1:9"
 
+# Split upload/download must preserve one path and backend across Web domains.
+XHTTP_PATH_PATHS=(/xhttp /xhttp)
+XHTTP_PATH_PORTS=(2400 2400)
+write_nginx_single_443_web_config "$tmp_dir/nginx-split-xhttp.conf"
+write_caddy_panel_config "$tmp_dir/panel-split.caddy"
+write_caddy_site_config "$tmp_dir"
+assert_grep_count "$tmp_dir/nginx-split-xhttp.conf" '^    location \^~ /xhttp \{' 2
+assert_grep_count "$tmp_dir/nginx-split-xhttp.conf" '^        proxy_pass http://127.0.0.1:2400;' 2
+for file in "$tmp_dir/panel-split.caddy" "$tmp_dir/site.example.com.caddy"; do
+    assert_contains "$file" '    @xhttp_0 path /xhttp /xhttp/*'
+    assert_contains "$file" '        reverse_proxy 127.0.0.1:2400 {'
+done
+
 echo "Golden render tests passed."

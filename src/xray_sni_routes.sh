@@ -228,7 +228,7 @@ manage_xray_inbound_routes() {
         echo -e "$(localized_text "${BOLD}Xray SNI 路由管理${PLAIN}" "${BOLD}Xray SNI route management${PLAIN}" "${BOLD}Управление маршрутами Xray SNI${PLAIN}")"
         echo -e "${CYAN}================================================${PLAIN}"
         echo -e "$(localized_text "${YELLOW}管理 SNI -> 本地地址:端口 路由记录；不会创建或修改 3x-ui/Xray 入站。${PLAIN}" "${YELLOW}Manage SNI -> local address:port routes without creating or editing 3x-ui/Xray inbounds.${PLAIN}" "${YELLOW}Управление маршрутами SNI -> локальный адрес:порт без создания или изменения входящих подключений 3x-ui/Xray.${PLAIN}")"
-        echo -e "$(localized_text "${YELLOW}xhttp 节点与 Web 域名共用 443 时，请到 [19] -> [2] -> [10] 添加路径反代。${PLAIN}" "${YELLOW}To share port 443 between an xhttp node and a Web domain, add a path reverse proxy at [19] -> [2] -> [10].${PLAIN}" "${YELLOW}Чтобы разделить порт 443 между узлом xhttp и Web-доменом, добавьте обратный прокси пути в [19] -> [2] -> [10].${PLAIN}")"
+        echo -e "$(localized_text "${YELLOW}XHTTP 节点与 Web 域名共用 443 时，请到 [19] -> [2] -> [10] 添加路径反代。${PLAIN}" "${YELLOW}To share port 443 between an XHTTP node and a Web domain, add a path reverse proxy at [19] -> [2] -> [10].${PLAIN}" "${YELLOW}Чтобы разделить порт 443 между узлом XHTTP и Web-доменом, добавьте обратный прокси пути в [19] -> [2] -> [10].${PLAIN}")"
         echo -e "$(localized_text "配置文件：$(xray_sni_routes_path)" "Configuration file: $(xray_sni_routes_path)" "Файл конфигурации: $(xray_sni_routes_path).")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${GREEN}  1. 查看 SNI 路由${PLAIN}" "${GREEN}  1. View SNI routes${PLAIN}" "${GREEN}  1. Показать маршруты SNI${PLAIN}")"

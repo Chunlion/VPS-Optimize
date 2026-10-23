@@ -63,7 +63,7 @@ Select interface language:
 |---|---|
 | Развернуть или настроить общий порт 443 | [Порт 443: развёртывание и настройка](docs/443-single-entry.md) |
 | Опубликовать сервисы подписок | [Сервисы подписок на порту 443](tutorials/02-subscription-tools-caddy-nginx-reverse-proxy-443-single-entry.md) |
-| Добавить узлы xhttp вместе с REALITY | [REALITY и xhttp вместе](tutorials/03-xhttp-reality-shared-443.md) |
+| Добавить узлы XHTTP вместе с REALITY | [REALITY и XHTTP вместе](tutorials/03-xhttp-reality-shared-443.md) |
 | Контролировать трафик портов | [Монитор трафика dog.sh](docs/dog.md) |
 | Использовать расширение x-ui | [Расширение x-ui](docs/xui-custom-manager.md) |
 | Диагностировать порт 443 | [Диагностика порта 443](docs/443-single-entry-troubleshooting.md) |

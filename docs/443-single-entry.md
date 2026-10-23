@@ -182,7 +182,7 @@ UUID、私钥、公钥和 shortId 由 3x-ui 的生成按钮创建；不要把别
 
 普通 TLS 节点使用另一套对应关系：例如客户端 SNI 为 `tls.example.com`，证书须覆盖该域名；它不使用 REALITY 的目标网站。先在 3x-ui 创建并启用本地 TCP/TLS 入站，再到 `[19] -> [4 管理 Xray SNI 转发规则]` 登记 `tls.example.com -> 本地地址:实际端口`。客户端连接地址仍为 VPS 公网 IP 或节点域名，端口使用公网入口端口。
 
-xhttp 节点有两种接法：独立节点域名，按上面的普通 TLS 节点方式登记 SNI 路由；或者与面板/网站共用域名，使用 `[19] -> [2 管理 Web 域名与反向代理] -> [10 xhttp 节点路径反代]`，由本地 Web 反代引擎按路径分流，TLS 在本地 `8443` 终结。完整步骤、客户端参数和排错见 [REALITY 与 xhttp 共存教程](../tutorials/03-xhttp-reality-shared-443.md)。
+XHTTP 节点有两种接法：独立节点域名，按上面的普通 TLS 节点方式登记 SNI 路由；或者与面板/网站共用域名，使用 `[19] -> [2 管理 Web 域名与反向代理] -> [10 XHTTP 节点路径反代]`，由本地 Web 反代引擎按路径分流，TLS 在本地 `8443` 终结。完整步骤、客户端参数和排错见 [REALITY 与 XHTTP 共存教程](../tutorials/03-xhttp-reality-shared-443.md)。
 
 如果面板正常、入口与 SNI 路由检查通过，但升级到 Xray `26.9.30` 后 Mihomo 节点超时，可按[服务端版本兼容性排查](./443-single-entry-troubleshooting.md#升级-xray-后节点超时)回退到已验证可用的 **`26.6.27`**，再测试原客户端配置；不要直接全局修改客户端参数。
 
@@ -311,7 +311,7 @@ TCP Peek 的优点是分流组件更轻量，并且能在连接早期按 SNI 处
 
 保存后用浏览器打开 `https://site.example.com`。如果程序实际只监听 Docker 容器内部地址，先发布到宿主机的 `127.0.0.1`，不要把容器名或容器内部专用主机名当作 VPS 后端地址。
 
-如果要在同一个域名下再挂一个 xhttp 节点，使用 `[10 xhttp 节点路径反代]`。它只登记“域名 + 路径 -> 本地端口”，证书和 TLS 仍由本地 Web 反代引擎处理；3x-ui 侧的入站必须监听 `127.0.0.1` 并且不启用 TLS。完整步骤见 [REALITY 与 xhttp 共存教程](../tutorials/03-xhttp-reality-shared-443.md)。
+如果要在同一个域名下再挂一个 XHTTP 节点，使用 `[10 XHTTP 节点路径反代]`。它只登记“域名 + 路径 -> 本地端口”，证书和 TLS 仍由本地 Web 反代引擎处理；3x-ui 侧的入站必须监听 `127.0.0.1` 并且不启用 TLS。完整步骤见 [REALITY 与 XHTTP 共存教程](../tutorials/03-xhttp-reality-shared-443.md)。
 
 ### 反向代理 URL 怎么填
 
@@ -321,7 +321,7 @@ TCP Peek 的优点是分流组件更轻量，并且能在连接早期按 SNI 处
 
 ### 管理域名 IP 白名单
 
-Web 白名单按域名生效，只作用于面板和网站这类 Web 域名，不限制 REALITY 节点和 SNI 路由。通过 Web 域名路径接入的 xhttp 节点属于 Web 流量，会一起受限。入口模式为 `nginx-stream` 或 `tcp-peek` 时，使用以下入口：
+Web 白名单按域名生效，只作用于面板和网站这类 Web 域名，不限制 REALITY 节点和 SNI 路由。通过 Web 域名路径接入的 XHTTP 节点属于 Web 流量，会一起受限。入口模式为 `nginx-stream` 或 `tcp-peek` 时，使用以下入口：
 
 ```text
 主菜单 [19 443端口复用管理中心] -> [2 管理 Web 域名与反向代理] -> [5 管理域名 IP 白名单]
@@ -398,8 +398,8 @@ Nginx Stream 和 TCP Peek 支持这两项保护；Xray Fallback 没有前置的 
 
 - 不要让 3x-ui 面板、订阅或后端端口直接监听公网。
 - 不要让两个服务同时监听公网 `443`。
-- 不要把 xhttp 路径设在 `/panel/`、`/sub/`、`/clash/` 或它们的子路径下。
-- 不要在 xhttp 入站和本地 Web 反代之间同时启用 TLS。
+- 不要把 XHTTP 路径设在 `/panel/`、`/sub/`、`/clash/` 或它们的子路径下。
+- 不要在 XHTTP 入站和本地 Web 反代之间同时启用 TLS。
 - 不要把面板域名、节点域名或本机地址当作 REALITY 的伪装目标。
 - 不要在没有 SSH 保底连接和备份的情况下切换入口。
 - 不要把示例域名、端口和路径原样复制到生产环境。

@@ -18,7 +18,7 @@ manage_sni_stack_sites() {
         echo -e "$(localized_text "${GREEN}  7. 443端口复用链路体检${PLAIN}" "${GREEN}7. Port 443 Reuse diagnostics${PLAIN}" "${GREEN}7. Диагностика повторного использования порта 443${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  8. 切换 Web 反向代理引擎${PLAIN}       ${YELLOW}(Caddy / Nginx 本地反代)${PLAIN}" "${GREEN}8. Switch the Web reverse-proxy engine (local Caddy/Nginx)${PLAIN}" "${GREEN}8. Сменить Web-движок обратного прокси (локальный Caddy/Nginx)${PLAIN}")"
         echo -e "$(localized_text "${GREEN}  9. 修改面板域名${PLAIN}" "${GREEN}9. Change the panel domain${PLAIN}" "${GREEN}9. Изменить домен панели${PLAIN}")"
-        echo -e "$(localized_text "${GREEN} 10. xhttp 节点路径反代${PLAIN}       ${YELLOW}(与 Web 域名共用 443)${PLAIN}" "${GREEN}10. xhttp node path reverse proxy (share port 443 with a Web domain)${PLAIN}" "${GREEN}10. Обратный прокси пути xhttp (общий порт 443 с Web-доменом)${PLAIN}")"
+        echo -e "$(localized_text "${GREEN} 10. XHTTP 节点路径反代${PLAIN}       ${YELLOW}(与 Web 域名共用 443)${PLAIN}" "${GREEN}10. XHTTP node path reverse proxy (share port 443 with a Web domain)${PLAIN}" "${GREEN}10. Обратный прокси пути XHTTP (общий порт 443 с Web-доменом)${PLAIN}")"
         echo -e "------------------------------------------------"
         echo -e "$(localized_text "${BLUE}  ?. 查看帮助${PLAIN}" "${BLUE}?. View help${PLAIN}" "${BLUE}?. Посмотреть справку${PLAIN}")"
         echo -e "$(localized_text "${RED}  0. 返回上一级 / q 返回${PLAIN}" "${RED}0. Back / q Back${PLAIN}" "${RED}0. Назад / q Назад${PLAIN}")"

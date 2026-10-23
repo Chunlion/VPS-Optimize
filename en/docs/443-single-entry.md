@@ -184,7 +184,7 @@ The client link should use your node domain and port `443`, not `127.0.0.1:1443`
 
 Ordinary TLS nodes use a different mapping: if the client SNI is `tls.example.com`, the certificate must cover that name. They do not use a REALITY target site. Create and enable a local TCP/TLS inbound in 3x-ui, then register `tls.example.com -> local address:actual port` under `[19] -> [4 Manage Xray SNI forwarding rules]`. The client still connects to the VPS public IP or node domain on the public entry port.
 
-xhttp nodes have two wirings: a dedicated node domain, registered as an SNI route the same way as an ordinary TLS node; or sharing the panel/site domain through `[19] -> [2 Manage Web domains and reverse proxies] -> [10 xhttp node path reverse proxy]`, where the local Web proxy routes by path and terminates TLS at local `8443`. Full steps, client settings, and troubleshooting are in [REALITY and xhttp Together](../tutorials/03-xhttp-reality-shared-443.md).
+XHTTP nodes have two wirings: a dedicated node domain, registered as an SNI route the same way as an ordinary TLS node; or sharing the panel/site domain through `[19] -> [2 Manage Web domains and reverse proxies] -> [10 XHTTP node path reverse proxy]`, where the local Web proxy routes by path and terminates TLS at local `8443`. Full steps, client settings, and troubleshooting are in [REALITY and XHTTP Together](../tutorials/03-xhttp-reality-shared-443.md).
 
 ### 4. Run the Port 443 wizard
 
@@ -309,7 +309,7 @@ Backend port: 3000
 
 Then open `https://site.example.com` in a browser. If the app is inside a container, publish it to the host loopback address first; do not use a container-only hostname as the VPS backend address.
 
-To serve an xhttp node under the same domain, use `[10 xhttp node path reverse proxy]`. It only records "domain + path -> local port"; certificates and TLS stay on the local Web proxy, and the 3x-ui inbound must listen on `127.0.0.1` with TLS disabled. See [REALITY and xhttp Together](../tutorials/03-xhttp-reality-shared-443.md).
+To serve an XHTTP node under the same domain, use `[10 XHTTP node path reverse proxy]`. It only records "domain + path -> local port"; certificates and TLS stay on the local Web proxy, and the 3x-ui inbound must listen on `127.0.0.1` with TLS disabled. See [REALITY and XHTTP Together](../tutorials/03-xhttp-reality-shared-443.md).
 
 ### How to fill in the reverse-proxy URL
 
@@ -319,7 +319,7 @@ The DNS record, Web domain, backend, external URL, and verification steps for a 
 
 ### Manage the Web IP allowlist
 
-The Web allowlist works per domain and applies to Web domains such as the panel and sites. It does not limit REALITY nodes or SNI routes. xhttp nodes reached through a Web domain path are Web traffic and are limited as well. In `nginx-stream` or `tcp-peek`, use:
+The Web allowlist works per domain and applies to Web domains such as the panel and sites. It does not limit REALITY nodes or SNI routes. XHTTP nodes reached through a Web domain path are Web traffic and are limited as well. In `nginx-stream` or `tcp-peek`, use:
 
 ```text
 Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [5 Manage domain IP allowlist]
@@ -394,8 +394,8 @@ If possible, use a non-CDN HTTPS site as the REALITY target; it reduces the impa
 
 - Do not expose the 3x-ui panel, subscription service, or website backend directly to the Internet.
 - Do not let two services listen on public `443` at the same time.
-- Do not put an xhttp path on `/panel/`, `/sub/`, `/clash/`, or their subpaths.
-- Do not enable TLS on both the xhttp inbound and the local Web proxy.
+- Do not put an XHTTP path on `/panel/`, `/sub/`, `/clash/`, or their subpaths.
+- Do not enable TLS on both the XHTTP inbound and the local Web proxy.
 - Do not use the panel domain, node domain, or a local address as the REALITY camouflage target.
 - Do not switch the entry without a working SSH session and a backup.
 - Do not copy example domains, ports, or paths into production unchanged.

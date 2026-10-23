@@ -51,14 +51,14 @@ https://panel.example.com:1443/
 https://panel.example.com:40000/
 ```
 
-## Can an xhttp node share port 443 with the panel
+## Can an XHTTP node share port 443 with the panel
 
 Yes, with two possible wirings:
 
-- **Shared Web domain**: `Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [10 xhttp node path reverse proxy]`. The xhttp inbound in 3x-ui must listen on `127.0.0.1` with TLS disabled; TLS stays on the local Caddy/Nginx. The client uses the same domain and the registered path.
-- **Dedicated node domain**: same as an ordinary TLS node. Register the domain and local port under `[4 Manage Xray SNI forwarding rules]`, and let the xhttp inbound use its own certificate.
+- **Shared Web domain**: `Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [10 XHTTP node path reverse proxy]`. The XHTTP inbound in 3x-ui must listen on `127.0.0.1` with TLS disabled; TLS stays on the local Caddy/Nginx. The client uses the same domain and the registered path.
+- **Dedicated node domain**: same as an ordinary TLS node. Register the domain and local port under `[4 Manage Xray SNI forwarding rules]`, and let the XHTTP inbound use its own certificate.
 
-With a shared domain, the domain's Web allowlist limits xhttp too. `xray-fallback` does not support path reverse proxying, and xhttp over HTTP/3 needs UDP `443`, which the entry does not listen on. Full steps are in [REALITY and xhttp Together](../tutorials/03-xhttp-reality-shared-443.md).
+With a shared domain, the domain's Web allowlist limits XHTTP too. `xray-fallback` does not support path reverse proxying, and XHTTP over HTTP/3 needs UDP `443`, which the entry does not listen on. Full steps are in [REALITY and XHTTP Together](../tutorials/03-xhttp-reality-shared-443.md).
 
 ## How to paste dynamic TCP parameters
 

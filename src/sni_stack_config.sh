@@ -945,7 +945,7 @@ print_sni_stack_current_summary() {
     if [[ ${#XHTTP_PATH_DOMAINS[@]} -gt 0 ]]; then
         local xhttp_i
         for xhttp_i in "${!XHTTP_PATH_DOMAINS[@]}"; do
-            echo -e "$(localized_text "xhttp 路径： https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}" "xhttp path:  https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}" "xhttp путь:  https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}")"
+            echo -e "$(localized_text "XHTTP 路径： https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}" "XHTTP path:  https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}" "XHTTP путь:  https://${XHTTP_PATH_DOMAINS[$xhttp_i]}${XHTTP_PATH_PATHS[$xhttp_i]} -> ${XHTTP_PATH_ADDRS[$xhttp_i]}:${XHTTP_PATH_PORTS[$xhttp_i]}")"
         done
     fi
     echo -e "$(localized_text "Web 反代：  ${web_label} (${web_backend})" "Web reverse proxy: ${web_label} (${web_backend})" "веб-прокси: ${web_label} (${web_backend})")"

@@ -29,7 +29,7 @@ Remove tokens, passwords, private keys, and subscription keys before posting. Fu
 | [Connection closed or TLS error](#err-connection-closed-err-ssl-protocol-error) | Public listener and forwarding target |
 | [Page not found](#_404) | Panel or subscription path |
 | [Bad gateway](#_502) | Local backend and reverse proxy |
-| [xhttp node will not connect](#xhttp-node-will-not-connect) | Path, TLS, and SNI routes |
+| [XHTTP node will not connect](#xhttp-node-will-not-connect) | Path, TLS, and SNI routes |
 
 ## Website selection suggestions
 
@@ -695,16 +695,16 @@ Main menu [19 Port 443 Reuse manager] -> [9 Regenerate and apply entry configura
 Main menu [19 Port 443 Reuse manager] -> [13 Check entry configuration, certificates, and routes]
 ```
 
-## xhttp node will not connect
+## XHTTP node will not connect
 
 ### Symptoms
 
-REALITY nodes work, but the xhttp node completes the handshake and then carries no data; or, with a shared Web domain, the node path returns the panel login page.
+REALITY nodes work, but the XHTTP node completes the handshake and then carries no data; or, with a shared Web domain, the node path returns the panel login page.
 
 ### Common causes
 
 - The client `path` does not match the 3x-ui inbound, usually a missing or extra trailing slash.
-- With a shared Web domain, TLS is enabled on the xhttp inbound while the local Web proxy forwards plain HTTP.
+- With a shared Web domain, TLS is enabled on the XHTTP inbound while the local Web proxy forwards plain HTTP.
 - The dedicated node domain has no SNI route, or the route was saved but not synced to the active entry.
 - The path overlaps the panel `webBasePath` or a subscription path, so the default Web rule matches first.
 - The Web domain has an IP allowlist and the client egress IP is outside it.
@@ -718,12 +718,12 @@ curl -sS http://127.0.0.1:2400/xhttp -o /dev/null -w '%{http_code}\n'
 journalctl -u caddy -n 80 --no-pager
 ```
 
-If the two `curl` calls return different status codes, the problem is in the Web proxy layer. If they match but the client still fails, the problem is in the inbound or the client settings. A 404 or 400 is expected and means the request reached the xhttp backend rather than the panel.
+If the two `curl` calls return different status codes, the problem is in the Web proxy layer. If they match but the client still fails, the problem is in the inbound or the client settings. A 404 or 400 is expected and means the request reached the XHTTP backend rather than the panel.
 
 ### Solution
 
 - Match `path` exactly, including case and the trailing slash.
-- Disable TLS on the xhttp inbound for a shared domain; only the local Web proxy uses the certificate.
+- Disable TLS on the XHTTP inbound for a shared domain; only the local Web proxy uses the certificate.
 - For a dedicated domain, register it under `[4 Manage Xray SNI forwarding rules]` and sync it to the active entry.
 - Keep the path away from `/panel/`, `/sub/`, `/clash/`, and their subpaths.
 - For an allowlisted domain, add the client egress IP or switch to a dedicated node domain.
@@ -731,6 +731,6 @@ If the two `curl` calls return different status codes, the problem is in the Web
 ### Related menu entry
 
 ```text
-Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [10 xhttp node path reverse proxy]
+Main menu [19 Port 443 Reuse manager] -> [2 Manage Web domains and reverse proxies] -> [10 XHTTP node path reverse proxy]
 Main menu [19 Port 443 Reuse manager] -> [4 Manage Xray SNI forwarding rules]
 ```

@@ -79,7 +79,7 @@ Shortcuts are case-insensitive and behave like selecting the corresponding main-
 | Security hardening | SSH, public-key authentication, Fail2ban, firewall, and port concurrency limits |
 | Panels and subscriptions | 3x-ui, S-UI, 2S-UI, 3m-ui, Miaomiaowu, MiaomiaowuX, Sing-box, Xray, Xray relay (xray-relay), SublinkPro, Sub-Store, Dockge, Komari, and CDT Monitor |
 | Forwarding and networking | Realm, Gost, FLVX, EasyTier, and Tailscale |
-| Port 443 Reuse | Share public port `443` across Web services, panels, subscriptions, and nodes; Nginx Stream/TCP Peek route by SNI, xhttp nodes can share a Web domain by path, while Xray Fallback uses the Xray main inbound |
+| Port 443 Reuse | Share public port `443` across Web services, panels, subscriptions, and nodes; Nginx Stream/TCP Peek route by SNI, XHTTP nodes can share a Web domain by path, while Xray Fallback uses the Xray main inbound |
 | Diagnostics and rollback | Service health, port 443 diagnostics, space checks, optional encrypted backups, restore, and quarantine archives |
 
 Mirror selection: `Main menu [9 System settings and cleanup] -> [9 Switch package mirrors]`. Choose mainland China, Asia, Europe, North America, South America, Oceania, or Africa, then select a mirror. Mirrors that do not serve the current distribution are hidden. Custom addresses are an advanced option. The [LinuxMirrors](https://linuxmirrors.cn/use/) tool is downloaded through the configured GitHub mirror. This changes system package sources without upgrading packages. GitHub, Docker, and pip/npm sources are configured separately; download speed depends on the server's network route.
@@ -88,7 +88,7 @@ Mirror selection: `Main menu [9 System settings and cleanup] -> [9 Switch packag
 
 - [Quick Start](https://chunlion.github.io/VPS-Optimize/en/quick-start)
 - [Port 443 Reuse: Setup and Configuration](https://chunlion.github.io/VPS-Optimize/en/docs/443-single-entry)
-- [Port 443 Reuse: REALITY and xhttp Together](https://chunlion.github.io/VPS-Optimize/en/tutorials/03-xhttp-reality-shared-443)
+- [Port 443 Reuse: REALITY and XHTTP Together](https://chunlion.github.io/VPS-Optimize/en/tutorials/03-xhttp-reality-shared-443)
 - [Port 443 Reuse Troubleshooting and Recovery](https://chunlion.github.io/VPS-Optimize/en/docs/443-single-entry-troubleshooting)
 - [Recovery and Rollback](https://chunlion.github.io/VPS-Optimize/en/docs/recovery-runbook)
 - [CDT Monitor: Alibaba Cloud CDT Traffic and ECS Management](https://chunlion.github.io/VPS-Optimize/en/docs/cdt-monitor)
