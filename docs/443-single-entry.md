@@ -313,6 +313,8 @@ TCP Peek 的优点是分流组件更轻量，并且能在连接早期按 SNI 处
 
 如果要在同一个域名下再挂一个 XHTTP 节点，使用 `[10 XHTTP 节点路径反代]`。它只登记“域名 + 路径 -> 本地端口”，证书和 TLS 仍由本地 Web 反代引擎处理；3x-ui 侧的入站必须监听 `127.0.0.1` 并且不启用 TLS。完整步骤见 [REALITY 与 XHTTP 共存教程](../tutorials/03-xhttp-reality-shared-443.md)。
 
+同一个 Web 域名下可以挂多个 XHTTP 节点，每个节点用不同路径和不同本地端口；多个域名指向同一路径和同一端口则是上下行分离。REALITY 走 SNI，XHTTP 走“域名 + 路径”，两类分流键互不重叠，可以在同一个 `443` 下并存，条目数没有硬上限。扩容顺序、唯一性约束和 CDN 注意事项见教程的「多节点」一节。
+
 ### 反向代理 URL 怎么填
 
 先分清服务类型：3x-ui 订阅填写 `https://panel.example.com + URI 路径`，例如 `https://panel.example.com/sub/`；SublinkPro、Sub-Store 等独立订阅工具使用自己的 Web 域名，不能套用 3x-ui 的填写方式。

@@ -214,6 +214,58 @@ Reference: [Xray's official XHTTP upload/download separation explanation](https:
 
 REALITY nodes are unaffected by either option. They keep using their own SNI routes and never touch the XHTTP path rules.
 
+## Multiple nodes: from two XHTTP plus one REALITY to more
+
+The three routing keys never overlap, so they stack:
+
+| Node type | Public key | Registered in | Record format |
+| --- | --- | --- | --- |
+| REALITY, dedicated node domain | SNI | `[4] Manage Xray SNI routes` | `SNI\|ADDR\|PORT` |
+| XHTTP (shared Web domain) | Web domain + path | `[2] -> [10]` | `DOMAIN\|PATH\|ADDR\|PORT` |
+| Panel, subscription, site | Domain (+ path) | `[2] Manage Web domains and reverse proxies` | certificate + backend |
+
+Two XHTTP nodes plus one REALITY (domains and ports are example values):
+
+| Node | 3x-ui inbound | Record |
+| --- | --- | --- |
+| REALITY-A | `127.0.0.1:1443`, serverNames `reality.example.net` | `reality.example.net -> 127.0.0.1:1443` |
+| XHTTP-1 | `127.0.0.1:2400`, path `/xhttp1` | `panel.example.com\|/xhttp1\|127.0.0.1\|2400` |
+| XHTTP-2 | `127.0.0.1:2401`, path `/xhttp2` | `panel.example.com\|/xhttp2\|127.0.0.1\|2401` |
+
+One Xray XHTTP inbound carries exactly one `path`, so every independent XHTTP node on the same domain needs its own path and its own local port. The script rejects a second record with the same domain and path. Several domains pointing at one path and one port is the upload/download split, not a new node.
+
+Three or four nodes work; the script has no hard limit on record count. The real constraints:
+
+- **Unique SNI**: two REALITY records cannot share an SNI, and an XHTTP Web domain cannot reuse an SNI route name.
+- **Unique local port**: each REALITY and XHTTP inbound takes its own port and must not collide with `443`, the Web proxy on `8443`, the panel, or the subscription port.
+- **Unique (domain, path)**: that pair is the XHTTP key.
+- **One certificate per domain**: an XHTTP node needs the certificate of the Web domain it hangs under, and a CDN domain needs its own.
+- **Shared entry capacity**: every node shares public `443`. In TCP Peek, `max_connections` (4096 by default) is the total for the entry, not a per-node quota.
+- **Keep the strict gate in sync**: with SNI filtering on, an unregistered or unsynced SNI is dropped outright.
+- **Fallback limits are per inbound**: multiple REALITY inbounds must be configured one at a time.
+
+With several REALITY inbounds, pick one of these layouts:
+
+- One inbound, several `serverNames`: saves ports, and every name shares the same fallback limits.
+- One inbound, one SNI: separate ports and limits, easier to troubleshoot.
+
+Both are valid, but never give two inbounds the same SNI. The full mapping is in the port 443 guide's REALITY multiple-inbound section.
+
+### Order of operations
+
+Repeat this for every node you add:
+
+1. Create and enable the inbound in 3x-ui first. The script checks that the local port is actually listening and refuses to register it otherwise.
+2. Add any Web domain that needs a certificate under `[2] -> [2]` and wait for issuance.
+3. Register XHTTP under `[2] -> [10]` and REALITY under `[4]`.
+4. Enter every rule first, then run "Sync with the active entry mode" once instead of restarting the entry per rule.
+5. If SNI filtering is on, run `[6] -> [3] Resynchronize the current SNI list`.
+6. Verify each node with a real client, and only then switch the domain to the orange cloud.
+
+### CDN with several nodes
+
+Grey and orange cloud are per domain, which is why the upload/download split needs two domains. Give every CDN node domain its own certificate and its own Cache Rules, and write rules as "domain + path" — a single wildcard rule covering all nodes would also proxy the domains that must stay direct.
+
 ## Known limits
 
 - **No HTTP/3**: the XHTTP QUIC mode needs UDP `443`, and the entry listens on TCP `443` only.
@@ -221,6 +273,7 @@ REALITY nodes are unaffected by either option. They keep using their own SNI rou
 - **Web allowlists also limit XHTTP**: Option B rules live under a Web domain, so an IP allowlist on that domain applies to XHTTP as well. REALITY and Option A SNI routes are unaffected.
 - **SNI filtering works on domains**: Option B adds no new SNI because the domain is already listed. Option A must register the node domain as an SNI route, or the strict gate drops it.
 - **Long-lived XHTTP connections**: the script disables response and request buffering for the path proxy and sets a one-hour read/write timeout. Do not add a short timeout in the Web proxy on top of that.
+- **Entry capacity is shared**: every node uses public `443`, and TCP Peek defaults to `max_connections: 4096` for the whole entry, so one busy node can crowd out the others.
 
 ## Verification
 
@@ -275,4 +328,6 @@ journalctl -u x-ui -u 3x-ui -n 80 --no-pager
 - Do not bind the XHTTP local port to `0.0.0.0`.
 - Do not place the XHTTP path on `/panel/`, `/sub/`, `/clash/`, or their subpaths.
 - Do not try to manage paths through `[2] -> [10]` in `xray-fallback` mode.
+- Do not create two XHTTP records with the same domain, the same path, and different ports.
+- Do not assign the same SNI to two REALITY inbounds.
 - Do not deploy with the example domains and ports.

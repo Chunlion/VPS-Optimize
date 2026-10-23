@@ -311,6 +311,8 @@ Then open `https://site.example.com` in a browser. If the app is inside a contai
 
 To serve an XHTTP node under the same domain, use `[10 XHTTP node path reverse proxy]`. It only records "domain + path -> local port"; certificates and TLS stay on the local Web proxy, and the 3x-ui inbound must listen on `127.0.0.1` with TLS disabled. See [REALITY and XHTTP Together](../tutorials/03-xhttp-reality-shared-443.md).
 
+A single Web domain can carry several XHTTP nodes, each with its own path and local port; several domains pointing at one path and one port is the upload/download split. REALITY routes by SNI and XHTTP routes by domain plus path, so the two keys never overlap, both can share one `443`, and there is no hard cap on record count. The tutorial's multiple-node section covers the order of operations, the uniqueness rules, and the CDN caveats.
+
 ### How to fill in the reverse-proxy URL
 
 First identify the service. A 3x-ui subscription uses `https://panel.example.com + URI path`, such as `https://panel.example.com/sub/`. A standalone tool such as SublinkPro or Sub-Store uses its own Web domain and must not reuse the 3x-ui field values.
