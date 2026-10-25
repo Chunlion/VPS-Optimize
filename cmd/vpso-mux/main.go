@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -25,7 +26,6 @@ import (
 )
 
 const (
-	initialPeekSize          = 4096
 	maxPeekSize              = 16 * 1024
 	statusJSONPath           = "/var/lib/vps-optimize/vpso-mux/status.json"
 	statusFlushEvery         = 2 * time.Second
@@ -66,15 +66,42 @@ type statusError struct {
 	RouteName string `json:"route_name,omitempty"`
 }
 
+// statusTracker 的计数器全部走 atomic，记录路径不抢锁；
+// 锁只保留给状态文件写入（writeMu）和最近错误列表（errMu）。
 type statusTracker struct {
-	mu                sync.Mutex
-	writeMu           sync.Mutex
-	path              string
-	data              runtimeStatus
-	dirty             bool
-	revision          uint64
-	lastWriteErrorLog time.Time
-	writePayload      func([]byte) error
+	path         string
+	listen       []string
+	maxConn      int
+	startTime    string
+	writePayload func([]byte) error
+
+	active    atomic.Int64
+	mutations atomic.Uint64
+
+	routeHits sync.Map // route name -> *atomic.Uint64
+
+	total                       atomic.Uint64
+	rejected                    atomic.Uint64
+	dialErrors                  atomic.Uint64
+	retryAttempts               atomic.Uint64
+	retrySuccess                atomic.Uint64
+	retryFailed                 atomic.Uint64
+	spliceSuccess               atomic.Uint64
+	copyFallback                atomic.Uint64
+	whitelistBlocked            atomic.Uint64
+	unknownSNIBlocked           atomic.Uint64
+	noSNI                       atomic.Uint64
+	peekErrors                  atomic.Uint64
+	peekTimeouts                atomic.Uint64
+	bytesClientToBackendCounter atomic.Uint64
+	bytesBackendToClientCounter atomic.Uint64
+
+	writeMu             sync.Mutex
+	lastWrittenRevision uint64    // guarded by writeMu
+	lastWriteErrorLog   time.Time // guarded by writeMu
+
+	errMu        sync.Mutex
+	recentErrors []statusError
 }
 
 type backendRetryStats struct {
@@ -139,16 +166,50 @@ func main() {
 		return
 	}
 
-	if err := run(cfg); err != nil {
+	if err := run(cfg, *configPath); err != nil {
 		log.Fatalf("vpso-mux stopped: %v", err)
 	}
 }
 
-func run(cfg *mux.Config) error {
-	durations, err := cfg.Durations()
+// runtimeConfig 捆绑配置和派生时长，SIGHUP 重载时用 atomic.Pointer 整体换新。
+// listen 和 max_connections 在启动时已固化到 listener/limiter，重载只影响新连接的路由行为。
+type runtimeConfig struct {
+	cfg *mux.Config
+	d   mux.Durations
+}
+
+func newRuntimeConfig(cfg *mux.Config) (*runtimeConfig, error) {
+	d, err := cfg.Durations()
+	if err != nil {
+		return nil, err
+	}
+	return &runtimeConfig{cfg: cfg, d: d}, nil
+}
+
+func reloadRuntimeConfig(path string, current *atomic.Pointer[runtimeConfig], logger *mux.Logger) {
+	cfg, err := mux.LoadConfig(path)
+	if err == nil {
+		_, err = mux.ValidateConfig(cfg)
+	}
+	var d mux.Durations
+	if err == nil {
+		d, err = cfg.Durations()
+	}
+	if err != nil {
+		logger.Emit("error", mux.LogEvent{Message: "config reload failed; keeping previous config", Error: err.Error()})
+		return
+	}
+	current.Store(&runtimeConfig{cfg: cfg, d: d})
+	logger.Emit("info", mux.LogEvent{Message: "config reloaded"})
+}
+
+func run(cfg *mux.Config, configPath string) error {
+	rc, err := newRuntimeConfig(cfg)
 	if err != nil {
 		return err
 	}
+	var current atomic.Pointer[runtimeConfig]
+	current.Store(rc)
 	logger := mux.NewLogger(mux.LoggerOptions{
 		Level:        cfg.Logging.Level,
 		Format:       cfg.Logging.Format,
@@ -167,6 +228,24 @@ func run(cfg *mux.Config) error {
 		statusWG.Wait()
 		status.Write()
 	}()
+
+	reloadSignals := make(chan os.Signal, 1)
+	signal.Notify(reloadSignals, syscall.SIGHUP)
+	defer signal.Stop(reloadSignals)
+	var reloadWG sync.WaitGroup
+	reloadWG.Add(1)
+	go func() {
+		defer reloadWG.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-reloadSignals:
+				reloadRuntimeConfig(configPath, &current, logger)
+			}
+		}
+	}()
+	defer reloadWG.Wait()
 
 	var listeners []net.Listener
 	for _, addr := range cfg.Listen.TCP {
@@ -188,7 +267,7 @@ func run(cfg *mux.Config) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			acceptLoop(ctx, ln, cfg, durations, logger, status, limiter, &wg)
+			acceptLoop(ctx, ln, &current, logger, status, limiter, &wg)
 		}()
 	}
 
@@ -196,8 +275,8 @@ func run(cfg *mux.Config) error {
 	for _, ln := range listeners {
 		_ = ln.Close()
 	}
-	if !waitForShutdown(&wg, durations.Shutdown) {
-		return fmt.Errorf("shutdown timeout after %s", durations.Shutdown)
+	if !waitForShutdown(&wg, rc.d.Shutdown) {
+		return fmt.Errorf("shutdown timeout after %s", rc.d.Shutdown)
 	}
 	return nil
 }
@@ -224,17 +303,11 @@ func waitForShutdown(wg *sync.WaitGroup, timeout time.Duration) bool {
 }
 
 func newStatusTracker(listen []string, maxConnections int) *statusTracker {
-	listenCopy := append([]string(nil), listen...)
-	now := time.Now().Format(time.RFC3339)
 	return &statusTracker{
-		path: statusJSONPath,
-		data: runtimeStatus{
-			StartTime:       now,
-			ListenAddresses: listenCopy,
-			MaxConnections:  maxConnections,
-			RouteHits:       map[string]uint64{},
-			UpdatedAt:       now,
-		},
+		path:      statusJSONPath,
+		listen:    append([]string(nil), listen...),
+		maxConn:   maxConnections,
+		startTime: time.Now().Format(time.RFC3339),
 	}
 }
 
@@ -274,177 +347,194 @@ func (s *statusTracker) write(force bool) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
-	s.mu.Lock()
-	if !force && !s.dirty {
-		s.mu.Unlock()
+	if !force && s.mutations.Load() == s.lastWrittenRevision {
 		return
 	}
-	s.data.UpdatedAt = time.Now().Format(time.RFC3339)
-	revision := s.revision
-	payload, err := json.MarshalIndent(s.data, "", "  ")
+	revision := s.mutations.Load()
+	payload, err := json.MarshalIndent(s.snapshot(), "", "  ")
 	if err == nil {
 		payload = append(payload, '\n')
-	}
-	s.mu.Unlock()
-
-	if err == nil {
 		if s.writePayload != nil {
 			err = s.writePayload(payload)
 		} else {
 			err = writeStatusPayload(s.path, payload)
 		}
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if err != nil {
 		s.logWriteErrorLocked(err)
 		return
 	}
-	if revision == s.revision {
-		s.dirty = false
+	if revision > s.lastWrittenRevision {
+		s.lastWrittenRevision = revision
 	}
 }
 
-func (s *statusTracker) markDirtyLocked() {
-	s.dirty = true
-	s.revision++
+func (s *statusTracker) snapshot() runtimeStatus {
+	active := s.active.Load()
+	if active < 0 {
+		active = 0
+	}
+	out := runtimeStatus{
+		StartTime:            s.startTime,
+		ListenAddresses:      s.listen,
+		MaxConnections:       s.maxConn,
+		ActiveConnections:    uint64(active),
+		TotalConnections:     s.total.Load(),
+		RejectedConnections:  s.rejected.Load(),
+		BackendDialErrors:    s.dialErrors.Load(),
+		BackendRetryAttempts: s.retryAttempts.Load(),
+		BackendRetrySuccess:  s.retrySuccess.Load(),
+		BackendRetryFailed:   s.retryFailed.Load(),
+		RouteHits:            map[string]uint64{},
+		SpliceSuccess:        s.spliceSuccess.Load(),
+		CopyFallback:         s.copyFallback.Load(),
+		WhitelistBlocked:     s.whitelistBlocked.Load(),
+		UnknownSNIBlocked:    s.unknownSNIBlocked.Load(),
+		NoSNI:                s.noSNI.Load(),
+		PeekErrors:           s.peekErrors.Load(),
+		PeekTimeouts:         s.peekTimeouts.Load(),
+		BytesClientToBackend: s.bytesClientToBackendCounter.Load(),
+		BytesBackendToClient: s.bytesBackendToClientCounter.Load(),
+		UpdatedAt:            time.Now().Format(time.RFC3339),
+	}
+	s.routeHits.Range(func(key, value any) bool {
+		out.RouteHits[key.(string)] = value.(*atomic.Uint64).Load()
+		return true
+	})
+	s.errMu.Lock()
+	out.RecentErrors = append([]statusError(nil), s.recentErrors...)
+	s.errMu.Unlock()
+	return out
 }
 
 func (s *statusTracker) RecordAccepted() {
 	if s == nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.data.ActiveConnections++
-	s.markDirtyLocked()
+	s.active.Add(1)
+	s.mutations.Add(1)
 }
 
 func (s *statusTracker) RecordFinished() {
 	if s == nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.data.ActiveConnections > 0 {
-		s.data.ActiveConnections--
-	}
-	s.markDirtyLocked()
+	s.active.Add(-1)
+	s.mutations.Add(1)
 }
 
 func (s *statusTracker) RecordRejected(message string) {
 	if s == nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.data.RejectedConnections++
-	s.addErrorLocked(message, "", "")
-	s.markDirtyLocked()
+	s.rejected.Add(1)
+	s.addError(message, "", "")
+	s.mutations.Add(1)
 }
 
 func (s *statusTracker) RecordPeekTimeout(message string) {
 	if s == nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.data.RejectedConnections++
-	s.data.PeekErrors++
-	s.data.PeekTimeouts++
-	s.addErrorLocked(message, "", "")
-	s.markDirtyLocked()
+	s.rejected.Add(1)
+	s.peekErrors.Add(1)
+	s.peekTimeouts.Add(1)
+	s.addError(message, "", "")
+	s.mutations.Add(1)
 }
 
 func (s *statusTracker) RecordConnection(match mux.Match, sni, transferMode string, countCopyFallback bool, bytesClientToBackend, bytesBackendToClient int64, backendDialError, peekError bool, err error) {
 	if s == nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.data.TotalConnections++
+	s.total.Add(1)
 	routeName := match.RouteName
 	if routeName == "" {
 		routeName = "unknown"
 	}
-	s.data.RouteHits[routeName]++
+	s.recordRouteHit(routeName)
 	if sni == "" {
-		s.data.NoSNI++
+		s.noSNI.Add(1)
 	}
 	if !match.Allowed || match.Blocked {
 		if match.RouteName == "strict_sni_gate" {
-			s.data.UnknownSNIBlocked++
+			s.unknownSNIBlocked.Add(1)
 		} else {
-			s.data.WhitelistBlocked++
+			s.whitelistBlocked.Add(1)
 		}
-		s.data.RejectedConnections++
+		s.rejected.Add(1)
 	}
 	if backendDialError {
-		s.data.BackendDialErrors++
+		s.dialErrors.Add(1)
 	}
 	if peekError {
-		s.data.PeekErrors++
+		s.peekErrors.Add(1)
 	}
 	if bytesClientToBackend > 0 {
-		s.data.BytesClientToBackend += uint64(bytesClientToBackend)
+		s.bytesClientToBackendCounter.Add(uint64(bytesClientToBackend))
 	}
 	if bytesBackendToClient > 0 {
-		s.data.BytesBackendToClient += uint64(bytesBackendToClient)
+		s.bytesBackendToClientCounter.Add(uint64(bytesBackendToClient))
 	}
 	switch transferMode {
 	case "splice":
-		s.data.SpliceSuccess++
+		s.spliceSuccess.Add(1)
 	case "copy":
 		if countCopyFallback {
-			s.data.CopyFallback++
+			s.copyFallback.Add(1)
 		}
 	}
 	if err != nil {
-		s.addErrorLocked(err.Error(), sni, routeName)
+		s.addError(err.Error(), sni, routeName)
 	}
-	s.markDirtyLocked()
+	s.mutations.Add(1)
 }
 
 func (s *statusTracker) RecordBackendRetryStats(stats backendRetryStats) {
 	if s == nil || stats.attempts == 0 {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.data.BackendRetryAttempts += stats.attempts
+	s.retryAttempts.Add(stats.attempts)
 	if stats.success {
-		s.data.BackendRetrySuccess++
+		s.retrySuccess.Add(1)
 	}
 	if stats.failed {
-		s.data.BackendRetryFailed++
+		s.retryFailed.Add(1)
 	}
-	s.markDirtyLocked()
+	s.mutations.Add(1)
 }
 
 func (s *statusTracker) RecordError(message string) {
 	if s == nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.addErrorLocked(message, "", "")
-	s.markDirtyLocked()
+	s.addError(message, "", "")
+	s.mutations.Add(1)
 }
 
-func (s *statusTracker) addErrorLocked(message, sni, routeName string) {
+func (s *statusTracker) recordRouteHit(name string) {
+	if value, ok := s.routeHits.Load(name); ok {
+		value.(*atomic.Uint64).Add(1)
+		return
+	}
+	actual, _ := s.routeHits.LoadOrStore(name, new(atomic.Uint64))
+	actual.(*atomic.Uint64).Add(1)
+}
+
+func (s *statusTracker) addError(message, sni, routeName string) {
 	if message == "" {
 		return
 	}
-	s.data.RecentErrors = append(s.data.RecentErrors, statusError{
+	s.errMu.Lock()
+	defer s.errMu.Unlock()
+	s.recentErrors = append(s.recentErrors, statusError{
 		Time:      time.Now().Format(time.RFC3339),
 		Message:   message,
 		SNI:       sni,
 		RouteName: routeName,
 	})
-	if len(s.data.RecentErrors) > 10 {
-		s.data.RecentErrors = s.data.RecentErrors[len(s.data.RecentErrors)-10:]
+	if len(s.recentErrors) > 10 {
+		s.recentErrors = s.recentErrors[len(s.recentErrors)-10:]
 	}
 }
 
@@ -490,7 +580,9 @@ func (s *statusTracker) logWriteErrorLocked(err error) {
 	log.Printf(`{"level":"error","message":"failed to write status json","path":%q,"error":%q}`, s.path, err.Error())
 }
 
-func acceptLoop(ctx context.Context, ln net.Listener, cfg *mux.Config, d mux.Durations, logger *mux.Logger, status *statusTracker, limiter *connectionLimiter, wg *sync.WaitGroup) {
+func acceptLoop(ctx context.Context, ln net.Listener, current *atomic.Pointer[runtimeConfig], logger *mux.Logger, status *statusTracker, limiter *connectionLimiter, wg *sync.WaitGroup) {
+	// 对持续性 Accept 错误（如 fd 耗尽）指数退避，避免空转放大日志和状态锁压力。
+	var acceptBackoff time.Duration
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -498,16 +590,29 @@ func acceptLoop(ctx context.Context, ln net.Listener, cfg *mux.Config, d mux.Dur
 			case <-ctx.Done():
 				return
 			default:
-				logger.Emit("error", mux.LogEvent{Message: "accept failed", Error: err.Error()})
-				status.RecordError("accept failed: " + err.Error())
-				continue
 			}
+			logger.Emit("error", mux.LogEvent{Message: "accept failed", Error: err.Error()})
+			status.RecordError("accept failed: " + err.Error())
+			if acceptBackoff == 0 {
+				acceptBackoff = 25 * time.Millisecond
+			} else if acceptBackoff < time.Second {
+				acceptBackoff *= 2
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(acceptBackoff):
+			}
+			continue
 		}
+		acceptBackoff = 0
 		tcpConn, ok := conn.(*net.TCPConn)
 		if !ok {
 			_ = conn.Close()
 			continue
 		}
+		_ = tcpConn.SetKeepAlive(true)
+		_ = tcpConn.SetKeepAlivePeriod(time.Minute)
 		if !limiter.Acquire() {
 			allowed := false
 			logger.Emit("warn", mux.LogEvent{
@@ -526,7 +631,8 @@ func acceptLoop(ctx context.Context, ln net.Listener, cfg *mux.Config, d mux.Dur
 			defer wg.Done()
 			defer limiter.Release()
 			defer status.RecordFinished()
-			handleConn(tcpConn, cfg, d, logger, status)
+			rc := current.Load()
+			handleConn(tcpConn, rc.cfg, rc.d, logger, status)
 		}()
 	}
 }
@@ -541,7 +647,7 @@ func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *m
 		}
 	}
 
-	peeked, peekErr := peek(client, d.Peek)
+	sni, peekErr := peek(client, d.Peek)
 	if errors.Is(peekErr, errPeekTimeout) {
 		allowed := false
 		logger.Emit("warn", mux.LogEvent{
@@ -554,16 +660,7 @@ func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *m
 		status.RecordPeekTimeout(peekErr.Error())
 		return
 	}
-	sni := ""
 	peekErrorForStatus := false
-	if peekErr == nil {
-		parsedSNI, err := mux.ExtractSNI(peeked)
-		if err == nil {
-			sni = parsedSNI
-		} else if !errors.Is(err, mux.ErrNoSNI) && !errors.Is(err, mux.ErrInvalidClientHello) && !errors.Is(err, mux.ErrNeedMore) {
-			peekErr = err
-		}
-	}
 
 	match := mux.MatchRoute(cfg, sni, clientAddr)
 	allowed := match.Allowed
@@ -591,7 +688,7 @@ func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *m
 		peekErrorForStatus = true
 	}
 
-	backend, retryStats, err := dialBackendWithRetry(match.Backend, d.Dial, cfg.BackendRetry.Count, d.BackendRetryDelay, net.DialTimeout)
+	backend, retryStats, err := dialBackendWithRetry(match.Backend, d.Dial, cfg.BackendRetry.Count, d.BackendRetryDelay, dialBackend)
 	status.RecordBackendRetryStats(retryStats)
 	if err != nil {
 		event.Error = err.Error()
@@ -600,6 +697,15 @@ func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *m
 		return
 	}
 	defer backend.Close()
+
+	if match.ProxyProtocol == "v1" {
+		if err := writeProxyProtocolV1(backend, client); err != nil {
+			event.Error = err.Error()
+			logger.Emit("error", event)
+			status.RecordConnection(match, sni, "", false, 0, 0, false, peekErrorForStatus, err)
+			return
+		}
+	}
 
 	mode, bytesClientToBackend, bytesBackendToClient, err := mux.ProxyBidirectional(client, backend, mux.TransferOptions{
 		SpliceEnabled:  cfg.Splice.Enabled,
@@ -623,10 +729,36 @@ func handleConn(client *net.TCPConn, cfg *mux.Config, d mux.Durations, logger *m
 	status.RecordConnection(match, sni, mode, cfg.Splice.Enabled && cfg.Splice.FallbackToCopy, bytesClientToBackend, bytesBackendToClient, false, peekErrorForStatus, statusErr)
 }
 
+// dialBackend 是默认拨号函数：带 60s TCP keepalive，让静默断掉的死连接及时释放连接槽位。
+func dialBackend(network, address string, timeout time.Duration) (net.Conn, error) {
+	dialer := &net.Dialer{Timeout: timeout, KeepAlive: time.Minute}
+	return dialer.Dial(network, address)
+}
+
+// writeProxyProtocolV1 在转发 ClientHello 前向 backend 发送 PROXY protocol v1 文本头，
+// 让后端拿得到真实客户端 IP。
+func writeProxyProtocolV1(backend net.Conn, client *net.TCPConn) error {
+	remoteHost, remotePort, err := net.SplitHostPort(client.RemoteAddr().String())
+	if err != nil {
+		return err
+	}
+	localHost, localPort, err := net.SplitHostPort(client.LocalAddr().String())
+	if err != nil {
+		return err
+	}
+	family := "TCP4"
+	if strings.Contains(remoteHost, ":") {
+		family = "TCP6"
+	}
+	header := fmt.Sprintf("PROXY %s %s %s %s %s\r\n", family, remoteHost, localHost, remotePort, localPort)
+	_, err = backend.Write([]byte(header))
+	return err
+}
+
 func dialBackendWithRetry(backend string, dialTimeout time.Duration, retryCount int, retryDelay time.Duration, dial backendDialFunc) (net.Conn, backendRetryStats, error) {
 	var stats backendRetryStats
 	if dial == nil {
-		dial = net.DialTimeout
+		dial = dialBackend
 	}
 	conn, err := dial("tcp", backend, dialTimeout)
 	if err == nil {
@@ -660,56 +792,76 @@ func remoteIP(addr net.Addr) string {
 	return strings.Trim(host, "[]")
 }
 
-func peek(conn *net.TCPConn, timeout time.Duration) ([]byte, error) {
+// peek 缓冲统一取 16KB 池化块：MSG_PEEK 不消费数据，连接结束后整块归还，
+// 免去每连接分配和 4K->16K 的逐级扩容。缓冲不逃出本函数，可安全复用。
+var peekBufPool = sync.Pool{New: func() any {
+	buf := make([]byte, maxPeekSize)
+	return &buf
+}}
+
+// peek 读取完整 ClientHello 并返回其中的 SNI，不消费连接数据。
+// needed 记录首次解析得到的完整 ClientHello 长度，未凑齐前跳过重复解析。
+func peek(conn *net.TCPConn, timeout time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)
 	if timeout > 0 {
 		if err := conn.SetReadDeadline(deadline); err != nil {
-			return nil, err
+			return "", err
 		}
 		defer conn.SetReadDeadline(time.Time{})
 	}
 
-	size := initialPeekSize
-	buf := make([]byte, size)
+	bufPtr := peekBufPool.Get().(*[]byte)
+	defer peekBufPool.Put(bufPtr)
+	buf := *bufPtr
 	lastN := -1
+	needed := -1
 	for {
 		n, err := recvPeek(conn, buf)
 		if err != nil {
 			if isTimeoutError(err) {
-				return nil, errPeekTimeout
+				return "", errPeekTimeout
 			}
-			return nil, err
+			return "", err
 		}
 		if n == lastN {
 			if timeout <= 0 {
-				return buf[:n], nil
+				return "", nil
 			}
 			if !time.Now().Before(deadline) {
-				return buf[:n], errPeekTimeout
+				return "", errPeekTimeout
 			}
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		if _, parseErr := mux.ExtractSNI(buf[:n]); errors.Is(parseErr, mux.ErrNeedMore) {
-			if n == size && size < maxPeekSize {
-				size *= 2
-				if size > maxPeekSize {
-					size = maxPeekSize
+		if needed >= 0 && n < needed {
+			lastN = n
+			continue
+		}
+		sni, parseErr := mux.ExtractSNI(buf[:n])
+		if parseErr == nil {
+			return sni, nil
+		}
+		if errors.Is(parseErr, mux.ErrNeedMore) {
+			if n >= maxPeekSize {
+				if timeout <= 0 {
+					return "", nil
 				}
-				buf = make([]byte, size)
-				lastN = -1
+				if !time.Now().Before(deadline) {
+					return "", errPeekTimeout
+				}
+				lastN = n
 				continue
 			}
-			if timeout <= 0 {
-				return buf[:n], nil
-			}
-			if !time.Now().Before(deadline) {
-				return buf[:n], errPeekTimeout
+			needed = mux.ClientHelloNeeded(buf[:n])
+			if needed <= n {
+				// 多条 record 的 ClientHello 无法从头部预估总长，退化为每次有新数据再解析。
+				needed = n + 1
 			}
 			lastN = n
 			continue
 		}
-		return buf[:n], nil
+		// 无 SNI 或格式异常：照旧按无 SNI 处理，交给默认路由。
+		return "", nil
 	}
 }
 
@@ -759,7 +911,14 @@ func duplicateSocket(conn *net.TCPConn) (int, error) {
 	return fd, dupErr
 }
 
+// spliceUnavailable 记住本机内核/环境不支持 splice 的事实，
+// 避免每条连接每个方向都重新走一遍 dup+pipe 建管再失败。
+var spliceUnavailable atomic.Bool
+
 func spliceCopy(dst, src *net.TCPConn, pipeSize int, idleTimeout time.Duration) (int64, error) {
+	if spliceUnavailable.Load() {
+		return 0, mux.ErrSpliceUnavailable
+	}
 	srcFD, err := duplicateSocket(src)
 	if err != nil {
 		return 0, errors.Join(mux.ErrSpliceUnavailable, err)
@@ -796,6 +955,7 @@ func spliceCopy(dst, src *net.TCPConn, pipeSize int, idleTimeout time.Duration) 
 				continue
 			}
 			if total == 0 && (errors.Is(err, unix.EINVAL) || errors.Is(err, unix.ENOSYS) || errors.Is(err, unix.EOPNOTSUPP)) {
+				spliceUnavailable.Store(true)
 				return 0, errors.Join(mux.ErrSpliceUnavailable, err)
 			}
 			return total, err
@@ -838,9 +998,10 @@ func waitFD(fd int, events int16, idleTimeout time.Duration) error {
 	if idleTimeout <= 0 {
 		timeoutMs = -1
 	}
-	pollFds := []unix.PollFd{{Fd: int32(fd), Events: events}}
+	var pollFds [1]unix.PollFd
+	pollFds[0] = unix.PollFd{Fd: int32(fd), Events: events}
 	for {
-		n, err := unix.Poll(pollFds, timeoutMs)
+		n, err := unix.Poll(pollFds[:], timeoutMs)
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}

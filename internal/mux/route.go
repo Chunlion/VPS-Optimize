@@ -2,25 +2,29 @@ package mux
 
 import (
 	"net/netip"
-	"regexp"
 	"sort"
 	"strings"
 )
 
 type Route struct {
-	Name       string   `yaml:"name"`
-	SNI        []string `yaml:"sni"`
-	Backend    string   `yaml:"backend"`
-	Whitelist  []string `yaml:"whitelist,omitempty"`
-	Blackhole  string   `yaml:"blackhole_backend,omitempty"`
-	RejectMode string   `yaml:"reject,omitempty"`
+	Name          string   `yaml:"name"`
+	SNI           []string `yaml:"sni"`
+	Backend       string   `yaml:"backend"`
+	Whitelist     []string `yaml:"whitelist,omitempty"`
+	Blackhole     string   `yaml:"blackhole_backend,omitempty"`
+	RejectMode    string   `yaml:"reject,omitempty"`
+	ProxyProtocol string   `yaml:"proxy_protocol,omitempty"`
+
+	// prefixes 是 Whitelist 规范化后预编译的结果，避免每条连接重新解析 CIDR 字符串。
+	prefixes []netip.Prefix
 }
 
 type Match struct {
-	Backend   string
-	RouteName string
-	Allowed   bool
-	Blocked   bool
+	Backend       string
+	RouteName     string
+	Allowed       bool
+	Blocked       bool
+	ProxyProtocol string
 }
 
 type routeIndex struct {
@@ -32,8 +36,6 @@ type wildcardRoute struct {
 	suffix string
 	route  *Route
 }
-
-var domainLabelPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
 func NormalizeSNI(sni string) string {
 	sni = strings.TrimSpace(strings.ToLower(sni))
@@ -61,11 +63,32 @@ func validDomain(domain string) bool {
 		return false
 	}
 	for _, label := range labels {
-		if !domainLabelPattern.MatchString(label) {
+		if !validDomainLabel(label) {
 			return false
 		}
 	}
 	return true
+}
+
+// validDomainLabel 等价于 ^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$ ，用字节循环替代正则，
+// 这段代码在每条连接解析 SNI 时都会执行。
+func validDomainLabel(label string) bool {
+	if len(label) < 1 || len(label) > 63 {
+		return false
+	}
+	for i := 0; i < len(label); i++ {
+		c := label[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= '0' && c <= '9', c == '-':
+		default:
+			return false
+		}
+	}
+	return isAlnumByte(label[0]) && isAlnumByte(label[len(label)-1])
+}
+
+func isAlnumByte(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= '0' && c <= '9'
 }
 
 func MatchRoute(c *Config, sni string, clientIP netip.Addr) Match {
@@ -172,14 +195,15 @@ func wildcardSuffixMatch(suffix, sni string) bool {
 
 func matchRouteAllowed(route *Route, clientIP netip.Addr) Match {
 	match := Match{
-		Backend:   route.Backend,
-		RouteName: route.Name,
-		Allowed:   true,
+		Backend:       route.Backend,
+		RouteName:     route.Name,
+		Allowed:       true,
+		ProxyProtocol: route.ProxyProtocol,
 	}
 	if len(route.Whitelist) == 0 {
 		return match
 	}
-	if clientIP.IsValid() && IPAllowed(clientIP, route.Whitelist) {
+	if clientIP.IsValid() && routeAllowsIP(route, clientIP) {
 		return match
 	}
 	match.Allowed = false
@@ -190,4 +214,12 @@ func matchRouteAllowed(route *Route, clientIP netip.Addr) Match {
 		match.Backend = ""
 	}
 	return match
+}
+
+// routeAllowsIP 优先使用预编译前缀；未经 ValidateConfig 处理的配置回退到解析规则字符串。
+func routeAllowsIP(route *Route, addr netip.Addr) bool {
+	if len(route.prefixes) > 0 {
+		return prefixAllowed(addr, route.prefixes)
+	}
+	return IPAllowed(addr, route.Whitelist)
 }

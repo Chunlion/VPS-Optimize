@@ -157,6 +157,19 @@ func collectClientHello(data []byte) ([]byte, error) {
 	}
 }
 
+// ClientHelloNeeded 从前 9 字节估算完整 ClientHello 需要的总字节数（单条 TLS record 场景），
+// 供接收循环跳过对未完整缓冲的重复解析；无法判断时返回 -1。
+func ClientHelloNeeded(data []byte) int {
+	if len(data) < 9 || data[0] != tlsRecordHandshake || data[5] != tlsHandshakeClient {
+		return -1
+	}
+	helloLen := int(data[6])<<16 | int(data[7])<<8 | int(data[8])
+	if helloLen <= 0 {
+		return -1
+	}
+	return 9 + helloLen
+}
+
 func parseServerNameExtension(data []byte) (string, error) {
 	if len(data) < 2 {
 		return "", ErrInvalidClientHello

@@ -176,6 +176,24 @@ func TestValidateConfigRejectsInvalidLoggingEnums(t *testing.T) {
 	}
 }
 
+func TestValidateConfigProxyProtocol(t *testing.T) {
+	cfg := validConfigForValidation()
+	cfg.Routes[0].ProxyProtocol = " V1 "
+	if _, err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("ValidateConfig: %v", err)
+	}
+	if cfg.Routes[0].ProxyProtocol != "v1" {
+		t.Fatalf("proxy_protocol = %q, want normalized v1", cfg.Routes[0].ProxyProtocol)
+	}
+
+	cfg = validConfigForValidation()
+	cfg.Routes[0].ProxyProtocol = "v2"
+	_, err := ValidateConfig(cfg)
+	if err == nil || !strings.Contains(err.Error(), "proxy_protocol") {
+		t.Fatalf("error = %v, want proxy_protocol validation error", err)
+	}
+}
+
 func validConfigForValidation() *Config {
 	cfg := DefaultConfig()
 	cfg.Listen.TCP = []string{"127.0.0.1:443"}

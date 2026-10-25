@@ -108,6 +108,55 @@ func TestRouteWhitelistBlocksClient(t *testing.T) {
 	}
 }
 
+func TestRouteWhitelistPrecompiledPrefixesMatchStringRules(t *testing.T) {
+	allowed := netip.MustParseAddr("10.20.30.40")
+	blocked := netip.MustParseAddr("198.51.100.9")
+
+	cfg := DefaultConfig()
+	cfg.Listen.TCP = []string{"127.0.0.1:443"}
+	cfg.DefaultBackend = "127.0.0.1:1443"
+	cfg.Routes = []Route{{
+		Name:      "panel",
+		SNI:       []string{"panel.example.com"},
+		Backend:   "127.0.0.1:8443",
+		Whitelist: []string{"10.0.0.0/8"},
+	}}
+	if _, err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("ValidateConfig: %v", err)
+	}
+	if len(cfg.Routes[0].prefixes) != 1 {
+		t.Fatalf("whitelist prefixes not precompiled: %+v", cfg.Routes[0].prefixes)
+	}
+	if m := MatchRoute(cfg, "panel.example.com", allowed); !m.Allowed {
+		t.Fatalf("precompiled whitelist blocked an allowed client: %+v", m)
+	}
+	if m := MatchRoute(cfg, "panel.example.com", blocked); m.Allowed || !m.Blocked {
+		t.Fatalf("precompiled whitelist allowed a blocked client: %+v", m)
+	}
+}
+
+func TestMatchCarriesProxyProtocol(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Listen.TCP = []string{"127.0.0.1:443"}
+	cfg.DefaultBackend = "127.0.0.1:1443"
+	cfg.Routes = []Route{{
+		Name:          "panel",
+		SNI:           []string{"panel.example.com"},
+		Backend:       "127.0.0.1:8443",
+		ProxyProtocol: "v1",
+	}}
+	if _, err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("ValidateConfig: %v", err)
+	}
+	match := MatchRoute(cfg, "panel.example.com", netip.MustParseAddr("203.0.113.8"))
+	if match.ProxyProtocol != "v1" {
+		t.Fatalf("match proxy protocol = %q, want v1", match.ProxyProtocol)
+	}
+	if m := MatchRoute(cfg, "other.example.com", netip.MustParseAddr("203.0.113.8")); m.ProxyProtocol != "" {
+		t.Fatalf("default route proxy protocol = %q, want empty", m.ProxyProtocol)
+	}
+}
+
 func TestRouteWhitelistRejectsInvalidClientAddress(t *testing.T) {
 	for _, blackhole := range []string{"", "127.0.0.1:9"} {
 		route := Route{Name: "panel", Backend: "127.0.0.1:8443", Whitelist: []string{"203.0.113.1"}, Blackhole: blackhole}

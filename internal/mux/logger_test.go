@@ -14,10 +14,12 @@ func TestLoggerRotatesFile(t *testing.T) {
 		MaxSizeBytes: 120,
 		MaxBackups:   2,
 	})
-	defer logger.Close()
 
 	for i := 0; i < 6; i++ {
 		logger.Emit("info", LogEvent{Message: strings.Repeat("x", 80)})
+	}
+	if err := logger.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
 
 	if _, err := os.Stat(logPath + ".1"); err != nil {

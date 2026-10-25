@@ -193,6 +193,15 @@ func ValidateConfig(c *Config) ([]string, error) {
 			}
 			route.Whitelist[j] = prefix.String()
 		}
+		route.ProxyProtocol = strings.ToLower(strings.TrimSpace(route.ProxyProtocol))
+		switch route.ProxyProtocol {
+		case "", "v1":
+		default:
+			return warnings, fmt.Errorf("routes[%d].proxy_protocol must be \"v1\" or empty", i)
+		}
+		if prefixes, err := CompilePrefixes(route.Whitelist); err == nil {
+			route.prefixes = prefixes
+		}
 		lowerName := strings.ToLower(route.Name)
 		if len(route.Whitelist) == 0 && (strings.Contains(lowerName, "panel") || strings.Contains(lowerName, "subscription") || strings.Contains(lowerName, "sub")) {
 			warnings = append(warnings, fmt.Sprintf("route %q looks sensitive but has no whitelist", route.Name))

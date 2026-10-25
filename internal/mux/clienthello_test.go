@@ -157,6 +157,22 @@ func TestExtractSNIWithFragmentedHandshakeHeader(t *testing.T) {
 	}
 }
 
+func TestClientHelloNeeded(t *testing.T) {
+	hello := makeClientHello(t, "panel.example.com")
+	if needed := ClientHelloNeeded(hello); needed != len(hello) {
+		t.Fatalf("needed = %d, want %d", needed, len(hello))
+	}
+	if needed := ClientHelloNeeded(hello[:8]); needed != -1 {
+		t.Fatalf("short buffer: needed = %d, want -1", needed)
+	}
+	if needed := ClientHelloNeeded([]byte("GET / HTTP/1.1\r\n\r\n")); needed != -1 {
+		t.Fatalf("non-TLS: needed = %d, want -1", needed)
+	}
+	if needed := ClientHelloNeeded(hello[:9]); needed != 9+int(hello[6])<<16|int(hello[7])<<8+int(hello[8]) {
+		t.Fatalf("header-only buffer: needed = %d", needed)
+	}
+}
+
 func appendTLSRecord(dst []byte, version []byte, payload []byte) []byte {
 	dst = append(dst, tlsRecordHandshake, version[0], version[1], byte(len(payload)>>8), byte(len(payload)))
 	return append(dst, payload...)

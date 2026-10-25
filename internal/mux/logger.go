@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -34,15 +35,26 @@ type LoggerOptions struct {
 	MaxBackups   int
 }
 
+// Logger 落盘走单独的写协程：连接协程只做格式化和入队，
+// 磁盘慢不再阻塞连接处理；队列满时回退为同步写以保证不丢日志。
 type Logger struct {
-	mu           sync.Mutex
 	minLevel     int
 	format       string
 	filePath     string
 	maxSizeBytes int64
 	maxBackups   int
-	file         *os.File
+
+	queue     chan string
+	closed    atomic.Bool
+	closeOnce sync.Once
+	wg        sync.WaitGroup
+
+	writeMu  sync.Mutex
+	file     *os.File
+	fileSize int64
 }
+
+const logQueueSize = 1024
 
 func NewLogger(options ...LoggerOptions) *Logger {
 	logger := &Logger{
@@ -67,7 +79,20 @@ func NewLogger(options ...LoggerOptions) *Logger {
 			logger.maxBackups = opt.MaxBackups
 		}
 	}
+	if logger.filePath != "" {
+		logger.queue = make(chan string, logQueueSize)
+		logger.wg.Add(1)
+		go logger.writerLoop()
+	}
 	return logger
+}
+
+func (l *Logger) writerLoop() {
+	defer l.wg.Done()
+	for line := range l.queue {
+		log.Print(line)
+		l.writeLine(line + "\n")
+	}
 }
 
 func (l *Logger) Emit(level string, ev LogEvent) {
@@ -87,8 +112,19 @@ func (l *Logger) Emit(level string, ev LogEvent) {
 		}
 		line = string(data)
 	}
-	log.Print(line)
-	l.writeFile(line + "\n")
+	if l.queue == nil || l.closed.Load() {
+		log.Print(line)
+		if l.queue != nil {
+			l.writeLine(line + "\n")
+		}
+		return
+	}
+	select {
+	case l.queue <- line:
+	default:
+		log.Print(line)
+		l.writeLine(line + "\n")
+	}
 }
 
 func logLevelPriority(level string) int {
@@ -136,8 +172,15 @@ func (l *Logger) Close() error {
 	if l == nil {
 		return nil
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	if l.queue != nil {
+		l.closeOnce.Do(func() {
+			l.closed.Store(true)
+			close(l.queue)
+			l.wg.Wait()
+		})
+	}
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
 	if l.file == nil {
 		return nil
 	}
@@ -146,14 +189,11 @@ func (l *Logger) Close() error {
 	return err
 }
 
-func (l *Logger) writeFile(line string) {
-	if l == nil || l.filePath == "" {
-		return
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
+func (l *Logger) writeLine(line string) {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
 
-	if err := l.rotateIfNeeded(int64(len(line))); err != nil {
+	if err := l.rotateIfNeededLocked(int64(len(line))); err != nil {
 		log.Printf(`{"level":"error","message":"failed to rotate log file","error":%q}`, err.Error())
 		return
 	}
@@ -168,24 +208,23 @@ func (l *Logger) writeFile(line string) {
 			return
 		}
 		l.file = file
+		if info, err := file.Stat(); err == nil {
+			l.fileSize = info.Size()
+		}
 	}
 	if _, err := l.file.WriteString(line); err != nil {
 		log.Printf(`{"level":"error","message":"failed to write log file","error":%q}`, err.Error())
+		return
 	}
+	l.fileSize += int64(len(line))
 }
 
-func (l *Logger) rotateIfNeeded(incomingBytes int64) error {
+// rotateIfNeededLocked 只看内存中的 fileSize，避免每写一行 os.Stat 一次。
+func (l *Logger) rotateIfNeededLocked(incomingBytes int64) error {
 	if l.filePath == "" || l.maxSizeBytes <= 0 {
 		return nil
 	}
-	info, err := os.Stat(l.filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	if info.Size()+incomingBytes < l.maxSizeBytes {
+	if l.fileSize+incomingBytes < l.maxSizeBytes {
 		return nil
 	}
 	if l.file != nil {
@@ -194,6 +233,7 @@ func (l *Logger) rotateIfNeeded(incomingBytes int64) error {
 		}
 		l.file = nil
 	}
+	l.fileSize = 0
 	if l.maxBackups <= 0 {
 		return os.Truncate(l.filePath, 0)
 	}
