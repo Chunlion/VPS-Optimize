@@ -1,5 +1,6 @@
 node_modules
 .agents/
+.workbuddy/
 .vitepress/cache
 .vitepress/dist
 .vitepress/preview-*.log
