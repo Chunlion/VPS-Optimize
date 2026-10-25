@@ -4,6 +4,31 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'docs/**'
+      - 'en/**'
+      - 'ru/**'
+      - 'tutorials/**'
+      - 'public/**'
+      - 'index.md'
+      - 'quick-start.md'
+      - '.vitepress/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/pages.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'en/**'
+      - 'ru/**'
+      - 'tutorials/**'
+      - 'public/**'
+      - 'index.md'
+      - 'quick-start.md'
+      - '.vitepress/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -35,14 +60,17 @@ jobs:
         run: npm run build
 
       - name: Setup Pages
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-pages-artifact@v3
         with:
           path: .vitepress/dist
 
   deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

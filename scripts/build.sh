@@ -29,6 +29,27 @@ load_modules() {
 mkdir -p "$out_dir"
 load_modules
 
+# 防止新增真实模块忘记登记：非 Compatibility loader stub 的 src 模块必须出现在模块清单里。
+check_module_list_coverage() {
+    local src_file module_name listed
+    for src_file in "$repo_root"/src/*.sh; do
+        grep -q 'Compatibility loader' "$src_file" && continue
+        module_name="$(basename "$src_file" .sh)"
+        listed=0
+        for module in "${modules[@]}"; do
+            if [[ "$module" == "${module_name}.sh" ]]; then
+                listed=1
+                break
+            fi
+        done
+        [[ "$listed" -eq 1 ]] || {
+            printf 'src/%s.sh is not a stub but missing from %s\n' "$module_name" "$modules_list" >&2
+            exit 1
+        }
+    done
+}
+check_module_list_coverage
+
 {
     printf '%s\n' '#!/usr/bin/env bash'
     printf '%s\n' ''

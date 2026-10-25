@@ -5,14 +5,20 @@ cd "$(dirname "$0")/.."
 source src/input.sh
 source src/validate.sh
 source src/sni_stack_config.sh
+source src/xhttp_path_routes.sh
+
+fail() { echo "FAIL: $*" >&2; exit 1; }
+
+# 菜单模块加载时只定义函数；确认依赖齐全时能完整加载并导出全部入口函数。
+for vpso_fn in xhttp_path_mode_notice list_xhttp_path_routes add_xhttp_path_route remove_xhttp_path_route manage_xhttp_path_routes; do
+    declare -F "$vpso_fn" >/dev/null || fail "xhttp_path_routes.sh did not define $vpso_fn"
+done
 
 PANEL_WEB_PATH=/panel/
 SUB_URI_PATH=/sub/
 CLASH_URI_PATH=/clash/
 
 xhttp_paths_path() { echo "/tmp/vpso-xhttp-test.conf"; }
-
-fail() { echo "FAIL: $*" >&2; exit 1; }
 
 expect_path() {
     local input="$1" want="$2" got

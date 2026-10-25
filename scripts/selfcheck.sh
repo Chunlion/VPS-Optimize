@@ -9,9 +9,7 @@ echo "==> build release artifact"
 bash scripts/build.sh
 
 echo "==> bash syntax"
-for script in vps.sh dist/vps.sh dog.sh xui-custom-manager.sh src/*.sh scripts/*.sh tests/*.sh; do
-    bash -n "$script"
-done
+bash scripts/syntax-check.sh
 
 echo "==> golden render"
 bash tests/golden-render.sh
@@ -20,7 +18,11 @@ bash tests/sni-setup.sh
 bash tests/sni-rollback.sh
 
 echo "==> docs build"
-npm run build
+if [[ "${VPSO_SELFCHECK_SKIP_DOCS:-0}" == "1" ]]; then
+    echo "docs build skipped (VPSO_SELFCHECK_SKIP_DOCS=1); pages.yml builds docs separately."
+else
+    npm run build
+fi
 
 echo "==> shellcheck"
 if command -v shellcheck >/dev/null 2>&1; then

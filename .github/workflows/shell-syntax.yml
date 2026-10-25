@@ -20,21 +20,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install docs dependencies
-        run: npm ci
-
       - name: Install ShellCheck
         run: |
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y shellcheck
 
       - name: Run selfcheck
+        env:
+          VPSO_SELFCHECK_SKIP_DOCS: "1"
         run: |
           bash scripts/selfcheck.sh
 
@@ -79,9 +72,7 @@ jobs:
       - name: Build and syntax checks
         run: |
           bash scripts/build.sh
-          for script in vps.sh dist/vps.sh dog.sh xui-custom-manager.sh src/*.sh scripts/*.sh tests/*.sh; do
-            bash -n "$script"
-          done
+          bash scripts/syntax-check.sh
 
       - name: Run container-compatible smoke tests
         env:
