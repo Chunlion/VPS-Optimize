@@ -4,7 +4,7 @@ outline: 2
 
 # Port 443 Reuse: Setup and Configuration
 
-This guide puts the panel, subscription service, websites, and REALITY on one public `443` port. Replace every example domain and port with your own value.
+This guide puts the panel, subscription service, websites, and REALITY on one public `443` port. "Port 443 Reuse", "443 single entry", and "entry mode" all mean the same thing here: one entry service owns public `443` and routes to local backends by SNI or path. Replace every example domain and port with your own value.
 
 ## Choose the entry mode first
 
@@ -16,13 +16,25 @@ If you are unsure, choose **Nginx Stream**. It is the recommended first deployme
 | **TCP Peek + Splice** | Nginx Stream already works and you want the TCP Peek path | Switch to it later |
 | **Xray Fallback** | You already have a complete Xray main inbound that can own public `443` | Advanced; not the first choice |
 
-Only one service can listen on public `443` at a time. The following chain describes the Nginx Stream setup in this guide; TCP Peek also forwards to local backends. Xray Fallback instead uses a public Xray main inbound, so the local inbound settings below do not apply to that entry.
+The capability differences at a glance:
+
+| Capability | Nginx Stream | TCP Peek + Splice | Xray Fallback |
+| --- | --- | --- | --- |
+| Multiple SNI to multiple local inbounds | Yes | Yes | No |
+| Web domain IP allowlist | Yes | Yes | No |
+| XHTTP path reverse proxy | Yes | Yes | No |
+| SNI filtering | Yes | Yes | No |
+| REALITY fallback rate limiting | Yes | Yes | Yes |
+
+Every `xray-fallback` limitation has the same cause: the Xray main inbound owns public `443` on its own, and the script does not insert a routing layer in front of it. Anything that needs a second SNI split is therefore unavailable.
+
+Only one listening process can own public `443` at a time. The following chain describes the Nginx Stream setup in this guide; TCP Peek also forwards to local backends. Xray Fallback instead uses a public Xray main inbound, so the local inbound settings below do not apply to that entry.
 
 ```text
-Public 443 -> the single service selected by the current ENTRY_MODE
-Normal HTTPS / websites -> Caddy or Nginx -> your local website
-Panel / subscription -> Caddy or Nginx -> the local 3x-ui HTTP ports
-REALITY nodes -> the local Xray / 3x-ui inbound
+Public 443 -> the single service selected by the current ENTRY_MODE (routes by SNI / path)
+  |- Normal HTTPS / websites -> Caddy or Nginx -> your local website
+  |- Panel / subscription    -> Caddy or Nginx -> the local 3x-ui HTTP ports
+  `- REALITY nodes           -> the local Xray / 3x-ui inbound
 ```
 
 For a normal 3x-ui + website + REALITY setup, select Nginx Stream and continue.
@@ -59,7 +71,7 @@ Keep these three kinds of values separate:
 
 - Prepare a panel domain and a node domain, such as `panel.example.com` and `node.example.com`.
 - Point them to the VPS in your DNS provider.
-- For REALITY `serverName` / `target`, prefer a stable, directly reachable HTTPS site without CDN protection. If a CDN domain is unavoidable, enable [SNI filtering and REALITY fallback protection](#sni-filtering-and-reality-fallback-protection) after setup; otherwise failed REALITY connections may turn the server into a CDN relay and consume bandwidth.
+- For REALITY `serverName` / `target`, prefer a stable, directly reachable HTTPS site without CDN protection. If a CDN domain is unavoidable, enable [SNI filtering and REALITY fallback protection](#sni-filtering-and-reality-fallback-protection) after setup; otherwise failed REALITY connections may turn the server into a CDN relay and consume bandwidth. That CDN domain must be a separate third domain, never the panel or node domain.
 - Keep the current SSH session open. Allow SSH and TCP `443` in the cloud security group and the system firewall.
 
 Use the example domains like this:
@@ -71,7 +83,7 @@ Use the example domains like this:
 | `www.example.org` | The target site's own address | REALITY `serverName` / `target`, not the VPS |
 
 ::: tip Node address and REALITY target are different
-Panel and website domains may use a CDN. The REALITY node address in this guide must connect directly to the VPS using DNS-only records. Standard Cloudflare proxying does not forward arbitrary TCP protocols; see [proxying limitations](https://developers.cloudflare.com/dns/proxy-status/limitations/). The REALITY `serverName` / `target` is a separate setting; do not use this example’s node domain there.
+Panel and website domains may use a CDN. The REALITY node address in this guide must connect directly to the VPS using DNS-only records. Standard Cloudflare proxying terminates TLS at the edge and forwards HTTP, while REALITY depends on end-to-end TLS characteristics, so it cannot pass through; see [proxying limitations](https://developers.cloudflare.com/dns/proxy-status/limitations/). The REALITY `serverName` / `target` is a separate setting; do not use this example’s node domain there.
 :::
 
 ### Cloudflare DNS API
@@ -100,7 +112,7 @@ Before changing port ownership, keep one SSH session open and make a configurati
 Run on the VPS:
 
 ```bash
-ss -lntp | grep ':443'
+ss -lntp | grep ':443\b'
 ```
 
 If Nginx, Caddy, or another service already uses `443`, note what it does before continuing. The script checks conflicts during a switch but cannot decide which service you want to replace.
@@ -109,9 +121,7 @@ If Nginx, Caddy, or another service already uses `443`, note what it does before
 
 ### 1. Install 3x-ui on loopback
 
-During 3x-ui installation:
-
-> **3x-ui 2.x, including v2.9.4 and earlier:** Older installers may not offer `Skip SSL`. If it cannot be skipped, complete the legacy installation flow. In the shared-port-443 wizard in step 4 of this guide, confirm **Clear legacy 3x-ui certificate paths**; the script clears the panel and subscription certificate paths automatically. If that fails, clear them manually in 3x-ui, restart the panel, then continue the wizard.
+During 3x-ui installation, fill in these options:
 
 1. Choose `Skip SSL (advanced — behind reverse proxy / SSH tunnel only)` for the panel certificate.
 2. Set the listen IP to `127.0.0.1`.
@@ -123,6 +133,10 @@ During 3x-ui installation:
    ```
 
    If the installer does not offer a path, keep the path it displays instead of inventing one.
+
+::: warning 3x-ui 2.x and earlier (such as v2.9.4)
+Older installers may not offer `Skip SSL`. If it cannot be skipped, complete the legacy installation flow. In the shared-port-443 wizard in step 4 of this guide, confirm **Clear legacy 3x-ui certificate paths**; the script clears the panel and subscription certificate paths automatically. If that fails, clear them manually in 3x-ui, restart the panel, then continue the wizard.
+:::
 
 The panel is then reachable through the shared `443` entry instead of a public panel port.
 
@@ -138,7 +152,7 @@ The 3x-ui subscription page configures only the local backend. Its public URL is
 - Listen domain: leave blank.
 - Listen port: an unused local port, for example `2096`.
 - URI path: use your actual path, for example `/sub/`. Do not assume the example is the panel’s default.
-- Reverse Proxy URI: `https://panel.example.com/sub/`, which is `https://panel domain + URI path`.
+- Reverse Proxy URI: `https://panel.example.com/sub/`, which is `https://panel domain + URI path`. If the generated subscription link contains a double slash `//`, remove the trailing `/` from the URI path and regenerate it.
 - Do not enter `node.example.com` and do not give the subscription service a separate public certificate.
 
 Using the example values:
@@ -182,7 +196,11 @@ Let 3x-ui generate the UUID, private/public keys, and short ID. Do not copy anot
 
 The client link should use your node domain and port `443`, not `127.0.0.1:1443`.
 
-Ordinary TLS nodes use a different mapping: if the client SNI is `tls.example.com`, the certificate must cover that name. They do not use a REALITY target site. Create and enable a local TCP/TLS inbound in 3x-ui, then register `tls.example.com -> local address:actual port` under `[19] -> [4 Manage Xray SNI forwarding rules]`. The client still connects to the VPS public IP or node domain on the public entry port.
+Ordinary TLS nodes use a different mapping and do not involve REALITY:
+
+- The client SNI, for example `tls.example.com`, must be covered by the certificate. No REALITY target site is used.
+- Create and enable a local TCP/TLS inbound in 3x-ui, then register `tls.example.com -> local address:actual port` under `[19] -> [4 Manage Xray SNI forwarding rules]`.
+- The client connects to the VPS public IP or node domain on the public entry port `443`.
 
 XHTTP nodes have two wirings: a dedicated node domain, registered as an SNI route the same way as an ordinary TLS node; or sharing the panel/site domain through `[19] -> [2 Manage Web domains and reverse proxies] -> [10 XHTTP node path reverse proxy]`, where the local Web proxy routes by path and terminates TLS at local `8443`. Full steps, client settings, and troubleshooting are in [REALITY and XHTTP Together](../tutorials/03-xhttp-reality-shared-443.md).
 
@@ -221,7 +239,7 @@ Return to 3x-ui after the wizard finishes:
   - Address: `node.example.com`.
   - Port: `443`.
   - Security / SNI / Fingerprint / ALPN: keep them consistent with the inbound and client, for example `REALITY`, `www.example.org`, `chrome`, and the inbound's actual ALPN.
-- For 3x-ui v3.3.1 and earlier: open `External Proxy` in the REALITY inbound. Keep the type consistent, set the address to `node.example.com`, and set the port to `443`; do not enter `127.0.0.1:1443`.
+- Before 3x-ui v3.4.0: open `External Proxy` in the REALITY inbound. Keep the type consistent, set the address to `node.example.com`, and set the port to `443`; do not enter `127.0.0.1:1443`.
 - Copy the node link and verify that it uses the node domain and port `443`.
 
 The Hosts **address** is the public node domain, not the local listen address. The **Inbound** field is what connects that public name to the local REALITY inbound. The expected result is:
@@ -244,12 +262,12 @@ Open the panel domain in a browser, open the subscription URL, and test a node. 
 These read-only checks are useful on the VPS:
 
 ```bash
-ss -lntp | grep -E ':(443|40000|2096|1443)'
+ss -lntp | grep -E ':(443|40000|2096|1443)\b'
 curl -I https://panel.example.com/panel/
 curl -I https://panel.example.com/sub/
 ```
 
-Only the shared entry needs to be public on `443`; the other example ports should be bound to `127.0.0.1`. Use the paths actually shown by your panel.
+Only the shared entry needs to be public on `443`; the other example ports must be bound to `127.0.0.1`. Use the paths actually shown by your panel.
 
 If the panel is unavailable, check local ports and the current entry status before reinstalling anything. See [Troubleshooting and Recovery](443-single-entry-troubleshooting.md).
 
@@ -269,6 +287,16 @@ The script checks dependencies, ports, and backend reachability. Keep the SSH se
 
 Choose this only when an Xray main inbound is already configured to own public `443`. Xray receives `443` and sends normal HTTPS to the selected Caddy or Nginx Web reverse proxy. This mode is not intended for managing several Xray inbounds through the script's SNI route menu.
 
+### Switch back to Nginx Stream or another mode
+
+Any of the three modes can replace another; you do not need to roll back first. The path is always the same:
+
+```text
+Main menu [19 Port 443 Reuse manager] -> [1 Set up or switch the 443 entry mode] -> select the target mode
+```
+
+A switch reuses the saved domains, certificates, and backends. Only `xray-fallback` requires you to supply a working Xray main inbound.
+
 ### Roll back the last switch
 
 If a switch fails, run:
@@ -277,7 +305,7 @@ If a switch fails, run:
 Main menu [19 Port 443 Reuse manager] -> [10 Roll back the last entry-mode switch]
 ```
 
-Then check the panel domain, node link, and `ss -lntp | grep ':443'` again.
+Then check the panel domain, node link, and `ss -lntp | grep ':443\b'` again.
 
 ## Common maintenance
 
@@ -311,7 +339,24 @@ Then open `https://site.example.com` in a browser. If the app is inside a contai
 
 To serve an XHTTP node under the same domain, use `[10 XHTTP node path reverse proxy]`. It only records "domain + path -> local port"; certificates and TLS stay on the local Web proxy, and the 3x-ui inbound must listen on `127.0.0.1` with TLS disabled. See [REALITY and XHTTP Together](../tutorials/03-xhttp-reality-shared-443.md).
 
-A single Web domain can carry several XHTTP nodes, each with its own path and local port; several domains pointing at one path and one port is the upload/download split. REALITY routes by SNI and XHTTP routes by domain plus path, so the two keys never overlap, both can share one `443`, and there is no hard cap on record count. The tutorial's multiple-node section covers the order of operations, the uniqueness rules, and the CDN caveats.
+A single Web domain can carry several XHTTP nodes, each with its own path and local port.
+
+Pointing several domains at one path and one local port is only the **server-side prerequisite** for an upload/download split. The split itself happens on the client: `downloadSettings` under `xhttpSettings.extra` must name the second domain, otherwise both directions still use the same entry. See [Split upload and download](../tutorials/03-xhttp-reality-shared-443.md#split-upload-and-download-direct-upload-cdn-download) for the full fields and verification steps.
+
+REALITY routes by SNI and XHTTP routes by domain plus path, so the two keys do not conflict and both can share one `443`; however, the same SNI cannot be registered as both types, and the script enforces domain uniqueness. There is no artificial limit on record count, but more records increase configuration size and SNI list synchronization cost. The tutorial's multiple-node section covers the order of operations, the uniqueness rules, and the CDN caveats.
+
+### Certificate renewal and expiry checks
+
+`acme.sh` renews certificates from cron. After a successful renewal, the `reloadcmd` registered by `--install-cert` reloads Caddy or Nginx and writes the new files to `/etc/caddy/certs/`; `/root/cert/` holds symlinks to the same files. No manual step is required.
+
+To check the current state:
+
+```bash
+/root/.acme.sh/acme.sh --list
+crontab -l | grep acme
+```
+
+A failed renewal does not raise an alert. It shows up as a browser certificate error or a failed client handshake; reissue through `[19] -> [7 Maintain certificates, Caddy, and Cloudflare]` instead of replacing certificate files by hand.
 
 ### How to fill in the reverse-proxy URL
 
@@ -353,9 +398,15 @@ The useful actions are:
 
 Fallback limits support only 3x-ui with a local SQLite database. When PostgreSQL is detected, actions `[4]` and `[5]` are marked unavailable and the script does not modify the remote database.
 
+::: warning
 Changing fallback limits restarts the panel or Xray service. Do it outside important transfers and keep the generated backup. For a non-CDN REALITY target, fallback limiting is usually unnecessary.
+:::
 
-The strict SNI list is generated from registered Web domains, SNI routes, and the REALITY SNI. After changing an SNI, save and run `[3] Resynchronize the current SNI list`. Synchronization backs up, checks, and reapplies the entry, attempting rollback on failure. For an inbound with several `serverNames`, add a route for each name pointing to the same local address and port. “Configured; entry service running” reports configuration and service checks, not verified public filtering.
+The strict SNI list is generated from registered Web domains, SNI routes, and the REALITY SNI. Three things to remember:
+
+- **After adding or changing an SNI, save first, then run `[3] Resynchronize the current SNI list`.** Synchronization backs up, checks, and reapplies the entry, attempting rollback on failure.
+- For an inbound with several `serverNames`, add a route for each name pointing to the same local address and port.
+- “Configured; entry service running” reports configuration and service checks, not verified public filtering.
 
 ### Configure multiple REALITY inbounds
 
@@ -376,7 +427,13 @@ Use this order:
 4. Open `Main menu [19 Port 443 Reuse manager] -> [6 Set SNI filtering and REALITY fallback limits] -> [4 Set REALITY fallback rate limits]`. The menu lists every REALITY inbound. Each run modifies only the selected inbound, so repeat it for every inbound that needs protection.
 5. Synchronizing the routes also regenerates the strict SNI list from the saved domains and routes.
 
-Fallback limits are stored per inbound, not as one global switch and not per user. Each inbound must use a distinct local port and SNI; enabling the limit for inbound A does not protect inbound B. There is currently no batch action to set limits for every inbound, so select and configure each inbound separately. The strict SNI gate is shared by the entry and covers all registered SNIs. When 3x-ui uses PostgreSQL, the script does not support fallback limits because it avoids modifying a remote database; this feature supports only local SQLite 3x-ui.
+A few rules apply:
+
+- Fallback limits are stored **per inbound**, not as one global switch and not per user.
+- Each inbound must use a distinct local port and SNI; enabling the limit for inbound A does not protect inbound B.
+- There is currently no batch action to set limits for every inbound, so select and configure each inbound separately.
+- The strict SNI gate is shared by the entry and covers all registered SNIs.
+- Only 3x-ui with a local SQLite database is supported; when PostgreSQL is detected the script leaves the remote database untouched.
 
 `xray-fallback` may contain several inbounds inside Xray, but one Xray main inbound owns public `443`; the script does not split several SNIs to several local inbounds in that mode. Use Nginx Stream or TCP Peek + Splice when several inbounds must share `443`.
 
@@ -384,18 +441,20 @@ If possible, use a non-CDN HTTPS site as the REALITY target; it reduces the impa
 
 ## Verify and troubleshoot
 
-1. Run `ss -lntp | grep ':443'` and confirm that only the current entry service owns public `443`.
+1. Run `ss -lntp | grep ':443\b'` and confirm that only the current entry service owns public `443`.
 2. Open the panel domain and the subscription URL in a browser.
 3. Test a node whose link uses the node domain and port `443`.
 4. Confirm that the REALITY SNI is the selected target site.
 5. For `403/401`, check the Web allowlist, CDN/WAF, and Host/SNI first. For `502`, check the backend address and port. For timeouts, check the firewall, cloud security group, and the `443` listener.
 6. Use `Main menu [19 Port 443 Reuse manager] -> [13 Check entry configuration, certificates, and routes]` for entry, certificate, Web, and Xray status. Use `[14 Test DNS, ports, and HTTPS access]` for public DNS/TCP/TLS tests.
 7. For failures, read [Troubleshooting and Recovery](443-single-entry-troubleshooting.md). For mode details, read [Entry Modes and Internals](443-tcp-peek-engine.md).
+8. If the panel and entry checks pass but Mihomo nodes time out after upgrading to Xray `26.9.30`, roll the server back to the verified `26.6.27` as described in [Server version compatibility](443-single-entry-troubleshooting.md#xray-timeout-after-upgrade), then retest the original client configuration. Do not change client settings globally.
 
 ## Avoid these mistakes
 
 - Do not expose the 3x-ui panel, subscription service, or website backend directly to the Internet.
-- Do not let two services listen on public `443` at the same time.
+- Do not let two listening processes own public `443` at the same time.
+- Do not assume `0.0.0.0` covers every client: it binds IPv4 only. If IPv6 clients must connect, confirm the entry also listens on `[::]:443`.
 - Do not put an XHTTP path on `/panel/`, `/sub/`, `/clash/`, or their subpaths.
 - Do not enable TLS on both the XHTTP inbound and the local Web proxy.
 - Do not use the panel domain, node domain, or a local address as the REALITY camouflage target.
