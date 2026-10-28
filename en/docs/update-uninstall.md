@@ -12,6 +12,15 @@ The main menu caches the remote version. After discovering a new version, enter 
 
 The built-in update will first perform a syntax check and then download the verification file; if the verification fails, the current `cy` command will not be overwritten.
 
+## GitHub update mirror
+
+The script connects to GitHub directly by default. On machines that cannot reach GitHub, save a working mirror at `[9 System settings and cleanup] -> [10 GitHub update mirror]`: script self-updates use it, and other GitHub-hosted installers automatically retry through it when direct access fails.
+
+- The setting is stored in `/etc/vps-optimize/update-mirror.conf` and survives updates.
+- Enter `-` in the same menu to restore direct access.
+- The package mirror tool is downloaded from the official LinuxMirrors site (linuxmirrors.cn) and does not depend on GitHub.
+- To replace an older `cy`, run the new script, configure a mirror if needed, then select `[17 Update script]`.
+
 ## Manual update
 
 Run as `root`. These commands check the download, reject an empty file, and check Bash syntax. Use the menu update for full verification. Installation stops if any check fails.
