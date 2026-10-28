@@ -18,7 +18,7 @@ The script connects to GitHub directly by default. On machines that cannot reach
 
 - The setting is stored in `/etc/vps-optimize/update-mirror.conf` and survives updates.
 - Enter `-` in the same menu to restore direct access.
-- The package mirror tool is downloaded from the official LinuxMirrors site (linuxmirrors.cn) and does not depend on GitHub.
+- The package mirror tool is downloaded from the official LinuxMirrors site (linuxmirrors.cn) first; when a mirror is configured, that mirror is tried first, then the official site and GitHub.
 - To replace an older `cy`, run the new script, configure a mirror if needed, then select `[17 Update script]`.
 
 ## Manual update

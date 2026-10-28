@@ -20974,7 +20974,7 @@ func_configure_update_mirror() {
     if [[ -s "$UPDATE_MIRROR_CONFIG" && -z "$UPDATE_MIRROR" ]]; then
         echo "$(localized_text "⚠️ 配置文件内容无效，已忽略：${UPDATE_MIRROR_CONFIG}" "⚠️ The config file is invalid and has been ignored: ${UPDATE_MIRROR_CONFIG}" "⚠️ Содержимое файла конфигурации неверно и проигнорировано: ${UPDATE_MIRROR_CONFIG}")"
     fi
-    echo "$(localized_text "只影响脚本自身更新与换源工具下载，其它第三方安装脚本仍直连 GitHub。" "Only script self-updates and the change-mirror tool download use it; other third-party installers still use GitHub directly." "Действует только на самообновление сценария и загрузку инструмента смены зеркала; остальные установщики идут напрямую с GitHub.")"
+    echo "$(localized_text "影响脚本自身更新、换源工具下载，以及其他 GitHub 安装脚本直连失败后的重试。" "Used for script self-updates, the change-mirror tool download, and retries when other GitHub-hosted installers cannot connect directly." "Используется для самообновления сценария, загрузки инструмента смены зеркал и повторов, когда другие установщики с GitHub не могут подключиться напрямую.")"
     echo "$(localized_text "输入你信任的 HTTPS 镜像前缀；保存后，版本检查、脚本和校验文件统一使用它。输入 - 恢复 GitHub 直连。" "Enter a trusted HTTPS mirror prefix. Version checks, the script, and the checksum file will all use it. Enter - to restore direct GitHub access." "Введите префикс доверенного HTTPS-зеркала. Проверка версии, сценарий и контрольная сумма будут загружаться через него. Введите - для прямого доступа к GitHub.")"
     while true; do
         read_trimmed mirror "$(localized_text "镜像前缀（回车保持，- 恢复直连，q 返回）: " "Mirror prefix (Enter to keep, - for direct GitHub, q to return): " "Префикс зеркала (Enter — оставить, - — напрямую, q — назад): ")"

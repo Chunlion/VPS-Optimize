@@ -18,7 +18,7 @@
 
 - 配置保存在 `/etc/vps-optimize/update-mirror.conf`，更新脚本后保留。
 - 在同一菜单输入 `-` 可恢复直连。
-- 系统换源工具优先从 LinuxMirrors 官方站点（linuxmirrors.cn）下载，不依赖 GitHub。
+- 系统换源工具优先从 LinuxMirrors 官方站点（linuxmirrors.cn）下载；配置了镜像时先试镜像，再回退官方站点与 GitHub。
 - 已有旧版 `cy` 时，先运行新版并按需设置镜像，再选择 `[17 更新脚本]` 完成替换。
 
 ## 手动更新
