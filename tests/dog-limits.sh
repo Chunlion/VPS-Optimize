@@ -146,7 +146,58 @@ before=$(nft -j list table inet dog_test)
 [[ "$(nft -j list table inet dog_test)" == "$before" ]]
 echo 'PASS: 50G after 1G used, stale quota repair, idempotence and atomic failure'
 
+# An existing HTB tree must survive both applying and removing dog limits.
+update_config '.ports["80"].bandwidth_limit.class_id = "1:1050"'
+tc qdisc add dev dog0 root handle 1: htb
+tc class add dev dog0 parent 1: classid 1:1 htb rate 1mbit
+tc class add dev dog0 parent 1:1 classid "$(legacy_tc_class_id 80)" htb rate 100kbit
+before_classes=$(tc -j class show dev dog0)
+before_filters=$(tc -j filter show dev dog0 parent 1:)
+if apply_tc_limit 80 4mbit 2>/dev/null; then exit 1; fi
+if remove_tc_limit 80 2>/dev/null; then exit 1; fi
+[[ "$(tc -j class show dev dog0)" == "$before_classes" ]]
+[[ "$(tc -j filter show dev dog0 parent 1:)" == "$before_filters" ]]
+tc qdisc del dev dog0 root handle 1:
+
+# Recognise legacy dog rules from enabled ports without rewriting the parent.
+update_config '.ports["80"].bandwidth_limit = {enabled:true, rate:"4Mbps"}'
+tc qdisc add dev dog0 root handle 1: htb default 30
+tc class add dev dog0 parent 1: classid 1:1 htb rate 1gbit quantum 1514
+tc class add dev dog0 parent 1:1 classid "$(legacy_tc_class_id 80)" htb rate 100kbit
+tc filter add dev dog0 protocol ip parent 1: prio 81 u32 match ip sport 80 0xffff flowid "$(legacy_tc_class_id 80)"
+apply_tc_limit 80 4mbit
+tc -j filter show dev dog0 parent 1: | jq -e 'all(.[]; .kind != "u32")' >/dev/null
+tc -j class show dev dog0 | jq -e 'any(.[]; .handle == "1:1" and .rate == 125000000)' >/dev/null
+remove_tc_limit 80
+
+# A failed first installation must not leave an unrecognised HTB root behind.
+(
+    tc() {
+        if [[ "$1 ${2:-}" == 'filter replace' ]]; then return 1; fi
+        command tc "$@"
+    }
+    if apply_tc_limit 80 4mbit 2>/dev/null; then exit 1; fi
+)
+tc -j qdisc show dev dog0 | jq -e 'all(.[]; .kind != "htb")' >/dev/null
+
+apply_tc_limit 80 4mbit
+before_classes=$(tc -j class show dev dog0)
+before_filters=$(tc -j filter show dev dog0 parent 1:)
+(
+    tc() {
+        if [[ "$1 ${2:-}" == 'filter replace' && "$*" == *'protocol ipv6'* ]]; then return 1; fi
+        command tc "$@"
+    }
+    if apply_tc_limit 54559 4mbit 2>/dev/null; then exit 1; fi
+)
+[[ "$(tc -j class show dev dog0)" == "$before_classes" ]]
+[[ "$(tc -j filter show dev dog0 parent 1:)" == "$before_filters" ]]
+
 for port in 54558 54559 65535 1000-1002 80 1080; do apply_tc_limit "$port" 4mbit; done
+# Restoring dog rules must preserve the existing parent rate.
+tc class change dev dog0 parent 1: classid 1:1 htb rate 1gbit
+apply_tc_limit 80 4mbit
+tc -j class show dev dog0 | jq -e 'any(.[]; .handle == "1:1" and .rate == 125000000)' >/dev/null
 # Old ports 80 and 1080 share u32 preference 81; remove only the selected handle.
 tc filter add dev dog0 protocol ip parent 1: prio 81 u32 match ip sport 80 0xffff flowid "$(legacy_tc_class_id 80)"
 tc filter add dev dog0 protocol ip parent 1: prio 81 u32 match ip sport 1080 0xffff flowid "$(legacy_tc_class_id 1080)"
@@ -219,3 +270,10 @@ remove_nftables_rules 54558
 nft list counter inet dog_test port_54559_in >/dev/null
 if nft list counter inet dog_test port_54558_in >/dev/null 2>&1; then exit 1; fi
 echo 'PASS: IPv4/IPv6 packet classification, ranges/high ports and independent removal'
+
+for port in 54559 65535 1000-1002 80 1080; do remove_tc_limit "$port"; done
+tc -j qdisc show dev dog0 | jq -e 'all(.[]; .kind != "htb")' >/dev/null
+apply_tc_limit 80 4mbit
+remove_tc_limit 80
+tc -j qdisc show dev dog0 | jq -e 'all(.[]; .kind != "htb")' >/dev/null
+echo 'PASS: foreign HTB preservation, parent preservation and owned root cleanup'

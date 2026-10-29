@@ -2109,19 +2109,47 @@ remove_nftables_quota() {
     [ -z "$batch_cmds" ] || printf '%s\n' "$batch_cmds" | nft -f -
 }
 
+tc_root_is_owned() {
+    local interface="$1" class_ids classes filters port class_id
+    tc -j qdisc show dev "$interface" | jq -e 'any(.[]; .root == true and .kind == "htb" and .handle == "1:")' >/dev/null || return 1
+    class_ids=$(while read -r port class_id; do
+        [ -n "$class_id" ] || class_id=$(legacy_tc_class_id "$port")
+        printf '%s\n' "$class_id"
+    done < <(jq -r '.ports | to_entries[] |
+        select(.value.bandwidth_limit.class_id != null or .value.bandwidth_limit.enabled == true) |
+        [.key, (.value.bandwidth_limit.class_id // "")] | @tsv' "$CONFIG_FILE") |
+        jq -Rsc 'split("\n") | map(select(length > 0))') || return 1
+    classes=$(tc -j class show dev "$interface") || return 1
+    jq -e --argjson ids "$class_ids" '
+        length > 1 and all(.[];
+            (.classid // .handle) as $id | $id == "1:1" or ($ids | index($id)) != null)
+    ' <<< "$classes" >/dev/null || return 1
+    filters=$(tc -j filter show dev "$interface" parent 1:) || return 1
+    jq -e --argjson ids "$class_ids" '
+        any(.[]; ((.kind == "flower" and (.pref == 32000 or .pref == 32001)) or
+                  .kind == "u32" or .kind == "fw") and
+            ((.options.classid // .options.flowid) as $id |
+                $id != null and ($ids | index($id)) != null))
+    ' <<< "$filters" >/dev/null
+}
+
 apply_tc_limit() {
     local port=$1
     local total_limit=$2
-    local interface class_id minor protocol proto direction pref handle old_rate
+    local interface class_id minor protocol proto direction pref handle old_rate root_created=false
     interface=$(get_default_interface) || return 1
     class_id=$(generate_tc_class_id "$port") || return 1
     minor=$((16#${class_id#1:}))
-    tc qdisc add dev "$interface" root handle 1: htb 2>/dev/null || true
-    if ! tc -j qdisc show dev "$interface" | jq -e 'any(.[]; .root == true and .kind == "htb" and .handle == "1:")' >/dev/null; then
+    if tc qdisc add dev "$interface" root handle 1: htb 2>/dev/null; then
+        root_created=true
+        if ! tc class add dev "$interface" parent 1: classid 1:1 htb rate 100000mbit quantum 1514; then
+            tc qdisc del dev "$interface" root handle 1:
+            return 1
+        fi
+    elif ! tc_root_is_owned "$interface"; then
         echo "网卡 $interface 的根队列被其他工具占用，未应用端口 $port 限速。" >&2
         return 1
     fi
-    tc class replace dev "$interface" parent 1: classid 1:1 htb rate 100000mbit quantum 1514 || return 1
 
     local base_rate=$(parse_tc_rate_to_kbps "$total_limit")
     local burst_bytes=$(calculate_tc_burst "$base_rate")
@@ -2129,6 +2157,7 @@ apply_tc_limit() {
 
     if ! tc class replace dev "$interface" parent 1:1 classid "$class_id" htb rate "$total_limit" ceil "$total_limit" burst "$burst_size" quantum 1514; then
         echo "端口 $port 限速类应用失败。" >&2
+        if [ "$root_created" = true ]; then tc qdisc del dev "$interface" root handle 1:; fi
         return 1
     fi
 
@@ -2142,11 +2171,14 @@ apply_tc_limit() {
                 if ! tc filter replace dev "$interface" protocol "$protocol" parent 1: prio "$pref" handle "$handle" flower ip_proto "$proto" "$direction" "$port" classid "$class_id"; then
                     echo "端口 $port 的 $protocol/$proto 限速规则应用失败，未保存新限制。" >&2
                     old_rate=$(jq -r --arg port "$port" '.ports[$port].bandwidth_limit | select(.enabled == true) | .rate // empty' "$CONFIG_FILE")
-                    if [ -n "$old_rate" ] && [ "$old_rate" != "unlimited" ]; then
+                    if [ "$root_created" = true ]; then
+                        tc qdisc del dev "$interface" root handle 1: || return 1
+                    elif [ -n "$old_rate" ] && [ "$old_rate" != "unlimited" ]; then
                         old_rate=$(convert_bandwidth_to_tc "$old_rate")
                         tc class replace dev "$interface" parent 1:1 classid "$class_id" htb rate "$old_rate" ceil "$old_rate" quantum 1514 || return 1
                     else
-                        remove_tc_limit "$port" || return 1
+                        remove_tc_filters "$interface" "$class_id" || return 1
+                        tc class del dev "$interface" classid "$class_id" || return 1
                     fi
                     return 1
                 fi
@@ -2179,11 +2211,19 @@ remove_tc_limit() {
     if ! tc -j qdisc show dev "$interface" | jq -e 'any(.[]; .root == true and .kind == "htb" and .handle == "1:")' >/dev/null; then
         return 0
     fi
+    if ! tc_root_is_owned "$interface"; then
+        echo "网卡 $interface 的根队列被其他工具占用，未移除端口 $port 限速。" >&2
+        return 1
+    fi
     class_id=$(generate_tc_class_id "$port") || return 1
     remove_tc_filters "$interface" "$class_id" || return 1
     classes=$(tc -j class show dev "$interface") || return 1
     if jq -e --arg id "$class_id" 'any(.[]; .classid == $id or .handle == $id)' <<< "$classes" >/dev/null; then
         tc class del dev "$interface" classid "$class_id" || return 1
+    fi
+    if tc -j class show dev "$interface" | jq -e 'all(.[]; (.classid // .handle) == "1:1")' >/dev/null &&
+       tc -j filter show dev "$interface" parent 1: | jq -e 'length == 0' >/dev/null; then
+        tc qdisc del dev "$interface" root handle 1: || return 1
     fi
 }
 
