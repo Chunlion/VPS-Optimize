@@ -35,7 +35,7 @@ install:
   note: 运行前创建 VPS 快照，并保留当前 SSH 会话。
 
 workflow:
-  label: 建议维护步骤，点击查看相关文档
+  label: 维护步骤与文档
   steps:
     - icon: fa-solid fa-magnifying-glass
       title: 检测

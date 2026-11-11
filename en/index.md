@@ -35,7 +35,7 @@ install:
   note: Create a VPS snapshot and keep your current SSH session open before running.
 
 workflow:
-  label: Suggested maintenance steps. Follow each link for guidance.
+  label: Maintenance workflow & guides
   steps:
     - icon: fa-solid fa-magnifying-glass
       title: Detect

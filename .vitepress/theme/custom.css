@@ -31,6 +31,10 @@
   --vp-button-brand-hover-text: #fff;
 }
 
+:root:lang(zh) {
+  --vp-font-family-base: "Noto Sans SC Variable", "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+
 .dark {
   --vp-c-brand-1: #8bd6aa;
   --vp-c-brand-2: #b0e8c7;
@@ -52,6 +56,7 @@
 }
 
 body { font-optical-sizing: auto; -webkit-font-smoothing: antialiased; }
+.VPNavBarTitle .title, .VPHome .VPHero .name { font-family: "Inter Variable", var(--vp-font-family-base); }
 .VPNavBar { border-bottom: 1px solid var(--vp-home-border); background: var(--vp-c-bg); }
 .VPNavBar.home .container { max-width: 1200px; }
 .VPNavBarTitle .title { font-weight: 750; letter-spacing: -.035em; }
@@ -166,6 +171,11 @@ body { font-optical-sizing: auto; -webkit-font-smoothing: antialiased; }
 .VPDocAsideOutline { padding: 16px 0; font-size: 13px; }
 .VPDocAsideOutline .outline-link { line-height: 1.6; padding-top: 7px; padding-bottom: 7px; white-space: normal; }
 .VPDocFooter .pager-link { border-radius: 10px; background: var(--vp-home-surface); }
+
+:lang(zh) :is(.VPHome .VPHero .text, .home-workflow h2, .home-story h2, .vp-doc h1, .vp-doc h2) {
+  font-weight: 600;
+  letter-spacing: 0;
+}
 
 @media (min-width: 1280px) {
   .VPDoc.has-aside .content-container { max-width: 800px; }
