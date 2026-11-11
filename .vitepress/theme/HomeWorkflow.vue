@@ -19,17 +19,21 @@ const workflow = computed(() => frontmatter.value.workflow as WorkflowData)
 </script>
 
 <template>
-  <section class="home-workflow" :aria-label="workflow.label">
+  <section class="home-workflow" aria-labelledby="workflow-title">
     <div class="home-workflow__inner">
-        <a v-for="step in workflow.steps" :key="step.title" class="home-workflow__step" :href="withBase(step.link)">
-          <span class="home-workflow__icon" aria-hidden="true">
-            <i :class="step.icon" />
-          </span>
-          <div>
-            <h2>{{ step.title }}</h2>
-            <p>{{ step.details }}</p>
-          </div>
-        </a>
+      <h2 id="workflow-title">{{ workflow.label }}</h2>
+      <ol class="home-workflow__list">
+        <li v-for="(step, index) in workflow.steps" :key="step.title">
+          <a class="home-workflow__step" :href="withBase(step.link)">
+            <span class="home-workflow__number" aria-hidden="true">0{{ index + 1 }}</span>
+            <div>
+              <h3>{{ step.title }}</h3>
+              <p>{{ step.details }}</p>
+            </div>
+            <i class="fa-solid fa-arrow-right" aria-hidden="true" />
+          </a>
+        </li>
+      </ol>
     </div>
   </section>
 </template>

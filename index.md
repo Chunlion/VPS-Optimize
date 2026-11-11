@@ -26,6 +26,14 @@ hero:
       text: 项目源码
       link: https://github.com/Chunlion/VPS-Optimize
 
+install:
+  title: 安装并运行
+  copy: 复制命令
+  copying: 复制中…
+  copied: 已复制，在 VPS 的 root 会话中粘贴运行。
+  error: 复制失败，请选中上方命令手动复制。
+  note: 运行前创建 VPS 快照，并保留当前 SSH 会话。
+
 workflow:
   label: 建议维护步骤，点击查看相关文档
   steps:
@@ -64,19 +72,6 @@ story:
     - icon: fa-solid fa-chart-column
       title: 排查问题
       text: 结合服务状态与日志
-  terminalLabel: 状态示例 · 非实时数据
-  terminalHeader: 项目 / 状态
-  terminalRows:
-    - label: 系统环境
-      value: 正常
-    - label: 配置备份
-      value: 可用
-    - label: 443 端口复用
-      value: 运行中
-    - label: 关键服务
-      value: 运行中
-    - label: 防火墙
-      value: 已启用
   primaryIcon: fa-solid fa-shield-halved
   primaryTitle: 更稳妥
   primaryText: 保留 SSH 会话，提前准备快照与恢复入口。

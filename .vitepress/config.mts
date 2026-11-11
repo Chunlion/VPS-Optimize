@@ -325,7 +325,7 @@ export default defineConfig({
   ],
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/VPS-Optimize/favicon.svg' }],
-    ['meta', { name: 'theme-color', content: '#f7fbff' }],
+    ['meta', { name: 'theme-color', content: '#fafbf9' }],
     ['meta', { name: 'referrer', content: 'strict-origin-when-cross-origin' }]
   ],
   markdown: {

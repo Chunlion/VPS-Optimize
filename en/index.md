@@ -26,6 +26,14 @@ hero:
       text: Source Code
       link: https://github.com/Chunlion/VPS-Optimize
 
+install:
+  title: Install & run
+  copy: Copy command
+  copying: Copying…
+  copied: Copied. Paste into a root session on your VPS to run.
+  error: Copy failed. Select the command above and copy it manually.
+  note: Create a VPS snapshot and keep your current SSH session open before running.
+
 workflow:
   label: Suggested maintenance steps. Follow each link for guidance.
   steps:
@@ -64,19 +72,6 @@ story:
     - icon: fa-solid fa-chart-column
       title: Diagnose issues
       text: Review status and logs
-  terminalLabel: Example status · Not live data
-  terminalHeader: Item / Status
-  terminalRows:
-    - label: System environment
-      value: Healthy
-    - label: Configuration backup
-      value: Available
-    - label: Port 443 Reuse
-      value: Running
-    - label: Key services
-      value: Running
-    - label: Firewall
-      value: Enabled
   primaryIcon: fa-solid fa-shield-halved
   primaryTitle: Safer changes
   primaryText: Keep SSH open and prepare a snapshot and recovery access.

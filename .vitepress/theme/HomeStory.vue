@@ -7,9 +7,6 @@ interface HomeStoryData {
   title: string
   description: string
   principles: Array<{ icon: string; title: string; text: string }>
-  terminalLabel: string
-  terminalHeader: string
-  terminalRows: Array<{ label: string; value: string }>
   primaryIcon: string
   primaryTitle: string
   primaryText: string
@@ -38,22 +35,6 @@ const story = computed(() => frontmatter.value.story as HomeStoryData)
             </span>
           </li>
         </ul>
-      </div>
-
-      <div class="home-story__terminal" :aria-label="story.terminalLabel">
-        <div class="home-story__terminal-bar">
-          <span>{{ story.terminalLabel }}</span>
-          <i class="fa-solid fa-terminal" aria-hidden="true" />
-        </div>
-        <div class="home-story__terminal-body">
-          <div class="home-story__terminal-header">
-            <span>{{ story.terminalHeader }}</span>
-          </div>
-          <div v-for="row in story.terminalRows" :key="row.label">
-            <span>{{ row.label }}</span>
-            <strong>{{ row.value }}</strong>
-          </div>
-        </div>
       </div>
 
       <div class="home-story__outcomes">

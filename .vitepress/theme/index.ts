@@ -4,6 +4,7 @@ import DefaultTheme from 'vitepress/theme'
 import HomeHeroVisual from './HomeHeroVisual.vue'
 import HomeStory from './HomeStory.vue'
 import HomeWorkflow from './HomeWorkflow.vue'
+import HomeInstall from './HomeInstall.vue'
 import '@fortawesome/fontawesome-free/css/all.min.css'
 import '@fontsource-variable/inter'
 import '@fontsource-variable/noto-sans-sc'
@@ -22,6 +23,9 @@ export default {
           : null,
         'home-hero-image': () => frontmatter.value.hero?.guide
           ? h(HomeHeroVisual)
+          : null,
+        'home-hero-actions-after': () => frontmatter.value.install
+          ? h(HomeInstall)
           : null,
         'home-features-before': () => frontmatter.value.workflow
           ? h(HomeWorkflow)

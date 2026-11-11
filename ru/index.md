@@ -26,6 +26,14 @@ hero:
       text: Исходный код
       link: https://github.com/Chunlion/VPS-Optimize
 
+install:
+  title: Установка и запуск
+  copy: Копировать
+  copying: Копирование…
+  copied: Скопировано. Вставьте команду в сеанс root на VPS для запуска.
+  error: Не удалось скопировать. Выделите команду выше и скопируйте вручную.
+  note: Перед запуском создайте снимок VPS и оставьте текущий сеанс SSH открытым.
+
 workflow:
   label: Рекомендуемые шаги обслуживания со ссылками на инструкции
   steps:
@@ -64,19 +72,6 @@ story:
     - icon: fa-solid fa-chart-column
       title: Диагностика
       text: Состояние и журналы
-  terminalLabel: Пример состояния · Не текущие данные
-  terminalHeader: Компонент / Состояние
-  terminalRows:
-    - label: Системное окружение
-      value: Норма
-    - label: Резервная копия
-      value: Доступна
-    - label: Единый порт 443
-      value: Работает
-    - label: Основные службы
-      value: Работают
-    - label: Межсетевой экран
-      value: Включён
   primaryIcon: fa-solid fa-shield-halved
   primaryTitle: Надёжнее
   primaryText: Сохраните сеанс SSH, подготовьте снимок VPS и доступ к восстановлению.
