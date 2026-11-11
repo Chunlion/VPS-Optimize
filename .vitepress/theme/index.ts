@@ -27,11 +27,11 @@ export default {
         'home-hero-actions-after': () => frontmatter.value.install
           ? h(HomeInstall)
           : null,
-        'home-features-before': () => frontmatter.value.workflow
-          ? h(HomeWorkflow)
-          : null,
-        'home-features-after': () => frontmatter.value.story
+        'home-features-before': () => frontmatter.value.story
           ? h(HomeStory)
+          : null,
+        'home-features-after': () => frontmatter.value.workflow
+          ? h(HomeWorkflow)
           : null
       })
     }
